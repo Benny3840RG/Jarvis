@@ -1,0 +1,19 @@
+{
+  "lastIntent": "greeting",
+  "lastInput": "Hello Jarvis",
+  "lastResult": {
+    "outputs": [
+      {
+        "module": "runtime",
+        "action": "respond",
+        "payload": "Hello Jarvis"
+      }
+    ],
+    "safetyStatus": "ok"
+  },
+  "lastReminder": {
+    "id": "1783610008334",
+    "title": "Remind me to buy milk",
+    "due": "tomorrow"
+  }
+}
