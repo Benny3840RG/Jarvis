@@ -1,5 +1,6 @@
 import fs from "fs/promises";
 import path from "path";
+import { fileURLToPath } from "url";
 
 export type AssistantState = {
   lastIntent?: string;
@@ -14,93 +15,107 @@ export interface PersistenceProvider {
   saveState(state: AssistantState): Promise<void>;
 }
 
+function defaultDataPath(): string {
+  // Resolve typescript/data relative to this file without using __dirname.
+  const __filename = fileURLToPath(import.meta.url);
+  return path.resolve(path.dirname(__filename), "../../data/jarvis-state.json");
+}
+
 export class JSONPersistence implements PersistenceProvider {
   private filePath: string;
 
   constructor(filePath?: string) {
-    this.filePath = filePath ?? path.resolve(__dirname, "../../data/jarvis-state.json");
+    this.filePath = filePath ?? defaultDataPath();
   }
 
   async loadState(): Promise<AssistantState> {
     try {
       const raw = await fs.readFile(this.filePath, { encoding: "utf8" });
-      return JSON.parse(raw) as AssistantState;
+      try {
+        return JSON.parse(raw) as AssistantState;
+      } catch (err) {
+        throw new Error(`Malformed JSON in state file ${this.filePath}: ${(err as Error).message}`);
+      }
     } catch (err: any) {
-      // If file doesn't exist or is invalid, return empty state
-      return {};
+      if (err.code === "ENOENT") {
+        // File doesn't exist: return empty state
+        return {};
+      }
+      // Surface other errors (permissions, etc.)
+      throw err;
     }
   }
 
   async saveState(state: AssistantState): Promise<void> {
     const dir = path.dirname(this.filePath);
-    try {
-      await fs.mkdir(dir, { recursive: true });
-      await fs.writeFile(this.filePath, JSON.stringify(state, null, 2), { encoding: "utf8" });
-    } catch (err) {
-      throw err;
-    }
+    await fs.mkdir(dir, { recursive: true });
+    const payload = JSON.stringify(state, null, 2);
+    await fs.writeFile(this.filePath, payload, { encoding: "utf8" });
   }
 }
 
-/**
- * ConvexPersistence is a thin runtime wrapper around a Convex client.
- * This implementation intentionally uses dynamic import so the project can be
- * type-checked and tested without Convex being configured or installed.
- *
- * It will throw helpful errors if Convex is not configured at runtime.
- */
+// Convex types are imported as type-only so the runtime does not fail when convex
+// is not installed. At runtime we accept an injected client or dynamically import
+// the convex package only when needed.
+import type { ConvexClient } from "convex";
+
 export class ConvexPersistence implements PersistenceProvider {
-  private client: any | null = null;
+  private client: ConvexClient | any;
 
   constructor(client?: any) {
-    if (client) this.client = client;
+    // If the environment requests convex as the provider, fail fast if CONVEX_URL is missing.
+    if ((process.env.PERSISTENCE_PROVIDER ?? "json").toLowerCase() === "convex" && !process.env.CONVEX_URL) {
+      throw new Error(
+        "PERSISTENCE_PROVIDER=convex requires CONVEX_URL to be set in the environment."
+      );
+    }
+
+    if (client) {
+      this.client = client;
+    }
   }
 
-  private async ensureClient() {
+  private async ensureClient(): Promise<any> {
     if (this.client) return this.client;
-
-    // Try to dynamically import the convex client package.
+    // Try to create a Convex client from the official package using CONVEX_URL.
+    // We perform a dynamic import here so that repositories without the convex
+    // package installed can still type-check and run tests that inject a mock client.
     try {
-      // Many convex client bundles export a default or named client. We accept either.
-      // We avoid importing at top-level so tests that don't install convex still run.
       const convexPkg = await import("convex");
-      // Heuristics to find a client constructor / factory
-      const ConvexClient = (convexPkg as any).ConvexClient ?? (convexPkg as any).default ?? (convexPkg as any).client;
-      if (!ConvexClient) {
-        // If the package shape isn't what we expect, just keep the raw package.
-        this.client = convexPkg;
-      } else {
-        // If an env variable like CONVEX_URL exists we could instantiate here.
-        // We don't auto-instantiate to avoid creating credentials in repo. Leave to caller.
-        this.client = ConvexClient;
+      const ConvexClientCtor = (convexPkg as any).ConvexClient ?? (convexPkg as any).ConvexHttpClient ?? (convexPkg as any).default ?? (convexPkg as any).client;
+      if (!ConvexClientCtor) {
+        throw new Error("Could not find a Convex client constructor on the 'convex' package.");
       }
+      // Construct with the documented CONVEX_URL
+      this.client = new ConvexClientCtor({ url: process.env.CONVEX_URL });
       return this.client;
-    } catch (err) {
+    } catch (err: any) {
       throw new Error(
-        "The 'convex' package is not installed or could not be imported. Run 'npm install' in typescript/ to add Convex, and set up credentials before using PERSISTENCE_PROVIDER=convex."
+        "Failed to load the 'convex' package or construct a client. Ensure 'convex' is installed in typescript/ and that CONVEX_URL is set. Original error: " + err?.message
       );
     }
   }
 
   async loadState(): Promise<AssistantState> {
-    // Minimal safe behaviour: if convex isn't configured return empty state, but surface a clear message.
     const client = await this.ensureClient();
-    // Real Convex integration would query a table named 'assistantState' and return the latest row.
-    // We avoid making assumptions about authentication/deployment in this repo commit.
-    throw new Error("ConvexPersistence.loadState is not fully implemented in this repository commit. Please configure Convex and complete the deployment-specific wiring.");
+    // Call the assistantState.get query (client-side wrapper will call the function name).
+    const row = await client.query("assistantState/get");
+    if (!row) return {};
+    // Expect the row to have a 'state' JSON object.
+    return (row.state ?? {}) as AssistantState;
   }
 
-  async saveState(_state: AssistantState): Promise<void> {
+  async saveState(state: AssistantState): Promise<void> {
     const client = await this.ensureClient();
-    throw new Error("ConvexPersistence.saveState is not fully implemented in this repository commit. Please configure Convex and complete the deployment-specific wiring.");
+    // Call the assistantState upsert mutation. We pass the whole state as the single argument.
+    await client.mutation("assistantState/upsert", state);
   }
 }
 
-export function createPersistenceFromEnv(): PersistenceProvider {
+export function createPersistenceFromEnv(client?: any): PersistenceProvider {
   const provider = (process.env.PERSISTENCE_PROVIDER ?? "json").toLowerCase();
   if (provider === "convex") {
-    return new ConvexPersistence();
+    return new ConvexPersistence(client);
   }
-  // Default and fallback
   return new JSONPersistence();
 }
