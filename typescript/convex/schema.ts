@@ -1,33 +1,42 @@
-export type TaskRow = {
-  id?: string;
-  title: string;
-  completed?: boolean;
-  createdAt?: string; // ISO
-  [key: string]: unknown;
-};
+import { defineSchema, defineTable } from "convex/schema";
+import { v } from "convex/values";
 
-export type ReminderRow = {
-  id?: string;
-  title: string;
-  due?: string; // ISO or human string
-  createdAt?: string;
-  [key: string]: unknown;
-};
+// Define the Convex schema for the repository. This file intentionally uses
+// the server-side schema builders from the Convex SDK. After installing
+// convex locally you must run `npx convex codegen` to generate the client API
+// used by the Node CLI.
 
-export type MemoryRow = {
-  id?: string;
-  text: string;
-  createdAt?: string;
-};
+export default defineSchema({
+  tables: {
+    tasks: defineTable({
+      // A short title for the task
+      title: v.string(),
+      // Optional completed flag
+      completed: v.optional(v.boolean()),
+      // ISO timestamp
+      createdAt: v.optional(v.string()),
+    }),
 
-export type ConversationRow = {
-  id?: string;
-  messages: Array<{ role: string; text: string; timestamp?: string }>;
-  createdAt?: string;
-};
+    reminders: defineTable({
+      title: v.string(),
+      due: v.optional(v.string()),
+      createdAt: v.optional(v.string()),
+    }),
 
-export type AssistantStateRow = {
-  id?: string;
-  state: Record<string, unknown>;
-  updatedAt?: string;
-};
+    memories: defineTable({
+      text: v.string(),
+      createdAt: v.optional(v.string()),
+    }),
+
+    conversations: defineTable({
+      messages: v.any(), // flexible array of message objects; use v.any() because messages are structured
+      createdAt: v.optional(v.string()),
+    }),
+
+    assistantState: defineTable({
+      // store the whole assistant state as a JSON-like object
+      state: v.any(),
+      updatedAt: v.optional(v.string()),
+    }),
+  },
+});

@@ -1,23 +1,44 @@
-import type { ConvexClient } from "convex";
-import type { TaskRow } from "./schema";
+import { mutation, query } from "convex/server";
+import { v } from "convex/values";
 
-export const TASK_CREATE_FN = "tasks/create";
-export const TASK_LIST_FN = "tasks/list";
-export const TASK_UPDATE_FN = "tasks/update";
-export const TASK_DELETE_FN = "tasks/delete";
+// Server-side Convex functions for tasks.
 
-export async function createTask(client: ConvexClient | any, task: TaskRow) {
-  return client.mutation(TASK_CREATE_FN, task);
-}
+export const create = mutation({
+  args: [v.object({ title: v.string() })],
+  handler: async (ctx, [arg]) => {
+    const now = new Date().toISOString();
+    const row = {
+      title: arg.title,
+      completed: false,
+      createdAt: now,
+    };
+    const id = await ctx.db.insert("tasks", row);
+    return { id, ...row };
+  },
+});
 
-export async function listTasks(client: ConvexClient | any) {
-  return client.query(TASK_LIST_FN);
-}
+export const list = query({
+  args: [],
+  handler: async (ctx) => {
+    // Convex provides table iteration via ctx.db.table or ctx.db.query depending on SDK version.
+    // We use ctx.db.table("tasks").collect() here as a conventional pattern.
+    const rows = await ctx.db.table("tasks").all();
+    return rows;
+  },
+});
 
-export async function updateTask(client: ConvexClient | any, id: string, patch: Partial<TaskRow>) {
-  return client.mutation(TASK_UPDATE_FN, { id, patch });
-}
+export const update = mutation({
+  args: [v.object({ id: v.id("tasks"), patch: v.any() })],
+  handler: async (ctx, [arg]) => {
+    await ctx.db.patch("tasks", arg.id, arg.patch);
+    return true;
+  },
+});
 
-export async function deleteTask(client: ConvexClient | any, id: string) {
-  return client.mutation(TASK_DELETE_FN, { id });
-}
+export const remove = mutation({
+  args: [v.object({ id: v.id("tasks") })],
+  handler: async (ctx, [arg]) => {
+    await ctx.db.delete("tasks", arg.id);
+    return true;
+  },
+});

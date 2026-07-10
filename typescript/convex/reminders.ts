@@ -1,23 +1,36 @@
-import type { ConvexClient } from "convex";
-import type { ReminderRow } from "./schema";
+import { mutation, query } from "convex/server";
+import { v } from "convex/values";
 
-export const REMINDER_CREATE_FN = "reminders/create";
-export const REMINDER_LIST_FN = "reminders/list";
-export const REMINDER_UPDATE_FN = "reminders/update";
-export const REMINDER_DELETE_FN = "reminders/delete";
+export const create = mutation({
+  args: [v.object({ title: v.string(), due: v.optional(v.string()) })],
+  handler: async (ctx, [arg]) => {
+    const now = new Date().toISOString();
+    const row = { title: arg.title, due: arg.due, createdAt: now };
+    const id = await ctx.db.insert("reminders", row);
+    return { id, ...row };
+  },
+});
 
-export async function createReminder(client: ConvexClient | any, reminder: ReminderRow) {
-  return client.mutation(REMINDER_CREATE_FN, reminder);
-}
+export const list = query({
+  args: [],
+  handler: async (ctx) => {
+    const rows = await ctx.db.table("reminders").all();
+    return rows;
+  },
+});
 
-export async function listReminders(client: ConvexClient | any) {
-  return client.query(REMINDER_LIST_FN);
-}
+export const update = mutation({
+  args: [v.object({ id: v.id("reminders"), patch: v.any() })],
+  handler: async (ctx, [arg]) => {
+    await ctx.db.patch("reminders", arg.id, arg.patch);
+    return true;
+  },
+});
 
-export async function updateReminder(client: ConvexClient | any, id: string, patch: Partial<ReminderRow>) {
-  return client.mutation(REMINDER_UPDATE_FN, { id, patch });
-}
-
-export async function deleteReminder(client: ConvexClient | any, id: string) {
-  return client.mutation(REMINDER_DELETE_FN, { id });
-}
+export const remove = mutation({
+  args: [v.object({ id: v.id("reminders") })],
+  handler: async (ctx, [arg]) => {
+    await ctx.db.delete("reminders", arg.id);
+    return true;
+  },
+});

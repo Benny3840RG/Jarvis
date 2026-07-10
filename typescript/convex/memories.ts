@@ -1,23 +1,36 @@
-import type { ConvexClient } from "convex";
-import type { MemoryRow } from "./schema";
+import { mutation, query } from "convex/server";
+import { v } from "convex/values";
 
-export const MEMORY_CREATE_FN = "memories/create";
-export const MEMORY_LIST_FN = "memories/list";
-export const MEMORY_UPDATE_FN = "memories/update";
-export const MEMORY_DELETE_FN = "memories/delete";
+export const create = mutation({
+  args: [v.object({ text: v.string() })],
+  handler: async (ctx, [arg]) => {
+    const now = new Date().toISOString();
+    const row = { text: arg.text, createdAt: now };
+    const id = await ctx.db.insert("memories", row);
+    return { id, ...row };
+  },
+});
 
-export async function createMemory(client: ConvexClient | any, memory: MemoryRow) {
-  return client.mutation(MEMORY_CREATE_FN, memory);
-}
+export const list = query({
+  args: [],
+  handler: async (ctx) => {
+    const rows = await ctx.db.table("memories").all();
+    return rows;
+  },
+});
 
-export async function listMemories(client: ConvexClient | any) {
-  return client.query(MEMORY_LIST_FN);
-}
+export const update = mutation({
+  args: [v.object({ id: v.id("memories"), patch: v.any() })],
+  handler: async (ctx, [arg]) => {
+    await ctx.db.patch("memories", arg.id, arg.patch);
+    return true;
+  },
+});
 
-export async function updateMemory(client: ConvexClient | any, id: string, patch: Partial<MemoryRow>) {
-  return client.mutation(MEMORY_UPDATE_FN, { id, patch });
-}
-
-export async function deleteMemory(client: ConvexClient | any, id: string) {
-  return client.mutation(MEMORY_DELETE_FN, { id });
-}
+export const remove = mutation({
+  args: [v.object({ id: v.id("memories") })],
+  handler: async (ctx, [arg]) => {
+    await ctx.db.delete("memories", arg.id);
+    return true;
+  },
+});

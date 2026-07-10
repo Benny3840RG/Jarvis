@@ -1,23 +1,36 @@
-import type { ConvexClient } from "convex";
-import type { ConversationRow } from "./schema";
+import { mutation, query } from "convex/server";
+import { v } from "convex/values";
 
-export const CONVERSATION_CREATE_FN = "conversations/create";
-export const CONVERSATION_LIST_FN = "conversations/list";
-export const CONVERSATION_UPDATE_FN = "conversations/update";
-export const CONVERSATION_DELETE_FN = "conversations/delete";
+export const create = mutation({
+  args: [v.object({ messages: v.any() })],
+  handler: async (ctx, [arg]) => {
+    const now = new Date().toISOString();
+    const row = { messages: arg.messages, createdAt: now };
+    const id = await ctx.db.insert("conversations", row);
+    return { id, ...row };
+  },
+});
 
-export async function createConversation(client: ConvexClient | any, conversation: ConversationRow) {
-  return client.mutation(CONVERSATION_CREATE_FN, conversation);
-}
+export const list = query({
+  args: [],
+  handler: async (ctx) => {
+    const rows = await ctx.db.table("conversations").all();
+    return rows;
+  },
+});
 
-export async function listConversations(client: ConvexClient | any) {
-  return client.query(CONVERSATION_LIST_FN);
-}
+export const update = mutation({
+  args: [v.object({ id: v.id("conversations"), patch: v.any() })],
+  handler: async (ctx, [arg]) => {
+    await ctx.db.patch("conversations", arg.id, arg.patch);
+    return true;
+  },
+});
 
-export async function updateConversation(client: ConvexClient | any, id: string, patch: Partial<ConversationRow>) {
-  return client.mutation(CONVERSATION_UPDATE_FN, { id, patch });
-}
-
-export async function deleteConversation(client: ConvexClient | any, id: string) {
-  return client.mutation(CONVERSATION_DELETE_FN, { id });
-}
+export const remove = mutation({
+  args: [v.object({ id: v.id("conversations") })],
+  handler: async (ctx, [arg]) => {
+    await ctx.db.delete("conversations", arg.id);
+    return true;
+  },
+});
