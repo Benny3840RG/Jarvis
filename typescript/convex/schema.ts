@@ -1,34 +1,32 @@
-import { defineSchema, defineTable } from "convex/schema";
+import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
 export default defineSchema({
-  tables: {
-    tasks: defineTable({
-      title: v.string(),
-      completed: v.optional(v.boolean()),
-      createdAt: v.optional(v.string()),
-    }),
+  tasks: defineTable({
+    title: v.string(),
+    completed: v.optional(v.boolean()),
+    createdAt: v.optional(v.number()),
+  }),
 
-    reminders: defineTable({
-      title: v.string(),
-      due: v.optional(v.string()),
-      createdAt: v.optional(v.string()),
-    }),
+  reminders: defineTable({
+    title: v.string(),
+    due: v.optional(v.string()),
+    createdAt: v.optional(v.number()),
+  }),
 
-    memories: defineTable({
-      text: v.string(),
-      createdAt: v.optional(v.string()),
-    }),
+  memories: defineTable({
+    text: v.string(),
+    createdAt: v.optional(v.number()),
+  }),
 
-    conversations: defineTable({
-      messages: v.any(),
-      createdAt: v.optional(v.string()),
-    }),
+  conversations: defineTable({
+    messages: v.any(),
+    createdAt: v.optional(v.number()),
+  }),
 
-    assistantState: defineTable({
-      key: v.string(),
-      state: v.any(),
-      updatedAt: v.optional(v.string()),
-    }),
-  },
+  assistantState: defineTable({
+    key: v.string(),
+    state: v.any(),
+    updatedAt: v.optional(v.number()),
+  }).index("by_key", ["key"]),
 });

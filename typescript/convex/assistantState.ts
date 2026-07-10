@@ -1,33 +1,33 @@
-import { mutation, query } from "convex/server";
+import { query, mutation } from "convex/server";
 import { v } from "convex/values";
 
-// assistantState.get -> returns the assistantState row with key === "primary" or null
 export const get = query({
-  args: [],
+  args: {},
   handler: async (ctx) => {
-    const rows = await ctx.db.table("assistantState").all();
-    if (!rows || rows.length === 0) return null;
-    const found = rows.find((r: any) => r.key === "primary");
-    if (!found) return null;
-    return found;
+    const existing = await ctx.db
+      .query("assistantState")
+      .withIndex("by_key", (q) => q.eq("key", "primary"))
+      .unique();
+    if (!existing) return null;
+    return existing;
   },
 });
 
-// assistantState.upsert -> accepts an object { state: Record<string, unknown> }
-// and patches the existing primary row or inserts a new one.
 export const upsert = mutation({
-  args: [v.object({ state: v.any() })],
-  handler: async (ctx, [arg]) => {
-    const rows = await ctx.db.table("assistantState").all();
-    const existing = rows.find((r: any) => r.key === "primary");
-    const now = new Date().toISOString();
+  args: {
+    state: v.any(),
+  },
+  handler: async (ctx, args) => {
+    const existing = await ctx.db
+      .query("assistantState")
+      .withIndex("by_key", (q) => q.eq("key", "primary"))
+      .unique();
+    const now = Date.now();
     if (existing) {
-      await ctx.db.patch("assistantState", existing._id, { state: arg.state, updatedAt: now });
-      return { id: existing._id, state: arg.state, updatedAt: now };
+      await ctx.db.patch("assistantState", existing._id, { state: args.state, updatedAt: now });
+      return { _id: existing._id, key: existing.key, state: args.state, updatedAt: now };
     } else {
-      const row = { key: "primary", state: arg.state, updatedAt: now };
-      const id = await ctx.db.insert("assistantState", row);
-      return { id, ...row };
+      return await ctx.db.insert("assistantState", { key: "primary", state: args.state, updatedAt: now });
     }
   },
 });
