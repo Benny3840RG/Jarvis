@@ -7,3 +7,5 @@ __pycache__/
 .env
 .env.*
 *.sqlite3
+typescript/data/jarvis-state.json*
+typescript/data/.jarvis-state.json.tmp-*
