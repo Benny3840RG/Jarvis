@@ -26,13 +26,15 @@ export const update = mutationGeneric({
     if (args.title !== undefined) patch.title = args.title;
     if (args.due !== undefined) patch.due = args.due;
     await ctx.db.patch("reminders", args.id, patch);
-    return true;
+    return ctx.db.get(args.id);
   },
 });
 
 export const remove = mutationGeneric({
   args: { id: v.id("reminders") },
   handler: async (ctx, args) => {
+    const existing = await ctx.db.get(args.id);
+    if (!existing) return false;
     await ctx.db.delete("reminders", args.id);
     return true;
   },
