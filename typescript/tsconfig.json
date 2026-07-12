@@ -4,8 +4,6 @@
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "strict": true,
-    "allowJs": true,
-    "checkJs": false,
     "noEmit": true,
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
@@ -13,5 +11,5 @@
     "resolveJsonModule": true
   },
   "include": ["src/**/*", "tests/**/*", "convex/**/*"],
-  "exclude": ["node_modules"]
+  "exclude": ["node_modules", "dist"]
 }
