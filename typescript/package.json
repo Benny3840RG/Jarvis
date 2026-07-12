@@ -5,11 +5,11 @@
   "type": "module",
   "scripts": {
     "start": "tsx src/index.ts",
-    "test": "node --import tsx --test tests/**/*.test.ts",
+    "test": "node --import tsx --test tests/*.test.ts",
     "type-check": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "convex": "^1.0.0"
+    "convex": "^1.42.1"
   },
   "devDependencies": {
     "@types/node": "^26.1.1",
