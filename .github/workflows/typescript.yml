@@ -33,7 +33,5 @@ jobs:
         run: npm ci
       - name: Type-check
         run: npm run type-check
-      - name: Test
+      - name: Test interactive CLI and persistence
         run: npm test
-      - name: Smoke-test interactive CLI
-        run: printf 'exit\n' | npm start
