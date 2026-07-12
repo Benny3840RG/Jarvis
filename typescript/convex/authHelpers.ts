@@ -1,11 +1,12 @@
-type AuthContext = {
-  auth: {
-    getUserIdentity(): Promise<{ tokenIdentifier: string } | null>;
-  };
-};
+const OWNER_ID = "jarvis-cli";
 
-export async function requireOwner(ctx: AuthContext): Promise<string> {
-  const identity = await ctx.auth.getUserIdentity();
-  if (!identity) throw new Error("Unauthenticated: a valid identity token is required.");
-  return identity.tokenIdentifier;
+export function requireOwner(serviceToken: string): string {
+  const expected = process.env.JARVIS_SERVICE_TOKEN;
+  if (!expected) {
+    throw new Error("Server misconfigured: JARVIS_SERVICE_TOKEN is not set.");
+  }
+  if (!serviceToken || serviceToken !== expected) {
+    throw new Error("Unauthorized: invalid Jarvis service token.");
+  }
+  return OWNER_ID;
 }
