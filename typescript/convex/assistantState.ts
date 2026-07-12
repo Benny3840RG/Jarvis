@@ -1,23 +1,39 @@
 import { mutationGeneric, queryGeneric } from "convex/server";
 import { v } from "convex/values";
 
+import { requireOwner } from "./authHelpers.js";
+
 const PRIMARY_KEY = "primary";
+
+const assistantStateValidator = v.object({
+  _id: v.id("assistantState"),
+  _creationTime: v.number(),
+  ownerId: v.string(),
+  key: v.string(),
+  state: v.any(),
+  updatedAt: v.number(),
+});
 
 export const get = queryGeneric({
   args: {},
-  handler: async (ctx) =>
-    ctx.db
+  returns: v.union(assistantStateValidator, v.null()),
+  handler: async (ctx) => {
+    const ownerId = await requireOwner(ctx);
+    return ctx.db
       .query("assistantState")
-      .withIndex("by_key", (q) => q.eq("key", PRIMARY_KEY))
-      .unique(),
+      .withIndex("by_owner_key", (q) => q.eq("ownerId", ownerId).eq("key", PRIMARY_KEY))
+      .unique();
+  },
 });
 
 export const upsert = mutationGeneric({
   args: { state: v.any() },
+  returns: v.id("assistantState"),
   handler: async (ctx, args) => {
+    const ownerId = await requireOwner(ctx);
     const existing = await ctx.db
       .query("assistantState")
-      .withIndex("by_key", (q) => q.eq("key", PRIMARY_KEY))
+      .withIndex("by_owner_key", (q) => q.eq("ownerId", ownerId).eq("key", PRIMARY_KEY))
       .unique();
     const updatedAt = Date.now();
     if (existing) {
@@ -25,6 +41,7 @@ export const upsert = mutationGeneric({
       return existing._id;
     }
     return ctx.db.insert("assistantState", {
+      ownerId,
       key: PRIMARY_KEY,
       state: args.state,
       updatedAt,
