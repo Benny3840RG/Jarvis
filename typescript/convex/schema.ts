@@ -10,6 +10,7 @@ const conversationMessage = v.object({
 export default defineSchema({
   tasks: defineTable({
     title: v.string(),
+    category: v.optional(v.string()),
     completed: v.boolean(),
     createdAt: v.number(),
   }),
