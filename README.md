@@ -57,26 +57,28 @@ Removing the tracked runtime file does not remove its older copies from Git hist
 
 The JSON provider serialises operations inside one process. It does not provide cross-process file locking, so do not run two JSON-backed Jarvis CLI processes against the same file.
 
-### Convex persistence and authentication
+### Convex persistence and service authentication
 
-Convex is opt-in and rejects anonymous clients. Configure an OIDC provider for the deployment, then provide an identity token to the CLI:
+Convex is opt-in. This single-user CLI uses a shared service token rather than pretending to be a browser user with an OIDC identity provider. Every public Convex query and mutation checks the token against the deployment environment before accessing the owner-scoped records.
 
-```bash
-export PERSISTENCE_PROVIDER=convex
-export CONVEX_URL='https://your-deployment.convex.cloud'
-export CONVEX_AUTH_TOKEN='<OIDC identity token>'
-```
-
-The Convex deployment also needs:
+Convex creates `typescript/.env.local` when the project is linked. Add these local-only values to that file:
 
 ```text
-CONVEX_AUTH_ISSUER
-CONVEX_AUTH_AUDIENCE
+PERSISTENCE_PROVIDER=convex
+JARVIS_SERVICE_TOKEN=<strong random secret>
 ```
 
-The deployment URL is public routing information, not authentication. Every Convex query and mutation derives ownership from `ctx.auth.getUserIdentity()` and only accesses documents belonging to that authenticated identity.
+The Convex development deployment must contain the same secret:
 
-After choosing and configuring the real Convex deployment and auth provider, run `npx convex codegen` and the normal Convex deployment workflow. Generated files, deployment linking, credentials, and a real integration test are intentionally not fabricated in this repository change.
+```bash
+npx convex env set JARVIS_SERVICE_TOKEN
+```
+
+Enter the value interactively so it does not appear in shell history. The CLI loads `.env.local` on startup. `CONVEX_URL` is public routing information and is not treated as authentication.
+
+This service-token model is intentionally single-user. Replace it with a real OIDC user-authentication provider before exposing Jarvis as a multi-user application.
+
+After the deployment secret is configured, run `npx convex dev` to type-check, generate `convex/_generated`, and sync the functions to the development deployment. Do not use `npx convex deploy` until the production deployment is intentionally being configured.
 
 ## Checks
 
