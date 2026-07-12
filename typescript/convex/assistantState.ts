@@ -15,10 +15,10 @@ const assistantStateValidator = v.object({
 });
 
 export const get = queryGeneric({
-  args: {},
+  args: { serviceToken: v.string() },
   returns: v.union(assistantStateValidator, v.null()),
-  handler: async (ctx) => {
-    const ownerId = await requireOwner(ctx);
+  handler: async (ctx, args) => {
+    const ownerId = requireOwner(args.serviceToken);
     return ctx.db
       .query("assistantState")
       .withIndex("by_owner_key", (q) => q.eq("ownerId", ownerId))
@@ -28,10 +28,10 @@ export const get = queryGeneric({
 });
 
 export const upsert = mutationGeneric({
-  args: { state: v.any() },
+  args: { serviceToken: v.string(), state: v.any() },
   returns: v.id("assistantState"),
   handler: async (ctx, args) => {
-    const ownerId = await requireOwner(ctx);
+    const ownerId = requireOwner(args.serviceToken);
     const existing = await ctx.db
       .query("assistantState")
       .withIndex("by_owner_key", (q) => q.eq("ownerId", ownerId))
