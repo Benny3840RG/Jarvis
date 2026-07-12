@@ -249,7 +249,7 @@ export async function runCli(deps: RunCliDependencies = {}): Promise<void> {
           continue;
         }
 
-        if (lower.includes("task")) {
+        if (lower.includes("task") && !lower.includes("plan")) {
           write("Jarvis: Use `task add <title>`, `task list`, or `task complete <id>`.");
           continue;
         }
