@@ -254,17 +254,18 @@ describe("interactive CLI persistence wiring", () => {
     assert(logs.output.some((line) => line.includes("Durable task")));
   });
 
-  it("preserves planning behaviour", async () => {
+  it("preserves planning behaviour when the phrase also contains task", async () => {
     const persistence = new MockPersistence();
     const logs = capture();
     await runCli({
       persistence,
-      readline: new ScriptedReadline(["plan workshop", "exit"]),
+      readline: new ScriptedReadline(["plan workshop task", "exit"]),
       stdout: logs.stdout,
       stderr: logs.stderr,
     });
 
     assert.equal(persistence.state.lastIntent, "planning");
     assert(logs.output.some((line) => line.includes("Workflow:")));
+    assert.equal(logs.output.some((line) => line.includes("Use `task add")), false);
   });
 });
