@@ -1,33 +1,33 @@
-import { query, mutation } from "convex/server";
+import { mutationGeneric, queryGeneric } from "convex/server";
 import { v } from "convex/values";
 
-export const get = query({
+const PRIMARY_KEY = "primary";
+
+export const get = queryGeneric({
   args: {},
-  handler: async (ctx) => {
-    const existing = await ctx.db
+  handler: async (ctx) =>
+    ctx.db
       .query("assistantState")
-      .withIndex("by_key", (q) => q.eq("key", "primary"))
-      .unique();
-    if (!existing) return null;
-    return existing;
-  },
+      .withIndex("by_key", (q) => q.eq("key", PRIMARY_KEY))
+      .unique(),
 });
 
-export const upsert = mutation({
-  args: {
-    state: v.any(),
-  },
+export const upsert = mutationGeneric({
+  args: { state: v.any() },
   handler: async (ctx, args) => {
     const existing = await ctx.db
       .query("assistantState")
-      .withIndex("by_key", (q) => q.eq("key", "primary"))
+      .withIndex("by_key", (q) => q.eq("key", PRIMARY_KEY))
       .unique();
-    const now = Date.now();
+    const updatedAt = Date.now();
     if (existing) {
-      await ctx.db.patch("assistantState", existing._id, { state: args.state, updatedAt: now });
-      return { _id: existing._id, key: existing.key, state: args.state, updatedAt: now };
-    } else {
-      return await ctx.db.insert("assistantState", { key: "primary", state: args.state, updatedAt: now });
+      await ctx.db.patch("assistantState", existing._id, { state: args.state, updatedAt });
+      return existing._id;
     }
+    return ctx.db.insert("assistantState", {
+      key: PRIMARY_KEY,
+      state: args.state,
+      updatedAt,
+    });
   },
 });
