@@ -1,40 +1,30 @@
-import { query, mutation } from "convex/server";
+import { mutationGeneric, queryGeneric } from "convex/server";
 import { v } from "convex/values";
 
-export const create = mutation({
-  args: {
-    text: v.string(),
-  },
+export const create = mutationGeneric({
+  args: { text: v.string() },
   handler: async (ctx, args) => {
-    const now = Date.now();
-    const row = { text: args.text, createdAt: now };
+    const row = { text: args.text, createdAt: Date.now() };
     const id = await ctx.db.insert("memories", row);
     return { _id: id, ...row };
   },
 });
 
-export const list = query({
+export const list = queryGeneric({
   args: {},
-  handler: async (ctx) => {
-    return await ctx.db.table("memories").all();
-  },
+  handler: async (ctx) => ctx.db.query("memories").collect(),
 });
 
-export const update = mutation({
-  args: {
-    id: v.id("memories"),
-    patch: v.any(),
-  },
+export const update = mutationGeneric({
+  args: { id: v.id("memories"), text: v.string() },
   handler: async (ctx, args) => {
-    await ctx.db.patch("memories", args.id, args.patch);
+    await ctx.db.patch("memories", args.id, { text: args.text });
     return true;
   },
 });
 
-export const remove = mutation({
-  args: {
-    id: v.id("memories"),
-  },
+export const remove = mutationGeneric({
+  args: { id: v.id("memories") },
   handler: async (ctx, args) => {
     await ctx.db.delete("memories", args.id);
     return true;
