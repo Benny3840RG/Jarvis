@@ -403,8 +403,16 @@ function isInvalidIdError(error: unknown): boolean {
 
 export class ConvexPersistence implements PersistenceProvider {
   private readonly client: ConvexClientLike;
+  private readonly serviceToken: string;
 
-  constructor(client?: ConvexClientLike) {
+  constructor(client?: ConvexClientLike, serviceToken = process.env.JARVIS_SERVICE_TOKEN) {
+    if (!serviceToken) {
+      throw new Error(
+        "PERSISTENCE_PROVIDER=convex requires JARVIS_SERVICE_TOKEN. The deployment URL is not authentication.",
+      );
+    }
+    this.serviceToken = serviceToken;
+
     if (client) {
       this.client = client;
       return;
@@ -414,40 +422,44 @@ export class ConvexPersistence implements PersistenceProvider {
     if (!convexUrl) {
       throw new Error("PERSISTENCE_PROVIDER=convex requires CONVEX_URL to be set in the environment.");
     }
-    const authToken = process.env.CONVEX_AUTH_TOKEN;
-    if (!authToken) {
-      throw new Error(
-        "PERSISTENCE_PROVIDER=convex requires CONVEX_AUTH_TOKEN. The deployment URL is not authentication.",
-      );
-    }
-    this.client = new ConvexHttpClient(convexUrl, { auth: authToken }) as unknown as ConvexClientLike;
+    this.client = new ConvexHttpClient(convexUrl) as unknown as ConvexClientLike;
+  }
+
+  private authArgs(extra: Record<string, unknown> = {}): Record<string, unknown> {
+    return { serviceToken: this.serviceToken, ...extra };
   }
 
   async loadState(): Promise<AssistantState> {
     const row = await this.client.query<{ state?: AssistantState } | null>(
       assistantStateFunctions.get,
-      {},
+      this.authArgs(),
     );
     return row?.state ?? {};
   }
 
   async saveState(state: AssistantState): Promise<void> {
-    await this.client.mutation(assistantStateFunctions.upsert, { state });
+    await this.client.mutation(assistantStateFunctions.upsert, this.authArgs({ state }));
   }
 
   async listTasks(): Promise<Task[]> {
-    const rows = await this.client.query<ConvexTaskRecord[]>(taskFunctions.list, {});
+    const rows = await this.client.query<ConvexTaskRecord[]>(taskFunctions.list, this.authArgs());
     return rows.map(taskFromConvex);
   }
 
   async addTask(title: string, category: string): Promise<Task> {
-    const row = await this.client.mutation<ConvexTaskRecord>(taskFunctions.create, { title, category });
+    const row = await this.client.mutation<ConvexTaskRecord>(
+      taskFunctions.create,
+      this.authArgs({ title, category }),
+    );
     return taskFromConvex(row);
   }
 
   async completeTask(id: string): Promise<Task | null> {
     try {
-      const row = await this.client.mutation<ConvexTaskRecord | null>(taskFunctions.complete, { id });
+      const row = await this.client.mutation<ConvexTaskRecord | null>(
+        taskFunctions.complete,
+        this.authArgs({ id }),
+      );
       return row === null ? null : taskFromConvex(row);
     } catch (error: unknown) {
       if (isInvalidIdError(error)) return null;
@@ -456,23 +468,27 @@ export class ConvexPersistence implements PersistenceProvider {
   }
 
   async listReminders(): Promise<Reminder[]> {
-    const rows = await this.client.query<ConvexReminderRecord[]>(reminderFunctions.list, {});
+    const rows = await this.client.query<ConvexReminderRecord[]>(
+      reminderFunctions.list,
+      this.authArgs(),
+    );
     return rows.map(reminderFromConvex);
   }
 
   async addReminder(title: string, due?: string): Promise<Reminder> {
-    const row = await this.client.mutation<ConvexReminderRecord>(reminderFunctions.create, {
-      title,
-      ...(due === undefined ? {} : { due }),
-    });
+    const row = await this.client.mutation<ConvexReminderRecord>(
+      reminderFunctions.create,
+      this.authArgs({ title, ...(due === undefined ? {} : { due }) }),
+    );
     return reminderFromConvex(row);
   }
 
   async removeReminder(id: string): Promise<Reminder | null> {
     try {
-      const row = await this.client.mutation<ConvexReminderRecord | null>(reminderFunctions.remove, {
-        id,
-      });
+      const row = await this.client.mutation<ConvexReminderRecord | null>(
+        reminderFunctions.remove,
+        this.authArgs({ id }),
+      );
       return row === null ? null : reminderFromConvex(row);
     } catch (error: unknown) {
       if (isInvalidIdError(error)) return null;
