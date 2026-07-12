@@ -14,8 +14,8 @@ import { OrchestrationGraph } from "./orchestration/graph.js";
 import { Orchestrator } from "./runtime/orchestrator.js";
 import { WorkflowGenerator } from "./autonomy/workflowGenerator.js";
 import { LearningEngine } from "./adaptive/learningEngine.js";
-import { ReminderService } from "./runtime/reminderService.js";
-import { TaskService } from "./runtime/taskService.js";
+import { ReminderService, type Reminder } from "./runtime/reminderService.js";
+import { TaskService, type Task } from "./runtime/taskService.js";
 import { ProactiveAssistant } from "./runtime/proactiveAssistant.js";
 import { ContextMemory } from "./runtime/contextMemory.js";
 import { PersonalTraitsService } from "./runtime/personalTraitsService.js";
@@ -43,6 +43,14 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+function formatTask(task: Task): string {
+  return `${task.completed ? "[x]" : "[ ]"} ${task.id} ${task.title} (${task.category})`;
+}
+
+function formatReminder(reminder: Reminder): string {
+  return `${reminder.id} ${reminder.title}${reminder.due ? ` (${reminder.due})` : ""}`;
+}
+
 export async function runCli(deps: RunCliDependencies = {}): Promise<void> {
   const write = deps.stdout ?? ((...values: unknown[]) => console.log(...values));
   const writeError = deps.stderr ?? ((...values: unknown[]) => console.error(...values));
@@ -56,11 +64,17 @@ export async function runCli(deps: RunCliDependencies = {}): Promise<void> {
   const state = new StateService();
 
   let previousState: AssistantState;
+  let persistedTasks: Task[];
+  let persistedReminders: Reminder[];
   try {
-    previousState = await persistence.loadState();
+    [previousState, persistedTasks, persistedReminders] = await Promise.all([
+      persistence.loadState(),
+      persistence.listTasks(),
+      persistence.listReminders(),
+    ]);
   } catch (error: unknown) {
     rl.close();
-    writeError("Failed to load persistent state:", errorMessage(error));
+    writeError("Failed to load persistent data:", errorMessage(error));
     throw error;
   }
 
@@ -71,8 +85,8 @@ export async function runCli(deps: RunCliDependencies = {}): Promise<void> {
   const home = new HomeEngine();
   const workflowGenerator = new WorkflowGenerator();
   const learningEngine = new LearningEngine();
-  const reminderService = new ReminderService();
-  const taskService = new TaskService();
+  const reminderService = new ReminderService(persistedReminders);
+  const taskService = new TaskService(persistedTasks);
   const proactiveAssistant = new ProactiveAssistant();
   const contextMemory = new ContextMemory();
   const personalTraits = new PersonalTraitsService();
@@ -144,7 +158,8 @@ export async function runCli(deps: RunCliDependencies = {}): Promise<void> {
   try {
     while (true) {
       const inputText = await rl.question("You: ");
-      const lower = inputText.trim().toLowerCase();
+      const trimmed = inputText.trim();
+      const lower = trimmed.toLowerCase();
       if (lower === "exit") break;
 
       const parsed = conversation.parse(inputText, {});
@@ -154,13 +169,59 @@ export async function runCli(deps: RunCliDependencies = {}): Promise<void> {
       const result = await orchestrator.execute(plan);
       const reply = responseFormatter.format(intent, inputText);
 
-      if (lower.includes("remind")) {
-        const reminder = reminderService.add(inputText, "tomorrow");
+      if (lower === "task list") {
+        const tasks = taskService.list();
+        write("Jarvis:", tasks.length ? tasks.map(formatTask).join("\n") : "No tasks saved.");
+        write(JSON.stringify({ intent, tasks }, null, 2));
+      } else if (lower.startsWith("task complete ")) {
+        const id = trimmed.slice("task complete ".length).trim();
+        const task = id ? await persistence.completeTask(id) : null;
+        if (!task) {
+          write("Jarvis:", `Task not found: ${id || "missing id"}`);
+          continue;
+        }
+        taskService.remember(task);
+        await saveRuntimeState({ lastInput: inputText, lastIntent: intent, lastTask: task });
+        write("Jarvis:", `Task completed: ${task.title}`);
+        write(JSON.stringify({ intent, task }, null, 2));
+      } else if (lower.startsWith("task add ")) {
+        const title = trimmed.slice("task add ".length).trim();
+        if (!title) {
+          write("Jarvis:", "Task title cannot be empty.");
+          continue;
+        }
+        const task = await persistence.addTask(title, "personal");
+        taskService.remember(task);
+        await saveRuntimeState({ lastInput: inputText, lastIntent: intent, lastTask: task });
+        write("Jarvis:", `Task added: ${task.title}`);
+        write(JSON.stringify({ intent, task }, null, 2));
+      } else if (lower === "reminder list") {
+        const reminders = reminderService.list();
+        write(
+          "Jarvis:",
+          reminders.length ? reminders.map(formatReminder).join("\n") : "No reminders saved.",
+        );
+        write(JSON.stringify({ intent, reminders }, null, 2));
+      } else if (lower.startsWith("reminder remove ")) {
+        const id = trimmed.slice("reminder remove ".length).trim();
+        const removed = id ? await persistence.removeReminder(id) : false;
+        if (!removed) {
+          write("Jarvis:", `Reminder not found: ${id || "missing id"}`);
+          continue;
+        }
+        reminderService.remove(id);
+        await saveRuntimeState({ lastInput: inputText, lastIntent: intent });
+        write("Jarvis:", `Reminder removed: ${id}`);
+        write(JSON.stringify({ intent, removed: id }, null, 2));
+      } else if (lower.includes("remind")) {
+        const reminder = await persistence.addReminder(inputText, "tomorrow");
+        reminderService.remember(reminder);
         await saveRuntimeState({ lastInput: inputText, lastIntent: intent, lastReminder: reminder });
         write("Jarvis:", `Reminder set: ${reminder.title} for ${reminder.due}`);
         write(JSON.stringify({ intent, reminder }, null, 2));
       } else if (lower.includes("task") && !lower.includes("plan")) {
-        const task = taskService.add(inputText, "personal");
+        const task = await persistence.addTask(inputText, "personal");
+        taskService.remember(task);
         await saveRuntimeState({ lastInput: inputText, lastIntent: intent, lastTask: task });
         write("Jarvis:", `Task added: ${task.title}`);
         write(JSON.stringify({ intent, task }, null, 2));
