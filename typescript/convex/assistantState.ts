@@ -14,15 +14,23 @@ const assistantStateValidator = v.object({
   updatedAt: v.number(),
 });
 
+async function findPrimaryState(
+  ctx: Parameters<Parameters<typeof queryGeneric>[0]["handler"]>[0],
+  ownerId: string,
+) {
+  return ctx.db
+    .query("assistantState")
+    .withIndex("by_owner_key", (q) => q.eq("ownerId", ownerId))
+    .filter((q) => q.eq(q.field("key"), PRIMARY_KEY))
+    .unique();
+}
+
 export const get = queryGeneric({
   args: {},
   returns: v.union(assistantStateValidator, v.null()),
   handler: async (ctx) => {
     const ownerId = await requireOwner(ctx);
-    return ctx.db
-      .query("assistantState")
-      .withIndex("by_owner_key", (q) => q.eq("ownerId", ownerId).eq("key", PRIMARY_KEY))
-      .unique();
+    return findPrimaryState(ctx, ownerId);
   },
 });
 
@@ -33,7 +41,8 @@ export const upsert = mutationGeneric({
     const ownerId = await requireOwner(ctx);
     const existing = await ctx.db
       .query("assistantState")
-      .withIndex("by_owner_key", (q) => q.eq("ownerId", ownerId).eq("key", PRIMARY_KEY))
+      .withIndex("by_owner_key", (q) => q.eq("ownerId", ownerId))
+      .filter((q) => q.eq(q.field("key"), PRIMARY_KEY))
       .unique();
     const updatedAt = Date.now();
     if (existing) {
