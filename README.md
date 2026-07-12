@@ -2,9 +2,9 @@
 
 A small local command-line assistant scaffold for Benny's workflow.
 
-This repo is intentionally simple: no API keys, no cloud lock-in, and no background magic. It gives you a working Python entry point that can be expanded into reminders, job notes, quoting helpers, and daily trade checklists.
+This repo is intentionally simple: no background magic. It gives you a working Python entry point and a TypeScript interactive CLI that can be expanded into reminders, job notes, quoting helpers, and daily trade checklists.
 
-## Quick start
+## Python quick start
 
 ```bash
 cd Jarvis
@@ -17,7 +17,7 @@ jarvis note "Measure Kirsten hedge access and green waste volume"
 jarvis notes
 ```
 
-## Commands
+## Python commands
 
 | Command | What it does |
 |---|---|
@@ -26,49 +26,63 @@ jarvis notes
 | `jarvis note "text"` | Saves a timestamped local note. |
 | `jarvis notes` | Lists saved notes. |
 
-## Storage
+Local Python notes are stored in `~/.jarvis/notes.jsonl`.
 
-Local notes are stored in:
+## TypeScript CLI
 
-```text
-~/.jarvis/notes.jsonl
+```bash
+cd typescript
+npm ci
+npm start
 ```
 
-## Next sensible upgrades
+Durable commands are deliberately explicit:
 
-- Quote helper using The Beez Treez rates.
-- Job checklist templates.
-- Client follow-up tracker.
-- Calendar/email integration only after the basics are stable.
+```text
+task add <title>
+task list
+task complete <id>
+reminder add <title> --due <when>
+reminder list
+reminder remove <id>
+```
+
+Fuzzy phrases containing `task` or `remind` do not write data. Jarvis prints the supported command syntax instead.
+
+### Local JSON persistence
+
+JSON is the default provider. Runtime data is stored in `typescript/data/jarvis-state.json`, which is ignored by Git. Writes use a temporary file plus atomic rename. Malformed or unsupported files are moved aside with a `.corrupt-*` suffix so the CLI can start with an empty document while preserving the bad file for recovery.
+
+The JSON provider serialises operations inside one process. It does not provide cross-process file locking, so do not run two JSON-backed Jarvis CLI processes against the same file.
+
+### Convex persistence and authentication
+
+Convex is opt-in and rejects anonymous clients. Configure an OIDC provider for the deployment, then provide an identity token to the CLI:
+
+```bash
+export PERSISTENCE_PROVIDER=convex
+export CONVEX_URL='https://your-deployment.convex.cloud'
+export CONVEX_AUTH_TOKEN='<OIDC identity token>'
+```
+
+The Convex deployment also needs:
+
+```text
+CONVEX_AUTH_ISSUER
+CONVEX_AUTH_AUDIENCE
+```
+
+The deployment URL is public routing information, not authentication. Every Convex query and mutation derives ownership from `ctx.auth.getUserIdentity()` and only accesses documents belonging to that authenticated identity.
+
+After choosing and configuring the real Convex deployment and auth provider, run `npx convex codegen` and the normal Convex deployment workflow. Generated files, deployment linking, credentials, and a real integration test are intentionally not fabricated in this repository change.
+
+## Checks
+
+```bash
+cd typescript
+npm ci
+npm run type-check
+npm test
+```
 
 Keep it boring first. Boring is what works.
-Add Convex to this existing TypeScript Node.js CLI.
-
-Repository:
-Benny3840/Jarvis
-
-Base commit:
-ad3114b498bf93aa6c688c1a0eeefa26c039fd23
-
-Requirements:
-
-1. Install the convex package using npm.
-2. Initialise Convex inside the existing repository. Do not scaffold a separate application.
-3. Create a typed Convex schema for:
-   - tasks
-   - reminders
-   - memories
-   - conversations
-   - assistantState
-4. Create query and mutation functions for each table.
-5. Introduce a persistence interface so the current CLI services do not depend directly on Convex.
-6. Keep the existing JSON PersistentState implementation as a local fallback.
-7. Add a Convex persistence implementation.
-8. Select the persistence provider using an environment variable.
-9. Do not add React, Next.js or browser-specific code.
-10. Preserve all existing CLI behaviour and tests.
-11. Add tests for the persistence abstraction.
-12. Run type-checking and the full test suite.
-13. Commit the completed work as one logical commit.
-
-Do not create or enter Convex credentials, deployment keys or secrets without stopping for user approval.
