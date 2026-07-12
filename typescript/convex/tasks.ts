@@ -14,10 +14,10 @@ const taskValidator = v.object({
 });
 
 export const create = mutationGeneric({
-  args: { title: v.string(), category: v.string() },
+  args: { serviceToken: v.string(), title: v.string(), category: v.string() },
   returns: taskValidator,
   handler: async (ctx, args) => {
-    const ownerId = await requireOwner(ctx);
+    const ownerId = requireOwner(args.serviceToken);
     const id = await ctx.db.insert("tasks", {
       ownerId,
       title: args.title,
@@ -32,19 +32,19 @@ export const create = mutationGeneric({
 });
 
 export const list = queryGeneric({
-  args: {},
+  args: { serviceToken: v.string() },
   returns: v.array(taskValidator),
-  handler: async (ctx) => {
-    const ownerId = await requireOwner(ctx);
+  handler: async (ctx, args) => {
+    const ownerId = requireOwner(args.serviceToken);
     return ctx.db.query("tasks").withIndex("by_owner", (q) => q.eq("ownerId", ownerId)).collect();
   },
 });
 
 export const complete = mutationGeneric({
-  args: { id: v.string() },
+  args: { serviceToken: v.string(), id: v.string() },
   returns: v.union(taskValidator, v.null()),
   handler: async (ctx, args) => {
-    const ownerId = await requireOwner(ctx);
+    const ownerId = requireOwner(args.serviceToken);
     const id = ctx.db.normalizeId("tasks", args.id);
     if (!id) return null;
     const task = await ctx.db.get("tasks", id);
