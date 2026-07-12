@@ -1,238 +1,230 @@
-import { createPersistenceFromEnv, PersistenceProvider, AssistantState } from "./persistence/persistence.js";
+import * as readlinePromises from "node:readline/promises";
+import { stdin as input, stdout as output } from "node:process";
 
-export type CLIDeps = {
-  persistence?: PersistenceProvider;
-  stdout?: (s: string) => void;
-  stderr?: (s: string) => void;
-  exit?: (code: number) => void;
-};
+import { ConversationService } from "../dist/runtime/conversationService.js";
+import { MemoryService } from "../dist/runtime/memoryService.js";
+import { StateService } from "../dist/runtime/stateService.js";
+import { IntentRouter } from "../dist/runtime/intentRouter.js";
+import { AssistantResponse } from "../dist/runtime/assistantResponse.js";
+import { WorkshopEngine } from "../dist/domains/workshopEngine.js";
+import { BusinessEngine } from "../dist/domains/businessEngine.js";
+import { HomeEngine } from "../dist/domains/homeEngine.js";
+import { SafetyEnvelope } from "../dist/safety/safetyEnvelope.js";
+import { OrchestrationGraph } from "../dist/orchestration/graph.js";
+import { Orchestrator } from "../dist/runtime/orchestrator.js";
+import { WorkflowGenerator } from "../dist/autonomy/workflowGenerator.js";
+import { LearningEngine } from "../dist/adaptive/learningEngine.js";
+import { ReminderService } from "../dist/runtime/reminderService.js";
+import { TaskService } from "../dist/runtime/taskService.js";
+import { ProactiveAssistant } from "../dist/runtime/proactiveAssistant.js";
+import { ContextMemory } from "../dist/runtime/contextMemory.js";
+import { PersonalTraitsService } from "../dist/runtime/personalTraitsService.js";
 
-class RuntimeState {
-  private state: AssistantState = {};
+import {
+  createPersistenceFromEnv,
+  type AssistantState,
+  type PersistenceProvider,
+} from "./persistence/persistence.js";
 
-  load(initial: AssistantState) {
-    this.state = { ...initial };
-  }
-
-  snapshot(): AssistantState {
-    return { ...this.state };
-  }
-
-  setLastIntent(intent: string) {
-    this.state.lastIntent = intent;
-  }
-
-  setLastInput(input: string) {
-    this.state.lastInput = input;
-  }
-
-  setLastResult(result: unknown) {
-    this.state.lastResult = result;
-  }
-
-  setLastReminder(reminder: unknown) {
-    this.state.lastReminder = reminder;
-  }
-
-  setLastTask(task: unknown) {
-    this.state.lastTask = task;
-  }
-
-  addNote(text: string) {
-    const notes = (this.state.notes as string[]) ?? [];
-    notes.push(text);
-    this.state.notes = notes;
-  }
-
-  addReminder(r: { id?: string; title: string; due?: string }) {
-    const rs = (this.state.reminders as any[]) ?? [];
-    rs.push(r);
-    this.state.reminders = rs;
-    this.setLastReminder(r);
-  }
-
-  addTask(t: { id?: string; title: string; completed?: boolean }) {
-    const ts = (this.state.tasks as any[]) ?? [];
-    ts.push(t);
-    this.state.tasks = ts;
-    this.setLastTask(t);
-  }
+export interface ReadlineAdapter {
+  question(prompt: string): Promise<string>;
+  close(): void;
 }
 
-export async function runCli(argv: string[], deps: CLIDeps = {}) {
-  const stdout = deps.stdout ?? ((s: string) => console.log(s));
-  const stderr = deps.stderr ?? ((s: string) => console.error(s));
-  const exit = deps.exit ?? ((c: number) => { if (c !== 0) process.exit(c); });
+export type ConsoleWriter = (...values: unknown[]) => void;
 
-  // Create a single persistence provider for the lifetime of the CLI.
-  const persistence: PersistenceProvider = deps.persistence ?? createPersistenceFromEnv();
+export type RunCliDependencies = {
+  persistence?: PersistenceProvider;
+  readline?: ReadlineAdapter;
+  stdout?: ConsoleWriter;
+  stderr?: ConsoleWriter;
+};
 
-  // Load startup state once.
-  let initialState: AssistantState;
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+export async function runCli(deps: RunCliDependencies = {}): Promise<void> {
+  const write = deps.stdout ?? ((...values: unknown[]) => console.log(...values));
+  const writeError = deps.stderr ?? ((...values: unknown[]) => console.error(...values));
+  const rl =
+    deps.readline ??
+    (readlinePromises.createInterface({ input, output }) as ReadlineAdapter);
+  const persistence = deps.persistence ?? createPersistenceFromEnv();
+
+  const conversation = new ConversationService();
+  const memory = new MemoryService();
+  const router = new IntentRouter();
+  const responseFormatter = new AssistantResponse();
+  const state = new StateService();
+
+  let previousState: AssistantState;
   try {
-    initialState = await persistence.loadState();
-  } catch (err: unknown) {
-    stderr(`Failed to load persistent state: ${(err as Error).message}`);
-    exit(1);
-    return;
+    previousState = await persistence.loadState();
+  } catch (error: unknown) {
+    rl.close();
+    writeError("Failed to load persistent state:", errorMessage(error));
+    throw error;
   }
 
-  const runtime = new RuntimeState();
-  runtime.load(initialState ?? {});
+  Object.entries(previousState).forEach(([key, value]) => {
+    state.set(key, value);
+  });
 
-  // helper to persist the current runtime snapshot plus any extras
-  async function saveRuntimeState(extra: AssistantState = {}) {
-    const toSave: AssistantState = { ...runtime.snapshot(), ...extra };
+  const workshop = new WorkshopEngine();
+  const business = new BusinessEngine();
+  const home = new HomeEngine();
+  const workflowGenerator = new WorkflowGenerator();
+  const learningEngine = new LearningEngine();
+  const reminderService = new ReminderService();
+  const taskService = new TaskService();
+  const proactiveAssistant = new ProactiveAssistant();
+  const contextMemory = new ContextMemory();
+  const personalTraits = new PersonalTraitsService();
+  const safety = new SafetyEnvelope();
+  const graph = new OrchestrationGraph();
+
+  graph.addNode({ id: "workshop", kind: "domain" });
+  graph.addNode({ id: "business", kind: "domain" });
+  graph.addNode({ id: "home", kind: "domain" });
+  graph.addNode({ id: "safety", kind: "safety" });
+  graph.addEdge({ from: "workshop", to: "safety" });
+  graph.addEdge({ from: "business", to: "safety" });
+  graph.addEdge({ from: "home", to: "safety" });
+
+  const domainRouter = {
+    async route(module: string, action: string, payload: unknown) {
+      if (module === "domains" && action === "plan") {
+        const workshopTask = workshop.createTask(
+          "Prototype Jarvis",
+          "Create the first workshop task",
+          "high",
+        );
+        const businessTask = business.createTask(
+          "Submit build update",
+          "Share the current Jarvis progress",
+          "2026-07-11",
+        );
+        const homeTask = home.createTask(
+          "Reset living room",
+          "Tidy up the living room",
+          "living room",
+        );
+        state.set("lastIntent", String(payload));
+        return {
+          module,
+          action,
+          payload,
+          workshopTask,
+          workshopSummary: workshop.summarize(workshopTask),
+          businessTask,
+          businessSummary: business.summarize(businessTask),
+          homeTask,
+          homeSummary: home.summarize(homeTask),
+          graph: graph.getPlan(),
+          state: state.snapshot(),
+        };
+      }
+      return { module, action, payload };
+    },
+  };
+
+  const orchestrator = new Orchestrator(memory, domainRouter, safety);
+
+  async function saveRuntimeState(extra: AssistantState = {}): Promise<void> {
     try {
-      await persistence.saveState(toSave);
-    } catch (err: unknown) {
-      stderr(`Failed to save persistent state: ${(err as Error).message}`);
-      throw err;
+      await persistence.saveState({
+        ...state.snapshot(),
+        ...extra,
+      });
+    } catch (error: unknown) {
+      writeError("Failed to save persistent state:", errorMessage(error));
+      throw error;
     }
   }
 
-  const args = argv.slice();
-  const cmd = args.shift();
+  write("Jarvis CLI ready. Type 'exit' to quit.");
 
-  if (!cmd) {
-    stdout("No command provided. Use: status|checklist|note|notes|add-reminder|list-reminders|add-task|list-tasks");
-    return;
-  }
+  try {
+    while (true) {
+      const inputText = await rl.question("You: ");
+      if (inputText.trim().toLowerCase() === "exit") {
+        break;
+      }
 
-  if (cmd === "status") {
-    runtime.setLastIntent("status");
-    runtime.setLastInput("");
-    runtime.setLastResult({ ok: true });
-    await saveRuntimeState();
-    stdout("Jarvis is working.");
-    return;
-  }
+      const parsed = conversation.parse(inputText, {});
+      const intent = router.route(inputText);
+      contextMemory.remember(inputText);
+      const plan = orchestrator.plan(parsed);
+      const result = await orchestrator.execute(plan);
+      const reply = responseFormatter.format(intent, inputText);
 
-  if (cmd === "checklist") {
-    runtime.setLastIntent("checklist");
-    runtime.setLastInput("");
-    runtime.setLastResult({ printed: true });
-    const lines = [
-      "Jarvis daily checklist:",
-      "1. Check calendar and booked jobs.",
-      "2. Confirm client messages and invoice follow-ups.",
-      "3. Load tools, PPE, fuel, batteries, and consumables.",
-      "4. Check job scope, access, waste volume, and weather.",
-      "5. Photograph before/during/after where useful.",
-      "6. Record labour, materials, waste, travel, and extras before leaving site.",
-      "7. Send quote/invoice/follow-up before the day gets away from you.",
-    ];
-    stdout(lines.join("\n"));
-    await saveRuntimeState();
-    return;
-  }
-
-  if (cmd === "note") {
-    const text = args.join(" ").trim();
-    if (!text) {
-      stderr("Error: Note text cannot be empty.");
-      exit(2);
-      return;
+      if (intent === "planning") {
+        const workflow = workflowGenerator.createPlan(inputText, {
+          priority: "high",
+          context: "workshop, business, and home tasks",
+        });
+        learningEngine.observe(inputText);
+        write("Jarvis:", `${reply}\nWorkflow: ${JSON.stringify(workflow)}`);
+        write(
+          JSON.stringify(
+            {
+              intent,
+              result,
+              workflow,
+              suggestion: learningEngine.suggest(),
+            },
+            null,
+            2,
+          ),
+        );
+      } else if (inputText.toLowerCase().includes("remind")) {
+        const reminder = reminderService.add(inputText, "tomorrow");
+        await saveRuntimeState({
+          lastInput: inputText,
+          lastIntent: intent,
+          lastReminder: reminder,
+        });
+        write("Jarvis:", `Reminder set: ${reminder.title} for ${reminder.due}`);
+        write(JSON.stringify({ intent, reminder }, null, 2));
+      } else if (inputText.toLowerCase().includes("task")) {
+        const task = taskService.add(inputText, "personal");
+        await saveRuntimeState({
+          lastInput: inputText,
+          lastIntent: intent,
+          lastTask: task,
+        });
+        write("Jarvis:", `Task added: ${task.title}`);
+        write(JSON.stringify({ intent, task }, null, 2));
+      } else if (inputText.toLowerCase().includes("summary")) {
+        const summary = proactiveAssistant.summarize(taskService.list());
+        write("Jarvis:", summary);
+        write(JSON.stringify({ intent, summary }, null, 2));
+      } else if (inputText.toLowerCase().includes("remember")) {
+        const recall = contextMemory.recall("milk");
+        write("Jarvis:", `I remember: ${recall.join(", ") || "nothing yet"}`);
+        write(JSON.stringify({ intent, recall }, null, 2));
+      } else if (inputText.toLowerCase().includes("brief")) {
+        const brief = personalTraits.dailyBrief();
+        write("Jarvis:", brief);
+        write(JSON.stringify({ intent, brief }, null, 2));
+      } else if (inputText.toLowerCase().includes("motivate")) {
+        const motivation = personalTraits.motivation();
+        write("Jarvis:", motivation);
+        write(JSON.stringify({ intent, motivation }, null, 2));
+      } else {
+        await saveRuntimeState({
+          lastInput: inputText,
+          lastIntent: intent,
+          lastResult: result,
+        });
+        write("Jarvis:", reply);
+        write(JSON.stringify({ intent, result }, null, 2));
+      }
     }
-    runtime.setLastIntent("note");
-    runtime.setLastInput(text);
-    runtime.addNote(text);
-    runtime.setLastResult({ saved: true, text });
-    try {
-      await saveRuntimeState();
-    } catch (err) {
-      // saveRuntimeState already reported the error
-      exit(1);
-      return;
-    }
-    stdout(`Saved note: ${text}`);
-    return;
+  } finally {
+    rl.close();
   }
-
-  if (cmd === "notes") {
-    const notes = (runtime.snapshot().notes as string[]) ?? [];
-    if (notes.length === 0) {
-      stdout("No notes saved yet.");
-      return;
-    }
-    notes.forEach((n, idx) => stdout(`${idx + 1}. ${n}`));
-    runtime.setLastIntent("notes");
-    runtime.setLastResult({ count: notes.length });
-    await saveRuntimeState();
-    return;
-  }
-
-  if (cmd === "add-reminder") {
-    const title = args.join(" ").trim();
-    if (!title) {
-      stderr("Error: reminder title cannot be empty.");
-      exit(2);
-      return;
-    }
-    const reminder = { title, id: undefined };
-    runtime.setLastIntent("add-reminder");
-    runtime.setLastInput(title);
-    runtime.addReminder(reminder);
-    runtime.setLastResult({ saved: true, reminder });
-    try {
-      await saveRuntimeState();
-    } catch (err) {
-      exit(1);
-      return;
-    }
-    stdout(`Saved reminder: ${title}`);
-    return;
-  }
-
-  if (cmd === "list-reminders") {
-    const reminders = (runtime.snapshot().reminders as any[]) ?? [];
-    if (reminders.length === 0) {
-      stdout("No reminders saved yet.");
-      return;
-    }
-    reminders.forEach((r, idx) => stdout(`${idx + 1}. ${r.title}`));
-    runtime.setLastIntent("list-reminders");
-    runtime.setLastResult({ count: reminders.length });
-    await saveRuntimeState();
-    return;
-  }
-
-  if (cmd === "add-task") {
-    const title = args.join(" ").trim();
-    if (!title) {
-      stderr("Error: task title cannot be empty.");
-      exit(2);
-      return;
-    }
-    const task = { title, completed: false };
-    runtime.setLastIntent("add-task");
-    runtime.setLastInput(title);
-    runtime.addTask(task);
-    runtime.setLastResult({ saved: true, task });
-    try {
-      await saveRuntimeState();
-    } catch (err) {
-      exit(1);
-      return;
-    }
-    stdout(`Saved task: ${title}`);
-    return;
-  }
-
-  if (cmd === "list-tasks") {
-    const tasks = (runtime.snapshot().tasks as any[]) ?? [];
-    if (tasks.length === 0) {
-      stdout("No tasks saved yet.");
-      return;
-    }
-    tasks.forEach((t, idx) => stdout(`${idx + 1}. ${t.title} ${t.completed ? "(done)" : ""}`));
-    runtime.setLastIntent("list-tasks");
-    runtime.setLastResult({ count: tasks.length });
-    await saveRuntimeState();
-    return;
-  }
-
-  stderr(`Unknown command: ${cmd}`);
 }
 
 export default runCli;
