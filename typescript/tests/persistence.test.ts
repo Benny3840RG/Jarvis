@@ -18,13 +18,13 @@ import {
 
 const originalProvider = process.env.PERSISTENCE_PROVIDER;
 const originalUrl = process.env.CONVEX_URL;
-const originalToken = process.env.CONVEX_AUTH_TOKEN;
+const originalToken = process.env.JARVIS_SERVICE_TOKEN;
 let tempDir = "";
 
 beforeEach(async () => {
   delete process.env.PERSISTENCE_PROVIDER;
   delete process.env.CONVEX_URL;
-  delete process.env.CONVEX_AUTH_TOKEN;
+  delete process.env.JARVIS_SERVICE_TOKEN;
   tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "jarvis-persistence-"));
 });
 
@@ -33,8 +33,8 @@ afterEach(async () => {
   else process.env.PERSISTENCE_PROVIDER = originalProvider;
   if (originalUrl === undefined) delete process.env.CONVEX_URL;
   else process.env.CONVEX_URL = originalUrl;
-  if (originalToken === undefined) delete process.env.CONVEX_AUTH_TOKEN;
-  else process.env.CONVEX_AUTH_TOKEN = originalToken;
+  if (originalToken === undefined) delete process.env.JARVIS_SERVICE_TOKEN;
+  else process.env.JARVIS_SERVICE_TOKEN = originalToken;
   await fs.rm(tempDir, { recursive: true, force: true });
 });
 
@@ -137,8 +137,9 @@ describe("createPersistenceFromEnv", () => {
     assert(createPersistenceFromEnv() instanceof JSONPersistence);
   });
 
-  it("selects Convex with an injected client and no real URL or token", () => {
+  it("selects Convex with an injected client and service token", () => {
     process.env.PERSISTENCE_PROVIDER = "convex";
+    process.env.JARVIS_SERVICE_TOKEN = "test-service-token";
     const mock: ConvexClientLike = {
       async query<T>() {
         return null as T;
@@ -150,11 +151,11 @@ describe("createPersistenceFromEnv", () => {
     assert(createPersistenceFromEnv(mock) instanceof ConvexPersistence);
   });
 
-  it("requires both the Convex URL and an identity token for a real client", () => {
+  it("requires both a service token and Convex URL for a real client", () => {
     process.env.PERSISTENCE_PROVIDER = "convex";
+    assert.throws(() => createPersistenceFromEnv(), /JARVIS_SERVICE_TOKEN/);
+    process.env.JARVIS_SERVICE_TOKEN = "test-service-token";
     assert.throws(() => createPersistenceFromEnv(), /CONVEX_URL/);
-    process.env.CONVEX_URL = "https://example.convex.cloud";
-    assert.throws(() => createPersistenceFromEnv(), /CONVEX_AUTH_TOKEN/);
   });
 
   it("rejects unknown provider names", () => {
@@ -164,24 +165,24 @@ describe("createPersistenceFromEnv", () => {
 });
 
 describe("ConvexPersistence", () => {
-  it("loads and saves assistant state using the wrapped payload", async () => {
+  it("loads and saves assistant state with the service token", async () => {
     const sample: AssistantState = { lastIntent: "hello" };
     const events: string[] = [];
     const mock: ConvexClientLike = {
       async query<T>(reference: unknown, args?: Record<string, unknown>) {
         assert.equal(reference, assistantStateFunctions.get);
-        assert.deepEqual(args, {});
+        assert.deepEqual(args, { serviceToken: "test-service-token" });
         events.push("load");
         return { state: sample } as T;
       },
       async mutation<T>(reference: unknown, args: Record<string, unknown>) {
         assert.equal(reference, assistantStateFunctions.upsert);
-        assert.deepEqual(args, { state: sample });
+        assert.deepEqual(args, { serviceToken: "test-service-token", state: sample });
         events.push("save");
         return undefined as T;
       },
     };
-    const provider = new ConvexPersistence(mock);
+    const provider = new ConvexPersistence(mock, "test-service-token");
     assert.deepEqual(await provider.loadState(), sample);
     await provider.saveState(sample);
     assert.deepEqual(events, ["load", "save"]);
@@ -189,7 +190,8 @@ describe("ConvexPersistence", () => {
 
   it("maps task and reminder records through the shared provider contract", async () => {
     const mock: ConvexClientLike = {
-      async query<T>(reference: unknown) {
+      async query<T>(reference: unknown, args?: Record<string, unknown>) {
+        assert.equal(args?.serviceToken, "test-service-token");
         if (reference === taskFunctions.list) {
           return [
             {
@@ -206,7 +208,8 @@ describe("ConvexPersistence", () => {
         }
         return null as T;
       },
-      async mutation<T>(reference: unknown) {
+      async mutation<T>(reference: unknown, args: Record<string, unknown>) {
+        assert.equal(args.serviceToken, "test-service-token");
         if (reference === taskFunctions.create || reference === taskFunctions.complete) {
           return {
             _id: "task-id",
@@ -219,7 +222,7 @@ describe("ConvexPersistence", () => {
         return { _id: "reminder-id", title: "Reminder", due: "Friday", createdAt: 2 } as T;
       },
     };
-    const provider = new ConvexPersistence(mock);
+    const provider = new ConvexPersistence(mock, "test-service-token");
     assert.equal((await provider.listTasks())[0].id, "task-id");
     assert.equal((await provider.addTask("Task", "personal")).title, "Task");
     assert.equal((await provider.completeTask("task-id"))?.completed, true);
@@ -237,7 +240,7 @@ describe("ConvexPersistence", () => {
         throw new Error("ArgumentValidationError: invalid Convex ID");
       },
     };
-    const provider = new ConvexPersistence(mock);
+    const provider = new ConvexPersistence(mock, "test-service-token");
     assert.equal(await provider.completeTask("garbage"), null);
     assert.equal(await provider.removeReminder("garbage"), null);
   });
