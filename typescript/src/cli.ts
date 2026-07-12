@@ -1,25 +1,24 @@
 import * as readlinePromises from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
 
-import { ConversationService } from "../dist/runtime/conversationService.js";
-import { MemoryService } from "../dist/runtime/memoryService.js";
-import { StateService } from "../dist/runtime/stateService.js";
-import { IntentRouter } from "../dist/runtime/intentRouter.js";
-import { AssistantResponse } from "../dist/runtime/assistantResponse.js";
-import { WorkshopEngine } from "../dist/domains/workshopEngine.js";
-import { BusinessEngine } from "../dist/domains/businessEngine.js";
-import { HomeEngine } from "../dist/domains/homeEngine.js";
-import { SafetyEnvelope } from "../dist/safety/safetyEnvelope.js";
-import { OrchestrationGraph } from "../dist/orchestration/graph.js";
-import { Orchestrator } from "../dist/runtime/orchestrator.js";
-import { WorkflowGenerator } from "../dist/autonomy/workflowGenerator.js";
-import { LearningEngine } from "../dist/adaptive/learningEngine.js";
-import { ReminderService } from "../dist/runtime/reminderService.js";
-import { TaskService } from "../dist/runtime/taskService.js";
-import { ProactiveAssistant } from "../dist/runtime/proactiveAssistant.js";
-import { ContextMemory } from "../dist/runtime/contextMemory.js";
-import { PersonalTraitsService } from "../dist/runtime/personalTraitsService.js";
-
+import { ConversationService } from "./runtime/conversationService.js";
+import { MemoryService } from "./runtime/memoryService.js";
+import { StateService } from "./runtime/stateService.js";
+import { IntentRouter } from "./runtime/intentRouter.js";
+import { AssistantResponse } from "./runtime/assistantResponse.js";
+import { WorkshopEngine } from "./domains/workshopEngine.js";
+import { BusinessEngine } from "./domains/businessEngine.js";
+import { HomeEngine } from "./domains/homeEngine.js";
+import { SafetyEnvelope } from "./safety/safetyEnvelope.js";
+import { OrchestrationGraph } from "./orchestration/graph.js";
+import { Orchestrator } from "./runtime/orchestrator.js";
+import { WorkflowGenerator } from "./autonomy/workflowGenerator.js";
+import { LearningEngine } from "./adaptive/learningEngine.js";
+import { ReminderService } from "./runtime/reminderService.js";
+import { TaskService } from "./runtime/taskService.js";
+import { ProactiveAssistant } from "./runtime/proactiveAssistant.js";
+import { ContextMemory } from "./runtime/contextMemory.js";
+import { PersonalTraitsService } from "./runtime/personalTraitsService.js";
 import {
   createPersistenceFromEnv,
   type AssistantState,
@@ -47,9 +46,7 @@ function errorMessage(error: unknown): string {
 export async function runCli(deps: RunCliDependencies = {}): Promise<void> {
   const write = deps.stdout ?? ((...values: unknown[]) => console.log(...values));
   const writeError = deps.stderr ?? ((...values: unknown[]) => console.error(...values));
-  const rl =
-    deps.readline ??
-    (readlinePromises.createInterface({ input, output }) as ReadlineAdapter);
+  const rl = deps.readline ?? (readlinePromises.createInterface({ input, output }) as ReadlineAdapter);
   const persistence = deps.persistence ?? createPersistenceFromEnv();
 
   const conversation = new ConversationService();
@@ -67,9 +64,7 @@ export async function runCli(deps: RunCliDependencies = {}): Promise<void> {
     throw error;
   }
 
-  Object.entries(previousState).forEach(([key, value]) => {
-    state.set(key, value);
-  });
+  for (const [key, value] of Object.entries(previousState)) state.set(key, value);
 
   const workshop = new WorkshopEngine();
   const business = new BusinessEngine();
@@ -84,16 +79,20 @@ export async function runCli(deps: RunCliDependencies = {}): Promise<void> {
   const safety = new SafetyEnvelope();
   const graph = new OrchestrationGraph();
 
-  graph.addNode({ id: "workshop", kind: "domain" });
-  graph.addNode({ id: "business", kind: "domain" });
-  graph.addNode({ id: "home", kind: "domain" });
-  graph.addNode({ id: "safety", kind: "safety" });
-  graph.addEdge({ from: "workshop", to: "safety" });
-  graph.addEdge({ from: "business", to: "safety" });
-  graph.addEdge({ from: "home", to: "safety" });
+  for (const node of [
+    { id: "workshop", kind: "domain" },
+    { id: "business", kind: "domain" },
+    { id: "home", kind: "domain" },
+    { id: "safety", kind: "safety" },
+  ]) graph.addNode(node);
+  for (const edge of [
+    { from: "workshop", to: "safety" },
+    { from: "business", to: "safety" },
+    { from: "home", to: "safety" },
+  ]) graph.addEdge(edge);
 
   const domainRouter = {
-    async route(module: string, action: string, payload: unknown) {
+    async route(module: string, action: string, payload: unknown): Promise<unknown> {
       if (module === "domains" && action === "plan") {
         const workshopTask = workshop.createTask(
           "Prototype Jarvis",
@@ -133,10 +132,7 @@ export async function runCli(deps: RunCliDependencies = {}): Promise<void> {
 
   async function saveRuntimeState(extra: AssistantState = {}): Promise<void> {
     try {
-      await persistence.saveState({
-        ...state.snapshot(),
-        ...extra,
-      });
+      await persistence.saveState({ ...state.snapshot(), ...extra });
     } catch (error: unknown) {
       writeError("Failed to save persistent state:", errorMessage(error));
       throw error;
@@ -148,9 +144,8 @@ export async function runCli(deps: RunCliDependencies = {}): Promise<void> {
   try {
     while (true) {
       const inputText = await rl.question("You: ");
-      if (inputText.trim().toLowerCase() === "exit") {
-        break;
-      }
+      const lower = inputText.trim().toLowerCase();
+      if (lower === "exit") break;
 
       const parsed = conversation.parse(inputText, {});
       const intent = router.route(inputText);
@@ -159,65 +154,44 @@ export async function runCli(deps: RunCliDependencies = {}): Promise<void> {
       const result = await orchestrator.execute(plan);
       const reply = responseFormatter.format(intent, inputText);
 
-      if (intent === "planning") {
+      if (lower.includes("remind")) {
+        const reminder = reminderService.add(inputText, "tomorrow");
+        await saveRuntimeState({ lastInput: inputText, lastIntent: intent, lastReminder: reminder });
+        write("Jarvis:", `Reminder set: ${reminder.title} for ${reminder.due}`);
+        write(JSON.stringify({ intent, reminder }, null, 2));
+      } else if (lower.includes("task") && !lower.includes("plan")) {
+        const task = taskService.add(inputText, "personal");
+        await saveRuntimeState({ lastInput: inputText, lastIntent: intent, lastTask: task });
+        write("Jarvis:", `Task added: ${task.title}`);
+        write(JSON.stringify({ intent, task }, null, 2));
+      } else if (lower.includes("summary")) {
+        const summary = proactiveAssistant.summarize(taskService.list());
+        write("Jarvis:", summary);
+        write(JSON.stringify({ intent, summary }, null, 2));
+      } else if (lower.includes("remember")) {
+        const keyword = lower.replace(/^.*?remember\s+/, "").trim() || "milk";
+        const recall = contextMemory.recall(keyword);
+        write("Jarvis:", `I remember: ${recall.join(", ") || "nothing yet"}`);
+        write(JSON.stringify({ intent, recall }, null, 2));
+      } else if (lower.includes("brief")) {
+        const brief = personalTraits.dailyBrief();
+        write("Jarvis:", brief);
+        write(JSON.stringify({ intent, brief }, null, 2));
+      } else if (lower.includes("motivate")) {
+        const motivation = personalTraits.motivation();
+        write("Jarvis:", motivation);
+        write(JSON.stringify({ intent, motivation }, null, 2));
+      } else if (intent === "planning") {
         const workflow = workflowGenerator.createPlan(inputText, {
           priority: "high",
           context: "workshop, business, and home tasks",
         });
         learningEngine.observe(inputText);
+        await saveRuntimeState({ lastInput: inputText, lastIntent: intent, lastResult: result });
         write("Jarvis:", `${reply}\nWorkflow: ${JSON.stringify(workflow)}`);
-        write(
-          JSON.stringify(
-            {
-              intent,
-              result,
-              workflow,
-              suggestion: learningEngine.suggest(),
-            },
-            null,
-            2,
-          ),
-        );
-      } else if (inputText.toLowerCase().includes("remind")) {
-        const reminder = reminderService.add(inputText, "tomorrow");
-        await saveRuntimeState({
-          lastInput: inputText,
-          lastIntent: intent,
-          lastReminder: reminder,
-        });
-        write("Jarvis:", `Reminder set: ${reminder.title} for ${reminder.due}`);
-        write(JSON.stringify({ intent, reminder }, null, 2));
-      } else if (inputText.toLowerCase().includes("task")) {
-        const task = taskService.add(inputText, "personal");
-        await saveRuntimeState({
-          lastInput: inputText,
-          lastIntent: intent,
-          lastTask: task,
-        });
-        write("Jarvis:", `Task added: ${task.title}`);
-        write(JSON.stringify({ intent, task }, null, 2));
-      } else if (inputText.toLowerCase().includes("summary")) {
-        const summary = proactiveAssistant.summarize(taskService.list());
-        write("Jarvis:", summary);
-        write(JSON.stringify({ intent, summary }, null, 2));
-      } else if (inputText.toLowerCase().includes("remember")) {
-        const recall = contextMemory.recall("milk");
-        write("Jarvis:", `I remember: ${recall.join(", ") || "nothing yet"}`);
-        write(JSON.stringify({ intent, recall }, null, 2));
-      } else if (inputText.toLowerCase().includes("brief")) {
-        const brief = personalTraits.dailyBrief();
-        write("Jarvis:", brief);
-        write(JSON.stringify({ intent, brief }, null, 2));
-      } else if (inputText.toLowerCase().includes("motivate")) {
-        const motivation = personalTraits.motivation();
-        write("Jarvis:", motivation);
-        write(JSON.stringify({ intent, motivation }, null, 2));
+        write(JSON.stringify({ intent, result, workflow, suggestion: learningEngine.suggest() }, null, 2));
       } else {
-        await saveRuntimeState({
-          lastInput: inputText,
-          lastIntent: intent,
-          lastResult: result,
-        });
+        await saveRuntimeState({ lastInput: inputText, lastIntent: intent, lastResult: result });
         write("Jarvis:", reply);
         write(JSON.stringify({ intent, result }, null, 2));
       }
