@@ -1,39 +1,56 @@
 import { mutationGeneric, queryGeneric } from "convex/server";
 import { v } from "convex/values";
 
+import { requireOwner } from "./authHelpers.js";
+
+const reminderValidator = v.object({
+  _id: v.id("reminders"),
+  _creationTime: v.number(),
+  ownerId: v.string(),
+  title: v.string(),
+  due: v.optional(v.string()),
+  createdAt: v.number(),
+});
+
 export const create = mutationGeneric({
   args: { title: v.string(), due: v.optional(v.string()) },
+  returns: reminderValidator,
   handler: async (ctx, args) => {
-    const row = { title: args.title, due: args.due, createdAt: Date.now() };
-    const id = await ctx.db.insert("reminders", row);
-    return { _id: id, ...row };
+    const ownerId = await requireOwner(ctx);
+    const id = await ctx.db.insert("reminders", {
+      ownerId,
+      title: args.title,
+      ...(args.due === undefined ? {} : { due: args.due }),
+      createdAt: Date.now(),
+    });
+    const reminder = await ctx.db.get("reminders", id);
+    if (!reminder) throw new Error("Reminder creation failed.");
+    return reminder;
   },
 });
 
 export const list = queryGeneric({
   args: {},
-  handler: async (ctx) => ctx.db.query("reminders").collect(),
-});
-
-export const update = mutationGeneric({
-  args: {
-    id: v.id("reminders"),
-    title: v.optional(v.string()),
-    due: v.optional(v.string()),
-  },
-  handler: async (ctx, args) => {
-    const patch: { title?: string; due?: string } = {};
-    if (args.title !== undefined) patch.title = args.title;
-    if (args.due !== undefined) patch.due = args.due;
-    await ctx.db.patch("reminders", args.id, patch);
-    return true;
+  returns: v.array(reminderValidator),
+  handler: async (ctx) => {
+    const ownerId = await requireOwner(ctx);
+    return ctx.db
+      .query("reminders")
+      .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+      .collect();
   },
 });
 
 export const remove = mutationGeneric({
-  args: { id: v.id("reminders") },
+  args: { id: v.string() },
+  returns: v.union(reminderValidator, v.null()),
   handler: async (ctx, args) => {
-    await ctx.db.delete("reminders", args.id);
-    return true;
+    const ownerId = await requireOwner(ctx);
+    const id = ctx.db.normalizeId("reminders", args.id);
+    if (!id) return null;
+    const reminder = await ctx.db.get("reminders", id);
+    if (!reminder || reminder.ownerId !== ownerId) return null;
+    await ctx.db.delete("reminders", id);
+    return reminder;
   },
 });
