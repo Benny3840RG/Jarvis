@@ -1,39 +1,55 @@
 import { mutationGeneric, queryGeneric } from "convex/server";
 import { v } from "convex/values";
 
+import { requireOwner } from "./authHelpers.js";
+
+const taskValidator = v.object({
+  _id: v.id("tasks"),
+  _creationTime: v.number(),
+  ownerId: v.string(),
+  title: v.string(),
+  completed: v.boolean(),
+  category: v.string(),
+  createdAt: v.number(),
+});
+
 export const create = mutationGeneric({
-  args: { title: v.string() },
+  args: { title: v.string(), category: v.string() },
+  returns: taskValidator,
   handler: async (ctx, args) => {
-    const row = { title: args.title, completed: false, createdAt: Date.now() };
-    const id = await ctx.db.insert("tasks", row);
-    return { _id: id, ...row };
+    const ownerId = await requireOwner(ctx);
+    const id = await ctx.db.insert("tasks", {
+      ownerId,
+      title: args.title,
+      completed: false,
+      category: args.category,
+      createdAt: Date.now(),
+    });
+    const task = await ctx.db.get("tasks", id);
+    if (!task) throw new Error("Task creation failed.");
+    return task;
   },
 });
 
 export const list = queryGeneric({
   args: {},
-  handler: async (ctx) => ctx.db.query("tasks").collect(),
-});
-
-export const update = mutationGeneric({
-  args: {
-    id: v.id("tasks"),
-    title: v.optional(v.string()),
-    completed: v.optional(v.boolean()),
-  },
-  handler: async (ctx, args) => {
-    const patch: { title?: string; completed?: boolean } = {};
-    if (args.title !== undefined) patch.title = args.title;
-    if (args.completed !== undefined) patch.completed = args.completed;
-    await ctx.db.patch("tasks", args.id, patch);
-    return true;
+  returns: v.array(taskValidator),
+  handler: async (ctx) => {
+    const ownerId = await requireOwner(ctx);
+    return ctx.db.query("tasks").withIndex("by_owner", (q) => q.eq("ownerId", ownerId)).collect();
   },
 });
 
-export const remove = mutationGeneric({
-  args: { id: v.id("tasks") },
+export const complete = mutationGeneric({
+  args: { id: v.string() },
+  returns: v.union(taskValidator, v.null()),
   handler: async (ctx, args) => {
-    await ctx.db.delete("tasks", args.id);
-    return true;
+    const ownerId = await requireOwner(ctx);
+    const id = ctx.db.normalizeId("tasks", args.id);
+    if (!id) return null;
+    const task = await ctx.db.get("tasks", id);
+    if (!task || task.ownerId !== ownerId) return null;
+    await ctx.db.patch("tasks", id, { completed: true });
+    return ctx.db.get("tasks", id);
   },
 });
