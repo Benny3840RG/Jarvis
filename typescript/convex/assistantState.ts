@@ -14,23 +14,16 @@ const assistantStateValidator = v.object({
   updatedAt: v.number(),
 });
 
-async function findPrimaryState(
-  ctx: Parameters<Parameters<typeof queryGeneric>[0]["handler"]>[0],
-  ownerId: string,
-) {
-  return ctx.db
-    .query("assistantState")
-    .withIndex("by_owner_key", (q) => q.eq("ownerId", ownerId))
-    .filter((q) => q.eq(q.field("key"), PRIMARY_KEY))
-    .unique();
-}
-
 export const get = queryGeneric({
   args: {},
   returns: v.union(assistantStateValidator, v.null()),
   handler: async (ctx) => {
     const ownerId = await requireOwner(ctx);
-    return findPrimaryState(ctx, ownerId);
+    return ctx.db
+      .query("assistantState")
+      .withIndex("by_owner_key", (q) => q.eq("ownerId", ownerId))
+      .filter((q) => q.eq(q.field("key"), PRIMARY_KEY))
+      .unique();
   },
 });
 
