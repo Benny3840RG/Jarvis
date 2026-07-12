@@ -1,5 +1,6 @@
-import fs from "node:fs/promises";
+import fs, { type FileHandle } from "node:fs/promises";
 import path from "node:path";
+import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 
 import { ConvexHttpClient } from "convex/browser";
@@ -14,14 +15,176 @@ export type AssistantState = {
   [key: string]: unknown;
 };
 
+export type Task = {
+  id: string;
+  title: string;
+  completed: boolean;
+  category: string;
+  createdAt: number;
+};
+
+export type Reminder = {
+  id: string;
+  title: string;
+  due?: string;
+  createdAt: number;
+};
+
 export interface PersistenceProvider {
   loadState(): Promise<AssistantState>;
   saveState(state: AssistantState): Promise<void>;
+  listTasks(): Promise<Task[]>;
+  addTask(title: string, category: string): Promise<Task>;
+  completeTask(id: string): Promise<Task | null>;
+  listReminders(): Promise<Reminder[]>;
+  addReminder(title: string, due?: string): Promise<Reminder>;
+  removeReminder(id: string): Promise<Reminder | null>;
+}
+
+const DOCUMENT_VERSION = 1 as const;
+
+type PersistedDocument = {
+  version: typeof DOCUMENT_VERSION;
+  state: AssistantState;
+  tasks: Task[];
+  reminders: Reminder[];
+};
+
+class StateDocumentError extends Error {}
+
+function emptyDocument(): PersistedDocument {
+  return { version: DOCUMENT_VERSION, state: {}, tasks: [], reminders: [] };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function cloneTask(task: Task): Task {
+  return { ...task };
+}
+
+function cloneReminder(reminder: Reminder): Reminder {
+  return { ...reminder };
+}
+
+function cloneDocument(document: PersistedDocument): PersistedDocument {
+  return {
+    version: DOCUMENT_VERSION,
+    state: { ...document.state },
+    tasks: document.tasks.map(cloneTask),
+    reminders: document.reminders.map(cloneReminder),
+  };
+}
+
+function normalizeTask(value: unknown, index: number, strict: boolean): Task {
+  if (!isRecord(value)) throw new StateDocumentError(`Task ${index} is not an object.`);
+  if (typeof value.id !== "string" || value.id.length === 0) {
+    throw new StateDocumentError(`Task ${index} has an invalid id.`);
+  }
+  if (typeof value.title !== "string" || value.title.length === 0) {
+    throw new StateDocumentError(`Task ${index} has an invalid title.`);
+  }
+  if (typeof value.completed !== "boolean") {
+    throw new StateDocumentError(`Task ${index} has an invalid completed flag.`);
+  }
+  if (strict && typeof value.category !== "string") {
+    throw new StateDocumentError(`Task ${index} has an invalid category.`);
+  }
+  if (strict && typeof value.createdAt !== "number") {
+    throw new StateDocumentError(`Task ${index} has an invalid createdAt value.`);
+  }
+  return {
+    id: value.id,
+    title: value.title,
+    completed: value.completed,
+    category: typeof value.category === "string" ? value.category : "personal",
+    createdAt: typeof value.createdAt === "number" ? value.createdAt : 0,
+  };
+}
+
+function normalizeReminder(value: unknown, index: number, strict: boolean): Reminder {
+  if (!isRecord(value)) throw new StateDocumentError(`Reminder ${index} is not an object.`);
+  if (typeof value.id !== "string" || value.id.length === 0) {
+    throw new StateDocumentError(`Reminder ${index} has an invalid id.`);
+  }
+  if (typeof value.title !== "string" || value.title.length === 0) {
+    throw new StateDocumentError(`Reminder ${index} has an invalid title.`);
+  }
+  if (value.due !== undefined && typeof value.due !== "string") {
+    throw new StateDocumentError(`Reminder ${index} has an invalid due value.`);
+  }
+  if (strict && typeof value.createdAt !== "number") {
+    throw new StateDocumentError(`Reminder ${index} has an invalid createdAt value.`);
+  }
+  return {
+    id: value.id,
+    title: value.title,
+    ...(typeof value.due === "string" ? { due: value.due } : {}),
+    createdAt: typeof value.createdAt === "number" ? value.createdAt : 0,
+  };
+}
+
+function normalizeRows<T>(
+  value: unknown,
+  name: string,
+  normalize: (entry: unknown, index: number, strict: boolean) => T,
+  strict: boolean,
+): T[] {
+  if (!Array.isArray(value)) throw new StateDocumentError(`${name} must be an array.`);
+  return value.map((entry, index) => normalize(entry, index, strict));
+}
+
+export function normalizeDocument(value: unknown): PersistedDocument {
+  if (!isRecord(value)) throw new StateDocumentError("State document must be an object.");
+
+  if ("version" in value) {
+    if (value.version !== DOCUMENT_VERSION) {
+      throw new StateDocumentError(`Unsupported state document version: ${String(value.version)}.`);
+    }
+    if (!isRecord(value.state)) throw new StateDocumentError("Version 1 state must be an object.");
+    return {
+      version: DOCUMENT_VERSION,
+      state: { ...value.state },
+      tasks: normalizeRows(value.tasks, "Version 1 tasks", normalizeTask, true),
+      reminders: normalizeRows(value.reminders, "Version 1 reminders", normalizeReminder, true),
+    };
+  }
+
+  const documentLike = "state" in value || "tasks" in value || "reminders" in value;
+  if (!documentLike) {
+    return { version: DOCUMENT_VERSION, state: { ...value }, tasks: [], reminders: [] };
+  }
+
+  if (value.state !== undefined && !isRecord(value.state)) {
+    throw new StateDocumentError("Legacy state must be an object.");
+  }
+  return {
+    version: DOCUMENT_VERSION,
+    state: value.state === undefined ? {} : { ...value.state },
+    tasks: value.tasks === undefined ? [] : normalizeRows(value.tasks, "Legacy tasks", normalizeTask, false),
+    reminders:
+      value.reminders === undefined
+        ? []
+        : normalizeRows(value.reminders, "Legacy reminders", normalizeReminder, false),
+  };
 }
 
 export const assistantStateFunctions = {
   get: anyApi.assistantState.get,
   upsert: anyApi.assistantState.upsert,
+};
+
+export const taskFunctions = {
+  create: anyApi.tasks.create,
+  list: anyApi.tasks.list,
+  complete: anyApi.tasks.complete,
+};
+
+export const reminderFunctions = {
+  create: anyApi.reminders.create,
+  list: anyApi.reminders.list,
+  remove: anyApi.reminders.remove,
 };
 
 function defaultDataPath(): string {
@@ -33,33 +196,209 @@ function isNodeError(error: unknown): error is NodeJS.ErrnoException {
   return error instanceof Error && "code" in error;
 }
 
-export class JSONPersistence implements PersistenceProvider {
-  constructor(private readonly filePath = defaultDataPath()) {}
+export type PersistenceWarning = (message: string) => void;
 
-  async loadState(): Promise<AssistantState> {
+export class JSONPersistence implements PersistenceProvider {
+  private cachedDocument: PersistedDocument | undefined;
+  private pending: Promise<void> = Promise.resolve();
+
+  constructor(
+    private readonly filePath = defaultDataPath(),
+    private readonly warn: PersistenceWarning = (message) => console.warn(message),
+  ) {}
+
+  private enqueue<T>(operation: () => Promise<T>): Promise<T> {
+    const result = this.pending.then(operation, operation);
+    this.pending = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    return result;
+  }
+
+  private async quarantine(error: unknown): Promise<void> {
+    const suffix = `${new Date().toISOString().replace(/[:.]/g, "-")}-${randomUUID().slice(0, 8)}`;
+    const corruptPath = `${this.filePath}.corrupt-${suffix}`;
     try {
-      const raw = await fs.readFile(this.filePath, "utf8");
-      try {
-        return JSON.parse(raw) as AssistantState;
-      } catch (error: unknown) {
-        const message = error instanceof Error ? error.message : String(error);
-        throw new Error(`Malformed JSON in state file ${this.filePath}: ${message}`);
-      }
+      await fs.rename(this.filePath, corruptPath);
+      const message = error instanceof Error ? error.message : String(error);
+      this.warn(`Jarvis state file was corrupt and has been moved to ${corruptPath}: ${message}`);
+    } catch (renameError: unknown) {
+      if (isNodeError(renameError) && renameError.code === "ENOENT") return;
+      throw renameError;
+    }
+  }
+
+  private async readFromDisk(): Promise<PersistedDocument> {
+    let raw: string;
+    try {
+      raw = await fs.readFile(this.filePath, "utf8");
     } catch (error: unknown) {
-      if (isNodeError(error) && error.code === "ENOENT") return {};
+      if (isNodeError(error) && error.code === "ENOENT") return emptyDocument();
+      throw error;
+    }
+
+    try {
+      return normalizeDocument(JSON.parse(raw) as unknown);
+    } catch (error: unknown) {
+      const documentError =
+        error instanceof StateDocumentError
+          ? error
+          : new StateDocumentError(
+              `Malformed JSON: ${error instanceof Error ? error.message : String(error)}`,
+            );
+      await this.quarantine(documentError);
+      return emptyDocument();
+    }
+  }
+
+  private async readDocument(): Promise<PersistedDocument> {
+    if (this.cachedDocument === undefined) this.cachedDocument = await this.readFromDisk();
+    return cloneDocument(this.cachedDocument);
+  }
+
+  private async writeDocument(document: PersistedDocument): Promise<void> {
+    await fs.mkdir(path.dirname(this.filePath), { recursive: true });
+    const tempPath = path.join(
+      path.dirname(this.filePath),
+      `.${path.basename(this.filePath)}.tmp-${process.pid}-${randomUUID()}`,
+    );
+    let handle: FileHandle | undefined;
+    try {
+      handle = await fs.open(tempPath, "wx", 0o600);
+      await handle.writeFile(`${JSON.stringify(document, null, 2)}\n`, "utf8");
+      await handle.sync();
+      await handle.close();
+      handle = undefined;
+      await fs.rename(tempPath, this.filePath);
+    } catch (error: unknown) {
+      await handle?.close().catch(() => undefined);
+      await fs.rm(tempPath, { force: true }).catch(() => undefined);
       throw error;
     }
   }
 
+  private async remember(document: PersistedDocument): Promise<void> {
+    await this.writeDocument(document);
+    this.cachedDocument = cloneDocument(document);
+  }
+
+  async loadState(): Promise<AssistantState> {
+    return this.enqueue(async () => ({ ...(await this.readDocument()).state }));
+  }
+
   async saveState(state: AssistantState): Promise<void> {
-    await fs.mkdir(path.dirname(this.filePath), { recursive: true });
-    await fs.writeFile(this.filePath, JSON.stringify(state, null, 2), "utf8");
+    await this.enqueue(async () => {
+      const current = await this.readDocument();
+      await this.remember({ ...current, state: { ...state } });
+    });
+  }
+
+  async listTasks(): Promise<Task[]> {
+    return this.enqueue(async () => (await this.readDocument()).tasks.map(cloneTask));
+  }
+
+  async addTask(title: string, category: string): Promise<Task> {
+    return this.enqueue(async () => {
+      const current = await this.readDocument();
+      const task: Task = {
+        id: randomUUID(),
+        title,
+        completed: false,
+        category,
+        createdAt: Date.now(),
+      };
+      await this.remember({ ...current, tasks: [...current.tasks, task] });
+      return cloneTask(task);
+    });
+  }
+
+  async completeTask(id: string): Promise<Task | null> {
+    return this.enqueue(async () => {
+      const current = await this.readDocument();
+      const index = current.tasks.findIndex((task) => task.id === id);
+      if (index < 0) return null;
+      const task = { ...current.tasks[index], completed: true };
+      const tasks = current.tasks.map((entry, taskIndex) => (taskIndex === index ? task : entry));
+      await this.remember({ ...current, tasks });
+      return cloneTask(task);
+    });
+  }
+
+  async listReminders(): Promise<Reminder[]> {
+    return this.enqueue(async () => (await this.readDocument()).reminders.map(cloneReminder));
+  }
+
+  async addReminder(title: string, due?: string): Promise<Reminder> {
+    return this.enqueue(async () => {
+      const current = await this.readDocument();
+      const reminder: Reminder = {
+        id: randomUUID(),
+        title,
+        ...(due === undefined ? {} : { due }),
+        createdAt: Date.now(),
+      };
+      await this.remember({ ...current, reminders: [...current.reminders, reminder] });
+      return cloneReminder(reminder);
+    });
+  }
+
+  async removeReminder(id: string): Promise<Reminder | null> {
+    return this.enqueue(async () => {
+      const current = await this.readDocument();
+      const reminder = current.reminders.find((entry) => entry.id === id);
+      if (!reminder) return null;
+      await this.remember({
+        ...current,
+        reminders: current.reminders.filter((entry) => entry.id !== id),
+      });
+      return cloneReminder(reminder);
+    });
   }
 }
 
 export interface ConvexClientLike {
-  query<T>(functionReference: unknown, args?: Record<string, never>): Promise<T>;
+  query<T>(functionReference: unknown, args?: Record<string, unknown>): Promise<T>;
   mutation<T>(functionReference: unknown, args: Record<string, unknown>): Promise<T>;
+}
+
+type ConvexTaskRecord = {
+  _id: string;
+  title: string;
+  completed: boolean;
+  category: string;
+  createdAt: number;
+};
+
+type ConvexReminderRecord = {
+  _id: string;
+  title: string;
+  due?: string;
+  createdAt: number;
+};
+
+function taskFromConvex(row: ConvexTaskRecord): Task {
+  return {
+    id: row._id,
+    title: row.title,
+    completed: row.completed,
+    category: row.category,
+    createdAt: row.createdAt,
+  };
+}
+
+function reminderFromConvex(row: ConvexReminderRecord): Reminder {
+  return {
+    id: row._id,
+    title: row.title,
+    ...(row.due === undefined ? {} : { due: row.due }),
+    createdAt: row.createdAt,
+  };
+}
+
+function isInvalidIdError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /argument validation|invalid(?: convex)? id|invalid id|document.*not found/i.test(message);
 }
 
 export class ConvexPersistence implements PersistenceProvider {
@@ -75,7 +414,13 @@ export class ConvexPersistence implements PersistenceProvider {
     if (!convexUrl) {
       throw new Error("PERSISTENCE_PROVIDER=convex requires CONVEX_URL to be set in the environment.");
     }
-    this.client = new ConvexHttpClient(convexUrl) as unknown as ConvexClientLike;
+    const authToken = process.env.CONVEX_AUTH_TOKEN;
+    if (!authToken) {
+      throw new Error(
+        "PERSISTENCE_PROVIDER=convex requires CONVEX_AUTH_TOKEN. The deployment URL is not authentication.",
+      );
+    }
+    this.client = new ConvexHttpClient(convexUrl, { auth: authToken }) as unknown as ConvexClientLike;
   }
 
   async loadState(): Promise<AssistantState> {
@@ -88,6 +433,51 @@ export class ConvexPersistence implements PersistenceProvider {
 
   async saveState(state: AssistantState): Promise<void> {
     await this.client.mutation(assistantStateFunctions.upsert, { state });
+  }
+
+  async listTasks(): Promise<Task[]> {
+    const rows = await this.client.query<ConvexTaskRecord[]>(taskFunctions.list, {});
+    return rows.map(taskFromConvex);
+  }
+
+  async addTask(title: string, category: string): Promise<Task> {
+    const row = await this.client.mutation<ConvexTaskRecord>(taskFunctions.create, { title, category });
+    return taskFromConvex(row);
+  }
+
+  async completeTask(id: string): Promise<Task | null> {
+    try {
+      const row = await this.client.mutation<ConvexTaskRecord | null>(taskFunctions.complete, { id });
+      return row === null ? null : taskFromConvex(row);
+    } catch (error: unknown) {
+      if (isInvalidIdError(error)) return null;
+      throw error;
+    }
+  }
+
+  async listReminders(): Promise<Reminder[]> {
+    const rows = await this.client.query<ConvexReminderRecord[]>(reminderFunctions.list, {});
+    return rows.map(reminderFromConvex);
+  }
+
+  async addReminder(title: string, due?: string): Promise<Reminder> {
+    const row = await this.client.mutation<ConvexReminderRecord>(reminderFunctions.create, {
+      title,
+      ...(due === undefined ? {} : { due }),
+    });
+    return reminderFromConvex(row);
+  }
+
+  async removeReminder(id: string): Promise<Reminder | null> {
+    try {
+      const row = await this.client.mutation<ConvexReminderRecord | null>(reminderFunctions.remove, {
+        id,
+      });
+      return row === null ? null : reminderFromConvex(row);
+    } catch (error: unknown) {
+      if (isInvalidIdError(error)) return null;
+      throw error;
+    }
   }
 }
 
