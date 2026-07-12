@@ -23,6 +23,8 @@ import {
   createPersistenceFromEnv,
   type AssistantState,
   type PersistenceProvider,
+  type Reminder,
+  type Task,
 } from "./persistence/persistence.js";
 
 export interface ReadlineAdapter {
@@ -43,6 +45,26 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+function printTaskList(write: ConsoleWriter, tasks: ReturnType<TaskService["list"]>): void {
+  if (tasks.length === 0) {
+    write("Jarvis: No tasks saved.");
+    return;
+  }
+  for (const task of tasks) {
+    write(`${task.completed ? "[x]" : "[ ]"} ${task.id} ${task.title}`);
+  }
+}
+
+function printReminderList(write: ConsoleWriter, reminders: ReturnType<ReminderService["list"]>): void {
+  if (reminders.length === 0) {
+    write("Jarvis: No reminders saved.");
+    return;
+  }
+  for (const reminder of reminders) {
+    write(`${reminder.id} ${reminder.title}${reminder.due ? ` — ${reminder.due}` : ""}`);
+  }
+}
+
 export async function runCli(deps: RunCliDependencies = {}): Promise<void> {
   const write = deps.stdout ?? ((...values: unknown[]) => console.log(...values));
   const writeError = deps.stderr ?? ((...values: unknown[]) => console.error(...values));
@@ -56,11 +78,17 @@ export async function runCli(deps: RunCliDependencies = {}): Promise<void> {
   const state = new StateService();
 
   let previousState: AssistantState;
+  let restoredTasks: Task[];
+  let restoredReminders: Reminder[];
   try {
-    previousState = await persistence.loadState();
+    [previousState, restoredTasks, restoredReminders] = await Promise.all([
+      persistence.loadState(),
+      persistence.listTasks(),
+      persistence.listReminders(),
+    ]);
   } catch (error: unknown) {
     rl.close();
-    writeError("Failed to load persistent state:", errorMessage(error));
+    writeError("Failed to load persistent data:", errorMessage(error));
     throw error;
   }
 
@@ -71,8 +99,8 @@ export async function runCli(deps: RunCliDependencies = {}): Promise<void> {
   const home = new HomeEngine();
   const workflowGenerator = new WorkflowGenerator();
   const learningEngine = new LearningEngine();
-  const reminderService = new ReminderService();
-  const taskService = new TaskService();
+  const reminderService = new ReminderService(restoredReminders);
+  const taskService = new TaskService(restoredTasks);
   const proactiveAssistant = new ProactiveAssistant();
   const contextMemory = new ContextMemory();
   const personalTraits = new PersonalTraitsService();
@@ -130,12 +158,14 @@ export async function runCli(deps: RunCliDependencies = {}): Promise<void> {
 
   const orchestrator = new Orchestrator(memory, domainRouter, safety);
 
-  async function saveRuntimeState(extra: AssistantState = {}): Promise<void> {
+  async function saveRuntimeState(extra: AssistantState = {}): Promise<boolean> {
+    for (const [key, value] of Object.entries(extra)) state.set(key, value);
     try {
-      await persistence.saveState({ ...state.snapshot(), ...extra });
+      await persistence.saveState(state.snapshot());
+      return true;
     } catch (error: unknown) {
-      writeError("Failed to save persistent state:", errorMessage(error));
-      throw error;
+      writeError("Failed to save runtime state:", errorMessage(error));
+      return false;
     }
   }
 
@@ -144,56 +174,135 @@ export async function runCli(deps: RunCliDependencies = {}): Promise<void> {
   try {
     while (true) {
       const inputText = await rl.question("You: ");
-      const lower = inputText.trim().toLowerCase();
+      const trimmed = inputText.trim();
+      const lower = trimmed.toLowerCase();
       if (lower === "exit") break;
 
-      const parsed = conversation.parse(inputText, {});
-      const intent = router.route(inputText);
-      contextMemory.remember(inputText);
-      const plan = orchestrator.plan(parsed);
-      const result = await orchestrator.execute(plan);
-      const reply = responseFormatter.format(intent, inputText);
+      try {
+        const taskAdd = /^task add\s+(.+)$/i.exec(trimmed);
+        const taskComplete = /^task complete\s+(.+)$/i.exec(trimmed);
+        const reminderAdd = /^reminder add\s+(.+?)\s+--due\s+(.+)$/i.exec(trimmed);
+        const reminderRemove = /^reminder remove\s+(.+)$/i.exec(trimmed);
 
-      if (lower.includes("remind")) {
-        const reminder = reminderService.add(inputText, "tomorrow");
-        await saveRuntimeState({ lastInput: inputText, lastIntent: intent, lastReminder: reminder });
-        write("Jarvis:", `Reminder set: ${reminder.title} for ${reminder.due}`);
-        write(JSON.stringify({ intent, reminder }, null, 2));
-      } else if (lower.includes("task") && !lower.includes("plan")) {
-        const task = taskService.add(inputText, "personal");
-        await saveRuntimeState({ lastInput: inputText, lastIntent: intent, lastTask: task });
-        write("Jarvis:", `Task added: ${task.title}`);
-        write(JSON.stringify({ intent, task }, null, 2));
-      } else if (lower.includes("summary")) {
-        const summary = proactiveAssistant.summarize(taskService.list());
-        write("Jarvis:", summary);
-        write(JSON.stringify({ intent, summary }, null, 2));
-      } else if (lower.includes("remember")) {
-        const keyword = lower.replace(/^.*?remember\s+/, "").trim() || "milk";
-        const recall = contextMemory.recall(keyword);
-        write("Jarvis:", `I remember: ${recall.join(", ") || "nothing yet"}`);
-        write(JSON.stringify({ intent, recall }, null, 2));
-      } else if (lower.includes("brief")) {
-        const brief = personalTraits.dailyBrief();
-        write("Jarvis:", brief);
-        write(JSON.stringify({ intent, brief }, null, 2));
-      } else if (lower.includes("motivate")) {
-        const motivation = personalTraits.motivation();
-        write("Jarvis:", motivation);
-        write(JSON.stringify({ intent, motivation }, null, 2));
-      } else if (intent === "planning") {
-        const workflow = workflowGenerator.createPlan(inputText, {
-          priority: "high",
-          context: "workshop, business, and home tasks",
-        });
-        learningEngine.observe(inputText);
-        await saveRuntimeState({ lastInput: inputText, lastIntent: intent, lastResult: result });
-        write("Jarvis:", `${reply}\nWorkflow: ${JSON.stringify(workflow)}`);
-        write(JSON.stringify({ intent, result, workflow, suggestion: learningEngine.suggest() }, null, 2));
-      } else {
-        await saveRuntimeState({ lastInput: inputText, lastIntent: intent, lastResult: result });
-        write("Jarvis:", reply);
-        write(JSON.stringify({ intent, result }, null, 2));
+        if (taskAdd) {
+          const task = await persistence.addTask(taskAdd[1].trim(), "personal");
+          taskService.replace([...taskService.list(), task]);
+          await saveRuntimeState({ lastInput: inputText, lastIntent: "task-add", lastTask: task });
+          write("Jarvis:", `Task added: ${task.title}`);
+          continue;
+        }
+
+        if (lower === "task list") {
+          printTaskList(write, taskService.list());
+          continue;
+        }
+
+        if (taskComplete) {
+          const task = await persistence.completeTask(taskComplete[1].trim());
+          if (!task) {
+            write("Jarvis: Task not found.");
+            continue;
+          }
+          taskService.replace(
+            taskService.list().map((entry) => (entry.id === task.id ? task : entry)),
+          );
+          await saveRuntimeState({ lastInput: inputText, lastIntent: "task-complete", lastTask: task });
+          write("Jarvis:", `Task completed: ${task.title}`);
+          continue;
+        }
+
+        if (reminderAdd) {
+          const reminder = await persistence.addReminder(
+            reminderAdd[1].trim(),
+            reminderAdd[2].trim(),
+          );
+          reminderService.replace([...reminderService.list(), reminder]);
+          await saveRuntimeState({
+            lastInput: inputText,
+            lastIntent: "reminder-add",
+            lastReminder: reminder,
+          });
+          write("Jarvis:", `Reminder set: ${reminder.title} for ${reminder.due}`);
+          continue;
+        }
+
+        if (lower === "reminder list") {
+          printReminderList(write, reminderService.list());
+          continue;
+        }
+
+        if (reminderRemove) {
+          const reminder = await persistence.removeReminder(reminderRemove[1].trim());
+          if (!reminder) {
+            write("Jarvis: Reminder not found.");
+            continue;
+          }
+          reminderService.replace(
+            reminderService.list().filter((entry) => entry.id !== reminder.id),
+          );
+          await saveRuntimeState({
+            lastInput: inputText,
+            lastIntent: "reminder-remove",
+            lastReminder: reminder,
+          });
+          write("Jarvis:", `Reminder removed: ${reminder.title}`);
+          continue;
+        }
+
+        if (lower.includes("task")) {
+          write("Jarvis: Use `task add <title>`, `task list`, or `task complete <id>`.");
+          continue;
+        }
+
+        if (lower.includes("remind")) {
+          write(
+            "Jarvis: Use `reminder add <title> --due <when>`, `reminder list`, or `reminder remove <id>`.",
+          );
+          continue;
+        }
+
+        const parsed = conversation.parse(inputText, {});
+        const intent = router.route(inputText);
+        contextMemory.remember(inputText);
+        const plan = orchestrator.plan(parsed);
+        const result = await orchestrator.execute(plan);
+        const reply = responseFormatter.format(intent, inputText);
+
+        if (lower.includes("summary")) {
+          const summary = proactiveAssistant.summarize(taskService.list());
+          write("Jarvis:", summary);
+          write(JSON.stringify({ intent, summary }, null, 2));
+        } else if (lower.includes("remember")) {
+          const keyword = lower.replace(/^.*?remember\s+/, "").trim() || "milk";
+          const recall = contextMemory.recall(keyword);
+          write("Jarvis:", `I remember: ${recall.join(", ") || "nothing yet"}`);
+          write(JSON.stringify({ intent, recall }, null, 2));
+        } else if (lower.includes("brief")) {
+          const brief = personalTraits.dailyBrief();
+          write("Jarvis:", brief);
+          write(JSON.stringify({ intent, brief }, null, 2));
+        } else if (lower.includes("motivate")) {
+          const motivation = personalTraits.motivation();
+          write("Jarvis:", motivation);
+          write(JSON.stringify({ intent, motivation }, null, 2));
+        } else if (intent === "planning") {
+          const workflow = workflowGenerator.createPlan(inputText, {
+            priority: "high",
+            context: "workshop, business, and home tasks",
+          });
+          learningEngine.observe(inputText);
+          await saveRuntimeState({ lastInput: inputText, lastIntent: intent, lastResult: result });
+          write("Jarvis:", `${reply}\nWorkflow: ${JSON.stringify(workflow)}`);
+          write(
+            JSON.stringify({ intent, result, workflow, suggestion: learningEngine.suggest() }, null, 2),
+          );
+        } else {
+          await saveRuntimeState({ lastInput: inputText, lastIntent: intent, lastResult: result });
+          write("Jarvis:", reply);
+          write(JSON.stringify({ intent, result }, null, 2));
+        }
+      } catch (error: unknown) {
+        writeError("Command failed:", errorMessage(error));
       }
     }
   } finally {
