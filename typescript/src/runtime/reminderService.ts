@@ -1,19 +1,19 @@
-export type Reminder = { id: string; title: string; due?: string };
+import type { Reminder } from "../persistence/persistence.js";
+
+export type { Reminder };
 
 export class ReminderService {
-  private reminders: Reminder[] = [];
+  private reminders: Reminder[];
 
-  add(title: string, due?: string): Reminder {
-    const reminder = { id: `${Date.now()}`, title, due };
-    this.reminders.push(reminder);
-    return reminder;
+  constructor(initial: Reminder[] = []) {
+    this.reminders = initial.map((reminder) => ({ ...reminder }));
+  }
+
+  replace(reminders: Reminder[]): void {
+    this.reminders = reminders.map((reminder) => ({ ...reminder }));
   }
 
   list(): Reminder[] {
-    return [...this.reminders];
-  }
-
-  clear(): void {
-    this.reminders = [];
+    return this.reminders.map((reminder) => ({ ...reminder }));
   }
 }
