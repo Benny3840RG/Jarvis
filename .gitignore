@@ -9,3 +9,6 @@ __pycache__/
 *.sqlite3
 typescript/data/jarvis-state.json*
 typescript/data/.jarvis-state.json.tmp-*
+
+# TypeScript dependencies
+/typescript/node_modules/
