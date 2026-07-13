@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { spawn } from "node:child_process";
+import { once } from "node:events";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -78,6 +80,7 @@ describe("JSONPersistence", () => {
     assert.equal(stored.version, 1);
     const files = await fs.readdir(tempDir);
     assert.equal(files.some((name) => name.includes(".tmp-")), false);
+    assert.equal(files.some((name) => name.endsWith(".lock")), false);
   });
 
   it("migrates the original unversioned state without rewriting it on startup", async () => {
@@ -146,6 +149,68 @@ describe("JSONPersistence", () => {
     assert.equal(await provider.completeTask("garbage"), null);
     assert.equal(await provider.removeTask("garbage"), null);
     assert.equal(await provider.removeReminder("garbage"), null);
+  });
+
+  it("serializes writes and refreshes reads across provider instances", async () => {
+    const file = path.join(tempDir, "shared.json");
+    const first = new JSONPersistence(file);
+    const second = new JSONPersistence(file);
+
+    assert.deepEqual(await first.listTasks(), []);
+
+    await Promise.all([
+      first.addTask("First task", "personal"),
+      second.addTask("Second task", "personal"),
+      first.addReminder("First reminder", "Monday"),
+      second.addReminder("Second reminder", "Tuesday"),
+    ]);
+
+    assert.deepEqual(
+      (await first.listTasks()).map((task) => task.title).sort(),
+      ["First task", "Second task"],
+    );
+    assert.deepEqual(
+      (await second.listReminders()).map((reminder) => reminder.title).sort(),
+      ["First reminder", "Second reminder"],
+    );
+    assert.equal((await fs.readdir(tempDir)).some((name) => name.endsWith(".lock")), false);
+  });
+
+  it("times out with an actionable error while a live writer holds the lock", async () => {
+    const file = path.join(tempDir, "locked.json");
+    await fs.writeFile(
+      `${file}.lock`,
+      `${JSON.stringify({ pid: process.pid, acquiredAt: Date.now(), token: "held-by-test" })}\n`,
+      { mode: 0o600 },
+    );
+
+    const provider = new JSONPersistence(file, () => undefined, 40);
+    await assert.rejects(
+      provider.addTask("Blocked task", "personal"),
+      /locked by process .*Close the other local writer or select Convex/,
+    );
+  });
+
+  it("reclaims a lock left by a process that has exited", async () => {
+    const file = path.join(tempDir, "stale.json");
+    const child = spawn(process.execPath, ["-e", "process.exit(0)"], { stdio: "ignore" });
+    if (child.pid === undefined) throw new Error("Failed to start stale-lock test process.");
+    const childPid = child.pid;
+    await once(child, "exit");
+
+    await fs.writeFile(
+      `${file}.lock`,
+      `${JSON.stringify({ pid: childPid, acquiredAt: Date.now(), token: "stale-test-lock" })}\n`,
+      { mode: 0o600 },
+    );
+
+    const warnings: string[] = [];
+    const provider = new JSONPersistence(file, (message) => warnings.push(message), 250);
+    const task = await provider.addTask("Recovered task", "personal");
+
+    assert.equal(task.title, "Recovered task");
+    assert.match(warnings[0] ?? "", /reclaimed a stale JSON state lock/);
+    assert.equal((await fs.readdir(tempDir)).some((name) => name.endsWith(".lock")), false);
   });
 });
 
