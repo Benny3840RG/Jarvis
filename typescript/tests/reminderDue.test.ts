@@ -95,10 +95,11 @@ describe("reminder due normalization", () => {
         timezone: "Australia/Melbourne",
       },
     );
-    assert.deepEqual(
-      validateReminderDue({ raw: "ISO time", at: 1, timezone: "UTC+10:00" }),
-      { raw: "ISO time", at: 1, timezone: "UTC+10:00" },
-    );
+    assert.deepEqual(validateReminderDue({ raw: "ISO time", at: 1, timezone: "UTC+10:00" }), {
+      raw: "ISO time",
+      at: 1,
+      timezone: "UTC+10:00",
+    });
   });
 
   it("rejects invalid timezone configuration and inconsistent normalized values", () => {
