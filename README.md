@@ -42,6 +42,7 @@ Durable commands are deliberately explicit:
 task add <title>
 task list
 task complete <id>
+task remove <id>
 reminder add <title> --due <when>
 reminder list
 reminder remove <id>
@@ -79,6 +80,20 @@ Enter the value interactively so it does not appear in shell history. The CLI lo
 This service-token model is intentionally single-user. Replace it with a real OIDC user-authentication provider before exposing Jarvis as a multi-user application.
 
 After the deployment secret is configured, run `npx convex dev` to type-check, generate `convex/_generated`, and sync the functions to the development deployment. Do not use `npx convex deploy` until the production deployment is intentionally being configured.
+
+### Live Convex smoke test
+
+The smoke command refuses any deployment whose `CONVEX_DEPLOYMENT` does not start with `dev:`. It creates a uniquely named task and reminder, verifies them through fresh provider instances, completes and removes the task, removes the reminder, and verifies cleanup. A `finally` block retries cleanup after failures, and surfaced errors redact the configured service token.
+
+Run it only after syncing the current functions to the development deployment:
+
+```bash
+cd typescript
+npx convex dev --once --tail-logs disable
+npm run smoke:convex
+```
+
+Do not run the smoke command while deliberately testing against production. The deployment guard is there to fail closed.
 
 ## Checks
 
