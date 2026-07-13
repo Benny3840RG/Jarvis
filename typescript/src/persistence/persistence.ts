@@ -2,6 +2,7 @@ import fs, { type FileHandle } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
+import { setTimeout as delay } from "node:timers/promises";
 
 import { ConvexHttpClient } from "convex/browser";
 
@@ -44,12 +45,20 @@ export interface PersistenceProvider {
 }
 
 const DOCUMENT_VERSION = 1 as const;
+const DEFAULT_LOCK_TIMEOUT_MS = 2_000;
+const LOCK_RETRY_MS = 25;
 
 type PersistedDocument = {
   version: typeof DOCUMENT_VERSION;
   state: AssistantState;
   tasks: Task[];
   reminders: Reminder[];
+};
+
+type LockRecord = {
+  pid: number;
+  acquiredAt: number;
+  token: string;
 };
 
 class StateDocumentError extends Error {}
@@ -185,16 +194,42 @@ function isNodeError(error: unknown): error is NodeJS.ErrnoException {
   return error instanceof Error && "code" in error;
 }
 
+function normalizeLockRecord(value: unknown): LockRecord | null {
+  if (!isRecord(value)) return null;
+  if (typeof value.pid !== "number" || !Number.isSafeInteger(value.pid) || value.pid <= 0) return null;
+  if (typeof value.acquiredAt !== "number" || !Number.isFinite(value.acquiredAt)) return null;
+  if (typeof value.token !== "string" || value.token.length === 0) return null;
+  return {
+    pid: value.pid,
+    acquiredAt: value.acquiredAt,
+    token: value.token,
+  };
+}
+
+function isProcessAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error: unknown) {
+    if (isNodeError(error) && error.code === "ESRCH") return false;
+    return true;
+  }
+}
+
 export type PersistenceWarning = (message: string) => void;
 
 export class JSONPersistence implements PersistenceProvider {
-  private cachedDocument: PersistedDocument | undefined;
   private pending: Promise<void> = Promise.resolve();
 
   constructor(
     private readonly filePath = defaultDataPath(),
     private readonly warn: PersistenceWarning = (message) => console.warn(message),
+    private readonly lockTimeoutMs = DEFAULT_LOCK_TIMEOUT_MS,
   ) {}
+
+  private get lockPath(): string {
+    return `${this.filePath}.lock`;
+  }
 
   private enqueue<T>(operation: () => Promise<T>): Promise<T> {
     const result = this.pending.then(operation, operation);
@@ -242,8 +277,7 @@ export class JSONPersistence implements PersistenceProvider {
   }
 
   private async readDocument(): Promise<PersistedDocument> {
-    if (this.cachedDocument === undefined) this.cachedDocument = await this.readFromDisk();
-    return cloneDocument(this.cachedDocument);
+    return cloneDocument(await this.readFromDisk());
   }
 
   private async writeDocument(document: PersistedDocument): Promise<void> {
@@ -267,9 +301,76 @@ export class JSONPersistence implements PersistenceProvider {
     }
   }
 
-  private async remember(document: PersistedDocument): Promise<void> {
-    await this.writeDocument(document);
-    this.cachedDocument = cloneDocument(document);
+  private async readLockRecord(): Promise<LockRecord | null> {
+    try {
+      const raw = await fs.readFile(this.lockPath, "utf8");
+      return normalizeLockRecord(JSON.parse(raw) as unknown);
+    } catch (error: unknown) {
+      if (isNodeError(error) && error.code === "ENOENT") return null;
+      if (error instanceof SyntaxError) return null;
+      throw error;
+    }
+  }
+
+  private async reclaimDeadLock(): Promise<boolean> {
+    const record = await this.readLockRecord();
+    if (!record || isProcessAlive(record.pid)) return false;
+    try {
+      await fs.rm(this.lockPath);
+      this.warn(`Jarvis reclaimed a stale JSON state lock left by process ${record.pid}.`);
+      return true;
+    } catch (error: unknown) {
+      if (isNodeError(error) && error.code === "ENOENT") return true;
+      throw error;
+    }
+  }
+
+  private async acquireWriteLock(): Promise<FileHandle> {
+    await fs.mkdir(path.dirname(this.filePath), { recursive: true });
+    const startedAt = Date.now();
+
+    while (true) {
+      let handle: FileHandle | undefined;
+      try {
+        handle = await fs.open(this.lockPath, "wx", 0o600);
+        const record: LockRecord = {
+          pid: process.pid,
+          acquiredAt: Date.now(),
+          token: randomUUID(),
+        };
+        await handle.writeFile(`${JSON.stringify(record)}\n`, "utf8");
+        await handle.sync();
+        return handle;
+      } catch (error: unknown) {
+        await handle?.close().catch(() => undefined);
+        if (!(isNodeError(error) && error.code === "EEXIST")) {
+          await fs.rm(this.lockPath, { force: true }).catch(() => undefined);
+          throw error;
+        }
+      }
+
+      if (await this.reclaimDeadLock()) continue;
+
+      if (Date.now() - startedAt >= Math.max(0, this.lockTimeoutMs)) {
+        const record = await this.readLockRecord();
+        const owner = record ? `process ${record.pid}` : "another process";
+        throw new Error(
+          `Jarvis JSON state is locked by ${owner}. Close the other local writer or select Convex for multi-process use.`,
+        );
+      }
+
+      await delay(LOCK_RETRY_MS);
+    }
+  }
+
+  private async withWriteLock<T>(operation: () => Promise<T>): Promise<T> {
+    const handle = await this.acquireWriteLock();
+    try {
+      return await operation();
+    } finally {
+      await handle.close().catch(() => undefined);
+      await fs.rm(this.lockPath, { force: true });
+    }
   }
 
   async loadState(): Promise<AssistantState> {
@@ -277,10 +378,12 @@ export class JSONPersistence implements PersistenceProvider {
   }
 
   async saveState(state: AssistantState): Promise<void> {
-    await this.enqueue(async () => {
-      const current = await this.readDocument();
-      await this.remember({ ...current, state: { ...state } });
-    });
+    await this.enqueue(() =>
+      this.withWriteLock(async () => {
+        const current = await this.readDocument();
+        await this.writeDocument({ ...current, state: { ...state } });
+      }),
+    );
   }
 
   async listTasks(): Promise<Task[]> {
@@ -288,43 +391,49 @@ export class JSONPersistence implements PersistenceProvider {
   }
 
   async addTask(title: string, category: string): Promise<Task> {
-    return this.enqueue(async () => {
-      const current = await this.readDocument();
-      const task: Task = {
-        id: randomUUID(),
-        title,
-        completed: false,
-        category,
-        createdAt: Date.now(),
-      };
-      await this.remember({ ...current, tasks: [...current.tasks, task] });
-      return cloneTask(task);
-    });
+    return this.enqueue(() =>
+      this.withWriteLock(async () => {
+        const current = await this.readDocument();
+        const task: Task = {
+          id: randomUUID(),
+          title,
+          completed: false,
+          category,
+          createdAt: Date.now(),
+        };
+        await this.writeDocument({ ...current, tasks: [...current.tasks, task] });
+        return cloneTask(task);
+      }),
+    );
   }
 
   async completeTask(id: string): Promise<Task | null> {
-    return this.enqueue(async () => {
-      const current = await this.readDocument();
-      const index = current.tasks.findIndex((task) => task.id === id);
-      if (index < 0) return null;
-      const task = { ...current.tasks[index], completed: true };
-      const tasks = current.tasks.map((entry, taskIndex) => (taskIndex === index ? task : entry));
-      await this.remember({ ...current, tasks });
-      return cloneTask(task);
-    });
+    return this.enqueue(() =>
+      this.withWriteLock(async () => {
+        const current = await this.readDocument();
+        const index = current.tasks.findIndex((task) => task.id === id);
+        if (index < 0) return null;
+        const task = { ...current.tasks[index], completed: true };
+        const tasks = current.tasks.map((entry, taskIndex) => (taskIndex === index ? task : entry));
+        await this.writeDocument({ ...current, tasks });
+        return cloneTask(task);
+      }),
+    );
   }
 
   async removeTask(id: string): Promise<Task | null> {
-    return this.enqueue(async () => {
-      const current = await this.readDocument();
-      const task = current.tasks.find((entry) => entry.id === id);
-      if (!task) return null;
-      await this.remember({
-        ...current,
-        tasks: current.tasks.filter((entry) => entry.id !== id),
-      });
-      return cloneTask(task);
-    });
+    return this.enqueue(() =>
+      this.withWriteLock(async () => {
+        const current = await this.readDocument();
+        const task = current.tasks.find((entry) => entry.id === id);
+        if (!task) return null;
+        await this.writeDocument({
+          ...current,
+          tasks: current.tasks.filter((entry) => entry.id !== id),
+        });
+        return cloneTask(task);
+      }),
+    );
   }
 
   async listReminders(): Promise<Reminder[]> {
@@ -332,30 +441,34 @@ export class JSONPersistence implements PersistenceProvider {
   }
 
   async addReminder(title: string, due?: string): Promise<Reminder> {
-    return this.enqueue(async () => {
-      const current = await this.readDocument();
-      const reminder: Reminder = {
-        id: randomUUID(),
-        title,
-        ...(due === undefined ? {} : { due }),
-        createdAt: Date.now(),
-      };
-      await this.remember({ ...current, reminders: [...current.reminders, reminder] });
-      return cloneReminder(reminder);
-    });
+    return this.enqueue(() =>
+      this.withWriteLock(async () => {
+        const current = await this.readDocument();
+        const reminder: Reminder = {
+          id: randomUUID(),
+          title,
+          ...(due === undefined ? {} : { due }),
+          createdAt: Date.now(),
+        };
+        await this.writeDocument({ ...current, reminders: [...current.reminders, reminder] });
+        return cloneReminder(reminder);
+      }),
+    );
   }
 
   async removeReminder(id: string): Promise<Reminder | null> {
-    return this.enqueue(async () => {
-      const current = await this.readDocument();
-      const reminder = current.reminders.find((entry) => entry.id === id);
-      if (!reminder) return null;
-      await this.remember({
-        ...current,
-        reminders: current.reminders.filter((entry) => entry.id !== id),
-      });
-      return cloneReminder(reminder);
-    });
+    return this.enqueue(() =>
+      this.withWriteLock(async () => {
+        const current = await this.readDocument();
+        const reminder = current.reminders.find((entry) => entry.id === id);
+        if (!reminder) return null;
+        await this.writeDocument({
+          ...current,
+          reminders: current.reminders.filter((entry) => entry.id !== id),
+        });
+        return cloneReminder(reminder);
+      }),
+    );
   }
 }
 
