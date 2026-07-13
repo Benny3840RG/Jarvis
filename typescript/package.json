@@ -6,7 +6,8 @@
   "scripts": {
     "start": "tsx src/index.ts",
     "test": "node --import tsx --test tests/*.test.ts",
-    "type-check": "tsc -p tsconfig.json"
+    "type-check": "tsc -p tsconfig.json",
+    "smoke:convex": "tsx src/tools/runConvexSmoke.ts"
   },
   "dependencies": {
     "convex": "^1.42.1"
