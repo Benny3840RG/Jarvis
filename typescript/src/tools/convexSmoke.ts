@@ -5,9 +5,11 @@ import type { PersistenceProvider } from "../persistence/persistence.js";
 export type ConvexSmokeResult = {
   marker: string;
   taskCreated: boolean;
+  taskUpdated: boolean;
   taskCompleted: boolean;
   taskRemoved: boolean;
   reminderCreated: boolean;
+  reminderUpdated: boolean;
   reminderRemoved: boolean;
   restartVisibilityVerified: boolean;
 };
@@ -37,6 +39,9 @@ export async function runConvexSmoke(
   }
 
   const marker = `jarvis-smoke-${randomUUID()}`;
+  const updatedTaskTitle = `${marker} task updated`;
+  const updatedReminderTitle = `${marker} reminder updated`;
+  const updatedDueRaw = `${marker} due updated`;
   let taskId: string | undefined;
   let reminderId: string | undefined;
   let primaryError: unknown;
@@ -48,24 +53,64 @@ export async function runConvexSmoke(
     const reminder = await firstRun.addReminder(`${marker} reminder`, { raw: marker });
     reminderId = reminder.id;
 
+    const updatedTask = await firstRun.updateTask(task.id, {
+      title: updatedTaskTitle,
+      category: "smoke-updated",
+    });
+    requireCondition(
+      updatedTask?.title === updatedTaskTitle && updatedTask.category === "smoke-updated",
+      "Task update did not return the updated record.",
+    );
+    const updatedReminder = await firstRun.updateReminder(reminder.id, {
+      title: updatedReminderTitle,
+      due: { raw: updatedDueRaw },
+    });
+    requireCondition(
+      updatedReminder?.title === updatedReminderTitle && updatedReminder.dueRaw === updatedDueRaw,
+      "Reminder update did not return the updated record.",
+    );
+
     const createdTasks = await firstRun.listTasks();
     const createdReminders = await firstRun.listReminders();
-    requireCondition(createdTasks.some((entry) => entry.id === task.id), "Created task was not listed.");
     requireCondition(
-      createdReminders.some((entry) => entry.id === reminder.id && entry.dueRaw === marker),
-      "Created reminder or its preserved due text was not listed.",
+      createdTasks.some(
+        (entry) =>
+          entry.id === task.id &&
+          entry.title === updatedTaskTitle &&
+          entry.category === "smoke-updated",
+      ),
+      "Updated task was not listed.",
+    );
+    requireCondition(
+      createdReminders.some(
+        (entry) =>
+          entry.id === reminder.id &&
+          entry.title === updatedReminderTitle &&
+          entry.dueRaw === updatedDueRaw,
+      ),
+      "Updated reminder was not listed.",
     );
 
     const restartedRun = createProvider();
     const restoredTasks = await restartedRun.listTasks();
     const restoredReminders = await restartedRun.listReminders();
     requireCondition(
-      restoredTasks.some((entry) => entry.id === task.id),
-      "Task was not visible from a new provider instance.",
+      restoredTasks.some(
+        (entry) =>
+          entry.id === task.id &&
+          entry.title === updatedTaskTitle &&
+          entry.category === "smoke-updated",
+      ),
+      "Updated task was not visible from a new provider instance.",
     );
     requireCondition(
-      restoredReminders.some((entry) => entry.id === reminder.id && entry.dueRaw === marker),
-      "Reminder was not visible from a new provider instance with its due text intact.",
+      restoredReminders.some(
+        (entry) =>
+          entry.id === reminder.id &&
+          entry.title === updatedReminderTitle &&
+          entry.dueRaw === updatedDueRaw,
+      ),
+      "Updated reminder was not visible from a new provider instance.",
     );
 
     const completed = await restartedRun.completeTask(task.id);
@@ -101,13 +146,17 @@ export async function runConvexSmoke(
     const result: ConvexSmokeResult = {
       marker,
       taskCreated: true,
+      taskUpdated: true,
       taskCompleted: true,
       taskRemoved: true,
       reminderCreated: true,
+      reminderUpdated: true,
       reminderRemoved: true,
       restartVisibilityVerified: true,
     };
-    write("Convex smoke passed: create, list, restart visibility, complete, remove, and cleanup verified.");
+    write(
+      "Convex smoke passed: create, update, list, restart visibility, complete, remove, and cleanup verified.",
+    );
     return result;
   } catch (error: unknown) {
     primaryError = error;

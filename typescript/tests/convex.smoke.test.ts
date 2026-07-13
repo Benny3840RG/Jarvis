@@ -6,7 +6,9 @@ import type {
   PersistenceProvider,
   Reminder,
   ReminderDue,
+  ReminderUpdate,
   Task,
+  TaskUpdate,
 } from "../src/persistence/persistence.js";
 import { redactSecret, runConvexSmoke } from "../src/tools/convexSmoke.js";
 
@@ -46,6 +48,14 @@ class FakePersistence implements PersistenceProvider {
     return { ...task };
   }
 
+  async updateTask(id: string, update: TaskUpdate): Promise<Task | null> {
+    const task = this.store.tasks.find((entry) => entry.id === id);
+    if (!task) return null;
+    if (update.title !== undefined) task.title = update.title;
+    if (update.category !== undefined) task.category = update.category;
+    return { ...task };
+  }
+
   async completeTask(id: string): Promise<Task | null> {
     if (this.store.failComplete) throw new Error("forced completion failure");
     const task = this.store.tasks.find((entry) => entry.id === id);
@@ -80,6 +90,27 @@ class FakePersistence implements PersistenceProvider {
       createdAt: this.store.nextReminder,
     };
     this.store.reminders.push(reminder);
+    return { ...reminder };
+  }
+
+  async updateReminder(id: string, update: ReminderUpdate): Promise<Reminder | null> {
+    const reminder = this.store.reminders.find((entry) => entry.id === id);
+    if (!reminder) return null;
+    if (update.title !== undefined) reminder.title = update.title;
+    if (update.due === null) {
+      delete reminder.dueRaw;
+      delete reminder.dueAt;
+      delete reminder.dueTimezone;
+    } else if (update.due !== undefined) {
+      reminder.dueRaw = update.due.raw;
+      if (update.due.at === undefined) {
+        delete reminder.dueAt;
+        delete reminder.dueTimezone;
+      } else {
+        reminder.dueAt = update.due.at;
+        reminder.dueTimezone = update.due.timezone as string;
+      }
+    }
     return { ...reminder };
   }
 
@@ -121,7 +152,7 @@ describe("Convex smoke runner", () => {
     assert.equal(factoryCalls, 0);
   });
 
-  it("verifies restart visibility and cleans up all created records", async () => {
+  it("verifies update and restart visibility and cleans up all created records", async () => {
     const store = makeStore();
     let factoryCalls = 0;
     const messages: string[] = [];
@@ -136,9 +167,11 @@ describe("Convex smoke runner", () => {
     );
 
     assert.equal(result.taskCreated, true);
+    assert.equal(result.taskUpdated, true);
     assert.equal(result.taskCompleted, true);
     assert.equal(result.taskRemoved, true);
     assert.equal(result.reminderCreated, true);
+    assert.equal(result.reminderUpdated, true);
     assert.equal(result.reminderRemoved, true);
     assert.equal(result.restartVisibilityVerified, true);
     assert(factoryCalls >= 4);

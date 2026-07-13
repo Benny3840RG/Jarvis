@@ -9,7 +9,9 @@ import {
   type PersistenceProvider,
   type Reminder,
   type ReminderDue,
+  type ReminderUpdate,
   type Task,
+  type TaskUpdate,
 } from "../src/persistence/persistence.js";
 
 class ScriptedReadline implements ReadlineAdapter {
@@ -34,6 +36,7 @@ type Faults = {
   listTasksError?: Error;
   listReminders?: Error;
   addTask?: Error;
+  updateTask?: Error;
   saveState?: Error;
 };
 
@@ -45,6 +48,7 @@ class FaultInjectingPersistence implements PersistenceProvider {
   listTasksCalls = 0;
   listRemindersCalls = 0;
   addTaskCalls = 0;
+  updateTaskCalls = 0;
   saveStateCalls = 0;
 
   constructor(
@@ -90,6 +94,16 @@ class FaultInjectingPersistence implements PersistenceProvider {
     return { ...task };
   }
 
+  async updateTask(id: string, update: TaskUpdate): Promise<Task | null> {
+    this.updateTaskCalls += 1;
+    if (this.faults.updateTask) throw this.faults.updateTask;
+    const task = this.tasks.find((entry) => entry.id === id);
+    if (!task) return null;
+    if (update.title !== undefined) task.title = update.title;
+    if (update.category !== undefined) task.category = update.category;
+    return { ...task };
+  }
+
   async completeTask(id: string): Promise<Task | null> {
     const task = this.tasks.find((entry) => entry.id === id);
     if (!task) return null;
@@ -125,6 +139,20 @@ class FaultInjectingPersistence implements PersistenceProvider {
       createdAt: Date.now(),
     };
     this.reminders.push(reminder);
+    return { ...reminder };
+  }
+
+  async updateReminder(id: string, update: ReminderUpdate): Promise<Reminder | null> {
+    const reminder = this.reminders.find((entry) => entry.id === id);
+    if (!reminder) return null;
+    if (update.title !== undefined) reminder.title = update.title;
+    if (update.due === null) {
+      delete reminder.dueRaw;
+      delete reminder.dueAt;
+      delete reminder.dueTimezone;
+    } else if (update.due !== undefined) {
+      reminder.dueRaw = update.due.raw;
+    }
     return { ...reminder };
   }
 
@@ -227,6 +255,35 @@ describe("failure behaviour matrix", () => {
     assert(logs.output.some((line) => line.includes("No tasks saved")));
   });
 
+  it("does not save runtime state when an unauthorized update is rejected", async () => {
+    const persistence = new FaultInjectingPersistence(
+      { updateTask: new Error("Unauthorized: invalid Jarvis service token.") },
+      {
+        tasks: [
+          {
+            id: "task-1",
+            title: "Original",
+            completed: false,
+            category: "personal",
+            createdAt: 1,
+          },
+        ],
+      },
+    );
+    const logs = capture();
+
+    await runCli({
+      persistence,
+      readline: new ScriptedReadline(["task update task-1 --title Blocked", "exit"]),
+      stdout: logs.stdout,
+      stderr: logs.stderr,
+    });
+
+    assert.equal(persistence.tasks[0].title, "Original");
+    assert.equal(persistence.saveStateCalls, 0);
+    assert(logs.errors.some((line) => line.includes("Command failed: Unauthorized")));
+  });
+
   it("keeps a durable removal when the secondary runtime-state save fails", async () => {
     const persistence = new FaultInjectingPersistence(
       { saveState: new Error("state backend unavailable") },
@@ -275,5 +332,7 @@ describe("failure behaviour matrix", () => {
     assert.equal(mutationCalls, 0);
     await assert.rejects(() => provider.addTask("Blocked", "personal"), /Unauthorized/);
     assert.equal(mutationCalls, 1);
+    await assert.rejects(() => provider.updateTask("task-id", { title: "Blocked" }), /Unauthorized/);
+    assert.equal(mutationCalls, 2);
   });
 });

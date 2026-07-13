@@ -8,8 +8,14 @@ import { ConvexHttpClient } from "convex/browser";
 
 import { api } from "../../convex/_generated/api.js";
 import { validateReminderDue, type ReminderDue } from "../reminders/due.js";
+import {
+  validateReminderUpdate,
+  validateTaskUpdate,
+  type ReminderUpdate,
+  type TaskUpdate,
+} from "./updates.js";
 
-export type { ReminderDue };
+export type { ReminderDue, ReminderUpdate, TaskUpdate };
 
 export type AssistantState = {
   lastIntent?: string;
@@ -42,10 +48,12 @@ export interface PersistenceProvider {
   saveState(state: AssistantState): Promise<void>;
   listTasks(): Promise<Task[]>;
   addTask(title: string, category: string): Promise<Task>;
+  updateTask(id: string, update: TaskUpdate): Promise<Task | null>;
   completeTask(id: string): Promise<Task | null>;
   removeTask(id: string): Promise<Task | null>;
   listReminders(): Promise<Reminder[]>;
   addReminder(title: string, due?: ReminderDue): Promise<Reminder>;
+  updateReminder(id: string, update: ReminderUpdate): Promise<Reminder | null>;
   removeReminder(id: string): Promise<Reminder | null>;
 }
 
@@ -489,6 +497,21 @@ export class JSONPersistence implements PersistenceProvider {
     );
   }
 
+  async updateTask(id: string, update: TaskUpdate): Promise<Task | null> {
+    const validated = validateTaskUpdate(update);
+    return this.enqueue(() =>
+      this.withWriteLock(async () => {
+        const current = await this.readDocument();
+        const index = current.tasks.findIndex((task) => task.id === id);
+        if (index < 0) return null;
+        const task: Task = { ...current.tasks[index], ...validated };
+        const tasks = current.tasks.map((entry, taskIndex) => (taskIndex === index ? task : entry));
+        await this.writeDocument({ ...current, tasks });
+        return cloneTask(task);
+      }),
+    );
+  }
+
   async completeTask(id: string): Promise<Task | null> {
     return this.enqueue(() =>
       this.withWriteLock(async () => {
@@ -528,6 +551,32 @@ export class JSONPersistence implements PersistenceProvider {
         const current = await this.readDocument();
         const reminder = reminderFromDue(randomUUID(), title, Date.now(), due);
         await this.writeDocument({ ...current, reminders: [...current.reminders, reminder] });
+        return cloneReminder(reminder);
+      }),
+    );
+  }
+
+  async updateReminder(id: string, update: ReminderUpdate): Promise<Reminder | null> {
+    const validated = validateReminderUpdate(update);
+    return this.enqueue(() =>
+      this.withWriteLock(async () => {
+        const current = await this.readDocument();
+        const index = current.reminders.findIndex((reminder) => reminder.id === id);
+        if (index < 0) return null;
+        const existing = current.reminders[index];
+        const title = validated.title ?? existing.title;
+        let reminder: Reminder;
+        if (validated.due === undefined) {
+          reminder = { ...existing, title };
+        } else if (validated.due === null) {
+          reminder = { id: existing.id, title, createdAt: existing.createdAt };
+        } else {
+          reminder = reminderFromDue(existing.id, title, existing.createdAt, validated.due);
+        }
+        const reminders = current.reminders.map((entry, reminderIndex) =>
+          reminderIndex === index ? reminder : entry,
+        );
+        await this.writeDocument({ ...current, reminders });
         return cloneReminder(reminder);
       }),
     );
@@ -646,6 +695,21 @@ export class ConvexPersistence implements PersistenceProvider {
     return taskFromConvex(row);
   }
 
+  async updateTask(id: string, update: TaskUpdate): Promise<Task | null> {
+    const validated = validateTaskUpdate(update);
+    try {
+      const row = await this.client.mutation(taskFunctions.update, {
+        serviceToken: this.serviceToken,
+        id,
+        ...validated,
+      });
+      return row === null ? null : taskFromConvex(row);
+    } catch (error: unknown) {
+      if (isInvalidIdError(error)) return null;
+      throw error;
+    }
+  }
+
   async completeTask(id: string): Promise<Task | null> {
     try {
       const row = await this.client.mutation(taskFunctions.complete, {
@@ -694,6 +758,36 @@ export class ConvexPersistence implements PersistenceProvider {
           }),
     });
     return reminderFromConvex(row);
+  }
+
+  async updateReminder(id: string, update: ReminderUpdate): Promise<Reminder | null> {
+    const validated = validateReminderUpdate(update);
+    const dueArgs =
+      validated.due === undefined
+        ? {}
+        : validated.due === null
+          ? { clearDue: true }
+          : {
+              dueRaw: validated.due.raw,
+              ...(validated.due.at === undefined
+                ? {}
+                : {
+                    dueAt: validated.due.at,
+                    dueTimezone: validated.due.timezone as string,
+                  }),
+            };
+    try {
+      const row = await this.client.mutation(reminderFunctions.update, {
+        serviceToken: this.serviceToken,
+        id,
+        ...(validated.title === undefined ? {} : { title: validated.title }),
+        ...dueArgs,
+      });
+      return row === null ? null : reminderFromConvex(row);
+    } catch (error: unknown) {
+      if (isInvalidIdError(error)) return null;
+      throw error;
+    }
   }
 
   async removeReminder(id: string): Promise<Reminder | null> {

@@ -18,7 +18,9 @@ import {
   type PersistenceProvider,
   type Reminder,
   type ReminderDue,
+  type ReminderUpdate,
   type Task,
+  type TaskUpdate,
 } from "../src/persistence/persistence.js";
 
 let tempDir = "";
@@ -60,6 +62,10 @@ class FailingRestoreProvider implements PersistenceProvider {
     return { ...task };
   }
 
+  async updateTask(_id: string, _update: TaskUpdate): Promise<Task | null> {
+    return null;
+  }
+
   async completeTask(id: string): Promise<Task | null> {
     const task = this.tasks.find((entry) => entry.id === id);
     if (!task) return null;
@@ -80,6 +86,10 @@ class FailingRestoreProvider implements PersistenceProvider {
 
   async addReminder(_title: string, _due?: ReminderDue): Promise<Reminder> {
     throw new Error("forced reminder restore failure");
+  }
+
+  async updateReminder(_id: string, _update: ReminderUpdate): Promise<Reminder | null> {
+    return null;
   }
 
   async removeReminder(id: string): Promise<Reminder | null> {

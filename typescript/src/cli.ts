@@ -1,6 +1,7 @@
 import * as readlinePromises from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
 
+import { parseUpdateOptions } from "./cli/updateOptions.js";
 import { ConversationService } from "./runtime/conversationService.js";
 import { MemoryService } from "./runtime/memoryService.js";
 import { StateService } from "./runtime/stateService.js";
@@ -25,7 +26,9 @@ import {
   type AssistantState,
   type PersistenceProvider,
   type Reminder,
+  type ReminderUpdate,
   type Task,
+  type TaskUpdate,
 } from "./persistence/persistence.js";
 
 export interface ReadlineAdapter {
@@ -52,7 +55,7 @@ function printTaskList(write: ConsoleWriter, tasks: ReturnType<TaskService["list
     return;
   }
   for (const task of tasks) {
-    write(`${task.completed ? "[x]" : "[ ]"} ${task.id} ${task.title}`);
+    write(`${task.completed ? "[x]" : "[ ]"} ${task.id} ${task.title} [${task.category}]`);
   }
 }
 
@@ -66,6 +69,29 @@ function printReminderList(write: ConsoleWriter, reminders: ReturnType<ReminderS
       `${reminder.id} ${reminder.title}${reminder.dueRaw ? ` — ${reminder.dueRaw}` : ""}`,
     );
   }
+}
+
+function taskUpdateFromOptions(input: string | undefined): TaskUpdate {
+  const options = parseUpdateOptions(input, ["title", "category"]);
+  return {
+    ...(typeof options.title === "string" ? { title: options.title } : {}),
+    ...(typeof options.category === "string" ? { category: options.category } : {}),
+  };
+}
+
+function reminderUpdateFromOptions(input: string | undefined): ReminderUpdate {
+  const options = parseUpdateOptions(input, ["title", "due"], ["clear-due"]);
+  if (options.due !== undefined && options["clear-due"] === true) {
+    throw new Error("Reminder update cannot use --due and --clear-due together.");
+  }
+  return {
+    ...(typeof options.title === "string" ? { title: options.title } : {}),
+    ...(typeof options.due === "string"
+      ? { due: parseReminderDue(options.due) }
+      : options["clear-due"] === true
+        ? { due: null }
+        : {}),
+  };
 }
 
 export async function runCli(deps: RunCliDependencies = {}): Promise<void> {
@@ -197,9 +223,11 @@ export async function runCli(deps: RunCliDependencies = {}): Promise<void> {
 
       try {
         const taskAdd = /^task add\s+(.+)$/i.exec(trimmed);
+        const taskUpdate = /^task update\s+(\S+)(?:\s+(.*))?$/i.exec(trimmed);
         const taskComplete = /^task complete\s+(.+)$/i.exec(trimmed);
         const taskRemove = /^task remove\s+(.+)$/i.exec(trimmed);
         const reminderAdd = /^reminder add\s+(.+?)\s+--due\s+(.+)$/i.exec(trimmed);
+        const reminderUpdate = /^reminder update\s+(\S+)(?:\s+(.*))?$/i.exec(trimmed);
         const reminderRemove = /^reminder remove\s+(.+)$/i.exec(trimmed);
 
         if (taskAdd) {
@@ -212,6 +240,23 @@ export async function runCli(deps: RunCliDependencies = {}): Promise<void> {
 
         if (lower === "task list") {
           printTaskList(write, await refreshTasks());
+          continue;
+        }
+
+        if (taskUpdate) {
+          const task = await persistence.updateTask(
+            taskUpdate[1].trim(),
+            taskUpdateFromOptions(taskUpdate[2]),
+          );
+          if (!task) {
+            write("Jarvis: Task not found.");
+            continue;
+          }
+          taskService.replace(
+            taskService.list().map((entry) => (entry.id === task.id ? task : entry)),
+          );
+          await saveRuntimeState({ lastInput: inputText, lastIntent: "task-update", lastTask: task });
+          write("Jarvis:", `Task updated: ${task.title} [${task.category}]`);
           continue;
         }
 
@@ -259,6 +304,30 @@ export async function runCli(deps: RunCliDependencies = {}): Promise<void> {
           continue;
         }
 
+        if (reminderUpdate) {
+          const reminder = await persistence.updateReminder(
+            reminderUpdate[1].trim(),
+            reminderUpdateFromOptions(reminderUpdate[2]),
+          );
+          if (!reminder) {
+            write("Jarvis: Reminder not found.");
+            continue;
+          }
+          reminderService.replace(
+            reminderService.list().map((entry) => (entry.id === reminder.id ? reminder : entry)),
+          );
+          await saveRuntimeState({
+            lastInput: inputText,
+            lastIntent: "reminder-update",
+            lastReminder: reminder,
+          });
+          write(
+            "Jarvis:",
+            `Reminder updated: ${reminder.title}${reminder.dueRaw ? ` for ${reminder.dueRaw}` : ""}`,
+          );
+          continue;
+        }
+
         if (reminderRemove) {
           const reminder = await persistence.removeReminder(reminderRemove[1].trim());
           if (!reminder) {
@@ -279,14 +348,14 @@ export async function runCli(deps: RunCliDependencies = {}): Promise<void> {
 
         if (lower.includes("task") && !lower.includes("plan")) {
           write(
-            "Jarvis: Use `task add <title>`, `task list`, `task complete <id>`, or `task remove <id>`.",
+            "Jarvis: Use `task add <title>`, `task list`, `task update <id> --title <title> [--category <category>]`, `task complete <id>`, or `task remove <id>`.",
           );
           continue;
         }
 
         if (lower.includes("remind")) {
           write(
-            "Jarvis: Use `reminder add <title> --due <when>`, `reminder list`, or `reminder remove <id>`.",
+            "Jarvis: Use `reminder add <title> --due <when>`, `reminder list`, `reminder update <id> [--title <title>] [--due <when> | --clear-due]`, or `reminder remove <id>`.",
           );
           continue;
         }
