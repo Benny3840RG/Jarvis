@@ -6,6 +6,7 @@
   "scripts": {
     "start": "tsx src/index.ts",
     "test": "node --import tsx --test tests/*.test.ts",
+    "test:coverage": "node --import tsx --test --experimental-test-coverage tests/*.test.ts",
     "type-check": "tsc -p tsconfig.json",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
