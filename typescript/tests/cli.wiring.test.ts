@@ -531,6 +531,7 @@ describe("interactive CLI persistence wiring", () => {
 
     assert.equal(persistence.state.lastIntent, "planning");
     assert(logs.output.some((line) => line.includes("Workflow:")));
+    assert.equal(logs.output.some((line) => line.includes("dueDate")), false);
     assert.equal(
       logs.output.some((line) => line.includes("Use `task add")),
       false,
