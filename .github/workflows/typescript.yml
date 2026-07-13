@@ -37,5 +37,7 @@ jobs:
         run: npm run lint
       - name: Check formatting
         run: npm run format:check
+      - name: Validate OpenAPI contract
+        run: npm run openapi:lint
       - name: Test interactive CLI and persistence with coverage
         run: npm run test:coverage

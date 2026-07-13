@@ -15,7 +15,8 @@
     "lint:fix": "eslint . --fix",
     "format:check": "prettier . --check",
     "format": "prettier . --write",
-    "check": "npm run type-check && npm run lint && npm run format:check && npm test",
+    "openapi:lint": "redocly lint openapi/jarvis.openapi.json",
+    "check": "npm run type-check && npm run lint && npm run format:check && npm run openapi:lint && npm test",
     "smoke:convex": "tsx src/tools/runConvexSmoke.ts",
     "backup": "tsx src/tools/runBackup.ts"
   },
@@ -25,6 +26,7 @@
   "devDependencies": {
     "@convex-dev/eslint-plugin": "^2.0.0",
     "@eslint/js": "^9.39.0",
+    "@redocly/cli": "^2.39.0",
     "@types/node": "^26.1.1",
     "eslint": "^9.39.0",
     "globals": "^17.4.0",
