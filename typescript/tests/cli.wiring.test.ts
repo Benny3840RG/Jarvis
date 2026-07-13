@@ -71,7 +71,9 @@ class MockPersistence implements PersistenceProvider {
   ) {
     this.state = { ...(initial.state ?? {}) };
     this.tasks = (initial.tasks ?? []).map((task) => ({ ...task }));
-    this.reminders = (initial.reminders ?? []).map((reminder) => ({ ...reminder }));
+    this.reminders = (initial.reminders ?? []).map((reminder) => ({
+      ...reminder,
+    }));
   }
 
   async loadState(): Promise<AssistantState> {
@@ -221,7 +223,12 @@ describe("interactive CLI persistence wiring", () => {
     const readline = new ScriptedReadline(["exit"]);
     const logs = capture();
 
-    await runCli({ persistence, readline, stdout: logs.stdout, stderr: logs.stderr });
+    await runCli({
+      persistence,
+      readline,
+      stdout: logs.stdout,
+      stderr: logs.stderr,
+    });
 
     assert.equal(persistence.loadCalled, 1);
     assert.equal(persistence.listTasksCalled, 1);
@@ -237,7 +244,12 @@ describe("interactive CLI persistence wiring", () => {
     const readline = new ScriptedReadline(["task add Call Claire", "exit"]);
     const logs = capture();
 
-    await runCli({ persistence, readline, stdout: logs.stdout, stderr: logs.stderr });
+    await runCli({
+      persistence,
+      readline,
+      stdout: logs.stdout,
+      stderr: logs.stderr,
+    });
 
     assert.deepEqual(persistence.events, ["task-write", "state-save"]);
     assert.equal(persistence.tasks[0].title, "Call Claire");
@@ -419,7 +431,12 @@ describe("interactive CLI persistence wiring", () => {
       () => "exit",
     ]);
 
-    await runCli({ persistence, readline, stdout: logs.stdout, stderr: logs.stderr });
+    await runCli({
+      persistence,
+      readline,
+      stdout: logs.stdout,
+      stderr: logs.stderr,
+    });
 
     assert.equal(persistence.listTasksCalled, 3);
     assert.equal(persistence.listRemindersCalled, 2);
@@ -531,6 +548,10 @@ describe("interactive CLI persistence wiring", () => {
 
     assert.equal(persistence.state.lastIntent, "planning");
     assert(logs.output.some((line) => line.includes("Workflow:")));
+    assert.equal(
+      logs.output.some((line) => line.includes("dueDate")),
+      false,
+    );
     assert.equal(
       logs.output.some((line) => line.includes("Use `task add")),
       false,

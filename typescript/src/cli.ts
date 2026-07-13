@@ -169,7 +169,6 @@ export async function runCli(deps: RunCliDependencies = {}): Promise<void> {
         const businessTask = business.createTask(
           "Submit build update",
           "Share the current Jarvis progress",
-          "2026-07-11",
         );
         const homeTask = home.createTask(
           "Reset living room",
@@ -241,7 +240,11 @@ export async function runCli(deps: RunCliDependencies = {}): Promise<void> {
         if (taskAdd) {
           const task = await persistence.addTask(taskAdd[1].trim(), "personal");
           taskService.replace([...taskService.list(), task]);
-          await saveRuntimeState({ lastInput: inputText, lastIntent: "task-add", lastTask: task });
+          await saveRuntimeState({
+            lastInput: inputText,
+            lastIntent: "task-add",
+            lastTask: task,
+          });
           write("Jarvis:", `Task added: ${task.title}`);
           continue;
         }
@@ -404,17 +407,30 @@ export async function runCli(deps: RunCliDependencies = {}): Promise<void> {
             context: "workshop, business, and home tasks",
           });
           learningEngine.observe(inputText);
-          await saveRuntimeState({ lastInput: inputText, lastIntent: intent, lastResult: result });
+          await saveRuntimeState({
+            lastInput: inputText,
+            lastIntent: intent,
+            lastResult: result,
+          });
           write("Jarvis:", `${reply}\nWorkflow: ${JSON.stringify(workflow)}`);
           write(
             JSON.stringify(
-              { intent, result, workflow, suggestion: learningEngine.suggest() },
+              {
+                intent,
+                result,
+                workflow,
+                suggestion: learningEngine.suggest(),
+              },
               null,
               2,
             ),
           );
         } else {
-          await saveRuntimeState({ lastInput: inputText, lastIntent: intent, lastResult: result });
+          await saveRuntimeState({
+            lastInput: inputText,
+            lastIntent: intent,
+            lastResult: result,
+          });
           write("Jarvis:", reply);
           write(JSON.stringify({ intent, result }, null, 2));
         }
