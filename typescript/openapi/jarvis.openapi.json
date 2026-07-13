@@ -141,7 +141,7 @@
       "get": {
         "operationId": "getHelp",
         "summary": "List supported operator capabilities",
-        "description": "Returns the stable operator-facing capability map generated from this contract.",
+        "description": "Returns the stable operator-facing capability map for the subset of this contract implemented by the running adapter.",
         "tags": ["System"],
         "x-mcp-tool": {
           "exposed": false,
@@ -170,6 +170,9 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"

@@ -1,0 +1,78 @@
+export type Capability = {
+  operationId: string;
+  summary: string;
+  mutating: boolean;
+  destructive: boolean;
+  mcpExposed: boolean;
+};
+
+export type HealthResponse = {
+  status: "ok";
+  service: "jarvis";
+  version: string;
+  time: string;
+};
+
+export type HelpResponse = {
+  apiVersion: "v1";
+  capabilities: Capability[];
+};
+
+export type LayerStatus = {
+  status: "ready" | "partial" | "inactive" | "blocked";
+  reason?: string;
+};
+
+export type LayersStatus = {
+  runtime: LayerStatus;
+  domains: LayerStatus;
+  integration: LayerStatus;
+  orchestration: LayerStatus;
+  safety: LayerStatus;
+  adaptive: LayerStatus;
+  autonomy: LayerStatus;
+  reliability: LayerStatus;
+};
+
+export type ProviderStatus = {
+  name: "json" | "convex";
+  reachability: "ok" | "unavailable";
+  authentication: "not-required" | "ok" | "failed";
+  schemaCompatibility: "compatible" | "incompatible" | "unknown";
+  deploymentVersion: string | null;
+};
+
+export type SystemStatus = {
+  status: "ok" | "degraded" | "unavailable";
+  version: string;
+  sourceVersion: string;
+  provider: ProviderStatus;
+  timezone: string;
+  layers: LayersStatus;
+  zState: "disabled" | "stabilising" | "active" | "suspended";
+  checkedAt: string;
+};
+
+export const IMPLEMENTED_CAPABILITIES: readonly Capability[] = [
+  {
+    operationId: "getHealth",
+    summary: "Check process liveness",
+    mutating: false,
+    destructive: false,
+    mcpExposed: false,
+  },
+  {
+    operationId: "getHelp",
+    summary: "List supported operator capabilities",
+    mutating: false,
+    destructive: false,
+    mcpExposed: false,
+  },
+  {
+    operationId: "getJarvisStatus",
+    summary: "Inspect Jarvis runtime and provider status",
+    mutating: false,
+    destructive: false,
+    mcpExposed: true,
+  },
+] as const;

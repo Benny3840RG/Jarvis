@@ -64,8 +64,21 @@ Update flags may be supplied in either order. At least one supported flag is req
 
 The versioned implementation target for Jarvis's HTTP and ChatGPT App adapters is
 [`typescript/openapi/jarvis.openapi.json`](typescript/openapi/jarvis.openapi.json). The
-maintained runtime remains the TypeScript CLI until those adapters are implemented and tested;
-the contract does not imply that an HTTP server is already running.
+maintained TypeScript CLI remains available, and the first HTTP adapter slice now implements
+public liveness plus authenticated help and provider/Z-State status checks. Task, reminder,
+conversation, backup, and MCP routes remain contract-only until their focused implementation
+stages are complete.
+
+Start the local-only HTTP service after configuring `JARVIS_SERVICE_TOKEN` in `.env.local`:
+
+```bash
+cd typescript
+npm run start:http
+```
+
+It listens on `127.0.0.1:3000` by default. See
+[`typescript/docs/operators/http-api.md`](typescript/docs/operators/http-api.md) for endpoint,
+security, status, and configuration details.
 
 Validate the OpenAPI 3.1 document with the same zero-warning gate used by CI:
 
