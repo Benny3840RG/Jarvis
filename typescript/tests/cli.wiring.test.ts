@@ -25,9 +25,27 @@ class ScriptedReadline implements ReadlineAdapter {
   }
 }
 
+class CallbackReadline implements ReadlineAdapter {
+  readonly prompts: string[] = [];
+  closed = false;
+
+  constructor(private readonly steps: Array<() => string>) {}
+
+  async question(prompt: string): Promise<string> {
+    this.prompts.push(prompt);
+    return this.steps.shift()?.() ?? "exit";
+  }
+
+  close(): void {
+    this.closed = true;
+  }
+}
+
 class MockPersistence implements PersistenceProvider {
   loadCalled = 0;
   saveCalled = 0;
+  listTasksCalled = 0;
+  listRemindersCalled = 0;
   addTaskCalled = 0;
   addReminderCalled = 0;
   completeTaskCalled = 0;
@@ -61,6 +79,7 @@ class MockPersistence implements PersistenceProvider {
   }
 
   async listTasks(): Promise<Task[]> {
+    this.listTasksCalled += 1;
     return this.tasks.map((task) => ({ ...task }));
   }
 
@@ -87,6 +106,7 @@ class MockPersistence implements PersistenceProvider {
   }
 
   async listReminders(): Promise<Reminder[]> {
+    this.listRemindersCalled += 1;
     return this.reminders.map((reminder) => ({ ...reminder }));
   }
 
@@ -132,6 +152,8 @@ describe("interactive CLI persistence wiring", () => {
     await runCli({ persistence, readline, stdout: logs.stdout, stderr: logs.stderr });
 
     assert.equal(persistence.loadCalled, 1);
+    assert.equal(persistence.listTasksCalled, 1);
+    assert.equal(persistence.listRemindersCalled, 1);
     assert.equal(persistence.saveCalled, 0);
     assert.deepEqual(readline.prompts, ["You: "]);
     assert.equal(readline.closed, true);
@@ -169,6 +191,51 @@ describe("interactive CLI persistence wiring", () => {
 
     assert(logs.output.some((line) => line.includes("Measure gate")));
     assert.equal(persistence.loadCalled, 2);
+  });
+
+  it("refreshes lists and summaries from durable storage during a running session", async () => {
+    const persistence = new MockPersistence();
+    const logs = capture();
+    const readline = new CallbackReadline([
+      () => {
+        persistence.tasks.push({
+          id: "external-task-1",
+          title: "Added by another process",
+          completed: false,
+          category: "personal",
+          createdAt: 1,
+        });
+        return "task list";
+      },
+      () => {
+        persistence.tasks.push({
+          id: "external-task-2",
+          title: "Added before summary",
+          completed: false,
+          category: "personal",
+          createdAt: 2,
+        });
+        return "summary";
+      },
+      () => {
+        persistence.reminders.push({
+          id: "external-reminder-1",
+          title: "External reminder",
+          due: "Monday",
+          createdAt: 1,
+        });
+        return "reminder list";
+      },
+      () => "exit",
+    ]);
+
+    await runCli({ persistence, readline, stdout: logs.stdout, stderr: logs.stderr });
+
+    assert.equal(persistence.listTasksCalled, 3);
+    assert.equal(persistence.listRemindersCalled, 2);
+    assert(logs.output.some((line) => line.includes("Added by another process")));
+    assert(logs.output.some((line) => line.includes("Added before summary")));
+    assert(logs.output.some((line) => line.includes("External reminder")));
   });
 
   it("requires explicit reminder syntax with a due value", async () => {
