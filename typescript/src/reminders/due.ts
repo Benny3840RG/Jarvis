@@ -39,6 +39,28 @@ function formatter(timezone: string): Intl.DateTimeFormat {
   });
 }
 
+function isValidFixedOffsetTimezone(timezone: string): boolean {
+  if (timezone === "UTC") return true;
+  const match = /^UTC([+-])(\d{2}):(\d{2})$/.exec(timezone);
+  if (!match) return false;
+  const hours = Number(match[2]);
+  const minutes = Number(match[3]);
+  return minutes <= 59 && (hours < 14 || (hours === 14 && minutes === 0));
+}
+
+function validateStoredTimezone(timezone: string): string {
+  const cleaned = timezone.trim();
+  if (isValidFixedOffsetTimezone(cleaned)) return cleaned;
+  try {
+    formatter(cleaned).format(new Date(0));
+    return cleaned;
+  } catch {
+    throw new Error(
+      `Invalid reminder due timezone '${cleaned}'. Use an IANA timezone such as Australia/Melbourne or a fixed offset such as UTC+10:00.`,
+    );
+  }
+}
+
 export function resolveReminderTimezone(explicit = process.env.JARVIS_TIMEZONE): string {
   const timezone = explicit?.trim() || Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
   try {
@@ -80,13 +102,17 @@ function equalCalendar(left: CalendarDateTime, right: CalendarDateTime): boolean
   );
 }
 
+function utcTimestamp(value: CalendarDateTime, milliseconds = 0): number {
+  const date = new Date(0);
+  date.setUTCFullYear(value.year, value.month - 1, value.day);
+  date.setUTCHours(value.hour, value.minute, value.second, milliseconds);
+  return date.getTime();
+}
+
 function timezoneOffsetAt(timestamp: number, timezone: string): number {
   const rounded = Math.floor(timestamp / 1_000) * 1_000;
   const local = partsAt(rounded, timezone);
-  return (
-    Date.UTC(local.year, local.month - 1, local.day, local.hour, local.minute, local.second) -
-    rounded
-  );
+  return utcTimestamp(local) - rounded;
 }
 
 function isValidCalendar(value: CalendarDateTime): boolean {
@@ -97,6 +123,8 @@ function isValidCalendar(value: CalendarDateTime): boolean {
     !Number.isInteger(value.hour) ||
     !Number.isInteger(value.minute) ||
     !Number.isInteger(value.second) ||
+    value.year < 0 ||
+    value.year > 9_999 ||
     value.month < 1 ||
     value.month > 12 ||
     value.day < 1 ||
@@ -111,9 +139,7 @@ function isValidCalendar(value: CalendarDateTime): boolean {
     return false;
   }
 
-  const check = new Date(
-    Date.UTC(value.year, value.month - 1, value.day, value.hour, value.minute, value.second),
-  );
+  const check = new Date(utcTimestamp(value));
   return (
     check.getUTCFullYear() === value.year &&
     check.getUTCMonth() + 1 === value.month &&
@@ -127,14 +153,7 @@ function isValidCalendar(value: CalendarDateTime): boolean {
 function zonedTimestamp(value: CalendarDateTime, timezone: string): number | undefined {
   if (!isValidCalendar(value)) return undefined;
 
-  const wallClockUtc = Date.UTC(
-    value.year,
-    value.month - 1,
-    value.day,
-    value.hour,
-    value.minute,
-    value.second,
-  );
+  const wallClockUtc = utcTimestamp(value);
   const offsets = new Set<number>();
   for (const delta of [-2 * DAY_MS, -DAY_MS, 0, DAY_MS, 2 * DAY_MS]) {
     offsets.add(timezoneOffsetAt(wallClockUtc + delta, timezone));
@@ -145,7 +164,7 @@ function zonedTimestamp(value: CalendarDateTime, timezone: string): number | und
     .filter((candidate) => equalCalendar(partsAt(candidate, timezone), value))
     .sort((left, right) => left - right);
 
-  return candidates[0];
+  return candidates.length === 1 ? candidates[0] : undefined;
 }
 
 function parseTime(value: string): { hour: number; minute: number } | undefined {
@@ -171,7 +190,7 @@ function parseTime(value: string): { hour: number; minute: number } | undefined 
 }
 
 function addCalendarDays(value: CalendarDateTime, days: number): CalendarDateTime {
-  const date = new Date(Date.UTC(value.year, value.month - 1, value.day + days));
+  const date = new Date(utcTimestamp({ ...value, day: value.day + days }));
   return {
     year: date.getUTCFullYear(),
     month: date.getUTCMonth() + 1,
@@ -188,14 +207,38 @@ function withNormalized(raw: string, value: CalendarDateTime, timezone: string):
 }
 
 function parseAbsoluteIso(raw: string): ReminderDue | undefined {
-  const match = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?(Z|[+-]\d{2}:\d{2})$/i.exec(
-    raw,
-  );
+  const match =
+    /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,3}))?)?(Z|([+-])(\d{2}):(\d{2}))$/i.exec(
+      raw,
+    );
   if (!match) return undefined;
-  const at = Date.parse(raw);
-  if (Number.isNaN(at)) return { raw };
-  const timezone = match[1].toUpperCase() === "Z" ? "UTC" : `UTC${match[1]}`;
-  return { raw, at, timezone };
+
+  const value: CalendarDateTime = {
+    year: Number(match[1]),
+    month: Number(match[2]),
+    day: Number(match[3]),
+    hour: Number(match[4]),
+    minute: Number(match[5]),
+    second: match[6] === undefined ? 0 : Number(match[6]),
+  };
+  if (!isValidCalendar(value)) return { raw };
+
+  const milliseconds = match[7] === undefined ? 0 : Number(match[7].padEnd(3, "0"));
+  let offsetMinutes = 0;
+  let timezone = "UTC";
+  if (match[8].toUpperCase() !== "Z") {
+    const offsetHours = Number(match[10]);
+    const offsetMinutePart = Number(match[11]);
+    if (offsetMinutePart > 59 || offsetHours > 14 || (offsetHours === 14 && offsetMinutePart > 0)) {
+      return { raw };
+    }
+    const direction = match[9] === "+" ? 1 : -1;
+    offsetMinutes = direction * (offsetHours * 60 + offsetMinutePart);
+    timezone = `UTC${match[9]}${match[10]}:${match[11]}`;
+  }
+
+  const at = utcTimestamp(value, milliseconds) - offsetMinutes * 60_000;
+  return Number.isFinite(at) ? { raw, at, timezone } : { raw };
 }
 
 export function parseReminderDue(
@@ -210,8 +253,9 @@ export function parseReminderDue(
 
   const timezone = resolveReminderTimezone(options.timezone);
   const now = options.now ?? new Date();
-  if (Number.isNaN(now.getTime()))
+  if (Number.isNaN(now.getTime())) {
     throw new Error("Reminder parser received an invalid current time.");
+  }
   const nowLocal = partsAt(now.getTime(), timezone);
 
   const isoLocal = /^(\d{4})-(\d{2})-(\d{2})(?:[ T](.+))?$/.exec(raw);
@@ -267,7 +311,7 @@ export function parseReminderDue(
     if (!time) return { raw };
     const targetDay = WEEKDAYS.indexOf(weekday[1].toLowerCase() as (typeof WEEKDAYS)[number]);
     const currentDay = new Date(
-      Date.UTC(nowLocal.year, nowLocal.month - 1, nowLocal.day),
+      utcTimestamp({ ...nowLocal, hour: 0, minute: 0, second: 0 }),
     ).getUTCDay();
     let daysAhead = (targetDay - currentDay + 7) % 7;
     let candidate = addCalendarDays(
@@ -300,11 +344,10 @@ export function validateReminderDue(due: ReminderDue): ReminderDue {
   if (due.at !== undefined && !Number.isFinite(due.at)) {
     throw new Error("Reminder due timestamp must be a finite number.");
   }
-  if (due.timezone !== undefined && due.timezone.trim().length === 0) {
-    throw new Error("Reminder due timezone cannot be empty.");
-  }
+
+  const timezone = due.timezone === undefined ? undefined : validateStoredTimezone(due.timezone);
   return {
     raw,
-    ...(due.at === undefined ? {} : { at: due.at, timezone: due.timezone?.trim() }),
+    ...(due.at === undefined ? {} : { at: due.at, timezone: timezone as string }),
   };
 }
