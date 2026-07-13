@@ -4,6 +4,8 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, it } from "node:test";
 
+import { getFunctionName } from "convex/server";
+
 import {
   exportBackup,
   parseBackup,
@@ -13,15 +15,33 @@ import {
   writeBackupFile,
 } from "../src/backup/backup.js";
 import {
+  ConvexPersistence,
   JSONPersistence,
+  assistantStateFunctions,
   type AssistantState,
+  type ConvexClientLike,
   type PersistenceProvider,
+  type PersistenceRestoreResult,
+  type PersistenceSnapshot,
   type Reminder,
   type ReminderDue,
   type ReminderUpdate,
   type Task,
   type TaskUpdate,
 } from "../src/persistence/persistence.js";
+
+type ConvexStub = {
+  query(reference: unknown, args?: Record<string, unknown>): Promise<unknown>;
+  mutation(reference: unknown, args: Record<string, unknown>): Promise<unknown>;
+};
+
+function asConvexClient(stub: ConvexStub): ConvexClientLike {
+  return stub as ConvexClientLike;
+}
+
+function functionName(reference: unknown): string {
+  return getFunctionName(reference as Parameters<typeof getFunctionName>[0]);
+}
 
 let tempDir = "";
 
@@ -33,7 +53,7 @@ afterEach(async () => {
   await fs.rm(tempDir, { recursive: true, force: true });
 });
 
-class FailingRestoreProvider implements PersistenceProvider {
+class InMemoryAtomicProvider implements PersistenceProvider {
   state: AssistantState = {};
   tasks: Task[] = [];
   reminders: Reminder[] = [];
@@ -84,8 +104,22 @@ class FailingRestoreProvider implements PersistenceProvider {
     return this.reminders.map((reminder) => ({ ...reminder }));
   }
 
-  async addReminder(_title: string, _due?: ReminderDue): Promise<Reminder> {
-    throw new Error("forced reminder restore failure");
+  async addReminder(title: string, due?: ReminderDue): Promise<Reminder> {
+    const reminder: Reminder = {
+      id: `reminder-${this.reminders.length + 1}`,
+      title,
+      ...(due === undefined
+        ? {}
+        : {
+            dueRaw: due.raw,
+            ...(due.at === undefined
+              ? {}
+              : { dueAt: due.at, dueTimezone: due.timezone as string }),
+          }),
+      createdAt: Date.now(),
+    };
+    this.reminders.push(reminder);
+    return { ...reminder };
   }
 
   async updateReminder(_id: string, _update: ReminderUpdate): Promise<Reminder | null> {
@@ -97,6 +131,50 @@ class FailingRestoreProvider implements PersistenceProvider {
     if (index < 0) return null;
     const [reminder] = this.reminders.splice(index, 1);
     return { ...reminder };
+  }
+
+  async snapshot(): Promise<PersistenceSnapshot> {
+    return {
+      state: { ...this.state },
+      tasks: this.tasks.map((task) => ({ ...task })),
+      reminders: this.reminders.map((reminder) => ({ ...reminder })),
+    };
+  }
+
+  async restoreSnapshotIntoEmpty(
+    _snapshot: PersistenceSnapshot,
+  ): Promise<PersistenceRestoreResult> {
+    throw new Error("forced atomic restore failure");
+  }
+}
+
+class SnapshotOnlyProvider extends InMemoryAtomicProvider {
+  override async loadState(): Promise<AssistantState> {
+    throw new Error("export must not read state separately");
+  }
+
+  override async listTasks(): Promise<Task[]> {
+    throw new Error("export must not read tasks separately");
+  }
+
+  override async listReminders(): Promise<Reminder[]> {
+    throw new Error("export must not read reminders separately");
+  }
+
+  override async snapshot(): Promise<PersistenceSnapshot> {
+    return {
+      state: { coherent: true },
+      tasks: [
+        {
+          id: "snapshot-task",
+          title: "One coherent task",
+          completed: false,
+          category: "work",
+          createdAt: 1,
+        },
+      ],
+      reminders: [],
+    };
   }
 }
 
@@ -161,6 +239,37 @@ describe("Jarvis backup archives", () => {
     ]);
   });
 
+  it("exports from one provider snapshot rather than three independent reads", async () => {
+    const archive = await exportBackup(
+      new SnapshotOnlyProvider(),
+      () => new Date("2026-07-13T03:30:00.000Z"),
+    );
+
+    assert.deepEqual(archive.state, { coherent: true });
+    assert.equal(archive.tasks[0].title, "One coherent task");
+  });
+
+  it("allows only one concurrent restore into the same JSON target", async () => {
+    const source = new JSONPersistence(path.join(tempDir, "source-concurrent.json"));
+    await source.addTask("Only one copy", "work");
+    await source.addReminder("Only one reminder", { raw: "after Claire calls" });
+    const archive = await exportBackup(source);
+    const target = path.join(tempDir, "concurrent-target.json");
+
+    const attempts = await Promise.allSettled([
+      restoreBackupIntoEmptyProvider(new JSONPersistence(target), archive),
+      restoreBackupIntoEmptyProvider(new JSONPersistence(target), archive),
+    ]);
+
+    assert.equal(attempts.filter((attempt) => attempt.status === "fulfilled").length, 1);
+    const rejection = attempts.find(
+      (attempt): attempt is PromiseRejectedResult => attempt.status === "rejected",
+    );
+    assert.match(String(rejection?.reason), /target provider is not empty/);
+    assert.equal((await new JSONPersistence(target).listTasks()).length, 1);
+    assert.equal((await new JSONPersistence(target).listReminders()).length, 1);
+  });
+
   it("accepts a version 1 backup and preserves its free-form due text", () => {
     const migrated = parseBackup({
       format: "jarvis-backup",
@@ -209,7 +318,7 @@ describe("Jarvis backup archives", () => {
     assert.deepEqual(await destination.loadState(), { occupied: true });
   });
 
-  it("rolls back records created before a restore failure", async () => {
+  it("leaves a target unchanged when its atomic restore fails", async () => {
     const archive = parseBackup({
       format: "jarvis-backup",
       version: 2,
@@ -224,27 +333,112 @@ describe("Jarvis backup archives", () => {
           createdAt: 1,
         },
       ],
-      reminders: [
-        {
-          id: "source-reminder",
-          title: "Failure trigger",
-          dueRaw: "Friday 9am",
-          createdAt: 2,
-        },
-      ],
+      reminders: [],
     });
-    const provider = new FailingRestoreProvider();
+    const provider = new InMemoryAtomicProvider();
 
     await assert.rejects(
       () => restoreBackupIntoEmptyProvider(provider, archive),
-      /forced reminder restore failure/,
+      /forced atomic restore failure/,
     );
     assert.deepEqual(provider.tasks, []);
     assert.deepEqual(provider.reminders, []);
     assert.deepEqual(provider.state, {});
   });
 
-  it("rejects unsupported versions, malformed due pairs, and duplicate record IDs", () => {
+  it("uses one Convex query and one Convex mutation for atomic backup operations", async () => {
+    const calls: Array<{ name: string; args: Record<string, unknown> }> = [];
+    const taskRow = {
+      _id: "target-task",
+      _creationTime: 1,
+      ownerId: "jarvis-cli",
+      title: "Convex task",
+      completed: true,
+      category: "work",
+      createdAt: 2,
+    };
+    const reminderRow = {
+      _id: "target-reminder",
+      _creationTime: 3,
+      ownerId: "jarvis-cli",
+      title: "Convex reminder",
+      dueRaw: "Friday 9am",
+      createdAt: 4,
+    };
+    const client = asConvexClient({
+      async query(reference, args) {
+        calls.push({ name: functionName(reference), args: args ?? {} });
+        return { state: { taskId: "source-task" }, tasks: [taskRow], reminders: [reminderRow] };
+      },
+      async mutation(reference, args) {
+        calls.push({ name: functionName(reference), args });
+        return {
+          state: { taskId: "target-task", reminderId: "target-reminder" },
+          tasks: [taskRow],
+          reminders: [reminderRow],
+          taskIds: [{ sourceId: "source-task", targetId: "target-task" }],
+          reminderIds: [{ sourceId: "source-reminder", targetId: "target-reminder" }],
+        };
+      },
+    });
+    const provider = new ConvexPersistence(client, "test-token");
+
+    const snapshot = await provider.snapshot();
+    assert.equal(snapshot.tasks[0].id, "target-task");
+    const restored = await provider.restoreSnapshotIntoEmpty({
+      state: { taskId: "source-task", reminderId: "source-reminder" },
+      tasks: [
+        {
+          id: "source-task",
+          title: "Convex task",
+          completed: true,
+          category: "work",
+          createdAt: 1,
+        },
+      ],
+      reminders: [
+        {
+          id: "source-reminder",
+          title: "Convex reminder",
+          dueRaw: "Friday 9am",
+          createdAt: 1,
+        },
+      ],
+    });
+
+    assert.equal(restored.taskIds.get("source-task"), "target-task");
+    assert.equal(restored.reminderIds.get("source-reminder"), "target-reminder");
+    assert.deepEqual(calls, [
+      {
+        name: functionName(assistantStateFunctions.snapshot),
+        args: { serviceToken: "test-token" },
+      },
+      {
+        name: functionName(assistantStateFunctions.restoreEmpty),
+        args: {
+          serviceToken: "test-token",
+          state: { taskId: "source-task", reminderId: "source-reminder" },
+          tasks: [
+            {
+              sourceId: "source-task",
+              title: "Convex task",
+              completed: true,
+              category: "work",
+            },
+          ],
+          reminders: [
+            {
+              sourceId: "source-reminder",
+              title: "Convex reminder",
+              dueRaw: "Friday 9am",
+            },
+          ],
+        },
+      },
+    ]);
+  });
+
+  it("rejects unsupported versions, malformed due values, and duplicate record IDs", () => {
     assert.throws(
       () =>
         parseBackup({
@@ -276,6 +470,27 @@ describe("Jarvis backup archives", () => {
           ],
         }),
       /both dueAt and dueTimezone/,
+    );
+    assert.throws(
+      () =>
+        parseBackup({
+          format: "jarvis-backup",
+          version: 2,
+          createdAt: "2026-07-13T03:30:00.000Z",
+          state: {},
+          tasks: [],
+          reminders: [
+            {
+              id: "bad-timezone",
+              title: "Bad timezone",
+              dueRaw: "Friday 9am",
+              dueAt: 1,
+              dueTimezone: "UTC+15:00",
+              createdAt: 1,
+            },
+          ],
+        }),
+      /Invalid reminder due timezone/,
     );
     assert.throws(
       () =>
