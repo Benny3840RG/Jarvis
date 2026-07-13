@@ -96,7 +96,7 @@ export class JSONPersistence extends CoreJSONPersistence implements PersistenceP
     this.lock = new JsonFileLock(atomicFilePath, atomicWarn, lockTimeoutMs);
   }
 
-  private async quarantine(error: unknown): Promise<void> {
+  private async quarantineAtomic(error: unknown): Promise<void> {
     const suffix = `${new Date().toISOString().replace(/[:.]/g, "-")}-${randomUUID().slice(0, 8)}`;
     const corruptPath = `${this.atomicFilePath}.corrupt-${suffix}`;
     try {
@@ -111,7 +111,7 @@ export class JSONPersistence extends CoreJSONPersistence implements PersistenceP
     }
   }
 
-  private async readDocument(): Promise<PersistedDocument> {
+  private async readAtomicDocument(): Promise<PersistedDocument> {
     let raw: string;
     try {
       raw = await fs.readFile(this.atomicFilePath, "utf8");
@@ -125,12 +125,12 @@ export class JSONPersistence extends CoreJSONPersistence implements PersistenceP
     try {
       return normalizeDocument(JSON.parse(raw) as unknown) as PersistedDocument;
     } catch (error: unknown) {
-      await this.quarantine(error);
+      await this.quarantineAtomic(error);
       return { version: DOCUMENT_VERSION, state: {}, tasks: [], reminders: [] };
     }
   }
 
-  private async writeDocument(document: PersistedDocument): Promise<void> {
+  private async writeAtomicDocument(document: PersistedDocument): Promise<void> {
     await fs.mkdir(path.dirname(this.atomicFilePath), { recursive: true });
     const tempPath = path.join(
       path.dirname(this.atomicFilePath),
@@ -152,7 +152,7 @@ export class JSONPersistence extends CoreJSONPersistence implements PersistenceP
   }
 
   async snapshot(): Promise<PersistenceSnapshot> {
-    return this.lock.run(async () => snapshotFromDocument(await this.readDocument()));
+    return this.lock.run(async () => snapshotFromDocument(await this.readAtomicDocument()));
   }
 
   async restoreSnapshotIntoEmpty(
@@ -166,7 +166,7 @@ export class JSONPersistence extends CoreJSONPersistence implements PersistenceP
     }) as PersistedDocument;
 
     return this.lock.run(async () => {
-      const current = await this.readDocument();
+      const current = await this.readAtomicDocument();
       if (
         Object.keys(current.state).length > 0 ||
         current.tasks.length > 0 ||
@@ -204,7 +204,7 @@ export class JSONPersistence extends CoreJSONPersistence implements PersistenceP
         tasks,
         reminders,
       };
-      await this.writeDocument(restoredDocument);
+      await this.writeAtomicDocument(restoredDocument);
       return {
         snapshot: snapshotFromDocument(restoredDocument),
         taskIds,
