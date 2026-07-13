@@ -45,7 +45,7 @@ function isValidFixedOffsetTimezone(timezone: string): boolean {
   if (!match) return false;
   const hours = Number(match[2]);
   const minutes = Number(match[3]);
-  return hours < 14 || (hours === 14 && minutes === 0);
+  return minutes <= 59 && (hours < 14 || (hours === 14 && minutes === 0));
 }
 
 function validateStoredTimezone(timezone: string): string {
@@ -229,7 +229,11 @@ function parseAbsoluteIso(raw: string): ReminderDue | undefined {
   if (match[8].toUpperCase() !== "Z") {
     const offsetHours = Number(match[10]);
     const offsetMinutePart = Number(match[11]);
-    if (offsetMinutePart > 59 || offsetHours > 14 || (offsetHours === 14 && offsetMinutePart > 0)) {
+    if (
+      offsetMinutePart > 59 ||
+      offsetHours > 14 ||
+      (offsetHours === 14 && offsetMinutePart > 0)
+    ) {
       return { raw };
     }
     const direction = match[9] === "+" ? 1 : -1;
@@ -345,7 +349,8 @@ export function validateReminderDue(due: ReminderDue): ReminderDue {
     throw new Error("Reminder due timestamp must be a finite number.");
   }
 
-  const timezone = due.timezone === undefined ? undefined : validateStoredTimezone(due.timezone);
+  const timezone =
+    due.timezone === undefined ? undefined : validateStoredTimezone(due.timezone);
   return {
     raw,
     ...(due.at === undefined ? {} : { at: due.at, timezone: timezone as string }),
