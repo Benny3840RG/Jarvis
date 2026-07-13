@@ -19,6 +19,7 @@ import { TaskService } from "./runtime/taskService.js";
 import { ProactiveAssistant } from "./runtime/proactiveAssistant.js";
 import { ContextMemory } from "./runtime/contextMemory.js";
 import { PersonalTraitsService } from "./runtime/personalTraitsService.js";
+import { parseReminderDue } from "./reminders/due.js";
 import {
   createPersistenceFromEnv,
   type AssistantState,
@@ -61,7 +62,9 @@ function printReminderList(write: ConsoleWriter, reminders: ReturnType<ReminderS
     return;
   }
   for (const reminder of reminders) {
-    write(`${reminder.id} ${reminder.title}${reminder.due ? ` — ${reminder.due}` : ""}`);
+    write(
+      `${reminder.id} ${reminder.title}${reminder.dueRaw ? ` — ${reminder.dueRaw}` : ""}`,
+    );
   }
 }
 
@@ -112,12 +115,14 @@ export async function runCli(deps: RunCliDependencies = {}): Promise<void> {
     { id: "business", kind: "domain" },
     { id: "home", kind: "domain" },
     { id: "safety", kind: "safety" },
-  ]) graph.addNode(node);
+  ])
+    graph.addNode(node);
   for (const edge of [
     { from: "workshop", to: "safety" },
     { from: "business", to: "safety" },
     { from: "home", to: "safety" },
-  ]) graph.addEdge(edge);
+  ])
+    graph.addEdge(edge);
 
   const domainRouter = {
     async route(module: string, action: string, payload: unknown): Promise<unknown> {
@@ -237,17 +242,15 @@ export async function runCli(deps: RunCliDependencies = {}): Promise<void> {
         }
 
         if (reminderAdd) {
-          const reminder = await persistence.addReminder(
-            reminderAdd[1].trim(),
-            reminderAdd[2].trim(),
-          );
+          const due = parseReminderDue(reminderAdd[2]);
+          const reminder = await persistence.addReminder(reminderAdd[1].trim(), due);
           reminderService.replace([...reminderService.list(), reminder]);
           await saveRuntimeState({
             lastInput: inputText,
             lastIntent: "reminder-add",
             lastReminder: reminder,
           });
-          write("Jarvis:", `Reminder set: ${reminder.title} for ${reminder.due}`);
+          write("Jarvis:", `Reminder set: ${reminder.title} for ${reminder.dueRaw}`);
           continue;
         }
 

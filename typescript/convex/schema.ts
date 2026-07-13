@@ -13,6 +13,9 @@ export default defineSchema({
     ownerId: v.string(),
     title: v.string(),
     due: v.optional(v.string()),
+    dueRaw: v.optional(v.string()),
+    dueAt: v.optional(v.number()),
+    dueTimezone: v.optional(v.string()),
     createdAt: v.number(),
   }).index("by_owner", ["ownerId"]),
   assistantState: defineTable({

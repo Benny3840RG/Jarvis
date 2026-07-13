@@ -45,15 +45,15 @@ export async function runConvexSmoke(
     const firstRun = createProvider();
     const task = await firstRun.addTask(`${marker} task`, "smoke");
     taskId = task.id;
-    const reminder = await firstRun.addReminder(`${marker} reminder`, marker);
+    const reminder = await firstRun.addReminder(`${marker} reminder`, { raw: marker });
     reminderId = reminder.id;
 
     const createdTasks = await firstRun.listTasks();
     const createdReminders = await firstRun.listReminders();
     requireCondition(createdTasks.some((entry) => entry.id === task.id), "Created task was not listed.");
     requireCondition(
-      createdReminders.some((entry) => entry.id === reminder.id),
-      "Created reminder was not listed.",
+      createdReminders.some((entry) => entry.id === reminder.id && entry.dueRaw === marker),
+      "Created reminder or its preserved due text was not listed.",
     );
 
     const restartedRun = createProvider();
@@ -64,8 +64,8 @@ export async function runConvexSmoke(
       "Task was not visible from a new provider instance.",
     );
     requireCondition(
-      restoredReminders.some((entry) => entry.id === reminder.id),
-      "Reminder was not visible from a new provider instance.",
+      restoredReminders.some((entry) => entry.id === reminder.id && entry.dueRaw === marker),
+      "Reminder was not visible from a new provider instance with its due text intact.",
     );
 
     const completed = await restartedRun.completeTask(task.id);

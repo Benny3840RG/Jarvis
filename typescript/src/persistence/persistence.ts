@@ -7,6 +7,9 @@ import { setTimeout as delay } from "node:timers/promises";
 import { ConvexHttpClient } from "convex/browser";
 
 import { api } from "../../convex/_generated/api.js";
+import { validateReminderDue, type ReminderDue } from "../reminders/due.js";
+
+export type { ReminderDue };
 
 export type AssistantState = {
   lastIntent?: string;
@@ -28,7 +31,9 @@ export type Task = {
 export type Reminder = {
   id: string;
   title: string;
-  due?: string;
+  dueRaw?: string;
+  dueAt?: number;
+  dueTimezone?: string;
   createdAt: number;
 };
 
@@ -40,11 +45,12 @@ export interface PersistenceProvider {
   completeTask(id: string): Promise<Task | null>;
   removeTask(id: string): Promise<Task | null>;
   listReminders(): Promise<Reminder[]>;
-  addReminder(title: string, due?: string): Promise<Reminder>;
+  addReminder(title: string, due?: ReminderDue): Promise<Reminder>;
   removeReminder(id: string): Promise<Reminder | null>;
 }
 
-const DOCUMENT_VERSION = 1 as const;
+const DOCUMENT_VERSION = 2 as const;
+const LEGACY_DOCUMENT_VERSION = 1 as const;
 const DEFAULT_LOCK_TIMEOUT_MS = 2_000;
 const LOCK_RETRY_MS = 25;
 
@@ -114,7 +120,40 @@ function normalizeTask(value: unknown, index: number, strict: boolean): Task {
   };
 }
 
-function normalizeReminder(value: unknown, index: number, strict: boolean): Reminder {
+function normalizedDueFromRecord(value: Record<string, unknown>, index: number): Partial<Reminder> {
+  if (value.dueRaw !== undefined && (typeof value.dueRaw !== "string" || value.dueRaw.length === 0)) {
+    throw new StateDocumentError(`Reminder ${index} has an invalid dueRaw value.`);
+  }
+  if (value.dueAt !== undefined && (typeof value.dueAt !== "number" || !Number.isFinite(value.dueAt))) {
+    throw new StateDocumentError(`Reminder ${index} has an invalid dueAt value.`);
+  }
+  if (
+    value.dueTimezone !== undefined &&
+    (typeof value.dueTimezone !== "string" || value.dueTimezone.length === 0)
+  ) {
+    throw new StateDocumentError(`Reminder ${index} has an invalid dueTimezone value.`);
+  }
+  if ((value.dueAt === undefined) !== (value.dueTimezone === undefined)) {
+    throw new StateDocumentError(
+      `Reminder ${index} must contain both dueAt and dueTimezone or neither value.`,
+    );
+  }
+  if (value.dueAt !== undefined && value.dueRaw === undefined) {
+    throw new StateDocumentError(`Reminder ${index} has a normalized due value without dueRaw.`);
+  }
+  return {
+    ...(typeof value.dueRaw === "string" ? { dueRaw: value.dueRaw } : {}),
+    ...(typeof value.dueAt === "number"
+      ? { dueAt: value.dueAt, dueTimezone: value.dueTimezone as string }
+      : {}),
+  };
+}
+
+function normalizeReminder(
+  value: unknown,
+  index: number,
+  format: "legacy" | "version1" | "version2",
+): Reminder {
   if (!isRecord(value)) throw new StateDocumentError(`Reminder ${index} is not an object.`);
   if (typeof value.id !== "string" || value.id.length === 0) {
     throw new StateDocumentError(`Reminder ${index} has an invalid id.`);
@@ -122,16 +161,27 @@ function normalizeReminder(value: unknown, index: number, strict: boolean): Remi
   if (typeof value.title !== "string" || value.title.length === 0) {
     throw new StateDocumentError(`Reminder ${index} has an invalid title.`);
   }
-  if (value.due !== undefined && typeof value.due !== "string") {
-    throw new StateDocumentError(`Reminder ${index} has an invalid due value.`);
-  }
-  if (strict && typeof value.createdAt !== "number") {
+  if (format !== "legacy" && typeof value.createdAt !== "number") {
     throw new StateDocumentError(`Reminder ${index} has an invalid createdAt value.`);
   }
+
+  let due: Partial<Reminder> = {};
+  if (format === "version2") {
+    if (value.due !== undefined) {
+      throw new StateDocumentError(`Reminder ${index} contains the retired due field.`);
+    }
+    due = normalizedDueFromRecord(value, index);
+  } else {
+    if (value.due !== undefined && typeof value.due !== "string") {
+      throw new StateDocumentError(`Reminder ${index} has an invalid due value.`);
+    }
+    due = typeof value.due === "string" ? { dueRaw: value.due } : {};
+  }
+
   return {
     id: value.id,
     title: value.title,
-    ...(typeof value.due === "string" ? { due: value.due } : {}),
+    ...due,
     createdAt: typeof value.createdAt === "number" ? value.createdAt : 0,
   };
 }
@@ -139,26 +189,34 @@ function normalizeReminder(value: unknown, index: number, strict: boolean): Remi
 function normalizeRows<T>(
   value: unknown,
   name: string,
-  normalize: (entry: unknown, index: number, strict: boolean) => T,
-  strict: boolean,
+  normalize: (entry: unknown, index: number) => T,
 ): T[] {
   if (!Array.isArray(value)) throw new StateDocumentError(`${name} must be an array.`);
-  return value.map((entry, index) => normalize(entry, index, strict));
+  return value.map(normalize);
 }
 
 export function normalizeDocument(value: unknown): PersistedDocument {
   if (!isRecord(value)) throw new StateDocumentError("State document must be an object.");
 
   if ("version" in value) {
-    if (value.version !== DOCUMENT_VERSION) {
+    if (value.version !== DOCUMENT_VERSION && value.version !== LEGACY_DOCUMENT_VERSION) {
       throw new StateDocumentError(`Unsupported state document version: ${String(value.version)}.`);
     }
-    if (!isRecord(value.state)) throw new StateDocumentError("Version 1 state must be an object.");
+    if (!isRecord(value.state)) {
+      throw new StateDocumentError(`Version ${String(value.version)} state must be an object.`);
+    }
+    const format = value.version === DOCUMENT_VERSION ? "version2" : "version1";
     return {
       version: DOCUMENT_VERSION,
       state: { ...value.state },
-      tasks: normalizeRows(value.tasks, "Version 1 tasks", normalizeTask, true),
-      reminders: normalizeRows(value.reminders, "Version 1 reminders", normalizeReminder, true),
+      tasks: normalizeRows(value.tasks, `Version ${String(value.version)} tasks`, (entry, index) =>
+        normalizeTask(entry, index, true),
+      ),
+      reminders: normalizeRows(
+        value.reminders,
+        `Version ${String(value.version)} reminders`,
+        (entry, index) => normalizeReminder(entry, index, format),
+      ),
     };
   }
 
@@ -173,11 +231,18 @@ export function normalizeDocument(value: unknown): PersistedDocument {
   return {
     version: DOCUMENT_VERSION,
     state: value.state === undefined ? {} : { ...value.state },
-    tasks: value.tasks === undefined ? [] : normalizeRows(value.tasks, "Legacy tasks", normalizeTask, false),
+    tasks:
+      value.tasks === undefined
+        ? []
+        : normalizeRows(value.tasks, "Legacy tasks", (entry, index) =>
+            normalizeTask(entry, index, false),
+          ),
     reminders:
       value.reminders === undefined
         ? []
-        : normalizeRows(value.reminders, "Legacy reminders", normalizeReminder, false),
+        : normalizeRows(value.reminders, "Legacy reminders", (entry, index) =>
+            normalizeReminder(entry, index, "legacy"),
+          ),
   };
 }
 
@@ -214,6 +279,23 @@ function isProcessAlive(pid: number): boolean {
     if (isNodeError(error) && error.code === "ESRCH") return false;
     return true;
   }
+}
+
+function reminderFromDue(id: string, title: string, createdAt: number, due?: ReminderDue): Reminder {
+  const normalized = due === undefined ? undefined : validateReminderDue(due);
+  return {
+    id,
+    title,
+    ...(normalized === undefined
+      ? {}
+      : {
+          dueRaw: normalized.raw,
+          ...(normalized.at === undefined
+            ? {}
+            : { dueAt: normalized.at, dueTimezone: normalized.timezone as string }),
+        }),
+    createdAt,
+  };
 }
 
 export type PersistenceWarning = (message: string) => void;
@@ -440,16 +522,11 @@ export class JSONPersistence implements PersistenceProvider {
     return this.enqueue(async () => (await this.readDocument()).reminders.map(cloneReminder));
   }
 
-  async addReminder(title: string, due?: string): Promise<Reminder> {
+  async addReminder(title: string, due?: ReminderDue): Promise<Reminder> {
     return this.enqueue(() =>
       this.withWriteLock(async () => {
         const current = await this.readDocument();
-        const reminder: Reminder = {
-          id: randomUUID(),
-          title,
-          ...(due === undefined ? {} : { due }),
-          createdAt: Date.now(),
-        };
+        const reminder = reminderFromDue(randomUUID(), title, Date.now(), due);
         await this.writeDocument({ ...current, reminders: [...current.reminders, reminder] });
         return cloneReminder(reminder);
       }),
@@ -494,12 +571,18 @@ function reminderFromConvex(row: {
   _id: string;
   title: string;
   due?: string;
+  dueRaw?: string;
+  dueAt?: number;
+  dueTimezone?: string;
   createdAt: number;
 }): Reminder {
+  const dueRaw = row.dueRaw ?? row.due;
+  const hasNormalized = row.dueAt !== undefined && row.dueTimezone !== undefined;
   return {
     id: row._id,
     title: row.title,
-    ...(row.due === undefined ? {} : { due: row.due }),
+    ...(dueRaw === undefined ? {} : { dueRaw }),
+    ...(hasNormalized ? { dueAt: row.dueAt, dueTimezone: row.dueTimezone } : {}),
     createdAt: row.createdAt,
   };
 }
@@ -596,11 +679,19 @@ export class ConvexPersistence implements PersistenceProvider {
     return rows.map(reminderFromConvex);
   }
 
-  async addReminder(title: string, due?: string): Promise<Reminder> {
+  async addReminder(title: string, due?: ReminderDue): Promise<Reminder> {
+    const normalized = due === undefined ? undefined : validateReminderDue(due);
     const row = await this.client.mutation(reminderFunctions.create, {
       serviceToken: this.serviceToken,
       title,
-      ...(due === undefined ? {} : { due }),
+      ...(normalized === undefined
+        ? {}
+        : {
+            dueRaw: normalized.raw,
+            ...(normalized.at === undefined
+              ? {}
+              : { dueAt: normalized.at, dueTimezone: normalized.timezone as string }),
+          }),
     });
     return reminderFromConvex(row);
   }

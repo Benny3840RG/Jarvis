@@ -9,11 +9,13 @@ import {
   type AssistantState,
   type PersistenceProvider,
   type Reminder,
+  type ReminderDue,
   type Task,
 } from "../persistence/persistence.js";
 
 const BACKUP_FORMAT = "jarvis-backup" as const;
-const BACKUP_VERSION = 1 as const;
+const BACKUP_VERSION = 2 as const;
+const LEGACY_BACKUP_VERSION = 1 as const;
 const MAX_BACKUP_BYTES = 10 * 1024 * 1024;
 
 export type BackupArchive = {
@@ -92,7 +94,7 @@ function parseTask(value: unknown, index: number): Task {
   };
 }
 
-function parseReminder(value: unknown, index: number): Reminder {
+function parseReminder(value: unknown, index: number, version: 1 | 2): Reminder {
   if (!isRecord(value)) throw new Error(`Backup reminder ${index} must be an object.`);
   if (typeof value.id !== "string" || value.id.length === 0) {
     throw new Error(`Backup reminder ${index} has an invalid id.`);
@@ -100,16 +102,59 @@ function parseReminder(value: unknown, index: number): Reminder {
   if (typeof value.title !== "string" || value.title.length === 0) {
     throw new Error(`Backup reminder ${index} has an invalid title.`);
   }
-  if (value.due !== undefined && typeof value.due !== "string") {
-    throw new Error(`Backup reminder ${index} has an invalid due value.`);
-  }
   if (typeof value.createdAt !== "number" || !Number.isFinite(value.createdAt)) {
     throw new Error(`Backup reminder ${index} has an invalid createdAt value.`);
   }
+
+  if (version === LEGACY_BACKUP_VERSION) {
+    if (value.due !== undefined && typeof value.due !== "string") {
+      throw new Error(`Backup reminder ${index} has an invalid due value.`);
+    }
+    return {
+      id: value.id,
+      title: value.title,
+      ...(typeof value.due === "string" ? { dueRaw: value.due } : {}),
+      createdAt: value.createdAt,
+    };
+  }
+
+  if (value.due !== undefined) {
+    throw new Error(`Backup reminder ${index} contains the retired due field.`);
+  }
+  if (
+    value.dueRaw !== undefined &&
+    (typeof value.dueRaw !== "string" || value.dueRaw.length === 0)
+  ) {
+    throw new Error(`Backup reminder ${index} has an invalid dueRaw value.`);
+  }
+  if (
+    value.dueAt !== undefined &&
+    (typeof value.dueAt !== "number" || !Number.isFinite(value.dueAt))
+  ) {
+    throw new Error(`Backup reminder ${index} has an invalid dueAt value.`);
+  }
+  if (
+    value.dueTimezone !== undefined &&
+    (typeof value.dueTimezone !== "string" || value.dueTimezone.length === 0)
+  ) {
+    throw new Error(`Backup reminder ${index} has an invalid dueTimezone value.`);
+  }
+  if ((value.dueAt === undefined) !== (value.dueTimezone === undefined)) {
+    throw new Error(
+      `Backup reminder ${index} must contain both dueAt and dueTimezone or neither value.`,
+    );
+  }
+  if (value.dueAt !== undefined && value.dueRaw === undefined) {
+    throw new Error(`Backup reminder ${index} has a normalized due value without dueRaw.`);
+  }
+
   return {
     id: value.id,
     title: value.title,
-    ...(value.due === undefined ? {} : { due: value.due }),
+    ...(typeof value.dueRaw === "string" ? { dueRaw: value.dueRaw } : {}),
+    ...(typeof value.dueAt === "number"
+      ? { dueAt: value.dueAt, dueTimezone: value.dueTimezone as string }
+      : {}),
     createdAt: value.createdAt,
   };
 }
@@ -125,7 +170,7 @@ function assertUniqueIds(records: Array<{ id: string }>, name: string): void {
 export function parseBackup(value: unknown): BackupArchive {
   if (!isRecord(value)) throw new Error("Backup must be an object.");
   if (value.format !== BACKUP_FORMAT) throw new Error("Unsupported backup format.");
-  if (value.version !== BACKUP_VERSION) {
+  if (value.version !== BACKUP_VERSION && value.version !== LEGACY_BACKUP_VERSION) {
     throw new Error(`Unsupported backup version: ${String(value.version)}.`);
   }
   if (typeof value.createdAt !== "string" || Number.isNaN(Date.parse(value.createdAt))) {
@@ -137,7 +182,9 @@ export function parseBackup(value: unknown): BackupArchive {
 
   assertJsonSafe(value.state, "backup.state");
   const tasks = value.tasks.map(parseTask);
-  const reminders = value.reminders.map(parseReminder);
+  const reminders = value.reminders.map((entry, index) =>
+    parseReminder(entry, index, value.version as 1 | 2),
+  );
   assertUniqueIds(tasks, "task");
   assertUniqueIds(reminders, "reminder");
 
@@ -233,8 +280,25 @@ function taskSignatures(tasks: Task[]): string[] {
 
 function reminderSignatures(reminders: Reminder[]): string[] {
   return reminders
-    .map((reminder) => JSON.stringify([reminder.title, reminder.due ?? null]))
+    .map((reminder) =>
+      JSON.stringify([
+        reminder.title,
+        reminder.dueRaw ?? null,
+        reminder.dueAt ?? null,
+        reminder.dueTimezone ?? null,
+      ]),
+    )
     .sort();
+}
+
+function reminderDue(reminder: Reminder): ReminderDue | undefined {
+  if (reminder.dueRaw === undefined) return undefined;
+  return {
+    raw: reminder.dueRaw,
+    ...(reminder.dueAt === undefined
+      ? {}
+      : { at: reminder.dueAt, timezone: reminder.dueTimezone as string }),
+  };
 }
 
 export async function assertRestoredBackup(
@@ -300,7 +364,7 @@ export async function restoreBackupIntoEmptyProvider(
     }
 
     for (const source of archive.reminders) {
-      const restored = await provider.addReminder(source.title, source.due);
+      const restored = await provider.addReminder(source.title, reminderDue(source));
       createdReminders.push(restored.id);
       reminderIds.set(source.id, restored.id);
     }

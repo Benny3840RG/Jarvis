@@ -9,18 +9,57 @@ const reminderValidator = v.object({
   ownerId: v.string(),
   title: v.string(),
   due: v.optional(v.string()),
+  dueRaw: v.optional(v.string()),
+  dueAt: v.optional(v.number()),
+  dueTimezone: v.optional(v.string()),
   createdAt: v.number(),
 });
 
+function validatedDue(args: {
+  dueRaw?: string;
+  dueAt?: number;
+  dueTimezone?: string;
+}): { dueRaw?: string; dueAt?: number; dueTimezone?: string } {
+  if (args.dueRaw !== undefined && args.dueRaw.trim().length === 0) {
+    throw new Error("Reminder due text cannot be empty.");
+  }
+  if ((args.dueAt === undefined) !== (args.dueTimezone === undefined)) {
+    throw new Error("A normalized reminder due value requires both a timestamp and timezone.");
+  }
+  if (args.dueAt !== undefined && args.dueRaw === undefined) {
+    throw new Error("A normalized reminder due value requires the preserved raw text.");
+  }
+  if (args.dueAt !== undefined && !Number.isFinite(args.dueAt)) {
+    throw new Error("Reminder due timestamp must be finite.");
+  }
+  if (args.dueTimezone !== undefined && args.dueTimezone.trim().length === 0) {
+    throw new Error("Reminder due timezone cannot be empty.");
+  }
+
+  return {
+    ...(args.dueRaw === undefined ? {} : { dueRaw: args.dueRaw.trim() }),
+    ...(args.dueAt === undefined
+      ? {}
+      : { dueAt: args.dueAt, dueTimezone: args.dueTimezone?.trim() }),
+  };
+}
+
 export const create = mutation({
-  args: { serviceToken: v.string(), title: v.string(), due: v.optional(v.string()) },
+  args: {
+    serviceToken: v.string(),
+    title: v.string(),
+    dueRaw: v.optional(v.string()),
+    dueAt: v.optional(v.number()),
+    dueTimezone: v.optional(v.string()),
+  },
   returns: reminderValidator,
   handler: async (ctx, args) => {
     const ownerId = requireOwner(args.serviceToken);
+    const due = validatedDue(args);
     const id = await ctx.db.insert("reminders", {
       ownerId,
       title: args.title,
-      ...(args.due === undefined ? {} : { due: args.due }),
+      ...due,
       createdAt: Date.now(),
     });
     const reminder = await ctx.db.get("reminders", id);

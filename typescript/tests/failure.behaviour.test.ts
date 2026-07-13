@@ -8,6 +8,7 @@ import {
   type ConvexClientLike,
   type PersistenceProvider,
   type Reminder,
+  type ReminderDue,
   type Task,
 } from "../src/persistence/persistence.js";
 
@@ -109,11 +110,18 @@ class FaultInjectingPersistence implements PersistenceProvider {
     return this.reminders.map((reminder) => ({ ...reminder }));
   }
 
-  async addReminder(title: string, due?: string): Promise<Reminder> {
+  async addReminder(title: string, due?: ReminderDue): Promise<Reminder> {
     const reminder: Reminder = {
       id: `reminder-${this.reminders.length + 1}`,
       title,
-      ...(due === undefined ? {} : { due }),
+      ...(due === undefined
+        ? {}
+        : {
+            dueRaw: due.raw,
+            ...(due.at === undefined
+              ? {}
+              : { dueAt: due.at, dueTimezone: due.timezone as string }),
+          }),
       createdAt: Date.now(),
     };
     this.reminders.push(reminder);

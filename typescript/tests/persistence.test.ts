@@ -63,12 +63,16 @@ describe("JSONPersistence", () => {
     assert.deepEqual(await provider.listReminders(), []);
   });
 
-  it("saves state, tasks, and reminders in one versioned document", async () => {
+  it("saves normalized reminder due data in the current versioned document", async () => {
     const file = path.join(tempDir, "state.json");
     const provider = new JSONPersistence(file);
     const sample = { lastIntent: "testing", lastInput: "hi" };
     const task = await provider.addTask("Call Claire", "personal");
-    const reminder = await provider.addReminder("Quote follow-up", "Friday 9am");
+    const reminder = await provider.addReminder("Quote follow-up", {
+      raw: "Friday 9am",
+      at: Date.parse("2026-07-16T23:00:00.000Z"),
+      timezone: "Australia/Melbourne",
+    });
     await provider.saveState(sample);
 
     const reloaded = new JSONPersistence(file);
@@ -76,8 +80,15 @@ describe("JSONPersistence", () => {
     assert.deepEqual(await reloaded.listTasks(), [task]);
     assert.deepEqual(await reloaded.listReminders(), [reminder]);
 
-    const stored = JSON.parse(await fs.readFile(file, "utf8")) as { version: number };
-    assert.equal(stored.version, 1);
+    const stored = JSON.parse(await fs.readFile(file, "utf8")) as {
+      version: number;
+      reminders: Array<Record<string, unknown>>;
+    };
+    assert.equal(stored.version, 2);
+    assert.equal(stored.reminders[0].dueRaw, "Friday 9am");
+    assert.equal(stored.reminders[0].dueAt, Date.parse("2026-07-16T23:00:00.000Z"));
+    assert.equal(stored.reminders[0].dueTimezone, "Australia/Melbourne");
+    assert.equal("due" in stored.reminders[0], false);
     const files = await fs.readdir(tempDir);
     assert.equal(files.some((name) => name.includes(".tmp-")), false);
     assert.equal(files.some((name) => name.endsWith(".lock")), false);
@@ -94,16 +105,27 @@ describe("JSONPersistence", () => {
     assert.equal(await fs.readFile(file, "utf8"), raw);
   });
 
-  it("preserves task and reminder rows from a legacy document", () => {
-    const migrated = normalizeDocument({
+  it("preserves task and reminder rows from unversioned and version 1 documents", () => {
+    const migratedLegacy = normalizeDocument({
       state: { retained: true },
       tasks: [{ id: "task-1", title: "Old task", completed: false }],
       reminders: [{ id: "reminder-1", title: "Old reminder", due: "Monday" }],
     });
-    assert.equal(migrated.tasks[0].category, "personal");
-    assert.equal(migrated.tasks[0].createdAt, 0);
-    assert.equal(migrated.reminders[0].createdAt, 0);
-    assert.deepEqual(migrated.state, { retained: true });
+    assert.equal(migratedLegacy.tasks[0].category, "personal");
+    assert.equal(migratedLegacy.tasks[0].createdAt, 0);
+    assert.equal(migratedLegacy.reminders[0].createdAt, 0);
+    assert.equal(migratedLegacy.reminders[0].dueRaw, "Monday");
+    assert.deepEqual(migratedLegacy.state, { retained: true });
+
+    const migratedVersion1 = normalizeDocument({
+      version: 1,
+      state: {},
+      tasks: [],
+      reminders: [
+        { id: "reminder-2", title: "Verified backup reminder", due: "Friday 9am", createdAt: 2 },
+      ],
+    });
+    assert.equal(migratedVersion1.reminders[0].dueRaw, "Friday 9am");
   });
 
   it("moves malformed JSON aside and starts empty without bricking the CLI", async () => {
@@ -120,24 +142,42 @@ describe("JSONPersistence", () => {
     assert.equal(await fs.readFile(path.join(tempDir, corrupt), "utf8"), "{not json");
   });
 
-  it("rejects unknown versions and malformed version 1 rows instead of coercing them", () => {
+  it("rejects unknown versions and malformed current rows instead of coercing them", () => {
     assert.throws(
-      () => normalizeDocument({ version: 2, state: {}, tasks: [], reminders: [] }),
+      () => normalizeDocument({ version: 3, state: {}, tasks: [], reminders: [] }),
       /Unsupported state document version/,
     );
     assert.throws(
-      () => normalizeDocument({ version: 1, state: "bad", tasks: [], reminders: [] }),
+      () => normalizeDocument({ version: 2, state: "bad", tasks: [], reminders: [] }),
       /state must be an object/,
     );
     assert.throws(
       () =>
         normalizeDocument({
-          version: 1,
+          version: 2,
           state: {},
           tasks: [{ id: "task-1", title: "Broken", completed: false }],
           reminders: [],
         }),
       /category/,
+    );
+    assert.throws(
+      () =>
+        normalizeDocument({
+          version: 2,
+          state: {},
+          tasks: [],
+          reminders: [
+            {
+              id: "reminder-1",
+              title: "Broken due",
+              dueRaw: "Friday 9am",
+              dueAt: 1,
+              createdAt: 1,
+            },
+          ],
+        }),
+      /both dueAt and dueTimezone/,
     );
   });
 
@@ -161,8 +201,8 @@ describe("JSONPersistence", () => {
     await Promise.all([
       first.addTask("First task", "personal"),
       second.addTask("Second task", "personal"),
-      first.addReminder("First reminder", "Monday"),
-      second.addReminder("Second reminder", "Tuesday"),
+      first.addReminder("First reminder", { raw: "Monday" }),
+      second.addReminder("Second reminder", { raw: "Tuesday" }),
     ]);
 
     assert.deepEqual(
@@ -270,7 +310,8 @@ describe("ConvexPersistence", () => {
     assert.deepEqual(events, ["load", "save"]);
   });
 
-  it("maps task and reminder records through the generated provider contract", async () => {
+  it("maps legacy and normalized reminder records through the generated provider contract", async () => {
+    const normalizedAt = Date.parse("2026-07-16T23:00:00.000Z");
     const mock = asConvexClient({
       async query(reference, args) {
         assert.equal(args?.serviceToken, "test-service-token");
@@ -290,10 +331,10 @@ describe("ConvexPersistence", () => {
         if (convexFunctionName(reference) === convexFunctionName(reminderFunctions.list)) {
           return [
             {
-              _id: "reminder-id",
+              _id: "legacy-reminder-id",
               _creationTime: 2,
               ownerId: "jarvis-cli",
-              title: "Reminder",
+              title: "Legacy reminder",
               due: "Friday",
               createdAt: 2,
             },
@@ -319,12 +360,23 @@ describe("ConvexPersistence", () => {
             createdAt: 1,
           };
         }
+        if (functionName === convexFunctionName(reminderFunctions.create)) {
+          assert.deepEqual(args, {
+            serviceToken: "test-service-token",
+            title: "Reminder",
+            dueRaw: "Friday 9am",
+            dueAt: normalizedAt,
+            dueTimezone: "Australia/Melbourne",
+          });
+        }
         return {
           _id: "reminder-id",
           _creationTime: 2,
           ownerId: "jarvis-cli",
           title: "Reminder",
-          due: "Friday",
+          dueRaw: "Friday 9am",
+          dueAt: normalizedAt,
+          dueTimezone: "Australia/Melbourne",
           createdAt: 2,
         };
       },
@@ -334,8 +386,14 @@ describe("ConvexPersistence", () => {
     assert.equal((await provider.addTask("Task", "personal")).title, "Task");
     assert.equal((await provider.completeTask("task-id"))?.completed, true);
     assert.equal((await provider.removeTask("task-id"))?.title, "Task");
-    assert.equal((await provider.listReminders())[0].id, "reminder-id");
-    assert.equal((await provider.addReminder("Reminder", "Friday")).due, "Friday");
+    assert.equal((await provider.listReminders())[0].dueRaw, "Friday");
+    const added = await provider.addReminder("Reminder", {
+      raw: "Friday 9am",
+      at: normalizedAt,
+      timezone: "Australia/Melbourne",
+    });
+    assert.equal(added.dueRaw, "Friday 9am");
+    assert.equal(added.dueAt, normalizedAt);
     assert.equal((await provider.removeReminder("reminder-id"))?.title, "Reminder");
   });
 

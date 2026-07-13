@@ -17,6 +17,7 @@ import {
   type AssistantState,
   type PersistenceProvider,
   type Reminder,
+  type ReminderDue,
   type Task,
 } from "../src/persistence/persistence.js";
 
@@ -77,7 +78,7 @@ class FailingRestoreProvider implements PersistenceProvider {
     return this.reminders.map((reminder) => ({ ...reminder }));
   }
 
-  async addReminder(): Promise<Reminder> {
+  async addReminder(_title: string, _due?: ReminderDue): Promise<Reminder> {
     throw new Error("forced reminder restore failure");
   }
 
@@ -90,12 +91,16 @@ class FailingRestoreProvider implements PersistenceProvider {
 }
 
 describe("Jarvis backup archives", () => {
-  it("exports, writes, verifies, restores, and remaps state record IDs", async () => {
+  it("exports, writes, verifies, restores, and remaps normalized reminder data", async () => {
     const source = new JSONPersistence(path.join(tempDir, "source.json"));
     const pending = await source.addTask("Measure gate", "work");
     const completed = await source.addTask("Send invoice", "business");
     await source.completeTask(completed.id);
-    const reminder = await source.addReminder("Call Claire", "Friday 9am");
+    const reminder = await source.addReminder("Call Claire", {
+      raw: "Friday 9am",
+      at: Date.parse("2026-07-16T23:00:00.000Z"),
+      timezone: "Australia/Melbourne",
+    });
     await source.saveState({
       lastTask: completed,
       lastReminder: reminder,
@@ -103,9 +108,12 @@ describe("Jarvis backup archives", () => {
     });
 
     const archive = await exportBackup(source, () => new Date("2026-07-13T03:30:00.000Z"));
+    assert.equal(archive.version, 2);
     assert.equal(archive.createdAt, "2026-07-13T03:30:00.000Z");
     assert.equal(archive.tasks.length, 2);
     assert.equal(archive.reminders.length, 1);
+    assert.equal(archive.reminders[0].dueRaw, "Friday 9am");
+    assert.equal(archive.reminders[0].dueTimezone, "Australia/Melbourne");
 
     const backupPath = path.join(tempDir, "backups", "jarvis.json");
     await writeBackupFile(backupPath, archive);
@@ -128,7 +136,9 @@ describe("Jarvis backup archives", () => {
 
     assert.equal(restoredTasks.length, 2);
     assert.equal(restoredTasks.find((task) => task.title === "Send invoice")?.completed, true);
-    assert.equal(restoredReminders[0].due, "Friday 9am");
+    assert.equal(restoredReminders[0].dueRaw, "Friday 9am");
+    assert.equal(restoredReminders[0].dueAt, Date.parse("2026-07-16T23:00:00.000Z"));
+    assert.equal(restoredReminders[0].dueTimezone, "Australia/Melbourne");
     assert.equal(
       (restoredState.lastTask as { id: string }).id,
       result.taskIds.get(completed.id),
@@ -142,6 +152,32 @@ describe("Jarvis backup archives", () => {
       result.taskIds.get(completed.id),
       result.reminderIds.get(reminder.id),
     ]);
+  });
+
+  it("accepts a version 1 backup and preserves its free-form due text", () => {
+    const migrated = parseBackup({
+      format: "jarvis-backup",
+      version: 1,
+      createdAt: "2026-07-13T03:30:00.000Z",
+      state: {},
+      tasks: [],
+      reminders: [
+        {
+          id: "legacy-reminder",
+          title: "Legacy reminder",
+          due: "after Claire calls",
+          createdAt: 1,
+        },
+      ],
+    });
+
+    assert.equal(migrated.version, 2);
+    assert.deepEqual(migrated.reminders[0], {
+      id: "legacy-reminder",
+      title: "Legacy reminder",
+      dueRaw: "after Claire calls",
+      createdAt: 1,
+    });
   });
 
   it("refuses to overwrite an existing backup file", async () => {
@@ -169,7 +205,7 @@ describe("Jarvis backup archives", () => {
   it("rolls back records created before a restore failure", async () => {
     const archive = parseBackup({
       format: "jarvis-backup",
-      version: 1,
+      version: 2,
       createdAt: "2026-07-13T03:30:00.000Z",
       state: { retained: true },
       tasks: [
@@ -185,6 +221,7 @@ describe("Jarvis backup archives", () => {
         {
           id: "source-reminder",
           title: "Failure trigger",
+          dueRaw: "Friday 9am",
           createdAt: 2,
         },
       ],
@@ -200,12 +237,12 @@ describe("Jarvis backup archives", () => {
     assert.deepEqual(provider.state, {});
   });
 
-  it("rejects unsupported versions and duplicate record IDs", () => {
+  it("rejects unsupported versions, malformed due pairs, and duplicate record IDs", () => {
     assert.throws(
       () =>
         parseBackup({
           format: "jarvis-backup",
-          version: 2,
+          version: 3,
           createdAt: "2026-07-13T03:30:00.000Z",
           state: {},
           tasks: [],
@@ -217,7 +254,27 @@ describe("Jarvis backup archives", () => {
       () =>
         parseBackup({
           format: "jarvis-backup",
-          version: 1,
+          version: 2,
+          createdAt: "2026-07-13T03:30:00.000Z",
+          state: {},
+          tasks: [],
+          reminders: [
+            {
+              id: "bad-reminder",
+              title: "Bad reminder",
+              dueRaw: "Friday 9am",
+              dueAt: 1,
+              createdAt: 1,
+            },
+          ],
+        }),
+      /both dueAt and dueTimezone/,
+    );
+    assert.throws(
+      () =>
+        parseBackup({
+          format: "jarvis-backup",
+          version: 2,
           createdAt: "2026-07-13T03:30:00.000Z",
           state: {},
           tasks: [

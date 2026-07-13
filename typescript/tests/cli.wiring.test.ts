@@ -6,6 +6,7 @@ import type {
   AssistantState,
   PersistenceProvider,
   Reminder,
+  ReminderDue,
   Task,
 } from "../src/persistence/persistence.js";
 
@@ -119,13 +120,20 @@ class MockPersistence implements PersistenceProvider {
     return this.reminders.map((reminder) => ({ ...reminder }));
   }
 
-  async addReminder(title: string, due?: string): Promise<Reminder> {
+  async addReminder(title: string, due?: ReminderDue): Promise<Reminder> {
     this.events.push("reminder-write");
     this.addReminderCalled += 1;
-    const reminder = {
+    const reminder: Reminder = {
       id: `reminder-${this.reminders.length + 1}`,
       title,
-      ...(due === undefined ? {} : { due }),
+      ...(due === undefined
+        ? {}
+        : {
+            dueRaw: due.raw,
+            ...(due.at === undefined
+              ? {}
+              : { dueAt: due.at, dueTimezone: due.timezone as string }),
+          }),
       createdAt: this.reminders.length + 1,
     };
     this.reminders.push(reminder);
@@ -257,7 +265,7 @@ describe("interactive CLI persistence wiring", () => {
         persistence.reminders.push({
           id: "external-reminder-1",
           title: "External reminder",
-          due: "Monday",
+          dueRaw: "Monday",
           createdAt: 1,
         });
         return "reminder list";
@@ -274,7 +282,7 @@ describe("interactive CLI persistence wiring", () => {
     assert(logs.output.some((line) => line.includes("External reminder")));
   });
 
-  it("requires explicit reminder syntax with a due value", async () => {
+  it("requires explicit reminder syntax and preserves raw due text", async () => {
     const persistence = new MockPersistence();
     const logs = capture();
     await runCli({
@@ -290,7 +298,7 @@ describe("interactive CLI persistence wiring", () => {
 
     assert.equal(persistence.addReminderCalled, 1);
     assert.equal(persistence.reminders[0].title, "Call Claire");
-    assert.equal(persistence.reminders[0].due, "Friday 9am");
+    assert.equal(persistence.reminders[0].dueRaw, "Friday 9am");
     assert(logs.output.some((line) => line.includes("Use `reminder add")));
   });
 

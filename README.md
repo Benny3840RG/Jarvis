@@ -50,6 +50,18 @@ reminder remove <id>
 
 Fuzzy phrases containing `task` or `remind` do not write data. Jarvis prints the supported command syntax instead.
 
+### Reminder due values
+
+Jarvis always preserves the exact `--due` text as `dueRaw`. It also stores `dueAt` and `dueTimezone` when the value can be interpreted conservatively. Supported normalized forms include ISO timestamps with an offset, `YYYY-MM-DD`, Australian `DD/MM/YYYY`, `today 9am`, `tomorrow 9am`, and named weekdays such as `Friday 9am`.
+
+Ambiguous or unrecognised text such as `after Claire calls` is retained without inventing a timestamp. Local wall-clock values use `JARVIS_TIMEZONE` when configured, otherwise the machine's IANA timezone. For Benny's normal deployment this can be made explicit in `.env.local`:
+
+```text
+JARVIS_TIMEZONE=Australia/Melbourne
+```
+
+Invalid timezone configuration fails the reminder command rather than saving a guessed time. Existing version 1 JSON documents and backup archives remain readable; their old free-form `due` value is migrated in memory to `dueRaw`.
+
 ### Local JSON persistence
 
 JSON is the default provider. Runtime data is stored in `typescript/data/jarvis-state.json`, which is ignored by Git. Writes use a temporary file plus atomic rename. Malformed or unsupported files are moved aside with a `.corrupt-*` suffix so the CLI can start with an empty document while preserving the bad file for recovery.
@@ -67,9 +79,10 @@ Convex creates `typescript/.env.local` when the project is linked. Add these loc
 ```text
 PERSISTENCE_PROVIDER=convex
 JARVIS_SERVICE_TOKEN=<strong random secret>
+JARVIS_TIMEZONE=Australia/Melbourne
 ```
 
-The Convex development deployment must contain the same secret:
+The Convex development deployment must contain the same service secret:
 
 ```bash
 npx convex env set JARVIS_SERVICE_TOKEN
@@ -120,7 +133,7 @@ If the smoke test fails, keep `JARVIS_SERVICE_TOKEN_PREVIOUS` set until the loca
 
 ### Live Convex smoke test
 
-The smoke command refuses any deployment whose `CONVEX_DEPLOYMENT` does not start with `dev:`. It creates a uniquely named task and reminder, verifies them through fresh provider instances, completes and removes the task, removes the reminder, and verifies cleanup. A `finally` block retries cleanup after failures, and surfaced errors redact the configured service token.
+The smoke command refuses any deployment whose `CONVEX_DEPLOYMENT` does not start with `dev:`. It creates a uniquely named task and reminder, verifies the reminder's preserved due text through fresh provider instances, completes and removes the task, removes the reminder, and verifies cleanup. A `finally` block retries cleanup after failures, and surfaced errors redact the configured service token.
 
 Run it only after syncing the current functions to the development deployment:
 
@@ -134,7 +147,7 @@ Do not run the smoke command while deliberately testing against production. The 
 
 ### Backup, verification, and restore
 
-Backups are provider-neutral JSON archives containing assistant state, tasks, reminders, source IDs, and source timestamps. Files are created with private permissions and an existing backup file is never overwritten.
+Backups are provider-neutral JSON archives containing assistant state, tasks, reminders, source IDs, source timestamps, and normalized reminder due data. Files are created with private permissions and an existing backup file is never overwritten. Version 1 archives remain accepted and are migrated to the current version during validation.
 
 ```bash
 cd typescript
@@ -142,7 +155,7 @@ npm run backup -- export backups/jarvis-2026-07-13.json
 npm run backup -- verify backups/jarvis-2026-07-13.json
 ```
 
-`verify` restores the archive into isolated temporary JSON storage, checks tasks, reminders, completion state, and remapped assistant-state references, then deletes the temporary files. It does not touch the configured live provider.
+`verify` restores the archive into isolated temporary JSON storage, checks tasks, reminders, completion state, due fields, and remapped assistant-state references, then deletes the temporary files. It does not touch the configured live provider.
 
 A real restore is deliberately empty-target only and requires an explicit confirmation flag:
 
