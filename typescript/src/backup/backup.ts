@@ -8,10 +8,11 @@ import {
   JSONPersistence,
   type AssistantState,
   type PersistenceProvider,
+  type PersistenceSnapshot,
   type Reminder,
-  type ReminderDue,
   type Task,
 } from "../persistence/persistence.js";
+import { validateReminderDue } from "../reminders/due.js";
 
 const BACKUP_FORMAT = "jarvis-backup" as const;
 const BACKUP_VERSION = 2 as const;
@@ -148,13 +149,24 @@ function parseReminder(value: unknown, index: number, version: 1 | 2): Reminder 
     throw new Error(`Backup reminder ${index} has a normalized due value without dueRaw.`);
   }
 
+  const due =
+    typeof value.dueRaw === "string"
+      ? validateReminderDue({
+          raw: value.dueRaw,
+          ...(typeof value.dueAt === "number"
+            ? { at: value.dueAt, timezone: value.dueTimezone as string }
+            : {}),
+        })
+      : undefined;
   return {
     id: value.id,
     title: value.title,
-    ...(typeof value.dueRaw === "string" ? { dueRaw: value.dueRaw } : {}),
-    ...(typeof value.dueAt === "number"
-      ? { dueAt: value.dueAt, dueTimezone: value.dueTimezone as string }
-      : {}),
+    ...(due === undefined
+      ? {}
+      : {
+          dueRaw: due.raw,
+          ...(due.at === undefined ? {} : { dueAt: due.at, dueTimezone: due.timezone as string }),
+        }),
     createdAt: value.createdAt,
   };
 }
@@ -203,18 +215,17 @@ export async function exportBackup(
   provider: PersistenceProvider,
   now: () => Date = () => new Date(),
 ): Promise<BackupArchive> {
-  const [state, tasks, reminders] = await Promise.all([
-    provider.loadState(),
-    provider.listTasks(),
-    provider.listReminders(),
-  ]);
+  if (!provider.snapshot) {
+    throw new Error("Backup export requires an atomic persistence snapshot capability.");
+  }
+  const snapshot = await provider.snapshot();
   return parseBackup({
     format: BACKUP_FORMAT,
     version: BACKUP_VERSION,
     createdAt: now().toISOString(),
-    state,
-    tasks,
-    reminders,
+    state: snapshot.state,
+    tasks: snapshot.tasks,
+    reminders: snapshot.reminders,
   });
 }
 
@@ -292,38 +303,28 @@ function reminderSignatures(reminders: Reminder[]): string[] {
     .sort();
 }
 
-function reminderDue(reminder: Reminder): ReminderDue | undefined {
-  if (reminder.dueRaw === undefined) return undefined;
-  return {
-    raw: reminder.dueRaw,
-    ...(reminder.dueAt === undefined
-      ? {}
-      : { at: reminder.dueAt, timezone: reminder.dueTimezone as string }),
-  };
-}
-
-export async function assertRestoredBackup(
-  provider: PersistenceProvider,
+export function assertRestoredBackup(
+  snapshot: PersistenceSnapshot,
   archive: BackupArchive,
   result: RestoreResult,
-): Promise<void> {
-  const [state, tasks, reminders] = await Promise.all([
-    provider.loadState(),
-    provider.listTasks(),
-    provider.listReminders(),
-  ]);
+): void {
   const allIds = new Map<string, string>([
     ...result.taskIds.entries(),
     ...result.reminderIds.entries(),
   ]);
   const expectedState = remapIds(archive.state, allIds);
-  if (!isDeepStrictEqual(state, expectedState)) {
+  if (!isDeepStrictEqual(snapshot.state, expectedState)) {
     throw new Error("Restored assistant state does not match the backup.");
   }
-  if (!isDeepStrictEqual(taskSignatures(tasks), taskSignatures(archive.tasks))) {
+  if (!isDeepStrictEqual(taskSignatures(snapshot.tasks), taskSignatures(archive.tasks))) {
     throw new Error("Restored tasks do not match the backup.");
   }
-  if (!isDeepStrictEqual(reminderSignatures(reminders), reminderSignatures(archive.reminders))) {
+  if (
+    !isDeepStrictEqual(
+      reminderSignatures(snapshot.reminders),
+      reminderSignatures(archive.reminders),
+    )
+  ) {
     throw new Error("Restored reminders do not match the backup.");
   }
 }
@@ -333,80 +334,23 @@ export async function restoreBackupIntoEmptyProvider(
   archiveInput: BackupArchive,
 ): Promise<RestoreResult> {
   const archive = parseBackup(archiveInput);
-  const [existingState, existingTasks, existingReminders] = await Promise.all([
-    provider.loadState(),
-    provider.listTasks(),
-    provider.listReminders(),
-  ]);
-  if (
-    Object.keys(existingState).length > 0 ||
-    existingTasks.length > 0 ||
-    existingReminders.length > 0
-  ) {
-    throw new Error("Restore refused: the target provider is not empty.");
+  if (!provider.restoreSnapshotIntoEmpty) {
+    throw new Error("Backup restore requires an atomic empty-target restore capability.");
   }
 
-  const taskIds = new Map<string, string>();
-  const reminderIds = new Map<string, string>();
-  const createdTasks: string[] = [];
-  const createdReminders: string[] = [];
-  let stateWriteAttempted = false;
-
-  try {
-    for (const source of archive.tasks) {
-      let restored = await provider.addTask(source.title, source.category);
-      createdTasks.push(restored.id);
-      taskIds.set(source.id, restored.id);
-      if (source.completed) {
-        const completed = await provider.completeTask(restored.id);
-        if (!completed) throw new Error(`Failed to complete restored task: ${source.title}`);
-        restored = completed;
-      }
-    }
-
-    for (const source of archive.reminders) {
-      const restored = await provider.addReminder(source.title, reminderDue(source));
-      createdReminders.push(restored.id);
-      reminderIds.set(source.id, restored.id);
-    }
-
-    const allIds = new Map<string, string>([...taskIds.entries(), ...reminderIds.entries()]);
-    stateWriteAttempted = true;
-    await provider.saveState(remapIds(archive.state, allIds) as AssistantState);
-
-    const result: RestoreResult = {
-      taskIds,
-      reminderIds,
-      taskCount: taskIds.size,
-      reminderCount: reminderIds.size,
-    };
-    await assertRestoredBackup(provider, archive, result);
-    return result;
-  } catch (error: unknown) {
-    const cleanupErrors: unknown[] = [];
-    for (const id of [...createdReminders].reverse()) {
-      await provider
-        .removeReminder(id)
-        .catch((cleanupError: unknown) => cleanupErrors.push(cleanupError));
-    }
-    for (const id of [...createdTasks].reverse()) {
-      await provider
-        .removeTask(id)
-        .catch((cleanupError: unknown) => cleanupErrors.push(cleanupError));
-    }
-    if (stateWriteAttempted) {
-      await provider
-        .saveState({})
-        .catch((cleanupError: unknown) => cleanupErrors.push(cleanupError));
-    }
-    if (cleanupErrors.length > 0) {
-      throw new AggregateError(
-        [error, ...cleanupErrors],
-        "Restore failed and rollback was incomplete.",
-      );
-    }
-    throw error;
-  }
+  const restored = await provider.restoreSnapshotIntoEmpty({
+    state: archive.state,
+    tasks: archive.tasks,
+    reminders: archive.reminders,
+  });
+  const result: RestoreResult = {
+    taskIds: restored.taskIds,
+    reminderIds: restored.reminderIds,
+    taskCount: restored.taskIds.size,
+    reminderCount: restored.reminderIds.size,
+  };
+  assertRestoredBackup(restored.snapshot, archive, result);
+  return result;
 }
 
 export async function verifyBackupRestore(archive: BackupArchive): Promise<RestoreResult> {
