@@ -135,7 +135,7 @@ If the smoke test fails, keep `JARVIS_SERVICE_TOKEN_PREVIOUS` set until the loca
 
 ### Live Convex smoke test
 
-The smoke command refuses any deployment whose `CONVEX_DEPLOYMENT` does not start with `dev:`. It creates, updates, lists, re-reads through fresh provider instances, completes, removes, and cleans up a uniquely named task and reminder. It verifies task title/category changes and reminder title/due changes before cleanup. A `finally` block retries cleanup after failures, and surfaced errors redact the configured service token.
+The smoke command refuses any deployment whose `CONVEX_DEPLOYMENT` does not start with `dev:`. It creates, updates, lists, re-reads through fresh provider instances, completes, removes, and cleans up a uniquely named task and reminder. It verifies task title/category changes and reminder title/due changes before cleanup. Cleanup is attempted after both successful and failed runs, and surfaced errors redact the configured service token.
 
 Run it only after syncing the current functions to the development deployment:
 
@@ -172,8 +172,9 @@ Restore refuses any provider that already contains state, tasks, or reminders. I
 ```bash
 cd typescript
 npm ci
-npm run type-check
-npm test
+npm run check
 ```
+
+`npm run check` runs the TypeScript compiler, ESLint (including the Convex rules), Prettier verification, and the full test suite.
 
 Keep it boring first. Boring is what works.
