@@ -7,7 +7,9 @@ import type {
   PersistenceProvider,
   Reminder,
   ReminderDue,
+  ReminderUpdate,
   Task,
+  TaskUpdate,
 } from "../src/persistence/persistence.js";
 
 class ScriptedReadline implements ReadlineAdapter {
@@ -48,7 +50,9 @@ class MockPersistence implements PersistenceProvider {
   listTasksCalled = 0;
   listRemindersCalled = 0;
   addTaskCalled = 0;
+  updateTaskCalled = 0;
   addReminderCalled = 0;
+  updateReminderCalled = 0;
   completeTaskCalled = 0;
   removeTaskCalled = 0;
   removeReminderCalled = 0;
@@ -99,6 +103,16 @@ class MockPersistence implements PersistenceProvider {
     return { ...task };
   }
 
+  async updateTask(id: string, update: TaskUpdate): Promise<Task | null> {
+    this.events.push("task-update");
+    this.updateTaskCalled += 1;
+    const task = this.tasks.find((entry) => entry.id === id);
+    if (!task) return null;
+    if (update.title !== undefined) task.title = update.title.trim();
+    if (update.category !== undefined) task.category = update.category.trim();
+    return { ...task };
+  }
+
   async completeTask(id: string): Promise<Task | null> {
     this.completeTaskCalled += 1;
     const task = this.tasks.find((entry) => entry.id === id);
@@ -137,6 +151,29 @@ class MockPersistence implements PersistenceProvider {
       createdAt: this.reminders.length + 1,
     };
     this.reminders.push(reminder);
+    return { ...reminder };
+  }
+
+  async updateReminder(id: string, update: ReminderUpdate): Promise<Reminder | null> {
+    this.events.push("reminder-update");
+    this.updateReminderCalled += 1;
+    const reminder = this.reminders.find((entry) => entry.id === id);
+    if (!reminder) return null;
+    if (update.title !== undefined) reminder.title = update.title.trim();
+    if (update.due === null) {
+      delete reminder.dueRaw;
+      delete reminder.dueAt;
+      delete reminder.dueTimezone;
+    } else if (update.due !== undefined) {
+      reminder.dueRaw = update.due.raw;
+      if (update.due.at === undefined) {
+        delete reminder.dueAt;
+        delete reminder.dueTimezone;
+      } else {
+        reminder.dueAt = update.due.at;
+        reminder.dueTimezone = update.due.timezone as string;
+      }
+    }
     return { ...reminder };
   }
 
@@ -187,6 +224,97 @@ describe("interactive CLI persistence wiring", () => {
     assert.deepEqual(persistence.events, ["task-write", "state-save"]);
     assert.equal(persistence.tasks[0].title, "Call Claire");
     assert(logs.output.some((line) => line.includes("Task added: Call Claire")));
+  });
+
+  it("updates task and reminder fields using explicit flags", async () => {
+    const persistence = new MockPersistence({
+      tasks: [
+        {
+          id: "task-1",
+          title: "Old task",
+          completed: false,
+          category: "personal",
+          createdAt: 1,
+        },
+      ],
+      reminders: [
+        {
+          id: "reminder-1",
+          title: "Old reminder",
+          dueRaw: "Monday",
+          createdAt: 1,
+        },
+      ],
+    });
+    const logs = capture();
+
+    await runCli({
+      persistence,
+      readline: new ScriptedReadline([
+        "task update task-1 --category work --title Revised task",
+        "reminder update reminder-1 --title Revised reminder --due Friday 9am",
+        "reminder update reminder-1 --clear-due",
+        "task list",
+        "reminder list",
+        "exit",
+      ]),
+      stdout: logs.stdout,
+      stderr: logs.stderr,
+    });
+
+    assert.equal(persistence.updateTaskCalled, 1);
+    assert.equal(persistence.tasks[0].title, "Revised task");
+    assert.equal(persistence.tasks[0].category, "work");
+    assert.equal(persistence.updateReminderCalled, 2);
+    assert.equal(persistence.reminders[0].title, "Revised reminder");
+    assert.equal(persistence.reminders[0].dueRaw, undefined);
+    assert(logs.output.some((line) => line.includes("Task updated: Revised task [work]")));
+    assert(logs.output.some((line) => line.includes("Reminder updated: Revised reminder")));
+    assert(logs.output.some((line) => line.includes("Revised task [work]")));
+  });
+
+  it("rejects missing, duplicate, unknown, and conflicting update options without writing", async () => {
+    const persistence = new MockPersistence({
+      tasks: [
+        {
+          id: "task-1",
+          title: "Untouched",
+          completed: false,
+          category: "personal",
+          createdAt: 1,
+        },
+      ],
+      reminders: [
+        {
+          id: "reminder-1",
+          title: "Untouched reminder",
+          dueRaw: "Monday",
+          createdAt: 1,
+        },
+      ],
+    });
+    const logs = capture();
+
+    await runCli({
+      persistence,
+      readline: new ScriptedReadline([
+        "task update task-1",
+        "task update task-1 --title One --title Two",
+        "task update task-1 --bogus nope",
+        "reminder update reminder-1 --due Friday 9am --clear-due",
+        "exit",
+      ]),
+      stdout: logs.stdout,
+      stderr: logs.stderr,
+    });
+
+    assert.equal(persistence.updateTaskCalled, 1);
+    assert.equal(persistence.updateReminderCalled, 0);
+    assert.equal(persistence.tasks[0].title, "Untouched");
+    assert(logs.errors.some((line) => line.includes("Task update requires")));
+    assert(logs.errors.some((line) => line.includes("Duplicate update option")));
+    assert(logs.errors.some((line) => line.includes("Unknown update option")));
+    assert(logs.errors.some((line) => line.includes("cannot use --due and --clear-due")));
   });
 
   it("removes a task durably and refreshes the displayed list", async () => {
@@ -321,6 +449,8 @@ describe("interactive CLI persistence wiring", () => {
 
     assert.equal(persistence.addTaskCalled, 0);
     assert.equal(persistence.addReminderCalled, 0);
+    assert.equal(persistence.updateTaskCalled, 0);
+    assert.equal(persistence.updateReminderCalled, 0);
     assert.equal(persistence.saveCalled, 0);
     assert(logs.output.some((line) => line.includes("Use `task add")));
     assert(logs.output.some((line) => line.includes("Use `reminder add")));
@@ -332,8 +462,10 @@ describe("interactive CLI persistence wiring", () => {
     await runCli({
       persistence,
       readline: new ScriptedReadline([
+        "task update garbage --title Missing",
         "task complete garbage",
         "task remove garbage",
+        "reminder update garbage --title Missing",
         "reminder remove garbage",
         "task add Still running",
         "exit",
@@ -342,12 +474,14 @@ describe("interactive CLI persistence wiring", () => {
       stderr: logs.stderr,
     });
 
+    assert.equal(persistence.updateTaskCalled, 1);
     assert.equal(persistence.completeTaskCalled, 1);
     assert.equal(persistence.removeTaskCalled, 1);
+    assert.equal(persistence.updateReminderCalled, 1);
     assert.equal(persistence.removeReminderCalled, 1);
     assert.equal(persistence.addTaskCalled, 1);
-    assert(logs.output.filter((line) => line.includes("Task not found")).length >= 2);
-    assert(logs.output.some((line) => line.includes("Reminder not found")));
+    assert(logs.output.filter((line) => line.includes("Task not found")).length >= 3);
+    assert(logs.output.filter((line) => line.includes("Reminder not found")).length >= 2);
     assert(logs.output.some((line) => line.includes("Task added: Still running")));
   });
 
