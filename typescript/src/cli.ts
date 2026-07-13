@@ -169,6 +169,18 @@ export async function runCli(deps: RunCliDependencies = {}): Promise<void> {
     }
   }
 
+  async function refreshTasks(): Promise<Task[]> {
+    const tasks = await persistence.listTasks();
+    taskService.replace(tasks);
+    return taskService.list();
+  }
+
+  async function refreshReminders(): Promise<Reminder[]> {
+    const reminders = await persistence.listReminders();
+    reminderService.replace(reminders);
+    return reminderService.list();
+  }
+
   write("Jarvis CLI ready. Type 'exit' to quit.");
 
   try {
@@ -193,7 +205,7 @@ export async function runCli(deps: RunCliDependencies = {}): Promise<void> {
         }
 
         if (lower === "task list") {
-          printTaskList(write, taskService.list());
+          printTaskList(write, await refreshTasks());
           continue;
         }
 
@@ -227,7 +239,7 @@ export async function runCli(deps: RunCliDependencies = {}): Promise<void> {
         }
 
         if (lower === "reminder list") {
-          printReminderList(write, reminderService.list());
+          printReminderList(write, await refreshReminders());
           continue;
         }
 
@@ -269,7 +281,7 @@ export async function runCli(deps: RunCliDependencies = {}): Promise<void> {
         const reply = responseFormatter.format(intent, inputText);
 
         if (lower.includes("summary")) {
-          const summary = proactiveAssistant.summarize(taskService.list());
+          const summary = proactiveAssistant.summarize(await refreshTasks());
           write("Jarvis:", summary);
           write(JSON.stringify({ intent, summary }, null, 2));
         } else if (lower.includes("remember")) {
