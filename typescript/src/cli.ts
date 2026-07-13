@@ -49,6 +49,12 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+export function upsertById<T extends { id: string }>(records: readonly T[], record: T): T[] {
+  const index = records.findIndex((entry) => entry.id === record.id);
+  if (index < 0) return [...records, record];
+  return records.map((entry, entryIndex) => (entryIndex === index ? record : entry));
+}
+
 function printTaskList(write: ConsoleWriter, tasks: ReturnType<TaskService["list"]>): void {
   if (tasks.length === 0) {
     write("Jarvis: No tasks saved.");
@@ -254,9 +260,7 @@ export async function runCli(deps: RunCliDependencies = {}): Promise<void> {
             write("Jarvis: Task not found.");
             continue;
           }
-          taskService.replace(
-            taskService.list().map((entry) => (entry.id === task.id ? task : entry)),
-          );
+          taskService.replace(upsertById(taskService.list(), task));
           await saveRuntimeState({
             lastInput: inputText,
             lastIntent: "task-update",
@@ -272,9 +276,7 @@ export async function runCli(deps: RunCliDependencies = {}): Promise<void> {
             write("Jarvis: Task not found.");
             continue;
           }
-          taskService.replace(
-            taskService.list().map((entry) => (entry.id === task.id ? task : entry)),
-          );
+          taskService.replace(upsertById(taskService.list(), task));
           await saveRuntimeState({
             lastInput: inputText,
             lastIntent: "task-complete",
@@ -327,9 +329,7 @@ export async function runCli(deps: RunCliDependencies = {}): Promise<void> {
             write("Jarvis: Reminder not found.");
             continue;
           }
-          reminderService.replace(
-            reminderService.list().map((entry) => (entry.id === reminder.id ? reminder : entry)),
-          );
+          reminderService.replace(upsertById(reminderService.list(), reminder));
           await saveRuntimeState({
             lastInput: inputText,
             lastIntent: "reminder-update",
@@ -378,34 +378,46 @@ export async function runCli(deps: RunCliDependencies = {}): Promise<void> {
         const intent = router.route(inputText);
         contextMemory.remember(inputText);
         const plan = orchestrator.plan(parsed);
-        const result = await orchestrator.execute(plan);
-        const reply = responseFormatter.format(intent, inputText);
+        const result = await orchestrator.execute(parsed);
+        memory.add({
+          id: `${Date.now()}`,
+          type: "conversation",
+          source: "cli",
+          timestamp: Date.now(),
+          data: { input: inputText, parsed, intent, plan },
+          tags: ["cli", "interaction"],
+          importance: 0.5,
+        });
+        state.set("lastResult", result);
+        const reply = responseFormatter.compose(intent, result);
+        const workflow = workflowGenerator.generate(intent, result);
+        learningEngine.record(intent, result);
+        proactiveAssistant.observe(inputText);
+        personalTraits.update({ curiosity: 0.5 });
 
-        if (lower.includes("summary")) {
-          const summary = proactiveAssistant.summarize(await refreshTasks());
-          write("Jarvis:", summary);
-          write(JSON.stringify({ intent, summary }, null, 2));
-        } else if (lower.includes("remember")) {
-          const keyword = lower.replace(/^.*?remember\s+/, "").trim() || "milk";
-          const recall = contextMemory.recall(keyword);
-          write("Jarvis:", `I remember: ${recall.join(", ") || "nothing yet"}`);
-          write(JSON.stringify({ intent, recall }, null, 2));
-        } else if (lower.includes("brief")) {
-          const brief = personalTraits.dailyBrief();
-          write("Jarvis:", brief);
-          write(JSON.stringify({ intent, brief }, null, 2));
-        } else if (lower.includes("motivate")) {
-          const motivation = personalTraits.motivation();
-          write("Jarvis:", motivation);
-          write(JSON.stringify({ intent, motivation }, null, 2));
-        } else if (intent === "planning") {
-          const workflow = workflowGenerator.createPlan(inputText, {
-            priority: "high",
-            context: "workshop, business, and home tasks",
+        if (intent === "task-summary") {
+          const taskSummary = taskService.summary(await refreshTasks());
+          await saveRuntimeState({
+            lastInput: inputText,
+            lastIntent: intent,
+            lastResult: result,
           });
-          learningEngine.observe(inputText);
-          await saveRuntimeState({ lastInput: inputText, lastIntent: intent, lastResult: result });
-          write("Jarvis:", `${reply}\nWorkflow: ${JSON.stringify(workflow)}`);
+          write("Jarvis:", `${reply}\n${taskSummary}`);
+          write(
+            JSON.stringify(
+              { intent, result, workflow, suggestion: learningEngine.suggest() },
+              null,
+              2,
+            ),
+          );
+        } else if (intent === "reminder-summary") {
+          const reminders = await refreshReminders();
+          await saveRuntimeState({
+            lastInput: inputText,
+            lastIntent: intent,
+            lastResult: result,
+          });
+          write("Jarvis:", `${reply}\nReminders: ${reminders.length}`);
           write(
             JSON.stringify(
               { intent, result, workflow, suggestion: learningEngine.suggest() },
@@ -416,10 +428,10 @@ export async function runCli(deps: RunCliDependencies = {}): Promise<void> {
         } else {
           await saveRuntimeState({ lastInput: inputText, lastIntent: intent, lastResult: result });
           write("Jarvis:", reply);
-          write(JSON.stringify({ intent, result }, null, 2));
+          write(JSON.stringify({ intent, result, workflow }, null, 2));
         }
       } catch (error: unknown) {
-        writeError("Command failed:", errorMessage(error));
+        writeError("Jarvis command failed:", errorMessage(error));
       }
     }
   } finally {
