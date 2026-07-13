@@ -1,0 +1,7 @@
+node_modules/
+convex/_generated/
+.agents/
+.claude/
+backups/
+data/
+package-lock.json
