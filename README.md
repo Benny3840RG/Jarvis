@@ -132,6 +132,26 @@ npm run smoke:convex
 
 Do not run the smoke command while deliberately testing against production. The deployment guard is there to fail closed.
 
+### Backup, verification, and restore
+
+Backups are provider-neutral JSON archives containing assistant state, tasks, reminders, source IDs, and source timestamps. Files are created with private permissions and an existing backup file is never overwritten.
+
+```bash
+cd typescript
+npm run backup -- export backups/jarvis-2026-07-13.json
+npm run backup -- verify backups/jarvis-2026-07-13.json
+```
+
+`verify` restores the archive into isolated temporary JSON storage, checks tasks, reminders, completion state, and remapped assistant-state references, then deletes the temporary files. It does not touch the configured live provider.
+
+A real restore is deliberately empty-target only and requires an explicit confirmation flag:
+
+```bash
+npm run backup -- restore backups/jarvis-2026-07-13.json --confirm-empty-target
+```
+
+Restore refuses any provider that already contains state, tasks, or reminders. It rolls back records created during a failed restore. Because JSON and Convex issue their own record IDs and timestamps, a portable restore recreates those values; known and nested record-ID references inside assistant state are remapped automatically. The archive retains the original IDs and timestamps for audit purposes.
+
 ## Checks
 
 ```bash

@@ -7,7 +7,8 @@
     "start": "tsx src/index.ts",
     "test": "node --import tsx --test tests/*.test.ts",
     "type-check": "tsc -p tsconfig.json",
-    "smoke:convex": "tsx src/tools/runConvexSmoke.ts"
+    "smoke:convex": "tsx src/tools/runConvexSmoke.ts",
+    "backup": "tsx src/tools/runBackup.ts"
   },
   "dependencies": {
     "convex": "^1.42.1"
