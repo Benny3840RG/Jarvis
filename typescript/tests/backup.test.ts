@@ -112,9 +112,7 @@ class InMemoryAtomicProvider implements PersistenceProvider {
         ? {}
         : {
             dueRaw: due.raw,
-            ...(due.at === undefined
-              ? {}
-              : { dueAt: due.at, dueTimezone: due.timezone as string }),
+            ...(due.at === undefined ? {} : { dueAt: due.at, dueTimezone: due.timezone as string }),
           }),
       createdAt: Date.now(),
     };

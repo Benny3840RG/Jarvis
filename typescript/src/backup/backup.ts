@@ -165,9 +165,7 @@ function parseReminder(value: unknown, index: number, version: 1 | 2): Reminder 
       ? {}
       : {
           dueRaw: due.raw,
-          ...(due.at === undefined
-            ? {}
-            : { dueAt: due.at, dueTimezone: due.timezone as string }),
+          ...(due.at === undefined ? {} : { dueAt: due.at, dueTimezone: due.timezone as string }),
         }),
     createdAt: value.createdAt,
   };
@@ -322,7 +320,10 @@ export function assertRestoredBackup(
     throw new Error("Restored tasks do not match the backup.");
   }
   if (
-    !isDeepStrictEqual(reminderSignatures(snapshot.reminders), reminderSignatures(archive.reminders))
+    !isDeepStrictEqual(
+      reminderSignatures(snapshot.reminders),
+      reminderSignatures(archive.reminders),
+    )
   ) {
     throw new Error("Restored reminders do not match the backup.");
   }

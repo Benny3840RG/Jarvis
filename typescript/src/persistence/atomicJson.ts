@@ -76,9 +76,7 @@ function restoredReminder(id: string, reminder: Reminder): Reminder {
       ? {}
       : {
           dueRaw: due.raw,
-          ...(due.at === undefined
-            ? {}
-            : { dueAt: due.at, dueTimezone: due.timezone as string }),
+          ...(due.at === undefined ? {} : { dueAt: due.at, dueTimezone: due.timezone as string }),
         }),
     createdAt: Date.now(),
   };
@@ -155,9 +153,7 @@ export class JSONPersistence extends CoreJSONPersistence implements PersistenceP
     return this.lock.run(async () => snapshotFromDocument(await this.readAtomicDocument()));
   }
 
-  async restoreSnapshotIntoEmpty(
-    snapshot: PersistenceSnapshot,
-  ): Promise<PersistenceRestoreResult> {
+  async restoreSnapshotIntoEmpty(snapshot: PersistenceSnapshot): Promise<PersistenceRestoreResult> {
     const source = normalizeDocument({
       version: DOCUMENT_VERSION,
       state: snapshot.state,
@@ -193,10 +189,7 @@ export class JSONPersistence extends CoreJSONPersistence implements PersistenceP
         reminderIds.set(reminder.id, id);
         return restoredReminder(id, reminder);
       });
-      const allIds = new Map<string, string>([
-        ...taskIds.entries(),
-        ...reminderIds.entries(),
-      ]);
+      const allIds = new Map<string, string>([...taskIds.entries(), ...reminderIds.entries()]);
       const state = remapIds(source.state, allIds) as AssistantState;
       const restoredDocument: PersistedDocument = {
         version: DOCUMENT_VERSION,

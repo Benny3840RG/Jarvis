@@ -76,9 +76,7 @@ export class ConvexPersistence extends CoreConvexPersistence implements Persiste
     };
   }
 
-  async restoreSnapshotIntoEmpty(
-    snapshot: PersistenceSnapshot,
-  ): Promise<PersistenceRestoreResult> {
+  async restoreSnapshotIntoEmpty(snapshot: PersistenceSnapshot): Promise<PersistenceRestoreResult> {
     const row = await this.atomicClient.mutation(assistantStateFunctions.restoreEmpty, {
       serviceToken: this.atomicServiceToken,
       state: snapshot.state,
@@ -107,9 +105,7 @@ export class ConvexPersistence extends CoreConvexPersistence implements Persiste
         reminders: row.reminders.map(reminderFromConvex),
       },
       taskIds: new Map(row.taskIds.map(({ sourceId, targetId }) => [sourceId, targetId])),
-      reminderIds: new Map(
-        row.reminderIds.map(({ sourceId, targetId }) => [sourceId, targetId]),
-      ),
+      reminderIds: new Map(row.reminderIds.map(({ sourceId, targetId }) => [sourceId, targetId])),
     };
   }
 }

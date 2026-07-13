@@ -67,11 +67,11 @@ function remapIds(value: unknown, ids: ReadonlyMap<string, string>): unknown {
   return value;
 }
 
-function validatedDue(args: {
+function validatedDue(args: { dueRaw?: string; dueAt?: number; dueTimezone?: string }): {
   dueRaw?: string;
   dueAt?: number;
   dueTimezone?: string;
-}): { dueRaw?: string; dueAt?: number; dueTimezone?: string } {
+} {
   const dueRaw = args.dueRaw?.trim();
   const dueTimezone = args.dueTimezone?.trim();
   if (args.dueRaw !== undefined && dueRaw?.length === 0) {
@@ -88,9 +88,7 @@ function validatedDue(args: {
   }
   return {
     ...(dueRaw === undefined ? {} : { dueRaw }),
-    ...(args.dueAt === undefined
-      ? {}
-      : { dueAt: args.dueAt, dueTimezone: dueTimezone as string }),
+    ...(args.dueAt === undefined ? {} : { dueAt: args.dueAt, dueTimezone: dueTimezone as string }),
   };
 }
 
@@ -153,7 +151,10 @@ export const snapshot = query({
         .query("assistantState")
         .withIndex("by_owner_key", (q) => q.eq("ownerId", ownerId).eq("key", PRIMARY_KEY))
         .unique(),
-      ctx.db.query("tasks").withIndex("by_owner", (q) => q.eq("ownerId", ownerId)).collect(),
+      ctx.db
+        .query("tasks")
+        .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+        .collect(),
       ctx.db
         .query("reminders")
         .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
@@ -192,7 +193,10 @@ export const restoreEmpty = mutation({
         .query("assistantState")
         .withIndex("by_owner_key", (q) => q.eq("ownerId", ownerId).eq("key", PRIMARY_KEY))
         .unique(),
-      ctx.db.query("tasks").withIndex("by_owner", (q) => q.eq("ownerId", ownerId)).first(),
+      ctx.db
+        .query("tasks")
+        .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+        .first(),
       ctx.db
         .query("reminders")
         .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
