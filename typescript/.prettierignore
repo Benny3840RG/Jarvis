@@ -4,4 +4,5 @@ convex/_generated/
 .claude/
 backups/
 data/
+dist/
 package-lock.json
