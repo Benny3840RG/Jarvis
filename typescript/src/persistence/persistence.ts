@@ -403,23 +403,49 @@ export class JSONPersistence implements PersistenceProvider {
     }
   }
 
-  private async readLockRecord(): Promise<LockRecord | null> {
+  private async readLockState(): Promise<
+    | { kind: "missing" }
+    | { kind: "valid"; record: LockRecord }
+    | { kind: "malformed"; modifiedAt: number; size: number; device: number; inode: number }
+  > {
+    let raw: string;
     try {
-      const raw = await fs.readFile(this.lockPath, "utf8");
-      return normalizeLockRecord(JSON.parse(raw) as unknown);
+      raw = await fs.readFile(this.lockPath, "utf8");
     } catch (error: unknown) {
-      if (isNodeError(error) && error.code === "ENOENT") return null;
-      if (error instanceof SyntaxError) return null;
+      if (isNodeError(error) && error.code === "ENOENT") return { kind: "missing" };
       throw error;
     }
+
+    let stat: Awaited<ReturnType<typeof fs.stat>>;
+    try {
+      stat = await fs.stat(this.lockPath);
+    } catch (error: unknown) {
+      if (isNodeError(error) && error.code === "ENOENT") return { kind: "missing" };
+      throw error;
+    }
+
+    try {
+      const record = normalizeLockRecord(JSON.parse(raw) as unknown);
+      if (record) return { kind: "valid", record };
+    } catch (error: unknown) {
+      if (!(error instanceof SyntaxError)) throw error;
+    }
+
+    return {
+      kind: "malformed",
+      modifiedAt: stat.mtimeMs,
+      size: stat.size,
+      device: stat.dev,
+      inode: stat.ino,
+    };
   }
 
-  private async reclaimDeadLock(): Promise<boolean> {
-    const record = await this.readLockRecord();
-    if (!record || isProcessAlive(record.pid)) return false;
+  private async removeOwnedLock(token: string): Promise<boolean> {
+    const state = await this.readLockState();
+    if (state.kind === "missing") return true;
+    if (state.kind !== "valid" || state.record.token !== token) return false;
     try {
       await fs.rm(this.lockPath);
-      this.warn(`Jarvis reclaimed a stale JSON state lock left by process ${record.pid}.`);
       return true;
     } catch (error: unknown) {
       if (isNodeError(error) && error.code === "ENOENT") return true;
@@ -427,35 +453,81 @@ export class JSONPersistence implements PersistenceProvider {
     }
   }
 
-  private async acquireWriteLock(): Promise<FileHandle> {
+  private async reclaimStaleLock(): Promise<boolean> {
+    const state = await this.readLockState();
+    if (state.kind === "missing") return true;
+
+    if (state.kind === "valid") {
+      if (isProcessAlive(state.record.pid)) return false;
+      if (!(await this.removeOwnedLock(state.record.token))) return false;
+      this.warn(`Jarvis reclaimed a stale JSON state lock left by process ${state.record.pid}.`);
+      return true;
+    }
+
+    const malformedGraceMs = Math.max(100, this.lockTimeoutMs);
+    if (Date.now() - state.modifiedAt < malformedGraceMs) return false;
+
+    const confirmed = await this.readLockState();
+    if (
+      confirmed.kind !== "malformed" ||
+      confirmed.modifiedAt !== state.modifiedAt ||
+      confirmed.size !== state.size ||
+      confirmed.device !== state.device ||
+      confirmed.inode !== state.inode
+    ) {
+      return confirmed.kind === "missing";
+    }
+
+    try {
+      await fs.rm(this.lockPath);
+      this.warn("Jarvis reclaimed a stale malformed JSON state lock.");
+      return true;
+    } catch (error: unknown) {
+      if (isNodeError(error) && error.code === "ENOENT") return true;
+      throw error;
+    }
+  }
+
+  private async tryCreateWriteLock(record: LockRecord): Promise<boolean> {
+    const tempPath = `${this.lockPath}.tmp-${process.pid}-${record.token}`;
+    let handle: FileHandle | undefined;
+    try {
+      handle = await fs.open(tempPath, "wx", 0o600);
+      await handle.writeFile(`${JSON.stringify(record)}\n`, "utf8");
+      await handle.sync();
+      await handle.close();
+      handle = undefined;
+      try {
+        await fs.link(tempPath, this.lockPath);
+        return true;
+      } catch (error: unknown) {
+        if (isNodeError(error) && error.code === "EEXIST") return false;
+        throw error;
+      }
+    } finally {
+      await handle?.close().catch(() => undefined);
+      await fs.rm(tempPath, { force: true }).catch(() => undefined);
+    }
+  }
+
+  private async acquireWriteLock(): Promise<LockRecord> {
     await fs.mkdir(path.dirname(this.filePath), { recursive: true });
     const startedAt = Date.now();
+    const record: LockRecord = {
+      pid: process.pid,
+      acquiredAt: Date.now(),
+      token: randomUUID(),
+    };
 
     while (true) {
-      let handle: FileHandle | undefined;
-      try {
-        handle = await fs.open(this.lockPath, "wx", 0o600);
-        const record: LockRecord = {
-          pid: process.pid,
-          acquiredAt: Date.now(),
-          token: randomUUID(),
-        };
-        await handle.writeFile(`${JSON.stringify(record)}\n`, "utf8");
-        await handle.sync();
-        return handle;
-      } catch (error: unknown) {
-        await handle?.close().catch(() => undefined);
-        if (!(isNodeError(error) && error.code === "EEXIST")) {
-          await fs.rm(this.lockPath, { force: true }).catch(() => undefined);
-          throw error;
-        }
-      }
-
-      if (await this.reclaimDeadLock()) continue;
+      if (await this.tryCreateWriteLock(record)) return record;
+      if (await this.reclaimStaleLock()) continue;
 
       if (Date.now() - startedAt >= Math.max(0, this.lockTimeoutMs)) {
-        const record = await this.readLockRecord();
-        const owner = record ? `process ${record.pid}` : "another process";
+        const state = await this.readLockState();
+        if (state.kind === "missing") continue;
+        const owner =
+          state.kind === "valid" ? `process ${state.record.pid}` : "a malformed lock file";
         throw new Error(
           `Jarvis JSON state is locked by ${owner}. Close the other local writer or select Convex for multi-process use.`,
         );
@@ -466,13 +538,38 @@ export class JSONPersistence implements PersistenceProvider {
   }
 
   private async withWriteLock<T>(operation: () => Promise<T>): Promise<T> {
-    const handle = await this.acquireWriteLock();
+    const lock = await this.acquireWriteLock();
+    let failed = false;
+    let primaryError: unknown;
+    let result: T | undefined;
+
     try {
-      return await operation();
-    } finally {
-      await handle.close().catch(() => undefined);
-      await fs.rm(this.lockPath, { force: true });
+      result = await operation();
+    } catch (error: unknown) {
+      failed = true;
+      primaryError = error;
     }
+
+    let releaseError: unknown;
+    try {
+      if (!(await this.removeOwnedLock(lock.token))) {
+        throw new Error("Jarvis JSON state lock ownership changed before release; lock left in place.");
+      }
+    } catch (error: unknown) {
+      releaseError = error;
+    }
+
+    if (failed) {
+      if (releaseError !== undefined) {
+        throw new AggregateError(
+          [primaryError, releaseError],
+          "Jarvis JSON mutation failed and its state lock could not be released safely.",
+        );
+      }
+      throw primaryError;
+    }
+    if (releaseError !== undefined) throw releaseError;
+    return result as T;
   }
 
   async loadState(): Promise<AssistantState> {
@@ -650,7 +747,7 @@ function reminderFromConvex(row: {
 
 function isInvalidIdError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
-  return /argument validation|invalid(?: convex)? id|invalid id|document.*not found/i.test(message);
+  return /(?:invalid|malformed)(?: convex)?(?: document)? id|not a valid(?: convex)? id|document id.*not found/i.test(message);
 }
 
 export class ConvexPersistence implements PersistenceProvider {
