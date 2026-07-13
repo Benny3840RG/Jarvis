@@ -1,0 +1,81 @@
+name: Generate tooling lock
+
+on:
+  push:
+    branches: [agent/eslint-format-checks]
+    paths:
+      - "typescript/package.json"
+      - "typescript/eslint.config.mjs"
+      - "typescript/.prettierrc.json"
+      - "typescript/.prettierignore"
+      - ".github/workflows/generate-tooling-lock.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  generate-and-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: typescript/package-lock.json
+
+      - name: Generate package lock
+        working-directory: typescript
+        run: npm install --package-lock-only
+
+      - name: Install generated dependency graph
+        working-directory: typescript
+        run: npm ci
+
+      - name: Lint
+        id: lint
+        continue-on-error: true
+        working-directory: typescript
+        run: npm run lint
+
+      - name: Format working tree
+        working-directory: typescript
+        run: npm run format
+
+      - name: Type-check
+        id: typecheck
+        continue-on-error: true
+        working-directory: typescript
+        run: npm run type-check
+
+      - name: Test
+        id: test
+        continue-on-error: true
+        working-directory: typescript
+        run: npm test
+
+      - name: Capture generated tooling files
+        if: always()
+        run: git diff --binary > tooling.patch
+
+      - name: Upload generated lock and formatted sources
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tooling-output
+          if-no-files-found: error
+          path: |
+            tooling.patch
+            typescript/package-lock.json
+            typescript/src
+            typescript/tests
+            typescript/convex
+            typescript/eslint.config.mjs
+            typescript/.prettierrc.json
+            typescript/.prettierignore
+
+      - name: Fail when checks failed
+        if: steps.lint.outcome != 'success' || steps.typecheck.outcome != 'success' || steps.test.outcome != 'success'
+        run: exit 1
