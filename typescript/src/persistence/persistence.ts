@@ -553,7 +553,9 @@ export class JSONPersistence implements PersistenceProvider {
     let releaseError: unknown;
     try {
       if (!(await this.removeOwnedLock(lock.token))) {
-        throw new Error("Jarvis JSON state lock ownership changed before release; lock left in place.");
+        throw new Error(
+          "Jarvis JSON state lock ownership changed before release; lock left in place.",
+        );
       }
     } catch (error: unknown) {
       releaseError = error;
@@ -747,7 +749,9 @@ function reminderFromConvex(row: {
 
 function isInvalidIdError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
-  return /(?:invalid|malformed)(?: convex)?(?: document)? id|not a valid(?: convex)? id|document id.*not found/i.test(message);
+  return /(?:invalid|malformed)(?: convex)?(?: document)? id|not a valid(?: convex)? id|document id.*not found/i.test(
+    message,
+  );
 }
 
 export class ConvexPersistence implements PersistenceProvider {
