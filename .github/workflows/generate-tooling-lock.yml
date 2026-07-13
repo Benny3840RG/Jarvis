@@ -9,6 +9,14 @@ on:
       - "typescript/.prettierrc.json"
       - "typescript/.prettierignore"
       - ".github/workflows/generate-tooling-lock.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "typescript/package.json"
+      - "typescript/eslint.config.mjs"
+      - "typescript/.prettierrc.json"
+      - "typescript/.prettierignore"
+      - ".github/workflows/generate-tooling-lock.yml"
 
 permissions:
   contents: read
