@@ -3,7 +3,7 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
 
-import type { PersistenceWarning } from "./persistenceCore.js";
+import type { PersistenceWarning } from "./types.js";
 
 const LOCK_RETRY_MS = 25;
 
@@ -16,7 +16,13 @@ type LockRecord = {
 type LockState =
   | { kind: "missing" }
   | { kind: "valid"; record: LockRecord }
-  | { kind: "malformed"; modifiedAt: number; size: number; device: number; inode: number };
+  | {
+      kind: "malformed";
+      modifiedAt: number;
+      size: number;
+      device: number;
+      inode: number;
+    };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -191,13 +197,15 @@ export class JsonFileLock {
     }
   }
 
-  async run<T>(operation: () => Promise<T>): Promise<T> {
+  async run<T>(operation: () => Promise<T>, failureDescription = "backup operation"): Promise<T> {
     const lock = await this.acquire();
     let result: T | undefined;
+    let failed = false;
     let primaryError: unknown;
     try {
       result = await operation();
     } catch (error: unknown) {
+      failed = true;
       primaryError = error;
     }
 
@@ -212,11 +220,11 @@ export class JsonFileLock {
       releaseError = error;
     }
 
-    if (primaryError !== undefined) {
+    if (failed) {
       if (releaseError !== undefined) {
         throw new AggregateError(
           [primaryError, releaseError],
-          "Jarvis JSON backup operation failed and its state lock could not be released safely.",
+          `Jarvis JSON ${failureDescription} failed and its state lock could not be released safely.`,
         );
       }
       throw primaryError;
