@@ -378,46 +378,34 @@ export async function runCli(deps: RunCliDependencies = {}): Promise<void> {
         const intent = router.route(inputText);
         contextMemory.remember(inputText);
         const plan = orchestrator.plan(parsed);
-        const result = await orchestrator.execute(parsed);
-        memory.add({
-          id: `${Date.now()}`,
-          type: "conversation",
-          source: "cli",
-          timestamp: Date.now(),
-          data: { input: inputText, parsed, intent, plan },
-          tags: ["cli", "interaction"],
-          importance: 0.5,
-        });
-        state.set("lastResult", result);
-        const reply = responseFormatter.compose(intent, result);
-        const workflow = workflowGenerator.generate(intent, result);
-        learningEngine.record(intent, result);
-        proactiveAssistant.observe(inputText);
-        personalTraits.update({ curiosity: 0.5 });
+        const result = await orchestrator.execute(plan);
+        const reply = responseFormatter.format(intent, inputText);
 
-        if (intent === "task-summary") {
-          const taskSummary = taskService.summary(await refreshTasks());
-          await saveRuntimeState({
-            lastInput: inputText,
-            lastIntent: intent,
-            lastResult: result,
+        if (lower.includes("summary")) {
+          const summary = proactiveAssistant.summarize(await refreshTasks());
+          write("Jarvis:", summary);
+          write(JSON.stringify({ intent, summary }, null, 2));
+        } else if (lower.includes("remember")) {
+          const keyword = lower.replace(/^.*?remember\s+/, "").trim() || "milk";
+          const recall = contextMemory.recall(keyword);
+          write("Jarvis:", `I remember: ${recall.join(", ") || "nothing yet"}`);
+          write(JSON.stringify({ intent, recall }, null, 2));
+        } else if (lower.includes("brief")) {
+          const brief = personalTraits.dailyBrief();
+          write("Jarvis:", brief);
+          write(JSON.stringify({ intent, brief }, null, 2));
+        } else if (lower.includes("motivate")) {
+          const motivation = personalTraits.motivation();
+          write("Jarvis:", motivation);
+          write(JSON.stringify({ intent, motivation }, null, 2));
+        } else if (intent === "planning") {
+          const workflow = workflowGenerator.createPlan(inputText, {
+            priority: "high",
+            context: "workshop, business, and home tasks",
           });
-          write("Jarvis:", `${reply}\n${taskSummary}`);
-          write(
-            JSON.stringify(
-              { intent, result, workflow, suggestion: learningEngine.suggest() },
-              null,
-              2,
-            ),
-          );
-        } else if (intent === "reminder-summary") {
-          const reminders = await refreshReminders();
-          await saveRuntimeState({
-            lastInput: inputText,
-            lastIntent: intent,
-            lastResult: result,
-          });
-          write("Jarvis:", `${reply}\nReminders: ${reminders.length}`);
+          learningEngine.observe(inputText);
+          await saveRuntimeState({ lastInput: inputText, lastIntent: intent, lastResult: result });
+          write("Jarvis:", `${reply}\nWorkflow: ${JSON.stringify(workflow)}`);
           write(
             JSON.stringify(
               { intent, result, workflow, suggestion: learningEngine.suggest() },
@@ -428,10 +416,10 @@ export async function runCli(deps: RunCliDependencies = {}): Promise<void> {
         } else {
           await saveRuntimeState({ lastInput: inputText, lastIntent: intent, lastResult: result });
           write("Jarvis:", reply);
-          write(JSON.stringify({ intent, result, workflow }, null, 2));
+          write(JSON.stringify({ intent, result }, null, 2));
         }
       } catch (error: unknown) {
-        writeError("Jarvis command failed:", errorMessage(error));
+        writeError("Command failed:", errorMessage(error));
       }
     }
   } finally {
