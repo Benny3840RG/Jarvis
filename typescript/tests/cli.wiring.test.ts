@@ -106,10 +106,21 @@ class MockPersistence implements PersistenceProvider {
   async updateTask(id: string, update: TaskUpdate): Promise<Task | null> {
     this.events.push("task-update");
     this.updateTaskCalled += 1;
+    if (update.title === undefined && update.category === undefined) {
+      throw new Error("Task update requires --title or --category.");
+    }
     const task = this.tasks.find((entry) => entry.id === id);
     if (!task) return null;
-    if (update.title !== undefined) task.title = update.title.trim();
-    if (update.category !== undefined) task.category = update.category.trim();
+    if (update.title !== undefined) {
+      const title = update.title.trim();
+      if (title.length === 0) throw new Error("Task title cannot be empty.");
+      task.title = title;
+    }
+    if (update.category !== undefined) {
+      const category = update.category.trim();
+      if (category.length === 0) throw new Error("Task category cannot be empty.");
+      task.category = category;
+    }
     return { ...task };
   }
 
@@ -157,9 +168,16 @@ class MockPersistence implements PersistenceProvider {
   async updateReminder(id: string, update: ReminderUpdate): Promise<Reminder | null> {
     this.events.push("reminder-update");
     this.updateReminderCalled += 1;
+    if (update.title === undefined && update.due === undefined) {
+      throw new Error("Reminder update requires --title, --due, or --clear-due.");
+    }
     const reminder = this.reminders.find((entry) => entry.id === id);
     if (!reminder) return null;
-    if (update.title !== undefined) reminder.title = update.title.trim();
+    if (update.title !== undefined) {
+      const title = update.title.trim();
+      if (title.length === 0) throw new Error("Reminder title cannot be empty.");
+      reminder.title = title;
+    }
     if (update.due === null) {
       delete reminder.dueRaw;
       delete reminder.dueAt;
