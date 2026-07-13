@@ -1,10 +1,14 @@
 # Jarvis
 
-A small local command-line assistant scaffold for Benny's workflow.
+Jarvis is a local command-line assistant with durable JSON or Convex persistence.
 
-This repo is intentionally simple: no background magic. It gives you a working Python entry point and a TypeScript interactive CLI that can be expanded into reminders, job notes, quoting helpers, and daily trade checklists.
+The maintained application is the TypeScript CLI in `typescript/`. The root Python package is the original local-notes prototype; it is retained only for reference and does not share data, commands, tests, or persistence with the maintained application. See [Scaffold and runtime boundaries](typescript/docs/architecture/scaffold-and-runtime-boundaries.md).
 
-## Python quick start
+## Legacy Python prototype
+
+This entry point is not part of the maintained TypeScript/Convex runtime. Use it only to read or migrate notes previously stored in `~/.jarvis/notes.jsonl`.
+
+### Python quick start
 
 ```bash
 cd Jarvis
@@ -17,7 +21,7 @@ jarvis note "Measure Kirsten hedge access and green waste volume"
 jarvis notes
 ```
 
-## Python commands
+### Python commands
 
 | Command | What it does |
 |---|---|
@@ -28,7 +32,7 @@ jarvis notes
 
 Local Python notes are stored in `~/.jarvis/notes.jsonl`.
 
-## TypeScript CLI
+## Maintained TypeScript CLI
 
 ```bash
 cd typescript
@@ -153,8 +157,9 @@ Backups are provider-neutral JSON archives containing assistant state, tasks, re
 
 ```bash
 cd typescript
-npm run backup -- export backups/jarvis-2026-07-13.json
-npm run backup -- verify backups/jarvis-2026-07-13.json
+BACKUP_FILE="backups/jarvis-$(date +%Y%m%d-%H%M%S).json"
+npm run backup -- export "$BACKUP_FILE"
+npm run backup -- verify "$BACKUP_FILE"
 ```
 
 `verify` restores the archive into isolated temporary JSON storage, checks tasks, reminders, completion state, due fields, and remapped assistant-state references, then deletes the temporary files. It does not touch the configured live provider.
@@ -162,7 +167,7 @@ npm run backup -- verify backups/jarvis-2026-07-13.json
 A real restore is deliberately empty-target only and requires an explicit confirmation flag:
 
 ```bash
-npm run backup -- restore backups/jarvis-2026-07-13.json --confirm-empty-target
+npm run backup -- restore "$BACKUP_FILE" --confirm-empty-target
 ```
 
 Restore refuses any provider that already contains state, tasks, or reminders. It rolls back records created during a failed restore. Because JSON and Convex issue their own record IDs and timestamps, a portable restore recreates those values; known and nested record-ID references inside assistant state are remapped automatically. The archive retains the original IDs and timestamps for audit purposes.
