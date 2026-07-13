@@ -4,7 +4,8 @@ import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 
 import { ConvexHttpClient } from "convex/browser";
-import { anyApi } from "convex/server";
+
+import { api } from "../../convex/_generated/api.js";
 
 export type AssistantState = {
   lastIntent?: string;
@@ -170,22 +171,9 @@ export function normalizeDocument(value: unknown): PersistedDocument {
   };
 }
 
-export const assistantStateFunctions = {
-  get: anyApi.assistantState.get,
-  upsert: anyApi.assistantState.upsert,
-};
-
-export const taskFunctions = {
-  create: anyApi.tasks.create,
-  list: anyApi.tasks.list,
-  complete: anyApi.tasks.complete,
-};
-
-export const reminderFunctions = {
-  create: anyApi.reminders.create,
-  list: anyApi.reminders.list,
-  remove: anyApi.reminders.remove,
-};
+export const assistantStateFunctions = api.assistantState;
+export const taskFunctions = api.tasks;
+export const reminderFunctions = api.reminders;
 
 function defaultDataPath(): string {
   const filename = fileURLToPath(import.meta.url);
@@ -357,27 +345,15 @@ export class JSONPersistence implements PersistenceProvider {
   }
 }
 
-export interface ConvexClientLike {
-  query<T>(functionReference: unknown, args?: Record<string, unknown>): Promise<T>;
-  mutation<T>(functionReference: unknown, args: Record<string, unknown>): Promise<T>;
-}
+export type ConvexClientLike = Pick<ConvexHttpClient, "query" | "mutation">;
 
-type ConvexTaskRecord = {
+function taskFromConvex(row: {
   _id: string;
   title: string;
   completed: boolean;
   category: string;
   createdAt: number;
-};
-
-type ConvexReminderRecord = {
-  _id: string;
-  title: string;
-  due?: string;
-  createdAt: number;
-};
-
-function taskFromConvex(row: ConvexTaskRecord): Task {
+}): Task {
   return {
     id: row._id,
     title: row.title,
@@ -387,7 +363,12 @@ function taskFromConvex(row: ConvexTaskRecord): Task {
   };
 }
 
-function reminderFromConvex(row: ConvexReminderRecord): Reminder {
+function reminderFromConvex(row: {
+  _id: string;
+  title: string;
+  due?: string;
+  createdAt: number;
+}): Reminder {
   return {
     id: row._id,
     title: row.title,
@@ -422,44 +403,45 @@ export class ConvexPersistence implements PersistenceProvider {
     if (!convexUrl) {
       throw new Error("PERSISTENCE_PROVIDER=convex requires CONVEX_URL to be set in the environment.");
     }
-    this.client = new ConvexHttpClient(convexUrl) as unknown as ConvexClientLike;
-  }
-
-  private authArgs(extra: Record<string, unknown> = {}): Record<string, unknown> {
-    return { serviceToken: this.serviceToken, ...extra };
+    this.client = new ConvexHttpClient(convexUrl);
   }
 
   async loadState(): Promise<AssistantState> {
-    const row = await this.client.query<{ state?: AssistantState } | null>(
-      assistantStateFunctions.get,
-      this.authArgs(),
-    );
-    return row?.state ?? {};
+    const row = await this.client.query(assistantStateFunctions.get, {
+      serviceToken: this.serviceToken,
+    });
+    return row && isRecord(row.state) ? { ...row.state } : {};
   }
 
   async saveState(state: AssistantState): Promise<void> {
-    await this.client.mutation(assistantStateFunctions.upsert, this.authArgs({ state }));
+    await this.client.mutation(assistantStateFunctions.upsert, {
+      serviceToken: this.serviceToken,
+      state,
+    });
   }
 
   async listTasks(): Promise<Task[]> {
-    const rows = await this.client.query<ConvexTaskRecord[]>(taskFunctions.list, this.authArgs());
+    const rows = await this.client.query(taskFunctions.list, {
+      serviceToken: this.serviceToken,
+    });
     return rows.map(taskFromConvex);
   }
 
   async addTask(title: string, category: string): Promise<Task> {
-    const row = await this.client.mutation<ConvexTaskRecord>(
-      taskFunctions.create,
-      this.authArgs({ title, category }),
-    );
+    const row = await this.client.mutation(taskFunctions.create, {
+      serviceToken: this.serviceToken,
+      title,
+      category,
+    });
     return taskFromConvex(row);
   }
 
   async completeTask(id: string): Promise<Task | null> {
     try {
-      const row = await this.client.mutation<ConvexTaskRecord | null>(
-        taskFunctions.complete,
-        this.authArgs({ id }),
-      );
+      const row = await this.client.mutation(taskFunctions.complete, {
+        serviceToken: this.serviceToken,
+        id,
+      });
       return row === null ? null : taskFromConvex(row);
     } catch (error: unknown) {
       if (isInvalidIdError(error)) return null;
@@ -468,27 +450,27 @@ export class ConvexPersistence implements PersistenceProvider {
   }
 
   async listReminders(): Promise<Reminder[]> {
-    const rows = await this.client.query<ConvexReminderRecord[]>(
-      reminderFunctions.list,
-      this.authArgs(),
-    );
+    const rows = await this.client.query(reminderFunctions.list, {
+      serviceToken: this.serviceToken,
+    });
     return rows.map(reminderFromConvex);
   }
 
   async addReminder(title: string, due?: string): Promise<Reminder> {
-    const row = await this.client.mutation<ConvexReminderRecord>(
-      reminderFunctions.create,
-      this.authArgs({ title, ...(due === undefined ? {} : { due }) }),
-    );
+    const row = await this.client.mutation(reminderFunctions.create, {
+      serviceToken: this.serviceToken,
+      title,
+      ...(due === undefined ? {} : { due }),
+    });
     return reminderFromConvex(row);
   }
 
   async removeReminder(id: string): Promise<Reminder | null> {
     try {
-      const row = await this.client.mutation<ConvexReminderRecord | null>(
-        reminderFunctions.remove,
-        this.authArgs({ id }),
-      );
+      const row = await this.client.mutation(reminderFunctions.remove, {
+        serviceToken: this.serviceToken,
+        id,
+      });
       return row === null ? null : reminderFromConvex(row);
     } catch (error: unknown) {
       if (isInvalidIdError(error)) return null;
