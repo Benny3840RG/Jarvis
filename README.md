@@ -177,6 +177,6 @@ npm run check
 
 `npm run check` runs the TypeScript compiler, ESLint (including the Convex rules), Prettier verification, and the full test suite.
 
-`npm run test:coverage` runs the same tests with Node\’s built-in coverage report. CI prints this report for every TypeScript pull request and `main` update; coverage output is diagnostic and does not alter runtime behaviour.
+`npm run test:coverage` runs the same tests with Node's built-in coverage report. CI prints this report for every TypeScript pull request and `main` update; coverage output is diagnostic and does not alter runtime behaviour.
 
 Keep it boring first. Boring is what works.
