@@ -53,3 +53,17 @@ export const complete = mutation({
     return ctx.db.get("tasks", id);
   },
 });
+
+export const remove = mutation({
+  args: { serviceToken: v.string(), id: v.string() },
+  returns: v.union(taskValidator, v.null()),
+  handler: async (ctx, args) => {
+    const ownerId = requireOwner(args.serviceToken);
+    const id = ctx.db.normalizeId("tasks", args.id);
+    if (!id) return null;
+    const task = await ctx.db.get("tasks", id);
+    if (!task || task.ownerId !== ownerId) return null;
+    await ctx.db.delete("tasks", id);
+    return task;
+  },
+});
