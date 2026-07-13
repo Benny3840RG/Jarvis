@@ -23,12 +23,12 @@ jarvis notes
 
 ### Python commands
 
-| Command | What it does |
-|---|---|
-| `jarvis status` | Checks the app can run and shows storage path. |
-| `jarvis checklist` | Prints a practical daily trade/business checklist. |
-| `jarvis note "text"` | Saves a timestamped local note. |
-| `jarvis notes` | Lists saved notes. |
+| Command              | What it does                                       |
+| -------------------- | -------------------------------------------------- |
+| `jarvis status`      | Checks the app can run and shows storage path.     |
+| `jarvis checklist`   | Prints a practical daily trade/business checklist. |
+| `jarvis note "text"` | Saves a timestamped local note.                    |
+| `jarvis notes`       | Lists saved notes.                                 |
 
 Local Python notes are stored in `~/.jarvis/notes.jsonl`.
 
