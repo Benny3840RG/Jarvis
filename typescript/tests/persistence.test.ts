@@ -4,6 +4,7 @@ import { once } from "node:events";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, it } from "node:test";
 
 import { getFunctionName } from "convex/server";
@@ -31,6 +32,20 @@ function asConvexClient(stub: ConvexStub): ConvexClientLike {
 
 function convexFunctionName(reference: unknown): string {
   return getFunctionName(reference as Parameters<typeof getFunctionName>[0]);
+}
+
+async function runJsonWriter(file: string, title: string): Promise<void> {
+  const script = fileURLToPath(new URL("fixtures/jsonWriter.ts", import.meta.url));
+  const child = spawn(process.execPath, ["--import", "tsx", script, file, title], {
+    stdio: ["ignore", "ignore", "pipe"],
+  });
+  let stderr = "";
+  child.stderr?.setEncoding("utf8");
+  child.stderr?.on("data", (chunk: string) => {
+    stderr += chunk;
+  });
+  const [code, signal] = await once(child, "exit");
+  assert.equal(code, 0, `JSON writer exited with ${String(signal)}: ${stderr}`);
 }
 
 const originalProvider = process.env.PERSISTENCE_PROVIDER;
@@ -223,6 +238,50 @@ describe("JSONPersistence", () => {
       (await fs.readdir(tempDir)).some((name) => name.endsWith(".lock")),
       false,
     );
+  });
+
+  it("serializes writes from separate Node processes", async () => {
+    const file = path.join(tempDir, "multi-process.json");
+    const titles = ["Writer one", "Writer two", "Writer three", "Writer four"];
+
+    await Promise.all(titles.map((title) => runJsonWriter(file, title)));
+
+    assert.deepEqual(
+      (await new JSONPersistence(file).listTasks()).map((task) => task.title).sort(),
+      [...titles].sort(),
+    );
+    assert.equal(
+      (await fs.readdir(tempDir)).some((name) => name.includes(".lock.tmp-")),
+      false,
+    );
+  });
+
+  it("times out without deleting a fresh malformed lock", async () => {
+    const file = path.join(tempDir, "fresh-malformed.json");
+    await fs.writeFile(`${file}.lock`, "{", { mode: 0o600 });
+
+    const provider = new JSONPersistence(file, () => undefined, 40);
+    await assert.rejects(
+      provider.addTask("Blocked task", "personal"),
+      /locked by a malformed lock file/,
+    );
+    assert.equal(await fs.readFile(`${file}.lock`, "utf8"), "{");
+  });
+
+  it("reclaims a stale malformed lock left by an interrupted legacy writer", async () => {
+    const file = path.join(tempDir, "stale-malformed.json");
+    const lockPath = `${file}.lock`;
+    const warnings: string[] = [];
+    await fs.writeFile(lockPath, "{", { mode: 0o600 });
+    const old = new Date(Date.now() - 5_000);
+    await fs.utimes(lockPath, old, old);
+
+    const provider = new JSONPersistence(file, (message) => warnings.push(message), 40);
+    const task = await provider.addTask("Recovered malformed lock", "personal");
+
+    assert.equal(task.title, "Recovered malformed lock");
+    assert.match(warnings[0] ?? "", /reclaimed a stale malformed JSON state lock/);
+    await assert.rejects(fs.access(lockPath), /ENOENT/);
   });
 
   it("times out with an actionable error while a live writer holds the lock", async () => {
@@ -441,5 +500,24 @@ describe("ConvexPersistence", () => {
     assert.equal(await provider.completeTask("garbage"), null);
     assert.equal(await provider.removeTask("garbage"), null);
     assert.equal(await provider.removeReminder("garbage"), null);
+  });
+
+  it("does not hide unrelated Convex argument validation failures as missing IDs", async () => {
+    const provider = new ConvexPersistence(
+      asConvexClient({
+        async query() {
+          return [];
+        },
+        async mutation() {
+          throw new Error("ArgumentValidationError: object contains an unexpected field");
+        },
+      }),
+      "test-service-token",
+    );
+
+    await assert.rejects(
+      provider.updateTask("task-id", { title: "Updated title" }),
+      /unexpected field/,
+    );
   });
 });
