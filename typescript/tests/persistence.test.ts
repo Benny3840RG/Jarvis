@@ -4,6 +4,8 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, it } from "node:test";
 
+import { getFunctionName } from "convex/server";
+
 import {
   ConvexPersistence,
   JSONPersistence,
@@ -15,6 +17,19 @@ import {
   type AssistantState,
   type ConvexClientLike,
 } from "../src/persistence/persistence.js";
+
+type ConvexStub = {
+  query(reference: unknown, args?: Record<string, unknown>): Promise<unknown>;
+  mutation(reference: unknown, args: Record<string, unknown>): Promise<unknown>;
+};
+
+function asConvexClient(stub: ConvexStub): ConvexClientLike {
+  return stub as ConvexClientLike;
+}
+
+function convexFunctionName(reference: unknown): string {
+  return getFunctionName(reference as Parameters<typeof getFunctionName>[0]);
+}
 
 const originalProvider = process.env.PERSISTENCE_PROVIDER;
 const originalUrl = process.env.CONVEX_URL;
@@ -140,14 +155,14 @@ describe("createPersistenceFromEnv", () => {
   it("selects Convex with an injected client and service token", () => {
     process.env.PERSISTENCE_PROVIDER = "convex";
     process.env.JARVIS_SERVICE_TOKEN = "test-service-token";
-    const mock: ConvexClientLike = {
-      async query<T>() {
-        return null as T;
+    const mock = asConvexClient({
+      async query() {
+        return null;
       },
-      async mutation<T>() {
-        return undefined as T;
+      async mutation() {
+        return null;
       },
-    };
+    });
     assert(createPersistenceFromEnv(mock) instanceof ConvexPersistence);
   });
 
@@ -165,63 +180,86 @@ describe("createPersistenceFromEnv", () => {
 });
 
 describe("ConvexPersistence", () => {
-  it("loads and saves assistant state with the service token", async () => {
+  it("loads and saves assistant state with generated API references", async () => {
     const sample: AssistantState = { lastIntent: "hello" };
     const events: string[] = [];
-    const mock: ConvexClientLike = {
-      async query<T>(reference: unknown, args?: Record<string, unknown>) {
-        assert.equal(reference, assistantStateFunctions.get);
+    const mock = asConvexClient({
+      async query(reference, args) {
+        assert.equal(convexFunctionName(reference), convexFunctionName(assistantStateFunctions.get));
         assert.deepEqual(args, { serviceToken: "test-service-token" });
         events.push("load");
-        return { state: sample } as T;
+        return { state: sample };
       },
-      async mutation<T>(reference: unknown, args: Record<string, unknown>) {
-        assert.equal(reference, assistantStateFunctions.upsert);
+      async mutation(reference, args) {
+        assert.equal(convexFunctionName(reference), convexFunctionName(assistantStateFunctions.upsert));
         assert.deepEqual(args, { serviceToken: "test-service-token", state: sample });
         events.push("save");
-        return undefined as T;
+        return "assistant-state-id";
       },
-    };
+    });
     const provider = new ConvexPersistence(mock, "test-service-token");
     assert.deepEqual(await provider.loadState(), sample);
     await provider.saveState(sample);
     assert.deepEqual(events, ["load", "save"]);
   });
 
-  it("maps task and reminder records through the shared provider contract", async () => {
-    const mock: ConvexClientLike = {
-      async query<T>(reference: unknown, args?: Record<string, unknown>) {
+  it("maps task and reminder records through the generated provider contract", async () => {
+    const mock = asConvexClient({
+      async query(reference, args) {
         assert.equal(args?.serviceToken, "test-service-token");
-        if (reference === taskFunctions.list) {
+        if (convexFunctionName(reference) === convexFunctionName(taskFunctions.list)) {
           return [
             {
               _id: "task-id",
+              _creationTime: 1,
+              ownerId: "jarvis-cli",
               title: "Task",
               completed: false,
               category: "personal",
               createdAt: 1,
             },
-          ] as T;
+          ];
         }
-        if (reference === reminderFunctions.list) {
-          return [{ _id: "reminder-id", title: "Reminder", due: "Friday", createdAt: 2 }] as T;
+        if (convexFunctionName(reference) === convexFunctionName(reminderFunctions.list)) {
+          return [
+            {
+              _id: "reminder-id",
+              _creationTime: 2,
+              ownerId: "jarvis-cli",
+              title: "Reminder",
+              due: "Friday",
+              createdAt: 2,
+            },
+          ];
         }
-        return null as T;
+        return null;
       },
-      async mutation<T>(reference: unknown, args: Record<string, unknown>) {
+      async mutation(reference, args) {
         assert.equal(args.serviceToken, "test-service-token");
-        if (reference === taskFunctions.create || reference === taskFunctions.complete) {
+        if (
+          convexFunctionName(reference) === convexFunctionName(taskFunctions.create) ||
+          convexFunctionName(reference) === convexFunctionName(taskFunctions.complete)
+        ) {
           return {
             _id: "task-id",
+            _creationTime: 1,
+            ownerId: "jarvis-cli",
             title: "Task",
-            completed: reference === taskFunctions.complete,
+            completed: convexFunctionName(reference) === convexFunctionName(taskFunctions.complete),
             category: "personal",
             createdAt: 1,
-          } as T;
+          };
         }
-        return { _id: "reminder-id", title: "Reminder", due: "Friday", createdAt: 2 } as T;
+        return {
+          _id: "reminder-id",
+          _creationTime: 2,
+          ownerId: "jarvis-cli",
+          title: "Reminder",
+          due: "Friday",
+          createdAt: 2,
+        };
       },
-    };
+    });
     const provider = new ConvexPersistence(mock, "test-service-token");
     assert.equal((await provider.listTasks())[0].id, "task-id");
     assert.equal((await provider.addTask("Task", "personal")).title, "Task");
@@ -231,15 +269,28 @@ describe("ConvexPersistence", () => {
     assert.equal((await provider.removeReminder("reminder-id"))?.title, "Reminder");
   });
 
-  it("normalises legacy Convex invalid-ID failures to null", async () => {
-    const mock: ConvexClientLike = {
-      async query<T>() {
-        return [] as T;
+  it("treats malformed assistant state returned by Convex as empty", async () => {
+    const mock = asConvexClient({
+      async query() {
+        return { state: "not-an-object" };
       },
-      async mutation<T>() {
+      async mutation() {
+        return null;
+      },
+    });
+    const provider = new ConvexPersistence(mock, "test-service-token");
+    assert.deepEqual(await provider.loadState(), {});
+  });
+
+  it("normalises legacy Convex invalid-ID failures to null", async () => {
+    const mock = asConvexClient({
+      async query() {
+        return [];
+      },
+      async mutation() {
         throw new Error("ArgumentValidationError: invalid Convex ID");
       },
-    };
+    });
     const provider = new ConvexPersistence(mock, "test-service-token");
     assert.equal(await provider.completeTask("garbage"), null);
     assert.equal(await provider.removeReminder("garbage"), null);
