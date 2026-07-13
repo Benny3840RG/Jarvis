@@ -34,8 +34,12 @@ Local Python notes are stored in `~/.jarvis/notes.jsonl`.
 
 ## Maintained TypeScript CLI
 
+Node.js 24 is the supported runtime. `typescript/.nvmrc` is the source of truth for local
+development and CI, while `package.json` rejects unsupported major versions.
+
 ```bash
 cd typescript
+nvm use
 npm ci
 npm start
 ```
