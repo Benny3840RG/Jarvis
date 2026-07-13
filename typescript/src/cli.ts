@@ -49,29 +49,19 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-export function upsertById<T extends { id: string }>(
-  records: readonly T[],
-  record: T,
-): T[] {
+export function upsertById<T extends { id: string }>(records: readonly T[], record: T): T[] {
   const index = records.findIndex((entry) => entry.id === record.id);
   if (index < 0) return [...records, record];
-  return records.map((entry, entryIndex) =>
-    entryIndex === index ? record : entry,
-  );
+  return records.map((entry, entryIndex) => (entryIndex === index ? record : entry));
 }
 
-function printTaskList(
-  write: ConsoleWriter,
-  tasks: ReturnType<TaskService["list"]>,
-): void {
+function printTaskList(write: ConsoleWriter, tasks: ReturnType<TaskService["list"]>): void {
   if (tasks.length === 0) {
     write("Jarvis: No tasks saved.");
     return;
   }
   for (const task of tasks) {
-    write(
-      `${task.completed ? "[x]" : "[ ]"} ${task.id} ${task.title} [${task.category}]`,
-    );
+    write(`${task.completed ? "[x]" : "[ ]"} ${task.id} ${task.title} [${task.category}]`);
   }
 }
 
@@ -84,9 +74,7 @@ function printReminderList(
     return;
   }
   for (const reminder of reminders) {
-    write(
-      `${reminder.id} ${reminder.title}${reminder.dueRaw ? ` — ${reminder.dueRaw}` : ""}`,
-    );
+    write(`${reminder.id} ${reminder.title}${reminder.dueRaw ? ` — ${reminder.dueRaw}` : ""}`);
   }
 }
 
@@ -94,18 +82,14 @@ function taskUpdateFromOptions(input: string | undefined): TaskUpdate {
   const options = parseUpdateOptions(input, ["title", "category"]);
   return {
     ...(typeof options.title === "string" ? { title: options.title } : {}),
-    ...(typeof options.category === "string"
-      ? { category: options.category }
-      : {}),
+    ...(typeof options.category === "string" ? { category: options.category } : {}),
   };
 }
 
 function reminderUpdateFromOptions(input: string | undefined): ReminderUpdate {
   const options = parseUpdateOptions(input, ["title", "due"], ["clear-due"]);
   if (options.due !== undefined && options["clear-due"] === true) {
-    throw new Error(
-      "Reminder update cannot use --due and --clear-due together.",
-    );
+    throw new Error("Reminder update cannot use --due and --clear-due together.");
   }
   return {
     ...(typeof options.title === "string" ? { title: options.title } : {}),
@@ -118,13 +102,10 @@ function reminderUpdateFromOptions(input: string | undefined): ReminderUpdate {
 }
 
 export async function runCli(deps: RunCliDependencies = {}): Promise<void> {
-  const write =
-    deps.stdout ?? ((...values: unknown[]) => console.log(...values));
-  const writeError =
-    deps.stderr ?? ((...values: unknown[]) => console.error(...values));
+  const write = deps.stdout ?? ((...values: unknown[]) => console.log(...values));
+  const writeError = deps.stderr ?? ((...values: unknown[]) => console.error(...values));
   const rl =
-    deps.readline ??
-    (readlinePromises.createInterface({ input, output }) as ReadlineAdapter);
+    deps.readline ?? (readlinePromises.createInterface({ input, output }) as ReadlineAdapter);
   const persistence = deps.persistence ?? createPersistenceFromEnv();
 
   const conversation = new ConversationService();
@@ -148,8 +129,7 @@ export async function runCli(deps: RunCliDependencies = {}): Promise<void> {
     throw error;
   }
 
-  for (const [key, value] of Object.entries(previousState))
-    state.set(key, value);
+  for (const [key, value] of Object.entries(previousState)) state.set(key, value);
 
   const workshop = new WorkshopEngine();
   const business = new BusinessEngine();
@@ -179,11 +159,7 @@ export async function runCli(deps: RunCliDependencies = {}): Promise<void> {
     graph.addEdge(edge);
 
   const domainRouter = {
-    async route(
-      module: string,
-      action: string,
-      payload: unknown,
-    ): Promise<unknown> {
+    async route(module: string, action: string, payload: unknown): Promise<unknown> {
       if (module === "domains" && action === "plan") {
         const workshopTask = workshop.createTask(
           "Prototype Jarvis",
@@ -220,9 +196,7 @@ export async function runCli(deps: RunCliDependencies = {}): Promise<void> {
 
   const orchestrator = new Orchestrator(memory, domainRouter, safety);
 
-  async function saveRuntimeState(
-    extra: AssistantState = {},
-  ): Promise<boolean> {
+  async function saveRuntimeState(extra: AssistantState = {}): Promise<boolean> {
     for (const [key, value] of Object.entries(extra)) state.set(key, value);
     try {
       await persistence.saveState(state.snapshot());
@@ -259,12 +233,8 @@ export async function runCli(deps: RunCliDependencies = {}): Promise<void> {
         const taskUpdate = /^task update\s+(\S+)(?:\s+(.*))?$/i.exec(trimmed);
         const taskComplete = /^task complete\s+(.+)$/i.exec(trimmed);
         const taskRemove = /^task remove\s+(.+)$/i.exec(trimmed);
-        const reminderAdd = /^reminder add\s+(.+?)\s+--due\s+(.+)$/i.exec(
-          trimmed,
-        );
-        const reminderUpdate = /^reminder update\s+(\S+)(?:\s+(.*))?$/i.exec(
-          trimmed,
-        );
+        const reminderAdd = /^reminder add\s+(.+?)\s+--due\s+(.+)$/i.exec(trimmed);
+        const reminderUpdate = /^reminder update\s+(\S+)(?:\s+(.*))?$/i.exec(trimmed);
         const reminderRemove = /^reminder remove\s+(.+)$/i.exec(trimmed);
 
         if (taskAdd) {
@@ -325,9 +295,7 @@ export async function runCli(deps: RunCliDependencies = {}): Promise<void> {
             write("Jarvis: Task not found.");
             continue;
           }
-          taskService.replace(
-            taskService.list().filter((entry) => entry.id !== task.id),
-          );
+          taskService.replace(taskService.list().filter((entry) => entry.id !== task.id));
           await saveRuntimeState({
             lastInput: inputText,
             lastIntent: "task-remove",
@@ -339,20 +307,14 @@ export async function runCli(deps: RunCliDependencies = {}): Promise<void> {
 
         if (reminderAdd) {
           const due = parseReminderDue(reminderAdd[2]);
-          const reminder = await persistence.addReminder(
-            reminderAdd[1].trim(),
-            due,
-          );
+          const reminder = await persistence.addReminder(reminderAdd[1].trim(), due);
           reminderService.replace([...reminderService.list(), reminder]);
           await saveRuntimeState({
             lastInput: inputText,
             lastIntent: "reminder-add",
             lastReminder: reminder,
           });
-          write(
-            "Jarvis:",
-            `Reminder set: ${reminder.title} for ${reminder.dueRaw}`,
-          );
+          write("Jarvis:", `Reminder set: ${reminder.title} for ${reminder.dueRaw}`);
           continue;
         }
 
@@ -384,9 +346,7 @@ export async function runCli(deps: RunCliDependencies = {}): Promise<void> {
         }
 
         if (reminderRemove) {
-          const reminder = await persistence.removeReminder(
-            reminderRemove[1].trim(),
-          );
+          const reminder = await persistence.removeReminder(reminderRemove[1].trim());
           if (!reminder) {
             write("Jarvis: Reminder not found.");
             continue;
