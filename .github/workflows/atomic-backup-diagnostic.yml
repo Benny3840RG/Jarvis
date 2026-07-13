@@ -1,0 +1,42 @@
+name: Atomic backup diagnostic
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "typescript/**"
+      - ".github/workflows/atomic-backup-diagnostic.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: typescript/package-lock.json
+      - run: npm ci
+        working-directory: typescript
+      - name: Capture checks
+        run: |
+          set +e
+          npm run type-check > ../typecheck.log 2>&1
+          echo $? > ../typecheck.status
+          npm run format:check > ../format.log 2>&1
+          echo $? > ../format.status
+          exit 0
+        working-directory: typescript
+      - uses: actions/upload-artifact@v4
+        with:
+          name: atomic-backup-diagnostic
+          path: |
+            typecheck.log
+            typecheck.status
+            format.log
+            format.status
+          if-no-files-found: error
