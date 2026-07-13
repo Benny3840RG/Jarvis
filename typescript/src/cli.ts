@@ -193,6 +193,7 @@ export async function runCli(deps: RunCliDependencies = {}): Promise<void> {
       try {
         const taskAdd = /^task add\s+(.+)$/i.exec(trimmed);
         const taskComplete = /^task complete\s+(.+)$/i.exec(trimmed);
+        const taskRemove = /^task remove\s+(.+)$/i.exec(trimmed);
         const reminderAdd = /^reminder add\s+(.+?)\s+--due\s+(.+)$/i.exec(trimmed);
         const reminderRemove = /^reminder remove\s+(.+)$/i.exec(trimmed);
 
@@ -220,6 +221,18 @@ export async function runCli(deps: RunCliDependencies = {}): Promise<void> {
           );
           await saveRuntimeState({ lastInput: inputText, lastIntent: "task-complete", lastTask: task });
           write("Jarvis:", `Task completed: ${task.title}`);
+          continue;
+        }
+
+        if (taskRemove) {
+          const task = await persistence.removeTask(taskRemove[1].trim());
+          if (!task) {
+            write("Jarvis: Task not found.");
+            continue;
+          }
+          taskService.replace(taskService.list().filter((entry) => entry.id !== task.id));
+          await saveRuntimeState({ lastInput: inputText, lastIntent: "task-remove", lastTask: task });
+          write("Jarvis:", `Task removed: ${task.title}`);
           continue;
         }
 
@@ -262,7 +275,9 @@ export async function runCli(deps: RunCliDependencies = {}): Promise<void> {
         }
 
         if (lower.includes("task") && !lower.includes("plan")) {
-          write("Jarvis: Use `task add <title>`, `task list`, or `task complete <id>`.");
+          write(
+            "Jarvis: Use `task add <title>`, `task list`, `task complete <id>`, or `task remove <id>`.",
+          );
           continue;
         }
 
