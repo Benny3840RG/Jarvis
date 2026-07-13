@@ -42,9 +42,7 @@ async function cleanupSmokeRecords(
   try {
     const cleanup = createProvider();
     if (reminderId !== undefined) {
-      await cleanup
-        .removeReminder(reminderId)
-        .catch((error: unknown) => cleanupErrors.push(error));
+      await cleanup.removeReminder(reminderId).catch((error: unknown) => cleanupErrors.push(error));
     }
     if (taskId !== undefined) {
       await cleanup.removeTask(taskId).catch((error: unknown) => cleanupErrors.push(error));
