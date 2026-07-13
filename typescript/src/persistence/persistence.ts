@@ -37,6 +37,7 @@ export interface PersistenceProvider {
   listTasks(): Promise<Task[]>;
   addTask(title: string, category: string): Promise<Task>;
   completeTask(id: string): Promise<Task | null>;
+  removeTask(id: string): Promise<Task | null>;
   listReminders(): Promise<Reminder[]>;
   addReminder(title: string, due?: string): Promise<Reminder>;
   removeReminder(id: string): Promise<Reminder | null>;
@@ -313,6 +314,19 @@ export class JSONPersistence implements PersistenceProvider {
     });
   }
 
+  async removeTask(id: string): Promise<Task | null> {
+    return this.enqueue(async () => {
+      const current = await this.readDocument();
+      const task = current.tasks.find((entry) => entry.id === id);
+      if (!task) return null;
+      await this.remember({
+        ...current,
+        tasks: current.tasks.filter((entry) => entry.id !== id),
+      });
+      return cloneTask(task);
+    });
+  }
+
   async listReminders(): Promise<Reminder[]> {
     return this.enqueue(async () => (await this.readDocument()).reminders.map(cloneReminder));
   }
@@ -439,6 +453,19 @@ export class ConvexPersistence implements PersistenceProvider {
   async completeTask(id: string): Promise<Task | null> {
     try {
       const row = await this.client.mutation(taskFunctions.complete, {
+        serviceToken: this.serviceToken,
+        id,
+      });
+      return row === null ? null : taskFromConvex(row);
+    } catch (error: unknown) {
+      if (isInvalidIdError(error)) return null;
+      throw error;
+    }
+  }
+
+  async removeTask(id: string): Promise<Task | null> {
+    try {
+      const row = await this.client.mutation(taskFunctions.remove, {
         serviceToken: this.serviceToken,
         id,
       });

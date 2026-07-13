@@ -138,11 +138,13 @@ describe("JSONPersistence", () => {
     );
   });
 
-  it("returns null for malformed or missing task and reminder IDs", async () => {
+  it("removes tasks durably and returns null for missing IDs", async () => {
     const provider = new JSONPersistence(path.join(tempDir, "state.json"));
-    await provider.addTask("Real task", "personal");
-    await provider.addReminder("Real reminder", "tomorrow");
+    const task = await provider.addTask("Disposable task", "personal");
+    assert.deepEqual(await provider.removeTask(task.id), task);
+    assert.deepEqual(await provider.listTasks(), []);
     assert.equal(await provider.completeTask("garbage"), null);
+    assert.equal(await provider.removeTask("garbage"), null);
     assert.equal(await provider.removeReminder("garbage"), null);
   });
 });
@@ -236,16 +238,18 @@ describe("ConvexPersistence", () => {
       },
       async mutation(reference, args) {
         assert.equal(args.serviceToken, "test-service-token");
+        const functionName = convexFunctionName(reference);
         if (
-          convexFunctionName(reference) === convexFunctionName(taskFunctions.create) ||
-          convexFunctionName(reference) === convexFunctionName(taskFunctions.complete)
+          functionName === convexFunctionName(taskFunctions.create) ||
+          functionName === convexFunctionName(taskFunctions.complete) ||
+          functionName === convexFunctionName(taskFunctions.remove)
         ) {
           return {
             _id: "task-id",
             _creationTime: 1,
             ownerId: "jarvis-cli",
             title: "Task",
-            completed: convexFunctionName(reference) === convexFunctionName(taskFunctions.complete),
+            completed: functionName === convexFunctionName(taskFunctions.complete),
             category: "personal",
             createdAt: 1,
           };
@@ -264,6 +268,7 @@ describe("ConvexPersistence", () => {
     assert.equal((await provider.listTasks())[0].id, "task-id");
     assert.equal((await provider.addTask("Task", "personal")).title, "Task");
     assert.equal((await provider.completeTask("task-id"))?.completed, true);
+    assert.equal((await provider.removeTask("task-id"))?.title, "Task");
     assert.equal((await provider.listReminders())[0].id, "reminder-id");
     assert.equal((await provider.addReminder("Reminder", "Friday")).due, "Friday");
     assert.equal((await provider.removeReminder("reminder-id"))?.title, "Reminder");
@@ -293,6 +298,7 @@ describe("ConvexPersistence", () => {
     });
     const provider = new ConvexPersistence(mock, "test-service-token");
     assert.equal(await provider.completeTask("garbage"), null);
+    assert.equal(await provider.removeTask("garbage"), null);
     assert.equal(await provider.removeReminder("garbage"), null);
   });
 });

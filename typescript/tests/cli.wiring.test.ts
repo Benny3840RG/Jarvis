@@ -49,6 +49,7 @@ class MockPersistence implements PersistenceProvider {
   addTaskCalled = 0;
   addReminderCalled = 0;
   completeTaskCalled = 0;
+  removeTaskCalled = 0;
   removeReminderCalled = 0;
   state: AssistantState;
   tasks: Task[];
@@ -102,6 +103,14 @@ class MockPersistence implements PersistenceProvider {
     const task = this.tasks.find((entry) => entry.id === id);
     if (!task) return null;
     task.completed = true;
+    return { ...task };
+  }
+
+  async removeTask(id: string): Promise<Task | null> {
+    this.removeTaskCalled += 1;
+    const index = this.tasks.findIndex((entry) => entry.id === id);
+    if (index < 0) return null;
+    const [task] = this.tasks.splice(index, 1);
     return { ...task };
   }
 
@@ -170,6 +179,33 @@ describe("interactive CLI persistence wiring", () => {
     assert.deepEqual(persistence.events, ["task-write", "state-save"]);
     assert.equal(persistence.tasks[0].title, "Call Claire");
     assert(logs.output.some((line) => line.includes("Task added: Call Claire")));
+  });
+
+  it("removes a task durably and refreshes the displayed list", async () => {
+    const persistence = new MockPersistence({
+      tasks: [
+        {
+          id: "task-1",
+          title: "Temporary task",
+          completed: false,
+          category: "personal",
+          createdAt: 1,
+        },
+      ],
+    });
+    const logs = capture();
+
+    await runCli({
+      persistence,
+      readline: new ScriptedReadline(["task remove task-1", "task list", "exit"]),
+      stdout: logs.stdout,
+      stderr: logs.stderr,
+    });
+
+    assert.equal(persistence.removeTaskCalled, 1);
+    assert.deepEqual(persistence.tasks, []);
+    assert(logs.output.some((line) => line.includes("Task removed: Temporary task")));
+    assert(logs.output.some((line) => line.includes("No tasks saved")));
   });
 
   it("restores tasks on a later CLI run", async () => {
@@ -289,6 +325,7 @@ describe("interactive CLI persistence wiring", () => {
       persistence,
       readline: new ScriptedReadline([
         "task complete garbage",
+        "task remove garbage",
         "reminder remove garbage",
         "task add Still running",
         "exit",
@@ -298,9 +335,10 @@ describe("interactive CLI persistence wiring", () => {
     });
 
     assert.equal(persistence.completeTaskCalled, 1);
+    assert.equal(persistence.removeTaskCalled, 1);
     assert.equal(persistence.removeReminderCalled, 1);
     assert.equal(persistence.addTaskCalled, 1);
-    assert(logs.output.some((line) => line.includes("Task not found")));
+    assert(logs.output.filter((line) => line.includes("Task not found")).length >= 2);
     assert(logs.output.some((line) => line.includes("Reminder not found")));
     assert(logs.output.some((line) => line.includes("Task added: Still running")));
   });
