@@ -1,8 +1,8 @@
 name: Source snapshot
 
 on:
-  pull_request:
-    branches: [main]
+  push:
+    branches: [agent/fix-json-locks]
     paths:
       - ".github/workflows/source-snapshot.yml"
 
