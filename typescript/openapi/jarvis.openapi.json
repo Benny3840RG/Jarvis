@@ -1,0 +1,1991 @@
+{
+  "openapi": "3.1.0",
+  "jsonSchemaDialect": "https://json-schema.org/draft/2020-12/schema",
+  "info": {
+    "title": "Jarvis Operator API",
+    "summary": "A safety-gated API for the Jarvis Z-State runtime and durable operator data.",
+    "description": "Jarvis accepts structured operator requests, routes work through its runtime and safety envelope, and persists tasks and reminders through the configured JSON or Convex provider. This contract is intentionally single-user and private. The future ChatGPT App MCP server must keep the Jarvis service token server-side and expose only operations marked with x-mcp-tool.exposed=true.",
+    "version": "0.2.0",
+    "license": {
+      "name": "Proprietary",
+      "identifier": "LicenseRef-Proprietary"
+    }
+  },
+  "externalDocs": {
+    "description": "Jarvis source repository",
+    "url": "https://github.com/Benny3840/Jarvis"
+  },
+  "servers": [
+    {
+      "url": "http://127.0.0.1:3000",
+      "description": "Local development server"
+    }
+  ],
+  "security": [
+    {
+      "serviceToken": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "System",
+      "description": "Liveness, capabilities, provider health, and Z-State readiness."
+    },
+    {
+      "name": "Runtime",
+      "description": "Conversation parsing, orchestration, domain routing, and safety-gated execution."
+    },
+    {
+      "name": "Tasks",
+      "description": "Durable task operations shared by JSON and Convex providers."
+    },
+    {
+      "name": "Reminders",
+      "description": "Durable reminders with conservative due-time normalisation."
+    },
+    {
+      "name": "Backups",
+      "description": "Provider-neutral export, verification, and empty-target restore operations."
+    }
+  ],
+  "x-jarvis-architecture": {
+    "contextPackVersion": "2.0",
+    "stateModel": "Z-State",
+    "buildOrder": [
+      "runtime",
+      "domains",
+      "integration",
+      "orchestration",
+      "safety",
+      "adaptive",
+      "autonomy",
+      "z-state-activation"
+    ],
+    "immutableSafetyCategories": ["domain", "cross-domain", "memory", "reliability", "proposal"],
+    "businessBoundary": "Jarvis routes business-domain work through integrations and must not duplicate authoritative TBTB business logic."
+  },
+  "x-chatgpt-app": {
+    "archetype": "interactive-decoupled",
+    "visibility": "private",
+    "mcpEndpoint": "/mcp",
+    "widgetResourceUri": "ui://jarvis/dashboard-v1.html",
+    "credentialHandling": "The MCP server injects JARVIS_SERVICE_TOKEN server-side. The model, widget, and tool arguments never receive it.",
+    "remoteExposureRequirement": "Require OAuth 2.1 at the MCP boundary before any remote or multi-user deployment.",
+    "publicSubmissionReady": false,
+    "dataOperationIds": [
+      "getJarvisStatus",
+      "listTasks",
+      "getTask",
+      "createTask",
+      "updateTask",
+      "completeTask",
+      "deleteTask",
+      "listReminders",
+      "getReminder",
+      "createReminder",
+      "updateReminder",
+      "deleteReminder"
+    ],
+    "restOnlyOperationIds": [
+      "getHealth",
+      "getHelp",
+      "executeConversation",
+      "exportBackup",
+      "verifyBackup",
+      "restoreBackup"
+    ]
+  },
+  "paths": {
+    "/healthz": {
+      "get": {
+        "operationId": "getHealth",
+        "summary": "Check process liveness",
+        "description": "Returns process liveness without touching persistence or exposing configuration.",
+        "tags": ["System"],
+        "security": [],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The Jarvis process is alive.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
+    },
+    "/api/v1/help": {
+      "get": {
+        "operationId": "getHelp",
+        "summary": "List supported operator capabilities",
+        "description": "Returns the stable operator-facing capability map generated from this contract.",
+        "tags": ["System"],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Supported capabilities.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HelpResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
+    },
+    "/api/v1/status": {
+      "get": {
+        "operationId": "getJarvisStatus",
+        "summary": "Inspect Jarvis runtime and provider status",
+        "description": "Checks storage reachability, authentication, schema compatibility, layer readiness, timezone, and Z-State activation without returning secrets.",
+        "tags": ["System"],
+        "x-mcp-tool": {
+          "exposed": true,
+          "title": "Check Jarvis status",
+          "description": "Use this when the user asks whether Jarvis, its storage provider, safety gates, or Z-State layers are healthy and ready.",
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Current runtime and persistence status.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SystemStatus"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
+    },
+    "/api/v1/runtime/conversations": {
+      "post": {
+        "operationId": "executeConversation",
+        "summary": "Execute a safety-gated conversation turn",
+        "description": "Parses one text input, constructs an execution plan, routes each step, evaluates the complete output through the immutable safety envelope, and returns the result. ChatGPT should use focused task and reminder tools instead of exposing this broad runtime endpoint as an MCP tool.",
+        "tags": ["Runtime"],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": false
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConversationRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The conversation turn completed and passed the safety gate.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
+    },
+    "/api/v1/tasks": {
+      "get": {
+        "operationId": "listTasks",
+        "summary": "List durable tasks",
+        "description": "Returns the authoritative task list from the configured persistence provider.",
+        "tags": ["Tasks"],
+        "x-mcp-tool": {
+          "exposed": true,
+          "title": "List Jarvis tasks",
+          "description": "Use this when the user wants to see, review, summarise, or choose from their current Jarvis tasks.",
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Current tasks.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createTask",
+        "summary": "Create a durable task",
+        "description": "Creates one task after explicit user intent. Reusing an Idempotency-Key must replay the original result rather than create a duplicate.",
+        "tags": ["Tasks"],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "x-mcp-tool": {
+          "exposed": true,
+          "title": "Create a Jarvis task",
+          "description": "Use this when the user explicitly asks Jarvis to save one new task with a title and category.",
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTaskRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Task created.",
+            "headers": {
+              "Location": {
+                "description": "Canonical URL of the created task.",
+                "schema": {
+                  "type": "string",
+                  "format": "uri-reference"
+                }
+              },
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
+    },
+    "/api/v1/tasks/{taskId}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/TaskId"
+        }
+      ],
+      "get": {
+        "operationId": "getTask",
+        "summary": "Get one durable task",
+        "description": "Returns one task by its opaque provider-issued identifier.",
+        "tags": ["Tasks"],
+        "x-mcp-tool": {
+          "exposed": true,
+          "title": "Get a Jarvis task",
+          "description": "Use this when the user refers to one known Jarvis task identifier and its current authoritative fields are needed.",
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Task found.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      },
+      "patch": {
+        "operationId": "updateTask",
+        "summary": "Update a durable task",
+        "description": "Updates the supplied task title and/or category without changing identity, completion, or creation time.",
+        "tags": ["Tasks"],
+        "x-mcp-tool": {
+          "exposed": true,
+          "title": "Update a Jarvis task",
+          "description": "Use this when the user explicitly asks to change the title or category of one existing Jarvis task.",
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateTaskRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Task updated.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteTask",
+        "summary": "Delete a durable task",
+        "description": "Permanently removes one task after explicit user confirmation.",
+        "tags": ["Tasks"],
+        "x-mcp-tool": {
+          "exposed": true,
+          "title": "Delete a Jarvis task",
+          "description": "Use this only when the user explicitly asks to permanently remove one identified Jarvis task.",
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": true,
+            "openWorldHint": false,
+            "idempotentHint": false
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Task deleted. The removed record is returned for confirmation.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
+    },
+    "/api/v1/tasks/{taskId}/complete": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/TaskId"
+        }
+      ],
+      "post": {
+        "operationId": "completeTask",
+        "summary": "Complete a durable task",
+        "description": "Sets the task completed flag to true. Repeated calls leave the task completed.",
+        "tags": ["Tasks"],
+        "x-mcp-tool": {
+          "exposed": true,
+          "title": "Complete a Jarvis task",
+          "description": "Use this when the user explicitly says one identified Jarvis task is complete or done.",
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Task completed.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
+    },
+    "/api/v1/reminders": {
+      "get": {
+        "operationId": "listReminders",
+        "summary": "List durable reminders",
+        "description": "Returns the authoritative reminder list from the configured persistence provider.",
+        "tags": ["Reminders"],
+        "x-mcp-tool": {
+          "exposed": true,
+          "title": "List Jarvis reminders",
+          "description": "Use this when the user wants to see, review, summarise, or choose from their current Jarvis reminders.",
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Current reminders.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReminderListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createReminder",
+        "summary": "Create a durable reminder",
+        "description": "Creates one reminder and preserves its exact due text. Jarvis only adds a timestamp when the due value is unambiguous in the supplied timezone.",
+        "tags": ["Reminders"],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "x-mcp-tool": {
+          "exposed": true,
+          "title": "Create a Jarvis reminder",
+          "description": "Use this when the user explicitly asks Jarvis to save one reminder with a title and optional due text.",
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateReminderRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Reminder created.",
+            "headers": {
+              "Location": {
+                "description": "Canonical URL of the created reminder.",
+                "schema": {
+                  "type": "string",
+                  "format": "uri-reference"
+                }
+              },
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReminderResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
+    },
+    "/api/v1/reminders/{reminderId}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ReminderId"
+        }
+      ],
+      "get": {
+        "operationId": "getReminder",
+        "summary": "Get one durable reminder",
+        "description": "Returns one reminder by its opaque provider-issued identifier.",
+        "tags": ["Reminders"],
+        "x-mcp-tool": {
+          "exposed": true,
+          "title": "Get a Jarvis reminder",
+          "description": "Use this when the user refers to one known Jarvis reminder identifier and its current authoritative fields are needed.",
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Reminder found.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReminderResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      },
+      "patch": {
+        "operationId": "updateReminder",
+        "summary": "Update a durable reminder",
+        "description": "Updates the supplied title and/or due value. Sending due=null explicitly clears all due fields.",
+        "tags": ["Reminders"],
+        "x-mcp-tool": {
+          "exposed": true,
+          "title": "Update a Jarvis reminder",
+          "description": "Use this when the user explicitly asks to change the title or due value of one existing Jarvis reminder.",
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateReminderRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Reminder updated.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReminderResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteReminder",
+        "summary": "Delete a durable reminder",
+        "description": "Permanently removes one reminder after explicit user confirmation.",
+        "tags": ["Reminders"],
+        "x-mcp-tool": {
+          "exposed": true,
+          "title": "Delete a Jarvis reminder",
+          "description": "Use this only when the user explicitly asks to permanently remove one identified Jarvis reminder.",
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": true,
+            "openWorldHint": false,
+            "idempotentHint": false
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Reminder deleted. The removed record is returned for confirmation.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReminderResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
+    },
+    "/api/v1/backups/export": {
+      "get": {
+        "operationId": "exportBackup",
+        "summary": "Export a provider-neutral backup",
+        "description": "Takes one coherent persistence snapshot and returns a version 2 Jarvis backup archive. This sensitive operation is intentionally excluded from the model tool surface.",
+        "tags": ["Backups"],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Current backup archive.",
+            "headers": {
+              "Content-Disposition": {
+                "description": "Suggested private backup filename.",
+                "schema": {
+                  "type": "string",
+                  "example": "attachment; filename=jarvis-backup.json"
+                }
+              },
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BackupArchive"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
+    },
+    "/api/v1/backups/verify": {
+      "post": {
+        "operationId": "verifyBackup",
+        "summary": "Verify a backup archive",
+        "description": "Validates a version 1 or 2 archive and verifies it in isolated storage without touching the configured live provider.",
+        "tags": ["Backups"],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BackupArchiveInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Archive verified successfully.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BackupVerificationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
+    },
+    "/api/v1/backups/restore": {
+      "post": {
+        "operationId": "restoreBackup",
+        "summary": "Restore a backup into an empty provider",
+        "description": "Restores a verified archive only when the configured target has no assistant state, tasks, or reminders. The confirmation field must be exactly true. This operation is never exposed as a model tool.",
+        "tags": ["Backups"],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": true,
+            "openWorldHint": false,
+            "idempotentHint": false
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RestoreBackupRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Archive restored and returned references remapped.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RestoreBackupResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "serviceToken": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "opaque",
+        "description": "Single-user Jarvis service token. Send it only in the Authorization header. Never place it in URLs, logs, tool arguments, widget state, or model-visible output."
+      }
+    },
+    "headers": {
+      "RequestId": {
+        "description": "Opaque request correlation identifier safe to include in support reports.",
+        "schema": {
+          "type": "string",
+          "minLength": 8,
+          "maxLength": 128
+        }
+      }
+    },
+    "parameters": {
+      "TaskId": {
+        "name": "taskId",
+        "in": "path",
+        "required": true,
+        "description": "Opaque task identifier returned by Jarvis.",
+        "schema": {
+          "$ref": "#/components/schemas/RecordId"
+        }
+      },
+      "ReminderId": {
+        "name": "reminderId",
+        "in": "path",
+        "required": true,
+        "description": "Opaque reminder identifier returned by Jarvis.",
+        "schema": {
+          "$ref": "#/components/schemas/RecordId"
+        }
+      },
+      "IdempotencyKey": {
+        "name": "Idempotency-Key",
+        "in": "header",
+        "required": true,
+        "description": "A caller-generated key used to make retries safe. Reuse it only for an identical request body.",
+        "schema": {
+          "type": "string",
+          "minLength": 16,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9._:-]+$"
+        }
+      }
+    },
+    "responses": {
+      "BadRequest": {
+        "description": "The request could not be parsed or violated the transport contract.",
+        "$ref": "#/components/responses/ProblemResponse"
+      },
+      "Unauthorized": {
+        "description": "The service token is missing, invalid, or revoked.",
+        "headers": {
+          "WWW-Authenticate": {
+            "schema": {
+              "type": "string",
+              "example": "Bearer"
+            }
+          },
+          "X-Request-Id": {
+            "$ref": "#/components/headers/RequestId"
+          }
+        },
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "#/components/schemas/ProblemDetails"
+            }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "The requested record does not exist for this owner.",
+        "$ref": "#/components/responses/ProblemResponse"
+      },
+      "Conflict": {
+        "description": "The request conflicts with current state, an idempotency key, or an empty-target requirement.",
+        "$ref": "#/components/responses/ProblemResponse"
+      },
+      "PayloadTooLarge": {
+        "description": "The backup archive exceeds the 10 MiB limit.",
+        "$ref": "#/components/responses/ProblemResponse"
+      },
+      "UnprocessableEntity": {
+        "description": "The request is syntactically valid but violates Jarvis validation or safety rules.",
+        "$ref": "#/components/responses/ProblemResponse"
+      },
+      "TooManyRequests": {
+        "description": "The caller has exceeded the configured request rate.",
+        "headers": {
+          "Retry-After": {
+            "description": "Seconds before the caller should retry.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "X-Request-Id": {
+            "$ref": "#/components/headers/RequestId"
+          }
+        },
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "#/components/schemas/ProblemDetails"
+            }
+          }
+        }
+      },
+      "ServiceUnavailable": {
+        "description": "A required persistence, reliability, or safety dependency is unavailable.",
+        "$ref": "#/components/responses/ProblemResponse"
+      },
+      "InternalServerError": {
+        "description": "Jarvis failed without exposing credentials or internal exception details.",
+        "$ref": "#/components/responses/ProblemResponse"
+      },
+      "ProblemResponse": {
+        "description": "A problem response.",
+        "headers": {
+          "X-Request-Id": {
+            "$ref": "#/components/headers/RequestId"
+          }
+        },
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "#/components/schemas/ProblemDetails"
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "RecordId": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 256,
+        "pattern": "^[^\\s]+$",
+        "description": "Opaque identifier. Clients must not parse provider-specific structure."
+      },
+      "TimestampMs": {
+        "type": "integer",
+        "format": "int64",
+        "minimum": 0,
+        "description": "Unix timestamp in milliseconds."
+      },
+      "HealthResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["status", "service", "version", "time"],
+        "properties": {
+          "status": {
+            "const": "ok"
+          },
+          "service": {
+            "const": "jarvis"
+          },
+          "version": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "time": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "HelpResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["apiVersion", "capabilities"],
+        "properties": {
+          "apiVersion": {
+            "const": "v1"
+          },
+          "capabilities": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Capability"
+            }
+          }
+        }
+      },
+      "Capability": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["operationId", "summary", "mutating", "destructive", "mcpExposed"],
+        "properties": {
+          "operationId": {
+            "type": "string",
+            "pattern": "^[A-Za-z][A-Za-z0-9]+$"
+          },
+          "summary": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160
+          },
+          "mutating": {
+            "type": "boolean"
+          },
+          "destructive": {
+            "type": "boolean"
+          },
+          "mcpExposed": {
+            "type": "boolean"
+          }
+        }
+      },
+      "SystemStatus": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "status",
+          "version",
+          "sourceVersion",
+          "provider",
+          "timezone",
+          "layers",
+          "zState",
+          "checkedAt"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": ["ok", "degraded", "unavailable"]
+          },
+          "version": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "sourceVersion": {
+            "type": "string",
+            "minLength": 7,
+            "maxLength": 64,
+            "description": "Build commit or immutable source identifier."
+          },
+          "provider": {
+            "$ref": "#/components/schemas/ProviderStatus"
+          },
+          "timezone": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "examples": ["Australia/Melbourne"]
+          },
+          "layers": {
+            "$ref": "#/components/schemas/LayersStatus"
+          },
+          "zState": {
+            "type": "string",
+            "enum": ["disabled", "stabilising", "active", "suspended"]
+          },
+          "checkedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ProviderStatus": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "reachability", "authentication", "schemaCompatibility"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "enum": ["json", "convex"]
+          },
+          "reachability": {
+            "type": "string",
+            "enum": ["ok", "unavailable"]
+          },
+          "authentication": {
+            "type": "string",
+            "enum": ["not-required", "ok", "failed"]
+          },
+          "schemaCompatibility": {
+            "type": "string",
+            "enum": ["compatible", "incompatible", "unknown"]
+          },
+          "deploymentVersion": {
+            "oneOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "LayersStatus": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "runtime",
+          "domains",
+          "integration",
+          "orchestration",
+          "safety",
+          "adaptive",
+          "autonomy",
+          "reliability"
+        ],
+        "properties": {
+          "runtime": {
+            "$ref": "#/components/schemas/LayerStatus"
+          },
+          "domains": {
+            "$ref": "#/components/schemas/LayerStatus"
+          },
+          "integration": {
+            "$ref": "#/components/schemas/LayerStatus"
+          },
+          "orchestration": {
+            "$ref": "#/components/schemas/LayerStatus"
+          },
+          "safety": {
+            "$ref": "#/components/schemas/LayerStatus"
+          },
+          "adaptive": {
+            "$ref": "#/components/schemas/LayerStatus"
+          },
+          "autonomy": {
+            "$ref": "#/components/schemas/LayerStatus"
+          },
+          "reliability": {
+            "$ref": "#/components/schemas/LayerStatus"
+          }
+        }
+      },
+      "LayerStatus": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["status"],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": ["ready", "partial", "inactive", "blocked"]
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          }
+        }
+      },
+      "ConversationRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["message"],
+        "properties": {
+          "message": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 10000
+          },
+          "context": {
+            "type": "object",
+            "maxProperties": 32,
+            "additionalProperties": true,
+            "description": "Small task-specific context only. Do not send full conversation transcripts or credentials."
+          },
+          "mode": {
+            "type": "string",
+            "enum": ["plan", "execute"],
+            "default": "execute"
+          }
+        }
+      },
+      "ConversationResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["requestId", "parsed", "plan", "safety"],
+        "properties": {
+          "requestId": {
+            "type": "string",
+            "minLength": 8,
+            "maxLength": 128
+          },
+          "parsed": {
+            "$ref": "#/components/schemas/ParsedConversation"
+          },
+          "plan": {
+            "$ref": "#/components/schemas/ExecutionPlan"
+          },
+          "outputs": {
+            "type": "array",
+            "items": true
+          },
+          "safety": {
+            "$ref": "#/components/schemas/SafetyDecision"
+          }
+        }
+      },
+      "ParsedConversation": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["text", "intent", "entities", "context"],
+        "properties": {
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 10000
+          },
+          "intent": {
+            "type": "string",
+            "enum": ["greeting", "planning", "memory", "general"]
+          },
+          "entities": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "context": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      },
+      "ExecutionPlan": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["steps"],
+        "properties": {
+          "steps": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 64,
+            "items": {
+              "$ref": "#/components/schemas/PlanStep"
+            }
+          }
+        }
+      },
+      "PlanStep": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["module", "action", "payload"],
+        "properties": {
+          "module": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "action": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "payload": true
+        }
+      },
+      "SafetyDecision": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["status", "reasons", "evaluatedCategories"],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": ["ok", "warning", "blocked"]
+          },
+          "reasons": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 500
+            }
+          },
+          "evaluatedCategories": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "enum": ["domain", "cross-domain", "memory", "reliability", "proposal"]
+            }
+          }
+        }
+      },
+      "Task": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "title", "completed", "category", "createdAt"],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/RecordId"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "completed": {
+            "type": "boolean"
+          },
+          "category": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "createdAt": {
+            "$ref": "#/components/schemas/TimestampMs"
+          }
+        }
+      },
+      "CreateTaskRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["title"],
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "category": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "default": "personal"
+          }
+        }
+      },
+      "UpdateTaskRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "minProperties": 1,
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "category": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          }
+        }
+      },
+      "TaskResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["data"],
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/Task"
+          }
+        }
+      },
+      "TaskListResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["data", "count"],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Task"
+            }
+          },
+          "count": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "ReminderDueInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["text"],
+        "properties": {
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500,
+            "description": "Exact due text to preserve, such as tomorrow 9am or after Claire calls."
+          },
+          "timezone": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "description": "IANA timezone used only for local wall-clock input. Defaults to the configured Jarvis timezone.",
+            "examples": ["Australia/Melbourne"]
+          }
+        }
+      },
+      "Reminder": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "title", "createdAt"],
+        "dependentRequired": {
+          "dueAt": ["dueRaw", "dueTimezone"],
+          "dueTimezone": ["dueRaw", "dueAt"]
+        },
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/RecordId"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "dueRaw": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "dueAt": {
+            "$ref": "#/components/schemas/TimestampMs"
+          },
+          "dueTimezone": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "createdAt": {
+            "$ref": "#/components/schemas/TimestampMs"
+          }
+        }
+      },
+      "CreateReminderRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["title"],
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "due": {
+            "$ref": "#/components/schemas/ReminderDueInput"
+          }
+        }
+      },
+      "UpdateReminderRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "minProperties": 1,
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "due": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ReminderDueInput"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "ReminderResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["data"],
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/Reminder"
+          }
+        }
+      },
+      "ReminderListResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["data", "count"],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Reminder"
+            }
+          },
+          "count": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "AssistantState": {
+        "type": "object",
+        "additionalProperties": true,
+        "description": "JSON-safe Jarvis runtime state. It may contain provider record references that are remapped during restore."
+      },
+      "BackupArchive": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["format", "version", "createdAt", "state", "tasks", "reminders"],
+        "properties": {
+          "format": {
+            "const": "jarvis-backup"
+          },
+          "version": {
+            "const": 2
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "state": {
+            "$ref": "#/components/schemas/AssistantState"
+          },
+          "tasks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Task"
+            }
+          },
+          "reminders": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Reminder"
+            }
+          }
+        }
+      },
+      "BackupArchiveInput": {
+        "type": "object",
+        "description": "A version 1 or version 2 Jarvis backup archive. Version 1 is accepted for migration compatibility.",
+        "required": ["format", "version", "createdAt", "state", "tasks", "reminders"],
+        "properties": {
+          "format": {
+            "const": "jarvis-backup"
+          },
+          "version": {
+            "type": "integer",
+            "enum": [1, 2]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "state": {
+            "$ref": "#/components/schemas/AssistantState"
+          },
+          "tasks": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "reminders": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "BackupVerificationResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["valid", "format", "version", "taskCount", "reminderCount"],
+        "properties": {
+          "valid": {
+            "const": true
+          },
+          "format": {
+            "const": "jarvis-backup"
+          },
+          "version": {
+            "type": "integer",
+            "enum": [1, 2]
+          },
+          "taskCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "reminderCount": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "RestoreBackupRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["archive", "confirmEmptyTarget"],
+        "properties": {
+          "archive": {
+            "$ref": "#/components/schemas/BackupArchiveInput"
+          },
+          "confirmEmptyTarget": {
+            "const": true,
+            "description": "Explicit acknowledgement that restore is permitted only into an empty provider."
+          }
+        }
+      },
+      "RestoreBackupResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["taskCount", "reminderCount", "taskIds", "reminderIds"],
+        "properties": {
+          "taskCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "reminderCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "taskIds": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/RecordId"
+            },
+            "description": "Map from archive task IDs to restored provider IDs."
+          },
+          "reminderIds": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/RecordId"
+            },
+            "description": "Map from archive reminder IDs to restored provider IDs."
+          }
+        }
+      },
+      "ProblemDetails": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["type", "title", "status", "detail", "instance", "requestId"],
+        "properties": {
+          "type": {
+            "type": "string",
+            "format": "uri-reference",
+            "description": "Stable problem type identifier."
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160
+          },
+          "status": {
+            "type": "integer",
+            "minimum": 400,
+            "maximum": 599
+          },
+          "detail": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000,
+            "description": "Safe operator-facing detail with credentials and internal exception data removed."
+          },
+          "instance": {
+            "type": "string",
+            "format": "uri-reference"
+          },
+          "requestId": {
+            "type": "string",
+            "minLength": 8,
+            "maxLength": 128
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            }
+          }
+        }
+      },
+      "ValidationError": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "message"],
+        "properties": {
+          "path": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "message": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          }
+        }
+      }
+    }
+  }
+}

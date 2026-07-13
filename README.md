@@ -60,6 +60,20 @@ reminder remove <id>
 
 Update flags may be supplied in either order. At least one supported flag is required, duplicate or unknown flags are rejected, and `--due` cannot be combined with `--clear-due`. Fuzzy phrases containing `task` or `remind` do not write data. Jarvis prints the supported command syntax instead.
 
+### Operator API contract
+
+The versioned implementation target for Jarvis's HTTP and ChatGPT App adapters is
+[`typescript/openapi/jarvis.openapi.json`](typescript/openapi/jarvis.openapi.json). The
+maintained runtime remains the TypeScript CLI until those adapters are implemented and tested;
+the contract does not imply that an HTTP server is already running.
+
+Validate the OpenAPI 3.1 document with the same zero-warning gate used by CI:
+
+```bash
+cd typescript
+npm run openapi:lint
+```
+
 ### Reminder due values
 
 Jarvis always preserves the exact `--due` text as `dueRaw`. It also stores `dueAt` and `dueTimezone` when the value can be interpreted conservatively. Supported normalized forms include ISO timestamps with an offset, `YYYY-MM-DD`, Australian `DD/MM/YYYY`, `today 9am`, `tomorrow 9am`, and named weekdays such as `Friday 9am`.
