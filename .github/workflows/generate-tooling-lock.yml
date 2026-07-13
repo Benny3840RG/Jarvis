@@ -3,29 +3,22 @@ name: Generate tooling lock
 on:
   push:
     branches: [agent/eslint-format-checks]
-    paths:
-      - "typescript/package.json"
-      - "typescript/eslint.config.mjs"
-      - "typescript/.prettierrc.json"
-      - "typescript/.prettierignore"
-      - ".github/workflows/generate-tooling-lock.yml"
   pull_request:
     branches: [main]
     paths:
-      - "typescript/package.json"
-      - "typescript/eslint.config.mjs"
-      - "typescript/.prettierrc.json"
-      - "typescript/.prettierignore"
+      - "typescript/**"
       - ".github/workflows/generate-tooling-lock.yml"
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   generate-and-check:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'push' && github.ref_name || github.head_ref }}
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -42,48 +35,29 @@ jobs:
         working-directory: typescript
         run: npm ci
 
-      - name: Lint
-        id: lint
-        continue-on-error: true
-        working-directory: typescript
-        run: npm run lint
-
       - name: Format working tree
         working-directory: typescript
         run: npm run format
 
+      - name: Lint
+        working-directory: typescript
+        run: npm run lint
+
       - name: Type-check
-        id: typecheck
-        continue-on-error: true
         working-directory: typescript
         run: npm run type-check
 
       - name: Test
-        id: test
-        continue-on-error: true
         working-directory: typescript
         run: npm test
 
-      - name: Capture generated tooling files
-        if: always()
-        run: git diff --binary > tooling.patch
-
-      - name: Upload generated lock and formatted sources
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: tooling-output
-          if-no-files-found: error
-          path: |
-            tooling.patch
-            typescript/package-lock.json
-            typescript/src
-            typescript/tests
-            typescript/convex
-            typescript/eslint.config.mjs
-            typescript/.prettierrc.json
-            typescript/.prettierignore
-
-      - name: Fail when checks failed
-        if: steps.lint.outcome != 'success' || steps.typecheck.outcome != 'success' || steps.test.outcome != 'success'
-        run: exit 1
+      - name: Commit generated lock and formatting
+        if: github.event_name == 'push'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add typescript/package-lock.json typescript/src typescript/tests typescript/convex
+          if ! git diff --cached --quiet; then
+            git commit -m "chore: lock and format lint tooling"
+            git push
+          fi
