@@ -5,6 +5,7 @@ import type {
   AssistantState,
   PersistenceProvider,
   Reminder,
+  ReminderDue,
   Task,
 } from "../src/persistence/persistence.js";
 import { redactSecret, runConvexSmoke } from "../src/tools/convexSmoke.js";
@@ -64,11 +65,18 @@ class FakePersistence implements PersistenceProvider {
     return this.store.reminders.map((reminder) => ({ ...reminder }));
   }
 
-  async addReminder(title: string, due?: string): Promise<Reminder> {
+  async addReminder(title: string, due?: ReminderDue): Promise<Reminder> {
     const reminder: Reminder = {
       id: `reminder-${++this.store.nextReminder}`,
       title,
-      ...(due === undefined ? {} : { due }),
+      ...(due === undefined
+        ? {}
+        : {
+            dueRaw: due.raw,
+            ...(due.at === undefined
+              ? {}
+              : { dueAt: due.at, dueTimezone: due.timezone as string }),
+          }),
       createdAt: this.store.nextReminder,
     };
     this.store.reminders.push(reminder);
