@@ -37,6 +37,7 @@ type Faults = {
   listReminders?: Error;
   addTask?: Error;
   updateTask?: Error;
+  addReminder?: Error;
   saveState?: Error;
 };
 
@@ -125,6 +126,7 @@ class FaultInjectingPersistence implements PersistenceProvider {
   }
 
   async addReminder(title: string, due?: ReminderDue): Promise<Reminder> {
+    if (this.faults.addReminder) throw this.faults.addReminder;
     const reminder: Reminder = {
       id: `reminder-${this.reminders.length + 1}`,
       title,
@@ -254,6 +256,25 @@ describe("failure behaviour matrix", () => {
     assert.equal(persistence.saveStateCalls, 0);
     assert(logs.errors.some((line) => line.includes("Command failed: Unauthorized")));
     assert(logs.output.some((line) => line.includes("No tasks saved")));
+  });
+
+  it("does not mutate or save runtime state when an unauthorized reminder write is rejected", async () => {
+    const persistence = new FaultInjectingPersistence({
+      addReminder: new Error("Unauthorized: invalid Jarvis service token."),
+    });
+    const logs = capture();
+
+    await runCli({
+      persistence,
+      readline: new ScriptedReadline(["reminder add Blocked --due Friday 9am", "reminder list", "exit"]),
+      stdout: logs.stdout,
+      stderr: logs.stderr,
+    });
+
+    assert.equal(persistence.reminders.length, 0);
+    assert.equal(persistence.saveStateCalls, 0);
+    assert(logs.errors.some((line) => line.includes("Command failed: Unauthorized")));
+    assert(logs.output.some((line) => line.includes("No reminders saved")));
   });
 
   it("does not save runtime state when an unauthorized update is rejected", async () => {
