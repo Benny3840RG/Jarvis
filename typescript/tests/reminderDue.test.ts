@@ -23,14 +23,11 @@ describe("reminder due normalization", () => {
   });
 
   it("normalizes Australian local dates in an explicit IANA timezone", () => {
-    assert.deepEqual(
-      parseReminderDue("17/07/2026 9:30am", { timezone: "Australia/Melbourne" }),
-      {
-        raw: "17/07/2026 9:30am",
-        at: Date.parse("2026-07-16T23:30:00.000Z"),
-        timezone: "Australia/Melbourne",
-      },
-    );
+    assert.deepEqual(parseReminderDue("17/07/2026 9:30am", { timezone: "Australia/Melbourne" }), {
+      raw: "17/07/2026 9:30am",
+      at: Date.parse("2026-07-16T23:30:00.000Z"),
+      timezone: "Australia/Melbourne",
+    });
   });
 
   it("normalizes the next named weekday relative to the supplied current time", () => {
@@ -62,10 +59,9 @@ describe("reminder due normalization", () => {
   });
 
   it("does not normalize a wall-clock time that does not exist during a DST jump", () => {
-    assert.deepEqual(
-      parseReminderDue("04/10/2026 2:30am", { timezone: "Australia/Melbourne" }),
-      { raw: "04/10/2026 2:30am" },
-    );
+    assert.deepEqual(parseReminderDue("04/10/2026 2:30am", { timezone: "Australia/Melbourne" }), {
+      raw: "04/10/2026 2:30am",
+    });
   });
 
   it("rejects invalid timezone configuration and inconsistent normalized values", () => {

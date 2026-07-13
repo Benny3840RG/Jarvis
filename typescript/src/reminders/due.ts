@@ -84,7 +84,8 @@ function timezoneOffsetAt(timestamp: number, timezone: string): number {
   const rounded = Math.floor(timestamp / 1_000) * 1_000;
   const local = partsAt(rounded, timezone);
   return (
-    Date.UTC(local.year, local.month - 1, local.day, local.hour, local.minute, local.second) - rounded
+    Date.UTC(local.year, local.month - 1, local.day, local.hour, local.minute, local.second) -
+    rounded
   );
 }
 
@@ -181,20 +182,15 @@ function addCalendarDays(value: CalendarDateTime, days: number): CalendarDateTim
   };
 }
 
-function withNormalized(
-  raw: string,
-  value: CalendarDateTime,
-  timezone: string,
-): ReminderDue {
+function withNormalized(raw: string, value: CalendarDateTime, timezone: string): ReminderDue {
   const at = zonedTimestamp(value, timezone);
   return at === undefined ? { raw } : { raw, at, timezone };
 }
 
 function parseAbsoluteIso(raw: string): ReminderDue | undefined {
-  const match =
-    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?(Z|[+-]\d{2}:\d{2})$/i.exec(
-      raw,
-    );
+  const match = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?(Z|[+-]\d{2}:\d{2})$/i.exec(
+    raw,
+  );
   if (!match) return undefined;
   const at = Date.parse(raw);
   if (Number.isNaN(at)) return { raw };
@@ -214,7 +210,8 @@ export function parseReminderDue(
 
   const timezone = resolveReminderTimezone(options.timezone);
   const now = options.now ?? new Date();
-  if (Number.isNaN(now.getTime())) throw new Error("Reminder parser received an invalid current time.");
+  if (Number.isNaN(now.getTime()))
+    throw new Error("Reminder parser received an invalid current time.");
   const nowLocal = partsAt(now.getTime(), timezone);
 
   const isoLocal = /^(\d{4})-(\d{2})-(\d{2})(?:[ T](.+))?$/.exec(raw);
@@ -264,14 +261,14 @@ export function parseReminderDue(
     return withNormalized(raw, date, timezone);
   }
 
-  const weekday = /^(sunday|monday|tuesday|wednesday|thursday|friday|saturday)\s+(.+)$/i.exec(
-    raw,
-  );
+  const weekday = /^(sunday|monday|tuesday|wednesday|thursday|friday|saturday)\s+(.+)$/i.exec(raw);
   if (weekday) {
     const time = parseTime(weekday[2]);
     if (!time) return { raw };
     const targetDay = WEEKDAYS.indexOf(weekday[1].toLowerCase() as (typeof WEEKDAYS)[number]);
-    const currentDay = new Date(Date.UTC(nowLocal.year, nowLocal.month - 1, nowLocal.day)).getUTCDay();
+    const currentDay = new Date(
+      Date.UTC(nowLocal.year, nowLocal.month - 1, nowLocal.day),
+    ).getUTCDay();
     let daysAhead = (targetDay - currentDay + 7) % 7;
     let candidate = addCalendarDays(
       { ...nowLocal, hour: time.hour, minute: time.minute, second: 0 },

@@ -31,7 +31,12 @@ export function validateTaskUpdate(update: TaskUpdate): TaskUpdate {
 
 export function validateReminderUpdate(update: ReminderUpdate): ReminderUpdate {
   const title = cleanText(update.title, "Reminder title");
-  const due = update.due === undefined ? undefined : update.due === null ? null : validateReminderDue(update.due);
+  const due =
+    update.due === undefined
+      ? undefined
+      : update.due === null
+        ? null
+        : validateReminderDue(update.due);
   if (title === undefined && due === undefined) {
     throw new Error("Reminder update requires --title, --due, or --clear-due.");
   }

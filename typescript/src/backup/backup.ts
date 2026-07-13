@@ -162,7 +162,8 @@ function parseReminder(value: unknown, index: number, version: 1 | 2): Reminder 
 function assertUniqueIds(records: Array<{ id: string }>, name: string): void {
   const ids = new Set<string>();
   for (const record of records) {
-    if (ids.has(record.id)) throw new Error(`Backup contains a duplicate ${name} id: ${record.id}.`);
+    if (ids.has(record.id))
+      throw new Error(`Backup contains a duplicate ${name} id: ${record.id}.`);
     ids.add(record.id);
   }
 }
@@ -267,15 +268,15 @@ function remapIds(value: unknown, ids: ReadonlyMap<string, string>): unknown {
   if (typeof value === "string") return ids.get(value) ?? value;
   if (Array.isArray(value)) return value.map((entry) => remapIds(entry, ids));
   if (isRecord(value)) {
-    return Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, remapIds(entry, ids)]));
+    return Object.fromEntries(
+      Object.entries(value).map(([key, entry]) => [key, remapIds(entry, ids)]),
+    );
   }
   return value;
 }
 
 function taskSignatures(tasks: Task[]): string[] {
-  return tasks
-    .map((task) => JSON.stringify([task.title, task.completed, task.category]))
-    .sort();
+  return tasks.map((task) => JSON.stringify([task.title, task.completed, task.category])).sort();
 }
 
 function reminderSignatures(reminders: Reminder[]): string[] {
@@ -384,16 +385,25 @@ export async function restoreBackupIntoEmptyProvider(
   } catch (error: unknown) {
     const cleanupErrors: unknown[] = [];
     for (const id of [...createdReminders].reverse()) {
-      await provider.removeReminder(id).catch((cleanupError: unknown) => cleanupErrors.push(cleanupError));
+      await provider
+        .removeReminder(id)
+        .catch((cleanupError: unknown) => cleanupErrors.push(cleanupError));
     }
     for (const id of [...createdTasks].reverse()) {
-      await provider.removeTask(id).catch((cleanupError: unknown) => cleanupErrors.push(cleanupError));
+      await provider
+        .removeTask(id)
+        .catch((cleanupError: unknown) => cleanupErrors.push(cleanupError));
     }
     if (stateWriteAttempted) {
-      await provider.saveState({}).catch((cleanupError: unknown) => cleanupErrors.push(cleanupError));
+      await provider
+        .saveState({})
+        .catch((cleanupError: unknown) => cleanupErrors.push(cleanupError));
     }
     if (cleanupErrors.length > 0) {
-      throw new AggregateError([error, ...cleanupErrors], "Restore failed and rollback was incomplete.");
+      throw new AggregateError(
+        [error, ...cleanupErrors],
+        "Restore failed and rollback was incomplete.",
+      );
     }
     throw error;
   }

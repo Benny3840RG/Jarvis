@@ -9,7 +9,8 @@ export function requireOwner(serviceToken: string): string {
   }
 
   const matchesCurrent = serviceToken.length > 0 && serviceToken === current;
-  const matchesPrevious = previous !== undefined && serviceToken.length > 0 && serviceToken === previous;
+  const matchesPrevious =
+    previous !== undefined && serviceToken.length > 0 && serviceToken === previous;
   if (!matchesCurrent && !matchesPrevious) {
     throw new Error("Unauthorized: invalid Jarvis service token.");
   }

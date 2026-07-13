@@ -59,15 +59,16 @@ function printTaskList(write: ConsoleWriter, tasks: ReturnType<TaskService["list
   }
 }
 
-function printReminderList(write: ConsoleWriter, reminders: ReturnType<ReminderService["list"]>): void {
+function printReminderList(
+  write: ConsoleWriter,
+  reminders: ReturnType<ReminderService["list"]>,
+): void {
   if (reminders.length === 0) {
     write("Jarvis: No reminders saved.");
     return;
   }
   for (const reminder of reminders) {
-    write(
-      `${reminder.id} ${reminder.title}${reminder.dueRaw ? ` — ${reminder.dueRaw}` : ""}`,
-    );
+    write(`${reminder.id} ${reminder.title}${reminder.dueRaw ? ` — ${reminder.dueRaw}` : ""}`);
   }
 }
 
@@ -97,7 +98,8 @@ function reminderUpdateFromOptions(input: string | undefined): ReminderUpdate {
 export async function runCli(deps: RunCliDependencies = {}): Promise<void> {
   const write = deps.stdout ?? ((...values: unknown[]) => console.log(...values));
   const writeError = deps.stderr ?? ((...values: unknown[]) => console.error(...values));
-  const rl = deps.readline ?? (readlinePromises.createInterface({ input, output }) as ReadlineAdapter);
+  const rl =
+    deps.readline ?? (readlinePromises.createInterface({ input, output }) as ReadlineAdapter);
   const persistence = deps.persistence ?? createPersistenceFromEnv();
 
   const conversation = new ConversationService();
@@ -255,7 +257,11 @@ export async function runCli(deps: RunCliDependencies = {}): Promise<void> {
           taskService.replace(
             taskService.list().map((entry) => (entry.id === task.id ? task : entry)),
           );
-          await saveRuntimeState({ lastInput: inputText, lastIntent: "task-update", lastTask: task });
+          await saveRuntimeState({
+            lastInput: inputText,
+            lastIntent: "task-update",
+            lastTask: task,
+          });
           write("Jarvis:", `Task updated: ${task.title} [${task.category}]`);
           continue;
         }
@@ -269,7 +275,11 @@ export async function runCli(deps: RunCliDependencies = {}): Promise<void> {
           taskService.replace(
             taskService.list().map((entry) => (entry.id === task.id ? task : entry)),
           );
-          await saveRuntimeState({ lastInput: inputText, lastIntent: "task-complete", lastTask: task });
+          await saveRuntimeState({
+            lastInput: inputText,
+            lastIntent: "task-complete",
+            lastTask: task,
+          });
           write("Jarvis:", `Task completed: ${task.title}`);
           continue;
         }
@@ -281,7 +291,11 @@ export async function runCli(deps: RunCliDependencies = {}): Promise<void> {
             continue;
           }
           taskService.replace(taskService.list().filter((entry) => entry.id !== task.id));
-          await saveRuntimeState({ lastInput: inputText, lastIntent: "task-remove", lastTask: task });
+          await saveRuntimeState({
+            lastInput: inputText,
+            lastIntent: "task-remove",
+            lastTask: task,
+          });
           write("Jarvis:", `Task removed: ${task.title}`);
           continue;
         }
@@ -393,7 +407,11 @@ export async function runCli(deps: RunCliDependencies = {}): Promise<void> {
           await saveRuntimeState({ lastInput: inputText, lastIntent: intent, lastResult: result });
           write("Jarvis:", `${reply}\nWorkflow: ${JSON.stringify(workflow)}`);
           write(
-            JSON.stringify({ intent, result, workflow, suggestion: learningEngine.suggest() }, null, 2),
+            JSON.stringify(
+              { intent, result, workflow, suggestion: learningEngine.suggest() },
+              null,
+              2,
+            ),
           );
         } else {
           await saveRuntimeState({ lastInput: inputText, lastIntent: intent, lastResult: result });

@@ -129,10 +129,16 @@ function normalizeTask(value: unknown, index: number, strict: boolean): Task {
 }
 
 function normalizedDueFromRecord(value: Record<string, unknown>, index: number): Partial<Reminder> {
-  if (value.dueRaw !== undefined && (typeof value.dueRaw !== "string" || value.dueRaw.length === 0)) {
+  if (
+    value.dueRaw !== undefined &&
+    (typeof value.dueRaw !== "string" || value.dueRaw.length === 0)
+  ) {
     throw new StateDocumentError(`Reminder ${index} has an invalid dueRaw value.`);
   }
-  if (value.dueAt !== undefined && (typeof value.dueAt !== "number" || !Number.isFinite(value.dueAt))) {
+  if (
+    value.dueAt !== undefined &&
+    (typeof value.dueAt !== "number" || !Number.isFinite(value.dueAt))
+  ) {
     throw new StateDocumentError(`Reminder ${index} has an invalid dueAt value.`);
   }
   if (
@@ -269,7 +275,8 @@ function isNodeError(error: unknown): error is NodeJS.ErrnoException {
 
 function normalizeLockRecord(value: unknown): LockRecord | null {
   if (!isRecord(value)) return null;
-  if (typeof value.pid !== "number" || !Number.isSafeInteger(value.pid) || value.pid <= 0) return null;
+  if (typeof value.pid !== "number" || !Number.isSafeInteger(value.pid) || value.pid <= 0)
+    return null;
   if (typeof value.acquiredAt !== "number" || !Number.isFinite(value.acquiredAt)) return null;
   if (typeof value.token !== "string" || value.token.length === 0) return null;
   return {
@@ -289,7 +296,12 @@ function isProcessAlive(pid: number): boolean {
   }
 }
 
-function reminderFromDue(id: string, title: string, createdAt: number, due?: ReminderDue): Reminder {
+function reminderFromDue(
+  id: string,
+  title: string,
+  createdAt: number,
+  due?: ReminderDue,
+): Reminder {
   const normalized = due === undefined ? undefined : validateReminderDue(due);
   return {
     id,
@@ -660,7 +672,9 @@ export class ConvexPersistence implements PersistenceProvider {
 
     const convexUrl = process.env.CONVEX_URL;
     if (!convexUrl) {
-      throw new Error("PERSISTENCE_PROVIDER=convex requires CONVEX_URL to be set in the environment.");
+      throw new Error(
+        "PERSISTENCE_PROVIDER=convex requires CONVEX_URL to be set in the environment.",
+      );
     }
     this.client = new ConvexHttpClient(convexUrl);
   }

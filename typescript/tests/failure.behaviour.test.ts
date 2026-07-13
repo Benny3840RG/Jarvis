@@ -132,9 +132,7 @@ class FaultInjectingPersistence implements PersistenceProvider {
         ? {}
         : {
             dueRaw: due.raw,
-            ...(due.at === undefined
-              ? {}
-              : { dueAt: due.at, dueTimezone: due.timezone as string }),
+            ...(due.at === undefined ? {} : { dueAt: due.at, dueTimezone: due.timezone as string }),
           }),
       createdAt: Date.now(),
     };
@@ -199,7 +197,10 @@ describe("failure behaviour matrix", () => {
     assert.equal(readline.prompts.length, 0);
     assert.equal(persistence.addTaskCalls, 0);
     assert(logs.errors.some((line) => line.includes("Failed to load persistent data")));
-    assert.equal(logs.output.some((line) => line.includes("Jarvis CLI ready")), false);
+    assert.equal(
+      logs.output.some((line) => line.includes("Jarvis CLI ready")),
+      false,
+    );
   });
 
   it("fails closed when any parallel startup read is offline", async () => {
@@ -332,7 +333,10 @@ describe("failure behaviour matrix", () => {
     assert.equal(mutationCalls, 0);
     await assert.rejects(() => provider.addTask("Blocked", "personal"), /Unauthorized/);
     assert.equal(mutationCalls, 1);
-    await assert.rejects(() => provider.updateTask("task-id", { title: "Blocked" }), /Unauthorized/);
+    await assert.rejects(
+      () => provider.updateTask("task-id", { title: "Blocked" }),
+      /Unauthorized/,
+    );
     assert.equal(mutationCalls, 2);
   });
 });

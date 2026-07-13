@@ -62,11 +62,13 @@ class MockPersistence implements PersistenceProvider {
   readonly events: string[] = [];
   failStateSave = false;
 
-  constructor(initial: {
-    state?: AssistantState;
-    tasks?: Task[];
-    reminders?: Reminder[];
-  } = {}) {
+  constructor(
+    initial: {
+      state?: AssistantState;
+      tasks?: Task[];
+      reminders?: Reminder[];
+    } = {},
+  ) {
     this.state = { ...(initial.state ?? {}) };
     this.tasks = (initial.tasks ?? []).map((task) => ({ ...task }));
     this.reminders = (initial.reminders ?? []).map((reminder) => ({ ...reminder }));
@@ -155,9 +157,7 @@ class MockPersistence implements PersistenceProvider {
         ? {}
         : {
             dueRaw: due.raw,
-            ...(due.at === undefined
-              ? {}
-              : { dueAt: due.at, dueTimezone: due.timezone as string }),
+            ...(due.at === undefined ? {} : { dueAt: due.at, dueTimezone: due.timezone as string }),
           }),
       createdAt: this.reminders.length + 1,
     };
@@ -531,6 +531,9 @@ describe("interactive CLI persistence wiring", () => {
 
     assert.equal(persistence.state.lastIntent, "planning");
     assert(logs.output.some((line) => line.includes("Workflow:")));
-    assert.equal(logs.output.some((line) => line.includes("Use `task add")), false);
+    assert.equal(
+      logs.output.some((line) => line.includes("Use `task add")),
+      false,
+    );
   });
 });

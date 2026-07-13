@@ -90,8 +90,14 @@ describe("JSONPersistence", () => {
     assert.equal(stored.reminders[0].dueTimezone, "Australia/Melbourne");
     assert.equal("due" in stored.reminders[0], false);
     const files = await fs.readdir(tempDir);
-    assert.equal(files.some((name) => name.includes(".tmp-")), false);
-    assert.equal(files.some((name) => name.endsWith(".lock")), false);
+    assert.equal(
+      files.some((name) => name.includes(".tmp-")),
+      false,
+    );
+    assert.equal(
+      files.some((name) => name.endsWith(".lock")),
+      false,
+    );
   });
 
   it("migrates the original unversioned state without rewriting it on startup", async () => {
@@ -205,15 +211,18 @@ describe("JSONPersistence", () => {
       second.addReminder("Second reminder", { raw: "Tuesday" }),
     ]);
 
-    assert.deepEqual(
-      (await first.listTasks()).map((task) => task.title).sort(),
-      ["First task", "Second task"],
+    assert.deepEqual((await first.listTasks()).map((task) => task.title).sort(), [
+      "First task",
+      "Second task",
+    ]);
+    assert.deepEqual((await second.listReminders()).map((reminder) => reminder.title).sort(), [
+      "First reminder",
+      "Second reminder",
+    ]);
+    assert.equal(
+      (await fs.readdir(tempDir)).some((name) => name.endsWith(".lock")),
+      false,
     );
-    assert.deepEqual(
-      (await second.listReminders()).map((reminder) => reminder.title).sort(),
-      ["First reminder", "Second reminder"],
-    );
-    assert.equal((await fs.readdir(tempDir)).some((name) => name.endsWith(".lock")), false);
   });
 
   it("times out with an actionable error while a live writer holds the lock", async () => {
@@ -250,7 +259,10 @@ describe("JSONPersistence", () => {
 
     assert.equal(task.title, "Recovered task");
     assert.match(warnings[0] ?? "", /reclaimed a stale JSON state lock/);
-    assert.equal((await fs.readdir(tempDir)).some((name) => name.endsWith(".lock")), false);
+    assert.equal(
+      (await fs.readdir(tempDir)).some((name) => name.endsWith(".lock")),
+      false,
+    );
   });
 });
 
@@ -292,13 +304,19 @@ describe("ConvexPersistence", () => {
     const events: string[] = [];
     const mock = asConvexClient({
       async query(reference, args) {
-        assert.equal(convexFunctionName(reference), convexFunctionName(assistantStateFunctions.get));
+        assert.equal(
+          convexFunctionName(reference),
+          convexFunctionName(assistantStateFunctions.get),
+        );
         assert.deepEqual(args, { serviceToken: "test-service-token" });
         events.push("load");
         return { state: sample };
       },
       async mutation(reference, args) {
-        assert.equal(convexFunctionName(reference), convexFunctionName(assistantStateFunctions.upsert));
+        assert.equal(
+          convexFunctionName(reference),
+          convexFunctionName(assistantStateFunctions.upsert),
+        );
         assert.deepEqual(args, { serviceToken: "test-service-token", state: sample });
         events.push("save");
         return "assistant-state-id";

@@ -21,10 +21,36 @@ function requireCondition(condition: unknown, message: string): asserts conditio
   if (!condition) throw new Error(message);
 }
 
+function normalizeError(error: unknown): Error {
+  return error instanceof Error ? error : new Error(String(error));
+}
+
 export function redactSecret(error: unknown, secret?: string): string {
-  const message = error instanceof Error ? error.stack ?? error.message : String(error);
+  const message = error instanceof Error ? (error.stack ?? error.message) : String(error);
   if (!secret) return message;
   return message.split(secret).join("[REDACTED]");
+}
+
+async function cleanupSmokeRecords(
+  createProvider: PersistenceFactory,
+  taskId: string | undefined,
+  reminderId: string | undefined,
+): Promise<unknown[]> {
+  const cleanupErrors: unknown[] = [];
+  if (taskId === undefined && reminderId === undefined) return cleanupErrors;
+
+  try {
+    const cleanup = createProvider();
+    if (reminderId !== undefined) {
+      await cleanup.removeReminder(reminderId).catch((error: unknown) => cleanupErrors.push(error));
+    }
+    if (taskId !== undefined) {
+      await cleanup.removeTask(taskId).catch((error: unknown) => cleanupErrors.push(error));
+    }
+  } catch (error: unknown) {
+    cleanupErrors.push(error);
+  }
+  return cleanupErrors;
 }
 
 export async function runConvexSmoke(
@@ -44,7 +70,8 @@ export async function runConvexSmoke(
   const updatedDueRaw = `${marker} due updated`;
   let taskId: string | undefined;
   let reminderId: string | undefined;
-  let primaryError: unknown;
+  let primaryError: Error | undefined;
+  let result: ConvexSmokeResult | undefined;
 
   try {
     const firstRun = createProvider();
@@ -124,7 +151,10 @@ export async function runConvexSmoke(
     );
 
     const removedReminder = await verificationRun.removeReminder(reminder.id);
-    requireCondition(removedReminder?.id === reminder.id, "Reminder removal did not return the record.");
+    requireCondition(
+      removedReminder?.id === reminder.id,
+      "Reminder removal did not return the record.",
+    );
     reminderId = undefined;
 
     const removedTask = await verificationRun.removeTask(task.id);
@@ -143,7 +173,7 @@ export async function runConvexSmoke(
       "Smoke-test reminder remained after cleanup.",
     );
 
-    const result: ConvexSmokeResult = {
+    result = {
       marker,
       taskCreated: true,
       taskUpdated: true,
@@ -154,34 +184,22 @@ export async function runConvexSmoke(
       reminderRemoved: true,
       restartVisibilityVerified: true,
     };
-    write(
-      "Convex smoke passed: create, update, list, restart visibility, complete, remove, and cleanup verified.",
-    );
-    return result;
   } catch (error: unknown) {
-    primaryError = error;
-    throw error;
-  } finally {
-    const cleanupErrors: unknown[] = [];
-    if (taskId !== undefined || reminderId !== undefined) {
-      try {
-        const cleanup = createProvider();
-        if (reminderId !== undefined) {
-          await cleanup.removeReminder(reminderId).catch((error: unknown) => cleanupErrors.push(error));
-        }
-        if (taskId !== undefined) {
-          await cleanup.removeTask(taskId).catch((error: unknown) => cleanupErrors.push(error));
-        }
-      } catch (error: unknown) {
-        cleanupErrors.push(error);
-      }
-    }
-
-    if (cleanupErrors.length > 0) {
-      throw new AggregateError(
-        primaryError === undefined ? cleanupErrors : [primaryError, ...cleanupErrors],
-        "Convex smoke test cleanup failed.",
-      );
-    }
+    primaryError = normalizeError(error);
   }
+
+  const cleanupErrors = await cleanupSmokeRecords(createProvider, taskId, reminderId);
+  if (cleanupErrors.length > 0) {
+    throw new AggregateError(
+      primaryError === undefined ? cleanupErrors : [primaryError, ...cleanupErrors],
+      "Convex smoke test cleanup failed.",
+    );
+  }
+  if (primaryError !== undefined) throw primaryError;
+  requireCondition(result !== undefined, "Convex smoke test finished without a result.");
+
+  write(
+    "Convex smoke passed: create, update, list, restart visibility, complete, remove, and cleanup verified.",
+  );
+  return result;
 }

@@ -7,6 +7,11 @@
     "start": "tsx src/index.ts",
     "test": "node --import tsx --test tests/*.test.ts",
     "type-check": "tsc -p tsconfig.json",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format:check": "prettier . --check",
+    "format": "prettier . --write",
+    "check": "npm run type-check && npm run lint && npm run format:check && npm test",
     "smoke:convex": "tsx src/tools/runConvexSmoke.ts",
     "backup": "tsx src/tools/runBackup.ts"
   },
@@ -14,8 +19,14 @@
     "convex": "^1.42.1"
   },
   "devDependencies": {
+    "@convex-dev/eslint-plugin": "^2.0.0",
+    "@eslint/js": "^9.39.0",
     "@types/node": "^26.1.1",
+    "eslint": "^9.39.0",
+    "globals": "^17.4.0",
+    "prettier": "^3.9.5",
     "tsx": "^4.19.0",
-    "typescript": "^5.6.3"
+    "typescript": "^5.6.3",
+    "typescript-eslint": "^8.58.0"
   }
 }
