@@ -37,5 +37,5 @@ jobs:
         run: npm run lint
       - name: Check formatting
         run: npm run format:check
-      - name: Test interactive CLI and persistence
-        run: npm test
+      - name: Test interactive CLI and persistence with coverage
+        run: npm run test:coverage
