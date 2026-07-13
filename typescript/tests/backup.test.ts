@@ -149,10 +149,7 @@ describe("Jarvis backup archives", () => {
     assert.equal(restoredReminders[0].dueRaw, "Friday 9am");
     assert.equal(restoredReminders[0].dueAt, Date.parse("2026-07-16T23:00:00.000Z"));
     assert.equal(restoredReminders[0].dueTimezone, "Australia/Melbourne");
-    assert.equal(
-      (restoredState.lastTask as { id: string }).id,
-      result.taskIds.get(completed.id),
-    );
+    assert.equal((restoredState.lastTask as { id: string }).id, result.taskIds.get(completed.id));
     assert.equal(
       (restoredState.lastReminder as { id: string }).id,
       result.reminderIds.get(reminder.id),

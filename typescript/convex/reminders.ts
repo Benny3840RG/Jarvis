@@ -53,9 +53,7 @@ function existingDue(reminder: {
   const hasNormalized = reminder.dueAt !== undefined && reminder.dueTimezone !== undefined;
   return {
     ...(dueRaw === undefined ? {} : { dueRaw }),
-    ...(hasNormalized
-      ? { dueAt: reminder.dueAt, dueTimezone: reminder.dueTimezone }
-      : {}),
+    ...(hasNormalized ? { dueAt: reminder.dueAt, dueTimezone: reminder.dueTimezone } : {}),
   };
 }
 
@@ -128,7 +126,7 @@ export const update = mutation({
     const reminder = await ctx.db.get("reminders", id);
     if (!reminder || reminder.ownerId !== ownerId) return null;
 
-    const due = clearDue ? {} : suppliedDue ?? existingDue(reminder);
+    const due = clearDue ? {} : (suppliedDue ?? existingDue(reminder));
     await ctx.db.replace("reminders", id, {
       ownerId,
       title: title ?? reminder.title,

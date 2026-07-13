@@ -43,7 +43,10 @@ export const list = query({
   returns: v.array(taskValidator),
   handler: async (ctx, args) => {
     const ownerId = requireOwner(args.serviceToken);
-    return ctx.db.query("tasks").withIndex("by_owner", (q) => q.eq("ownerId", ownerId)).collect();
+    return ctx.db
+      .query("tasks")
+      .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+      .collect();
   },
 });
 

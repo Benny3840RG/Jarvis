@@ -13,10 +13,7 @@ function loadLocalEnvironment(): void {
 
 async function main(): Promise<void> {
   loadLocalEnvironment();
-  await runConvexSmoke(
-    () => new ConvexPersistence(),
-    process.env.CONVEX_DEPLOYMENT,
-  );
+  await runConvexSmoke(() => new ConvexPersistence(), process.env.CONVEX_DEPLOYMENT);
 }
 
 main().catch((error: unknown) => {

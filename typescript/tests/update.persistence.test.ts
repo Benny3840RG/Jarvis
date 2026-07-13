@@ -88,7 +88,10 @@ describe("JSON update contracts", () => {
 
   it("rejects no-op or empty updates and returns null for missing IDs", async () => {
     const provider = new JSONPersistence(path.join(tempDir, "state.json"));
-    await assert.rejects(() => provider.updateTask("missing", {}), /requires --title or --category/);
+    await assert.rejects(
+      () => provider.updateTask("missing", {}),
+      /requires --title or --category/,
+    );
     await assert.rejects(
       () => provider.updateTask("missing", { title: "   " }),
       /Task title cannot be empty/,

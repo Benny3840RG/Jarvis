@@ -22,7 +22,7 @@ function requireCondition(condition: unknown, message: string): asserts conditio
 }
 
 export function redactSecret(error: unknown, secret?: string): string {
-  const message = error instanceof Error ? error.stack ?? error.message : String(error);
+  const message = error instanceof Error ? (error.stack ?? error.message) : String(error);
   if (!secret) return message;
   return message.split(secret).join("[REDACTED]");
 }
@@ -124,7 +124,10 @@ export async function runConvexSmoke(
     );
 
     const removedReminder = await verificationRun.removeReminder(reminder.id);
-    requireCondition(removedReminder?.id === reminder.id, "Reminder removal did not return the record.");
+    requireCondition(
+      removedReminder?.id === reminder.id,
+      "Reminder removal did not return the record.",
+    );
     reminderId = undefined;
 
     const removedTask = await verificationRun.removeTask(task.id);
@@ -167,7 +170,9 @@ export async function runConvexSmoke(
       try {
         const cleanup = createProvider();
         if (reminderId !== undefined) {
-          await cleanup.removeReminder(reminderId).catch((error: unknown) => cleanupErrors.push(error));
+          await cleanup
+            .removeReminder(reminderId)
+            .catch((error: unknown) => cleanupErrors.push(error));
         }
         if (taskId !== undefined) {
           await cleanup.removeTask(taskId).catch((error: unknown) => cleanupErrors.push(error));
