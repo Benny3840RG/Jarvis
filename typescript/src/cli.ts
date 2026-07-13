@@ -169,7 +169,6 @@ export async function runCli(deps: RunCliDependencies = {}): Promise<void> {
         const businessTask = business.createTask(
           "Submit build update",
           "Share the current Jarvis progress",
-          "2026-07-11",
         );
         const homeTask = home.createTask(
           "Reset living room",
