@@ -14,4 +14,5 @@ export type { ReminderDue } from "../reminders/due.js";
 export type { ReminderUpdate, TaskUpdate } from "./updates.js";
 export { JSONPersistence } from "./jsonPersistence.js";
 export { ConvexPersistence } from "./convexPersistence.js";
-export { createPersistenceFromEnv } from "./providerSelection.js";
+export { createPersistenceFromEnv, resolvePersistenceProviderName } from "./providerSelection.js";
+export type { PersistenceProviderName } from "./providerSelection.js";
