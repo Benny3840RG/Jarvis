@@ -2,7 +2,7 @@ name: TypeScript checks
 
 on:
   push:
-    branches: [main, feat/convex-persistence]
+    branches: [main]
     paths:
       - "typescript/**"
       - ".github/workflows/typescript.yml"
@@ -16,7 +16,7 @@ permissions:
   contents: read
 
 jobs:
-  typecheck-and-test:
+  typecheck-lint-format-test:
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -33,5 +33,9 @@ jobs:
         run: npm ci
       - name: Type-check
         run: npm run type-check
+      - name: Lint TypeScript and Convex
+        run: npm run lint
+      - name: Check formatting
+        run: npm run format:check
       - name: Test interactive CLI and persistence
         run: npm test
