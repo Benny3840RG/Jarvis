@@ -1,7 +1,7 @@
-import { mutationGeneric, queryGeneric } from "convex/server";
 import { v } from "convex/values";
 
 import { requireOwner } from "./authHelpers.js";
+import { mutation, query } from "./_generated/server.js";
 
 const reminderValidator = v.object({
   _id: v.id("reminders"),
@@ -12,7 +12,7 @@ const reminderValidator = v.object({
   createdAt: v.number(),
 });
 
-export const create = mutationGeneric({
+export const create = mutation({
   args: { serviceToken: v.string(), title: v.string(), due: v.optional(v.string()) },
   returns: reminderValidator,
   handler: async (ctx, args) => {
@@ -29,7 +29,7 @@ export const create = mutationGeneric({
   },
 });
 
-export const list = queryGeneric({
+export const list = query({
   args: { serviceToken: v.string() },
   returns: v.array(reminderValidator),
   handler: async (ctx, args) => {
@@ -41,7 +41,7 @@ export const list = queryGeneric({
   },
 });
 
-export const remove = mutationGeneric({
+export const remove = mutation({
   args: { serviceToken: v.string(), id: v.string() },
   returns: v.union(reminderValidator, v.null()),
   handler: async (ctx, args) => {
