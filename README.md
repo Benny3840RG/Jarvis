@@ -41,14 +41,16 @@ Durable commands are deliberately explicit:
 ```text
 task add <title>
 task list
+task update <id> --title <title> [--category <category>]
 task complete <id>
 task remove <id>
 reminder add <title> --due <when>
 reminder list
+reminder update <id> [--title <title>] [--due <when> | --clear-due]
 reminder remove <id>
 ```
 
-Fuzzy phrases containing `task` or `remind` do not write data. Jarvis prints the supported command syntax instead.
+Update flags may be supplied in either order. At least one supported flag is required, duplicate or unknown flags are rejected, and `--due` cannot be combined with `--clear-due`. Fuzzy phrases containing `task` or `remind` do not write data. Jarvis prints the supported command syntax instead.
 
 ### Reminder due values
 
@@ -133,7 +135,7 @@ If the smoke test fails, keep `JARVIS_SERVICE_TOKEN_PREVIOUS` set until the loca
 
 ### Live Convex smoke test
 
-The smoke command refuses any deployment whose `CONVEX_DEPLOYMENT` does not start with `dev:`. It creates a uniquely named task and reminder, verifies the reminder's preserved due text through fresh provider instances, completes and removes the task, removes the reminder, and verifies cleanup. A `finally` block retries cleanup after failures, and surfaced errors redact the configured service token.
+The smoke command refuses any deployment whose `CONVEX_DEPLOYMENT` does not start with `dev:`. It creates, updates, lists, re-reads through fresh provider instances, completes, removes, and cleans up a uniquely named task and reminder. It verifies task title/category changes and reminder title/due changes before cleanup. A `finally` block retries cleanup after failures, and surfaced errors redact the configured service token.
 
 Run it only after syncing the current functions to the development deployment:
 
