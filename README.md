@@ -56,7 +56,7 @@ JSON is the default provider. Runtime data is stored in `typescript/data/jarvis-
 
 Removing the tracked runtime file does not remove its older copies from Git history. Scrub repository history separately if an earlier state file contained sensitive personal data.
 
-The JSON provider serialises operations inside one process. It does not provide cross-process file locking, so do not run two JSON-backed Jarvis CLI processes against the same file.
+The JSON provider serialises mutations across local processes with an adjacent `.lock` file. Each mutation acquires the lock, re-reads the latest complete document, writes by atomic replacement, and releases the lock. Reads re-read the file so an already-running process sees changes made by another process. A live lock times out with an actionable error, while a lock left by a process that has exited is reclaimed. Convex remains the preferred provider for access from multiple machines.
 
 ### Convex persistence and service authentication
 
@@ -77,7 +77,7 @@ npx convex env set JARVIS_SERVICE_TOKEN
 
 Enter the value interactively so it does not appear in shell history. The CLI loads `.env.local` on startup. `CONVEX_URL` is public routing information and is not treated as authentication.
 
-This service-token model is intentionally single-user. Replace it with a real OIDC user-authentication provider before exposing Jarvis as a multi-user application.
+This service-token model is intentionally single-user. Replace it with a real OIDC user-authentication provider before exposing Jarvis as a multi-user application. The accepted ownership and concurrency decision is documented in [`typescript/docs/architecture/ownership-and-concurrency.md`](typescript/docs/architecture/ownership-and-concurrency.md).
 
 After the deployment secret is configured, run `npx convex dev` to type-check, generate `convex/_generated`, and sync the functions to the development deployment. Do not use `npx convex deploy` until the production deployment is intentionally being configured.
 
