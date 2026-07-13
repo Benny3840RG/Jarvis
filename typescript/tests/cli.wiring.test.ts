@@ -122,8 +122,7 @@ class MockPersistence implements PersistenceProvider {
     }
     if (update.category !== undefined) {
       const category = update.category.trim();
-      if (category.length === 0)
-        throw new Error("Task category cannot be empty.");
+      if (category.length === 0) throw new Error("Task category cannot be empty.");
       task.category = category;
     }
     return { ...task };
@@ -160,9 +159,7 @@ class MockPersistence implements PersistenceProvider {
         ? {}
         : {
             dueRaw: due.raw,
-            ...(due.at === undefined
-              ? {}
-              : { dueAt: due.at, dueTimezone: due.timezone as string }),
+            ...(due.at === undefined ? {} : { dueAt: due.at, dueTimezone: due.timezone as string }),
           }),
       createdAt: this.reminders.length + 1,
     };
@@ -170,23 +167,17 @@ class MockPersistence implements PersistenceProvider {
     return { ...reminder };
   }
 
-  async updateReminder(
-    id: string,
-    update: ReminderUpdate,
-  ): Promise<Reminder | null> {
+  async updateReminder(id: string, update: ReminderUpdate): Promise<Reminder | null> {
     this.events.push("reminder-update");
     this.updateReminderCalled += 1;
     if (update.title === undefined && update.due === undefined) {
-      throw new Error(
-        "Reminder update requires --title, --due, or --clear-due.",
-      );
+      throw new Error("Reminder update requires --title, --due, or --clear-due.");
     }
     const reminder = this.reminders.find((entry) => entry.id === id);
     if (!reminder) return null;
     if (update.title !== undefined) {
       const title = update.title.trim();
-      if (title.length === 0)
-        throw new Error("Reminder title cannot be empty.");
+      if (title.length === 0) throw new Error("Reminder title cannot be empty.");
       reminder.title = title;
     }
     if (update.due === null) {
@@ -262,9 +253,7 @@ describe("interactive CLI persistence wiring", () => {
 
     assert.deepEqual(persistence.events, ["task-write", "state-save"]);
     assert.equal(persistence.tasks[0].title, "Call Claire");
-    assert(
-      logs.output.some((line) => line.includes("Task added: Call Claire")),
-    );
+    assert(logs.output.some((line) => line.includes("Task added: Call Claire")));
   });
 
   it("updates task and reminder fields using explicit flags", async () => {
@@ -309,16 +298,8 @@ describe("interactive CLI persistence wiring", () => {
     assert.equal(persistence.updateReminderCalled, 2);
     assert.equal(persistence.reminders[0].title, "Revised reminder");
     assert.equal(persistence.reminders[0].dueRaw, undefined);
-    assert(
-      logs.output.some((line) =>
-        line.includes("Task updated: Revised task [work]"),
-      ),
-    );
-    assert(
-      logs.output.some((line) =>
-        line.includes("Reminder updated: Revised reminder"),
-      ),
-    );
+    assert(logs.output.some((line) => line.includes("Task updated: Revised task [work]")));
+    assert(logs.output.some((line) => line.includes("Reminder updated: Revised reminder")));
     assert(logs.output.some((line) => line.includes("Revised task [work]")));
   });
 
@@ -361,15 +342,9 @@ describe("interactive CLI persistence wiring", () => {
     assert.equal(persistence.updateReminderCalled, 0);
     assert.equal(persistence.tasks[0].title, "Untouched");
     assert(logs.errors.some((line) => line.includes("Task update requires")));
-    assert(
-      logs.errors.some((line) => line.includes("Duplicate update option")),
-    );
+    assert(logs.errors.some((line) => line.includes("Duplicate update option")));
     assert(logs.errors.some((line) => line.includes("Unknown update option")));
-    assert(
-      logs.errors.some((line) =>
-        line.includes("cannot use --due and --clear-due"),
-      ),
-    );
+    assert(logs.errors.some((line) => line.includes("cannot use --due and --clear-due")));
   });
 
   it("removes a task durably and refreshes the displayed list", async () => {
@@ -388,20 +363,14 @@ describe("interactive CLI persistence wiring", () => {
 
     await runCli({
       persistence,
-      readline: new ScriptedReadline([
-        "task remove task-1",
-        "task list",
-        "exit",
-      ]),
+      readline: new ScriptedReadline(["task remove task-1", "task list", "exit"]),
       stdout: logs.stdout,
       stderr: logs.stderr,
     });
 
     assert.equal(persistence.removeTaskCalled, 1);
     assert.deepEqual(persistence.tasks, []);
-    assert(
-      logs.output.some((line) => line.includes("Task removed: Temporary task")),
-    );
+    assert(logs.output.some((line) => line.includes("Task removed: Temporary task")));
     assert(logs.output.some((line) => line.includes("No tasks saved")));
   });
 
@@ -471,9 +440,7 @@ describe("interactive CLI persistence wiring", () => {
 
     assert.equal(persistence.listTasksCalled, 3);
     assert.equal(persistence.listRemindersCalled, 2);
-    assert(
-      logs.output.some((line) => line.includes("Added by another process")),
-    );
+    assert(logs.output.some((line) => line.includes("Added by another process")));
     assert(logs.output.some((line) => line.includes("Added before summary")));
     assert(logs.output.some((line) => line.includes("External reminder")));
   });
@@ -548,16 +515,9 @@ describe("interactive CLI persistence wiring", () => {
     assert.equal(persistence.updateReminderCalled, 1);
     assert.equal(persistence.removeReminderCalled, 1);
     assert.equal(persistence.addTaskCalled, 1);
-    assert(
-      logs.output.filter((line) => line.includes("Task not found")).length >= 3,
-    );
-    assert(
-      logs.output.filter((line) => line.includes("Reminder not found"))
-        .length >= 2,
-    );
-    assert(
-      logs.output.some((line) => line.includes("Task added: Still running")),
-    );
+    assert(logs.output.filter((line) => line.includes("Task not found")).length >= 3);
+    assert(logs.output.filter((line) => line.includes("Reminder not found")).length >= 2);
+    assert(logs.output.some((line) => line.includes("Task added: Still running")));
   });
 
   it("warns on runtime-state save failure without killing the session", async () => {
@@ -566,19 +526,13 @@ describe("interactive CLI persistence wiring", () => {
     const logs = capture();
     await runCli({
       persistence,
-      readline: new ScriptedReadline([
-        "task add Durable task",
-        "task list",
-        "exit",
-      ]),
+      readline: new ScriptedReadline(["task add Durable task", "task list", "exit"]),
       stdout: logs.stdout,
       stderr: logs.stderr,
     });
 
     assert.equal(persistence.tasks.length, 1);
-    assert(
-      logs.errors.some((line) => line.includes("Failed to save runtime state")),
-    );
+    assert(logs.errors.some((line) => line.includes("Failed to save runtime state")));
     assert(logs.output.some((line) => line.includes("Durable task")));
   });
 
