@@ -12,3 +12,6 @@ typescript/data/.jarvis-state.json.tmp-*
 
 # TypeScript dependencies
 /typescript/node_modules/
+
+# Local Jarvis backups contain user data
+/typescript/backups/
