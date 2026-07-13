@@ -81,6 +81,43 @@ This service-token model is intentionally single-user. Replace it with a real OI
 
 After the deployment secret is configured, run `npx convex dev` to type-check, generate `convex/_generated`, and sync the functions to the development deployment. Do not use `npx convex deploy` until the production deployment is intentionally being configured.
 
+### Service-token rotation
+
+The deployment accepts an optional `JARVIS_SERVICE_TOKEN_PREVIOUS` during a controlled overlap window. This allows the server and local CLI to switch tokens without downtime. The previous token is rejected again as soon as the overlap variable is removed.
+
+First sync the overlap-capable auth code while the existing token is still current:
+
+```bash
+cd typescript
+npx convex dev --once --tail-logs disable
+```
+
+Then rotate without printing either token:
+
+```bash
+set -a
+. ./.env.local
+set +a
+
+OLD_TOKEN="$JARVIS_SERVICE_TOKEN"
+NEW_TOKEN="$(node -e 'console.log(require("node:crypto").randomBytes(32).toString("hex"))')"
+
+printf '%s\n' "$OLD_TOKEN" | npx convex env set JARVIS_SERVICE_TOKEN_PREVIOUS
+printf '%s\n' "$NEW_TOKEN" | npx convex env set JARVIS_SERVICE_TOKEN
+
+sed -i '/^JARVIS_SERVICE_TOKEN=/d' .env.local
+printf 'JARVIS_SERVICE_TOKEN=%s\n' "$NEW_TOKEN" >> .env.local
+chmod 600 .env.local
+
+unset JARVIS_SERVICE_TOKEN
+npm run smoke:convex
+npx convex env remove JARVIS_SERVICE_TOKEN_PREVIOUS
+
+unset OLD_TOKEN NEW_TOKEN
+```
+
+If the smoke test fails, keep `JARVIS_SERVICE_TOKEN_PREVIOUS` set until the local token is corrected. Removing it is the revocation step for the old credential. Never paste either token into Git, logs, issues, or chat.
+
 ### Live Convex smoke test
 
 The smoke command refuses any deployment whose `CONVEX_DEPLOYMENT` does not start with `dev:`. It creates a uniquely named task and reminder, verifies them through fresh provider instances, completes and removes the task, removes the reminder, and verifies cleanup. A `finally` block retries cleanup after failures, and surfaced errors redact the configured service token.
