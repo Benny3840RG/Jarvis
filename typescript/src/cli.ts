@@ -49,6 +49,12 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+export function upsertById<T extends { id: string }>(records: readonly T[], record: T): T[] {
+  const index = records.findIndex((entry) => entry.id === record.id);
+  if (index < 0) return [...records, record];
+  return records.map((entry, entryIndex) => (entryIndex === index ? record : entry));
+}
+
 function printTaskList(write: ConsoleWriter, tasks: ReturnType<TaskService["list"]>): void {
   if (tasks.length === 0) {
     write("Jarvis: No tasks saved.");
@@ -254,9 +260,7 @@ export async function runCli(deps: RunCliDependencies = {}): Promise<void> {
             write("Jarvis: Task not found.");
             continue;
           }
-          taskService.replace(
-            taskService.list().map((entry) => (entry.id === task.id ? task : entry)),
-          );
+          taskService.replace(upsertById(taskService.list(), task));
           await saveRuntimeState({
             lastInput: inputText,
             lastIntent: "task-update",
@@ -272,9 +276,7 @@ export async function runCli(deps: RunCliDependencies = {}): Promise<void> {
             write("Jarvis: Task not found.");
             continue;
           }
-          taskService.replace(
-            taskService.list().map((entry) => (entry.id === task.id ? task : entry)),
-          );
+          taskService.replace(upsertById(taskService.list(), task));
           await saveRuntimeState({
             lastInput: inputText,
             lastIntent: "task-complete",
@@ -327,9 +329,7 @@ export async function runCli(deps: RunCliDependencies = {}): Promise<void> {
             write("Jarvis: Reminder not found.");
             continue;
           }
-          reminderService.replace(
-            reminderService.list().map((entry) => (entry.id === reminder.id ? reminder : entry)),
-          );
+          reminderService.replace(upsertById(reminderService.list(), reminder));
           await saveRuntimeState({
             lastInput: inputText,
             lastIntent: "reminder-update",
