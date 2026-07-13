@@ -266,7 +266,11 @@ describe("failure behaviour matrix", () => {
 
     await runCli({
       persistence,
-      readline: new ScriptedReadline(["reminder add Blocked --due Friday 9am", "reminder list", "exit"]),
+      readline: new ScriptedReadline([
+        "reminder add Blocked --due Friday 9am",
+        "reminder list",
+        "exit",
+      ]),
       stdout: logs.stdout,
       stderr: logs.stderr,
     });
