@@ -3,10 +3,7 @@ import type { FastifyRequest } from "fastify";
 
 import { OpenAIRequestError } from "../integrations/openai/totalityReasoner.js";
 import type { TotalityResponse } from "../runtime/totalityContracts.js";
-import type {
-  TotalityPipeline,
-  TotalityReasoningResult,
-} from "../totality/totalityPipeline.js";
+import type { TotalityPipeline, TotalityReasoningResult } from "../totality/totalityPipeline.js";
 import { JarvisProblem } from "./problemDetails.js";
 import { requestIdFor } from "./requestId.js";
 import { HTTP_TOTALITY_PIPELINE } from "./tokens.js";
