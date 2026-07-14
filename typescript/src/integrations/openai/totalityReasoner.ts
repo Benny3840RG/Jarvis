@@ -77,6 +77,8 @@ type OpenAIResponsePayload = {
   error?: unknown;
 };
 
+type DraftArrayField = Exclude<keyof OpenAITotalityDraft, "answer">;
+
 function cleanRequiredSecret(value: string | undefined, field: string): string {
   if (value === undefined || value.trim().length === 0) {
     throw new Error(`${field} is required.`);
@@ -121,32 +123,31 @@ function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === "string");
 }
 
+function requireStringArray(
+  value: Record<string, unknown>,
+  field: DraftArrayField,
+): string[] {
+  const candidate = value[field];
+  if (!isStringArray(candidate)) {
+    throw new Error(`OpenAI Totality draft field ${field} must be an array of strings.`);
+  }
+  return candidate;
+}
+
 function parseDraft(value: unknown): OpenAITotalityDraft {
   if (!isRecord(value)) throw new Error("OpenAI returned a non-object Totality draft.");
-  const keys: Array<keyof OpenAITotalityDraft> = [
-    "assumptions",
-    "unknowns",
-    "risks",
-    "controls",
-    "unsupportedClaims",
-    "contradictions",
-  ];
   if (typeof value.answer !== "string") {
     throw new Error("OpenAI Totality draft is missing answer text.");
   }
-  for (const key of keys) {
-    if (!isStringArray(value[key])) {
-      throw new Error(`OpenAI Totality draft field ${key} must be an array of strings.`);
-    }
-  }
+
   return {
     answer: value.answer,
-    assumptions: value.assumptions,
-    unknowns: value.unknowns,
-    risks: value.risks,
-    controls: value.controls,
-    unsupportedClaims: value.unsupportedClaims,
-    contradictions: value.contradictions,
+    assumptions: requireStringArray(value, "assumptions"),
+    unknowns: requireStringArray(value, "unknowns"),
+    risks: requireStringArray(value, "risks"),
+    controls: requireStringArray(value, "controls"),
+    unsupportedClaims: requireStringArray(value, "unsupportedClaims"),
+    contradictions: requireStringArray(value, "contradictions"),
   };
 }
 
@@ -220,8 +221,13 @@ export class OpenAITotalityReasoner {
 
       const payload = (await response.json()) as OpenAIResponsePayload;
       if (!response.ok) {
-        const message = safeErrorMessage(payload) ?? `OpenAI request failed with status ${response.status}.`;
-        throw new OpenAIRequestError(message, response.status, response.status === 429 || response.status >= 500);
+        const message =
+          safeErrorMessage(payload) ?? `OpenAI request failed with status ${response.status}.`;
+        throw new OpenAIRequestError(
+          message,
+          response.status,
+          response.status === 429 || response.status >= 500,
+        );
       }
 
       const outputText = extractOutputText(payload);
