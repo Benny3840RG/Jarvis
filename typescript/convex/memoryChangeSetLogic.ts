@@ -6,6 +6,25 @@ export type MemoryRecord = Infer<typeof memoryRecordValidator>;
 
 export const MAX_MEMORY_CHANGE_RECORDS = 20;
 export const MAX_PROJECT_MEASUREMENTS = 500;
+export const MAX_DECISION_ALTERNATIVES = 50;
+
+type MemoryProposal = {
+  projectKey: string;
+  baseRevision: number;
+  records: MemoryRecord[];
+  rationale: string;
+  proposedBy: "user" | "agent" | "tool";
+};
+
+export function sameMemoryProposal(existing: MemoryProposal, input: MemoryProposal): boolean {
+  return (
+    existing.projectKey === input.projectKey &&
+    existing.baseRevision === input.baseRevision &&
+    existing.rationale === input.rationale &&
+    existing.proposedBy === input.proposedBy &&
+    JSON.stringify(existing.records) === JSON.stringify(input.records)
+  );
+}
 
 export function cleanRequiredText(value: string, field: string): string {
   const cleaned = value.trim();
@@ -37,8 +56,8 @@ export function normalizeMemoryRecord(record: MemoryRecord): MemoryRecord {
 
   switch (record.kind) {
     case "fact": {
-      if (record.confidence < 0 || record.confidence > 1) {
-        throw new Error(`Fact ${recordId} confidence must be between 0 and 1.`);
+      if (!Number.isFinite(record.confidence) || record.confidence < 0 || record.confidence > 1) {
+        throw new Error(`Fact ${recordId} confidence must be finite and between 0 and 1.`);
       }
       if (record.source === "inference" && record.confidence === 1) {
         throw new Error(`Inferred fact ${recordId} cannot be authoritative.`);
@@ -56,7 +75,10 @@ export function normalizeMemoryRecord(record: MemoryRecord): MemoryRecord {
         recordId,
         statement: cleanRequiredText(record.statement, `Assumption ${recordId} statement`),
       };
-    case "measurement":
+    case "measurement": {
+      if (!Number.isFinite(record.value)) {
+        throw new Error(`Measurement ${recordId} value must be finite.`);
+      }
       return {
         ...record,
         recordId,
@@ -69,15 +91,23 @@ export function normalizeMemoryRecord(record: MemoryRecord): MemoryRecord {
               tolerance: cleanRequiredText(record.tolerance, `Measurement ${recordId} tolerance`),
             }),
       };
-    case "decision":
+    }
+    case "decision": {
+      const alternativesRejected = cleanStringArray(record.alternativesRejected);
+      if (alternativesRejected.length > MAX_DECISION_ALTERNATIVES) {
+        throw new Error(
+          `Decision ${recordId} cannot contain more than ${MAX_DECISION_ALTERNATIVES} rejected alternatives.`,
+        );
+      }
       return {
         ...record,
         recordId,
         decision: cleanRequiredText(record.decision, `Decision ${recordId} decision`),
         rationale: cleanRequiredText(record.rationale, `Decision ${recordId} rationale`),
-        alternativesRejected: cleanStringArray(record.alternativesRejected),
+        alternativesRejected,
         timestamp: requireCanonicalTimestamp(record.timestamp, `Decision ${recordId} timestamp`),
       };
+    }
   }
 }
 
