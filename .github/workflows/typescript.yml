@@ -31,6 +31,15 @@ jobs:
           cache-dependency-path: typescript/package-lock.json
       - name: Install dependencies
         run: npm ci
+      - name: Package temporary development workspace
+        run: tar -czf "$RUNNER_TEMP/jarvis-typescript-workspace.tgz" -C .. typescript
+      - name: Upload temporary development workspace
+        uses: actions/upload-artifact@v4
+        with:
+          name: jarvis-typescript-workspace
+          path: ${{ runner.temp }}/jarvis-typescript-workspace.tgz
+          retention-days: 1
+          if-no-files-found: error
       - name: Type-check
         run: npm run type-check
       - name: Lint TypeScript and Convex
