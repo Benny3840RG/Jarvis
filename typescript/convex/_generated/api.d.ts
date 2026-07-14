@@ -13,6 +13,7 @@ import type * as auditEvents from "../auditEvents.js";
 import type * as authHelpers from "../authHelpers.js";
 import type * as projectRecords from "../projectRecords.js";
 import type * as projects from "../projects.js";
+import type * as reasoningJournal from "../reasoningJournal.js";
 import type * as reminders from "../reminders.js";
 import type * as tasks from "../tasks.js";
 import type * as totalityValidators from "../totalityValidators.js";
@@ -30,6 +31,7 @@ declare const fullApi: ApiFromModules<{
   authHelpers: typeof authHelpers;
   projectRecords: typeof projectRecords;
   projects: typeof projects;
+  reasoningJournal: typeof reasoningJournal;
   reminders: typeof reminders;
   tasks: typeof tasks;
   totalityValidators: typeof totalityValidators;

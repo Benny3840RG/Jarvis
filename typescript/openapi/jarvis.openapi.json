@@ -4,8 +4,8 @@
   "info": {
     "title": "Jarvis Operator API",
     "summary": "A safety-gated API for the Jarvis Z-State runtime and durable operator data.",
-    "description": "Jarvis accepts structured operator requests, routes work through its runtime and safety envelope, and persists tasks and reminders through the configured JSON or Convex provider. This contract is intentionally single-user and private. The future ChatGPT App MCP server must keep the Jarvis service token server-side and expose only operations marked with x-mcp-tool.exposed=true.",
-    "version": "0.2.0",
+    "description": "Jarvis accepts structured operator requests, routes work through its runtime and safety envelope, persists tasks and reminders through the configured JSON or Convex provider, and can run proposal-only Totality reasoning whose validation and audit evidence are committed atomically to Convex. This contract is intentionally single-user and private. The future ChatGPT App MCP server must keep Jarvis and OpenAI service credentials server-side and expose only operations marked with x-mcp-tool.exposed=true.",
+    "version": "0.3.0",
     "license": {
       "name": "Proprietary",
       "identifier": "LicenseRef-Proprietary"
@@ -92,7 +92,8 @@
       "executeConversation",
       "exportBackup",
       "verifyBackup",
-      "restoreBackup"
+      "restoreBackup",
+      "reasonWithTotality"
     ]
   },
   "paths": {
@@ -1092,6 +1093,72 @@
           }
         }
       }
+    },
+    "/api/v1/totality/reason": {
+      "post": {
+        "operationId": "reasonWithTotality",
+        "summary": "Run proposal-only Totality reasoning with validation and audit journalling",
+        "description": "Runs deterministic routing and authority checks, requests strict structured reasoning from OpenAI, validates the draft locally, and atomically commits the validation report and audit event to Convex. It never applies project-memory updates or executes tools.",
+        "tags": ["Runtime"],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "openWorldHint": true,
+            "idempotentHint": false
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TotalityReasonRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The reasoning draft was validated and journalled.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TotalityReasonResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "422": {
+            "description": "The request or authority policy is invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1986,6 +2053,293 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 500
+          }
+        }
+      },
+      "TotalityActionPolicy": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["maximumToolAuthority", "requireApprovalBeforeExecution"],
+        "properties": {
+          "maximumToolAuthority": {
+            "type": "string",
+            "enum": ["T0", "T1", "T2", "T3"]
+          },
+          "requireApprovalBeforeExecution": {
+            "type": "boolean"
+          }
+        }
+      },
+      "TotalityReasonRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "projectId",
+          "sessionId",
+          "taskType",
+          "domainContext",
+          "goal",
+          "constraints",
+          "inputs",
+          "outputStyle",
+          "actionPolicy"
+        ],
+        "properties": {
+          "projectId": {
+            "type": ["string", "null"],
+            "minLength": 1
+          },
+          "sessionId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "taskType": {
+            "type": "string",
+            "enum": [
+              "engineering_analysis",
+              "fabrication_planning",
+              "automation_design",
+              "robotics_vehicle_logic",
+              "safety_review",
+              "documentation_manual",
+              "branding_communication",
+              "project_management",
+              "comparison_tradeoff",
+              "optimization",
+              "simulation",
+              "prediction",
+              "integration",
+              "general_analysis"
+            ]
+          },
+          "domainContext": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "goal": {
+            "type": "string",
+            "minLength": 1
+          },
+          "constraints": {
+            "type": "array",
+            "items": {}
+          },
+          "inputs": {
+            "type": "array",
+            "items": {}
+          },
+          "outputStyle": {
+            "type": "string",
+            "enum": ["for_benny_engineering", "for_benny_workshop", "for_client", "default"]
+          },
+          "actionPolicy": {
+            "$ref": "#/components/schemas/TotalityActionPolicy"
+          }
+        }
+      },
+      "TotalityValidationCheck": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "status"],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["pass", "warning", "fail"]
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      },
+      "TotalityValidationReport": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["passed", "checks", "warnings", "blockingFailures"],
+        "properties": {
+          "passed": {
+            "type": "boolean"
+          },
+          "checks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TotalityValidationCheck"
+            }
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "blockingFailures": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "TotalityPermissionEnvelope": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["reasoningLevel", "riskLevel", "toolAuthority", "dataAccess", "actionState"],
+        "properties": {
+          "reasoningLevel": {
+            "type": "string",
+            "enum": ["R0", "R1", "R2", "R3"]
+          },
+          "riskLevel": {
+            "type": "string",
+            "enum": ["low", "moderate", "high", "critical"]
+          },
+          "toolAuthority": {
+            "type": "string",
+            "enum": ["T0", "T1", "T2", "T3"]
+          },
+          "dataAccess": {
+            "type": "string",
+            "enum": ["D0", "D1", "D2", "D3"]
+          },
+          "actionState": {
+            "type": "string",
+            "enum": ["read", "propose", "approve", "execute"]
+          }
+        }
+      },
+      "TotalityRoutingDecision": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["primaryMode", "supportingModes", "permission", "confidence", "reasonCodes"],
+        "properties": {
+          "primaryMode": {
+            "type": "string"
+          },
+          "supportingModes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "permission": {
+            "$ref": "#/components/schemas/TotalityPermissionEnvelope"
+          },
+          "confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "reasonCodes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "TotalityError": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["code", "message", "retryable"],
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "retryable": {
+            "type": "boolean"
+          }
+        }
+      },
+      "TotalityReasonResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "requestId",
+          "status",
+          "routing",
+          "result",
+          "assumptions",
+          "unknowns",
+          "risks",
+          "validation",
+          "memoryUpdates",
+          "toolActions",
+          "errors"
+        ],
+        "properties": {
+          "requestId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["completed", "partial", "blocked", "failed"]
+          },
+          "routing": {
+            "$ref": "#/components/schemas/TotalityRoutingDecision"
+          },
+          "result": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["answer", "responseId"],
+                "properties": {
+                  "answer": {
+                    "type": "string"
+                  },
+                  "responseId": {
+                    "type": ["string", "null"]
+                  }
+                }
+              }
+            ]
+          },
+          "assumptions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "unknowns": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "risks": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "validation": {
+            "$ref": "#/components/schemas/TotalityValidationReport"
+          },
+          "memoryUpdates": {
+            "type": "array",
+            "maxItems": 0,
+            "items": {}
+          },
+          "toolActions": {
+            "type": "array",
+            "maxItems": 0,
+            "items": {}
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TotalityError"
+            }
           }
         }
       }
