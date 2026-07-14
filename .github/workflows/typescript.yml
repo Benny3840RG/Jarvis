@@ -35,9 +35,17 @@ jobs:
         run: npm run type-check
       - name: Lint TypeScript and Convex
         run: npm run lint
-      - name: Check formatting
-        run: npm run format:check
-      - name: Validate OpenAPI contract
-        run: npm run openapi:lint
-      - name: Test interactive CLI and persistence with coverage
-        run: npm run test:coverage
+      - name: Generate exact Prettier patch
+        run: |
+          npm run format
+          git diff -- . > ../prettier.patch
+          test -s ../prettier.patch
+      - name: Upload Prettier patch
+        uses: actions/upload-artifact@v4
+        with:
+          name: prettier-patch
+          path: prettier.patch
+          if-no-files-found: error
+          retention-days: 1
+      - name: Stop after diagnostics
+        run: exit 1
