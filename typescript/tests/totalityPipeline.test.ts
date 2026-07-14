@@ -26,7 +26,9 @@ function makeRequest(): TotalityRequest {
   };
 }
 
-function makeReasoner(overrides: Partial<Awaited<ReturnType<TotalityReasoner["reason"]>>["draft"]> = {}): TotalityReasoner {
+function makeReasoner(
+  overrides: Partial<Awaited<ReturnType<TotalityReasoner["reason"]>>["draft"]> = {},
+): TotalityReasoner {
   return {
     async reason() {
       return {
@@ -47,25 +49,22 @@ function makeReasoner(overrides: Partial<Awaited<ReturnType<TotalityReasoner["re
 }
 
 function makeJournal(): TotalityJournal & {
-  validations: unknown[];
-  audits: Array<{ eventType: string }>;
+  outcomes: Array<{ eventType: string; validationPassed: boolean }>;
 } {
-  const validations: unknown[] = [];
-  const audits: Array<{ eventType: string }> = [];
+  const outcomes: Array<{ eventType: string; validationPassed: boolean }> = [];
   return {
-    validations,
-    audits,
-    async recordValidation(input) {
-      validations.push(input);
-    },
-    async appendAudit(input) {
-      audits.push({ eventType: input.eventType });
+    outcomes,
+    async commitOutcome(input) {
+      outcomes.push({
+        eventType: input.eventType,
+        validationPassed: input.report.passed,
+      });
     },
   };
 }
 
 describe("TotalityPipeline", () => {
-  it("returns a completed proposal only after validation and journalling", async () => {
+  it("returns a completed proposal only after atomic journalling", async () => {
     const journal = makeJournal();
     const pipeline = new TotalityPipeline(makeReasoner(), journal);
 
@@ -75,11 +74,12 @@ describe("TotalityPipeline", () => {
     assert.match(response.result?.answer ?? "", /gusset/);
     assert.deepEqual(response.memoryUpdates, []);
     assert.deepEqual(response.toolActions, []);
-    assert.equal(journal.validations.length, 1);
-    assert.deepEqual(journal.audits, [{ eventType: "totality.reasoning.completed" }]);
+    assert.deepEqual(journal.outcomes, [
+      { eventType: "totality.reasoning.completed", validationPassed: true },
+    ]);
   });
 
-  it("blocks the answer but still records validation and audit evidence", async () => {
+  it("blocks the answer but atomically records validation and audit evidence", async () => {
     const journal = makeJournal();
     const pipeline = new TotalityPipeline(
       makeReasoner({ unsupportedClaims: ["The bracket is certified for 10 kN."] }),
@@ -92,16 +92,15 @@ describe("TotalityPipeline", () => {
     assert.equal(response.result, null);
     assert.equal(response.validation.passed, false);
     assert.ok(response.errors.some((error) => error.code === "VALIDATION_BLOCKED"));
-    assert.deepEqual(journal.audits, [{ eventType: "totality.reasoning.blocked" }]);
+    assert.deepEqual(journal.outcomes, [
+      { eventType: "totality.reasoning.blocked", validationPassed: false },
+    ]);
   });
 
-  it("fails closed when validation evidence cannot be persisted", async () => {
+  it("fails closed when the atomic journal commit fails", async () => {
     const journal: TotalityJournal = {
-      async recordValidation() {
+      async commitOutcome() {
         throw new Error("Convex unavailable");
-      },
-      async appendAudit() {
-        throw new Error("must not run");
       },
     };
     const pipeline = new TotalityPipeline(makeReasoner(), journal);
