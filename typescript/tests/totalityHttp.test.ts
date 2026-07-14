@@ -27,7 +27,7 @@ const CONFIG: HttpAppConfig = {
   deploymentVersion: null,
   timezone: "Australia/Melbourne",
   currentToken: "current-secret",
-  previousToken: null,
+  previousToken: undefined,
 };
 
 const openApps: NestFastifyApplication[] = [];
