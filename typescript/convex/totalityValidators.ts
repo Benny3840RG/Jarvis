@@ -34,6 +34,18 @@ export const projectValidator = v.object({
 
 const impactValidator = v.union(v.literal("low"), v.literal("medium"), v.literal("high"));
 
+export const recordKindValidator = v.union(
+  v.literal("component"),
+  v.literal("fact"),
+  v.literal("assumption"),
+  v.literal("constraint"),
+  v.literal("measurement"),
+  v.literal("decision"),
+  v.literal("risk"),
+  v.literal("task"),
+  v.literal("event"),
+);
+
 const componentRecordValidator = v.object({
   kind: v.literal("component"),
   recordId: v.string(),
@@ -155,7 +167,7 @@ export const projectRecordDocumentValidator = v.object({
   _creationTime: v.number(),
   ownerId: v.string(),
   projectKey: v.string(),
-  kind: v.string(),
+  kind: recordKindValidator,
   recordId: v.string(),
   record: projectRecordValidator,
   updatedAt: v.number(),
