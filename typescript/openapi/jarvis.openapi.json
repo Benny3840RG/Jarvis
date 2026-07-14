@@ -4,8 +4,8 @@
   "info": {
     "title": "Jarvis Operator API",
     "summary": "A safety-gated API for the Jarvis Z-State runtime and durable operator data.",
-    "description": "Jarvis accepts structured operator requests, routes work through its runtime and safety envelope, persists tasks and reminders through the configured JSON or Convex provider, and can run proposal-only Totality reasoning whose validation and audit evidence are committed atomically to Convex. This contract is intentionally single-user and private. The future ChatGPT App MCP server must keep Jarvis and OpenAI service credentials server-side and expose only operations marked with x-mcp-tool.exposed=true.",
-    "version": "0.3.0",
+    "description": "Jarvis accepts structured operator requests, routes work through its runtime and safety envelope, persists tasks and reminders through the configured JSON or Convex provider, can run proposal-only Totality reasoning, and now stages revision-checked project-memory change sets for explicit approval and transactional Convex apply. This contract is intentionally single-user and private. The future ChatGPT App MCP server must keep Jarvis and OpenAI service credentials server-side and expose only operations marked with x-mcp-tool.exposed=true.",
+    "version": "0.4.0",
     "license": {
       "name": "Proprietary",
       "identifier": "LicenseRef-Proprietary"
@@ -46,6 +46,10 @@
     {
       "name": "Backups",
       "description": "Provider-neutral export, verification, and empty-target restore operations."
+    },
+    {
+      "name": "Memory",
+      "description": "Staged, revision-checked project-memory approval and apply operations."
     }
   ],
   "x-jarvis-architecture": {
@@ -93,7 +97,13 @@
       "exportBackup",
       "verifyBackup",
       "restoreBackup",
-      "reasonWithTotality"
+      "reasonWithTotality",
+      "stageMemoryChangeSet",
+      "listMemoryChangeSets",
+      "getMemoryChangeSet",
+      "approveMemoryChangeSet",
+      "rejectMemoryChangeSet",
+      "applyMemoryChangeSet"
     ]
   },
   "paths": {
@@ -1150,6 +1160,486 @@
           },
           "429": {
             "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{projectId}/memory-change-sets": {
+      "get": {
+        "operationId": "listMemoryChangeSets",
+        "summary": "List staged project-memory change sets",
+        "description": "Lists bounded, owner-scoped memory change sets, optionally filtered by state.",
+        "tags": ["Memory"],
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["proposed", "approved", "rejected", "applied"]
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 25
+            }
+          }
+        ],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Current project-memory change sets.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryChangeSetList"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      },
+      "post": {
+        "operationId": "stageMemoryChangeSet",
+        "summary": "Stage typed project-memory changes for explicit approval",
+        "description": "Stages one idempotent change set against the current project revision without writing canonical memory.",
+        "tags": ["Memory"],
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          }
+        ],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StageMemoryChangeSetRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Memory change set staged.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryChangeSet"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{projectId}/memory-change-sets/{changeSetId}": {
+      "get": {
+        "operationId": "getMemoryChangeSet",
+        "summary": "Inspect one project-memory change set",
+        "description": "Returns one staged memory change set without modifying its state.",
+        "tags": ["Memory"],
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "changeSetId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          }
+        ],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Memory change set.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryChangeSet"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{projectId}/memory-change-sets/{changeSetId}/approve": {
+      "post": {
+        "operationId": "approveMemoryChangeSet",
+        "summary": "Approve a revision-matched project-memory change set",
+        "description": "Transitions the memory change set to approved without writing canonical memory.",
+        "tags": ["Memory"],
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "changeSetId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          }
+        ],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExpectedRevisionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Memory change set approve result.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryChangeSet"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{projectId}/memory-change-sets/{changeSetId}/reject": {
+      "post": {
+        "operationId": "rejectMemoryChangeSet",
+        "summary": "Reject a staged project-memory change set",
+        "description": "Transitions the memory change set to rejectd without writing canonical memory.",
+        "tags": ["Memory"],
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "changeSetId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          }
+        ],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RejectMemoryChangeSetRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Memory change set reject result.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryChangeSet"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{projectId}/memory-change-sets/{changeSetId}/apply": {
+      "post": {
+        "operationId": "applyMemoryChangeSet",
+        "summary": "Transactionally apply an approved project-memory change set",
+        "description": "Applies all approved records, increments the project revision, and appends audit evidence in one Convex transaction.",
+        "tags": ["Memory"],
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "changeSetId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          }
+        ],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": true,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExpectedRevisionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Memory change set apply result.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplyMemoryChangeSetResult"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
@@ -2340,6 +2830,358 @@
             "items": {
               "$ref": "#/components/schemas/TotalityError"
             }
+          }
+        }
+      },
+      "MemoryFact": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "recordId", "statement", "source", "confidence", "recordedAt"],
+        "properties": {
+          "kind": {
+            "const": "fact"
+          },
+          "recordId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "statement": {
+            "type": "string",
+            "minLength": 1
+          },
+          "source": {
+            "type": "string",
+            "enum": ["user", "file", "tool", "measurement", "inference"]
+          },
+          "confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "recordedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "MemoryAssumption": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "recordId", "statement", "status", "impact"],
+        "properties": {
+          "kind": {
+            "const": "assumption"
+          },
+          "recordId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "statement": {
+            "type": "string",
+            "minLength": 1
+          },
+          "status": {
+            "type": "string",
+            "enum": ["unverified", "verified", "rejected"]
+          },
+          "impact": {
+            "type": "string",
+            "enum": ["low", "medium", "high"]
+          }
+        }
+      },
+      "MemoryMeasurement": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "recordId", "name", "value", "unit", "source"],
+        "properties": {
+          "kind": {
+            "const": "measurement"
+          },
+          "recordId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "value": {
+            "type": "number"
+          },
+          "unit": {
+            "type": "string",
+            "minLength": 1
+          },
+          "tolerance": {
+            "type": "string",
+            "minLength": 1
+          },
+          "source": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "MemoryDecision": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "kind",
+          "recordId",
+          "decision",
+          "rationale",
+          "alternativesRejected",
+          "timestamp"
+        ],
+        "properties": {
+          "kind": {
+            "const": "decision"
+          },
+          "recordId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "decision": {
+            "type": "string",
+            "minLength": 1
+          },
+          "rationale": {
+            "type": "string",
+            "minLength": 1
+          },
+          "alternativesRejected": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 50
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "MemoryRecord": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/MemoryFact"
+          },
+          {
+            "$ref": "#/components/schemas/MemoryAssumption"
+          },
+          {
+            "$ref": "#/components/schemas/MemoryMeasurement"
+          },
+          {
+            "$ref": "#/components/schemas/MemoryDecision"
+          }
+        ]
+      },
+      "MemoryChangeSet": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "changeSetId",
+          "requestId",
+          "projectId",
+          "baseRevision",
+          "state",
+          "records",
+          "rationale",
+          "proposedBy",
+          "createdAt",
+          "updatedAt"
+        ],
+        "properties": {
+          "changeSetId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "requestId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "projectId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "baseRevision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "state": {
+            "type": "string",
+            "enum": ["proposed", "approved", "rejected", "applied"]
+          },
+          "records": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 20,
+            "items": {
+              "$ref": "#/components/schemas/MemoryRecord"
+            }
+          },
+          "rationale": {
+            "type": "string",
+            "minLength": 1
+          },
+          "proposedBy": {
+            "type": "string",
+            "enum": ["user", "agent", "tool"]
+          },
+          "approvedBy": {
+            "const": "user"
+          },
+          "rejectedBy": {
+            "const": "user"
+          },
+          "rejectedReason": {
+            "type": "string",
+            "minLength": 1
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "approvedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "rejectedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "appliedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "appliedRevision": {
+            "type": "integer",
+            "minimum": 2
+          }
+        }
+      },
+      "StageMemoryChangeSetRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["changeSetId", "expectedRevision", "records", "rationale", "proposedBy"],
+        "properties": {
+          "changeSetId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "records": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 20,
+            "items": {
+              "$ref": "#/components/schemas/MemoryRecord"
+            }
+          },
+          "rationale": {
+            "type": "string",
+            "minLength": 1
+          },
+          "proposedBy": {
+            "type": "string",
+            "enum": ["user", "agent", "tool"]
+          }
+        }
+      },
+      "ExpectedRevisionRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["expectedRevision"],
+        "properties": {
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      },
+      "RejectMemoryChangeSetRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["reason"],
+        "properties": {
+          "reason": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "MemoryChangeSetList": {
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/MemoryChangeSet"
+        }
+      },
+      "AppliedMemoryRecord": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["recordId", "projectId", "kind", "record", "updatedAt"],
+        "properties": {
+          "recordId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "projectId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "kind": {
+            "type": "string",
+            "enum": ["fact", "assumption", "measurement", "decision"]
+          },
+          "record": {
+            "$ref": "#/components/schemas/MemoryRecord"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ApplyMemoryChangeSetResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["changeSet", "projectRevision", "records", "idempotent"],
+        "properties": {
+          "changeSet": {
+            "$ref": "#/components/schemas/MemoryChangeSet"
+          },
+          "projectRevision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "records": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AppliedMemoryRecord"
+            }
+          },
+          "idempotent": {
+            "type": "boolean"
           }
         }
       }

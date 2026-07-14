@@ -99,7 +99,9 @@ function changeSet(state: MemoryChangeSet["state"] = "proposed"): MemoryChangeSe
   };
 }
 
-function successfulService(overrides: Partial<MemoryChangeSetService> = {}): MemoryChangeSetService {
+function successfulService(
+  overrides: Partial<MemoryChangeSetService> = {},
+): MemoryChangeSetService {
   return {
     async stage() {
       return changeSet();
