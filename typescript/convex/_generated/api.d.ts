@@ -9,9 +9,14 @@
  */
 
 import type * as assistantState from "../assistantState.js";
+import type * as auditEvents from "../auditEvents.js";
 import type * as authHelpers from "../authHelpers.js";
+import type * as projectRecords from "../projectRecords.js";
+import type * as projects from "../projects.js";
 import type * as reminders from "../reminders.js";
 import type * as tasks from "../tasks.js";
+import type * as totalityValidators from "../totalityValidators.js";
+import type * as validationReports from "../validationReports.js";
 
 import type {
   ApiFromModules,
@@ -21,9 +26,14 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   assistantState: typeof assistantState;
+  auditEvents: typeof auditEvents;
   authHelpers: typeof authHelpers;
+  projectRecords: typeof projectRecords;
+  projects: typeof projects;
   reminders: typeof reminders;
   tasks: typeof tasks;
+  totalityValidators: typeof totalityValidators;
+  validationReports: typeof validationReports;
 }>;
 
 /**
