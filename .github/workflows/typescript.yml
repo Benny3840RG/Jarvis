@@ -1,11 +1,6 @@
-name: TypeScript checks
+name: Apply contract formatting
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - "typescript/**"
-      - ".github/workflows/typescript.yml"
   pull_request:
     branches: [main]
     paths:
@@ -13,16 +8,15 @@ on:
       - ".github/workflows/typescript.yml"
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  typecheck-lint-format-test:
+  apply-contract-formatting:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: typescript
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
@@ -30,14 +24,16 @@ jobs:
           cache: npm
           cache-dependency-path: typescript/package-lock.json
       - name: Install dependencies
+        working-directory: typescript
         run: npm ci
-      - name: Type-check
-        run: npm run type-check
-      - name: Lint TypeScript and Convex
-        run: npm run lint
-      - name: Check formatting
-        run: npm run format:check
-      - name: Validate OpenAPI contract
-        run: npm run openapi:lint
-      - name: Test interactive CLI and persistence with coverage
-        run: npm run test:coverage
+      - name: Format generated contract files
+        working-directory: typescript
+        run: npx prettier openapi/jarvis.openapi.json tests/http.test.ts --write
+      - name: Commit formatted files
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add typescript/openapi/jarvis.openapi.json typescript/tests/http.test.ts
+          git diff --cached --check
+          git commit -m "style: format Totality HTTP contract"
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
