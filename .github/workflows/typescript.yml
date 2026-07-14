@@ -36,20 +36,7 @@ jobs:
       - name: Lint TypeScript and Convex
         run: npm run lint
       - name: Check formatting
-        run: |
-          set +e
-          npm run format:check > prettier-errors.log 2>&1
-          status=$?
-          cat prettier-errors.log
-          exit $status
-      - name: Upload Prettier diagnostics
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: prettier-diagnostics
-          path: typescript/prettier-errors.log
-          if-no-files-found: error
-          retention-days: 1
+        run: npm run format:check
       - name: Validate OpenAPI contract
         run: npm run openapi:lint
       - name: Test interactive CLI and persistence with coverage
