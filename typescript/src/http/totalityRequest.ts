@@ -71,10 +71,7 @@ function actionPolicy(value: unknown): TotalityRequest["actionPolicy"] {
   };
 }
 
-export function parseTotalityReasonRequest(
-  body: unknown,
-  requestId: string,
-): TotalityRequest {
+export function parseTotalityReasonRequest(body: unknown, requestId: string): TotalityRequest {
   if (!isRecord(body)) throw new Error("Request body must be a JSON object.");
 
   return {
