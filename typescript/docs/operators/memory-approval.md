@@ -122,13 +122,13 @@ not write another audit event.
 
 ## Failure semantics
 
-| HTTP status | Meaning |
-| --- | --- |
-| `401` | Missing or invalid Jarvis service token |
-| `404` | Project/change set does not exist under the requested project path |
-| `409` | Revision, state, idempotency, or measurement conflict |
-| `422` | Invalid request contract |
-| `503` | Convex memory approval is unavailable or the transaction failed safely |
+| HTTP status | Meaning                                                                |
+| ----------- | ---------------------------------------------------------------------- |
+| `401`       | Missing or invalid Jarvis service token                                |
+| `404`       | Project/change set does not exist under the requested project path     |
+| `409`       | Revision, state, idempotency, or measurement conflict                  |
+| `422`       | Invalid request contract                                               |
+| `503`       | Convex memory approval is unavailable or the transaction failed safely |
 
 Problem responses use the existing redacted `application/problem+json` envelope. Service tokens,
 backend exception text, and internal state are never returned.
