@@ -97,9 +97,7 @@ function cleanModel(value: string | undefined): string {
 
 function cleanClientRequestId(value: string): string {
   if (value.length === 0 || value.length > 512 || !/^[\x21-\x7E]+$/.test(value)) {
-    throw new Error(
-      "OpenAI client request ID must contain 1 to 512 visible ASCII characters.",
-    );
+    throw new Error("OpenAI client request ID must contain 1 to 512 visible ASCII characters.");
   }
   return value;
 }
