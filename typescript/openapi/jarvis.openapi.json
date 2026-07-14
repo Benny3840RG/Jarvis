@@ -1486,7 +1486,7 @@
       "post": {
         "operationId": "rejectMemoryChangeSet",
         "summary": "Reject a staged project-memory change set",
-        "description": "Transitions the memory change set to rejectd without writing canonical memory.",
+        "description": "Transitions the memory change set to rejected without writing canonical memory.",
         "tags": ["Memory"],
         "parameters": [
           {
