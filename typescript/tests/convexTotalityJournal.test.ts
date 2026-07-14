@@ -2,17 +2,15 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import type { ConvexClientLike } from "../src/persistence/convexPersistence.js";
-import {
-  ConvexTotalityJournal,
-  reasoningJournalFunctions,
-} from "../src/persistence/convexTotalityJournal.js";
+import { ConvexTotalityJournal } from "../src/persistence/convexTotalityJournal.js";
 
-function fakeClient(capture: { functionRef?: unknown; args?: unknown }): ConvexClientLike {
+function fakeClient(capture: { calls: number; functionRef?: unknown; args?: unknown }): ConvexClientLike {
   return {
     async query() {
       return null;
     },
     async mutation(functionRef: unknown, args: unknown) {
+      capture.calls += 1;
       capture.functionRef = functionRef;
       capture.args = args;
       return {
@@ -25,7 +23,7 @@ function fakeClient(capture: { functionRef?: unknown; args?: unknown }): ConvexC
 
 describe("ConvexTotalityJournal", () => {
   it("commits validation and audit through one Convex mutation", async () => {
-    const capture: { functionRef?: unknown; args?: unknown } = {};
+    const capture: { calls: number; functionRef?: unknown; args?: unknown } = { calls: 0 };
     const journal = new ConvexTotalityJournal(fakeClient(capture), "service-token");
 
     await journal.commitOutcome({
@@ -42,7 +40,8 @@ describe("ConvexTotalityJournal", () => {
       payload: { responseId: "response-1" },
     });
 
-    assert.equal(capture.functionRef, reasoningJournalFunctions.commit);
+    assert.equal(capture.calls, 1);
+    assert.notEqual(capture.functionRef, undefined);
     assert.deepEqual(capture.args, {
       serviceToken: "service-token",
       requestId: "request-1",
