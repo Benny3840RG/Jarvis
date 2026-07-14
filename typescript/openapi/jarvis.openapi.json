@@ -4,8 +4,8 @@
   "info": {
     "title": "Jarvis Operator API",
     "summary": "A safety-gated API for the Jarvis Z-State runtime and durable operator data.",
-    "description": "Jarvis accepts structured operator requests, routes work through its runtime and safety envelope, and persists tasks and reminders through the configured JSON or Convex provider. This contract is intentionally single-user and private. The future ChatGPT App MCP server must keep the Jarvis service token server-side and expose only operations marked with x-mcp-tool.exposed=true.",
-    "version": "0.2.0",
+    "description": "Jarvis accepts structured operator requests, routes work through its runtime and safety envelope, persists tasks and reminders through the configured JSON or Convex provider, and can run proposal-only Totality reasoning whose validation and audit evidence are committed atomically to Convex. This contract is intentionally single-user and private. The future ChatGPT App MCP server must keep Jarvis and OpenAI service credentials server-side and expose only operations marked with x-mcp-tool.exposed=true.",
+    "version": "0.3.0",
     "license": {
       "name": "Proprietary",
       "identifier": "LicenseRef-Proprietary"
@@ -61,7 +61,13 @@
       "autonomy",
       "z-state-activation"
     ],
-    "immutableSafetyCategories": ["domain", "cross-domain", "memory", "reliability", "proposal"],
+    "immutableSafetyCategories": [
+      "domain",
+      "cross-domain",
+      "memory",
+      "reliability",
+      "proposal"
+    ],
     "businessBoundary": "Jarvis routes business-domain work through integrations and must not duplicate authoritative TBTB business logic."
   },
   "x-chatgpt-app": {
@@ -92,7 +98,8 @@
       "executeConversation",
       "exportBackup",
       "verifyBackup",
-      "restoreBackup"
+      "restoreBackup",
+      "reasonWithTotality"
     ]
   },
   "paths": {
@@ -101,7 +108,9 @@
         "operationId": "getHealth",
         "summary": "Check process liveness",
         "description": "Returns process liveness without touching persistence or exposing configuration.",
-        "tags": ["System"],
+        "tags": [
+          "System"
+        ],
         "security": [],
         "x-mcp-tool": {
           "exposed": false,
@@ -142,7 +151,9 @@
         "operationId": "getHelp",
         "summary": "List supported operator capabilities",
         "description": "Returns the stable operator-facing capability map for the subset of this contract implemented by the running adapter.",
-        "tags": ["System"],
+        "tags": [
+          "System"
+        ],
         "x-mcp-tool": {
           "exposed": false,
           "annotations": {
@@ -185,7 +196,9 @@
         "operationId": "getJarvisStatus",
         "summary": "Inspect Jarvis runtime and provider status",
         "description": "Checks storage reachability, authentication, schema compatibility, layer readiness, timezone, and Z-State activation without returning secrets.",
-        "tags": ["System"],
+        "tags": [
+          "System"
+        ],
         "x-mcp-tool": {
           "exposed": true,
           "title": "Check Jarvis status",
@@ -230,7 +243,9 @@
         "operationId": "executeConversation",
         "summary": "Execute a safety-gated conversation turn",
         "description": "Parses one text input, constructs an execution plan, routes each step, evaluates the complete output through the immutable safety envelope, and returns the result. ChatGPT should use focused task and reminder tools instead of exposing this broad runtime endpoint as an MCP tool.",
-        "tags": ["Runtime"],
+        "tags": [
+          "Runtime"
+        ],
         "parameters": [
           {
             "$ref": "#/components/parameters/IdempotencyKey"
@@ -300,7 +315,9 @@
         "operationId": "listTasks",
         "summary": "List durable tasks",
         "description": "Returns the authoritative task list from the configured persistence provider.",
-        "tags": ["Tasks"],
+        "tags": [
+          "Tasks"
+        ],
         "x-mcp-tool": {
           "exposed": true,
           "title": "List Jarvis tasks",
@@ -343,7 +360,9 @@
         "operationId": "createTask",
         "summary": "Create a durable task",
         "description": "Creates one task after explicit user intent. Reusing an Idempotency-Key must replay the original result rather than create a duplicate.",
-        "tags": ["Tasks"],
+        "tags": [
+          "Tasks"
+        ],
         "parameters": [
           {
             "$ref": "#/components/parameters/IdempotencyKey"
@@ -427,7 +446,9 @@
         "operationId": "getTask",
         "summary": "Get one durable task",
         "description": "Returns one task by its opaque provider-issued identifier.",
-        "tags": ["Tasks"],
+        "tags": [
+          "Tasks"
+        ],
         "x-mcp-tool": {
           "exposed": true,
           "title": "Get a Jarvis task",
@@ -473,7 +494,9 @@
         "operationId": "updateTask",
         "summary": "Update a durable task",
         "description": "Updates the supplied task title and/or category without changing identity, completion, or creation time.",
-        "tags": ["Tasks"],
+        "tags": [
+          "Tasks"
+        ],
         "x-mcp-tool": {
           "exposed": true,
           "title": "Update a Jarvis task",
@@ -535,7 +558,9 @@
         "operationId": "deleteTask",
         "summary": "Delete a durable task",
         "description": "Permanently removes one task after explicit user confirmation.",
-        "tags": ["Tasks"],
+        "tags": [
+          "Tasks"
+        ],
         "x-mcp-tool": {
           "exposed": true,
           "title": "Delete a Jarvis task",
@@ -588,7 +613,9 @@
         "operationId": "completeTask",
         "summary": "Complete a durable task",
         "description": "Sets the task completed flag to true. Repeated calls leave the task completed.",
-        "tags": ["Tasks"],
+        "tags": [
+          "Tasks"
+        ],
         "x-mcp-tool": {
           "exposed": true,
           "title": "Complete a Jarvis task",
@@ -636,7 +663,9 @@
         "operationId": "listReminders",
         "summary": "List durable reminders",
         "description": "Returns the authoritative reminder list from the configured persistence provider.",
-        "tags": ["Reminders"],
+        "tags": [
+          "Reminders"
+        ],
         "x-mcp-tool": {
           "exposed": true,
           "title": "List Jarvis reminders",
@@ -679,7 +708,9 @@
         "operationId": "createReminder",
         "summary": "Create a durable reminder",
         "description": "Creates one reminder and preserves its exact due text. Jarvis only adds a timestamp when the due value is unambiguous in the supplied timezone.",
-        "tags": ["Reminders"],
+        "tags": [
+          "Reminders"
+        ],
         "parameters": [
           {
             "$ref": "#/components/parameters/IdempotencyKey"
@@ -763,7 +794,9 @@
         "operationId": "getReminder",
         "summary": "Get one durable reminder",
         "description": "Returns one reminder by its opaque provider-issued identifier.",
-        "tags": ["Reminders"],
+        "tags": [
+          "Reminders"
+        ],
         "x-mcp-tool": {
           "exposed": true,
           "title": "Get a Jarvis reminder",
@@ -809,7 +842,9 @@
         "operationId": "updateReminder",
         "summary": "Update a durable reminder",
         "description": "Updates the supplied title and/or due value. Sending due=null explicitly clears all due fields.",
-        "tags": ["Reminders"],
+        "tags": [
+          "Reminders"
+        ],
         "x-mcp-tool": {
           "exposed": true,
           "title": "Update a Jarvis reminder",
@@ -871,7 +906,9 @@
         "operationId": "deleteReminder",
         "summary": "Delete a durable reminder",
         "description": "Permanently removes one reminder after explicit user confirmation.",
-        "tags": ["Reminders"],
+        "tags": [
+          "Reminders"
+        ],
         "x-mcp-tool": {
           "exposed": true,
           "title": "Delete a Jarvis reminder",
@@ -919,7 +956,9 @@
         "operationId": "exportBackup",
         "summary": "Export a provider-neutral backup",
         "description": "Takes one coherent persistence snapshot and returns a version 2 Jarvis backup archive. This sensitive operation is intentionally excluded from the model tool surface.",
-        "tags": ["Backups"],
+        "tags": [
+          "Backups"
+        ],
         "x-mcp-tool": {
           "exposed": false,
           "annotations": {
@@ -969,7 +1008,9 @@
         "operationId": "verifyBackup",
         "summary": "Verify a backup archive",
         "description": "Validates a version 1 or 2 archive and verifies it in isolated storage without touching the configured live provider.",
-        "tags": ["Backups"],
+        "tags": [
+          "Backups"
+        ],
         "x-mcp-tool": {
           "exposed": false,
           "annotations": {
@@ -1028,7 +1069,9 @@
         "operationId": "restoreBackup",
         "summary": "Restore a backup into an empty provider",
         "description": "Restores a verified archive only when the configured target has no assistant state, tasks, or reminders. The confirmation field must be exactly true. This operation is never exposed as a model tool.",
-        "tags": ["Backups"],
+        "tags": [
+          "Backups"
+        ],
         "parameters": [
           {
             "$ref": "#/components/parameters/IdempotencyKey"
@@ -1083,6 +1126,74 @@
           },
           "422": {
             "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
+    },
+    "/api/v1/totality/reason": {
+      "post": {
+        "operationId": "reasonWithTotality",
+        "summary": "Run proposal-only Totality reasoning with validation and audit journalling",
+        "description": "Runs deterministic routing and authority checks, requests strict structured reasoning from OpenAI, validates the draft locally, and atomically commits the validation report and audit event to Convex. It never applies project-memory updates or executes tools.",
+        "tags": [
+          "Runtime"
+        ],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "openWorldHint": true,
+            "idempotentHint": false
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TotalityReasonRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The reasoning draft was validated and journalled.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TotalityReasonResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "422": {
+            "description": "The request or authority policy is invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
@@ -1250,7 +1361,12 @@
       "HealthResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["status", "service", "version", "time"],
+        "required": [
+          "status",
+          "service",
+          "version",
+          "time"
+        ],
         "properties": {
           "status": {
             "const": "ok"
@@ -1272,7 +1388,10 @@
       "HelpResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["apiVersion", "capabilities"],
+        "required": [
+          "apiVersion",
+          "capabilities"
+        ],
         "properties": {
           "apiVersion": {
             "const": "v1"
@@ -1288,7 +1407,13 @@
       "Capability": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["operationId", "summary", "mutating", "destructive", "mcpExposed"],
+        "required": [
+          "operationId",
+          "summary",
+          "mutating",
+          "destructive",
+          "mcpExposed"
+        ],
         "properties": {
           "operationId": {
             "type": "string",
@@ -1326,7 +1451,11 @@
         "properties": {
           "status": {
             "type": "string",
-            "enum": ["ok", "degraded", "unavailable"]
+            "enum": [
+              "ok",
+              "degraded",
+              "unavailable"
+            ]
           },
           "version": {
             "type": "string",
@@ -1346,14 +1475,21 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 128,
-            "examples": ["Australia/Melbourne"]
+            "examples": [
+              "Australia/Melbourne"
+            ]
           },
           "layers": {
             "$ref": "#/components/schemas/LayersStatus"
           },
           "zState": {
             "type": "string",
-            "enum": ["disabled", "stabilising", "active", "suspended"]
+            "enum": [
+              "disabled",
+              "stabilising",
+              "active",
+              "suspended"
+            ]
           },
           "checkedAt": {
             "type": "string",
@@ -1364,23 +1500,42 @@
       "ProviderStatus": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["name", "reachability", "authentication", "schemaCompatibility"],
+        "required": [
+          "name",
+          "reachability",
+          "authentication",
+          "schemaCompatibility"
+        ],
         "properties": {
           "name": {
             "type": "string",
-            "enum": ["json", "convex"]
+            "enum": [
+              "json",
+              "convex"
+            ]
           },
           "reachability": {
             "type": "string",
-            "enum": ["ok", "unavailable"]
+            "enum": [
+              "ok",
+              "unavailable"
+            ]
           },
           "authentication": {
             "type": "string",
-            "enum": ["not-required", "ok", "failed"]
+            "enum": [
+              "not-required",
+              "ok",
+              "failed"
+            ]
           },
           "schemaCompatibility": {
             "type": "string",
-            "enum": ["compatible", "incompatible", "unknown"]
+            "enum": [
+              "compatible",
+              "incompatible",
+              "unknown"
+            ]
           },
           "deploymentVersion": {
             "oneOf": [
@@ -1439,11 +1594,18 @@
       "LayerStatus": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["status"],
+        "required": [
+          "status"
+        ],
         "properties": {
           "status": {
             "type": "string",
-            "enum": ["ready", "partial", "inactive", "blocked"]
+            "enum": [
+              "ready",
+              "partial",
+              "inactive",
+              "blocked"
+            ]
           },
           "reason": {
             "type": "string",
@@ -1455,7 +1617,9 @@
       "ConversationRequest": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["message"],
+        "required": [
+          "message"
+        ],
         "properties": {
           "message": {
             "type": "string",
@@ -1470,7 +1634,10 @@
           },
           "mode": {
             "type": "string",
-            "enum": ["plan", "execute"],
+            "enum": [
+              "plan",
+              "execute"
+            ],
             "default": "execute"
           }
         }
@@ -1478,7 +1645,12 @@
       "ConversationResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["requestId", "parsed", "plan", "safety"],
+        "required": [
+          "requestId",
+          "parsed",
+          "plan",
+          "safety"
+        ],
         "properties": {
           "requestId": {
             "type": "string",
@@ -1503,7 +1675,12 @@
       "ParsedConversation": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["text", "intent", "entities", "context"],
+        "required": [
+          "text",
+          "intent",
+          "entities",
+          "context"
+        ],
         "properties": {
           "text": {
             "type": "string",
@@ -1512,7 +1689,12 @@
           },
           "intent": {
             "type": "string",
-            "enum": ["greeting", "planning", "memory", "general"]
+            "enum": [
+              "greeting",
+              "planning",
+              "memory",
+              "general"
+            ]
           },
           "entities": {
             "type": "object",
@@ -1527,7 +1709,9 @@
       "ExecutionPlan": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["steps"],
+        "required": [
+          "steps"
+        ],
         "properties": {
           "steps": {
             "type": "array",
@@ -1542,7 +1726,11 @@
       "PlanStep": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["module", "action", "payload"],
+        "required": [
+          "module",
+          "action",
+          "payload"
+        ],
         "properties": {
           "module": {
             "type": "string",
@@ -1560,11 +1748,19 @@
       "SafetyDecision": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["status", "reasons", "evaluatedCategories"],
+        "required": [
+          "status",
+          "reasons",
+          "evaluatedCategories"
+        ],
         "properties": {
           "status": {
             "type": "string",
-            "enum": ["ok", "warning", "blocked"]
+            "enum": [
+              "ok",
+              "warning",
+              "blocked"
+            ]
           },
           "reasons": {
             "type": "array",
@@ -1579,7 +1775,13 @@
             "uniqueItems": true,
             "items": {
               "type": "string",
-              "enum": ["domain", "cross-domain", "memory", "reliability", "proposal"]
+              "enum": [
+                "domain",
+                "cross-domain",
+                "memory",
+                "reliability",
+                "proposal"
+              ]
             }
           }
         }
@@ -1587,7 +1789,13 @@
       "Task": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["id", "title", "completed", "category", "createdAt"],
+        "required": [
+          "id",
+          "title",
+          "completed",
+          "category",
+          "createdAt"
+        ],
         "properties": {
           "id": {
             "$ref": "#/components/schemas/RecordId"
@@ -1613,7 +1821,9 @@
       "CreateTaskRequest": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["title"],
+        "required": [
+          "title"
+        ],
         "properties": {
           "title": {
             "type": "string",
@@ -1648,7 +1858,9 @@
       "TaskResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["data"],
+        "required": [
+          "data"
+        ],
         "properties": {
           "data": {
             "$ref": "#/components/schemas/Task"
@@ -1658,7 +1870,10 @@
       "TaskListResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["data", "count"],
+        "required": [
+          "data",
+          "count"
+        ],
         "properties": {
           "data": {
             "type": "array",
@@ -1675,7 +1890,9 @@
       "ReminderDueInput": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["text"],
+        "required": [
+          "text"
+        ],
         "properties": {
           "text": {
             "type": "string",
@@ -1688,17 +1905,29 @@
             "minLength": 1,
             "maxLength": 128,
             "description": "IANA timezone used only for local wall-clock input. Defaults to the configured Jarvis timezone.",
-            "examples": ["Australia/Melbourne"]
+            "examples": [
+              "Australia/Melbourne"
+            ]
           }
         }
       },
       "Reminder": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["id", "title", "createdAt"],
+        "required": [
+          "id",
+          "title",
+          "createdAt"
+        ],
         "dependentRequired": {
-          "dueAt": ["dueRaw", "dueTimezone"],
-          "dueTimezone": ["dueRaw", "dueAt"]
+          "dueAt": [
+            "dueRaw",
+            "dueTimezone"
+          ],
+          "dueTimezone": [
+            "dueRaw",
+            "dueAt"
+          ]
         },
         "properties": {
           "id": {
@@ -1730,7 +1959,9 @@
       "CreateReminderRequest": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["title"],
+        "required": [
+          "title"
+        ],
         "properties": {
           "title": {
             "type": "string",
@@ -1767,7 +1998,9 @@
       "ReminderResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["data"],
+        "required": [
+          "data"
+        ],
         "properties": {
           "data": {
             "$ref": "#/components/schemas/Reminder"
@@ -1777,7 +2010,10 @@
       "ReminderListResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["data", "count"],
+        "required": [
+          "data",
+          "count"
+        ],
         "properties": {
           "data": {
             "type": "array",
@@ -1799,7 +2035,14 @@
       "BackupArchive": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["format", "version", "createdAt", "state", "tasks", "reminders"],
+        "required": [
+          "format",
+          "version",
+          "createdAt",
+          "state",
+          "tasks",
+          "reminders"
+        ],
         "properties": {
           "format": {
             "const": "jarvis-backup"
@@ -1831,14 +2074,24 @@
       "BackupArchiveInput": {
         "type": "object",
         "description": "A version 1 or version 2 Jarvis backup archive. Version 1 is accepted for migration compatibility.",
-        "required": ["format", "version", "createdAt", "state", "tasks", "reminders"],
+        "required": [
+          "format",
+          "version",
+          "createdAt",
+          "state",
+          "tasks",
+          "reminders"
+        ],
         "properties": {
           "format": {
             "const": "jarvis-backup"
           },
           "version": {
             "type": "integer",
-            "enum": [1, 2]
+            "enum": [
+              1,
+              2
+            ]
           },
           "createdAt": {
             "type": "string",
@@ -1865,7 +2118,13 @@
       "BackupVerificationResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["valid", "format", "version", "taskCount", "reminderCount"],
+        "required": [
+          "valid",
+          "format",
+          "version",
+          "taskCount",
+          "reminderCount"
+        ],
         "properties": {
           "valid": {
             "const": true
@@ -1875,7 +2134,10 @@
           },
           "version": {
             "type": "integer",
-            "enum": [1, 2]
+            "enum": [
+              1,
+              2
+            ]
           },
           "taskCount": {
             "type": "integer",
@@ -1890,7 +2152,10 @@
       "RestoreBackupRequest": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["archive", "confirmEmptyTarget"],
+        "required": [
+          "archive",
+          "confirmEmptyTarget"
+        ],
         "properties": {
           "archive": {
             "$ref": "#/components/schemas/BackupArchiveInput"
@@ -1904,7 +2169,12 @@
       "RestoreBackupResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["taskCount", "reminderCount", "taskIds", "reminderIds"],
+        "required": [
+          "taskCount",
+          "reminderCount",
+          "taskIds",
+          "reminderIds"
+        ],
         "properties": {
           "taskCount": {
             "type": "integer",
@@ -1933,7 +2203,14 @@
       "ProblemDetails": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["type", "title", "status", "detail", "instance", "requestId"],
+        "required": [
+          "type",
+          "title",
+          "status",
+          "detail",
+          "instance",
+          "requestId"
+        ],
         "properties": {
           "type": {
             "type": "string",
@@ -1976,7 +2253,10 @@
       "ValidationError": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["path", "message"],
+        "required": [
+          "path",
+          "message"
+        ],
         "properties": {
           "path": {
             "type": "string",
@@ -1986,6 +2266,373 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 500
+          }
+        }
+      },
+      "TotalityActionPolicy": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "maximumToolAuthority",
+          "requireApprovalBeforeExecution"
+        ],
+        "properties": {
+          "maximumToolAuthority": {
+            "type": "string",
+            "enum": [
+              "T0",
+              "T1",
+              "T2",
+              "T3"
+            ]
+          },
+          "requireApprovalBeforeExecution": {
+            "type": "boolean"
+          }
+        }
+      },
+      "TotalityReasonRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "projectId",
+          "sessionId",
+          "taskType",
+          "domainContext",
+          "goal",
+          "constraints",
+          "inputs",
+          "outputStyle",
+          "actionPolicy"
+        ],
+        "properties": {
+          "projectId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1
+          },
+          "sessionId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "taskType": {
+            "type": "string",
+            "enum": [
+              "engineering_analysis",
+              "fabrication_planning",
+              "automation_design",
+              "robotics_vehicle_logic",
+              "safety_review",
+              "documentation_manual",
+              "branding_communication",
+              "project_management",
+              "comparison_tradeoff",
+              "optimization",
+              "simulation",
+              "prediction",
+              "integration",
+              "general_analysis"
+            ]
+          },
+          "domainContext": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "goal": {
+            "type": "string",
+            "minLength": 1
+          },
+          "constraints": {
+            "type": "array",
+            "items": {}
+          },
+          "inputs": {
+            "type": "array",
+            "items": {}
+          },
+          "outputStyle": {
+            "type": "string",
+            "enum": [
+              "for_benny_engineering",
+              "for_benny_workshop",
+              "for_client",
+              "default"
+            ]
+          },
+          "actionPolicy": {
+            "$ref": "#/components/schemas/TotalityActionPolicy"
+          }
+        }
+      },
+      "TotalityValidationCheck": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "status"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pass",
+              "warning",
+              "fail"
+            ]
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      },
+      "TotalityValidationReport": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "passed",
+          "checks",
+          "warnings",
+          "blockingFailures"
+        ],
+        "properties": {
+          "passed": {
+            "type": "boolean"
+          },
+          "checks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TotalityValidationCheck"
+            }
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "blockingFailures": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "TotalityPermissionEnvelope": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "reasoningLevel",
+          "riskLevel",
+          "toolAuthority",
+          "dataAccess",
+          "actionState"
+        ],
+        "properties": {
+          "reasoningLevel": {
+            "type": "string",
+            "enum": [
+              "R0",
+              "R1",
+              "R2",
+              "R3"
+            ]
+          },
+          "riskLevel": {
+            "type": "string",
+            "enum": [
+              "low",
+              "moderate",
+              "high",
+              "critical"
+            ]
+          },
+          "toolAuthority": {
+            "type": "string",
+            "enum": [
+              "T0",
+              "T1",
+              "T2",
+              "T3"
+            ]
+          },
+          "dataAccess": {
+            "type": "string",
+            "enum": [
+              "D0",
+              "D1",
+              "D2",
+              "D3"
+            ]
+          },
+          "actionState": {
+            "type": "string",
+            "enum": [
+              "read",
+              "propose",
+              "approve",
+              "execute"
+            ]
+          }
+        }
+      },
+      "TotalityRoutingDecision": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "primaryMode",
+          "supportingModes",
+          "permission",
+          "confidence",
+          "reasonCodes"
+        ],
+        "properties": {
+          "primaryMode": {
+            "type": "string"
+          },
+          "supportingModes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "permission": {
+            "$ref": "#/components/schemas/TotalityPermissionEnvelope"
+          },
+          "confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "reasonCodes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "TotalityError": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "message",
+          "retryable"
+        ],
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "retryable": {
+            "type": "boolean"
+          }
+        }
+      },
+      "TotalityReasonResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "requestId",
+          "status",
+          "routing",
+          "result",
+          "assumptions",
+          "unknowns",
+          "risks",
+          "validation",
+          "memoryUpdates",
+          "toolActions",
+          "errors"
+        ],
+        "properties": {
+          "requestId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "completed",
+              "partial",
+              "blocked",
+              "failed"
+            ]
+          },
+          "routing": {
+            "$ref": "#/components/schemas/TotalityRoutingDecision"
+          },
+          "result": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "answer",
+                  "responseId"
+                ],
+                "properties": {
+                  "answer": {
+                    "type": "string"
+                  },
+                  "responseId": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          "assumptions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "unknowns": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "risks": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "validation": {
+            "$ref": "#/components/schemas/TotalityValidationReport"
+          },
+          "memoryUpdates": {
+            "type": "array",
+            "maxItems": 0,
+            "items": {}
+          },
+          "toolActions": {
+            "type": "array",
+            "maxItems": 0,
+            "items": {}
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TotalityError"
+            }
           }
         }
       }

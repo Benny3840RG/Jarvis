@@ -184,6 +184,13 @@ describe("Jarvis HTTP system boundary", () => {
           destructive: false,
           mcpExposed: true,
         },
+        {
+          operationId: "reasonWithTotality",
+          summary: "Run proposal-only Totality reasoning with validation and audit journalling",
+          mutating: true,
+          destructive: false,
+          mcpExposed: false,
+        },
       ],
     });
   });
@@ -211,6 +218,7 @@ describe("Jarvis HTTP system boundary", () => {
       ["/healthz", "get"],
       ["/api/v1/help", "get"],
       ["/api/v1/status", "get"],
+      ["/api/v1/totality/reason", "post"],
     ] as const;
     const contractCapabilities = implementedRoutes.map(([path, method]) => {
       const operation = contract.paths[path][method];
