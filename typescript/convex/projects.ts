@@ -24,9 +24,11 @@ function cleanDomains(domains: string[]): string[] {
 }
 
 function requireIsoDate(value: string, field: string): string {
-  if (!Number.isFinite(Date.parse(value)))
+  const timestamp = Date.parse(value);
+  if (!Number.isFinite(timestamp)) {
     throw new Error(`${field} must be an ISO date-time string.`);
-  return value;
+  }
+  return new Date(timestamp).toISOString();
 }
 
 function boundedLimit(limit: number | undefined): number {
