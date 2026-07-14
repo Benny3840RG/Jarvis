@@ -40,4 +40,17 @@ jobs:
       - name: Validate OpenAPI contract
         run: npm run openapi:lint
       - name: Test interactive CLI and persistence with coverage
-        run: npm run test:coverage
+        run: |
+          set +e
+          npm run test:coverage > test-errors.log 2>&1
+          status=$?
+          cat test-errors.log
+          exit $status
+      - name: Upload test diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-diagnostics
+          path: typescript/test-errors.log
+          if-no-files-found: error
+          retention-days: 1
