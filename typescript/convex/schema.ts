@@ -2,6 +2,11 @@ import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
 import {
+  memoryChangeSetActorValidator,
+  memoryChangeSetStateValidator,
+  memoryRecordValidator,
+} from "./memoryChangeSetValidators.js";
+import {
   projectPreferencesValidator,
   projectRecordValidator,
   projectStatusValidator,
@@ -57,6 +62,30 @@ export default defineSchema({
   })
     .index("by_owner_and_project_key_and_kind", ["ownerId", "projectKey", "kind"])
     .index("by_owner_and_project_key_and_record_id", ["ownerId", "projectKey", "recordId"]),
+  memoryChangeSets: defineTable({
+    ownerId: v.string(),
+    changeSetId: v.string(),
+    requestId: v.string(),
+    projectKey: v.string(),
+    baseRevision: v.number(),
+    state: memoryChangeSetStateValidator,
+    records: v.array(memoryRecordValidator),
+    rationale: v.string(),
+    proposedBy: memoryChangeSetActorValidator,
+    approvedBy: v.optional(v.literal("user")),
+    rejectedBy: v.optional(v.literal("user")),
+    rejectedReason: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    approvedAt: v.optional(v.number()),
+    rejectedAt: v.optional(v.number()),
+    appliedAt: v.optional(v.number()),
+    appliedRevision: v.optional(v.number()),
+  })
+    .index("by_owner_and_change_set_id", ["ownerId", "changeSetId"])
+    .index("by_owner_and_project_key", ["ownerId", "projectKey"])
+    .index("by_owner_and_project_key_and_state", ["ownerId", "projectKey", "state"])
+    .index("by_owner_and_request_id", ["ownerId", "requestId"]),
   validationReports: defineTable({
     ownerId: v.string(),
     requestId: v.string(),
