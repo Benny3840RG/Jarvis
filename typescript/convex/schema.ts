@@ -2,7 +2,6 @@ import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
 import {
-  auditEventValidator,
   projectPreferencesValidator,
   projectRecordValidator,
   projectStatusValidator,
@@ -70,13 +69,13 @@ export default defineSchema({
     .index("by_owner_and_request_id", ["ownerId", "requestId"])
     .index("by_owner_and_scope_key", ["ownerId", "scopeKey"]),
   auditEvents: defineTable({
-    ownerId: auditEventValidator.fields.ownerId,
-    requestId: auditEventValidator.fields.requestId,
-    scopeKey: auditEventValidator.fields.scopeKey,
-    eventType: auditEventValidator.fields.eventType,
-    actor: auditEventValidator.fields.actor,
-    payload: auditEventValidator.fields.payload,
-    createdAt: auditEventValidator.fields.createdAt,
+    ownerId: v.string(),
+    requestId: v.optional(v.string()),
+    scopeKey: v.string(),
+    eventType: v.string(),
+    actor: v.union(v.literal("user"), v.literal("agent"), v.literal("tool")),
+    payload: v.record(v.string(), v.any()),
+    createdAt: v.number(),
   })
     .index("by_owner_and_scope_key", ["ownerId", "scopeKey"])
     .index("by_owner_and_request_id", ["ownerId", "requestId"]),
