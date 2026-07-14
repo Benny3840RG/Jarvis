@@ -4,7 +4,11 @@ import { describe, it } from "node:test";
 import type { ConvexClientLike } from "../src/persistence/convexPersistence.js";
 import { ConvexTotalityJournal } from "../src/persistence/convexTotalityJournal.js";
 
-function fakeClient(capture: { calls: number; functionRef?: unknown; args?: unknown }): ConvexClientLike {
+function fakeClient(capture: {
+  calls: number;
+  functionRef?: unknown;
+  args?: unknown;
+}): ConvexClientLike {
   return {
     async query() {
       return null;
@@ -23,7 +27,9 @@ function fakeClient(capture: { calls: number; functionRef?: unknown; args?: unkn
 
 describe("ConvexTotalityJournal", () => {
   it("commits validation and audit through one Convex mutation", async () => {
-    const capture: { calls: number; functionRef?: unknown; args?: unknown } = { calls: 0 };
+    const capture: { calls: number; functionRef?: unknown; args?: unknown } = {
+      calls: 0,
+    };
     const journal = new ConvexTotalityJournal(fakeClient(capture), "service-token");
 
     await journal.commitOutcome({
