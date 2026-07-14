@@ -108,6 +108,24 @@ describe("OpenAI Totality reasoner", () => {
     );
   });
 
+  it("classifies non-JSON upstream server failures as retryable", async () => {
+    const fetchImpl = (async () =>
+      new Response("upstream unavailable", {
+        status: 503,
+        headers: { "Content-Type": "text/plain" },
+      })) as typeof fetch;
+    const reasoner = new OpenAITotalityReasoner(
+      { apiKey: "test-key", model: "gpt-5.6", timeoutMs: 5_000 },
+      fetchImpl,
+    );
+
+    await assert.rejects(
+      () => reasoner.reason(makeRequest()),
+      (error: unknown) =>
+        error instanceof OpenAIRequestError && error.status === 503 && error.retryable,
+    );
+  });
+
   it("blocks caller authority violations before making a network request", async () => {
     let called = false;
     const fetchImpl = (async () => {
@@ -122,6 +140,23 @@ describe("OpenAI Totality reasoner", () => {
     request.actionPolicy.maximumToolAuthority = "T0";
 
     await assert.rejects(() => reasoner.reason(request), /exceeds the request action policy/);
+    assert.equal(called, false);
+  });
+
+  it("blocks invalid client request IDs before making a network request", async () => {
+    let called = false;
+    const fetchImpl = (async () => {
+      called = true;
+      return new Response(JSON.stringify(successfulPayload()), { status: 200 });
+    }) as typeof fetch;
+    const reasoner = new OpenAITotalityReasoner(
+      { apiKey: "test-key", model: "gpt-5.6", timeoutMs: 5_000 },
+      fetchImpl,
+    );
+    const request = makeRequest();
+    request.requestId = "bad\nrequest-id";
+
+    await assert.rejects(() => reasoner.reason(request), /visible ASCII characters/);
     assert.equal(called, false);
   });
 });
