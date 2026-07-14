@@ -95,7 +95,11 @@ describe("ConvexMemoryChangeSetService", () => {
     } as unknown as ConvexClientLike;
     const service = new ConvexMemoryChangeSetService(client, "service-token");
 
-    const result = await service.apply({ changeSetId: "change-1", expectedRevision: 3 });
+    const result = await service.apply({
+      changeSetId: "change-1",
+      projectId: "project-1",
+      expectedRevision: 3,
+    });
 
     assert.equal(result.changeSet.state, "applied");
     assert.equal(result.changeSet.appliedRevision, 4);

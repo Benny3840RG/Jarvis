@@ -51,6 +51,7 @@ async function requireProject(
 async function requireChangeSet(
   ctx: ReadCtx,
   ownerId: string,
+  projectKey: string,
   changeSetId: string,
 ): Promise<Doc<"memoryChangeSets">> {
   const changeSet = await ctx.db
@@ -59,7 +60,9 @@ async function requireChangeSet(
       q.eq("ownerId", ownerId).eq("changeSetId", changeSetId),
     )
     .unique();
-  if (!changeSet) throw new Error("Memory change set does not exist.");
+  if (!changeSet || changeSet.projectKey !== projectKey) {
+    throw new Error("Memory change set does not exist.");
+  }
   return changeSet;
 }
 
@@ -252,16 +255,18 @@ export const stage = mutation({
 });
 
 export const get = query({
-  args: { serviceToken: v.string(), changeSetId: v.string() },
+  args: { serviceToken: v.string(), projectKey: v.string(), changeSetId: v.string() },
   returns: v.union(memoryChangeSetDocumentValidator, v.null()),
   handler: async (ctx, args) => {
     const ownerId = requireOwner(args.serviceToken);
-    return ctx.db
+    const projectKey = cleanRequiredText(args.projectKey, "Project key");
+    const changeSet = await ctx.db
       .query("memoryChangeSets")
       .withIndex("by_owner_and_change_set_id", (q) =>
         q.eq("ownerId", ownerId).eq("changeSetId", args.changeSetId.trim()),
       )
       .unique();
+    return changeSet?.projectKey === projectKey ? changeSet : null;
   },
 });
 
@@ -299,22 +304,29 @@ export const listRecent = query({
 export const approve = mutation({
   args: {
     serviceToken: v.string(),
+    projectKey: v.string(),
     changeSetId: v.string(),
     expectedRevision: v.number(),
   },
   returns: memoryChangeSetDocumentValidator,
   handler: async (ctx, args) => {
     const ownerId = requireOwner(args.serviceToken);
+    const projectKey = cleanRequiredText(args.projectKey, "Project key");
     const changeSetId = cleanRequiredText(args.changeSetId, "Memory change set ID");
     const expectedRevision = requirePositiveRevision(args.expectedRevision, "Expected revision");
-    const changeSet = await requireChangeSet(ctx, ownerId, changeSetId);
-    if (changeSet.state === "approved" || changeSet.state === "applied") return changeSet;
+    const changeSet = await requireChangeSet(ctx, ownerId, projectKey, changeSetId);
+    if (changeSet.baseRevision !== expectedRevision) {
+      throw new Error(
+        `Project revision conflict: expected ${expectedRevision}, proposal base ${changeSet.baseRevision}.`,
+      );
+    }
+    if (changeSet.state === "applied") return changeSet;
     if (changeSet.state === "rejected") {
       throw new Error("Rejected memory change sets cannot be approved.");
     }
 
     const project = await requireProject(ctx, ownerId, changeSet.projectKey);
-    if (changeSet.baseRevision !== expectedRevision || project.revision !== expectedRevision) {
+    if (project.revision !== expectedRevision) {
       throw new Error(
         `Project revision conflict: expected ${expectedRevision}, current ${project.revision}.`,
       );
@@ -346,15 +358,17 @@ export const approve = mutation({
 export const reject = mutation({
   args: {
     serviceToken: v.string(),
+    projectKey: v.string(),
     changeSetId: v.string(),
     reason: v.string(),
   },
   returns: memoryChangeSetDocumentValidator,
   handler: async (ctx, args) => {
     const ownerId = requireOwner(args.serviceToken);
+    const projectKey = cleanRequiredText(args.projectKey, "Project key");
     const changeSetId = cleanRequiredText(args.changeSetId, "Memory change set ID");
     const reason = cleanRequiredText(args.reason, "Rejection reason");
-    const changeSet = await requireChangeSet(ctx, ownerId, changeSetId);
+    const changeSet = await requireChangeSet(ctx, ownerId, projectKey, changeSetId);
     if (changeSet.state === "applied") {
       throw new Error("Applied memory change sets cannot be rejected.");
     }
@@ -387,15 +401,22 @@ export const reject = mutation({
 export const apply = mutation({
   args: {
     serviceToken: v.string(),
+    projectKey: v.string(),
     changeSetId: v.string(),
     expectedRevision: v.number(),
   },
   returns: memoryApplyResultValidator,
   handler: async (ctx, args) => {
     const ownerId = requireOwner(args.serviceToken);
+    const projectKey = cleanRequiredText(args.projectKey, "Project key");
     const changeSetId = cleanRequiredText(args.changeSetId, "Memory change set ID");
     const expectedRevision = requirePositiveRevision(args.expectedRevision, "Expected revision");
-    const changeSet = await requireChangeSet(ctx, ownerId, changeSetId);
+    const changeSet = await requireChangeSet(ctx, ownerId, projectKey, changeSetId);
+    if (changeSet.baseRevision !== expectedRevision) {
+      throw new Error(
+        `Project revision conflict: expected ${expectedRevision}, proposal base ${changeSet.baseRevision}.`,
+      );
+    }
     const project = await requireProject(ctx, ownerId, changeSet.projectKey);
 
     if (changeSet.state === "applied") {
@@ -409,7 +430,7 @@ export const apply = mutation({
     if (changeSet.state !== "approved") {
       throw new Error("Only approved memory change sets can be applied.");
     }
-    if (changeSet.baseRevision !== expectedRevision || project.revision !== expectedRevision) {
+    if (project.revision !== expectedRevision) {
       throw new Error(
         `Project revision conflict: expected ${expectedRevision}, current ${project.revision}.`,
       );

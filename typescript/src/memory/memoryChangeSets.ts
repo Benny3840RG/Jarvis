@@ -84,16 +84,25 @@ export interface MemoryChangeSetService {
     rationale: string;
     proposedBy: MemoryChangeSetActor;
   }): Promise<MemoryChangeSet>;
-  get(changeSetId: string): Promise<MemoryChangeSet | null>;
+  get(input: { changeSetId: string; projectId: string }): Promise<MemoryChangeSet | null>;
   list(input: {
     projectId: string;
     state?: MemoryChangeSetState;
     limit?: number;
   }): Promise<MemoryChangeSet[]>;
-  approve(input: { changeSetId: string; expectedRevision: number }): Promise<MemoryChangeSet>;
-  reject(input: { changeSetId: string; reason: string }): Promise<MemoryChangeSet>;
+  approve(input: {
+    changeSetId: string;
+    projectId: string;
+    expectedRevision: number;
+  }): Promise<MemoryChangeSet>;
+  reject(input: {
+    changeSetId: string;
+    projectId: string;
+    reason: string;
+  }): Promise<MemoryChangeSet>;
   apply(input: {
     changeSetId: string;
+    projectId: string;
     expectedRevision: number;
   }): Promise<ApplyMemoryChangeSetResult>;
 }

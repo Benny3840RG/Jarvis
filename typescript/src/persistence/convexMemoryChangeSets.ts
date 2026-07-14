@@ -110,10 +110,11 @@ export class ConvexMemoryChangeSetService implements MemoryChangeSetService {
     return changeSetFromConvex(row as ChangeSetRow);
   }
 
-  async get(changeSetId: string): Promise<MemoryChangeSet | null> {
+  async get(input: Parameters<MemoryChangeSetService["get"]>[0]): Promise<MemoryChangeSet | null> {
     const row = await this.client.query(memoryChangeSetFunctions.get, {
       serviceToken: this.serviceToken,
-      changeSetId,
+      changeSetId: input.changeSetId,
+      projectKey: input.projectId,
     });
     return row === null ? null : changeSetFromConvex(row as ChangeSetRow);
   }
@@ -132,6 +133,7 @@ export class ConvexMemoryChangeSetService implements MemoryChangeSetService {
     const row = await this.client.mutation(memoryChangeSetFunctions.approve, {
       serviceToken: this.serviceToken,
       changeSetId: input.changeSetId,
+      projectKey: input.projectId,
       expectedRevision: input.expectedRevision,
     });
     return changeSetFromConvex(row as ChangeSetRow);
@@ -141,6 +143,7 @@ export class ConvexMemoryChangeSetService implements MemoryChangeSetService {
     const row = await this.client.mutation(memoryChangeSetFunctions.reject, {
       serviceToken: this.serviceToken,
       changeSetId: input.changeSetId,
+      projectKey: input.projectId,
       reason: input.reason,
     });
     return changeSetFromConvex(row as ChangeSetRow);
@@ -152,6 +155,7 @@ export class ConvexMemoryChangeSetService implements MemoryChangeSetService {
     const result = await this.client.mutation(memoryChangeSetFunctions.apply, {
       serviceToken: this.serviceToken,
       changeSetId: input.changeSetId,
+      projectKey: input.projectId,
       expectedRevision: input.expectedRevision,
     });
     const typed = result as {

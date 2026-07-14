@@ -106,8 +106,8 @@ function successfulService(
     async stage() {
       return changeSet();
     },
-    async get() {
-      return changeSet();
+    async get(input) {
+      return input.projectId === "project-1" ? changeSet() : null;
     },
     async list() {
       return [changeSet()];
@@ -257,6 +257,17 @@ describe("Memory change set HTTP boundary", () => {
     });
     assert.equal(response.statusCode, 200);
     assert.deepEqual(captured, { projectId: "project-1", state: "approved", limit: 10 });
+  });
+
+  it("returns 404 when a change set belongs to another project", async () => {
+    const app = await makeApp(successfulService());
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/v1/projects/project-2/memory-change-sets/change-1",
+      headers: authHeaders(),
+    });
+    assert.equal(response.statusCode, 404);
+    assert.equal(response.json().type, "urn:jarvis:problem:memory-change-set-not-found");
   });
 
   it("maps revision conflicts without leaking backend details", async () => {

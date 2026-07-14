@@ -132,9 +132,9 @@ export class MemoryChangeSetController {
   }
 
   @Get(":changeSetId")
-  async get(@Param("changeSetId") changeSetId: string) {
+  async get(@Param("projectId") projectId: string, @Param("changeSetId") changeSetId: string) {
     try {
-      const changeSet = await this.requireService().get(changeSetId);
+      const changeSet = await this.requireService().get({ changeSetId, projectId });
       if (!changeSet) throw operationProblem(new Error("Memory change set does not exist."));
       return changeSet;
     } catch (error: unknown) {
@@ -145,7 +145,11 @@ export class MemoryChangeSetController {
 
   @Post(":changeSetId/approve")
   @HttpCode(200)
-  async approve(@Param("changeSetId") changeSetId: string, @Body() body: unknown) {
+  async approve(
+    @Param("projectId") projectId: string,
+    @Param("changeSetId") changeSetId: string,
+    @Body() body: unknown,
+  ) {
     let expectedRevision;
     try {
       expectedRevision = parseExpectedRevision(body);
@@ -158,7 +162,7 @@ export class MemoryChangeSetController {
       );
     }
     try {
-      return await this.requireService().approve({ changeSetId, expectedRevision });
+      return await this.requireService().approve({ changeSetId, projectId, expectedRevision });
     } catch (error: unknown) {
       if (error instanceof JarvisProblem) throw error;
       throw operationProblem(error);
@@ -167,7 +171,11 @@ export class MemoryChangeSetController {
 
   @Post(":changeSetId/reject")
   @HttpCode(200)
-  async reject(@Param("changeSetId") changeSetId: string, @Body() body: unknown) {
+  async reject(
+    @Param("projectId") projectId: string,
+    @Param("changeSetId") changeSetId: string,
+    @Body() body: unknown,
+  ) {
     let reason;
     try {
       reason = parseRejectionReason(body);
@@ -180,7 +188,7 @@ export class MemoryChangeSetController {
       );
     }
     try {
-      return await this.requireService().reject({ changeSetId, reason });
+      return await this.requireService().reject({ changeSetId, projectId, reason });
     } catch (error: unknown) {
       if (error instanceof JarvisProblem) throw error;
       throw operationProblem(error);
@@ -189,7 +197,11 @@ export class MemoryChangeSetController {
 
   @Post(":changeSetId/apply")
   @HttpCode(200)
-  async apply(@Param("changeSetId") changeSetId: string, @Body() body: unknown) {
+  async apply(
+    @Param("projectId") projectId: string,
+    @Param("changeSetId") changeSetId: string,
+    @Body() body: unknown,
+  ) {
     let expectedRevision;
     try {
       expectedRevision = parseExpectedRevision(body);
@@ -202,7 +214,7 @@ export class MemoryChangeSetController {
       );
     }
     try {
-      return await this.requireService().apply({ changeSetId, expectedRevision });
+      return await this.requireService().apply({ changeSetId, projectId, expectedRevision });
     } catch (error: unknown) {
       if (error instanceof JarvisProblem) throw error;
       throw operationProblem(error);
