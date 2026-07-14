@@ -331,6 +331,7 @@ export const approve = mutation({
         `Project revision conflict: expected ${expectedRevision}, current ${project.revision}.`,
       );
     }
+    if (changeSet.state === "approved") return changeSet;
 
     const now = Date.now();
     await ctx.db.patch("memoryChangeSets", changeSet._id, {
@@ -372,7 +373,10 @@ export const reject = mutation({
     if (changeSet.state === "applied") {
       throw new Error("Applied memory change sets cannot be rejected.");
     }
-    if (changeSet.state === "rejected") return changeSet;
+    if (changeSet.state === "rejected") {
+      if (changeSet.rejectedReason === reason) return changeSet;
+      throw new Error("Rejected memory change set already has a different reason.");
+    }
 
     const now = Date.now();
     await ctx.db.patch("memoryChangeSets", changeSet._id, {
