@@ -78,8 +78,7 @@ function makePersistence(): PersistenceProvider {
 
 function noOpJournal(): TotalityJournal {
   return {
-    async recordValidation() {},
-    async appendAudit() {},
+    async commitOutcome() {},
   };
 }
 
@@ -219,12 +218,11 @@ describe("Totality HTTP boundary", () => {
     assert.doesNotMatch(response.body, /sensitive upstream detail/);
   });
 
-  it("fails closed when Convex journalling fails", async () => {
+  it("fails closed when the atomic Convex journal commit fails", async () => {
     const journal: TotalityJournal = {
-      async recordValidation() {
+      async commitOutcome() {
         throw new Error("Convex unavailable");
       },
-      async appendAudit() {},
     };
     const app = await makeApp(successfulPipeline(journal));
     const response = await app.inject({
