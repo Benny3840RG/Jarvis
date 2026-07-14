@@ -3,53 +3,40 @@ from pathlib import Path
 path = Path(__file__).resolve().parents[2] / "typescript/convex/memoryChangeSets.ts"
 text = path.read_text(encoding="utf-8")
 
-approve_old = '''    const changeSet = await requireChangeSet(ctx, ownerId, changeSetId);
-    if (changeSet.state === "approved" || changeSet.state === "applied") return changeSet;
-    if (changeSet.state === "rejected") {
-      throw new Error("Rejected memory change sets cannot be approved.");
-    }
-
-    const project = await requireProject(ctx, ownerId, changeSet.projectKey);
-    if (changeSet.baseRevision !== expectedRevision || project.revision !== expectedRevision) {
-'''
-approve_new = '''    const changeSet = await requireChangeSet(ctx, ownerId, changeSetId);
-    if (changeSet.baseRevision !== expectedRevision) {
+approve_old = '''    const project = await requireProject(ctx, ownerId, changeSet.projectKey);
+    if (project.revision !== expectedRevision) {
       throw new Error(
-        `Project revision conflict: expected ${expectedRevision}, proposal base ${changeSet.baseRevision}.`,
+        `Project revision conflict: expected ${expectedRevision}, current ${project.revision}.`,
       );
     }
-    if (changeSet.state === "applied") return changeSet;
-    if (changeSet.state === "rejected") {
-      throw new Error("Rejected memory change sets cannot be approved.");
-    }
 
-    const project = await requireProject(ctx, ownerId, changeSet.projectKey);
+    const now = Date.now();
+'''
+approve_new = '''    const project = await requireProject(ctx, ownerId, changeSet.projectKey);
     if (project.revision !== expectedRevision) {
+      throw new Error(
+        `Project revision conflict: expected ${expectedRevision}, current ${project.revision}.`,
+      );
+    }
+    if (changeSet.state === "approved") return changeSet;
+
+    const now = Date.now();
 '''
 if approve_old in text:
-    text = text.replace(approve_old, approve_new)
+    text = text.replace(approve_old, approve_new, 1)
 
-apply_old = '''    const changeSet = await requireChangeSet(ctx, ownerId, changeSetId);
-    const project = await requireProject(ctx, ownerId, changeSet.projectKey);
+reject_old = '''    if (changeSet.state === "rejected") return changeSet;
 
-    if (changeSet.state === "applied") {
+    const now = Date.now();
 '''
-apply_new = '''    const changeSet = await requireChangeSet(ctx, ownerId, changeSetId);
-    if (changeSet.baseRevision !== expectedRevision) {
-      throw new Error(
-        `Project revision conflict: expected ${expectedRevision}, proposal base ${changeSet.baseRevision}.`,
-      );
+reject_new = '''    if (changeSet.state === "rejected") {
+      if (changeSet.rejectedReason === reason) return changeSet;
+      throw new Error("Rejected memory change set already has a different reason.");
     }
-    const project = await requireProject(ctx, ownerId, changeSet.projectKey);
 
-    if (changeSet.state === "applied") {
+    const now = Date.now();
 '''
-if apply_old in text:
-    text = text.replace(apply_old, apply_new)
+if reject_old in text:
+    text = text.replace(reject_old, reject_new, 1)
 
-apply_conflict_old = '''    if (changeSet.baseRevision !== expectedRevision || project.revision !== expectedRevision) {
-'''
-apply_conflict_new = '''    if (project.revision !== expectedRevision) {
-'''
-text = text.replace(apply_conflict_old, apply_conflict_new)
 path.write_text(text, encoding="utf-8")
