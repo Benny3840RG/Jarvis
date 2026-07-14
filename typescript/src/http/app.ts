@@ -12,6 +12,8 @@ import {
   type PersistenceProvider,
   type PersistenceProviderName,
 } from "../persistence/persistence.js";
+import { createTotalityPipelineFromEnv } from "../totality/totalityFactory.js";
+import type { TotalityPipeline } from "../totality/totalityPipeline.js";
 import { resolveHttpAppConfig, type HttpAppConfig } from "./config.js";
 import { JarvisHttpModule } from "./jarvisHttpModule.js";
 import { REQUEST_ID_HEADER, resolveRequestId } from "./requestId.js";
@@ -27,10 +29,12 @@ type InjectedPersistenceOptions = {
 };
 
 export type CreateJarvisHttpAppOptions = (
-  DefaultPersistenceOptions | InjectedPersistenceOptions
+  | DefaultPersistenceOptions
+  | InjectedPersistenceOptions
 ) & {
   config?: HttpAppConfig;
   logger?: NestApplicationOptions["logger"];
+  totalityPipeline?: TotalityPipeline | null;
 };
 
 export async function createJarvisHttpApp(
@@ -42,6 +46,10 @@ export async function createJarvisHttpApp(
   const providerName = options.providerName ?? resolvePersistenceProviderName();
   const persistence = options.persistence ?? createPersistenceFromEnv();
   const config = options.config ?? resolveHttpAppConfig();
+  const totalityPipeline =
+    options.totalityPipeline === undefined
+      ? createTotalityPipelineFromEnv()
+      : options.totalityPipeline;
   const adapter = new FastifyAdapter({
     genReqId: (request: IncomingMessage) =>
       resolveRequestId(request.headers[REQUEST_ID_HEADER], [
@@ -50,7 +58,7 @@ export async function createJarvisHttpApp(
       ]),
   });
   const app = await NestFactory.create<NestFastifyApplication>(
-    JarvisHttpModule.register({ persistence, providerName, config }),
+    JarvisHttpModule.register({ persistence, providerName, config, totalityPipeline }),
     adapter,
     { logger: options.logger, abortOnError: false },
   );
