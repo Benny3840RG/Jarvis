@@ -112,9 +112,11 @@ not write another audit event.
 
 - project and change-set IDs are trimmed and non-empty;
 - revisions are positive integers;
-- fact confidence is between `0` and `1`;
+- fact confidence is finite and between `0` and `1`;
+- measurement values are finite;
 - inferred facts cannot claim confidence `1`;
 - fact and decision timestamps are canonical UTC ISO date-times;
+- decisions contain at most 50 rejected alternatives;
 - record IDs are unique within a change set;
 - measurement `name + unit` keys are unique within the project;
 - measurement conflict validation is bounded and fails closed on oversized datasets;

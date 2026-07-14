@@ -8,6 +8,7 @@ import {
   measurementKey,
   normalizeMemoryRecords,
   requirePositiveRevision,
+  sameMemoryProposal,
   type MemoryRecord,
 } from "./memoryChangeSetLogic.js";
 import {
@@ -87,27 +88,6 @@ async function appendAudit(
     payload: input.payload,
     createdAt: input.createdAt,
   });
-}
-
-function sameProposal(
-  existing: Doc<"memoryChangeSets">,
-  input: {
-    requestId: string;
-    projectKey: string;
-    baseRevision: number;
-    records: MemoryRecord[];
-    rationale: string;
-    proposedBy: "user" | "agent" | "tool";
-  },
-): boolean {
-  return (
-    existing.requestId === input.requestId &&
-    existing.projectKey === input.projectKey &&
-    existing.baseRevision === input.baseRevision &&
-    existing.rationale === input.rationale &&
-    existing.proposedBy === input.proposedBy &&
-    JSON.stringify(existing.records) === JSON.stringify(input.records)
-  );
 }
 
 async function recordsForChangeSet(
@@ -198,8 +178,7 @@ export const stage = mutation({
       .unique();
     if (existing) {
       if (
-        !sameProposal(existing, {
-          requestId,
+        !sameMemoryProposal(existing, {
           projectKey,
           baseRevision: expectedRevision,
           records,

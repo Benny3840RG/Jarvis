@@ -41,7 +41,9 @@ function operationProblem(error: unknown): JarvisProblem {
     );
   }
   if (
-    /cannot be|only approved|already exists with different|conflicting|duplicate/i.test(message)
+    /cannot be|only approved|already exists with different|already has a different|conflicting|duplicate/i.test(
+      message,
+    )
   ) {
     return new JarvisProblem(
       409,
