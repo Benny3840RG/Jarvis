@@ -31,14 +31,7 @@ export interface MemoryUpdateProposal {
   operation: "create" | "update" | "append";
   target: keyof ProjectMemory;
   value: unknown;
-  classification:
-    | "fact"
-    | "assumption"
-    | "measurement"
-    | "decision"
-    | "risk"
-    | "task"
-    | "event";
+  classification: "fact" | "assumption" | "measurement" | "decision" | "risk" | "task" | "event";
   requiresApproval: boolean;
 }
 
@@ -71,10 +64,7 @@ export interface TotalityResponse<TResult = unknown> {
   errors: TotalityError[];
 }
 
-export function assertRequestAuthority(
-  request: TotalityRequest,
-  routing: RoutingDecision,
-): void {
+export function assertRequestAuthority(request: TotalityRequest, routing: RoutingDecision): void {
   const authorityRank: Record<PermissionEnvelope["toolAuthority"], number> = {
     T0: 0,
     T1: 1,
@@ -93,8 +83,6 @@ export function assertRequestAuthority(
     request.actionPolicy.requireApprovalBeforeExecution &&
     routing.permission.actionState === "execute"
   ) {
-    throw new Error(
-      "Execution requires approval under the request action policy",
-    );
+    throw new Error("Execution requires approval under the request action policy");
   }
 }
