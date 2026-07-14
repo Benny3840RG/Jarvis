@@ -54,9 +54,7 @@ export class TotalityPipeline {
     private readonly journal: TotalityJournal,
   ) {}
 
-  async run(
-    request: TotalityRequest,
-  ): Promise<TotalityResponse<TotalityReasoningResult>> {
+  async run(request: TotalityRequest): Promise<TotalityResponse<TotalityReasoningResult>> {
     const routing = routeTotalityTask({
       taskType: request.taskType,
       outputStyle: request.outputStyle,
