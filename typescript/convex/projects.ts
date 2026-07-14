@@ -23,12 +23,12 @@ function cleanDomains(domains: string[]): string[] {
   return cleaned;
 }
 
-function requireIsoDate(value: string, field: string): string {
+function requireTimestamp(value: string, field: string): number {
   const timestamp = Date.parse(value);
-  if (!Number.isFinite(timestamp)) {
-    throw new Error(`${field} must be an ISO date-time string.`);
+  if (!Number.isFinite(timestamp) || new Date(timestamp).toISOString() !== value) {
+    throw new Error(`${field} must be a canonical UTC ISO date-time string.`);
   }
-  return new Date(timestamp).toISOString();
+  return timestamp;
 }
 
 function boundedLimit(limit: number | undefined): number {
@@ -61,19 +61,11 @@ export const upsert = mutation({
     }
 
     const projectKey = cleanRequiredText(args.projectKey, "Project key");
-    const values = {
-      ownerId,
-      projectKey,
-      projectName: cleanRequiredText(args.projectName, "Project name"),
-      projectType: cleanRequiredText(args.projectType, "Project type"),
-      status: args.status,
-      createdAt: requireIsoDate(args.createdAt, "Project createdAt"),
-      updatedAt: requireIsoDate(args.updatedAt, "Project updatedAt"),
-      revision: args.revision,
-      domains: cleanDomains(args.domains),
-      summary: args.summary.trim(),
-      preferences: args.preferences,
-    };
+    const requestedCreatedAt = requireTimestamp(args.createdAt, "Project createdAt");
+    const requestedUpdatedAt = requireTimestamp(args.updatedAt, "Project updatedAt");
+    if (requestedUpdatedAt < requestedCreatedAt) {
+      throw new Error("Project updatedAt cannot be earlier than createdAt.");
+    }
 
     const existing = await ctx.db
       .query("projects")
@@ -86,6 +78,26 @@ export const upsert = mutation({
       if (args.revision < existing.revision) {
         throw new Error("Project revision cannot move backwards.");
       }
+      if (requestedUpdatedAt < existing.updatedAt) {
+        throw new Error("Project updatedAt cannot move backwards.");
+      }
+    }
+
+    const values = {
+      ownerId,
+      projectKey,
+      projectName: cleanRequiredText(args.projectName, "Project name"),
+      projectType: cleanRequiredText(args.projectType, "Project type"),
+      status: args.status,
+      createdAt: existing?.createdAt ?? requestedCreatedAt,
+      updatedAt: requestedUpdatedAt,
+      revision: args.revision,
+      domains: cleanDomains(args.domains),
+      summary: args.summary.trim(),
+      preferences: args.preferences,
+    };
+
+    if (existing) {
       await ctx.db.patch("projects", existing._id, values);
       const updated = await ctx.db.get("projects", existing._id);
       if (!updated) throw new Error("Project update failed.");
