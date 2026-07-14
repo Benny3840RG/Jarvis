@@ -6,6 +6,8 @@ on:
     paths:
       - "typescript/**"
       - ".github/scripts/add_memory_approval_contract.py"
+      - ".github/scripts/fix_memory_change_set_idempotency.py"
+      - ".github/scripts/fix_memory_change_set_project_scope.py"
       - ".github/workflows/format-memory-approval.yml"
 
 permissions:
@@ -28,6 +30,10 @@ jobs:
         run: npm ci
       - name: Generate memory approval contract
         run: python .github/scripts/add_memory_approval_contract.py
+      - name: Tighten memory approval correctness
+        run: |
+          python .github/scripts/fix_memory_change_set_idempotency.py
+          python .github/scripts/fix_memory_change_set_project_scope.py
       - name: Format memory approval files
         working-directory: typescript
         run: >-
