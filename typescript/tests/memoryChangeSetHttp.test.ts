@@ -23,6 +23,7 @@ import type {
 const CONFIG: HttpAppConfig = {
   version: "0.1.0",
   sourceVersion: "test-source",
+  deploymentVersion: null,
   timezone: "Australia/Melbourne",
   currentToken: "current-secret",
 };
