@@ -75,4 +75,11 @@ export const IMPLEMENTED_CAPABILITIES: readonly Capability[] = [
     destructive: false,
     mcpExposed: true,
   },
+  {
+    operationId: "reasonWithTotality",
+    summary: "Run proposal-only Totality reasoning with validation and audit journalling",
+    mutating: true,
+    destructive: false,
+    mcpExposed: false,
+  },
 ] as const;
