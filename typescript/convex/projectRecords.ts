@@ -1,10 +1,7 @@
 import { v } from "convex/values";
 
 import { requireOwner } from "./authHelpers.js";
-import {
-  projectRecordDocumentValidator,
-  projectRecordValidator,
-} from "./totalityValidators.js";
+import { projectRecordDocumentValidator, projectRecordValidator } from "./totalityValidators.js";
 import { mutation, query } from "./_generated/server.js";
 
 const MAX_LIST_LIMIT = 100;
@@ -99,10 +96,7 @@ export const listByKind = query({
     return ctx.db
       .query("projectRecords")
       .withIndex("by_owner_and_project_key_and_kind", (q) =>
-        q
-          .eq("ownerId", ownerId)
-          .eq("projectKey", args.projectKey.trim())
-          .eq("kind", args.kind),
+        q.eq("ownerId", ownerId).eq("projectKey", args.projectKey.trim()).eq("kind", args.kind),
       )
       .order("desc")
       .take(boundedLimit(args.limit));
