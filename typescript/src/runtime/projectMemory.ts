@@ -1,4 +1,5 @@
-export type ProjectStatus = "planned" | "active" | "blocked" | "completed" | "archived";
+export type ProjectStatus =
+  "planned" | "active" | "blocked" | "completed" | "archived";
 export type FactSource = "user" | "file" | "tool" | "measurement" | "inference";
 export type AssumptionStatus = "unverified" | "verified" | "rejected";
 export type ImpactLevel = "low" | "medium" | "high";
@@ -134,8 +135,15 @@ export function assertProjectMemoryIntegrity(project: ProjectMemory): void {
   }
 
   for (const risk of project.risks) {
-    if (risk.likelihood < 1 || risk.likelihood > 5 || risk.consequence < 1 || risk.consequence > 5) {
-      throw new Error(`Risk ${risk.riskId} likelihood and consequence must be between 1 and 5`);
+    if (
+      risk.likelihood < 1 ||
+      risk.likelihood > 5 ||
+      risk.consequence < 1 ||
+      risk.consequence > 5
+    ) {
+      throw new Error(
+        `Risk ${risk.riskId} likelihood and consequence must be between 1 and 5`,
+      );
     }
   }
 
