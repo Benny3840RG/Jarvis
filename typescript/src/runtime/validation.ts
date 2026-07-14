@@ -22,19 +22,15 @@ export interface ValidationInput {
   contradictions?: string[];
   hazards?: string[];
   controls?: string[];
-  requestedAuthority?: Pick<
-    PermissionEnvelope,
-    "toolAuthority" | "actionState"
-  >;
+  requestedAuthority?: Pick<PermissionEnvelope, "toolAuthority" | "actionState">;
 }
 
-const TOOL_AUTHORITY_RANK: Record<PermissionEnvelope["toolAuthority"], number> =
-  {
-    T0: 0,
-    T1: 1,
-    T2: 2,
-    T3: 3,
-  };
+const TOOL_AUTHORITY_RANK: Record<PermissionEnvelope["toolAuthority"], number> = {
+  T0: 0,
+  T1: 1,
+  T2: 2,
+  T3: 3,
+};
 
 const ACTION_STATE_RANK: Record<PermissionEnvelope["actionState"], number> = {
   read: 0,
@@ -43,9 +39,7 @@ const ACTION_STATE_RANK: Record<PermissionEnvelope["actionState"], number> = {
   execute: 3,
 };
 
-export function validateTotalityResult(
-  input: ValidationInput,
-): ValidationReport {
+export function validateTotalityResult(input: ValidationInput): ValidationReport {
   const checks: ValidationCheck[] = [];
   const warnings: string[] = [];
   const blockingFailures: string[] = [];
@@ -64,35 +58,25 @@ export function validateTotalityResult(
   checks.push({
     id: "UNSUPPORTED_FACTUAL_CLAIMS",
     status: unsupportedClaims.length === 0 ? "pass" : "fail",
-    message:
-      unsupportedClaims.length === 0 ? undefined : unsupportedClaims.join("; "),
+    message: unsupportedClaims.length === 0 ? undefined : unsupportedClaims.join("; "),
   });
-  blockingFailures.push(
-    ...unsupportedClaims.map((claim) => `Unsupported claim: ${claim}`),
-  );
+  blockingFailures.push(...unsupportedClaims.map((claim) => `Unsupported claim: ${claim}`));
 
   const contradictions = input.contradictions ?? [];
   checks.push({
     id: "TECHNICAL_CONTRADICTIONS",
     status: contradictions.length === 0 ? "pass" : "fail",
-    message:
-      contradictions.length === 0 ? undefined : contradictions.join("; "),
+    message: contradictions.length === 0 ? undefined : contradictions.join("; "),
   });
-  blockingFailures.push(
-    ...contradictions.map((item) => `Contradiction: ${item}`),
-  );
+  blockingFailures.push(...contradictions.map((item) => `Contradiction: ${item}`));
 
-  const highRisk = ["high", "critical"].includes(
-    input.routing.permission.riskLevel,
-  );
+  const highRisk = ["high", "critical"].includes(input.routing.permission.riskLevel);
   const controlsPresent = (input.controls?.length ?? 0) > 0;
   checks.push({
     id: "HIGH_RISK_CONTROLS_PRESENT",
     status: !highRisk || controlsPresent ? "pass" : "fail",
     message:
-      !highRisk || controlsPresent
-        ? undefined
-        : "High-risk work requires explicit controls.",
+      !highRisk || controlsPresent ? undefined : "High-risk work requires explicit controls.",
   });
   if (highRisk && !controlsPresent)
     blockingFailures.push("High-risk work has no explicit controls.");
@@ -111,8 +95,7 @@ export function validateTotalityResult(
       ? undefined
       : "Requested action exceeds the routing permission envelope.",
   });
-  if (!authorityWithinBoundary)
-    blockingFailures.push("Requested action exceeds authority.");
+  if (!authorityWithinBoundary) blockingFailures.push("Requested action exceeds authority.");
 
   const hazards = input.hazards ?? [];
   if (highRisk && hazards.length === 0) {
