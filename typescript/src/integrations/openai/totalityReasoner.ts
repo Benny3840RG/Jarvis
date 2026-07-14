@@ -95,6 +95,15 @@ function cleanModel(value: string | undefined): string {
   return model;
 }
 
+function cleanClientRequestId(value: string): string {
+  if (value.length === 0 || value.length > 512 || !/^[\x21-\x7E]+$/.test(value)) {
+    throw new Error(
+      "OpenAI client request ID must contain 1 to 512 visible ASCII characters.",
+    );
+  }
+  return value;
+}
+
 function resolveTimeout(value: string | undefined): number {
   if (value === undefined || value.trim().length === 0) return DEFAULT_TIMEOUT_MS;
   if (!/^\d+$/.test(value)) throw new Error("OPENAI_TIMEOUT_MS must be an integer.");
@@ -163,6 +172,15 @@ function extractOutputText(payload: OpenAIResponsePayload): string {
   throw new Error("OpenAI response did not contain output_text content.");
 }
 
+function parseResponsePayload(text: string): OpenAIResponsePayload | null {
+  try {
+    const parsed = JSON.parse(text) as unknown;
+    return isRecord(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
 function safeErrorMessage(payload: unknown): string | null {
   if (!isRecord(payload) || !isRecord(payload.error)) return null;
   return typeof payload.error.message === "string" ? payload.error.message : null;
@@ -181,6 +199,7 @@ export class OpenAITotalityReasoner {
       domainContext: request.domainContext,
     });
     assertRequestAuthority(request, routing);
+    const clientRequestId = cleanClientRequestId(request.requestId);
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.config.timeoutMs);
@@ -190,7 +209,7 @@ export class OpenAITotalityReasoner {
         headers: {
           Authorization: `Bearer ${this.config.apiKey}`,
           "Content-Type": "application/json",
-          "X-Client-Request-Id": request.requestId,
+          "X-Client-Request-Id": clientRequestId,
         },
         body: JSON.stringify({
           model: this.config.model,
@@ -216,7 +235,8 @@ export class OpenAITotalityReasoner {
         signal: controller.signal,
       });
 
-      const payload = (await response.json()) as OpenAIResponsePayload;
+      const responseText = await response.text();
+      const payload = parseResponsePayload(responseText);
       if (!response.ok) {
         const message =
           safeErrorMessage(payload) ?? `OpenAI request failed with status ${response.status}.`;
@@ -225,6 +245,9 @@ export class OpenAITotalityReasoner {
           response.status,
           response.status === 429 || response.status >= 500,
         );
+      }
+      if (payload === null) {
+        throw new Error("OpenAI returned a non-JSON success response.");
       }
 
       const outputText = extractOutputText(payload);
@@ -239,6 +262,9 @@ export class OpenAITotalityReasoner {
         throw new OpenAIRequestError("OpenAI request timed out.", null, true);
       }
       const message = error instanceof Error ? error.message : String(error);
+      if (error instanceof TypeError) {
+        throw new OpenAIRequestError(`OpenAI network request failed: ${message}`, null, true);
+      }
       throw new OpenAIRequestError(`OpenAI response processing failed: ${message}`, null, false);
     } finally {
       clearTimeout(timeout);
