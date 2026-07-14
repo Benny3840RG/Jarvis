@@ -24,7 +24,8 @@ function cleanDomains(domains: string[]): string[] {
 }
 
 function requireIsoDate(value: string, field: string): string {
-  if (!Number.isFinite(Date.parse(value))) throw new Error(`${field} must be an ISO date-time string.`);
+  if (!Number.isFinite(Date.parse(value)))
+    throw new Error(`${field} must be an ISO date-time string.`);
   return value;
 }
 
