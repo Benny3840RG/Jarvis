@@ -23,10 +23,8 @@ import type {
 const CONFIG: HttpAppConfig = {
   version: "0.1.0",
   sourceVersion: "test-source",
-  deploymentVersion: null,
   timezone: "Australia/Melbourne",
   currentToken: "current-secret",
-  previousToken: null,
 };
 
 const openApps: NestFastifyApplication[] = [];
@@ -196,11 +194,11 @@ describe("Memory change set HTTP boundary", () => {
   });
 
   it("stages a typed proposal with the HTTP request ID", async () => {
-    let captured: Parameters<MemoryChangeSetService["stage"]>[0] | null = null;
+    const captured: Array<Parameters<MemoryChangeSetService["stage"]>[0]> = [];
     const app = await makeApp(
       successfulService({
         async stage(input) {
-          captured = input;
+          captured.push(input);
           return changeSet();
         },
       }),
@@ -212,9 +210,9 @@ describe("Memory change set HTTP boundary", () => {
       payload: stageBody(),
     });
     assert.equal(response.statusCode, 201);
-    assert.equal(captured?.requestId, "request-http-1");
-    assert.equal(captured?.projectId, "project-1");
-    assert.equal(captured?.expectedRevision, 3);
+    assert.equal(captured[0]?.requestId, "request-http-1");
+    assert.equal(captured[0]?.projectId, "project-1");
+    assert.equal(captured[0]?.expectedRevision, 3);
   });
 
   it("rejects unsupported record kinds before calling the service", async () => {
