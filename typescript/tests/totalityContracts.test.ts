@@ -1,14 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import {
-  assertProjectMemoryIntegrity,
-  type ProjectMemory,
-} from "../src/runtime/projectMemory.js";
-import {
-  assertRequestAuthority,
-  type TotalityRequest,
-} from "../src/runtime/totalityContracts.js";
+import { assertProjectMemoryIntegrity, type ProjectMemory } from "../src/runtime/projectMemory.js";
+import { assertRequestAuthority, type TotalityRequest } from "../src/runtime/totalityContracts.js";
 import { routeTotalityTask } from "../src/runtime/totalityPolicy.js";
 import { validateTotalityResult } from "../src/runtime/validation.js";
 
@@ -57,10 +51,7 @@ describe("Totality contracts", () => {
       recordedAt: "2026-07-15T00:00:00.000Z",
     });
 
-    assert.throws(
-      () => assertProjectMemoryIntegrity(project),
-      /cannot be authoritative/,
-    );
+    assert.throws(() => assertProjectMemoryIntegrity(project), /cannot be authoritative/);
   });
 
   it("rejects duplicate measurement identities", () => {
@@ -82,10 +73,7 @@ describe("Totality contracts", () => {
       },
     );
 
-    assert.throws(
-      () => assertProjectMemoryIntegrity(project),
-      /duplicate measurement/,
-    );
+    assert.throws(() => assertProjectMemoryIntegrity(project), /duplicate measurement/);
   });
 
   it("blocks high-risk results without controls", () => {
@@ -98,11 +86,7 @@ describe("Totality contracts", () => {
     });
 
     assert.equal(report.passed, false);
-    assert.ok(
-      report.blockingFailures.includes(
-        "High-risk work has no explicit controls.",
-      ),
-    );
+    assert.ok(report.blockingFailures.includes("High-risk work has no explicit controls."));
   });
 
   it("blocks authority escalation", () => {
@@ -116,9 +100,7 @@ describe("Totality contracts", () => {
     });
 
     assert.equal(report.passed, false);
-    assert.ok(
-      report.blockingFailures.includes("Requested action exceeds authority."),
-    );
+    assert.ok(report.blockingFailures.includes("Requested action exceeds authority."));
   });
 
   it("enforces the caller's maximum authority", () => {
