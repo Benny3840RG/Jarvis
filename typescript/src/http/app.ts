@@ -47,9 +47,11 @@ export async function createJarvisHttpApp(
   const persistence = options.persistence ?? createPersistenceFromEnv();
   const config = options.config ?? resolveHttpAppConfig();
   const totalityPipeline =
-    options.totalityPipeline === undefined
-      ? createTotalityPipelineFromEnv()
-      : options.totalityPipeline;
+    options.totalityPipeline !== undefined
+      ? options.totalityPipeline
+      : options.persistence === undefined
+        ? createTotalityPipelineFromEnv()
+        : null;
   const adapter = new FastifyAdapter({
     genReqId: (request: IncomingMessage) =>
       resolveRequestId(request.headers[REQUEST_ID_HEADER], [
