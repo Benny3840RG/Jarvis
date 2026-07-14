@@ -102,9 +102,7 @@ function successfulPipeline(journal: TotalityJournal = noOpJournal()): TotalityP
   return new TotalityPipeline(reasoner, journal);
 }
 
-async function makeApp(
-  totalityPipeline: TotalityPipeline | null,
-): Promise<NestFastifyApplication> {
+async function makeApp(totalityPipeline: TotalityPipeline | null): Promise<NestFastifyApplication> {
   const app = await createJarvisHttpApp({
     persistence: makePersistence(),
     providerName: "json",
