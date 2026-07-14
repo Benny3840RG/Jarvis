@@ -146,7 +146,9 @@ export class ConvexMemoryChangeSetService implements MemoryChangeSetService {
     return changeSetFromConvex(row as ChangeSetRow);
   }
 
-  async apply(input: Parameters<MemoryChangeSetService["apply"]>[0]): Promise<ApplyMemoryChangeSetResult> {
+  async apply(
+    input: Parameters<MemoryChangeSetService["apply"]>[0],
+  ): Promise<ApplyMemoryChangeSetResult> {
     const result = await this.client.mutation(memoryChangeSetFunctions.apply, {
       serviceToken: this.serviceToken,
       changeSetId: input.changeSetId,

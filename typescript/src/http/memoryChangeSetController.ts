@@ -1,14 +1,4 @@
-import {
-  Body,
-  Controller,
-  Get,
-  HttpCode,
-  Inject,
-  Param,
-  Post,
-  Query,
-  Req,
-} from "@nestjs/common";
+import { Body, Controller, Get, HttpCode, Inject, Param, Post, Query, Req } from "@nestjs/common";
 import type { FastifyRequest } from "fastify";
 
 import type { MemoryChangeSetService } from "../memory/memoryChangeSets.js";
@@ -50,7 +40,9 @@ function operationProblem(error: unknown): JarvisProblem {
       "The project revision changed before this memory operation could be completed.",
     );
   }
-  if (/cannot be|only approved|already exists with different|conflicting|duplicate/i.test(message)) {
+  if (
+    /cannot be|only approved|already exists with different|conflicting|duplicate/i.test(message)
+  ) {
     return new JarvisProblem(
       409,
       "memory-state-conflict",

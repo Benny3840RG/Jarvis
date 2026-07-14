@@ -66,10 +66,7 @@ export function normalizeMemoryRecord(record: MemoryRecord): MemoryRecord {
         ...(record.tolerance === undefined
           ? {}
           : {
-              tolerance: cleanRequiredText(
-                record.tolerance,
-                `Measurement ${recordId} tolerance`,
-              ),
+              tolerance: cleanRequiredText(record.tolerance, `Measurement ${recordId} tolerance`),
             }),
       };
     case "decision":

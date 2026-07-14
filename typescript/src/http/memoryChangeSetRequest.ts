@@ -119,7 +119,11 @@ export function parseStageMemoryChangeSet(body: unknown): {
   proposedBy: MemoryChangeSetActor;
 } {
   if (!isRecord(body)) throw new Error("Request body must be a JSON object.");
-  if (!Array.isArray(body.records) || body.records.length < 1 || body.records.length > MAX_RECORDS) {
+  if (
+    !Array.isArray(body.records) ||
+    body.records.length < 1 ||
+    body.records.length > MAX_RECORDS
+  ) {
     throw new Error(`records must contain between 1 and ${MAX_RECORDS} items.`);
   }
   const proposedBy = requiredString(body.proposedBy, "proposedBy");

@@ -31,8 +31,7 @@ type InjectedPersistenceOptions = {
 };
 
 export type CreateJarvisHttpAppOptions = (
-  | DefaultPersistenceOptions
-  | InjectedPersistenceOptions
+  DefaultPersistenceOptions | InjectedPersistenceOptions
 ) & {
   config?: HttpAppConfig;
   logger?: NestApplicationOptions["logger"];
