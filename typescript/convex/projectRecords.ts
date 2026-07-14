@@ -1,23 +1,15 @@
 import { v } from "convex/values";
 
 import { requireOwner } from "./authHelpers.js";
-import { projectRecordDocumentValidator, projectRecordValidator } from "./totalityValidators.js";
+import {
+  projectRecordDocumentValidator,
+  projectRecordValidator,
+  recordKindValidator,
+} from "./totalityValidators.js";
 import { mutation, query } from "./_generated/server.js";
 
 const MAX_LIST_LIMIT = 100;
 const DEFAULT_LIST_LIMIT = 50;
-
-const recordKindValidator = v.union(
-  v.literal("component"),
-  v.literal("fact"),
-  v.literal("assumption"),
-  v.literal("constraint"),
-  v.literal("measurement"),
-  v.literal("decision"),
-  v.literal("risk"),
-  v.literal("task"),
-  v.literal("event"),
-);
 
 function cleanRequiredText(value: string, field: string): string {
   const cleaned = value.trim();
