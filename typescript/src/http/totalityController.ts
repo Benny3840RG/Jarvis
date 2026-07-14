@@ -1,4 +1,4 @@
-import { Body, Controller, Inject, Post, Req } from "@nestjs/common";
+import { Body, Controller, HttpCode, Inject, Post, Req } from "@nestjs/common";
 import type { FastifyRequest } from "fastify";
 
 import { OpenAIRequestError } from "../integrations/openai/totalityReasoner.js";
@@ -25,6 +25,7 @@ export class TotalityController {
   ) {}
 
   @Post("reason")
+  @HttpCode(200)
   async reason(
     @Body() body: unknown,
     @Req() request: FastifyRequest,
