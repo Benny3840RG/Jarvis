@@ -1,10 +1,7 @@
 import { v } from "convex/values";
 
 import { requireOwner } from "./authHelpers.js";
-import {
-  validationCheckValidator,
-  validationReportValidator,
-} from "./totalityValidators.js";
+import { validationCheckValidator, validationReportValidator } from "./totalityValidators.js";
 import { mutation, query } from "./_generated/server.js";
 
 const GLOBAL_SCOPE = "__global__";
