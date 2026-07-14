@@ -2,8 +2,8 @@
 
 Jarvis exposes one narrow, authenticated reasoning operation:
 
-| Method | Path                       | Result |
-| ------ | -------------------------- | ------ |
+| Method | Path                      | Result                                                                   |
+| ------ | ------------------------- | ------------------------------------------------------------------------ |
 | POST   | `/api/v1/totality/reason` | Proposal-only reasoning, local validation, and atomic Convex journalling |
 
 The operation is unavailable unless the process uses `PERSISTENCE_PROVIDER=convex` and has all
@@ -64,12 +64,12 @@ or tool actions.
 
 ## Failure semantics
 
-| HTTP status | Meaning |
-| ----------- | ------- |
-| `401` | Missing or invalid Jarvis service token |
-| `422` | Invalid request or authority-policy violation |
-| `429` | OpenAI rate limit |
-| `503` | Totality disabled, OpenAI failure, or atomic Convex journal failure |
+| HTTP status | Meaning                                                             |
+| ----------- | ------------------------------------------------------------------- |
+| `401`       | Missing or invalid Jarvis service token                             |
+| `422`       | Invalid request or authority-policy violation                       |
+| `429`       | OpenAI rate limit                                                   |
+| `503`       | Totality disabled, OpenAI failure, or atomic Convex journal failure |
 
 All failures use the existing redacted `application/problem+json` envelope. Provider response text,
 credentials, stack traces, and internal persistence errors are not returned to the caller.
