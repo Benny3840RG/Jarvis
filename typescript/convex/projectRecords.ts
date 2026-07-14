@@ -6,7 +6,7 @@ import {
   projectRecordValidator,
   recordKindValidator,
 } from "./totalityValidators.js";
-import { mutation, query } from "./_generated/server.js";
+import { internalMutation, query } from "./_generated/server.js";
 
 const MAX_LIST_LIMIT = 100;
 const DEFAULT_LIST_LIMIT = 50;
@@ -25,7 +25,7 @@ function boundedLimit(limit: number | undefined): number {
   return resolved;
 }
 
-export const upsert = mutation({
+export const upsert = internalMutation({
   args: {
     serviceToken: v.string(),
     projectKey: v.string(),
@@ -95,7 +95,7 @@ export const listByKind = query({
   },
 });
 
-export const remove = mutation({
+export const remove = internalMutation({
   args: { serviceToken: v.string(), projectKey: v.string(), recordId: v.string() },
   returns: v.union(projectRecordDocumentValidator, v.null()),
   handler: async (ctx, args) => {
