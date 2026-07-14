@@ -2,11 +2,9 @@ import { ConvexHttpClient } from "convex/browser";
 
 import { api } from "../../convex/_generated/api.js";
 import type { TotalityJournal } from "../totality/totalityPipeline.js";
-import type { ValidationReport } from "../runtime/validation.js";
 import type { ConvexClientLike } from "./convexPersistence.js";
 
-export const validationReportFunctions = api.validationReports;
-export const auditEventFunctions = api.auditEvents;
+export const reasoningJournalFunctions = api.reasoningJournal;
 
 export class ConvexTotalityJournal implements TotalityJournal {
   private readonly client: ConvexClientLike;
@@ -30,36 +28,17 @@ export class ConvexTotalityJournal implements TotalityJournal {
     this.client = new ConvexHttpClient(convexUrl);
   }
 
-  async recordValidation(input: {
-    requestId: string;
-    projectId: string | null;
-    report: ValidationReport;
-  }): Promise<void> {
-    await this.client.mutation(validationReportFunctions.record, {
+  async commitOutcome(input: Parameters<TotalityJournal["commitOutcome"]>[0]): Promise<void> {
+    await this.client.mutation(reasoningJournalFunctions.commit, {
       serviceToken: this.serviceToken,
       requestId: input.requestId,
       ...(input.projectId === null ? {} : { projectKey: input.projectId }),
-      passed: input.report.passed,
-      checks: input.report.checks,
-      warnings: input.report.warnings,
-      blockingFailures: input.report.blockingFailures,
-    });
-  }
-
-  async appendAudit(input: {
-    requestId: string;
-    projectId: string | null;
-    eventType: string;
-    actor: "agent";
-    payload: Record<string, unknown>;
-  }): Promise<void> {
-    await this.client.mutation(auditEventFunctions.append, {
-      serviceToken: this.serviceToken,
-      requestId: input.requestId,
-      ...(input.projectId === null ? {} : { projectKey: input.projectId }),
-      eventType: input.eventType,
-      actor: input.actor,
-      payload: input.payload,
+      report: input.report,
+      event: {
+        eventType: input.eventType,
+        actor: input.actor,
+        payload: input.payload,
+      },
     });
   }
 }
