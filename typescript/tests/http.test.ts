@@ -191,6 +191,48 @@ describe("Jarvis HTTP system boundary", () => {
           destructive: false,
           mcpExposed: false,
         },
+        {
+          operationId: "stageMemoryChangeSet",
+          summary: "Stage typed project-memory changes for explicit approval",
+          mutating: true,
+          destructive: false,
+          mcpExposed: false,
+        },
+        {
+          operationId: "listMemoryChangeSets",
+          summary: "List staged project-memory change sets",
+          mutating: false,
+          destructive: false,
+          mcpExposed: false,
+        },
+        {
+          operationId: "getMemoryChangeSet",
+          summary: "Inspect one project-memory change set",
+          mutating: false,
+          destructive: false,
+          mcpExposed: false,
+        },
+        {
+          operationId: "approveMemoryChangeSet",
+          summary: "Approve a revision-matched project-memory change set",
+          mutating: true,
+          destructive: false,
+          mcpExposed: false,
+        },
+        {
+          operationId: "rejectMemoryChangeSet",
+          summary: "Reject a staged project-memory change set",
+          mutating: true,
+          destructive: false,
+          mcpExposed: false,
+        },
+        {
+          operationId: "applyMemoryChangeSet",
+          summary: "Transactionally apply an approved project-memory change set",
+          mutating: true,
+          destructive: true,
+          mcpExposed: false,
+        },
       ],
     });
   });
@@ -219,6 +261,12 @@ describe("Jarvis HTTP system boundary", () => {
       ["/api/v1/help", "get"],
       ["/api/v1/status", "get"],
       ["/api/v1/totality/reason", "post"],
+      ["/api/v1/projects/{projectId}/memory-change-sets", "post"],
+      ["/api/v1/projects/{projectId}/memory-change-sets", "get"],
+      ["/api/v1/projects/{projectId}/memory-change-sets/{changeSetId}", "get"],
+      ["/api/v1/projects/{projectId}/memory-change-sets/{changeSetId}/approve", "post"],
+      ["/api/v1/projects/{projectId}/memory-change-sets/{changeSetId}/reject", "post"],
+      ["/api/v1/projects/{projectId}/memory-change-sets/{changeSetId}/apply", "post"],
     ] as const;
     const contractCapabilities = implementedRoutes.map(([path, method]) => {
       const operation = contract.paths[path][method];

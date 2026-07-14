@@ -6,6 +6,8 @@ import type { NestApplicationOptions } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import { FastifyAdapter, type NestFastifyApplication } from "@nestjs/platform-fastify";
 
+import { createMemoryChangeSetServiceFromEnv } from "../memory/memoryChangeSetFactory.js";
+import type { MemoryChangeSetService } from "../memory/memoryChangeSets.js";
 import {
   createPersistenceFromEnv,
   resolvePersistenceProviderName,
@@ -34,6 +36,7 @@ export type CreateJarvisHttpAppOptions = (
   config?: HttpAppConfig;
   logger?: NestApplicationOptions["logger"];
   totalityPipeline?: TotalityPipeline | null;
+  memoryChangeSetService?: MemoryChangeSetService | null;
 };
 
 export async function createJarvisHttpApp(
@@ -45,11 +48,18 @@ export async function createJarvisHttpApp(
   const providerName = options.providerName ?? resolvePersistenceProviderName();
   const persistence = options.persistence ?? createPersistenceFromEnv();
   const config = options.config ?? resolveHttpAppConfig();
+  const usesEnvironment = options.persistence === undefined;
   const totalityPipeline =
     options.totalityPipeline !== undefined
       ? options.totalityPipeline
-      : options.persistence === undefined
+      : usesEnvironment
         ? createTotalityPipelineFromEnv()
+        : null;
+  const memoryChangeSetService =
+    options.memoryChangeSetService !== undefined
+      ? options.memoryChangeSetService
+      : usesEnvironment
+        ? createMemoryChangeSetServiceFromEnv()
         : null;
   const adapter = new FastifyAdapter({
     genReqId: (request: IncomingMessage) =>
@@ -59,7 +69,13 @@ export async function createJarvisHttpApp(
       ]),
   });
   const app = await NestFactory.create<NestFastifyApplication>(
-    JarvisHttpModule.register({ persistence, providerName, config, totalityPipeline }),
+    JarvisHttpModule.register({
+      persistence,
+      providerName,
+      config,
+      totalityPipeline,
+      memoryChangeSetService,
+    }),
     adapter,
     { logger: options.logger, abortOnError: false },
   );
