@@ -123,10 +123,7 @@ function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === "string");
 }
 
-function requireStringArray(
-  value: Record<string, unknown>,
-  field: DraftArrayField,
-): string[] {
+function requireStringArray(value: Record<string, unknown>, field: DraftArrayField): string[] {
   const candidate = value[field];
   if (!isStringArray(candidate)) {
     throw new Error(`OpenAI Totality draft field ${field} must be an array of strings.`);
