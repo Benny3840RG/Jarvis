@@ -5,6 +5,7 @@ import {
   projectPreferencesValidator,
   projectRecordValidator,
   projectStatusValidator,
+  recordKindValidator,
   validationCheckValidator,
 } from "./totalityValidators.js";
 
@@ -49,7 +50,7 @@ export default defineSchema({
   projectRecords: defineTable({
     ownerId: v.string(),
     projectKey: v.string(),
-    kind: v.string(),
+    kind: recordKindValidator,
     recordId: v.string(),
     record: projectRecordValidator,
     updatedAt: v.number(),
