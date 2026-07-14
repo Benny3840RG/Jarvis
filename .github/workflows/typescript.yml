@@ -32,20 +32,7 @@ jobs:
       - name: Install dependencies
         run: npm ci
       - name: Type-check
-        run: |
-          set +e
-          npm run type-check > tsc-errors.log 2>&1
-          status=$?
-          cat tsc-errors.log
-          exit $status
-      - name: Upload TypeScript diagnostics
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: typescript-diagnostics
-          path: typescript/tsc-errors.log
-          if-no-files-found: error
-          retention-days: 1
+        run: npm run type-check
       - name: Lint TypeScript and Convex
         run: npm run lint
       - name: Check formatting
