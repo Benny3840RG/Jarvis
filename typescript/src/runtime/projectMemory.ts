@@ -1,17 +1,9 @@
-export type ProjectStatus =
-  "planned" | "active" | "blocked" | "completed" | "archived";
+export type ProjectStatus = "planned" | "active" | "blocked" | "completed" | "archived";
 export type FactSource = "user" | "file" | "tool" | "measurement" | "inference";
 export type AssumptionStatus = "unverified" | "verified" | "rejected";
 export type ImpactLevel = "low" | "medium" | "high";
 export type ConstraintType =
-  | "budget"
-  | "time"
-  | "access"
-  | "material"
-  | "tool"
-  | "legal"
-  | "safety"
-  | "dimensional";
+  "budget" | "time" | "access" | "material" | "tool" | "legal" | "safety" | "dimensional";
 export type TaskStatus = "pending" | "active" | "blocked" | "done";
 export type EventActor = "user" | "agent" | "tool";
 
@@ -141,9 +133,7 @@ export function assertProjectMemoryIntegrity(project: ProjectMemory): void {
       risk.consequence < 1 ||
       risk.consequence > 5
     ) {
-      throw new Error(
-        `Risk ${risk.riskId} likelihood and consequence must be between 1 and 5`,
-      );
+      throw new Error(`Risk ${risk.riskId} likelihood and consequence must be between 1 and 5`);
     }
   }
 
