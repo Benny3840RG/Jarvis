@@ -103,7 +103,9 @@ function successfulPipeline(journal: TotalityJournal = noOpJournal()): TotalityP
   return new TotalityPipeline(reasoner, journal);
 }
 
-async function makeApp(totalityPipeline: TotalityPipeline | null): Promise<NestFastifyApplication> {
+async function makeApp(
+  totalityPipeline: TotalityPipeline | null,
+): Promise<NestFastifyApplication> {
   const app = await createJarvisHttpApp({
     persistence: makePersistence(),
     providerName: "json",
@@ -190,7 +192,7 @@ describe("Totality HTTP boundary", () => {
       payload: body(),
     });
 
-    assert.equal(response.statusCode, 201);
+    assert.equal(response.statusCode, 200);
     const payload = response.json();
     assert.equal(payload.requestId, "request-http-1");
     assert.equal(payload.status, "completed");
