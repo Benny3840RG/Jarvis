@@ -25,14 +25,10 @@ export interface TotalityReasoner {
 }
 
 export interface TotalityJournal {
-  recordValidation(input: {
+  commitOutcome(input: {
     requestId: string;
     projectId: string | null;
     report: TotalityResponse["validation"];
-  }): Promise<void>;
-  appendAudit(input: {
-    requestId: string;
-    projectId: string | null;
     eventType: string;
     actor: "agent";
     payload: Record<string, unknown>;
@@ -79,14 +75,10 @@ export class TotalityPipeline {
     });
     const status = validation.passed ? "completed" : "blocked";
 
-    await this.journal.recordValidation({
+    await this.journal.commitOutcome({
       requestId: request.requestId,
       projectId: request.projectId,
       report: validation,
-    });
-    await this.journal.appendAudit({
-      requestId: request.requestId,
-      projectId: request.projectId,
       eventType: `totality.reasoning.${status}`,
       actor: "agent",
       payload: {
