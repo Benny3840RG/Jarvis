@@ -18,7 +18,7 @@ not call a tool, mutate an external system, or grant Jarvis a general execution 
 
 Every proposal includes:
 
-- a stable action ID and idempotency key;
+- a stable action ID and owner-scoped idempotency key;
 - the originating request ID;
 - a project ID and expected project revision;
 - a named tool and operation;
@@ -29,8 +29,14 @@ Every proposal includes:
 - the proposing actor.
 
 Jarvis normalises argument-object key order before persistence and rejects non-finite numbers, reserved
-keys, excessive depth, excessive object size, and unsupported values. Reusing an action ID is
-idempotent only when the full proposal is identical.
+keys, credential-shaped keys, oversized strings, excessive depth, excessive object size, and
+unsupported values. Keys such as `password`, `apiKey`, `access_token`, `Authorization`,
+`clientSecret`, and equivalent punctuation or case variants are not permitted anywhere in the argument
+tree. Credentials belong in server-side configuration, never in proposals or audit records.
+
+Reusing an action ID is idempotent only when the full proposal is identical. An idempotency key is
+unique to one owner and cannot be rebound to a different action ID. Concurrent staging attempts remain
+inside Convex optimistic concurrency control, so only one proposal can acquire the key.
 
 ## Authority levels
 
