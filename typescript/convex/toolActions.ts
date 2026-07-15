@@ -53,7 +53,9 @@ async function requireAction(
 ): Promise<Doc<"toolActions">> {
   const action = await ctx.db
     .query("toolActions")
-    .withIndex("by_owner_and_action_id", (q) => q.eq("ownerId", ownerId).eq("actionId", actionId))
+    .withIndex("by_owner_and_action_id", (q) =>
+      q.eq("ownerId", ownerId).eq("actionId", actionId),
+    )
     .unique();
   if (!action || action.projectKey !== projectKey) {
     throw new Error("Tool action does not exist.");
@@ -129,13 +131,25 @@ export const stage = mutation({
 
     const existing = await ctx.db
       .query("toolActions")
-      .withIndex("by_owner_and_action_id", (q) => q.eq("ownerId", ownerId).eq("actionId", actionId))
+      .withIndex("by_owner_and_action_id", (q) =>
+        q.eq("ownerId", ownerId).eq("actionId", actionId),
+      )
       .unique();
     if (existing) {
       if (!sameToolActionProposal(existing, proposal)) {
         throw new Error("Tool action ID already exists with different contents.");
       }
       return existing;
+    }
+
+    const existingIdempotencyKey = await ctx.db
+      .query("toolActions")
+      .withIndex("by_owner_and_idempotency_key", (q) =>
+        q.eq("ownerId", ownerId).eq("idempotencyKey", idempotencyKey),
+      )
+      .unique();
+    if (existingIdempotencyKey) {
+      throw new Error("Tool idempotency key already belongs to another action.");
     }
 
     const project = await requireProject(ctx, ownerId, projectKey);
