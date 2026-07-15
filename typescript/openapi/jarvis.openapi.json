@@ -4,8 +4,8 @@
   "info": {
     "title": "Jarvis Operator API",
     "summary": "A safety-gated API for the Jarvis Z-State runtime and durable operator data.",
-    "description": "Jarvis accepts structured operator requests, routes work through its runtime and safety envelope, persists tasks and reminders through the configured JSON or Convex provider, runs proposal-only Totality reasoning, and can atomically stage locally validated reasoning-generated project-memory change sets for explicit approval and transactional Convex apply. This contract is intentionally single-user and private. The future ChatGPT App MCP server must keep Jarvis and OpenAI service credentials server-side and expose only operations marked with x-mcp-tool.exposed=true.",
-    "version": "0.5.0",
+    "description": "Jarvis accepts structured operator requests, routes work through its runtime and safety envelope, persists tasks and reminders through the configured JSON or Convex provider, runs proposal-only Totality reasoning, stages revision-checked project-memory changes, and now stores revision-bound tool-action proposals for explicit approval or rejection without execution. This contract is intentionally single-user and private. The future ChatGPT App MCP server must keep Jarvis and OpenAI service credentials server-side and expose only operations marked with x-mcp-tool.exposed=true.",
+    "version": "0.6.0",
     "license": {
       "name": "Proprietary",
       "identifier": "LicenseRef-Proprietary"
@@ -50,6 +50,10 @@
     {
       "name": "Memory",
       "description": "Staged, revision-checked project-memory approval and apply operations."
+    },
+    {
+      "name": "Tool Actions",
+      "description": "Revision-bound tool-action proposal, inspection, approval, and rejection. Approval does not execute the operation."
     }
   ],
   "x-jarvis-architecture": {
@@ -65,7 +69,14 @@
       "autonomy",
       "z-state-activation"
     ],
-    "immutableSafetyCategories": ["domain", "cross-domain", "memory", "reliability", "proposal"],
+    "immutableSafetyCategories": [
+      "domain",
+      "cross-domain",
+      "memory",
+      "reliability",
+      "proposal",
+      "tool-action"
+    ],
     "businessBoundary": "Jarvis routes business-domain work through integrations and must not duplicate authoritative TBTB business logic."
   },
   "x-chatgpt-app": {
@@ -103,7 +114,12 @@
       "getMemoryChangeSet",
       "approveMemoryChangeSet",
       "rejectMemoryChangeSet",
-      "applyMemoryChangeSet"
+      "applyMemoryChangeSet",
+      "stageToolAction",
+      "listToolActions",
+      "getToolAction",
+      "approveToolAction",
+      "rejectToolAction"
     ]
   },
   "paths": {
@@ -1631,6 +1647,401 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ApplyMemoryChangeSetResult"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{projectId}/tool-actions": {
+      "get": {
+        "operationId": "listToolActions",
+        "summary": "List revision-bound tool-action proposals",
+        "description": "Returns recent tool-action proposals for one project. This operation cannot execute a tool.",
+        "tags": ["Tool Actions"],
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/ToolActionState"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 25
+            }
+          }
+        ],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Current project tool-action proposals.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ToolActionList"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      },
+      "post": {
+        "operationId": "stageToolAction",
+        "summary": "Stage a tool-action proposal for explicit review",
+        "description": "Stores one idempotent proposal against the authoritative project revision. Staging never calls the named tool.",
+        "tags": ["Tool Actions"],
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          }
+        ],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StageToolActionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Tool-action proposal staged.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ToolAction"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{projectId}/tool-actions/{actionId}": {
+      "get": {
+        "operationId": "getToolAction",
+        "summary": "Inspect one tool-action proposal",
+        "description": "Returns one proposal and its approval state without invoking the named tool.",
+        "tags": ["Tool Actions"],
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "actionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          }
+        ],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Tool-action proposal.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ToolAction"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{projectId}/tool-actions/{actionId}/approve": {
+      "post": {
+        "operationId": "approveToolAction",
+        "summary": "Approve a revision-matched tool-action proposal",
+        "description": "Records explicit operator approval after checking the project revision. Approval does not execute the proposal.",
+        "tags": ["Tool Actions"],
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "actionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          }
+        ],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExpectedRevisionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Tool-action proposal approved.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ToolAction"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{projectId}/tool-actions/{actionId}/reject": {
+      "post": {
+        "operationId": "rejectToolAction",
+        "summary": "Reject a tool-action proposal",
+        "description": "Records an explicit rejection reason. Rejection does not call the named tool.",
+        "tags": ["Tool Actions"],
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "actionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          }
+        ],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RejectToolActionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Tool-action proposal rejected.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ToolAction"
                 }
               }
             }
@@ -3223,6 +3634,198 @@
           "requiresApproval": {
             "const": true
           }
+        }
+      },
+      "ToolActionState": {
+        "type": "string",
+        "enum": ["proposed", "approved", "rejected"]
+      },
+      "ToolAuthority": {
+        "type": "string",
+        "enum": ["T1", "T2", "T3"]
+      },
+      "ToolAction": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "actionId",
+          "requestId",
+          "projectId",
+          "baseRevision",
+          "state",
+          "tool",
+          "operation",
+          "arguments",
+          "rationale",
+          "requiredAuthority",
+          "destructive",
+          "idempotencyKey",
+          "proposedBy",
+          "createdAt",
+          "updatedAt"
+        ],
+        "properties": {
+          "actionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "requestId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "projectId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "baseRevision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "state": {
+            "$ref": "#/components/schemas/ToolActionState"
+          },
+          "tool": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "operation": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "arguments": {
+            "type": "object",
+            "maxProperties": 64,
+            "additionalProperties": true
+          },
+          "rationale": {
+            "type": "string",
+            "minLength": 1
+          },
+          "requiredAuthority": {
+            "$ref": "#/components/schemas/ToolAuthority"
+          },
+          "destructive": {
+            "type": "boolean"
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "proposedBy": {
+            "type": "string",
+            "enum": ["user", "agent", "tool"]
+          },
+          "approvedBy": {
+            "const": "user"
+          },
+          "rejectedBy": {
+            "const": "user"
+          },
+          "rejectedReason": {
+            "type": "string",
+            "minLength": 1
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "approvedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "rejectedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "StageToolActionRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "actionId",
+          "expectedRevision",
+          "tool",
+          "operation",
+          "arguments",
+          "rationale",
+          "requiredAuthority",
+          "destructive",
+          "idempotencyKey",
+          "proposedBy"
+        ],
+        "properties": {
+          "actionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "tool": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "operation": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "arguments": {
+            "type": "object",
+            "maxProperties": 64,
+            "additionalProperties": true
+          },
+          "rationale": {
+            "type": "string",
+            "minLength": 1
+          },
+          "requiredAuthority": {
+            "$ref": "#/components/schemas/ToolAuthority"
+          },
+          "destructive": {
+            "type": "boolean",
+            "description": "When true, requiredAuthority must be T3. This still does not authorise execution."
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "proposedBy": {
+            "type": "string",
+            "enum": ["user", "agent", "tool"]
+          }
+        }
+      },
+      "RejectToolActionRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["reason"],
+        "properties": {
+          "reason": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "ToolActionList": {
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/ToolAction"
         }
       }
     }

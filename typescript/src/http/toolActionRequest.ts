@@ -1,7 +1,4 @@
-import type {
-  ToolActionActor,
-  ToolActionState,
-} from "../actions/toolActions.js";
+import type { ToolActionActor, ToolActionState } from "../actions/toolActions.js";
 import type { ToolAuthority } from "../runtime/totalityPolicy.js";
 
 const ACTION_STATES: readonly ToolActionState[] = ["proposed", "approved", "rejected"];
@@ -68,12 +65,7 @@ function safeArgumentValue(
       if (cleanedKey.startsWith("$") || cleanedKey.startsWith("_")) {
         throw new Error(`Argument key ${cleanedKey} is reserved.`);
       }
-      output[cleanedKey] = safeArgumentValue(
-        entry,
-        `${path}.${cleanedKey}`,
-        depth + 1,
-        counter,
-      );
+      output[cleanedKey] = safeArgumentValue(entry, `${path}.${cleanedKey}`, depth + 1, counter);
     }
     return output;
   }

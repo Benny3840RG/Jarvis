@@ -55,7 +55,9 @@ function normaliseValue(
     return value;
   }
   if (Array.isArray(value)) {
-    return value.map((entry, index) => normaliseValue(entry, `${path}[${index}]`, depth + 1, counter));
+    return value.map((entry, index) =>
+      normaliseValue(entry, `${path}[${index}]`, depth + 1, counter),
+    );
   }
   if (typeof value === "object") {
     const entries = Object.entries(value as Record<string, unknown>);

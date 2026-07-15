@@ -34,12 +34,12 @@ idempotent only when the full proposal is identical.
 
 ## Authority levels
 
-| Level | Meaning in this boundary                                                |
-| ----- | ----------------------------------------------------------------------- |
-| `T0`  | No tool-action proposal permitted                                       |
-| `T1`  | Low-authority, non-destructive proposal                                 |
-| `T2`  | Higher-authority, non-destructive proposal requiring operator approval  |
-| `T3`  | Highest authority; mandatory for proposals marked destructive           |
+| Level | Meaning in this boundary                                               |
+| ----- | ---------------------------------------------------------------------- |
+| `T0`  | No tool-action proposal permitted                                      |
+| `T1`  | Low-authority, non-destructive proposal                                |
+| `T2`  | Higher-authority, non-destructive proposal requiring operator approval |
+| `T3`  | Highest authority; mandatory for proposals marked destructive          |
 
 A destructive proposal below `T3` is rejected before persistence. This is a classification boundary,
 not permission to execute. An approved `T3` proposal is still only approved data until a later,
@@ -55,13 +55,13 @@ must then be reviewed and restaged against current project context rather than s
 
 All routes require the existing Jarvis Bearer service token.
 
-| Method | Path                                                           | Result                 |
-| ------ | -------------------------------------------------------------- | ---------------------- |
-| POST   | `/api/v1/projects/{projectId}/tool-actions`                    | Stage a proposal       |
-| GET    | `/api/v1/projects/{projectId}/tool-actions`                    | List recent proposals  |
-| GET    | `/api/v1/projects/{projectId}/tool-actions/{actionId}`         | Inspect one proposal   |
-| POST   | `/api/v1/projects/{projectId}/tool-actions/{actionId}/approve` | Approve after review   |
-| POST   | `/api/v1/projects/{projectId}/tool-actions/{actionId}/reject`  | Reject with a reason   |
+| Method | Path                                                           | Result                |
+| ------ | -------------------------------------------------------------- | --------------------- |
+| POST   | `/api/v1/projects/{projectId}/tool-actions`                    | Stage a proposal      |
+| GET    | `/api/v1/projects/{projectId}/tool-actions`                    | List recent proposals |
+| GET    | `/api/v1/projects/{projectId}/tool-actions/{actionId}`         | Inspect one proposal  |
+| POST   | `/api/v1/projects/{projectId}/tool-actions/{actionId}/approve` | Approve after review  |
+| POST   | `/api/v1/projects/{projectId}/tool-actions/{actionId}/reject`  | Reject with a reason  |
 
 No `/execute` route exists. Requests to such a route return `404`.
 
