@@ -221,10 +221,7 @@ describe("OpenAI Totality reasoner", () => {
     const request = makeRequest();
     request.requestId = "bad\nrequest-id";
 
-    await assert.rejects(
-      () => reasoner.reason(request, makeContext()),
-      /visible ASCII characters/,
-    );
+    await assert.rejects(() => reasoner.reason(request, makeContext()), /visible ASCII characters/);
     assert.equal(called, false);
   });
 });

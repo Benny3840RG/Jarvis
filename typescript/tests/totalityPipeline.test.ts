@@ -287,7 +287,10 @@ describe("TotalityPipeline", () => {
     const reasoner: TotalityReasoner = {
       async reason() {
         reasonerCalled = true;
-        return makeReasoner().reason(makeRequest(), { project: makeProject(), proposedAt: PROPOSED_AT });
+        return makeReasoner().reason(makeRequest(), {
+          project: makeProject(),
+          proposedAt: PROPOSED_AT,
+        });
       },
     };
     const journal = makeJournal();

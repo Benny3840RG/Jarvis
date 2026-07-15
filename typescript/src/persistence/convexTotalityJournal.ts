@@ -1,10 +1,7 @@
 import { ConvexHttpClient } from "convex/browser";
 
 import { api } from "../../convex/_generated/api.js";
-import type {
-  TotalityJournal,
-  TotalityProjectContext,
-} from "../totality/totalityPipeline.js";
+import type { TotalityJournal, TotalityProjectContext } from "../totality/totalityPipeline.js";
 import type { ConvexClientLike } from "./convexPersistence.js";
 
 export const reasoningJournalFunctions = api.reasoningJournal;

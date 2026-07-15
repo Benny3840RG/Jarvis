@@ -146,12 +146,7 @@ type OpenAIResponsePayload = {
 };
 
 type DraftArrayField =
-  | "assumptions"
-  | "unknowns"
-  | "risks"
-  | "controls"
-  | "unsupportedClaims"
-  | "contradictions";
+  "assumptions" | "unknowns" | "risks" | "controls" | "unsupportedClaims" | "contradictions";
 
 const FACT_SOURCES = ["user", "file", "tool", "measurement", "inference"] as const;
 const IMPACT_LEVELS = ["low", "medium", "high"] as const;
