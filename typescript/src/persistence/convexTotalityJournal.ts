@@ -1,10 +1,38 @@
 import { ConvexHttpClient } from "convex/browser";
 
 import { api } from "../../convex/_generated/api.js";
-import type { TotalityJournal } from "../totality/totalityPipeline.js";
+import type {
+  TotalityJournal,
+  TotalityProjectContext,
+} from "../totality/totalityPipeline.js";
 import type { ConvexClientLike } from "./convexPersistence.js";
 
 export const reasoningJournalFunctions = api.reasoningJournal;
+export const totalityProjectFunctions = api.projects;
+
+type ProjectRow = {
+  projectKey: string;
+  projectName: string;
+  projectType: string;
+  status: TotalityProjectContext["status"];
+  revision: number;
+  domains: string[];
+  summary: string;
+  updatedAt: number;
+};
+
+function projectContextFromConvex(row: ProjectRow): TotalityProjectContext {
+  return {
+    projectId: row.projectKey,
+    projectName: row.projectName,
+    projectType: row.projectType,
+    status: row.status,
+    revision: row.revision,
+    domains: row.domains,
+    summary: row.summary,
+    updatedAt: new Date(row.updatedAt).toISOString(),
+  };
+}
 
 export class ConvexTotalityJournal implements TotalityJournal {
   private readonly client: ConvexClientLike;
@@ -26,6 +54,14 @@ export class ConvexTotalityJournal implements TotalityJournal {
       throw new Error("Totality Convex journalling requires CONVEX_URL.");
     }
     this.client = new ConvexHttpClient(convexUrl);
+  }
+
+  async getProjectContext(projectId: string): Promise<TotalityProjectContext | null> {
+    const row = await this.client.query(totalityProjectFunctions.get, {
+      serviceToken: this.serviceToken,
+      projectKey: projectId,
+    });
+    return row === null ? null : projectContextFromConvex(row as ProjectRow);
   }
 
   async commitOutcome(input: Parameters<TotalityJournal["commitOutcome"]>[0]): Promise<void> {
