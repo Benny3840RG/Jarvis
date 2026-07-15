@@ -6,6 +6,8 @@ import type { NestApplicationOptions } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import { FastifyAdapter, type NestFastifyApplication } from "@nestjs/platform-fastify";
 
+import { createToolActionServiceFromEnv } from "../actions/toolActionFactory.js";
+import type { ToolActionService } from "../actions/toolActions.js";
 import { createMemoryChangeSetServiceFromEnv } from "../memory/memoryChangeSetFactory.js";
 import type { MemoryChangeSetService } from "../memory/memoryChangeSets.js";
 import {
@@ -37,6 +39,7 @@ export type CreateJarvisHttpAppOptions = (
   logger?: NestApplicationOptions["logger"];
   totalityPipeline?: TotalityPipeline | null;
   memoryChangeSetService?: MemoryChangeSetService | null;
+  toolActionService?: ToolActionService | null;
 };
 
 export async function createJarvisHttpApp(
@@ -61,6 +64,12 @@ export async function createJarvisHttpApp(
       : usesEnvironment
         ? createMemoryChangeSetServiceFromEnv()
         : null;
+  const toolActionService =
+    options.toolActionService !== undefined
+      ? options.toolActionService
+      : usesEnvironment
+        ? createToolActionServiceFromEnv()
+        : null;
   const adapter = new FastifyAdapter({
     genReqId: (request: IncomingMessage) =>
       resolveRequestId(request.headers[REQUEST_ID_HEADER], [
@@ -75,6 +84,7 @@ export async function createJarvisHttpApp(
       config,
       totalityPipeline,
       memoryChangeSetService,
+      toolActionService,
     }),
     adapter,
     { logger: options.logger, abortOnError: false },
