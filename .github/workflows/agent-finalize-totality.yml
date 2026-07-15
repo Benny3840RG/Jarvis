@@ -8,7 +8,7 @@ on:
       - ".github/workflows/agent-finalize-totality.yml"
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   finalize:
@@ -18,6 +18,8 @@ jobs:
         working-directory: typescript
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
@@ -101,11 +103,22 @@ jobs:
         run: npm run openapi:lint
       - name: Run tests with coverage
         run: npm run test:coverage
-      - name: Upload finalized TypeScript workspace
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: totality-finalized-workspace
-          path: typescript
-          include-hidden-files: true
-          retention-days: 1
+      - name: Commit verified generated changes
+        env:
+          HEAD_BRANCH: ${{ github.head_ref }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            docs/operators/totality-http.md \
+            openapi/jarvis.openapi.json \
+            src/integrations/openai/totalityReasoner.ts \
+            src/persistence/convexTotalityJournal.ts \
+            tests/openaiTotalityReasoner.test.ts \
+            tests/totalityPipeline.test.ts
+          if git diff --cached --quiet; then
+            echo "No generated changes to commit."
+          else
+            git commit -m "style: apply generated Totality contract and formatting"
+            git push origin "HEAD:${HEAD_BRANCH}"
+          fi
