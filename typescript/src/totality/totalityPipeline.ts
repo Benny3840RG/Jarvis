@@ -1,6 +1,5 @@
 import { createHash } from "node:crypto";
 
-import type { MemoryChangeSetService } from "../memory/memoryChangeSets.js";
 import {
   materializeReasoningMemoryProposal,
   type MaterializedReasoningMemoryProposal,
@@ -62,7 +61,13 @@ export interface TotalityJournal {
     eventType: string;
     actor: "agent";
     payload: Record<string, unknown>;
-  }): Promise<void>;
+    memoryProposal?: {
+      changeSetId: string;
+      expectedRevision: number;
+      records: MaterializedReasoningMemoryProposal["records"];
+      rationale: string;
+    };
+  }): Promise<{ memoryChangeSetId: string | null }>;
 }
 
 export type TotalityReasoningResult = {
@@ -133,7 +138,6 @@ export class TotalityPipeline {
   constructor(
     private readonly reasoner: TotalityReasoner,
     private readonly journal: TotalityJournal,
-    private readonly memoryChangeSets: MemoryChangeSetService | null = null,
     private readonly now: () => Date = () => new Date(),
   ) {}
 
@@ -187,7 +191,7 @@ export class TotalityPipeline {
     );
     const status = validation.passed ? "completed" : "blocked";
 
-    await this.journal.commitOutcome({
+    const committed = await this.journal.commitOutcome({
       requestId: request.requestId,
       projectId: request.projectId,
       report: validation,
@@ -202,24 +206,17 @@ export class TotalityPipeline {
         blockingFailureCount: validation.blockingFailures.length,
         memoryProposalCount: reasoning.draft.memoryProposals.length,
       },
+      ...(validation.passed && project !== null && memoryProposal.records.length > 0
+        ? {
+            memoryProposal: {
+              changeSetId: reasoningChangeSetId(project.projectId, request.requestId),
+              expectedRevision: project.revision,
+              records: memoryProposal.records,
+              rationale: memoryProposal.rationale,
+            },
+          }
+        : {}),
     });
-
-    let memoryChangeSetId: string | null = null;
-    if (validation.passed && memoryProposal.records.length > 0) {
-      if (project === null || this.memoryChangeSets === null) {
-        throw new Error("Reasoning memory proposal staging is unavailable.");
-      }
-      const staged = await this.memoryChangeSets.stage({
-        changeSetId: reasoningChangeSetId(project.projectId, request.requestId),
-        requestId: request.requestId,
-        projectId: project.projectId,
-        expectedRevision: project.revision,
-        records: memoryProposal.records,
-        rationale: memoryProposal.rationale,
-        proposedBy: "agent",
-      });
-      memoryChangeSetId = staged.changeSetId;
-    }
 
     return {
       requestId: request.requestId,
@@ -229,7 +226,7 @@ export class TotalityPipeline {
         ? {
             answer: reasoning.draft.answer,
             responseId: reasoning.responseId,
-            memoryChangeSetId,
+            memoryChangeSetId: committed.memoryChangeSetId,
             memoryProposalCount: memoryProposal.records.length,
           }
         : null,
