@@ -321,7 +321,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add typescript openapi docs src tests convex
+          git add convex docs openapi src tests
           if git diff --cached --quiet; then
             echo "No generated changes to commit."
           else
