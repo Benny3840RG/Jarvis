@@ -9,9 +9,22 @@ import { requestIdFor } from "./requestId.js";
 import { HTTP_TOTALITY_PIPELINE } from "./tokens.js";
 import { parseTotalityReasonRequest } from "./totalityRequest.js";
 
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 function isAuthorityError(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error);
-  return /authority|approval/i.test(message);
+  return /authority|approval/i.test(errorMessage(error));
+}
+
+function isProjectMissingError(error: unknown): boolean {
+  return /project context does not exist/i.test(errorMessage(error));
+}
+
+function isMemoryConflictError(error: unknown): boolean {
+  return /revision conflict|already exists with different|conflicting|duplicate measurement/i.test(
+    errorMessage(error),
+  );
 }
 
 @Controller("api/v1/totality")
@@ -67,6 +80,22 @@ export class TotalityController {
           "The configured reasoning provider could not produce a usable response.",
         );
       }
+      if (isProjectMissingError(error)) {
+        throw new JarvisProblem(
+          404,
+          "totality-project-not-found",
+          "Totality Project Not Found",
+          "The requested authoritative project context does not exist.",
+        );
+      }
+      if (isMemoryConflictError(error)) {
+        throw new JarvisProblem(
+          409,
+          "memory-proposal-conflict",
+          "Memory Proposal Conflict",
+          "The proposed memory update conflicts with the authoritative project revision or records.",
+        );
+      }
       if (isAuthorityError(error)) {
         throw new JarvisProblem(
           422,
@@ -79,7 +108,7 @@ export class TotalityController {
         503,
         "totality-journal-failed",
         "Totality Journal Failed",
-        "The reasoning result could not be safely recorded.",
+        "The reasoning result or staged memory proposal could not be safely recorded.",
       );
     }
   }

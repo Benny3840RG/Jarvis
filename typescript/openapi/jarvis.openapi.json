@@ -4,8 +4,8 @@
   "info": {
     "title": "Jarvis Operator API",
     "summary": "A safety-gated API for the Jarvis Z-State runtime and durable operator data.",
-    "description": "Jarvis accepts structured operator requests, routes work through its runtime and safety envelope, persists tasks and reminders through the configured JSON or Convex provider, can run proposal-only Totality reasoning, and now stages revision-checked project-memory change sets for explicit approval and transactional Convex apply. This contract is intentionally single-user and private. The future ChatGPT App MCP server must keep Jarvis and OpenAI service credentials server-side and expose only operations marked with x-mcp-tool.exposed=true.",
-    "version": "0.4.0",
+    "description": "Jarvis accepts structured operator requests, routes work through its runtime and safety envelope, persists tasks and reminders through the configured JSON or Convex provider, runs proposal-only Totality reasoning, and can atomically stage locally validated reasoning-generated project-memory change sets for explicit approval and transactional Convex apply. This contract is intentionally single-user and private. The future ChatGPT App MCP server must keep Jarvis and OpenAI service credentials server-side and expose only operations marked with x-mcp-tool.exposed=true.",
+    "version": "0.5.0",
     "license": {
       "name": "Proprietary",
       "identifier": "LicenseRef-Proprietary"
@@ -182,11 +182,11 @@
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
-          "503": {
-            "$ref": "#/components/responses/ServiceUnavailable"
-          },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
           }
         }
       }
@@ -227,11 +227,11 @@
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
-          "503": {
-            "$ref": "#/components/responses/ServiceUnavailable"
-          },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
           }
         }
       }
@@ -297,11 +297,11 @@
           "429": {
             "$ref": "#/components/responses/TooManyRequests"
           },
-          "503": {
-            "$ref": "#/components/responses/ServiceUnavailable"
-          },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
           }
         }
       }
@@ -342,11 +342,11 @@
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
-          "503": {
-            "$ref": "#/components/responses/ServiceUnavailable"
-          },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
           }
         }
       },
@@ -419,11 +419,11 @@
           "429": {
             "$ref": "#/components/responses/TooManyRequests"
           },
-          "503": {
-            "$ref": "#/components/responses/ServiceUnavailable"
-          },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
           }
         }
       }
@@ -472,11 +472,11 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
-          "503": {
-            "$ref": "#/components/responses/ServiceUnavailable"
-          },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
           }
         }
       },
@@ -534,11 +534,11 @@
           "422": {
             "$ref": "#/components/responses/UnprocessableEntity"
           },
-          "503": {
-            "$ref": "#/components/responses/ServiceUnavailable"
-          },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
           }
         }
       },
@@ -580,11 +580,11 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
-          "503": {
-            "$ref": "#/components/responses/ServiceUnavailable"
-          },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
           }
         }
       }
@@ -633,11 +633,11 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
-          "503": {
-            "$ref": "#/components/responses/ServiceUnavailable"
-          },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
           }
         }
       }
@@ -678,11 +678,11 @@
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
-          "503": {
-            "$ref": "#/components/responses/ServiceUnavailable"
-          },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
           }
         }
       },
@@ -755,11 +755,11 @@
           "429": {
             "$ref": "#/components/responses/TooManyRequests"
           },
-          "503": {
-            "$ref": "#/components/responses/ServiceUnavailable"
-          },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
           }
         }
       }
@@ -808,11 +808,11 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
-          "503": {
-            "$ref": "#/components/responses/ServiceUnavailable"
-          },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
           }
         }
       },
@@ -870,11 +870,11 @@
           "422": {
             "$ref": "#/components/responses/UnprocessableEntity"
           },
-          "503": {
-            "$ref": "#/components/responses/ServiceUnavailable"
-          },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
           }
         }
       },
@@ -916,11 +916,11 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
-          "503": {
-            "$ref": "#/components/responses/ServiceUnavailable"
-          },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
           }
         }
       }
@@ -966,11 +966,11 @@
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
-          "503": {
-            "$ref": "#/components/responses/ServiceUnavailable"
-          },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
           }
         }
       }
@@ -1095,11 +1095,11 @@
           "422": {
             "$ref": "#/components/responses/UnprocessableEntity"
           },
-          "503": {
-            "$ref": "#/components/responses/ServiceUnavailable"
-          },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
           }
         }
       }
@@ -1108,7 +1108,7 @@
       "post": {
         "operationId": "reasonWithTotality",
         "summary": "Run proposal-only Totality reasoning with validation and audit journalling",
-        "description": "Runs deterministic routing and authority checks, requests strict structured reasoning from OpenAI, validates the draft locally, and atomically commits the validation report and audit event to Convex. It never applies project-memory updates or executes tools.",
+        "description": "Runs proposal-only Totality reasoning against bounded authoritative project context. Successful typed memory suggestions are validated locally and staged as approval-required project-memory change sets in the same Convex transaction as validation and audit evidence. No memory is approved or applied by this operation.",
         "tags": ["Runtime"],
         "x-mcp-tool": {
           "exposed": false,
@@ -1148,6 +1148,12 @@
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
           "422": {
             "description": "The request or authority policy is invalid.",
             "content": {
@@ -1161,11 +1167,11 @@
           "429": {
             "$ref": "#/components/responses/TooManyRequests"
           },
-          "503": {
-            "$ref": "#/components/responses/ServiceUnavailable"
-          },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
           }
         }
       }
@@ -1243,11 +1249,11 @@
           "422": {
             "$ref": "#/components/responses/UnprocessableEntity"
           },
-          "503": {
-            "$ref": "#/components/responses/ServiceUnavailable"
-          },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
           }
         }
       },
@@ -1315,11 +1321,11 @@
           "422": {
             "$ref": "#/components/responses/UnprocessableEntity"
           },
-          "503": {
-            "$ref": "#/components/responses/ServiceUnavailable"
-          },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
           }
         }
       }
@@ -1389,11 +1395,11 @@
           "422": {
             "$ref": "#/components/responses/UnprocessableEntity"
           },
-          "503": {
-            "$ref": "#/components/responses/ServiceUnavailable"
-          },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
           }
         }
       }
@@ -1473,11 +1479,11 @@
           "422": {
             "$ref": "#/components/responses/UnprocessableEntity"
           },
-          "503": {
-            "$ref": "#/components/responses/ServiceUnavailable"
-          },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
           }
         }
       }
@@ -1557,11 +1563,11 @@
           "422": {
             "$ref": "#/components/responses/UnprocessableEntity"
           },
-          "503": {
-            "$ref": "#/components/responses/ServiceUnavailable"
-          },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
           }
         }
       }
@@ -1641,11 +1647,11 @@
           "422": {
             "$ref": "#/components/responses/UnprocessableEntity"
           },
-          "503": {
-            "$ref": "#/components/responses/ServiceUnavailable"
-          },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
           }
         }
       }
@@ -2782,13 +2788,21 @@
               {
                 "type": "object",
                 "additionalProperties": false,
-                "required": ["answer", "responseId"],
+                "required": ["answer", "responseId", "memoryChangeSetId", "memoryProposalCount"],
                 "properties": {
                   "answer": {
                     "type": "string"
                   },
                   "responseId": {
                     "type": ["string", "null"]
+                  },
+                  "memoryChangeSetId": {
+                    "type": ["string", "null"]
+                  },
+                  "memoryProposalCount": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 20
                   }
                 }
               }
@@ -2817,8 +2831,10 @@
           },
           "memoryUpdates": {
             "type": "array",
-            "maxItems": 0,
-            "items": {}
+            "maxItems": 20,
+            "items": {
+              "$ref": "#/components/schemas/MemoryUpdateProposal"
+            }
           },
           "toolActions": {
             "type": "array",
@@ -3182,6 +3198,30 @@
           },
           "idempotent": {
             "type": "boolean"
+          }
+        }
+      },
+      "MemoryUpdateProposal": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["operation", "target", "value", "classification", "requiresApproval"],
+        "properties": {
+          "operation": {
+            "const": "append"
+          },
+          "target": {
+            "type": "string",
+            "enum": ["facts", "assumptions", "measurements", "decisions"]
+          },
+          "value": {
+            "$ref": "#/components/schemas/MemoryRecord"
+          },
+          "classification": {
+            "type": "string",
+            "enum": ["fact", "assumption", "measurement", "decision"]
+          },
+          "requiresApproval": {
+            "const": true
           }
         }
       }

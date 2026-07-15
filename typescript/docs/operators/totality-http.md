@@ -2,9 +2,9 @@
 
 Jarvis exposes one narrow, authenticated reasoning operation:
 
-| Method | Path                      | Result                                                                   |
-| ------ | ------------------------- | ------------------------------------------------------------------------ |
-| POST   | `/api/v1/totality/reason` | Proposal-only reasoning, local validation, and atomic Convex journalling |
+| Method | Path                      | Result                                                                                      |
+| ------ | ------------------------- | ------------------------------------------------------------------------------------------- |
+| POST   | `/api/v1/totality/reason` | Proposal-only reasoning, local validation, optional staged memory proposal, and journalling |
 
 The operation is unavailable unless the process uses `PERSISTENCE_PROVIDER=convex` and has all
 required Convex and OpenAI server-side configuration. Missing dependencies return `503`; Jarvis does
@@ -51,25 +51,52 @@ second request ID in the JSON body.
 }
 ```
 
+A non-null `projectId` must resolve to an authoritative Convex project before OpenAI is called. Jarvis
+supplies the model only the bounded project header and revision required to scope reasoning. It does
+not send the OpenAI adapter unrestricted project records or credentials.
+
 The route is protected by the existing Bearer service-token guard. It returns `200` only after:
 
 1. deterministic routing and authority validation;
-2. an OpenAI Responses API structured-output call with `store: false` and no tools;
-3. local technical and safety validation;
-4. one transactional Convex mutation that commits both the validation report and audit event.
+2. authoritative project-context retrieval when `projectId` is supplied;
+3. an OpenAI Responses API structured-output call with `store: false` and no tools;
+4. local technical, safety, and memory-proposal validation;
+5. one transactional Convex mutation that commits the validation report, reasoning audit event, and
+   any valid project-memory change set.
 
-If local validation blocks the draft, the response status is `blocked` and `result` is `null`. The
-validation evidence is still journalled. The operation never emits automatic project-memory updates
-or tool actions.
+## Memory proposal boundary
+
+OpenAI may suggest only typed project facts, assumptions, measurements, or decisions. The model does
+not choose record IDs or authoritative timestamps. Jarvis generates those fields locally and rejects:
+
+- authoritative inferred facts;
+- non-finite measurements;
+- duplicate measurement identities;
+- empty or oversized proposals;
+- unsupported record kinds;
+- proposals without an authoritative project scope.
+
+A successful memory suggestion is returned in `memoryUpdates` with `requiresApproval: true` and is
+stored as a `proposed` memory change set. The response includes its `memoryChangeSetId` and proposal
+count. It is **not** authoritative memory and it is not automatically approved or applied.
+
+The operator must use the existing project memory endpoints to inspect, approve, reject, and apply the
+change set. Approval and apply remain separate user-authority operations, and apply still checks the
+project revision and measurement conflicts transactionally.
+
+If local validation blocks the draft, the response status is `blocked`, `result` is `null`, and no
+memory change set is staged. The validation evidence is still journalled. Tool actions remain empty.
 
 ## Failure semantics
 
-| HTTP status | Meaning                                                             |
-| ----------- | ------------------------------------------------------------------- |
-| `401`       | Missing or invalid Jarvis service token                             |
-| `422`       | Invalid request or authority-policy violation                       |
-| `429`       | OpenAI rate limit                                                   |
-| `503`       | Totality disabled, OpenAI failure, or atomic Convex journal failure |
+| HTTP status | Meaning                                                                     |
+| ----------- | --------------------------------------------------------------------------- |
+| `401`       | Missing or invalid Jarvis service token                                     |
+| `404`       | Requested authoritative project does not exist                              |
+| `409`       | Project revision or memory-proposal conflict during atomic commit           |
+| `422`       | Invalid request or authority-policy violation                               |
+| `429`       | OpenAI rate limit                                                           |
+| `503`       | Totality disabled, OpenAI failure, or atomic Convex journal/staging failure |
 
 All failures use the existing redacted `application/problem+json` envelope. Provider response text,
 credentials, stack traces, and internal persistence errors are not returned to the caller.

@@ -7,6 +7,7 @@ import {
   resolveOpenAITotalityConfig,
 } from "../src/integrations/openai/totalityReasoner.js";
 import type { TotalityRequest } from "../src/runtime/totalityContracts.js";
+import type { TotalityReasoningContext } from "../src/totality/totalityPipeline.js";
 
 function makeRequest(): TotalityRequest {
   return {
@@ -26,7 +27,23 @@ function makeRequest(): TotalityRequest {
   };
 }
 
-function successfulPayload() {
+function makeContext(): TotalityReasoningContext {
+  return {
+    proposedAt: "2026-07-16T00:00:00.000Z",
+    project: {
+      projectId: "project-1",
+      projectName: "Bracket review",
+      projectType: "engineering",
+      status: "active",
+      revision: 4,
+      domains: ["mechanical"],
+      summary: "Review a fabricated steel bracket.",
+      updatedAt: "2026-07-15T23:00:00.000Z",
+    },
+  };
+}
+
+function successfulPayload(memoryProposals: unknown[] = []) {
   return {
     id: "resp_test",
     output: [
@@ -43,6 +60,11 @@ function successfulPayload() {
               controls: ["Inspect weld profile and proof-load the assembly."],
               unsupportedClaims: [],
               contradictions: [],
+              memoryProposals,
+              memoryRationale:
+                memoryProposals.length === 0
+                  ? ""
+                  : "Retain the supplied bracket dimensions for approval.",
             }),
           },
         ],
@@ -68,7 +90,7 @@ describe("OpenAI Totality reasoner", () => {
       { apiKey: "test-key", model: "gpt-5.6", timeoutMs: 5_000 },
       fetchImpl,
     );
-    const result = await reasoner.reason(makeRequest());
+    const result = await reasoner.reason(makeRequest(), makeContext());
 
     assert.equal(capturedUrl, "https://api.openai.com/v1/responses");
     assert.equal(capturedInit?.method, "POST");
@@ -79,8 +101,48 @@ describe("OpenAI Totality reasoner", () => {
     const body = JSON.parse(String(capturedInit?.body)) as Record<string, unknown>;
     assert.equal(body.store, false);
     assert.deepEqual(body.tools, undefined);
+    const input = JSON.parse(String(body.input)) as Record<string, unknown>;
+    assert.deepEqual(input.projectContext, makeContext().project);
+    assert.equal(input.proposalTimestamp, makeContext().proposedAt);
     assert.equal(result.responseId, "resp_test");
     assert.match(result.draft.answer, /gusseted bracket/);
+    assert.deepEqual(result.draft.memoryProposals, []);
+  });
+
+  it("parses typed memory proposals without allowing model-owned IDs or timestamps", async () => {
+    const fetchImpl = (async () =>
+      new Response(
+        JSON.stringify(
+          successfulPayload([
+            {
+              kind: "measurement",
+              name: "Bracket thickness",
+              value: 6,
+              unit: "mm",
+              tolerance: null,
+              source: "request input",
+            },
+          ]),
+        ),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      )) as typeof fetch;
+    const reasoner = new OpenAITotalityReasoner(
+      { apiKey: "test-key", model: "gpt-5.6", timeoutMs: 5_000 },
+      fetchImpl,
+    );
+
+    const result = await reasoner.reason(makeRequest(), makeContext());
+
+    assert.deepEqual(result.draft.memoryProposals, [
+      {
+        kind: "measurement",
+        name: "Bracket thickness",
+        value: 6,
+        unit: "mm",
+        tolerance: null,
+        source: "request input",
+      },
+    ]);
   });
 
   it("requires a server-side API key", () => {
@@ -102,7 +164,7 @@ describe("OpenAI Totality reasoner", () => {
     );
 
     await assert.rejects(
-      () => reasoner.reason(makeRequest()),
+      () => reasoner.reason(makeRequest(), makeContext()),
       (error: unknown) =>
         error instanceof OpenAIRequestError && error.status === 429 && error.retryable,
     );
@@ -120,7 +182,7 @@ describe("OpenAI Totality reasoner", () => {
     );
 
     await assert.rejects(
-      () => reasoner.reason(makeRequest()),
+      () => reasoner.reason(makeRequest(), makeContext()),
       (error: unknown) =>
         error instanceof OpenAIRequestError && error.status === 503 && error.retryable,
     );
@@ -139,7 +201,10 @@ describe("OpenAI Totality reasoner", () => {
     const request = makeRequest();
     request.actionPolicy.maximumToolAuthority = "T0";
 
-    await assert.rejects(() => reasoner.reason(request), /exceeds the request action policy/);
+    await assert.rejects(
+      () => reasoner.reason(request, makeContext()),
+      /exceeds the request action policy/,
+    );
     assert.equal(called, false);
   });
 
@@ -156,7 +221,7 @@ describe("OpenAI Totality reasoner", () => {
     const request = makeRequest();
     request.requestId = "bad\nrequest-id";
 
-    await assert.rejects(() => reasoner.reason(request), /visible ASCII characters/);
+    await assert.rejects(() => reasoner.reason(request, makeContext()), /visible ASCII characters/);
     assert.equal(called, false);
   });
 });
