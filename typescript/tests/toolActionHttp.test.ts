@@ -232,6 +232,32 @@ describe("Tool action approval HTTP boundary", () => {
     assert.equal(called, false);
   });
 
+  it("rejects credential-shaped arguments before calling the service", async () => {
+    let called = false;
+    const app = await makeApp(
+      successfulService({
+        async stage() {
+          called = true;
+          return action();
+        },
+      }),
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/v1/projects/project-1/tool-actions",
+      headers: authHeaders(),
+      payload: {
+        ...stageBody(),
+        arguments: { apiKey: "must-not-be-stored" },
+      },
+    });
+
+    assert.equal(response.statusCode, 422);
+    assert.equal(called, false);
+    assert.doesNotMatch(response.body, /must-not-be-stored/);
+  });
+
   it("passes state and limit filters to the service", async () => {
     let captured: Parameters<ToolActionService["list"]>[0] | null = null;
     const app = await makeApp(
