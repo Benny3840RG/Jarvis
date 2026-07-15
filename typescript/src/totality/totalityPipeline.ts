@@ -1,3 +1,11 @@
+import { createHash } from "node:crypto";
+
+import type { MemoryChangeSetService } from "../memory/memoryChangeSets.js";
+import {
+  materializeReasoningMemoryProposal,
+  type MaterializedReasoningMemoryProposal,
+  type ReasoningMemoryProposalDraft,
+} from "../memory/reasoningMemoryProposals.js";
 import type {
   TotalityError,
   TotalityRequest,
@@ -5,7 +13,23 @@ import type {
 } from "../runtime/totalityContracts.js";
 import { assertRequestAuthority } from "../runtime/totalityContracts.js";
 import { routeTotalityTask } from "../runtime/totalityPolicy.js";
-import { validateTotalityResult } from "../runtime/validation.js";
+import { validateTotalityResult, type ValidationReport } from "../runtime/validation.js";
+
+export type TotalityProjectContext = {
+  projectId: string;
+  projectName: string;
+  projectType: string;
+  status: "planned" | "active" | "blocked" | "completed" | "archived";
+  revision: number;
+  domains: string[];
+  summary: string;
+  updatedAt: string;
+};
+
+export type TotalityReasoningContext = {
+  project: TotalityProjectContext | null;
+  proposedAt: string;
+};
 
 export interface TotalityReasoningDraft {
   responseId: string | null;
@@ -17,14 +41,20 @@ export interface TotalityReasoningDraft {
     controls: string[];
     unsupportedClaims: string[];
     contradictions: string[];
+    memoryProposals: ReasoningMemoryProposalDraft[];
+    memoryRationale: string;
   };
 }
 
 export interface TotalityReasoner {
-  reason(request: TotalityRequest): Promise<TotalityReasoningDraft>;
+  reason(
+    request: TotalityRequest,
+    context: TotalityReasoningContext,
+  ): Promise<TotalityReasoningDraft>;
 }
 
 export interface TotalityJournal {
+  getProjectContext(projectId: string): Promise<TotalityProjectContext | null>;
   commitOutcome(input: {
     requestId: string;
     projectId: string | null;
@@ -38,6 +68,8 @@ export interface TotalityJournal {
 export type TotalityReasoningResult = {
   answer: string;
   responseId: string | null;
+  memoryChangeSetId: string | null;
+  memoryProposalCount: number;
 };
 
 function blockedErrors(blockingFailures: string[]): TotalityError[] {
@@ -48,10 +80,61 @@ function blockedErrors(blockingFailures: string[]): TotalityError[] {
   }));
 }
 
+function memoryValidation(
+  report: ValidationReport,
+  input: {
+    proposalCount: number;
+    projectAvailable: boolean;
+    failure: string | null;
+  },
+): ValidationReport {
+  const blockingFailures = [...report.blockingFailures];
+  let status: "pass" | "fail" = "pass";
+  let message: string | undefined;
+
+  if (input.failure) {
+    status = "fail";
+    message = input.failure;
+    blockingFailures.push(input.failure);
+  } else if (input.proposalCount > 0 && !input.projectAvailable) {
+    status = "fail";
+    message = "Reasoning memory proposals require an authoritative project context.";
+    blockingFailures.push(message);
+  }
+
+  return {
+    passed: blockingFailures.length === 0,
+    checks: [
+      ...report.checks,
+      {
+        id: "MEMORY_PROPOSAL_BOUNDARY",
+        status,
+        ...(message === undefined ? {} : { message }),
+      },
+    ],
+    warnings: report.warnings,
+    blockingFailures,
+  };
+}
+
+function reasoningChangeSetId(projectId: string, requestId: string): string {
+  const digest = createHash("sha256")
+    .update(`${projectId}\u0000${requestId}`)
+    .digest("hex")
+    .slice(0, 24);
+  return `reasoning-${digest}`;
+}
+
+function emptyMemoryProposal(): MaterializedReasoningMemoryProposal {
+  return { records: [], updates: [], rationale: "" };
+}
+
 export class TotalityPipeline {
   constructor(
     private readonly reasoner: TotalityReasoner,
     private readonly journal: TotalityJournal,
+    private readonly memoryChangeSets: MemoryChangeSetService | null = null,
+    private readonly now: () => Date = () => new Date(),
   ) {}
 
   async run(request: TotalityRequest): Promise<TotalityResponse<TotalityReasoningResult>> {
@@ -62,15 +145,46 @@ export class TotalityPipeline {
     });
     assertRequestAuthority(request, routing);
 
-    const reasoning = await this.reasoner.reason(request);
-    const validation = validateTotalityResult({
-      routing,
-      assumptions: reasoning.draft.assumptions,
-      unsupportedClaims: reasoning.draft.unsupportedClaims,
-      contradictions: reasoning.draft.contradictions,
-      hazards: reasoning.draft.risks,
-      controls: reasoning.draft.controls,
-    });
+    const project =
+      request.projectId === null ? null : await this.journal.getProjectContext(request.projectId);
+    if (request.projectId !== null && project === null) {
+      throw new Error("Project context does not exist.");
+    }
+
+    const proposedAt = this.now().toISOString();
+    const reasoning = await this.reasoner.reason(request, { project, proposedAt });
+    let memoryProposal = emptyMemoryProposal();
+    let memoryProposalFailure: string | null = null;
+
+    if (reasoning.draft.memoryProposals.length > 0 && project !== null) {
+      try {
+        memoryProposal = materializeReasoningMemoryProposal({
+          projectId: project.projectId,
+          requestId: request.requestId,
+          proposedAt,
+          drafts: reasoning.draft.memoryProposals,
+          rationale: reasoning.draft.memoryRationale,
+        });
+      } catch (error: unknown) {
+        memoryProposalFailure = error instanceof Error ? error.message : String(error);
+      }
+    }
+
+    const validation = memoryValidation(
+      validateTotalityResult({
+        routing,
+        assumptions: reasoning.draft.assumptions,
+        unsupportedClaims: reasoning.draft.unsupportedClaims,
+        contradictions: reasoning.draft.contradictions,
+        hazards: reasoning.draft.risks,
+        controls: reasoning.draft.controls,
+      }),
+      {
+        proposalCount: reasoning.draft.memoryProposals.length,
+        projectAvailable: project !== null,
+        failure: memoryProposalFailure,
+      },
+    );
     const status = validation.passed ? "completed" : "blocked";
 
     await this.journal.commitOutcome({
@@ -86,21 +200,44 @@ export class TotalityPipeline {
         riskLevel: routing.permission.riskLevel,
         validationPassed: validation.passed,
         blockingFailureCount: validation.blockingFailures.length,
+        memoryProposalCount: reasoning.draft.memoryProposals.length,
       },
     });
+
+    let memoryChangeSetId: string | null = null;
+    if (validation.passed && memoryProposal.records.length > 0) {
+      if (project === null || this.memoryChangeSets === null) {
+        throw new Error("Reasoning memory proposal staging is unavailable.");
+      }
+      const staged = await this.memoryChangeSets.stage({
+        changeSetId: reasoningChangeSetId(project.projectId, request.requestId),
+        requestId: request.requestId,
+        projectId: project.projectId,
+        expectedRevision: project.revision,
+        records: memoryProposal.records,
+        rationale: memoryProposal.rationale,
+        proposedBy: "agent",
+      });
+      memoryChangeSetId = staged.changeSetId;
+    }
 
     return {
       requestId: request.requestId,
       status,
       routing,
       result: validation.passed
-        ? { answer: reasoning.draft.answer, responseId: reasoning.responseId }
+        ? {
+            answer: reasoning.draft.answer,
+            responseId: reasoning.responseId,
+            memoryChangeSetId,
+            memoryProposalCount: memoryProposal.records.length,
+          }
         : null,
       assumptions: reasoning.draft.assumptions,
       unknowns: reasoning.draft.unknowns,
       risks: reasoning.draft.risks,
       validation,
-      memoryUpdates: [],
+      memoryUpdates: validation.passed ? memoryProposal.updates : [],
       toolActions: [],
       errors: validation.passed ? [] : blockedErrors(validation.blockingFailures),
     };
