@@ -1,0 +1,111 @@
+name: Agent finalize Totality
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "typescript/**"
+      - ".github/workflows/agent-finalize-totality.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: typescript
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: typescript/.nvmrc
+          cache: npm
+          cache-dependency-path: typescript/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Update Totality OpenAPI contract
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from "node:fs";
+
+          const path = "openapi/jarvis.openapi.json";
+          const document = JSON.parse(fs.readFileSync(path, "utf8"));
+          document.info.version = "0.5.0";
+          document.info.description =
+            "Jarvis accepts structured operator requests, routes work through its runtime and safety envelope, persists tasks and reminders through the configured JSON or Convex provider, runs proposal-only Totality reasoning, and can atomically stage locally validated reasoning-generated project-memory change sets for explicit approval and transactional Convex apply. This contract is intentionally single-user and private. The future ChatGPT App MCP server must keep Jarvis and OpenAI service credentials server-side and expose only operations marked with x-mcp-tool.exposed=true.";
+
+          const operation = document.paths["/api/v1/totality/reason"].post;
+          operation.description =
+            "Runs proposal-only Totality reasoning against bounded authoritative project context. Successful typed memory suggestions are validated locally and staged as approval-required project-memory change sets in the same Convex transaction as validation and audit evidence. No memory is approved or applied by this operation.";
+          operation.responses["404"] = { $ref: "#/components/responses/NotFound" };
+          operation.responses["409"] = { $ref: "#/components/responses/Conflict" };
+
+          document.components.schemas.MemoryUpdateProposal = {
+            type: "object",
+            additionalProperties: false,
+            required: ["operation", "target", "value", "classification", "requiresApproval"],
+            properties: {
+              operation: { const: "append" },
+              target: {
+                type: "string",
+                enum: ["facts", "assumptions", "measurements", "decisions"],
+              },
+              value: { $ref: "#/components/schemas/MemoryRecord" },
+              classification: {
+                type: "string",
+                enum: ["fact", "assumption", "measurement", "decision"],
+              },
+              requiresApproval: { const: true },
+            },
+          };
+
+          const response = document.components.schemas.TotalityReasonResponse;
+          const result = response.properties.result.oneOf.find(
+            (candidate) => candidate.type === "object",
+          );
+          result.required = [
+            "answer",
+            "responseId",
+            "memoryChangeSetId",
+            "memoryProposalCount",
+          ];
+          result.properties.memoryChangeSetId = { type: ["string", "null"] };
+          result.properties.memoryProposalCount = {
+            type: "integer",
+            minimum: 0,
+            maximum: 20,
+          };
+          response.properties.memoryUpdates = {
+            type: "array",
+            maxItems: 20,
+            items: { $ref: "#/components/schemas/MemoryUpdateProposal" },
+          };
+          response.properties.toolActions = {
+            type: "array",
+            maxItems: 0,
+            items: {},
+          };
+
+          fs.writeFileSync(path, `${JSON.stringify(document, null, 2)}\n`);
+          NODE
+      - name: Apply repository formatting
+        run: npx prettier --write .
+      - name: Type-check
+        run: npm run type-check
+      - name: Lint TypeScript and Convex
+        run: npm run lint
+      - name: Validate OpenAPI contract
+        run: npm run openapi:lint
+      - name: Run tests with coverage
+        run: npm run test:coverage
+      - name: Upload finalized TypeScript workspace
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: totality-finalized-workspace
+          path: typescript
+          include-hidden-files: true
+          retention-days: 1
