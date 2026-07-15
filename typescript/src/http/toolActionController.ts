@@ -41,7 +41,7 @@ function operationProblem(error: unknown): JarvisProblem {
     );
   }
   if (
-    /cannot be|already exists with different|already has a different|requires T3|requires authority T1/i.test(
+    /cannot be|already exists with different|already has a different|already belongs to another action|requires T3|requires authority T1/i.test(
       message,
     )
   ) {
