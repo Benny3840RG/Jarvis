@@ -2,8 +2,8 @@
 
 Jarvis exposes one narrow, authenticated reasoning operation:
 
-| Method | Path                      | Result                                                                                     |
-| ------ | ------------------------- | ------------------------------------------------------------------------------------------ |
+| Method | Path                      | Result                                                                                      |
+| ------ | ------------------------- | ------------------------------------------------------------------------------------------- |
 | POST   | `/api/v1/totality/reason` | Proposal-only reasoning, local validation, optional staged memory proposal, and journalling |
 
 The operation is unavailable unless the process uses `PERSISTENCE_PROVIDER=convex` and has all
@@ -89,14 +89,14 @@ memory change set is staged. The validation evidence is still journalled. Tool a
 
 ## Failure semantics
 
-| HTTP status | Meaning                                                                         |
-| ----------- | ------------------------------------------------------------------------------- |
-| `401`       | Missing or invalid Jarvis service token                                         |
-| `404`       | Requested authoritative project does not exist                                  |
-| `409`       | Project revision or memory-proposal conflict during atomic commit               |
-| `422`       | Invalid request or authority-policy violation                                   |
-| `429`       | OpenAI rate limit                                                               |
-| `503`       | Totality disabled, OpenAI failure, or atomic Convex journal/staging failure      |
+| HTTP status | Meaning                                                                     |
+| ----------- | --------------------------------------------------------------------------- |
+| `401`       | Missing or invalid Jarvis service token                                     |
+| `404`       | Requested authoritative project does not exist                              |
+| `409`       | Project revision or memory-proposal conflict during atomic commit           |
+| `422`       | Invalid request or authority-policy violation                               |
+| `429`       | OpenAI rate limit                                                           |
+| `503`       | Totality disabled, OpenAI failure, or atomic Convex journal/staging failure |
 
 All failures use the existing redacted `application/problem+json` envelope. Provider response text,
 credentials, stack traces, and internal persistence errors are not returned to the caller.
