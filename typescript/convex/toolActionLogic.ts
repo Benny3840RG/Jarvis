@@ -59,13 +59,17 @@ function sensitiveKeyFingerprint(value: string): string {
 function validateArgumentKey(value: string, path: string): string {
   const cleaned = cleanRequiredText(value, `Tool action argument key at ${path}`);
   if (cleaned.length > MAX_ARGUMENT_KEY_LENGTH) {
-    throw new Error(`Tool action argument key at ${path} exceeds ${MAX_ARGUMENT_KEY_LENGTH} characters.`);
+    throw new Error(
+      `Tool action argument key at ${path} exceeds ${MAX_ARGUMENT_KEY_LENGTH} characters.`,
+    );
   }
   if (cleaned.startsWith("$") || cleaned.startsWith("_")) {
     throw new Error(`Tool action argument key ${cleaned} is reserved.`);
   }
   if (SENSITIVE_ARGUMENT_KEYS.has(sensitiveKeyFingerprint(cleaned))) {
-    throw new Error(`Tool action argument key ${cleaned} may contain credentials and is not permitted.`);
+    throw new Error(
+      `Tool action argument key ${cleaned} may contain credentials and is not permitted.`,
+    );
   }
   return cleaned;
 }

@@ -3700,7 +3700,8 @@
           "arguments": {
             "type": "object",
             "maxProperties": 64,
-            "additionalProperties": true
+            "additionalProperties": true,
+            "description": "Bounded JSON arguments. Credential-bearing keys, secrets, non-finite numbers, excessive nesting, and oversized strings are rejected before persistence."
           },
           "rationale": {
             "type": "string",
@@ -3715,7 +3716,8 @@
           "idempotencyKey": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 256
+            "maxLength": 256,
+            "description": "Owner-scoped replay key that cannot be rebound to another action ID."
           },
           "proposedBy": {
             "type": "string",
@@ -3787,7 +3789,8 @@
           "arguments": {
             "type": "object",
             "maxProperties": 64,
-            "additionalProperties": true
+            "additionalProperties": true,
+            "description": "Bounded JSON arguments. Credential-bearing keys, secrets, non-finite numbers, excessive nesting, and oversized strings are rejected before persistence."
           },
           "rationale": {
             "type": "string",
@@ -3803,7 +3806,8 @@
           "idempotencyKey": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 256
+            "maxLength": 256,
+            "description": "Owner-scoped replay key that cannot be rebound to another action ID."
           },
           "proposedBy": {
             "type": "string",

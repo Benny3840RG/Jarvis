@@ -54,7 +54,9 @@ function sensitiveKeyFingerprint(value: string): string {
 function safeArgumentKey(value: string, path: string): string {
   const cleaned = requiredString(value, `Argument key at ${path}`);
   if (cleaned.length > MAX_ARGUMENT_KEY_LENGTH) {
-    throw new Error(`Argument key at ${path} must not exceed ${MAX_ARGUMENT_KEY_LENGTH} characters.`);
+    throw new Error(
+      `Argument key at ${path} must not exceed ${MAX_ARGUMENT_KEY_LENGTH} characters.`,
+    );
   }
   if (cleaned.startsWith("$") || cleaned.startsWith("_")) {
     throw new Error(`Argument key ${cleaned} is reserved.`);

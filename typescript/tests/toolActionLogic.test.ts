@@ -59,10 +59,7 @@ describe("tool action proposal validation", () => {
   });
 
   it("rejects oversized string values", () => {
-    assert.throws(
-      () => normaliseToolArguments({ body: "x".repeat(16_385) }),
-      /16384 characters/,
-    );
+    assert.throws(() => normaliseToolArguments({ body: "x".repeat(16_385) }), /16384 characters/);
   });
 
   it("rejects excessive nesting", () => {

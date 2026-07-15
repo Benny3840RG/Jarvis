@@ -53,9 +53,7 @@ async function requireAction(
 ): Promise<Doc<"toolActions">> {
   const action = await ctx.db
     .query("toolActions")
-    .withIndex("by_owner_and_action_id", (q) =>
-      q.eq("ownerId", ownerId).eq("actionId", actionId),
-    )
+    .withIndex("by_owner_and_action_id", (q) => q.eq("ownerId", ownerId).eq("actionId", actionId))
     .unique();
   if (!action || action.projectKey !== projectKey) {
     throw new Error("Tool action does not exist.");
@@ -131,9 +129,7 @@ export const stage = mutation({
 
     const existing = await ctx.db
       .query("toolActions")
-      .withIndex("by_owner_and_action_id", (q) =>
-        q.eq("ownerId", ownerId).eq("actionId", actionId),
-      )
+      .withIndex("by_owner_and_action_id", (q) => q.eq("ownerId", ownerId).eq("actionId", actionId))
       .unique();
     if (existing) {
       if (!sameToolActionProposal(existing, proposal)) {
