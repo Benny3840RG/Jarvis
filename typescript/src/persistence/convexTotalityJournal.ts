@@ -64,8 +64,10 @@ export class ConvexTotalityJournal implements TotalityJournal {
     return row === null ? null : projectContextFromConvex(row as ProjectRow);
   }
 
-  async commitOutcome(input: Parameters<TotalityJournal["commitOutcome"]>[0]): Promise<void> {
-    await this.client.mutation(reasoningJournalFunctions.commit, {
+  async commitOutcome(
+    input: Parameters<TotalityJournal["commitOutcome"]>[0],
+  ): Promise<{ memoryChangeSetId: string | null }> {
+    const result = await this.client.mutation(reasoningJournalFunctions.commit, {
       serviceToken: this.serviceToken,
       requestId: input.requestId,
       ...(input.projectId === null ? {} : { projectKey: input.projectId }),
@@ -75,6 +77,19 @@ export class ConvexTotalityJournal implements TotalityJournal {
         actor: input.actor,
         payload: input.payload,
       },
+      ...(input.memoryProposal === undefined
+        ? {}
+        : {
+            memoryProposal: {
+              changeSetId: input.memoryProposal.changeSetId,
+              expectedRevision: input.memoryProposal.expectedRevision,
+              records: input.memoryProposal.records,
+              rationale: input.memoryProposal.rationale,
+            },
+          }),
     });
+    return {
+      memoryChangeSetId: (result as { memoryChangeSetId: string | null }).memoryChangeSetId,
+    };
   }
 }
