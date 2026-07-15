@@ -1,0 +1,89 @@
+name: Agent Convex dev sync smoke
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/agent-dev-sync-smoke.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  dev-sync-smoke:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: typescript
+    env:
+      CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEV_DEPLOY_KEY || secrets.CONVEX_DEPLOY_KEY }}
+      JARVIS_SERVICE_TOKEN_SECRET: ${{ secrets.JARVIS_SERVICE_TOKEN }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      EXPECTED_CONVEX_DEPLOYMENT: dev:outgoing-ram-798
+      CONVEX_URL: https://outgoing-ram-798.convex.cloud
+      PERSISTENCE_PROVIDER: convex
+      JARVIS_TIMEZONE: Australia/Melbourne
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: typescript/.nvmrc
+          cache: npm
+          cache-dependency-path: typescript/package-lock.json
+
+      - name: Verify development-only authority
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "${CONVEX_DEPLOY_KEY:-}" ]]; then
+            echo "::error::Missing repository secret CONVEX_DEV_DEPLOY_KEY or CONVEX_DEPLOY_KEY."
+            exit 1
+          fi
+          deployment_ref="${CONVEX_DEPLOY_KEY%%|*}"
+          if [[ "$deployment_ref" != dev:* ]]; then
+            echo "::error::Refusing Convex key that does not target a development deployment."
+            exit 1
+          fi
+          if [[ "$deployment_ref" != "$EXPECTED_CONVEX_DEPLOYMENT" ]]; then
+            echo "::error::Convex deploy key targets an unexpected development deployment."
+            exit 1
+          fi
+          echo "CONVEX_DEPLOYMENT=$deployment_ref" >> "$GITHUB_ENV"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run repository checks
+        run: npm run check
+
+      - name: Resolve service token without logging it
+        shell: bash
+        run: |
+          set -euo pipefail
+          token="${JARVIS_SERVICE_TOKEN_SECRET:-}"
+          if [[ -z "$token" ]]; then
+            token="$(npx convex env get JARVIS_SERVICE_TOKEN)"
+          fi
+          if [[ -z "$token" ]]; then
+            echo "::error::JARVIS_SERVICE_TOKEN is unavailable in GitHub secrets and the Convex development environment."
+            exit 1
+          fi
+          echo "::add-mask::$token"
+          echo "JARVIS_SERVICE_TOKEN=$token" >> "$GITHUB_ENV"
+
+      - name: Sync current functions to the development deployment
+        run: npx convex dev --once --tail-logs disable
+
+      - name: Run live Convex persistence smoke
+        run: npm run smoke:convex
+
+      - name: Report Totality live-smoke readiness
+        shell: bash
+        run: |
+          if [[ -z "${OPENAI_API_KEY:-}" ]]; then
+            echo "::warning::OPENAI_API_KEY is not configured as a repository secret; the next live Totality reasoning smoke cannot run yet."
+          else
+            echo "OpenAI live-smoke prerequisite is configured."
+          fi
