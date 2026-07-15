@@ -7,6 +7,22 @@ const TOOL_AUTHORITIES: readonly ToolAuthority[] = ["T0", "T1", "T2", "T3"];
 const MAX_ARGUMENT_DEPTH = 8;
 const MAX_ARGUMENT_NODES = 256;
 const MAX_ARGUMENT_KEYS = 64;
+const MAX_ARGUMENT_KEY_LENGTH = 128;
+const MAX_ARGUMENT_STRING_LENGTH = 16_384;
+const SENSITIVE_ARGUMENT_KEYS = new Set([
+  "authorization",
+  "password",
+  "passwd",
+  "secret",
+  "apikey",
+  "accesstoken",
+  "refreshtoken",
+  "servicetoken",
+  "clientsecret",
+  "privatekey",
+  "bearertoken",
+  "sessiontoken",
+]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -31,6 +47,24 @@ function booleanValue(value: unknown, field: string): boolean {
   return value;
 }
 
+function sensitiveKeyFingerprint(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function safeArgumentKey(value: string, path: string): string {
+  const cleaned = requiredString(value, `Argument key at ${path}`);
+  if (cleaned.length > MAX_ARGUMENT_KEY_LENGTH) {
+    throw new Error(`Argument key at ${path} must not exceed ${MAX_ARGUMENT_KEY_LENGTH} characters.`);
+  }
+  if (cleaned.startsWith("$") || cleaned.startsWith("_")) {
+    throw new Error(`Argument key ${cleaned} is reserved.`);
+  }
+  if (SENSITIVE_ARGUMENT_KEYS.has(sensitiveKeyFingerprint(cleaned))) {
+    throw new Error(`Argument key ${cleaned} may contain credentials and is not permitted.`);
+  }
+  return cleaned;
+}
+
 function safeArgumentValue(
   value: unknown,
   path: string,
@@ -44,7 +78,13 @@ function safeArgumentValue(
   if (depth > MAX_ARGUMENT_DEPTH) {
     throw new Error(`arguments must not exceed depth ${MAX_ARGUMENT_DEPTH}.`);
   }
-  if (value === null || typeof value === "string" || typeof value === "boolean") return value;
+  if (value === null || typeof value === "boolean") return value;
+  if (typeof value === "string") {
+    if (value.length > MAX_ARGUMENT_STRING_LENGTH) {
+      throw new Error(`${path} must not exceed ${MAX_ARGUMENT_STRING_LENGTH} characters.`);
+    }
+    return value;
+  }
   if (typeof value === "number") {
     if (!Number.isFinite(value)) throw new Error(`${path} must be a finite number.`);
     return value;
@@ -61,10 +101,7 @@ function safeArgumentValue(
     }
     const output: Record<string, unknown> = {};
     for (const [key, entry] of entries.sort(([left], [right]) => left.localeCompare(right))) {
-      const cleanedKey = requiredString(key, `Argument key at ${path}`);
-      if (cleanedKey.startsWith("$") || cleanedKey.startsWith("_")) {
-        throw new Error(`Argument key ${cleanedKey} is reserved.`);
-      }
+      const cleanedKey = safeArgumentKey(key, path);
       output[cleanedKey] = safeArgumentValue(entry, `${path}.${cleanedKey}`, depth + 1, counter);
     }
     return output;
