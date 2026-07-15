@@ -115,6 +115,7 @@ export default defineSchema({
     rejectedAt: v.optional(v.number()),
   })
     .index("by_owner_and_action_id", ["ownerId", "actionId"])
+    .index("by_owner_and_idempotency_key", ["ownerId", "idempotencyKey"])
     .index("by_owner_and_project_key", ["ownerId", "projectKey"])
     .index("by_owner_and_project_key_and_state", ["ownerId", "projectKey", "state"])
     .index("by_owner_and_request_id", ["ownerId", "requestId"]),
