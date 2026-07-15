@@ -5,6 +5,7 @@ import type { NestFastifyApplication } from "@nestjs/platform-fastify";
 
 import { createJarvisHttpApp } from "../src/http/app.js";
 import type { HttpAppConfig } from "../src/http/config.js";
+import { OpenAIRequestError } from "../src/integrations/openai/totalityReasoner.js";
 import type {
   AssistantState,
   PersistenceProvider,
@@ -14,10 +15,10 @@ import type {
   Task,
   TaskUpdate,
 } from "../src/persistence/persistence.js";
-import { OpenAIRequestError } from "../src/integrations/openai/totalityReasoner.js";
 import {
   TotalityPipeline,
   type TotalityJournal,
+  type TotalityProjectContext,
   type TotalityReasoner,
 } from "../src/totality/totalityPipeline.js";
 
@@ -76,13 +77,37 @@ function makePersistence(): PersistenceProvider {
   };
 }
 
-function noOpJournal(): TotalityJournal {
+function projectContext(): TotalityProjectContext {
   return {
-    async commitOutcome() {},
+    projectId: "project-1",
+    projectName: "Bracket review",
+    projectType: "engineering",
+    status: "active",
+    revision: 4,
+    domains: ["mechanical"],
+    summary: "Review a fabricated bracket.",
+    updatedAt: "2026-07-15T23:00:00.000Z",
   };
 }
 
-function successfulPipeline(journal: TotalityJournal = noOpJournal()): TotalityPipeline {
+function noOpJournal(): TotalityJournal {
+  return {
+    async getProjectContext() {
+      return projectContext();
+    },
+    async commitOutcome(input) {
+      return {
+        memoryChangeSetId:
+          input.memoryProposal === undefined ? null : input.memoryProposal.changeSetId,
+      };
+    },
+  };
+}
+
+function successfulPipeline(
+  journal: TotalityJournal = noOpJournal(),
+  memoryProposals: Awaited<ReturnType<TotalityReasoner["reason"]>>["draft"]["memoryProposals"] = [],
+): TotalityPipeline {
   const reasoner: TotalityReasoner = {
     async reason() {
       return {
@@ -95,11 +120,14 @@ function successfulPipeline(journal: TotalityJournal = noOpJournal()): TotalityP
           controls: ["Proof-load and inspect the weld profile."],
           unsupportedClaims: [],
           contradictions: [],
+          memoryProposals,
+          memoryRationale:
+            memoryProposals.length === 0 ? "" : "Retain the proposal for explicit approval.",
         },
       };
     },
   };
-  return new TotalityPipeline(reasoner, journal);
+  return new TotalityPipeline(reasoner, journal, () => new Date("2026-07-16T00:00:00.000Z"));
 }
 
 async function makeApp(totalityPipeline: TotalityPipeline | null): Promise<NestFastifyApplication> {
@@ -193,8 +221,85 @@ describe("Totality HTTP boundary", () => {
     const payload = response.json();
     assert.equal(payload.requestId, "request-http-1");
     assert.equal(payload.status, "completed");
+    assert.equal(payload.result.memoryChangeSetId, null);
+    assert.equal(payload.result.memoryProposalCount, 0);
     assert.deepEqual(payload.memoryUpdates, []);
     assert.deepEqual(payload.toolActions, []);
+  });
+
+  it("returns staged memory proposal metadata without applying it", async () => {
+    const app = await makeApp(
+      successfulPipeline(noOpJournal(), [
+        {
+          kind: "assumption",
+          statement: "Peak load remains unverified.",
+          impact: "high",
+        },
+      ]),
+    );
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/v1/totality/reason",
+      headers: authHeaders(),
+      payload: body(),
+    });
+
+    assert.equal(response.statusCode, 200);
+    const payload = response.json();
+    assert.match(payload.result.memoryChangeSetId, /^reasoning-/);
+    assert.equal(payload.result.memoryProposalCount, 1);
+    assert.equal(payload.memoryUpdates.length, 1);
+    assert.equal(payload.memoryUpdates[0].requiresApproval, true);
+  });
+
+  it("returns 404 when authoritative project context is missing", async () => {
+    const journal: TotalityJournal = {
+      async getProjectContext() {
+        return null;
+      },
+      async commitOutcome() {
+        return { memoryChangeSetId: null };
+      },
+    };
+    const app = await makeApp(successfulPipeline(journal));
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/v1/totality/reason",
+      headers: authHeaders(),
+      payload: body(),
+    });
+
+    assert.equal(response.statusCode, 404);
+    assert.equal(response.json().type, "urn:jarvis:problem:totality-project-not-found");
+  });
+
+  it("returns 409 when the project revision moves before atomic staging", async () => {
+    const journal: TotalityJournal = {
+      async getProjectContext() {
+        return projectContext();
+      },
+      async commitOutcome() {
+        throw new Error("Project revision conflict: expected 4, current 5.");
+      },
+    };
+    const app = await makeApp(
+      successfulPipeline(journal, [
+        {
+          kind: "assumption",
+          statement: "Peak load remains unverified.",
+          impact: "high",
+        },
+      ]),
+    );
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/v1/totality/reason",
+      headers: authHeaders(),
+      payload: body(),
+    });
+
+    assert.equal(response.statusCode, 409);
+    assert.equal(response.json().type, "urn:jarvis:problem:memory-proposal-conflict");
   });
 
   it("maps provider rate limits without leaking provider details", async () => {
@@ -218,6 +323,9 @@ describe("Totality HTTP boundary", () => {
 
   it("fails closed when the atomic Convex journal commit fails", async () => {
     const journal: TotalityJournal = {
+      async getProjectContext() {
+        return projectContext();
+      },
       async commitOutcome() {
         throw new Error("Convex unavailable");
       },
