@@ -7,6 +7,11 @@ import {
   memoryRecordValidator,
 } from "./memoryChangeSetValidators.js";
 import {
+  toolActionActorValidator,
+  toolActionStateValidator,
+  toolAuthorityValidator,
+} from "./toolActionValidators.js";
+import {
   projectPreferencesValidator,
   projectRecordValidator,
   projectStatusValidator,
@@ -83,6 +88,33 @@ export default defineSchema({
     appliedRevision: v.optional(v.number()),
   })
     .index("by_owner_and_change_set_id", ["ownerId", "changeSetId"])
+    .index("by_owner_and_project_key", ["ownerId", "projectKey"])
+    .index("by_owner_and_project_key_and_state", ["ownerId", "projectKey", "state"])
+    .index("by_owner_and_request_id", ["ownerId", "requestId"]),
+  toolActions: defineTable({
+    ownerId: v.string(),
+    actionId: v.string(),
+    requestId: v.string(),
+    projectKey: v.string(),
+    baseRevision: v.number(),
+    state: toolActionStateValidator,
+    tool: v.string(),
+    operation: v.string(),
+    arguments: v.record(v.string(), v.any()),
+    rationale: v.string(),
+    requiredAuthority: toolAuthorityValidator,
+    destructive: v.boolean(),
+    idempotencyKey: v.string(),
+    proposedBy: toolActionActorValidator,
+    approvedBy: v.optional(v.literal("user")),
+    rejectedBy: v.optional(v.literal("user")),
+    rejectedReason: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    approvedAt: v.optional(v.number()),
+    rejectedAt: v.optional(v.number()),
+  })
+    .index("by_owner_and_action_id", ["ownerId", "actionId"])
     .index("by_owner_and_project_key", ["ownerId", "projectKey"])
     .index("by_owner_and_project_key_and_state", ["ownerId", "projectKey", "state"])
     .index("by_owner_and_request_id", ["ownerId", "requestId"]),
