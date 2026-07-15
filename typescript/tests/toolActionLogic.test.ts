@@ -49,6 +49,22 @@ describe("tool action proposal validation", () => {
     assert.throws(() => normaliseToolArguments({ $operator: "no" }), /reserved/);
   });
 
+  it("rejects credential-shaped argument keys at any depth", () => {
+    assert.throws(() => normaliseToolArguments({ api_key: "secret" }), /credentials/);
+    assert.throws(
+      () => normaliseToolArguments({ auth: { Authorization: "Bearer secret" } }),
+      /credentials/,
+    );
+    assert.throws(() => normaliseToolArguments({ clientSecret: "secret" }), /credentials/);
+  });
+
+  it("rejects oversized string values", () => {
+    assert.throws(
+      () => normaliseToolArguments({ body: "x".repeat(16_385) }),
+      /16384 characters/,
+    );
+  });
+
   it("rejects excessive nesting", () => {
     let value: Record<string, unknown> = { leaf: true };
     for (let index = 0; index < 9; index += 1) value = { next: value };
