@@ -13,6 +13,7 @@ import { ProblemDetailsFilter } from "./problemDetails.js";
 import { RequestIdInterceptor } from "./requestId.js";
 import { ServiceTokenGuard } from "./serviceTokenGuard.js";
 import { HealthController, OperatorSystemController } from "./systemControllers.js";
+import { SystemStatusService } from "./systemStatusService.js";
 import { ToolActionController } from "./toolActionController.js";
 import { TotalityController } from "./totalityController.js";
 import {
