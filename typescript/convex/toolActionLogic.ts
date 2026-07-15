@@ -22,6 +22,22 @@ export type ToolActionProposalValues = {
 const MAX_ARGUMENT_DEPTH = 8;
 const MAX_ARGUMENT_NODES = 256;
 const MAX_ARGUMENT_KEYS = 64;
+const MAX_ARGUMENT_KEY_LENGTH = 128;
+const MAX_ARGUMENT_STRING_LENGTH = 16_384;
+const SENSITIVE_ARGUMENT_KEYS = new Set([
+  "authorization",
+  "password",
+  "passwd",
+  "secret",
+  "apikey",
+  "accesstoken",
+  "refreshtoken",
+  "servicetoken",
+  "clientsecret",
+  "privatekey",
+  "bearertoken",
+  "sessiontoken",
+]);
 
 export function cleanRequiredText(value: string, field: string): string {
   const cleaned = value.trim();
@@ -34,6 +50,24 @@ export function requirePositiveRevision(value: number, field: string): number {
     throw new Error(`${field} must be a positive integer.`);
   }
   return value;
+}
+
+function sensitiveKeyFingerprint(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function validateArgumentKey(value: string, path: string): string {
+  const cleaned = cleanRequiredText(value, `Tool action argument key at ${path}`);
+  if (cleaned.length > MAX_ARGUMENT_KEY_LENGTH) {
+    throw new Error(`Tool action argument key at ${path} exceeds ${MAX_ARGUMENT_KEY_LENGTH} characters.`);
+  }
+  if (cleaned.startsWith("$") || cleaned.startsWith("_")) {
+    throw new Error(`Tool action argument key ${cleaned} is reserved.`);
+  }
+  if (SENSITIVE_ARGUMENT_KEYS.has(sensitiveKeyFingerprint(cleaned))) {
+    throw new Error(`Tool action argument key ${cleaned} may contain credentials and is not permitted.`);
+  }
+  return cleaned;
 }
 
 function normaliseValue(
@@ -49,7 +83,13 @@ function normaliseValue(
   if (depth > MAX_ARGUMENT_DEPTH) {
     throw new Error(`Tool action arguments exceed maximum depth ${MAX_ARGUMENT_DEPTH}.`);
   }
-  if (value === null || typeof value === "string" || typeof value === "boolean") return value;
+  if (value === null || typeof value === "boolean") return value;
+  if (typeof value === "string") {
+    if (value.length > MAX_ARGUMENT_STRING_LENGTH) {
+      throw new Error(`${path} exceeds ${MAX_ARGUMENT_STRING_LENGTH} characters.`);
+    }
+    return value;
+  }
   if (typeof value === "number") {
     if (!Number.isFinite(value)) throw new Error(`${path} must be a finite number.`);
     return value;
@@ -66,10 +106,7 @@ function normaliseValue(
     }
     const output: Record<string, unknown> = {};
     for (const [key, entry] of entries.sort(([left], [right]) => left.localeCompare(right))) {
-      const cleanedKey = cleanRequiredText(key, `Tool action argument key at ${path}`);
-      if (cleanedKey.startsWith("$") || cleanedKey.startsWith("_")) {
-        throw new Error(`Tool action argument key ${cleanedKey} is reserved.`);
-      }
+      const cleanedKey = validateArgumentKey(key, path);
       output[cleanedKey] = normaliseValue(entry, `${path}.${cleanedKey}`, depth + 1, counter);
     }
     return output;
