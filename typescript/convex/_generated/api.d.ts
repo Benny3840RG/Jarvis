@@ -19,6 +19,9 @@ import type * as projects from "../projects.js";
 import type * as reasoningJournal from "../reasoningJournal.js";
 import type * as reminders from "../reminders.js";
 import type * as tasks from "../tasks.js";
+import type * as toolActionLogic from "../toolActionLogic.js";
+import type * as toolActions from "../toolActions.js";
+import type * as toolActionValidators from "../toolActionValidators.js";
 import type * as totalityValidators from "../totalityValidators.js";
 import type * as validationReports from "../validationReports.js";
 
@@ -40,6 +43,9 @@ declare const fullApi: ApiFromModules<{
   reasoningJournal: typeof reasoningJournal;
   reminders: typeof reminders;
   tasks: typeof tasks;
+  toolActionLogic: typeof toolActionLogic;
+  toolActions: typeof toolActions;
+  toolActionValidators: typeof toolActionValidators;
   totalityValidators: typeof totalityValidators;
   validationReports: typeof validationReports;
 }>;
