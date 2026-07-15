@@ -359,6 +359,28 @@ describe("Tool action approval HTTP boundary", () => {
     assert.doesNotMatch(response.body, /current-secret|current 4/);
   });
 
+  it("maps duplicate idempotency keys to a redacted state conflict", async () => {
+    const app = await makeApp(
+      successfulService({
+        async stage() {
+          throw new Error(
+            "Tool idempotency key already belongs to another action. token=current-secret",
+          );
+        },
+      }),
+    );
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/v1/projects/project-1/tool-actions",
+      headers: authHeaders(),
+      payload: stageBody(),
+    });
+
+    assert.equal(response.statusCode, 409);
+    assert.equal(response.json().type, "urn:jarvis:problem:tool-action-state-conflict");
+    assert.doesNotMatch(response.body, /current-secret|belongs to another action/);
+  });
+
   it("has no execution route in this stage", async () => {
     const app = await makeApp(successfulService());
     const response = await app.inject({
