@@ -3,15 +3,19 @@
 Jarvis exposes a localhost-first NestJS/Fastify system boundary alongside the maintained CLI.
 This stage implements only the system operations whose runtime behaviour is complete:
 
-| Method | Path             | Authentication | Purpose                                                     |
-| ------ | ---------------- | -------------- | ----------------------------------------------------------- |
-| GET    | `/healthz`       | Public         | Process liveness only; never reads persistence.             |
-| GET    | `/api/v1/help`   | Bearer token   | Lists only operations implemented by the running adapter.   |
-| GET    | `/api/v1/status` | Bearer token   | Checks persistence, timezone, layer readiness, and Z-State. |
+| Method           | Path                             | Authentication | Purpose                                                     |
+| ---------------- | -------------------------------- | -------------- | ----------------------------------------------------------- |
+| GET              | `/healthz`                       | Public         | Process liveness only; never reads persistence.             |
+| GET              | `/api/v1/help`                   | Bearer token   | Lists only operations implemented by the running adapter.   |
+| GET              | `/api/v1/status`                 | Bearer token   | Checks persistence, timezone, layer readiness, and Z-State. |
+| GET              | `/api/v1/reminders`              | ******         | Lists durable reminders.                                    |
+| POST             | `/api/v1/reminders`              | ******         | Creates a durable reminder.                                 |
+| GET/PATCH/DELETE | `/api/v1/reminders/{reminderId}` | ******         | Reads, updates, or removes one reminder.                    |
 
 The complete implementation target remains
 [`../../openapi/jarvis.openapi.json`](../../openapi/jarvis.openapi.json). Operations not listed
-above are not yet HTTP routes.
+above are not yet HTTP routes. Reminder creation requires an `Idempotency-Key`; due input preserves
+the exact `text` and optionally normalizes it using the supplied `timezone`.
 
 ## Configuration
 

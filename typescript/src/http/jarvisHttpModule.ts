@@ -10,10 +10,12 @@ import type { TotalityPipeline } from "../totality/totalityPipeline.js";
 import type { HttpAppConfig } from "./config.js";
 import { MemoryChangeSetController } from "./memoryChangeSetController.js";
 import { ProblemDetailsFilter } from "./problemDetails.js";
+import { ReminderController } from "./reminderController.js";
 import { RequestIdInterceptor } from "./requestId.js";
 import { ServiceTokenGuard } from "./serviceTokenGuard.js";
 import { HealthController, OperatorSystemController } from "./systemControllers.js";
 import { SystemStatusService } from "./systemStatusService.js";
+import { TaskController } from "./taskController.js";
 import { ToolActionController } from "./toolActionController.js";
 import { TotalityController } from "./totalityController.js";
 import {
@@ -44,6 +46,8 @@ export class JarvisHttpModule {
         OperatorSystemController,
         TotalityController,
         MemoryChangeSetController,
+        TaskController,
+        ReminderController,
         ToolActionController,
       ],
       providers: [

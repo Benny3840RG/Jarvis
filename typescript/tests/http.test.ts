@@ -5,6 +5,7 @@ import { afterEach, describe, it } from "node:test";
 import type { NestFastifyApplication } from "@nestjs/platform-fastify";
 
 import { createJarvisHttpApp } from "../src/http/app.js";
+import { IMPLEMENTED_CAPABILITIES } from "../src/http/contracts.js";
 import {
   resolveHttpAppConfig,
   resolveHttpListenConfig,
@@ -55,8 +56,8 @@ function makePersistence(overrides: Partial<PersistenceProvider> = {}): Persiste
     async listTasks(): Promise<Task[]> {
       return [];
     },
-    async addTask(_title: string, _category: string): Promise<Task> {
-      return task;
+    async addTask(title: string, category: string): Promise<Task> {
+      return { ...task, title, category };
     },
     async updateTask(_id: string, _update: TaskUpdate): Promise<Task | null> {
       return task;
@@ -233,6 +234,21 @@ describe("Jarvis HTTP system boundary", () => {
           destructive: true,
           mcpExposed: false,
         },
+        ...IMPLEMENTED_CAPABILITIES.filter(({ operationId }) =>
+          [
+            "listTasks",
+            "createTask",
+            "getTask",
+            "updateTask",
+            "deleteTask",
+            "completeTask",
+            "listReminders",
+            "createReminder",
+            "getReminder",
+            "updateReminder",
+            "deleteReminder",
+          ].includes(operationId),
+        ),
       ],
     });
   });
@@ -267,6 +283,17 @@ describe("Jarvis HTTP system boundary", () => {
       ["/api/v1/projects/{projectId}/memory-change-sets/{changeSetId}/approve", "post"],
       ["/api/v1/projects/{projectId}/memory-change-sets/{changeSetId}/reject", "post"],
       ["/api/v1/projects/{projectId}/memory-change-sets/{changeSetId}/apply", "post"],
+      ["/api/v1/tasks", "get"],
+      ["/api/v1/tasks", "post"],
+      ["/api/v1/tasks/{taskId}", "get"],
+      ["/api/v1/tasks/{taskId}", "patch"],
+      ["/api/v1/tasks/{taskId}", "delete"],
+      ["/api/v1/tasks/{taskId}/complete", "post"],
+      ["/api/v1/reminders", "get"],
+      ["/api/v1/reminders", "post"],
+      ["/api/v1/reminders/{reminderId}", "get"],
+      ["/api/v1/reminders/{reminderId}", "patch"],
+      ["/api/v1/reminders/{reminderId}", "delete"],
     ] as const;
     const contractCapabilities = implementedRoutes.map(([path, method]) => {
       const operation = contract.paths[path][method];
@@ -292,6 +319,120 @@ describe("Jarvis HTTP system boundary", () => {
       response.json<{ capabilities: unknown[] }>().capabilities,
       contractCapabilities,
     );
+  });
+
+  it("exposes durable task operations through the authenticated boundary", async () => {
+    const app = await makeApp();
+    const list = await app.inject({
+      method: "GET",
+      url: "/api/v1/tasks",
+      headers: { authorization: ["Bearer", "current" + "-secret"].join(" ") },
+    });
+    const create = await app.inject({
+      method: "POST",
+      url: "/api/v1/tasks",
+      headers: {
+        authorization: ["Bearer", "current" + "-secret"].join(" "),
+        "idempotency-key": "task-create-1",
+      },
+      payload: { title: "Inspect bracket" },
+    });
+
+    assert.equal(list.statusCode, 200);
+    assert.deepEqual(list.json(), { data: [], count: 0 });
+    assert.equal(create.statusCode, 201);
+    assert.equal(create.json().data.title, "Inspect bracket");
+    assert.equal(create.json().data.category, "personal");
+    assert.match(create.headers.location ?? "", /\/api\/v1\/tasks\/task-1$/);
+  });
+
+  it("exposes durable reminder operations through the authenticated boundary", async () => {
+    const reminder: Reminder = {
+      id: "reminder-1",
+      title: "Inspect bracket",
+      dueRaw: "tomorrow 9am",
+      dueAt: 1_000,
+      dueTimezone: "Australia/Melbourne",
+      createdAt: 1,
+    };
+    let stored: Reminder | null = null;
+    const app = await makeApp({
+      persistence: makePersistence({
+        async listReminders() {
+          return stored === null ? [] : [stored];
+        },
+        async addReminder(title, due) {
+          stored = {
+            ...reminder,
+            title,
+            ...(due === undefined
+              ? {}
+              : { dueRaw: due.raw, dueAt: due.at, dueTimezone: due.timezone }),
+          };
+          return stored;
+        },
+        async updateReminder(id, update) {
+          if (stored?.id !== id) return null;
+          stored = {
+            ...stored,
+            ...(update.title === undefined ? {} : { title: update.title }),
+            ...(update.due === undefined
+              ? {}
+              : update.due === null
+                ? { dueRaw: undefined, dueAt: undefined, dueTimezone: undefined }
+                : {
+                    dueRaw: update.due.raw,
+                    dueAt: update.due.at,
+                    dueTimezone: update.due.timezone,
+                  }),
+          };
+          return stored;
+        },
+        async removeReminder(id) {
+          if (stored?.id !== id) return null;
+          const removed = stored;
+          stored = null;
+          return removed;
+        },
+      }),
+    });
+    const headers = { authorization: ["Bearer", "current" + "-secret"].join(" ") };
+
+    const list = await app.inject({ method: "GET", url: "/api/v1/reminders", headers });
+    const create = await app.inject({
+      method: "POST",
+      url: "/api/v1/reminders",
+      headers: { ...headers, "idempotency-key": "reminder-create-1" },
+      payload: { title: "Inspect bracket", due: { text: "tomorrow 9am" } },
+    });
+    const get = await app.inject({
+      method: "GET",
+      url: "/api/v1/reminders/reminder-1",
+      headers,
+    });
+    const update = await app.inject({
+      method: "PATCH",
+      url: "/api/v1/reminders/reminder-1",
+      headers,
+      payload: { title: "Revised reminder", due: null },
+    });
+    const remove = await app.inject({
+      method: "DELETE",
+      url: "/api/v1/reminders/reminder-1",
+      headers,
+    });
+
+    assert.equal(list.statusCode, 200);
+    assert.deepEqual(list.json(), { data: [], count: 0 });
+    assert.equal(create.statusCode, 201);
+    assert.equal(create.json().data.title, "Inspect bracket");
+    assert.match(create.headers.location ?? "", /\/api\/v1\/reminders\/reminder-1$/);
+    assert.equal(get.statusCode, 200);
+    assert.equal(update.statusCode, 200);
+    assert.equal(update.json().data.title, "Revised reminder");
+    assert.equal(update.json().data.dueRaw, undefined);
+    assert.equal(remove.statusCode, 200);
+    assert.equal(remove.json().data.id, "reminder-1");
   });
 
   it("accepts current and overlap tokens", async () => {

@@ -800,4 +800,38 @@ describe("compact ID display and prefix alias resolution in CLI", () => {
     assert.equal(persistence.listTasksCalled, 2);
     assert.equal(persistence.listRemindersCalled, 2);
   });
+
+  it("uses refreshed state as authoritative for the next runtime save", async () => {
+    const persistence = new MockPersistence({
+      state: { stale: "remove", externallyUpdated: "old" },
+    });
+    const logs = capture();
+    await runCli({
+      persistence,
+      readline: new CallbackReadline([
+        () => {
+          persistence.state = { externallyUpdated: "new" };
+          return "status";
+        },
+        () => "task add Keep refreshed state",
+        () => "exit",
+      ]),
+      stdout: logs.stdout,
+      stderr: logs.stderr,
+    });
+
+    assert.deepEqual(persistence.state, {
+      externallyUpdated: "new",
+      lastInput: "task add Keep refreshed state",
+      lastIntent: "task-add",
+      lastTask: {
+        id: "task-1",
+        title: "Keep refreshed state",
+        completed: false,
+        category: "personal",
+        createdAt: 1,
+      },
+    });
+    assert.equal("stale" in persistence.state, false);
+  });
 });
