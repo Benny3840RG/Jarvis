@@ -1,0 +1,241 @@
+name: Development commissioning
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type COMMISSION DEV to run against the authorised Convex development deployment
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: jarvis-development-commissioning
+  cancel-in-progress: false
+
+jobs:
+  commission-development:
+    name: Commission authorised development stack
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CONVEX_DEPLOYMENT: dev:outgoing-ram-798
+      CONVEX_URL: https://outgoing-ram-798.convex.cloud
+      PERSISTENCE_PROVIDER: convex
+      JARVIS_TIMEZONE: Australia/Melbourne
+      JARVIS_HTTP_HOST: 127.0.0.1
+      JARVIS_HTTP_PORT: "3000"
+      JARVIS_SOURCE_VERSION: ${{ github.sha }}
+      JARVIS_DEPLOYMENT_VERSION: dev:outgoing-ram-798
+      CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
+      JARVIS_SERVICE_TOKEN: ${{ secrets.JARVIS_SERVICE_TOKEN }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+
+    defaults:
+      run:
+        working-directory: typescript
+        shell: bash
+
+    steps:
+      - name: Check out exact main commit
+        uses: actions/checkout@v4
+
+      - name: Guard commissioning boundary
+        env:
+          COMMISSION_CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+
+          if [[ "$GITHUB_REF" != "refs/heads/main" ]]; then
+            echo "::error::Commissioning may run only from main."
+            exit 1
+          fi
+
+          if [[ "$COMMISSION_CONFIRMATION" != "COMMISSION DEV" ]]; then
+            echo "::error::Confirmation must exactly match COMMISSION DEV."
+            exit 1
+          fi
+
+          if [[ "$CONVEX_DEPLOYMENT" != "dev:outgoing-ram-798" ]]; then
+            echo "::error::Unexpected Convex deployment identity."
+            exit 1
+          fi
+
+          if [[ "$CONVEX_URL" != "https://outgoing-ram-798.convex.cloud" ]]; then
+            echo "::error::Unexpected Convex deployment URL."
+            exit 1
+          fi
+
+          for variable in CONVEX_DEPLOY_KEY JARVIS_SERVICE_TOKEN OPENAI_API_KEY; do
+            if [[ -z "${!variable:-}" ]]; then
+              echo "::error::Required repository secret $variable is unavailable."
+              exit 1
+            fi
+          done
+
+          if [[ "$CONVEX_DEPLOY_KEY" != dev:outgoing-ram-798\|* ]]; then
+            echo "::error::CONVEX_DEPLOY_KEY is not scoped to dev:outgoing-ram-798."
+            exit 1
+          fi
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: typescript/.nvmrc
+          cache: npm
+          cache-dependency-path: typescript/package-lock.json
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Run complete verification gate
+        run: npm run check
+
+      - name: Sync functions to authorised development deployment
+        run: npx convex dev --once --tail-logs disable
+
+      - name: Run self-cleaning Convex smoke test
+        run: npm run smoke:convex
+
+      - name: Start Jarvis and verify operator boundaries
+        run: |
+          set -euo pipefail
+
+          server_log="$RUNNER_TEMP/jarvis-http.log"
+          health_response="$RUNNER_TEMP/jarvis-health.json"
+          status_response="$RUNNER_TEMP/jarvis-status.json"
+          totality_request="$RUNNER_TEMP/jarvis-totality-request.json"
+          totality_response="$RUNNER_TEMP/jarvis-totality-response.json"
+
+          npm run start:http >"$server_log" 2>&1 &
+          server_pid=$!
+
+          cleanup() {
+            kill "$server_pid" 2>/dev/null || true
+            wait "$server_pid" 2>/dev/null || true
+          }
+          trap cleanup EXIT
+
+          ready=false
+          for _ in {1..30}; do
+            if curl --silent --show-error --fail \
+              "http://127.0.0.1:3000/healthz" \
+              --output "$health_response"; then
+              ready=true
+              break
+            fi
+            sleep 1
+          done
+
+          if [[ "$ready" != true ]]; then
+            echo "::error::Jarvis HTTP service did not become healthy."
+            sed -E 's/(Bearer )[A-Za-z0-9._~+\/-]+/\1[REDACTED]/g' "$server_log" || true
+            exit 1
+          fi
+
+          curl --silent --show-error --fail --config - \
+            --output "$status_response" <<EOF
+          url = "http://127.0.0.1:3000/api/v1/status"
+          header = "Authorization: Bearer $JARVIS_SERVICE_TOKEN"
+          header = "X-Request-Id: commissioning-status-${GITHUB_RUN_ID}"
+          EOF
+
+          node --input-type=module - "$status_response" <<'NODE'
+          import fs from "node:fs";
+          const payload = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+          if (payload.status !== "ok") {
+            throw new Error(`Unexpected system status: ${String(payload.status)}`);
+          }
+          if (payload.provider?.name !== "convex") {
+            throw new Error(`Unexpected persistence provider: ${String(payload.provider?.name)}`);
+          }
+          if (payload.provider?.reachability !== "ok") {
+            throw new Error(
+              `Unexpected persistence reachability: ${String(payload.provider?.reachability)}`,
+            );
+          }
+          if (payload.provider?.authentication !== "ok") {
+            throw new Error(
+              `Unexpected persistence authentication: ${String(payload.provider?.authentication)}`,
+            );
+          }
+          if (payload.provider?.schemaCompatibility !== "compatible") {
+            throw new Error(
+              `Unexpected schema compatibility: ${String(payload.provider?.schemaCompatibility)}`,
+            );
+          }
+          if (payload.provider?.deploymentVersion !== "dev:outgoing-ram-798") {
+            throw new Error(
+              `Unexpected deployment version: ${String(payload.provider?.deploymentVersion)}`,
+            );
+          }
+          NODE
+
+          cat >"$totality_request" <<'JSON'
+          {
+            "projectId": null,
+            "sessionId": "development-commissioning",
+            "taskType": "general_analysis",
+            "domainContext": ["operations"],
+            "goal": "Confirm that the Jarvis development reasoning boundary is operational. Return a brief acknowledgement only. Do not propose memory changes or tool actions.",
+            "constraints": [
+              "No tool execution",
+              "No memory proposal",
+              "No production activity"
+            ],
+            "inputs": [],
+            "outputStyle": "default",
+            "actionPolicy": {
+              "maximumToolAuthority": "T0",
+              "requireApprovalBeforeExecution": true
+            }
+          }
+          JSON
+
+          curl --silent --show-error --fail --config - \
+            --request POST \
+            --header "Content-Type: application/json" \
+            --data-binary "@$totality_request" \
+            --output "$totality_response" <<EOF
+          url = "http://127.0.0.1:3000/api/v1/totality/reason"
+          header = "Authorization: Bearer $JARVIS_SERVICE_TOKEN"
+          header = "X-Request-Id: commissioning-totality-${GITHUB_RUN_ID}"
+          EOF
+
+          node --input-type=module - "$totality_response" <<'NODE'
+          import fs from "node:fs";
+          const payload = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+          if (!["completed", "blocked"].includes(payload.status)) {
+            throw new Error(`Unexpected Totality status: ${String(payload.status)}`);
+          }
+          if (!payload.requestId) {
+            throw new Error("Totality response did not include a request ID.");
+          }
+          if (!Array.isArray(payload.toolActions) || payload.toolActions.length !== 0) {
+            throw new Error("Commissioning response unexpectedly proposed tool actions.");
+          }
+          NODE
+
+      - name: Export and verify development backup
+        run: |
+          set -euo pipefail
+          backup_file="$RUNNER_TEMP/jarvis-development-${GITHUB_RUN_ID}.json"
+          npm run backup -- export "$backup_file"
+          npm run backup -- verify "$backup_file"
+
+      - name: Commissioning summary
+        run: |
+          {
+            echo "## Jarvis development commissioning passed"
+            echo
+            echo "- Source: \`${GITHUB_SHA}\`"
+            echo "- Deployment: \`dev:outgoing-ram-798\`"
+            echo "- Static checks: passed"
+            echo "- Convex sync and smoke test: passed"
+            echo "- HTTP health and authenticated status: passed"
+            echo "- OpenAI Totality reasoning boundary: passed"
+            echo "- Backup export and isolated verification: passed"
+            echo "- Production deployment: not performed"
+          } >>"$GITHUB_STEP_SUMMARY"
