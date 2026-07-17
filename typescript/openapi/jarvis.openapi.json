@@ -4,13 +4,8 @@
   "info": {
     "title": "Jarvis Operator API",
     "summary": "A safety-gated API for the Jarvis Z-State runtime and durable operator data.",
-<<<<<<< HEAD
-    "description": "Jarvis accepts structured operator requests, routes work through its runtime and safety envelope, and persists tasks and reminders through the configured JSON or Convex provider. This contract is intentionally single-user and private. The future ChatGPT App MCP server must keep the Jarvis service token server-side and expose only operations marked with x-mcp-tool.exposed=true.",
-    "version": "0.2.0",
-=======
     "description": "Jarvis accepts structured operator requests, routes work through its runtime and safety envelope, persists tasks and reminders through the configured JSON or Convex provider, runs proposal-only Totality reasoning, stages revision-checked project-memory changes, and now stores revision-bound tool-action proposals for explicit approval or rejection without execution. This contract is intentionally single-user and private. The future ChatGPT App MCP server must keep Jarvis and OpenAI service credentials server-side and expose only operations marked with x-mcp-tool.exposed=true.",
     "version": "0.6.0",
->>>>>>> origin/main
     "license": {
       "name": "Proprietary",
       "identifier": "LicenseRef-Proprietary"
@@ -51,8 +46,6 @@
     {
       "name": "Backups",
       "description": "Provider-neutral export, verification, and empty-target restore operations."
-<<<<<<< HEAD
-=======
     },
     {
       "name": "Memory",
@@ -61,7 +54,6 @@
     {
       "name": "Tool Actions",
       "description": "Revision-bound tool-action proposal, inspection, approval, and rejection. Approval does not execute the operation."
->>>>>>> origin/main
     }
   ],
   "x-jarvis-architecture": {
@@ -77,9 +69,6 @@
       "autonomy",
       "z-state-activation"
     ],
-<<<<<<< HEAD
-    "immutableSafetyCategories": ["domain", "cross-domain", "memory", "reliability", "proposal"],
-=======
     "immutableSafetyCategories": [
       "domain",
       "cross-domain",
@@ -88,7 +77,6 @@
       "proposal",
       "tool-action"
     ],
->>>>>>> origin/main
     "businessBoundary": "Jarvis routes business-domain work through integrations and must not duplicate authoritative TBTB business logic."
   },
   "x-chatgpt-app": {
@@ -119,9 +107,6 @@
       "executeConversation",
       "exportBackup",
       "verifyBackup",
-<<<<<<< HEAD
-      "restoreBackup"
-=======
       "restoreBackup",
       "reasonWithTotality",
       "stageMemoryChangeSet",
@@ -135,7 +120,6 @@
       "getToolAction",
       "approveToolAction",
       "rejectToolAction"
->>>>>>> origin/main
     ]
   },
   "paths": {
@@ -184,11 +168,7 @@
       "get": {
         "operationId": "getHelp",
         "summary": "List supported operator capabilities",
-<<<<<<< HEAD
-        "description": "Returns the stable operator-facing capability map generated from this contract.",
-=======
         "description": "Returns the stable operator-facing capability map for the subset of this contract implemented by the running adapter.",
->>>>>>> origin/main
         "tags": ["System"],
         "x-mcp-tool": {
           "exposed": false,
@@ -220,12 +200,9 @@
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
-<<<<<<< HEAD
-=======
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
->>>>>>> origin/main
           }
         }
       }
@@ -266,19 +243,11 @@
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
-<<<<<<< HEAD
-          "503": {
-            "$ref": "#/components/responses/ServiceUnavailable"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalServerError"
-=======
           "500": {
             "$ref": "#/components/responses/InternalServerError"
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
->>>>>>> origin/main
           }
         }
       }
@@ -344,19 +313,11 @@
           "429": {
             "$ref": "#/components/responses/TooManyRequests"
           },
-<<<<<<< HEAD
-          "503": {
-            "$ref": "#/components/responses/ServiceUnavailable"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalServerError"
-=======
           "500": {
             "$ref": "#/components/responses/InternalServerError"
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
->>>>>>> origin/main
           }
         }
       }
@@ -397,19 +358,11 @@
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
-<<<<<<< HEAD
-          "503": {
-            "$ref": "#/components/responses/ServiceUnavailable"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalServerError"
-=======
           "500": {
             "$ref": "#/components/responses/InternalServerError"
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
->>>>>>> origin/main
           }
         }
       },
@@ -482,19 +435,11 @@
           "429": {
             "$ref": "#/components/responses/TooManyRequests"
           },
-<<<<<<< HEAD
-          "503": {
-            "$ref": "#/components/responses/ServiceUnavailable"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalServerError"
-=======
           "500": {
             "$ref": "#/components/responses/InternalServerError"
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
->>>>>>> origin/main
           }
         }
       }
@@ -543,19 +488,11 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
-<<<<<<< HEAD
-          "503": {
-            "$ref": "#/components/responses/ServiceUnavailable"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalServerError"
-=======
           "500": {
             "$ref": "#/components/responses/InternalServerError"
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
->>>>>>> origin/main
           }
         }
       },
@@ -613,19 +550,11 @@
           "422": {
             "$ref": "#/components/responses/UnprocessableEntity"
           },
-<<<<<<< HEAD
-          "503": {
-            "$ref": "#/components/responses/ServiceUnavailable"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalServerError"
-=======
           "500": {
             "$ref": "#/components/responses/InternalServerError"
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
->>>>>>> origin/main
           }
         }
       },
@@ -667,19 +596,11 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
-<<<<<<< HEAD
-          "503": {
-            "$ref": "#/components/responses/ServiceUnavailable"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalServerError"
-=======
           "500": {
             "$ref": "#/components/responses/InternalServerError"
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
->>>>>>> origin/main
           }
         }
       }
@@ -728,19 +649,11 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
-<<<<<<< HEAD
-          "503": {
-            "$ref": "#/components/responses/ServiceUnavailable"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalServerError"
-=======
           "500": {
             "$ref": "#/components/responses/InternalServerError"
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
->>>>>>> origin/main
           }
         }
       }
@@ -781,19 +694,11 @@
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
-<<<<<<< HEAD
-          "503": {
-            "$ref": "#/components/responses/ServiceUnavailable"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalServerError"
-=======
           "500": {
             "$ref": "#/components/responses/InternalServerError"
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
->>>>>>> origin/main
           }
         }
       },
@@ -866,19 +771,11 @@
           "429": {
             "$ref": "#/components/responses/TooManyRequests"
           },
-<<<<<<< HEAD
-          "503": {
-            "$ref": "#/components/responses/ServiceUnavailable"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalServerError"
-=======
           "500": {
             "$ref": "#/components/responses/InternalServerError"
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
->>>>>>> origin/main
           }
         }
       }
@@ -927,19 +824,11 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
-<<<<<<< HEAD
-          "503": {
-            "$ref": "#/components/responses/ServiceUnavailable"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalServerError"
-=======
           "500": {
             "$ref": "#/components/responses/InternalServerError"
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
->>>>>>> origin/main
           }
         }
       },
@@ -997,19 +886,11 @@
           "422": {
             "$ref": "#/components/responses/UnprocessableEntity"
           },
-<<<<<<< HEAD
-          "503": {
-            "$ref": "#/components/responses/ServiceUnavailable"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalServerError"
-=======
           "500": {
             "$ref": "#/components/responses/InternalServerError"
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
->>>>>>> origin/main
           }
         }
       },
@@ -1051,19 +932,11 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
-<<<<<<< HEAD
-          "503": {
-            "$ref": "#/components/responses/ServiceUnavailable"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalServerError"
-=======
           "500": {
             "$ref": "#/components/responses/InternalServerError"
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
->>>>>>> origin/main
           }
         }
       }
@@ -1109,19 +982,11 @@
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
-<<<<<<< HEAD
-          "503": {
-            "$ref": "#/components/responses/ServiceUnavailable"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalServerError"
-=======
           "500": {
             "$ref": "#/components/responses/InternalServerError"
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
->>>>>>> origin/main
           }
         }
       }
@@ -1246,13 +1111,6 @@
           "422": {
             "$ref": "#/components/responses/UnprocessableEntity"
           },
-<<<<<<< HEAD
-          "503": {
-            "$ref": "#/components/responses/ServiceUnavailable"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalServerError"
-=======
           "500": {
             "$ref": "#/components/responses/InternalServerError"
           },
@@ -2205,7 +2063,6 @@
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
->>>>>>> origin/main
           }
         }
       }
@@ -3105,8 +2962,6 @@
             "maxLength": 500
           }
         }
-<<<<<<< HEAD
-=======
       },
       "TotalityActionPolicy": {
         "type": "object",
@@ -3976,7 +3831,6 @@
         "items": {
           "$ref": "#/components/schemas/ToolAction"
         }
->>>>>>> origin/main
       }
     }
   }
