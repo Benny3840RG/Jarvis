@@ -128,7 +128,7 @@ Run `npm run smoke:convex` after every sync to verify the development deployment
 
 ```bash
 cd typescript
-npx convex deploy --cmd "echo skip" 2>/dev/null || npx convex deploy
+npx convex deploy
 ```
 
 Review the Convex dashboard after deploying to confirm all functions are active. Never run `npm run smoke:convex` against the production deployment — it creates and deletes real records.
