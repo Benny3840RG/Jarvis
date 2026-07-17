@@ -282,6 +282,7 @@ export async function runCli(deps: RunCliDependencies = {}): Promise<void> {
             refreshTasks(),
             refreshReminders(),
           ]);
+          state.replace(currentState);
           write("Jarvis status: ok");
           write(`Provider: ${providerLabel} (reachable)`);
           write(`Tasks: ${tasks.length}`);
