@@ -1,6 +1,10 @@
 import type { TaskUpdate } from "../persistence/updates.js";
 import { validateTaskUpdate } from "../persistence/updates.js";
 
+const MAX_TASK_FIELD_LENGTH = 100;
+const MIN_IDEMPOTENCY_KEY_LENGTH = 8;
+const MAX_IDEMPOTENCY_KEY_LENGTH = 128;
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -9,7 +13,9 @@ function requiredString(value: unknown, field: string): string {
   if (typeof value !== "string" || value.trim().length === 0) {
     throw new Error(`${field} must be a non-empty string.`);
   }
-  if (value.trim().length > 100) throw new Error(`${field} must not exceed 100 characters.`);
+  if (value.trim().length > MAX_TASK_FIELD_LENGTH) {
+    throw new Error(`${field} must not exceed ${MAX_TASK_FIELD_LENGTH} characters.`);
+  }
   return value.trim();
 }
 
@@ -41,8 +47,15 @@ export function parseUpdateTask(body: unknown): TaskUpdate {
 }
 
 export function parseIdempotencyKey(value: unknown): string {
-  if (typeof value !== "string" || !/^[A-Za-z0-9._:-]{8,128}$/.test(value)) {
-    throw new Error("Idempotency-Key must be 8 to 128 safe characters.");
+  if (
+    typeof value !== "string" ||
+    value.length < MIN_IDEMPOTENCY_KEY_LENGTH ||
+    value.length > MAX_IDEMPOTENCY_KEY_LENGTH ||
+    !/^[A-Za-z0-9._:-]+$/.test(value)
+  ) {
+    throw new Error(
+      `Idempotency-Key must be ${MIN_IDEMPOTENCY_KEY_LENGTH} to ${MAX_IDEMPOTENCY_KEY_LENGTH} safe characters.`,
+    );
   }
   return value;
 }

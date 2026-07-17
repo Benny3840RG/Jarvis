@@ -56,8 +56,8 @@ function makePersistence(overrides: Partial<PersistenceProvider> = {}): Persiste
     async listTasks(): Promise<Task[]> {
       return [];
     },
-    async addTask(_title: string, _category: string): Promise<Task> {
-      return task;
+    async addTask(title: string, category: string): Promise<Task> {
+      return { ...task, title, category };
     },
     async updateTask(_id: string, _update: TaskUpdate): Promise<Task | null> {
       return task;
@@ -331,7 +331,7 @@ describe("Jarvis HTTP system boundary", () => {
     assert.equal(list.statusCode, 200);
     assert.deepEqual(list.json(), { data: [], count: 0 });
     assert.equal(create.statusCode, 201);
-    assert.equal(create.json().data.title, "Test task");
+    assert.equal(create.json().data.title, "Inspect bracket");
     assert.match(create.headers.location ?? "", /\/api\/v1\/tasks\/task-1$/);
   });
 
