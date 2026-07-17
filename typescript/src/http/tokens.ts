@@ -4,3 +4,4 @@ export const HTTP_PROVIDER_NAME = Symbol("HTTP_PROVIDER_NAME");
 export const HTTP_TOTALITY_PIPELINE = Symbol("HTTP_TOTALITY_PIPELINE");
 export const HTTP_MEMORY_CHANGE_SETS = Symbol("HTTP_MEMORY_CHANGE_SETS");
 export const HTTP_TOOL_ACTIONS = Symbol("HTTP_TOOL_ACTIONS");
+export const HTTP_TASKS = Symbol("HTTP_TASKS");
