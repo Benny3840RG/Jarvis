@@ -6,11 +6,13 @@ on:
     paths:
       - "typescript/**"
       - ".github/workflows/typescript.yml"
+      - ".github/workflows/development-commissioning.yml"
   pull_request:
     branches: [main]
     paths:
       - "typescript/**"
       - ".github/workflows/typescript.yml"
+      - ".github/workflows/development-commissioning.yml"
 
 permissions:
   contents: read
