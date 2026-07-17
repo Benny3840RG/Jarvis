@@ -30,6 +30,7 @@ import {
   type Task,
   type TaskUpdate,
 } from "./persistence/persistence.js";
+import { resolvePersistenceProviderName } from "./persistence/providerSelection.js";
 
 export interface ReadlineAdapter {
   question(prompt: string): Promise<string>;
@@ -43,6 +44,7 @@ export type RunCliDependencies = {
   readline?: ReadlineAdapter;
   stdout?: ConsoleWriter;
   stderr?: ConsoleWriter;
+  providerName?: string;
 };
 
 function errorMessage(error: unknown): string {
@@ -55,13 +57,30 @@ export function upsertById<T extends { id: string }>(records: readonly T[], reco
   return records.map((entry, entryIndex) => (entryIndex === index ? record : entry));
 }
 
+export function compactId(id: string): string {
+  return id.length > 8 ? id.slice(0, 8) : id;
+}
+
+export function resolveId(alias: string, records: readonly { id: string }[], kind: string): string {
+  if (records.some((r) => r.id === alias)) return alias;
+  const prefix = records.filter((r) => r.id.startsWith(alias));
+  if (prefix.length === 1) return prefix[0].id;
+  if (prefix.length > 1)
+    throw new Error(
+      `Ambiguous ${kind} ID "${alias}" — ${prefix.length} records share that prefix. Use a longer prefix or the full ID.`,
+    );
+  return alias;
+}
+
 function printTaskList(write: ConsoleWriter, tasks: ReturnType<TaskService["list"]>): void {
   if (tasks.length === 0) {
     write("Jarvis: No tasks saved.");
     return;
   }
   for (const task of tasks) {
-    write(`${task.completed ? "[x]" : "[ ]"} ${task.id} ${task.title} [${task.category}]`);
+    write(
+      `${task.completed ? "[x]" : "[ ]"} ${compactId(task.id)} ${task.title} [${task.category}]`,
+    );
   }
 }
 
@@ -74,7 +93,9 @@ function printReminderList(
     return;
   }
   for (const reminder of reminders) {
-    write(`${reminder.id} ${reminder.title}${reminder.dueRaw ? ` — ${reminder.dueRaw}` : ""}`);
+    write(
+      `${compactId(reminder.id)} ${reminder.title}${reminder.dueRaw ? ` — ${reminder.dueRaw}` : ""}`,
+    );
   }
 }
 
@@ -107,6 +128,7 @@ export async function runCli(deps: RunCliDependencies = {}): Promise<void> {
   const rl =
     deps.readline ?? (readlinePromises.createInterface({ input, output }) as ReadlineAdapter);
   const persistence = deps.persistence ?? createPersistenceFromEnv();
+  const providerLabel = deps.providerName ?? resolvePersistenceProviderName();
 
   const conversation = new ConversationService();
   const memory = new MemoryService();
@@ -219,7 +241,9 @@ export async function runCli(deps: RunCliDependencies = {}): Promise<void> {
     return reminderService.list();
   }
 
-  write("Jarvis CLI ready. Type 'exit' to quit.");
+  write(
+    `Jarvis CLI ready (provider: ${providerLabel}). Type 'help' for commands or 'exit' to quit.`,
+  );
 
   try {
     while (true) {
@@ -229,6 +253,28 @@ export async function runCli(deps: RunCliDependencies = {}): Promise<void> {
       if (lower === "exit") break;
 
       try {
+        if (lower === "help") {
+          write(
+            [
+              "Jarvis: Available commands:",
+              "  task add <title>",
+              "  task list",
+              "  task update <id> [--title <title>] [--category <category>]",
+              "  task complete <id>",
+              "  task remove <id>",
+              "  reminder add <title> --due <when>",
+              "  reminder list",
+              "  reminder update <id> [--title <title>] [--due <when> | --clear-due]",
+              "  reminder remove <id>",
+              "  help",
+              "  exit",
+              "",
+              "IDs shown in listings are abbreviated. Use the abbreviated form or any unambiguous prefix as <id>.",
+            ].join("\n"),
+          );
+          continue;
+        }
+
         const taskAdd = /^task add\s+(.+)$/i.exec(trimmed);
         const taskUpdate = /^task update\s+(\S+)(?:\s+(.*))?$/i.exec(trimmed);
         const taskComplete = /^task complete\s+(.+)$/i.exec(trimmed);
@@ -255,12 +301,10 @@ export async function runCli(deps: RunCliDependencies = {}): Promise<void> {
         }
 
         if (taskUpdate) {
-          const task = await persistence.updateTask(
-            taskUpdate[1].trim(),
-            taskUpdateFromOptions(taskUpdate[2]),
-          );
+          const id = resolveId(taskUpdate[1].trim(), taskService.list(), "task");
+          const task = await persistence.updateTask(id, taskUpdateFromOptions(taskUpdate[2]));
           if (!task) {
-            write("Jarvis: Task not found.");
+            write("Jarvis: Task not found. Use `task list` to see current IDs.");
             continue;
           }
           taskService.replace(upsertById(taskService.list(), task));
@@ -274,9 +318,10 @@ export async function runCli(deps: RunCliDependencies = {}): Promise<void> {
         }
 
         if (taskComplete) {
-          const task = await persistence.completeTask(taskComplete[1].trim());
+          const id = resolveId(taskComplete[1].trim(), taskService.list(), "task");
+          const task = await persistence.completeTask(id);
           if (!task) {
-            write("Jarvis: Task not found.");
+            write("Jarvis: Task not found. Use `task list` to see current IDs.");
             continue;
           }
           taskService.replace(upsertById(taskService.list(), task));
@@ -290,9 +335,10 @@ export async function runCli(deps: RunCliDependencies = {}): Promise<void> {
         }
 
         if (taskRemove) {
-          const task = await persistence.removeTask(taskRemove[1].trim());
+          const id = resolveId(taskRemove[1].trim(), taskService.list(), "task");
+          const task = await persistence.removeTask(id);
           if (!task) {
-            write("Jarvis: Task not found.");
+            write("Jarvis: Task not found. Use `task list` to see current IDs.");
             continue;
           }
           taskService.replace(taskService.list().filter((entry) => entry.id !== task.id));
@@ -324,12 +370,13 @@ export async function runCli(deps: RunCliDependencies = {}): Promise<void> {
         }
 
         if (reminderUpdate) {
+          const id = resolveId(reminderUpdate[1].trim(), reminderService.list(), "reminder");
           const reminder = await persistence.updateReminder(
-            reminderUpdate[1].trim(),
+            id,
             reminderUpdateFromOptions(reminderUpdate[2]),
           );
           if (!reminder) {
-            write("Jarvis: Reminder not found.");
+            write("Jarvis: Reminder not found. Use `reminder list` to see current IDs.");
             continue;
           }
           reminderService.replace(upsertById(reminderService.list(), reminder));
@@ -346,9 +393,10 @@ export async function runCli(deps: RunCliDependencies = {}): Promise<void> {
         }
 
         if (reminderRemove) {
-          const reminder = await persistence.removeReminder(reminderRemove[1].trim());
+          const id = resolveId(reminderRemove[1].trim(), reminderService.list(), "reminder");
+          const reminder = await persistence.removeReminder(id);
           if (!reminder) {
-            write("Jarvis: Reminder not found.");
+            write("Jarvis: Reminder not found. Use `reminder list` to see current IDs.");
             continue;
           }
           reminderService.replace(
@@ -365,14 +413,14 @@ export async function runCli(deps: RunCliDependencies = {}): Promise<void> {
 
         if (lower.includes("task") && !lower.includes("plan")) {
           write(
-            "Jarvis: Use `task add <title>`, `task list`, `task update <id> --title <title> [--category <category>]`, `task complete <id>`, or `task remove <id>`.",
+            "Jarvis: Use `task add <title>`, `task list`, `task update <id> [--title <title>] [--category <category>]`, `task complete <id>`, or `task remove <id>`. IDs are shown in `task list`; use the abbreviated form or any unambiguous prefix.",
           );
           continue;
         }
 
         if (lower.includes("remind")) {
           write(
-            "Jarvis: Use `reminder add <title> --due <when>`, `reminder list`, `reminder update <id> [--title <title>] [--due <when> | --clear-due]`, or `reminder remove <id>`.",
+            "Jarvis: Use `reminder add <title> --due <when>`, `reminder list`, `reminder update <id> [--title <title>] [--due <when> | --clear-due]`, or `reminder remove <id>`. IDs are shown in `reminder list`; use the abbreviated form or any unambiguous prefix.",
           );
           continue;
         }
