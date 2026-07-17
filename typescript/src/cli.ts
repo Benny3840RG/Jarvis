@@ -266,12 +266,27 @@ export async function runCli(deps: RunCliDependencies = {}): Promise<void> {
               "  reminder list",
               "  reminder update <id> [--title <title>] [--due <when> | --clear-due]",
               "  reminder remove <id>",
+              "  status",
               "  help",
               "  exit",
               "",
               "IDs shown in listings are abbreviated. Use the abbreviated form or any unambiguous prefix as <id>.",
             ].join("\n"),
           );
+          continue;
+        }
+
+        if (lower === "status") {
+          const [currentState, tasks, reminders] = await Promise.all([
+            persistence.loadState(),
+            refreshTasks(),
+            refreshReminders(),
+          ]);
+          write("Jarvis status: ok");
+          write(`Provider: ${providerLabel} (reachable)`);
+          write(`Tasks: ${tasks.length}`);
+          write(`Reminders: ${reminders.length}`);
+          write(`Assistant state keys: ${Object.keys(currentState).length}`);
           continue;
         }
 
