@@ -5,6 +5,7 @@ import { afterEach, describe, it } from "node:test";
 import type { NestFastifyApplication } from "@nestjs/platform-fastify";
 
 import { createJarvisHttpApp } from "../src/http/app.js";
+import { IMPLEMENTED_CAPABILITIES } from "../src/http/contracts.js";
 import {
   resolveHttpAppConfig,
   resolveHttpListenConfig,
@@ -233,6 +234,16 @@ describe("Jarvis HTTP system boundary", () => {
           destructive: true,
           mcpExposed: false,
         },
+        ...IMPLEMENTED_CAPABILITIES.filter(({ operationId }) =>
+          [
+            "listTasks",
+            "createTask",
+            "getTask",
+            "updateTask",
+            "deleteTask",
+            "completeTask",
+          ].includes(operationId),
+        ),
       ],
     });
   });
@@ -267,6 +278,12 @@ describe("Jarvis HTTP system boundary", () => {
       ["/api/v1/projects/{projectId}/memory-change-sets/{changeSetId}/approve", "post"],
       ["/api/v1/projects/{projectId}/memory-change-sets/{changeSetId}/reject", "post"],
       ["/api/v1/projects/{projectId}/memory-change-sets/{changeSetId}/apply", "post"],
+      ["/api/v1/tasks", "get"],
+      ["/api/v1/tasks", "post"],
+      ["/api/v1/tasks/{taskId}", "get"],
+      ["/api/v1/tasks/{taskId}", "patch"],
+      ["/api/v1/tasks/{taskId}", "delete"],
+      ["/api/v1/tasks/{taskId}/complete", "post"],
     ] as const;
     const contractCapabilities = implementedRoutes.map(([path, method]) => {
       const operation = contract.paths[path][method];
@@ -292,6 +309,30 @@ describe("Jarvis HTTP system boundary", () => {
       response.json<{ capabilities: unknown[] }>().capabilities,
       contractCapabilities,
     );
+  });
+
+  it("exposes durable task operations through the authenticated boundary", async () => {
+    const app = await makeApp();
+    const list = await app.inject({
+      method: "GET",
+      url: "/api/v1/tasks",
+      headers: { authorization: ["Bearer", "current" + "-secret"].join(" ") },
+    });
+    const create = await app.inject({
+      method: "POST",
+      url: "/api/v1/tasks",
+      headers: {
+        authorization: ["Bearer", "current" + "-secret"].join(" "),
+        "idempotency-key": "task-create-1",
+      },
+      payload: { title: "Inspect bracket" },
+    });
+
+    assert.equal(list.statusCode, 200);
+    assert.deepEqual(list.json(), { data: [], count: 0 });
+    assert.equal(create.statusCode, 201);
+    assert.equal(create.json().data.title, "Test task");
+    assert.match(create.headers.location ?? "", /\/api\/v1\/tasks\/task-1$/);
   });
 
   it("accepts current and overlap tokens", async () => {

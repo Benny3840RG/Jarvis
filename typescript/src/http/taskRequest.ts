@@ -24,7 +24,8 @@ export function parseCreateTask(body: unknown): { title: string; category: strin
   rejectUnknownKeys(body, ["title", "category"]);
   return {
     title: requiredString(body.title, "Task title"),
-    category: body.category === undefined ? "personal" : requiredString(body.category, "Task category"),
+    category:
+      body.category === undefined ? "personal" : requiredString(body.category, "Task category"),
   };
 }
 

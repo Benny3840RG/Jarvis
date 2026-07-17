@@ -21,6 +21,7 @@ import { parseCreateTask, parseIdempotencyKey, parseUpdateTask } from "./taskReq
 import { HTTP_PERSISTENCE } from "./tokens.js";
 
 type CachedCreate = { fingerprint: string; task: Task };
+type PendingCreate = { fingerprint: string; task: Promise<Task> };
 
 function problem(slug: string, title: string, status: number, detail: string): JarvisProblem {
   return new JarvisProblem(status, slug, title, detail);
@@ -55,7 +56,7 @@ function taskResponse(task: Task): { data: Task } {
 @Controller("api/v1/tasks")
 export class TaskController {
   private readonly cachedCreates = new Map<string, CachedCreate>();
-  private readonly pendingCreates = new Map<string, Promise<Task>>();
+  private readonly pendingCreates = new Map<string, PendingCreate>();
 
   constructor(@Inject(HTTP_PERSISTENCE) private readonly persistence: PersistenceProvider) {}
 
@@ -105,12 +106,20 @@ export class TaskController {
     }
     const pending = this.pendingCreates.get(key);
     if (pending) {
-      const task = await pending;
+      if (pending.fingerprint !== fingerprint) {
+        throw problem(
+          "idempotency-conflict",
+          "Idempotency Key Conflict",
+          HttpStatus.CONFLICT,
+          "Idempotency-Key was already used for a different task request.",
+        );
+      }
+      const task = await pending.task;
       reply.header("Location", `/api/v1/tasks/${task.id}`);
       return taskResponse(task);
     }
     const create = this.persistence.addTask(input.title, input.category);
-    this.pendingCreates.set(key, create);
+    this.pendingCreates.set(key, { fingerprint, task: create });
     try {
       const task = await create;
       this.cachedCreates.set(key, { fingerprint, task });
