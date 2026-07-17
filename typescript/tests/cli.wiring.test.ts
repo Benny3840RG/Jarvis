@@ -759,4 +759,45 @@ describe("compact ID display and prefix alias resolution in CLI", () => {
     assert.ok(helpOutput.includes("reminder add"), "help should list reminder add");
     assert.ok(helpOutput.includes("abbreviated"), "help should mention abbreviated IDs");
   });
+
+  it("reports provider reachability and durable record counts", async () => {
+    const persistence = new MockPersistence({
+      state: { lastIntent: "task-add" },
+      tasks: [
+        {
+          id: "task-1",
+          title: "Check status",
+          completed: false,
+          category: "personal",
+          createdAt: 1,
+        },
+      ],
+      reminders: [
+        {
+          id: "reminder-1",
+          title: "Review status",
+          createdAt: 1,
+        },
+      ],
+    });
+    const logs = capture();
+
+    await runCli({
+      persistence,
+      readline: new ScriptedReadline(["status", "exit"]),
+      stdout: logs.stdout,
+      stderr: logs.stderr,
+      providerName: "json",
+    });
+
+    const statusOutput = logs.output.join("\n");
+    assert.ok(statusOutput.includes("Jarvis status: ok"));
+    assert.ok(statusOutput.includes("Provider: json (reachable)"));
+    assert.ok(statusOutput.includes("Tasks: 1"));
+    assert.ok(statusOutput.includes("Reminders: 1"));
+    assert.ok(statusOutput.includes("Assistant state keys: 1"));
+    assert.equal(persistence.loadCalled, 2);
+    assert.equal(persistence.listTasksCalled, 2);
+    assert.equal(persistence.listRemindersCalled, 2);
+  });
 });
