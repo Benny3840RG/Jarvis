@@ -39,6 +39,9 @@ jobs:
         shell: bash
 
     steps:
+      - name: Check out exact main commit
+        uses: actions/checkout@v4
+
       - name: Guard commissioning boundary
         env:
           COMMISSION_CONFIRMATION: ${{ inputs.confirmation }}
@@ -76,9 +79,6 @@ jobs:
             echo "::error::CONVEX_DEPLOY_KEY is not scoped to dev:outgoing-ram-798."
             exit 1
           fi
-
-      - name: Check out exact main commit
-        uses: actions/checkout@v4
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -145,12 +145,30 @@ jobs:
           node --input-type=module - "$status_response" <<'NODE'
           import fs from "node:fs";
           const payload = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
-          if (payload.reachability !== "ok") {
-            throw new Error(`Unexpected persistence reachability: ${String(payload.reachability)}`);
+          if (payload.status !== "ok") {
+            throw new Error(`Unexpected system status: ${String(payload.status)}`);
           }
-          if (payload.schemaCompatibility !== "compatible") {
+          if (payload.provider?.name !== "convex") {
+            throw new Error(`Unexpected persistence provider: ${String(payload.provider?.name)}`);
+          }
+          if (payload.provider?.reachability !== "ok") {
             throw new Error(
-              `Unexpected schema compatibility: ${String(payload.schemaCompatibility)}`,
+              `Unexpected persistence reachability: ${String(payload.provider?.reachability)}`,
+            );
+          }
+          if (payload.provider?.authentication !== "ok") {
+            throw new Error(
+              `Unexpected persistence authentication: ${String(payload.provider?.authentication)}`,
+            );
+          }
+          if (payload.provider?.schemaCompatibility !== "compatible") {
+            throw new Error(
+              `Unexpected schema compatibility: ${String(payload.provider?.schemaCompatibility)}`,
+            );
+          }
+          if (payload.provider?.deploymentVersion !== "dev:outgoing-ram-798") {
+            throw new Error(
+              `Unexpected deployment version: ${String(payload.provider?.deploymentVersion)}`,
             );
           }
           NODE
@@ -189,7 +207,7 @@ jobs:
           node --input-type=module - "$totality_response" <<'NODE'
           import fs from "node:fs";
           const payload = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
-          if (!['completed', 'blocked'].includes(payload.status)) {
+          if (!["completed", "blocked"].includes(payload.status)) {
             throw new Error(`Unexpected Totality status: ${String(payload.status)}`);
           }
           if (!payload.requestId) {
