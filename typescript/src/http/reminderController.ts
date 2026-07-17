@@ -14,7 +14,8 @@ import {
 } from "@nestjs/common";
 import type { FastifyReply, FastifyRequest } from "fastify";
 
-import type { PersistenceProvider, Reminder, ReminderDue } from "../persistence/persistence.js";
+import type { PersistenceProvider, Reminder } from "../persistence/persistence.js";
+import type { ReminderDue } from "../reminders/due.js";
 import { JarvisProblem } from "./problemDetails.js";
 import { parseCreateReminder, parseUpdateReminder } from "./reminderRequest.js";
 import { parseIdempotencyKey } from "./taskRequest.js";

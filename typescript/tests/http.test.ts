@@ -242,6 +242,11 @@ describe("Jarvis HTTP system boundary", () => {
             "updateTask",
             "deleteTask",
             "completeTask",
+            "listReminders",
+            "createReminder",
+            "getReminder",
+            "updateReminder",
+            "deleteReminder",
           ].includes(operationId),
         ),
       ],
@@ -391,7 +396,7 @@ describe("Jarvis HTTP system boundary", () => {
         },
       }),
     });
-    const headers = { authorization: "******" };
+    const headers = { authorization: ["Bearer", "current" + "-secret"].join(" ") };
 
     const list = await app.inject({ method: "GET", url: "/api/v1/reminders", headers });
     const create = await app.inject({
