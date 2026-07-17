@@ -22,6 +22,7 @@ import { HTTP_PERSISTENCE } from "./tokens.js";
 
 type CachedCreate = { fingerprint: string; task: Task };
 type PendingCreate = { fingerprint: string; task: Promise<Task> };
+const IDEMPOTENCY_CACHE_LIMIT = 1_000;
 
 function problem(slug: string, title: string, status: number, detail: string): JarvisProblem {
   return new JarvisProblem(status, slug, title, detail);
@@ -123,6 +124,11 @@ export class TaskController {
     try {
       const task = await create;
       this.cachedCreates.set(key, { fingerprint, task });
+      while (this.cachedCreates.size > IDEMPOTENCY_CACHE_LIMIT) {
+        const oldestKey = this.cachedCreates.keys().next().value;
+        if (oldestKey === undefined) break;
+        this.cachedCreates.delete(oldestKey);
+      }
       reply.header("Location", `/api/v1/tasks/${task.id}`);
       return taskResponse(task);
     } catch (error: unknown) {

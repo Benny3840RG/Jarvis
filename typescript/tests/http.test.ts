@@ -332,6 +332,7 @@ describe("Jarvis HTTP system boundary", () => {
     assert.deepEqual(list.json(), { data: [], count: 0 });
     assert.equal(create.statusCode, 201);
     assert.equal(create.json().data.title, "Inspect bracket");
+    assert.equal(create.json().data.category, "personal");
     assert.match(create.headers.location ?? "", /\/api\/v1\/tasks\/task-1$/);
   });
 
