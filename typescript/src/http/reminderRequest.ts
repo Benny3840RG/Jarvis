@@ -46,9 +46,7 @@ export function parseUpdateReminder(body: unknown): ReminderUpdate {
   if (!isRecord(body)) throw new Error("Request body must be a JSON object.");
   rejectUnknownKeys(body, ["title", "due"]);
   return validateReminderUpdate({
-    ...(body.title === undefined
-      ? {}
-      : { title: requiredString(body.title, "Reminder title") }),
+    ...(body.title === undefined ? {} : { title: requiredString(body.title, "Reminder title") }),
     ...(body.due === undefined ? {} : { due: body.due === null ? null : parseDue(body.due) }),
   });
 }

@@ -14,7 +14,7 @@ import {
 } from "@nestjs/common";
 import type { FastifyReply, FastifyRequest } from "fastify";
 
-import type { PersistenceProvider, Reminder } from "../persistence/persistence.js";
+import type { PersistenceProvider, Reminder, ReminderDue } from "../persistence/persistence.js";
 import { JarvisProblem } from "./problemDetails.js";
 import { parseCreateReminder, parseUpdateReminder } from "./reminderRequest.js";
 import { parseIdempotencyKey } from "./taskRequest.js";
@@ -78,7 +78,7 @@ export class ReminderController {
     @Req() request: FastifyRequest,
     @Res({ passthrough: true }) reply: FastifyReply,
   ) {
-    let input: { title: string; due?: import("../persistence/persistence.js").ReminderDue };
+    let input: { title: string; due?: ReminderDue };
     try {
       input = parseCreateReminder(body);
     } catch (error: unknown) {

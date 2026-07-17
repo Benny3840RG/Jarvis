@@ -66,8 +66,8 @@ The versioned implementation target for Jarvis's HTTP and ChatGPT App adapters i
 [`typescript/openapi/jarvis.openapi.json`](typescript/openapi/jarvis.openapi.json). The
 maintained TypeScript CLI remains available, and the first HTTP adapter slice now implements
 public liveness plus authenticated help, provider/Z-State status checks, and durable task
-operations. Reminder, conversation, backup, and MCP routes remain contract-only until their focused implementation
-stages are complete.
+operations. Reminder operations are now implemented; conversation, backup, and MCP routes remain
+contract-only until their focused implementation stages are complete.
 
 Start the local-only HTTP service after configuring `JARVIS_SERVICE_TOKEN` in `.env.local`:
 
