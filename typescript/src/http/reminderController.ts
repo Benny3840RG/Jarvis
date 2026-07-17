@@ -16,6 +16,7 @@ import type { FastifyReply, FastifyRequest } from "fastify";
 
 import type { PersistenceProvider, Reminder } from "../persistence/persistence.js";
 import type { ReminderDue } from "../reminders/due.js";
+import type { ReminderUpdate } from "../persistence/updates.js";
 import { JarvisProblem } from "./problemDetails.js";
 import { parseCreateReminder, parseUpdateReminder } from "./reminderRequest.js";
 import { parseIdempotencyKey } from "./taskRequest.js";
@@ -153,7 +154,7 @@ export class ReminderController {
 
   @Patch(":reminderId")
   async update(@Param("reminderId") reminderId: string, @Body() body: unknown) {
-    let input;
+    let input: ReminderUpdate;
     try {
       input = parseUpdateReminder(body);
     } catch (error: unknown) {
