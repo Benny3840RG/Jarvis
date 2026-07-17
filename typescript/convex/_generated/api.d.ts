@@ -9,9 +9,21 @@
  */
 
 import type * as assistantState from "../assistantState.js";
+import type * as auditEvents from "../auditEvents.js";
 import type * as authHelpers from "../authHelpers.js";
+import type * as memoryChangeSetLogic from "../memoryChangeSetLogic.js";
+import type * as memoryChangeSets from "../memoryChangeSets.js";
+import type * as memoryChangeSetValidators from "../memoryChangeSetValidators.js";
+import type * as projectRecords from "../projectRecords.js";
+import type * as projects from "../projects.js";
+import type * as reasoningJournal from "../reasoningJournal.js";
 import type * as reminders from "../reminders.js";
 import type * as tasks from "../tasks.js";
+import type * as toolActionLogic from "../toolActionLogic.js";
+import type * as toolActions from "../toolActions.js";
+import type * as toolActionValidators from "../toolActionValidators.js";
+import type * as totalityValidators from "../totalityValidators.js";
+import type * as validationReports from "../validationReports.js";
 
 import type {
   ApiFromModules,
@@ -21,9 +33,21 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   assistantState: typeof assistantState;
+  auditEvents: typeof auditEvents;
   authHelpers: typeof authHelpers;
+  memoryChangeSetLogic: typeof memoryChangeSetLogic;
+  memoryChangeSets: typeof memoryChangeSets;
+  memoryChangeSetValidators: typeof memoryChangeSetValidators;
+  projectRecords: typeof projectRecords;
+  projects: typeof projects;
+  reasoningJournal: typeof reasoningJournal;
   reminders: typeof reminders;
   tasks: typeof tasks;
+  toolActionLogic: typeof toolActionLogic;
+  toolActions: typeof toolActions;
+  toolActionValidators: typeof toolActionValidators;
+  totalityValidators: typeof totalityValidators;
+  validationReports: typeof validationReports;
 }>;
 
 /**

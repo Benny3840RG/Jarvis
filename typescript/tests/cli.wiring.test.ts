@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import runCli, { type ReadlineAdapter } from "../src/cli.js";
+import runCli, { type ReadlineAdapter, compactId, resolveId } from "../src/cli.js";
 import type {
   AssistantState,
   PersistenceProvider,
@@ -556,5 +556,282 @@ describe("interactive CLI persistence wiring", () => {
       logs.output.some((line) => line.includes("Use `task add")),
       false,
     );
+  });
+});
+
+describe("compact ID helpers", () => {
+  it("leaves IDs of 8 characters or fewer unchanged", () => {
+    assert.equal(compactId("task-1"), "task-1");
+    assert.equal(compactId("12345678"), "12345678");
+    assert.equal(compactId("x"), "x");
+  });
+
+  it("abbreviates IDs longer than 8 characters to the first 8", () => {
+    assert.equal(compactId("abcdef1234567890"), "abcdef12");
+    assert.equal(compactId("jh7abc1234"), "jh7abc12");
+  });
+
+  it("resolveId returns the alias unchanged for an exact match", () => {
+    const records = [{ id: "task-1" }, { id: "task-2" }];
+    assert.equal(resolveId("task-1", records, "task"), "task-1");
+  });
+
+  it("resolveId resolves an unambiguous prefix to the full ID", () => {
+    const records = [{ id: "jh7abc1234567890" }, { id: "xz9def9876543210" }];
+    assert.equal(resolveId("jh7abc12", records, "task"), "jh7abc1234567890");
+  });
+
+  it("resolveId throws for an ambiguous prefix", () => {
+    const records = [{ id: "jh7abc1111" }, { id: "jh7abc2222" }];
+    assert.throws(() => resolveId("jh7abc", records, "task"), /Ambiguous task ID "jh7abc"/);
+  });
+
+  it("resolveId passes through an alias not found in the cache", () => {
+    const records = [{ id: "task-1" }];
+    assert.equal(resolveId("unknown-xyz", records, "task"), "unknown-xyz");
+  });
+});
+
+describe("compact ID display and prefix alias resolution in CLI", () => {
+  it("shows abbreviated IDs in task list when IDs are long", async () => {
+    const longId = "jh7abc1234567890";
+    const persistence = new MockPersistence({
+      tasks: [
+        {
+          id: longId,
+          title: "Long ID task",
+          completed: false,
+          category: "personal",
+          createdAt: 1,
+        },
+      ],
+    });
+    const logs = capture();
+    await runCli({
+      persistence,
+      readline: new ScriptedReadline(["task list", "exit"]),
+      stdout: logs.stdout,
+      stderr: logs.stderr,
+    });
+
+    const listLine = logs.output.find((line) => line.includes("Long ID task"));
+    assert.ok(listLine, "task list output should contain the task title");
+    assert.ok(listLine.includes("jh7abc12"), "list should show the first 8 chars as compact ID");
+    assert.equal(listLine.includes(longId), false, "list should not show the full long ID");
+  });
+
+  it("shows abbreviated IDs in reminder list when IDs are long", async () => {
+    const longId = "rm9xyz9876543210";
+    const persistence = new MockPersistence({
+      reminders: [
+        {
+          id: longId,
+          title: "Long ID reminder",
+          dueRaw: "Monday",
+          createdAt: 1,
+        },
+      ],
+    });
+    const logs = capture();
+    await runCli({
+      persistence,
+      readline: new ScriptedReadline(["reminder list", "exit"]),
+      stdout: logs.stdout,
+      stderr: logs.stderr,
+    });
+
+    const listLine = logs.output.find((line) => line.includes("Long ID reminder"));
+    assert.ok(listLine, "reminder list output should contain the reminder title");
+    assert.ok(listLine.includes("rm9xyz98"), "list should show the first 8 chars as compact ID");
+    assert.equal(listLine.includes(longId), false, "list should not show the full long ID");
+  });
+
+  it("resolves a compact prefix alias to complete a task", async () => {
+    const longId = "jh7abc1234567890";
+    const persistence = new MockPersistence({
+      tasks: [
+        {
+          id: longId,
+          title: "Prefixed task",
+          completed: false,
+          category: "personal",
+          createdAt: 1,
+        },
+      ],
+    });
+    const logs = capture();
+    await runCli({
+      persistence,
+      readline: new ScriptedReadline(["task complete jh7abc12", "exit"]),
+      stdout: logs.stdout,
+      stderr: logs.stderr,
+    });
+
+    assert.equal(persistence.completeTaskCalled, 1);
+    assert.equal(persistence.tasks[0].completed, true);
+    assert(logs.output.some((line) => line.includes("Task completed: Prefixed task")));
+  });
+
+  it("resolves a compact prefix alias to remove a reminder", async () => {
+    const longId = "rm9xyz9876543210";
+    const persistence = new MockPersistence({
+      reminders: [
+        {
+          id: longId,
+          title: "Prefixed reminder",
+          dueRaw: "Tuesday",
+          createdAt: 1,
+        },
+      ],
+    });
+    const logs = capture();
+    await runCli({
+      persistence,
+      readline: new ScriptedReadline(["reminder remove rm9xyz98", "exit"]),
+      stdout: logs.stdout,
+      stderr: logs.stderr,
+    });
+
+    assert.equal(persistence.removeReminderCalled, 1);
+    assert.deepEqual(persistence.reminders, []);
+    assert(logs.output.some((line) => line.includes("Reminder removed: Prefixed reminder")));
+  });
+
+  it("reports an error for an ambiguous prefix and keeps the session alive", async () => {
+    const persistence = new MockPersistence({
+      tasks: [
+        {
+          id: "jh7abc1111111111",
+          title: "Task A",
+          completed: false,
+          category: "personal",
+          createdAt: 1,
+        },
+        {
+          id: "jh7abc2222222222",
+          title: "Task B",
+          completed: false,
+          category: "personal",
+          createdAt: 2,
+        },
+      ],
+    });
+    const logs = capture();
+    await runCli({
+      persistence,
+      readline: new ScriptedReadline(["task complete jh7abc", "task add Still alive", "exit"]),
+      stdout: logs.stdout,
+      stderr: logs.stderr,
+    });
+
+    assert.equal(persistence.completeTaskCalled, 0);
+    assert(logs.errors.some((line) => line.includes("Ambiguous task ID")));
+    assert(logs.output.some((line) => line.includes("Task added: Still alive")));
+  });
+
+  it("shows provider name in the startup message", async () => {
+    const persistence = new MockPersistence();
+    const logs = capture();
+    await runCli({
+      persistence,
+      readline: new ScriptedReadline(["exit"]),
+      stdout: logs.stdout,
+      stderr: logs.stderr,
+      providerName: "convex",
+    });
+
+    assert(logs.output.some((line) => line.includes("provider: convex")));
+  });
+
+  it("shows available commands for the help command", async () => {
+    const persistence = new MockPersistence();
+    const logs = capture();
+    await runCli({
+      persistence,
+      readline: new ScriptedReadline(["help", "exit"]),
+      stdout: logs.stdout,
+      stderr: logs.stderr,
+    });
+
+    const helpOutput = logs.output.join("\n");
+    assert.ok(helpOutput.includes("task add"), "help should list task add");
+    assert.ok(helpOutput.includes("task list"), "help should list task list");
+    assert.ok(helpOutput.includes("reminder add"), "help should list reminder add");
+    assert.ok(helpOutput.includes("abbreviated"), "help should mention abbreviated IDs");
+  });
+
+  it("reports provider reachability and durable record counts", async () => {
+    const persistence = new MockPersistence({
+      state: { lastIntent: "task-add" },
+      tasks: [
+        {
+          id: "task-1",
+          title: "Check status",
+          completed: false,
+          category: "personal",
+          createdAt: 1,
+        },
+      ],
+      reminders: [
+        {
+          id: "reminder-1",
+          title: "Review status",
+          createdAt: 1,
+        },
+      ],
+    });
+    const logs = capture();
+
+    await runCli({
+      persistence,
+      readline: new ScriptedReadline(["status", "exit"]),
+      stdout: logs.stdout,
+      stderr: logs.stderr,
+      providerName: "json",
+    });
+
+    const statusOutput = logs.output.join("\n");
+    assert.ok(statusOutput.includes("Jarvis status: ok"));
+    assert.ok(statusOutput.includes("Provider: json (reachable)"));
+    assert.ok(statusOutput.includes("Tasks: 1"));
+    assert.ok(statusOutput.includes("Reminders: 1"));
+    assert.ok(statusOutput.includes("Assistant state keys: 1"));
+    assert.equal(persistence.loadCalled, 2);
+    assert.equal(persistence.listTasksCalled, 2);
+    assert.equal(persistence.listRemindersCalled, 2);
+  });
+
+  it("uses refreshed state as authoritative for the next runtime save", async () => {
+    const persistence = new MockPersistence({
+      state: { stale: "remove", externallyUpdated: "old" },
+    });
+    const logs = capture();
+    await runCli({
+      persistence,
+      readline: new CallbackReadline([
+        () => {
+          persistence.state = { externallyUpdated: "new" };
+          return "status";
+        },
+        () => "task add Keep refreshed state",
+        () => "exit",
+      ]),
+      stdout: logs.stdout,
+      stderr: logs.stderr,
+    });
+
+    assert.deepEqual(persistence.state, {
+      externallyUpdated: "new",
+      lastInput: "task add Keep refreshed state",
+      lastIntent: "task-add",
+      lastTask: {
+        id: "task-1",
+        title: "Keep refreshed state",
+        completed: false,
+        category: "personal",
+        createdAt: 1,
+      },
+    });
+    assert.equal("stale" in persistence.state, false);
   });
 });

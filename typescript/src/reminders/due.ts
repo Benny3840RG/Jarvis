@@ -276,7 +276,7 @@ export function parseReminderDue(
     );
   }
 
-  const australian = /^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(.+))?$/.exec(raw);
+  const australian = /^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:[ \t]+([^ \t].*))?$/.exec(raw);
   if (australian) {
     const time = australian[4] === undefined ? { hour: 0, minute: 0 } : parseTime(australian[4]);
     if (!time) return { raw };
@@ -294,7 +294,7 @@ export function parseReminderDue(
     );
   }
 
-  const relative = /^(today|tomorrow)\s+(.+)$/i.exec(raw);
+  const relative = /^(today|tomorrow)[ \t]+([^ \t].*)$/i.exec(raw);
   if (relative) {
     const time = parseTime(relative[2]);
     if (!time) return { raw };
@@ -305,7 +305,8 @@ export function parseReminderDue(
     return withNormalized(raw, date, timezone);
   }
 
-  const weekday = /^(sunday|monday|tuesday|wednesday|thursday|friday|saturday)\s+(.+)$/i.exec(raw);
+  const weekday =
+    /^(sunday|monday|tuesday|wednesday|thursday|friday|saturday)[ \t]+([^ \t].*)$/i.exec(raw);
   if (weekday) {
     const time = parseTime(weekday[2]);
     if (!time) return { raw };

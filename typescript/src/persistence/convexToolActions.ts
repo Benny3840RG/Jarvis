@@ -1,0 +1,139 @@
+import { ConvexHttpClient } from "convex/browser";
+
+import { api } from "../../convex/_generated/api.js";
+import type { ToolAction, ToolActionService } from "../actions/toolActions.js";
+import type { ToolAuthority } from "../runtime/totalityPolicy.js";
+import type { ConvexClientLike } from "./convexPersistence.js";
+
+export const toolActionFunctions = api.toolActions;
+
+type ToolActionRow = {
+  actionId: string;
+  requestId: string;
+  projectKey: string;
+  baseRevision: number;
+  state: ToolAction["state"];
+  tool: string;
+  operation: string;
+  arguments: Record<string, unknown>;
+  rationale: string;
+  requiredAuthority: ToolAuthority;
+  destructive: boolean;
+  idempotencyKey: string;
+  proposedBy: ToolAction["proposedBy"];
+  approvedBy?: "user";
+  rejectedBy?: "user";
+  rejectedReason?: string;
+  createdAt: number;
+  updatedAt: number;
+  approvedAt?: number;
+  rejectedAt?: number;
+};
+
+function optionalTimestamp(value: number | undefined): string | undefined {
+  return value === undefined ? undefined : new Date(value).toISOString();
+}
+
+function actionFromConvex(row: ToolActionRow): ToolAction {
+  const approvedAt = optionalTimestamp(row.approvedAt);
+  const rejectedAt = optionalTimestamp(row.rejectedAt);
+  return {
+    actionId: row.actionId,
+    requestId: row.requestId,
+    projectId: row.projectKey,
+    baseRevision: row.baseRevision,
+    state: row.state,
+    tool: row.tool,
+    operation: row.operation,
+    arguments: row.arguments,
+    rationale: row.rationale,
+    requiredAuthority: row.requiredAuthority,
+    destructive: row.destructive,
+    idempotencyKey: row.idempotencyKey,
+    proposedBy: row.proposedBy,
+    ...(row.approvedBy === undefined ? {} : { approvedBy: row.approvedBy }),
+    ...(row.rejectedBy === undefined ? {} : { rejectedBy: row.rejectedBy }),
+    ...(row.rejectedReason === undefined ? {} : { rejectedReason: row.rejectedReason }),
+    createdAt: new Date(row.createdAt).toISOString(),
+    updatedAt: new Date(row.updatedAt).toISOString(),
+    ...(approvedAt === undefined ? {} : { approvedAt }),
+    ...(rejectedAt === undefined ? {} : { rejectedAt }),
+  };
+}
+
+export class ConvexToolActionService implements ToolActionService {
+  private readonly client: ConvexClientLike;
+  private readonly serviceToken: string;
+
+  constructor(client?: ConvexClientLike, serviceToken = process.env.JARVIS_SERVICE_TOKEN) {
+    if (!serviceToken) throw new Error("Tool action approval requires JARVIS_SERVICE_TOKEN.");
+    this.serviceToken = serviceToken;
+
+    if (client) {
+      this.client = client;
+      return;
+    }
+
+    const convexUrl = process.env.CONVEX_URL;
+    if (!convexUrl) throw new Error("Tool action approval requires CONVEX_URL.");
+    this.client = new ConvexHttpClient(convexUrl);
+  }
+
+  async stage(input: Parameters<ToolActionService["stage"]>[0]): Promise<ToolAction> {
+    const row = await this.client.mutation(toolActionFunctions.stage, {
+      serviceToken: this.serviceToken,
+      actionId: input.actionId,
+      requestId: input.requestId,
+      projectKey: input.projectId,
+      expectedRevision: input.expectedRevision,
+      tool: input.tool,
+      operation: input.operation,
+      arguments: input.arguments,
+      rationale: input.rationale,
+      requiredAuthority: input.requiredAuthority,
+      destructive: input.destructive,
+      idempotencyKey: input.idempotencyKey,
+      proposedBy: input.proposedBy,
+    });
+    return actionFromConvex(row as ToolActionRow);
+  }
+
+  async get(input: Parameters<ToolActionService["get"]>[0]): Promise<ToolAction | null> {
+    const row = await this.client.query(toolActionFunctions.get, {
+      serviceToken: this.serviceToken,
+      projectKey: input.projectId,
+      actionId: input.actionId,
+    });
+    return row === null ? null : actionFromConvex(row as ToolActionRow);
+  }
+
+  async list(input: Parameters<ToolActionService["list"]>[0]): Promise<ToolAction[]> {
+    const rows = await this.client.query(toolActionFunctions.listRecent, {
+      serviceToken: this.serviceToken,
+      projectKey: input.projectId,
+      ...(input.state === undefined ? {} : { state: input.state }),
+      ...(input.limit === undefined ? {} : { limit: input.limit }),
+    });
+    return (rows as ToolActionRow[]).map(actionFromConvex);
+  }
+
+  async approve(input: Parameters<ToolActionService["approve"]>[0]): Promise<ToolAction> {
+    const row = await this.client.mutation(toolActionFunctions.approve, {
+      serviceToken: this.serviceToken,
+      projectKey: input.projectId,
+      actionId: input.actionId,
+      expectedRevision: input.expectedRevision,
+    });
+    return actionFromConvex(row as ToolActionRow);
+  }
+
+  async reject(input: Parameters<ToolActionService["reject"]>[0]): Promise<ToolAction> {
+    const row = await this.client.mutation(toolActionFunctions.reject, {
+      serviceToken: this.serviceToken,
+      projectKey: input.projectId,
+      actionId: input.actionId,
+      reason: input.reason,
+    });
+    return actionFromConvex(row as ToolActionRow);
+  }
+}

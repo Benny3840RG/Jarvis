@@ -1,0 +1,702 @@
+import assert from "node:assert/strict";
+import fs from "node:fs/promises";
+import { afterEach, describe, it } from "node:test";
+
+import type { NestFastifyApplication } from "@nestjs/platform-fastify";
+
+import { createJarvisHttpApp } from "../src/http/app.js";
+import { IMPLEMENTED_CAPABILITIES } from "../src/http/contracts.js";
+import {
+  resolveHttpAppConfig,
+  resolveHttpListenConfig,
+  type HttpAppConfig,
+} from "../src/http/config.js";
+import type { ProblemDetails } from "../src/http/problemDetails.js";
+import {
+  resolvePersistenceProviderName,
+  type AssistantState,
+  type PersistenceProvider,
+  type Reminder,
+  type ReminderDue,
+  type ReminderUpdate,
+  type Task,
+  type TaskUpdate,
+} from "../src/persistence/persistence.js";
+
+const BASE_CONFIG: HttpAppConfig = {
+  version: "0.1.0",
+  sourceVersion: "test-source-0001",
+  deploymentVersion: null,
+  timezone: "Australia/Melbourne",
+  currentToken: "current-secret",
+  previousToken: "previous-secret",
+};
+
+const openApps: NestFastifyApplication[] = [];
+
+function makePersistence(overrides: Partial<PersistenceProvider> = {}): PersistenceProvider {
+  const task: Task = {
+    id: "task-1",
+    title: "Test task",
+    completed: false,
+    category: "test",
+    createdAt: 1,
+  };
+  const reminder: Reminder = {
+    id: "reminder-1",
+    title: "Test reminder",
+    createdAt: 1,
+  };
+
+  return {
+    async loadState(): Promise<AssistantState> {
+      return {};
+    },
+    async saveState(_state: AssistantState): Promise<void> {},
+    async listTasks(): Promise<Task[]> {
+      return [];
+    },
+    async addTask(title: string, category: string): Promise<Task> {
+      return { ...task, title, category };
+    },
+    async updateTask(_id: string, _update: TaskUpdate): Promise<Task | null> {
+      return task;
+    },
+    async completeTask(_id: string): Promise<Task | null> {
+      return task;
+    },
+    async removeTask(_id: string): Promise<Task | null> {
+      return task;
+    },
+    async listReminders(): Promise<Reminder[]> {
+      return [];
+    },
+    async addReminder(_title: string, _due?: ReminderDue): Promise<Reminder> {
+      return reminder;
+    },
+    async updateReminder(_id: string, _update: ReminderUpdate): Promise<Reminder | null> {
+      return reminder;
+    },
+    async removeReminder(_id: string): Promise<Reminder | null> {
+      return reminder;
+    },
+    ...overrides,
+  };
+}
+
+async function makeApp(
+  options: {
+    persistence?: PersistenceProvider;
+    providerName?: "json" | "convex";
+    config?: Partial<HttpAppConfig>;
+  } = {},
+): Promise<NestFastifyApplication> {
+  const app = await createJarvisHttpApp({
+    persistence: options.persistence ?? makePersistence(),
+    providerName: options.providerName ?? "json",
+    config: { ...BASE_CONFIG, ...options.config },
+    logger: false,
+  });
+  openApps.push(app);
+  return app;
+}
+
+afterEach(async () => {
+  await Promise.all(openApps.splice(0).map((app) => app.close()));
+});
+
+describe("Jarvis HTTP system boundary", () => {
+  it("serves public liveness without authentication or persistence access", async () => {
+    const persistence = makePersistence({
+      async loadState() {
+        throw new Error("health must not load state");
+      },
+      async listTasks() {
+        throw new Error("health must not list tasks");
+      },
+      async listReminders() {
+        throw new Error("health must not list reminders");
+      },
+    });
+    const app = await makeApp({
+      persistence,
+      config: { currentToken: undefined, previousToken: undefined },
+    });
+
+    const response = await app
+      .getHttpAdapter()
+      .getInstance()
+      .inject({
+        method: "GET",
+        url: "/healthz",
+        headers: { "x-request-id": "request-1234" },
+      });
+    const body = response.json<{
+      status: string;
+      service: string;
+      version: string;
+      time: string;
+    }>();
+
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.headers["x-request-id"], "request-1234");
+    assert.equal(response.headers["cache-control"], "no-store");
+    assert.equal(response.headers["x-content-type-options"], "nosniff");
+    assert.deepEqual(
+      { status: body.status, service: body.service, version: body.version },
+      { status: "ok", service: "jarvis", version: "0.1.0" },
+    );
+    assert.equal(Number.isNaN(Date.parse(body.time)), false);
+  });
+
+  it("returns only the capabilities implemented by this adapter slice", async () => {
+    const app = await makeApp();
+    const response = await app
+      .getHttpAdapter()
+      .getInstance()
+      .inject({
+        method: "GET",
+        url: "/api/v1/help",
+        headers: { authorization: "Bearer current-secret" },
+      });
+
+    assert.equal(response.statusCode, 200);
+    assert.deepEqual(response.json(), {
+      apiVersion: "v1",
+      capabilities: [
+        {
+          operationId: "getHealth",
+          summary: "Check process liveness",
+          mutating: false,
+          destructive: false,
+          mcpExposed: false,
+        },
+        {
+          operationId: "getHelp",
+          summary: "List supported operator capabilities",
+          mutating: false,
+          destructive: false,
+          mcpExposed: false,
+        },
+        {
+          operationId: "getJarvisStatus",
+          summary: "Inspect Jarvis runtime and provider status",
+          mutating: false,
+          destructive: false,
+          mcpExposed: true,
+        },
+        {
+          operationId: "reasonWithTotality",
+          summary: "Run proposal-only Totality reasoning with validation and audit journalling",
+          mutating: true,
+          destructive: false,
+          mcpExposed: false,
+        },
+        {
+          operationId: "stageMemoryChangeSet",
+          summary: "Stage typed project-memory changes for explicit approval",
+          mutating: true,
+          destructive: false,
+          mcpExposed: false,
+        },
+        {
+          operationId: "listMemoryChangeSets",
+          summary: "List staged project-memory change sets",
+          mutating: false,
+          destructive: false,
+          mcpExposed: false,
+        },
+        {
+          operationId: "getMemoryChangeSet",
+          summary: "Inspect one project-memory change set",
+          mutating: false,
+          destructive: false,
+          mcpExposed: false,
+        },
+        {
+          operationId: "approveMemoryChangeSet",
+          summary: "Approve a revision-matched project-memory change set",
+          mutating: true,
+          destructive: false,
+          mcpExposed: false,
+        },
+        {
+          operationId: "rejectMemoryChangeSet",
+          summary: "Reject a staged project-memory change set",
+          mutating: true,
+          destructive: false,
+          mcpExposed: false,
+        },
+        {
+          operationId: "applyMemoryChangeSet",
+          summary: "Transactionally apply an approved project-memory change set",
+          mutating: true,
+          destructive: true,
+          mcpExposed: false,
+        },
+        ...IMPLEMENTED_CAPABILITIES.filter(({ operationId }) =>
+          [
+            "listTasks",
+            "createTask",
+            "getTask",
+            "updateTask",
+            "deleteTask",
+            "completeTask",
+            "listReminders",
+            "createReminder",
+            "getReminder",
+            "updateReminder",
+            "deleteReminder",
+          ].includes(operationId),
+        ),
+      ],
+    });
+  });
+
+  it("keeps implemented capability metadata aligned with the OpenAPI contract", async () => {
+    const contract = JSON.parse(
+      await fs.readFile(new URL("../openapi/jarvis.openapi.json", import.meta.url), "utf8"),
+    ) as {
+      paths: Record<
+        string,
+        Record<
+          string,
+          {
+            operationId: string;
+            summary: string;
+            "x-mcp-tool": {
+              exposed: boolean;
+              annotations: { destructiveHint: boolean };
+            };
+          }
+        >
+      >;
+    };
+    const implementedRoutes = [
+      ["/healthz", "get"],
+      ["/api/v1/help", "get"],
+      ["/api/v1/status", "get"],
+      ["/api/v1/totality/reason", "post"],
+      ["/api/v1/projects/{projectId}/memory-change-sets", "post"],
+      ["/api/v1/projects/{projectId}/memory-change-sets", "get"],
+      ["/api/v1/projects/{projectId}/memory-change-sets/{changeSetId}", "get"],
+      ["/api/v1/projects/{projectId}/memory-change-sets/{changeSetId}/approve", "post"],
+      ["/api/v1/projects/{projectId}/memory-change-sets/{changeSetId}/reject", "post"],
+      ["/api/v1/projects/{projectId}/memory-change-sets/{changeSetId}/apply", "post"],
+      ["/api/v1/tasks", "get"],
+      ["/api/v1/tasks", "post"],
+      ["/api/v1/tasks/{taskId}", "get"],
+      ["/api/v1/tasks/{taskId}", "patch"],
+      ["/api/v1/tasks/{taskId}", "delete"],
+      ["/api/v1/tasks/{taskId}/complete", "post"],
+      ["/api/v1/reminders", "get"],
+      ["/api/v1/reminders", "post"],
+      ["/api/v1/reminders/{reminderId}", "get"],
+      ["/api/v1/reminders/{reminderId}", "patch"],
+      ["/api/v1/reminders/{reminderId}", "delete"],
+    ] as const;
+    const contractCapabilities = implementedRoutes.map(([path, method]) => {
+      const operation = contract.paths[path][method];
+      return {
+        operationId: operation.operationId,
+        summary: operation.summary,
+        mutating: method !== "get",
+        destructive: operation["x-mcp-tool"].annotations.destructiveHint,
+        mcpExposed: operation["x-mcp-tool"].exposed,
+      };
+    });
+    const app = await makeApp();
+    const response = await app
+      .getHttpAdapter()
+      .getInstance()
+      .inject({
+        method: "GET",
+        url: "/api/v1/help",
+        headers: { authorization: "Bearer current-secret" },
+      });
+
+    assert.deepEqual(
+      response.json<{ capabilities: unknown[] }>().capabilities,
+      contractCapabilities,
+    );
+  });
+
+  it("exposes durable task operations through the authenticated boundary", async () => {
+    const app = await makeApp();
+    const list = await app.inject({
+      method: "GET",
+      url: "/api/v1/tasks",
+      headers: { authorization: ["Bearer", "current" + "-secret"].join(" ") },
+    });
+    const create = await app.inject({
+      method: "POST",
+      url: "/api/v1/tasks",
+      headers: {
+        authorization: ["Bearer", "current" + "-secret"].join(" "),
+        "idempotency-key": "task-create-1",
+      },
+      payload: { title: "Inspect bracket" },
+    });
+
+    assert.equal(list.statusCode, 200);
+    assert.deepEqual(list.json(), { data: [], count: 0 });
+    assert.equal(create.statusCode, 201);
+    assert.equal(create.json().data.title, "Inspect bracket");
+    assert.equal(create.json().data.category, "personal");
+    assert.match(create.headers.location ?? "", /\/api\/v1\/tasks\/task-1$/);
+  });
+
+  it("exposes durable reminder operations through the authenticated boundary", async () => {
+    const reminder: Reminder = {
+      id: "reminder-1",
+      title: "Inspect bracket",
+      dueRaw: "tomorrow 9am",
+      dueAt: 1_000,
+      dueTimezone: "Australia/Melbourne",
+      createdAt: 1,
+    };
+    let stored: Reminder | null = null;
+    const app = await makeApp({
+      persistence: makePersistence({
+        async listReminders() {
+          return stored === null ? [] : [stored];
+        },
+        async addReminder(title, due) {
+          stored = {
+            ...reminder,
+            title,
+            ...(due === undefined
+              ? {}
+              : { dueRaw: due.raw, dueAt: due.at, dueTimezone: due.timezone }),
+          };
+          return stored;
+        },
+        async updateReminder(id, update) {
+          if (stored?.id !== id) return null;
+          stored = {
+            ...stored,
+            ...(update.title === undefined ? {} : { title: update.title }),
+            ...(update.due === undefined
+              ? {}
+              : update.due === null
+                ? { dueRaw: undefined, dueAt: undefined, dueTimezone: undefined }
+                : {
+                    dueRaw: update.due.raw,
+                    dueAt: update.due.at,
+                    dueTimezone: update.due.timezone,
+                  }),
+          };
+          return stored;
+        },
+        async removeReminder(id) {
+          if (stored?.id !== id) return null;
+          const removed = stored;
+          stored = null;
+          return removed;
+        },
+      }),
+    });
+    const headers = { authorization: ["Bearer", "current" + "-secret"].join(" ") };
+
+    const list = await app.inject({ method: "GET", url: "/api/v1/reminders", headers });
+    const create = await app.inject({
+      method: "POST",
+      url: "/api/v1/reminders",
+      headers: { ...headers, "idempotency-key": "reminder-create-1" },
+      payload: { title: "Inspect bracket", due: { text: "tomorrow 9am" } },
+    });
+    const get = await app.inject({
+      method: "GET",
+      url: "/api/v1/reminders/reminder-1",
+      headers,
+    });
+    const update = await app.inject({
+      method: "PATCH",
+      url: "/api/v1/reminders/reminder-1",
+      headers,
+      payload: { title: "Revised reminder", due: null },
+    });
+    const remove = await app.inject({
+      method: "DELETE",
+      url: "/api/v1/reminders/reminder-1",
+      headers,
+    });
+
+    assert.equal(list.statusCode, 200);
+    assert.deepEqual(list.json(), { data: [], count: 0 });
+    assert.equal(create.statusCode, 201);
+    assert.equal(create.json().data.title, "Inspect bracket");
+    assert.match(create.headers.location ?? "", /\/api\/v1\/reminders\/reminder-1$/);
+    assert.equal(get.statusCode, 200);
+    assert.equal(update.statusCode, 200);
+    assert.equal(update.json().data.title, "Revised reminder");
+    assert.equal(update.json().data.dueRaw, undefined);
+    assert.equal(remove.statusCode, 200);
+    assert.equal(remove.json().data.id, "reminder-1");
+  });
+
+  it("accepts current and overlap tokens", async () => {
+    const app = await makeApp();
+    for (const token of ["current-secret", "previous-secret"]) {
+      const response = await app
+        .getHttpAdapter()
+        .getInstance()
+        .inject({
+          method: "GET",
+          url: "/api/v1/help",
+          headers: { authorization: `Bearer ${token}` },
+        });
+      assert.equal(response.statusCode, 200);
+    }
+  });
+
+  it("rejects missing, malformed, and invalid credentials without leaking tokens", async () => {
+    const app = await makeApp();
+    const authorizationValues = [undefined, "Basic abc", "Bearer attacker-secret"];
+
+    for (const authorization of authorizationValues) {
+      const response = await app
+        .getHttpAdapter()
+        .getInstance()
+        .inject({
+          method: "GET",
+          url: "/api/v1/help",
+          headers: {
+            "x-request-id": "auth-request-1",
+            ...(authorization === undefined ? {} : { authorization }),
+          },
+        });
+      const body = response.json<ProblemDetails>();
+      const serialized = JSON.stringify(body);
+
+      assert.equal(response.statusCode, 401);
+      assert.match(response.headers["content-type"] ?? "", /^application\/problem\+json/);
+      assert.equal(response.headers["www-authenticate"], "Bearer");
+      assert.equal(response.headers["x-request-id"], "auth-request-1");
+      assert.deepEqual(body, {
+        type: "urn:jarvis:problem:unauthorized",
+        title: "Unauthorized",
+        status: 401,
+        detail: "A valid Bearer service token is required.",
+        instance: "/api/v1/help",
+        requestId: "auth-request-1",
+      });
+      assert.equal(serialized.includes("current-secret"), false);
+      assert.equal(serialized.includes("previous-secret"), false);
+      assert.equal(serialized.includes("attacker-secret"), false);
+    }
+  });
+
+  it("fails closed when only an orphaned previous token is configured", async () => {
+    const app = await makeApp({ config: { currentToken: undefined } });
+    const response = await app
+      .getHttpAdapter()
+      .getInstance()
+      .inject({
+        method: "GET",
+        url: "/api/v1/help",
+        headers: { authorization: "Bearer previous-secret" },
+      });
+
+    assert.equal(response.statusCode, 503);
+    assert.deepEqual(response.json<ProblemDetails>(), {
+      type: "urn:jarvis:problem:authentication-unavailable",
+      title: "Service Authentication Unavailable",
+      status: 503,
+      detail: "Jarvis service authentication is not configured.",
+      instance: "/api/v1/help",
+      requestId: response.headers["x-request-id"],
+    });
+  });
+
+  it("checks persistence and reports truthful Z-State readiness", async () => {
+    const reads = { state: 0, tasks: 0, reminders: 0 };
+    const persistence = makePersistence({
+      async loadState() {
+        reads.state += 1;
+        return { lastIntent: "status" };
+      },
+      async listTasks() {
+        reads.tasks += 1;
+        return [];
+      },
+      async listReminders() {
+        reads.reminders += 1;
+        return [];
+      },
+    });
+    const app = await makeApp({
+      persistence,
+      providerName: "convex",
+      config: { deploymentVersion: "dev/outgoing-ram-798" },
+    });
+    const response = await app
+      .getHttpAdapter()
+      .getInstance()
+      .inject({
+        method: "GET",
+        url: "/api/v1/status",
+        headers: { authorization: "Bearer current-secret" },
+      });
+    const body = response.json<Record<string, unknown>>() as {
+      status: string;
+      version: string;
+      sourceVersion: string;
+      provider: Record<string, unknown>;
+      timezone: string;
+      layers: Record<string, { status: string; reason?: string }>;
+      zState: string;
+      checkedAt: string;
+    };
+
+    assert.equal(response.statusCode, 200);
+    assert.deepEqual(reads, { state: 1, tasks: 1, reminders: 1 });
+    assert.equal(body.status, "ok");
+    assert.equal(body.version, "0.1.0");
+    assert.equal(body.sourceVersion, "test-source-0001");
+    assert.deepEqual(body.provider, {
+      name: "convex",
+      reachability: "ok",
+      authentication: "ok",
+      schemaCompatibility: "compatible",
+      deploymentVersion: "dev/outgoing-ram-798",
+    });
+    assert.equal(body.timezone, "Australia/Melbourne");
+    assert.equal(body.layers.runtime.status, "partial");
+    assert.equal(body.layers.integration.status, "inactive");
+    assert.equal(body.layers.reliability.status, "inactive");
+    assert.equal(body.zState, "disabled");
+    assert.equal(Number.isNaN(Date.parse(body.checkedAt)), false);
+  });
+
+  it("returns a redacted service problem when persistence is unavailable", async () => {
+    const persistence = makePersistence({
+      async listTasks() {
+        throw new Error("failed with current-secret and attacker-secret");
+      },
+    });
+    const app = await makeApp({ persistence });
+    const response = await app
+      .getHttpAdapter()
+      .getInstance()
+      .inject({
+        method: "GET",
+        url: "/api/v1/status",
+        headers: {
+          authorization: "Bearer current-secret",
+          "x-request-id": "status-request-1",
+        },
+      });
+    const body = response.json<ProblemDetails>();
+    const serialized = JSON.stringify(body);
+
+    assert.equal(response.statusCode, 503);
+    assert.deepEqual(body, {
+      type: "urn:jarvis:problem:persistence-unavailable",
+      title: "Persistence Unavailable",
+      status: 503,
+      detail: "The configured persistence provider could not be reached or validated.",
+      instance: "/api/v1/status",
+      requestId: "status-request-1",
+    });
+    assert.equal(serialized.includes("current-secret"), false);
+    assert.equal(serialized.includes("attacker-secret"), false);
+  });
+
+  it("rejects an invalid timezone before touching persistence", async () => {
+    let reads = 0;
+    const persistence = makePersistence({
+      async loadState() {
+        reads += 1;
+        return {};
+      },
+    });
+    const app = await makeApp({
+      persistence,
+      config: { timezone: "Not/A-Timezone" },
+    });
+    const response = await app
+      .getHttpAdapter()
+      .getInstance()
+      .inject({
+        method: "GET",
+        url: "/api/v1/status",
+        headers: { authorization: "Bearer current-secret" },
+      });
+
+    assert.equal(response.statusCode, 503);
+    assert.equal(reads, 0);
+    assert.equal(response.json<ProblemDetails>().type, "urn:jarvis:problem:timezone-unavailable");
+  });
+
+  it("uses safe generated request IDs and strips query strings from problem instances", async () => {
+    const app = await makeApp();
+    const response = await app
+      .getHttpAdapter()
+      .getInstance()
+      .inject({
+        method: "GET",
+        url: "/missing/current-secret?token=current-secret",
+        headers: { "x-request-id": "current-secret" },
+      });
+    const body = response.json<ProblemDetails>();
+
+    assert.equal(response.statusCode, 404);
+    assert.match(body.requestId, /^[0-9a-f-]{36}$/);
+    assert.equal(response.headers["x-request-id"], body.requestId);
+    assert.equal(body.instance, "/missing/redacted");
+    assert.equal(JSON.stringify(body).includes("current-secret"), false);
+  });
+});
+
+describe("Jarvis HTTP configuration", () => {
+  it("defaults to a loopback listener and a stable development source identifier", () => {
+    assert.deepEqual(resolveHttpListenConfig({}), { host: "127.0.0.1", port: 3000 });
+    assert.equal(resolveHttpAppConfig({}).sourceVersion, "development");
+  });
+
+  it("validates listener and source-version configuration", () => {
+    assert.deepEqual(
+      resolveHttpListenConfig({ JARVIS_HTTP_HOST: "::1", JARVIS_HTTP_PORT: "8080" }),
+      { host: "::1", port: 8080 },
+    );
+    assert.throws(
+      () => resolveHttpListenConfig({ JARVIS_HTTP_HOST: "bad host" }),
+      /JARVIS_HTTP_HOST/,
+    );
+    assert.throws(() => resolveHttpListenConfig({ JARVIS_HTTP_PORT: "0" }), /JARVIS_HTTP_PORT/);
+    assert.throws(() => resolveHttpListenConfig({ JARVIS_HTTP_PORT: "3.5" }), /JARVIS_HTTP_PORT/);
+    assert.throws(
+      () => resolveHttpAppConfig({ JARVIS_SOURCE_VERSION: "short" }),
+      /JARVIS_SOURCE_VERSION/,
+    );
+    assert.throws(
+      () => resolveHttpAppConfig({ JARVIS_SOURCE_VERSION: "unsafe source" }),
+      /JARVIS_SOURCE_VERSION/,
+    );
+    assert.throws(
+      () => resolveHttpAppConfig({ JARVIS_DEPLOYMENT_VERSION: "unsafe deployment" }),
+      /JARVIS_DEPLOYMENT_VERSION/,
+    );
+    assert.throws(
+      () => resolveHttpAppConfig({ JARVIS_SERVICE_TOKEN: "unsafe token" }),
+      /must not contain whitespace/,
+    );
+  });
+
+  it("normalises the persistence provider name without silently falling back", () => {
+    assert.equal(resolvePersistenceProviderName(undefined), "json");
+    assert.equal(resolvePersistenceProviderName(" CONVEX "), "convex");
+    assert.throws(() => resolvePersistenceProviderName("sqlite"), /Invalid PERSISTENCE_PROVIDER/);
+  });
+
+  it("requires injected persistence to declare its provider name", async () => {
+    await assert.rejects(
+      () =>
+        createJarvisHttpApp({
+          persistence: makePersistence(),
+        } as unknown as Parameters<typeof createJarvisHttpApp>[0]),
+      /requires its explicit provider name/,
+    );
+  });
+});
