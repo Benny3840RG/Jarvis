@@ -1,0 +1,40 @@
+name: Generate preview lock artifact
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - typescript/package.json
+      - .github/workflows/generate-preview-lock.yml
+
+permissions:
+  contents: read
+
+jobs:
+  generate-preview-lock:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out preview branch
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: typescript/.nvmrc
+          cache: npm
+          cache-dependency-path: typescript/package-lock.json
+
+      - name: Generate lockfile
+        working-directory: typescript
+        run: npm install --package-lock-only --ignore-scripts
+
+      - name: Upload generated lockfile
+        uses: actions/upload-artifact@v4
+        with:
+          name: preview-package-lock-${{ github.sha }}
+          path: typescript/package-lock.json
+          if-no-files-found: error
+          retention-days: 1
