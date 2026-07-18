@@ -181,7 +181,6 @@ export class JsonFileLock {
 
     while (true) {
       if (await this.tryCreate(record)) return record;
-      if (await this.reclaimStale()) continue;
 
       if (Date.now() - startedAt >= Math.max(0, this.timeoutMs)) {
         const state = await this.readState();
@@ -192,6 +191,8 @@ export class JsonFileLock {
           `Jarvis JSON state is locked by ${owner}. Close the other local writer or select Convex for multi-process use.`,
         );
       }
+
+      if (await this.reclaimStale()) continue;
 
       await delay(LOCK_RETRY_MS);
     }
