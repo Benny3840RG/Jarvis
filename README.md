@@ -62,12 +62,13 @@ Update flags may be supplied in either order. At least one supported flag is req
 
 ### Operator API contract
 
-The versioned implementation target for Jarvis's HTTP and ChatGPT App adapters is
+The versioned implementation contract for Jarvis's HTTP and private ChatGPT App adapters is
 [`typescript/openapi/jarvis.openapi.json`](typescript/openapi/jarvis.openapi.json). The
-maintained TypeScript CLI remains available, and the first HTTP adapter slice now implements
-public liveness plus authenticated help, provider/Z-State status checks, and durable task
-operations. Reminder operations are now implemented; conversation, backup, and MCP routes remain
-contract-only until their focused implementation stages are complete.
+maintained TypeScript CLI remains available. The HTTP adapter implements liveness, authenticated
+help, provider/Z-State status, Totality reasoning, staged memory and tool-action approvals,
+durable tasks and reminders, plus provider-neutral backup operations. The private development
+preview now implements a stateless Streamable HTTP MCP endpoint and versioned operator-console
+widget for the operations explicitly marked as MCP-exposed.
 
 Start the local-only HTTP service after configuring `JARVIS_SERVICE_TOKEN` in `.env.local`:
 
@@ -79,6 +80,20 @@ npm run start:http
 It listens on `127.0.0.1:3000` by default. See
 [`typescript/docs/operators/http-api.md`](typescript/docs/operators/http-api.md) for endpoint,
 security, status, and configuration details.
+
+### Controlled ChatGPT preview
+
+Start the commissioned Jarvis HTTP service and private MCP preview together:
+
+```bash
+cd typescript
+npm run start:preview
+```
+
+The MCP endpoint binds to `127.0.0.1:8787/mcp` by default and injects the Jarvis service token
+server-side. The model, widget and tool arguments never receive it. See
+[`typescript/docs/operators/chatgpt-preview.md`](typescript/docs/operators/chatgpt-preview.md)
+for the local runbook, Developer Mode connection steps, remote-binding guard and scope limits.
 
 Validate the OpenAPI 3.1 document with the same zero-warning gate used by CI:
 
