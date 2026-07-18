@@ -1,0 +1,51 @@
+name: Patch preview tool metadata
+
+on:
+  push:
+    branches:
+      - feat/chatgpt-preview
+    paths:
+      - .github/workflows/preview-fix-metadata.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/chatgpt-preview
+      - name: Add required tool metadata
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('typescript/src/mcp/server.ts')
+          text = path.read_text()
+          old_task = '''      outputSchema: { task: taskSchema },
+                annotations: readAnnotations,
+              },'''
+          new_task = '''      outputSchema: { task: taskSchema },
+                annotations: readAnnotations,
+                _meta: { ui: { visibility: ["model"] } },
+              },'''
+          old_reminder = '''      outputSchema: { reminder: reminderSchema },
+                annotations: readAnnotations,
+              },'''
+          new_reminder = '''      outputSchema: { reminder: reminderSchema },
+                annotations: readAnnotations,
+                _meta: { ui: { visibility: ["model"] } },
+              },'''
+          if old_task not in text or old_reminder not in text:
+              raise SystemExit('Expected tool definitions were not found.')
+          path.write_text(text.replace(old_task, new_task, 1).replace(old_reminder, new_reminder, 1))
+          PY
+      - name: Commit patch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add typescript/src/mcp/server.ts
+          git commit -m "fix: add required MCP tool metadata"
+          git push origin HEAD:feat/chatgpt-preview
