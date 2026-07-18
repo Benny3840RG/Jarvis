@@ -48,7 +48,9 @@ const AUTHORITY_LEVEL: Record<ToolAuthority, number> = { T0: 0, T1: 1, T2: 2, T3
 const MAX_TIMEOUT_MS = 30_000;
 
 function digest(value: unknown): string {
-  return createHash("sha256").update(JSON.stringify(value) ?? "undefined", "utf8").digest("hex");
+  return createHash("sha256")
+    .update(JSON.stringify(value) ?? "undefined", "utf8")
+    .digest("hex");
 }
 
 function receiptId(action: ToolAction, idempotencyKey: string): string {
@@ -102,25 +104,52 @@ export class ToolExecutionService {
     if (existing) return existing;
 
     const definition = this.definitions.get(`${input.action.tool}:${input.action.operation}`);
-    if (input.action.state !== "approved" || AUTHORITY_LEVEL[input.authority] < AUTHORITY_LEVEL[input.action.requiredAuthority]) {
-      const receipt = blockedReceipt(input.action, input.idempotencyKey, "blocked", "not-authorized", startedAt);
+    if (
+      input.action.state !== "approved" ||
+      AUTHORITY_LEVEL[input.authority] < AUTHORITY_LEVEL[input.action.requiredAuthority]
+    ) {
+      const receipt = blockedReceipt(
+        input.action,
+        input.idempotencyKey,
+        "blocked",
+        "not-authorized",
+        startedAt,
+      );
       await this.receipts.save(key, receipt);
       return receipt;
     }
     if (!definition) {
-      const receipt = blockedReceipt(input.action, input.idempotencyKey, "blocked", "not-allowlisted", startedAt);
+      const receipt = blockedReceipt(
+        input.action,
+        input.idempotencyKey,
+        "blocked",
+        "not-allowlisted",
+        startedAt,
+      );
       await this.receipts.save(key, receipt);
       return receipt;
     }
 
     const parsed = definition.schema.safeParse(input.action.arguments);
     if (!parsed.success) {
-      const receipt = blockedReceipt(input.action, input.idempotencyKey, "blocked", "invalid-arguments", startedAt);
+      const receipt = blockedReceipt(
+        input.action,
+        input.idempotencyKey,
+        "blocked",
+        "invalid-arguments",
+        startedAt,
+      );
       await this.receipts.save(key, receipt);
       return receipt;
     }
     if (input.dryRun) {
-      const receipt = blockedReceipt(input.action, input.idempotencyKey, "dry-run", undefined, startedAt);
+      const receipt = blockedReceipt(
+        input.action,
+        input.idempotencyKey,
+        "dry-run",
+        undefined,
+        startedAt,
+      );
       await this.receipts.save(key, receipt);
       return receipt;
     }

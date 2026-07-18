@@ -12,6 +12,10 @@ This stage implements only the operations whose runtime behaviour is complete:
 | POST             | `/api/v1/reminders`              | ******         | Creates a durable reminder.                                 |
 | GET/PATCH/DELETE | `/api/v1/reminders/{reminderId}` | ******         | Reads, updates, or removes one reminder.                    |
 
+The adapter also implements `/api/v1/tasks` (including completion), `/api/v1/totality/reason`, and
+the project-scoped memory-change-set and tool-action proposal routes. Tool-action approval changes
+proposal state only; there is intentionally no HTTP execution route in this stage.
+
 The task and Totality routes are also implemented by the maintained adapter; proposal routes are
 review-only and approval never executes a tool. The complete implementation target remains
 [`../../openapi/jarvis.openapi.json`](../../openapi/jarvis.openapi.json). Operations not listed
@@ -94,8 +98,8 @@ be healthy while prototype Z-State layers remain `partial` or `inactive`; Z-Stat
 
 ## Exposure boundary
 
-The default loopback bind is intentional. Do not bind this service to a remote interface or put it
-on the public internet as a substitute for user authentication. Remote MCP or multi-user exposure
-requires the planned OAuth 2.1 boundary, TLS, origin policy, and deployment review. The service
+The default loopback bind is intentional. Remote HTTP and MCP exposure are disabled, not merely
+discouraged, until the planned OAuth 2.1 boundary, TLS, origin policy, and deployment review are
+explicitly approved. The service
 token must remain server-side and must never enter model input, widget state, URLs, logs, or tool
 arguments.

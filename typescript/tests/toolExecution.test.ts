@@ -63,7 +63,12 @@ describe("tool execution stage", () => {
         },
       },
     ]);
-    const dryRun = await executor.execute({ action, authority: "T1", idempotencyKey: "same", dryRun: true });
+    const dryRun = await executor.execute({
+      action,
+      authority: "T1",
+      idempotencyKey: "same",
+      dryRun: true,
+    });
     assert.equal(dryRun.status, "dry-run");
     const first = await executor.execute({ action, authority: "T1", idempotencyKey: "execute" });
     const replay = await executor.execute({ action, authority: "T1", idempotencyKey: "execute" });
