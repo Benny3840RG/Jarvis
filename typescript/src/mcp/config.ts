@@ -78,9 +78,7 @@ function resolveApiBaseUrl(env: NodeJS.ProcessEnv): URL {
   return url;
 }
 
-export function resolveJarvisMcpConfig(
-  env: NodeJS.ProcessEnv = process.env,
-): JarvisMcpConfig {
+export function resolveJarvisMcpConfig(env: NodeJS.ProcessEnv = process.env): JarvisMcpConfig {
   return {
     host: resolveHost(env),
     port: parsePort(env.JARVIS_MCP_PORT),

@@ -327,9 +327,7 @@ export function createJarvisMcpServer(client: JarvisApiClient): McpServer {
         if (title === undefined && category === undefined) {
           return {
             isError: true,
-            content: [
-              { type: "text" as const, text: "Task update requires a title or category." },
-            ],
+            content: [{ type: "text" as const, text: "Task update requires a title or category." }],
           };
         }
         const task = await client.updateTask(taskId, {
@@ -407,9 +405,7 @@ export function createJarvisMcpServer(client: JarvisApiClient): McpServer {
       try {
         const reminders = await client.listReminders();
         return {
-          content: [
-            { type: "text" as const, text: `Found ${reminders.length} Jarvis reminders.` },
-          ],
+          content: [{ type: "text" as const, text: `Found ${reminders.length} Jarvis reminders.` }],
           structuredContent: { reminders, count: reminders.length },
         };
       } catch (error: unknown) {

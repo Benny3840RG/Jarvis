@@ -20,125 +20,436 @@
         --yellow: #f0c75e;
         --radius: 18px;
         font-family:
-          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+          Inter,
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
       }
-      * { box-sizing: border-box; }
+      * {
+        box-sizing: border-box;
+      }
       body {
         margin: 0;
         min-width: 0;
         background:
-          radial-gradient(circle at 10% 0%, rgba(255, 122, 24, 0.12), transparent 32rem),
-          var(--bg);
+          radial-gradient(circle at 10% 0%, rgba(255, 122, 24, 0.12), transparent 32rem), var(--bg);
         color: var(--text);
       }
-      button, input, select { font: inherit; }
-      button { cursor: pointer; }
-      button:disabled { cursor: not-allowed; opacity: 0.5; }
-      .shell { width: min(100%, 1100px); margin: 0 auto; padding: 18px; }
-      .topbar { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 14px; }
-      .brand { display: flex; align-items: center; gap: 11px; }
+      button,
+      input,
+      select {
+        font: inherit;
+      }
+      button {
+        cursor: pointer;
+      }
+      button:disabled {
+        cursor: not-allowed;
+        opacity: 0.5;
+      }
+      .shell {
+        width: min(100%, 1100px);
+        margin: 0 auto;
+        padding: 18px;
+      }
+      .topbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 14px;
+        margin-bottom: 14px;
+      }
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 11px;
+      }
       .mark {
-        display: grid; place-items: center; width: 40px; height: 40px;
-        border: 1px solid rgba(255, 122, 24, 0.45); border-radius: 12px;
-        background: var(--orange-soft); color: var(--orange); font-weight: 900;
+        display: grid;
+        place-items: center;
+        width: 40px;
+        height: 40px;
+        border: 1px solid rgba(255, 122, 24, 0.45);
+        border-radius: 12px;
+        background: var(--orange-soft);
+        color: var(--orange);
+        font-weight: 900;
       }
-      .brand h1 { margin: 0; font-size: 15px; letter-spacing: 0.14em; }
-      .brand p { margin: 3px 0 0; color: var(--muted); font-size: 12px; }
-      .status-line { display: flex; align-items: center; gap: 8px; }
+      .brand h1 {
+        margin: 0;
+        font-size: 15px;
+        letter-spacing: 0.14em;
+      }
+      .brand p {
+        margin: 3px 0 0;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .status-line {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
       .status-pill {
-        display: inline-flex; align-items: center; gap: 7px; min-height: 34px; padding: 0 12px;
-        border: 1px solid var(--line); border-radius: 999px;
-        background: rgba(18, 20, 25, 0.85); color: var(--muted); font-size: 12px; font-weight: 700;
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        min-height: 34px;
+        padding: 0 12px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: rgba(18, 20, 25, 0.85);
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 700;
       }
-      .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--yellow); box-shadow: 0 0 12px currentColor; }
-      .status-pill.ok .dot { background: var(--green); }
-      .status-pill.bad .dot { background: var(--red); }
-      .icon-button { width: 36px; height: 36px; border: 1px solid var(--line); border-radius: 11px; background: var(--panel); color: var(--text); }
+      .dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--yellow);
+        box-shadow: 0 0 12px currentColor;
+      }
+      .status-pill.ok .dot {
+        background: var(--green);
+      }
+      .status-pill.bad .dot {
+        background: var(--red);
+      }
+      .icon-button {
+        width: 36px;
+        height: 36px;
+        border: 1px solid var(--line);
+        border-radius: 11px;
+        background: var(--panel);
+        color: var(--text);
+      }
       .nav {
-        display: grid; grid-template-columns: repeat(4, 1fr); gap: 7px; padding: 6px;
-        border: 1px solid var(--line); border-radius: 14px;
-        background: rgba(18, 20, 25, 0.92); margin-bottom: 14px;
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 7px;
+        padding: 6px;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        background: rgba(18, 20, 25, 0.92);
+        margin-bottom: 14px;
       }
-      .nav button { min-height: 38px; border: 0; border-radius: 10px; background: transparent; color: var(--muted); font-weight: 750; }
-      .nav button.active { background: var(--orange-soft); color: var(--orange); }
-      .view { display: none; }
-      .view.active { display: block; }
-      .grid { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(250px, 0.8fr); gap: 14px; }
+      .nav button {
+        min-height: 38px;
+        border: 0;
+        border-radius: 10px;
+        background: transparent;
+        color: var(--muted);
+        font-weight: 750;
+      }
+      .nav button.active {
+        background: var(--orange-soft);
+        color: var(--orange);
+      }
+      .view {
+        display: none;
+      }
+      .view.active {
+        display: block;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1.55fr) minmax(250px, 0.8fr);
+        gap: 14px;
+      }
       .card {
-        border: 1px solid var(--line); border-radius: var(--radius);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
         background: linear-gradient(155deg, rgba(26, 29, 36, 0.96), rgba(16, 18, 23, 0.97));
-        padding: 18px; box-shadow: 0 16px 45px rgba(0, 0, 0, 0.22);
+        padding: 18px;
+        box-shadow: 0 16px 45px rgba(0, 0, 0, 0.22);
       }
-      .card + .card { margin-top: 14px; }
-      .eyebrow { margin: 0 0 9px; color: var(--orange); font-size: 11px; font-weight: 900; letter-spacing: 0.18em; }
-      .hero h2 { margin: 0; font-size: clamp(25px, 5vw, 42px); line-height: 1.04; letter-spacing: -0.045em; }
-      .hero .empty-title { color: var(--muted); }
-      .meta-row { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 16px; }
-      .chip { display: inline-flex; align-items: center; min-height: 28px; padding: 0 9px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); font-size: 11px; font-weight: 700; }
-      .primary, .secondary, .complete-button { min-height: 42px; border-radius: 11px; font-weight: 850; }
-      .primary, .complete-button { border: 1px solid var(--orange); background: var(--orange); color: #15100c; }
-      .secondary { border: 1px solid var(--line); background: var(--panel-2); color: var(--text); }
-      .hero-actions { display: flex; flex-wrap: wrap; gap: 9px; margin-top: 20px; }
-      .hero-actions button { padding: 0 16px; }
-      .section-title { display: flex; align-items: end; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
-      .section-title h2, .section-title h3 { margin: 0; font-size: 17px; }
-      .section-title span { color: var(--muted); font-size: 12px; }
-      .list { display: grid; gap: 8px; list-style: none; padding: 0; margin: 0; }
+      .card + .card {
+        margin-top: 14px;
+      }
+      .eyebrow {
+        margin: 0 0 9px;
+        color: var(--orange);
+        font-size: 11px;
+        font-weight: 900;
+        letter-spacing: 0.18em;
+      }
+      .hero h2 {
+        margin: 0;
+        font-size: clamp(25px, 5vw, 42px);
+        line-height: 1.04;
+        letter-spacing: -0.045em;
+      }
+      .hero .empty-title {
+        color: var(--muted);
+      }
+      .meta-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 7px;
+        margin-top: 16px;
+      }
+      .chip {
+        display: inline-flex;
+        align-items: center;
+        min-height: 28px;
+        padding: 0 9px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        color: var(--muted);
+        font-size: 11px;
+        font-weight: 700;
+      }
+      .primary,
+      .secondary,
+      .complete-button {
+        min-height: 42px;
+        border-radius: 11px;
+        font-weight: 850;
+      }
+      .primary,
+      .complete-button {
+        border: 1px solid var(--orange);
+        background: var(--orange);
+        color: #15100c;
+      }
+      .secondary {
+        border: 1px solid var(--line);
+        background: var(--panel-2);
+        color: var(--text);
+      }
+      .hero-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 9px;
+        margin-top: 20px;
+      }
+      .hero-actions button {
+        padding: 0 16px;
+      }
+      .section-title {
+        display: flex;
+        align-items: end;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 12px;
+      }
+      .section-title h2,
+      .section-title h3 {
+        margin: 0;
+        font-size: 17px;
+      }
+      .section-title span {
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .list {
+        display: grid;
+        gap: 8px;
+        list-style: none;
+        padding: 0;
+        margin: 0;
+      }
       .row {
-        display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 12px;
-        min-height: 58px; padding: 11px 12px; border: 1px solid var(--line); border-radius: 12px;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 12px;
+        min-height: 58px;
+        padding: 11px 12px;
+        border: 1px solid var(--line);
+        border-radius: 12px;
         background: rgba(8, 9, 12, 0.36);
       }
-      .row strong { display: block; overflow-wrap: anywhere; }
-      .row small { display: block; margin-top: 4px; color: var(--muted); }
-      .row.done strong { color: var(--muted); text-decoration: line-through; }
-      .row button { min-height: 36px; padding: 0 11px; }
-      .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-      .stat { padding: 12px 10px; border: 1px solid var(--line); border-radius: 12px; background: rgba(8, 9, 12, 0.34); }
-      .stat b { display: block; font-size: 24px; }
-      .stat span { color: var(--muted); font-size: 11px; }
-      form { display: grid; gap: 9px; }
-      .field-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(110px, 0.42fr); gap: 8px; }
-      label { display: grid; gap: 5px; color: var(--muted); font-size: 11px; font-weight: 750; }
-      input, select {
-        width: 100%; min-height: 42px; border: 1px solid var(--line); border-radius: 11px;
-        outline: none; background: #0d0f13; color: var(--text); padding: 0 12px;
+      .row strong {
+        display: block;
+        overflow-wrap: anywhere;
       }
-      input:focus, select:focus { border-color: var(--orange); box-shadow: 0 0 0 3px var(--orange-soft); }
-      .empty { color: var(--muted); font-size: 13px; }
-      .system-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-      .system-item { padding: 13px; border: 1px solid var(--line); border-radius: 12px; }
-      .system-item span { display: block; color: var(--muted); font-size: 11px; }
-      .system-item b { display: block; margin-top: 5px; overflow-wrap: anywhere; }
-      .layer-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
-      .layer { min-height: 66px; padding: 10px; border: 1px solid var(--line); border-radius: 11px; }
-      .layer b { display: block; font-size: 11px; text-transform: capitalize; }
-      .layer span { display: block; margin-top: 8px; color: var(--green); font-size: 10px; text-transform: uppercase; letter-spacing: 0.09em; }
-      .layer.partial span, .layer.inactive span { color: var(--yellow); }
-      .layer.blocked span { color: var(--red); }
+      .row small {
+        display: block;
+        margin-top: 4px;
+        color: var(--muted);
+      }
+      .row.done strong {
+        color: var(--muted);
+        text-decoration: line-through;
+      }
+      .row button {
+        min-height: 36px;
+        padding: 0 11px;
+      }
+      .stats {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 8px;
+      }
+      .stat {
+        padding: 12px 10px;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: rgba(8, 9, 12, 0.34);
+      }
+      .stat b {
+        display: block;
+        font-size: 24px;
+      }
+      .stat span {
+        color: var(--muted);
+        font-size: 11px;
+      }
+      form {
+        display: grid;
+        gap: 9px;
+      }
+      .field-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(110px, 0.42fr);
+        gap: 8px;
+      }
+      label {
+        display: grid;
+        gap: 5px;
+        color: var(--muted);
+        font-size: 11px;
+        font-weight: 750;
+      }
+      input,
+      select {
+        width: 100%;
+        min-height: 42px;
+        border: 1px solid var(--line);
+        border-radius: 11px;
+        outline: none;
+        background: #0d0f13;
+        color: var(--text);
+        padding: 0 12px;
+      }
+      input:focus,
+      select:focus {
+        border-color: var(--orange);
+        box-shadow: 0 0 0 3px var(--orange-soft);
+      }
+      .empty {
+        color: var(--muted);
+        font-size: 13px;
+      }
+      .system-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+      }
+      .system-item {
+        padding: 13px;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+      }
+      .system-item span {
+        display: block;
+        color: var(--muted);
+        font-size: 11px;
+      }
+      .system-item b {
+        display: block;
+        margin-top: 5px;
+        overflow-wrap: anywhere;
+      }
+      .layer-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 8px;
+        margin-top: 12px;
+      }
+      .layer {
+        min-height: 66px;
+        padding: 10px;
+        border: 1px solid var(--line);
+        border-radius: 11px;
+      }
+      .layer b {
+        display: block;
+        font-size: 11px;
+        text-transform: capitalize;
+      }
+      .layer span {
+        display: block;
+        margin-top: 8px;
+        color: var(--green);
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.09em;
+      }
+      .layer.partial span,
+      .layer.inactive span {
+        color: var(--yellow);
+      }
+      .layer.blocked span {
+        color: var(--red);
+      }
       .toast {
-        position: fixed; left: 50%; bottom: 18px; z-index: 20; width: min(calc(100% - 28px), 520px);
-        transform: translate(-50%, 140%); padding: 12px 14px; border: 1px solid var(--line);
-        border-radius: 12px; background: #171a20; box-shadow: 0 18px 55px rgba(0, 0, 0, 0.5);
+        position: fixed;
+        left: 50%;
+        bottom: 18px;
+        z-index: 20;
+        width: min(calc(100% - 28px), 520px);
+        transform: translate(-50%, 140%);
+        padding: 12px 14px;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: #171a20;
+        box-shadow: 0 18px 55px rgba(0, 0, 0, 0.5);
         transition: transform 180ms ease;
       }
-      .toast.show { transform: translate(-50%, 0); }
-      .toast.error { border-color: rgba(255, 92, 103, 0.55); }
+      .toast.show {
+        transform: translate(-50%, 0);
+      }
+      .toast.error {
+        border-color: rgba(255, 92, 103, 0.55);
+      }
       @media (max-width: 760px) {
-        .shell { padding: 12px; }
-        .topbar { align-items: flex-start; }
-        .grid, .field-grid { grid-template-columns: 1fr; }
-        .nav { overflow-x: auto; grid-template-columns: repeat(4, minmax(90px, 1fr)); }
-        .layer-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-        .status-pill span:last-child { display: none; }
+        .shell {
+          padding: 12px;
+        }
+        .topbar {
+          align-items: flex-start;
+        }
+        .grid,
+        .field-grid {
+          grid-template-columns: 1fr;
+        }
+        .nav {
+          overflow-x: auto;
+          grid-template-columns: repeat(4, minmax(90px, 1fr));
+        }
+        .layer-grid {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+        .status-pill span:last-child {
+          display: none;
+        }
       }
     </style>
   </head>
   <body>
     <main class="shell">
       <header class="topbar">
-        <div class="brand"><div class="mark">J</div><div><h1>JARVIS // OPERATOR CONSOLE</h1><p>Private development preview 0.1</p></div></div>
-        <div class="status-line"><div class="status-pill" id="status-pill"><span class="dot"></span><span id="status-label">Connecting</span></div><button class="icon-button" id="refresh" type="button" aria-label="Refresh dashboard">↻</button></div>
+        <div class="brand">
+          <div class="mark">J</div>
+          <div>
+            <h1>JARVIS // OPERATOR CONSOLE</h1>
+            <p>Private development preview 0.1</p>
+          </div>
+        </div>
+        <div class="status-line">
+          <div class="status-pill" id="status-pill">
+            <span class="dot"></span><span id="status-label">Connecting</span>
+          </div>
+          <button class="icon-button" id="refresh" type="button" aria-label="Refresh dashboard">
+            ↻
+          </button>
+        </div>
       </header>
       <nav class="nav" aria-label="Dashboard sections">
         <button class="active" type="button" data-view="focus">Focus</button>
@@ -149,30 +460,137 @@
       <section class="view active" id="view-focus">
         <div class="grid">
           <div>
-            <article class="card hero"><p class="eyebrow">NOW</p><h2 id="current-task" class="empty-title">Waiting for Jarvis…</h2><div class="meta-row" id="current-meta"></div><div class="hero-actions" id="current-actions"></div></article>
-            <article class="card"><div class="section-title"><h3>Next in line</h3><span id="queue-count">0 queued</span></div><ul class="list" id="focus-queue"></ul></article>
+            <article class="card hero">
+              <p class="eyebrow">NOW</p>
+              <h2 id="current-task" class="empty-title">Waiting for Jarvis…</h2>
+              <div class="meta-row" id="current-meta"></div>
+              <div class="hero-actions" id="current-actions"></div>
+            </article>
+            <article class="card">
+              <div class="section-title">
+                <h3>Next in line</h3>
+                <span id="queue-count">0 queued</span>
+              </div>
+              <ul class="list" id="focus-queue"></ul>
+            </article>
           </div>
           <aside>
-            <article class="card"><div class="section-title"><h3>Today at a glance</h3></div><div class="stats"><div class="stat"><b id="active-count">0</b><span>active</span></div><div class="stat"><b id="done-count">0</b><span>cleared</span></div><div class="stat"><b id="reminder-count">0</b><span>reminders</span></div></div></article>
-            <article class="card"><div class="section-title"><h3>Capture a task</h3></div><form id="task-form"><label>What needs doing?<input id="task-title" maxlength="100" autocomplete="off" required /></label><label>Category<select id="task-category"><option value="personal">Personal</option><option value="work">Work</option><option value="builds">Builds</option><option value="money">Money</option><option value="life">Life</option></select></label><button class="primary" type="submit">Add task</button></form></article>
+            <article class="card">
+              <div class="section-title"><h3>Today at a glance</h3></div>
+              <div class="stats">
+                <div class="stat"><b id="active-count">0</b><span>active</span></div>
+                <div class="stat"><b id="done-count">0</b><span>cleared</span></div>
+                <div class="stat"><b id="reminder-count">0</b><span>reminders</span></div>
+              </div>
+            </article>
+            <article class="card">
+              <div class="section-title"><h3>Capture a task</h3></div>
+              <form id="task-form">
+                <label
+                  >What needs doing?<input
+                    id="task-title"
+                    maxlength="100"
+                    autocomplete="off"
+                    required /></label
+                ><label
+                  >Category<select id="task-category">
+                    <option value="personal">Personal</option>
+                    <option value="work">Work</option>
+                    <option value="builds">Builds</option>
+                    <option value="money">Money</option>
+                    <option value="life">Life</option>
+                  </select></label
+                ><button class="primary" type="submit">Add task</button>
+              </form>
+            </article>
           </aside>
         </div>
       </section>
-      <section class="view" id="view-board"><div class="grid"><article class="card"><div class="section-title"><h2>Active tasks</h2><span id="board-active-count"></span></div><ul class="list" id="active-list"></ul></article><article class="card"><div class="section-title"><h2>Completed</h2><span id="board-done-count"></span></div><ul class="list" id="done-list"></ul></article></div></section>
-      <section class="view" id="view-reminders"><div class="grid"><article class="card"><div class="section-title"><h2>Reminders</h2><span id="reminders-total"></span></div><ul class="list" id="reminder-list"></ul></article><article class="card"><div class="section-title"><h2>Add reminder</h2></div><form id="reminder-form"><label>Reminder<input id="reminder-title" maxlength="500" autocomplete="off" required /></label><label>When (optional)<input id="reminder-due" maxlength="500" placeholder="Friday 9am" autocomplete="off" /></label><button class="primary" type="submit">Add reminder</button></form></article></div></section>
-      <section class="view" id="view-systems"><article class="card"><div class="section-title"><h2>Runtime health</h2><span id="checked-at"></span></div><div class="system-grid"><div class="system-item"><span>Overall</span><b id="system-status">Unknown</b></div><div class="system-item"><span>Z-State</span><b id="z-state">Unknown</b></div><div class="system-item"><span>Persistence</span><b id="provider">Unknown</b></div><div class="system-item"><span>Deployment</span><b id="deployment">Unknown</b></div><div class="system-item"><span>Source</span><b id="source-version">Unknown</b></div><div class="system-item"><span>Timezone</span><b id="timezone">Unknown</b></div></div><div class="layer-grid" id="layer-grid"></div></article></section>
+      <section class="view" id="view-board">
+        <div class="grid">
+          <article class="card">
+            <div class="section-title">
+              <h2>Active tasks</h2>
+              <span id="board-active-count"></span>
+            </div>
+            <ul class="list" id="active-list"></ul>
+          </article>
+          <article class="card">
+            <div class="section-title">
+              <h2>Completed</h2>
+              <span id="board-done-count"></span>
+            </div>
+            <ul class="list" id="done-list"></ul>
+          </article>
+        </div>
+      </section>
+      <section class="view" id="view-reminders">
+        <div class="grid">
+          <article class="card">
+            <div class="section-title">
+              <h2>Reminders</h2>
+              <span id="reminders-total"></span>
+            </div>
+            <ul class="list" id="reminder-list"></ul>
+          </article>
+          <article class="card">
+            <div class="section-title"><h2>Add reminder</h2></div>
+            <form id="reminder-form">
+              <label
+                >Reminder<input
+                  id="reminder-title"
+                  maxlength="500"
+                  autocomplete="off"
+                  required /></label
+              ><label
+                >When (optional)<input
+                  id="reminder-due"
+                  maxlength="500"
+                  placeholder="Friday 9am"
+                  autocomplete="off" /></label
+              ><button class="primary" type="submit">Add reminder</button>
+            </form>
+          </article>
+        </div>
+      </section>
+      <section class="view" id="view-systems">
+        <article class="card">
+          <div class="section-title">
+            <h2>Runtime health</h2>
+            <span id="checked-at"></span>
+          </div>
+          <div class="system-grid">
+            <div class="system-item"><span>Overall</span><b id="system-status">Unknown</b></div>
+            <div class="system-item"><span>Z-State</span><b id="z-state">Unknown</b></div>
+            <div class="system-item"><span>Persistence</span><b id="provider">Unknown</b></div>
+            <div class="system-item"><span>Deployment</span><b id="deployment">Unknown</b></div>
+            <div class="system-item"><span>Source</span><b id="source-version">Unknown</b></div>
+            <div class="system-item"><span>Timezone</span><b id="timezone">Unknown</b></div>
+          </div>
+          <div class="layer-grid" id="layer-grid"></div>
+        </article>
+      </section>
     </main>
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
     <script>
       (() => {
         "use strict";
-        const state = { status: null, tasks: [], reminders: [], counts: { activeTasks: 0, completedTasks: 0, reminders: 0 } };
+        const state = {
+          status: null,
+          tasks: [],
+          reminders: [],
+          counts: { activeTasks: 0, completedTasks: 0, reminders: 0 },
+        };
         let rpcId = 0;
         let toastTimer = null;
         const pendingRequests = new Map();
         const byId = (id) => document.getElementById(id);
-        const text = (element, value) => { element.textContent = value == null ? "" : String(value); };
-        function notify(method, params) { window.parent.postMessage({ jsonrpc: "2.0", method, params }, "*"); }
+        const text = (element, value) => {
+          element.textContent = value == null ? "" : String(value);
+        };
+        function notify(method, params) {
+          window.parent.postMessage({ jsonrpc: "2.0", method, params }, "*");
+        }
         function request(method, params) {
           return new Promise((resolve, reject) => {
             const id = ++rpcId;
@@ -188,9 +606,17 @@
           clearTimeout(toastTimer);
           toastTimer = setTimeout(() => toast.classList.remove("show"), 3000);
         }
-        function safeStructuredContent(result) { return result && typeof result === "object" && result.structuredContent ? result.structuredContent : result; }
+        function safeStructuredContent(result) {
+          return result && typeof result === "object" && result.structuredContent
+            ? result.structuredContent
+            : result;
+        }
         function recalculateCounts() {
-          state.counts = { activeTasks: state.tasks.filter((task) => !task.completed).length, completedTasks: state.tasks.filter((task) => task.completed).length, reminders: state.reminders.length };
+          state.counts = {
+            activeTasks: state.tasks.filter((task) => !task.completed).length,
+            completedTasks: state.tasks.filter((task) => task.completed).length,
+            reminders: state.reminders.length,
+          };
         }
         function updateFromResult(result) {
           const data = safeStructuredContent(result);
@@ -198,24 +624,34 @@
           if (data.status && typeof data.status === "object") state.status = data.status;
           if (Array.isArray(data.tasks)) state.tasks = data.tasks;
           if (Array.isArray(data.reminders)) state.reminders = data.reminders;
-          if (data.counts && typeof data.counts === "object") state.counts = data.counts; else recalculateCounts();
+          if (data.counts && typeof data.counts === "object") state.counts = data.counts;
+          else recalculateCounts();
           render();
         }
-        window.addEventListener("message", (event) => {
-          if (event.source !== window.parent) return;
-          const message = event.data;
-          if (!message || message.jsonrpc !== "2.0") return;
-          if (typeof message.id === "number") {
-            const pending = pendingRequests.get(message.id);
-            if (!pending) return;
-            pendingRequests.delete(message.id);
-            if (message.error) pending.reject(message.error); else pending.resolve(message.result);
-            return;
-          }
-          if (message.method === "ui/notifications/tool-result") updateFromResult(message.params);
-        }, { passive: true });
+        window.addEventListener(
+          "message",
+          (event) => {
+            if (event.source !== window.parent) return;
+            const message = event.data;
+            if (!message || message.jsonrpc !== "2.0") return;
+            if (typeof message.id === "number") {
+              const pending = pendingRequests.get(message.id);
+              if (!pending) return;
+              pendingRequests.delete(message.id);
+              if (message.error) pending.reject(message.error);
+              else pending.resolve(message.result);
+              return;
+            }
+            if (message.method === "ui/notifications/tool-result") updateFromResult(message.params);
+          },
+          { passive: true },
+        );
         const bridgeReady = (async () => {
-          await request("ui/initialize", { appInfo: { name: "jarvis-dashboard", version: "0.1.0" }, appCapabilities: {}, protocolVersion: "2026-01-26" });
+          await request("ui/initialize", {
+            appInfo: { name: "jarvis-dashboard", version: "0.1.0" },
+            appCapabilities: {},
+            protocolVersion: "2026-01-26",
+          });
           notify("ui/notifications/initialized", {});
         })();
         async function callTool(name, args = {}) {
@@ -224,117 +660,255 @@
           updateFromResult(result);
           return result;
         }
-        function taskSubtitle(task) { return `${task.category || "personal"} · ${task.completed ? "complete" : "active"}`; }
+        function taskSubtitle(task) {
+          return `${task.category || "personal"} · ${task.completed ? "complete" : "active"}`;
+        }
         function reminderSubtitle(reminder) {
           if (reminder.dueRaw) return reminder.dueRaw;
           if (reminder.dueAt) return new Date(reminder.dueAt).toLocaleString();
           return "No due time";
         }
-        function emptyRow(message) { const item = document.createElement("li"); item.className = "row empty"; text(item, message); return item; }
+        function emptyRow(message) {
+          const item = document.createElement("li");
+          item.className = "row empty";
+          text(item, message);
+          return item;
+        }
         function taskRow(task, allowComplete) {
           const item = document.createElement("li");
           item.className = `row${task.completed ? " done" : ""}`;
           const details = document.createElement("div");
           const title = document.createElement("strong");
           const subtitle = document.createElement("small");
-          text(title, task.title); text(subtitle, taskSubtitle(task)); details.append(title, subtitle); item.append(details);
+          text(title, task.title);
+          text(subtitle, taskSubtitle(task));
+          details.append(title, subtitle);
+          item.append(details);
           if (allowComplete && !task.completed) {
             const button = document.createElement("button");
-            button.className = "complete-button"; button.type = "button"; text(button, "Complete");
+            button.className = "complete-button";
+            button.type = "button";
+            text(button, "Complete");
             button.addEventListener("click", async () => {
               button.disabled = true;
-              try { await callTool("complete_task", { taskId: task.id }); showToast(`Completed ${task.title}`); }
-              catch { showToast("Could not complete that task.", true); }
-              finally { button.disabled = false; }
+              try {
+                await callTool("complete_task", { taskId: task.id });
+                showToast(`Completed ${task.title}`);
+              } catch {
+                showToast("Could not complete that task.", true);
+              } finally {
+                button.disabled = false;
+              }
             });
             item.append(button);
           }
           return item;
         }
         function reminderRow(reminder) {
-          const item = document.createElement("li"); item.className = "row";
-          const details = document.createElement("div"); const title = document.createElement("strong"); const subtitle = document.createElement("small");
-          text(title, reminder.title); text(subtitle, reminderSubtitle(reminder)); details.append(title, subtitle); item.append(details); return item;
+          const item = document.createElement("li");
+          item.className = "row";
+          const details = document.createElement("div");
+          const title = document.createElement("strong");
+          const subtitle = document.createElement("small");
+          text(title, reminder.title);
+          text(subtitle, reminderSubtitle(reminder));
+          details.append(title, subtitle);
+          item.append(details);
+          return item;
         }
         function renderList(element, items, renderer, emptyMessage) {
           element.replaceChildren();
-          if (!items.length) { element.append(emptyRow(emptyMessage)); return; }
+          if (!items.length) {
+            element.append(emptyRow(emptyMessage));
+            return;
+          }
           items.forEach((item) => element.append(renderer(item)));
         }
         function renderFocus() {
           const active = state.tasks.filter((task) => !task.completed);
           const current = active[0];
-          const currentTitle = byId("current-task"); const currentMeta = byId("current-meta"); const currentActions = byId("current-actions");
-          currentMeta.replaceChildren(); currentActions.replaceChildren();
-          if (!current) { text(currentTitle, "Deck cleared."); currentTitle.classList.add("empty-title"); }
-          else {
-            text(currentTitle, current.title); currentTitle.classList.remove("empty-title");
-            const category = document.createElement("span"); category.className = "chip"; text(category, current.category || "personal"); currentMeta.append(category);
-            const complete = document.createElement("button"); complete.className = "complete-button"; complete.type = "button"; text(complete, "✓ Complete");
+          const currentTitle = byId("current-task");
+          const currentMeta = byId("current-meta");
+          const currentActions = byId("current-actions");
+          currentMeta.replaceChildren();
+          currentActions.replaceChildren();
+          if (!current) {
+            text(currentTitle, "Deck cleared.");
+            currentTitle.classList.add("empty-title");
+          } else {
+            text(currentTitle, current.title);
+            currentTitle.classList.remove("empty-title");
+            const category = document.createElement("span");
+            category.className = "chip";
+            text(category, current.category || "personal");
+            currentMeta.append(category);
+            const complete = document.createElement("button");
+            complete.className = "complete-button";
+            complete.type = "button";
+            text(complete, "✓ Complete");
             complete.addEventListener("click", async () => {
               complete.disabled = true;
-              try { await callTool("complete_task", { taskId: current.id }); showToast(`Completed ${current.title}`); }
-              catch { showToast("Could not complete the current task.", true); }
-              finally { complete.disabled = false; }
+              try {
+                await callTool("complete_task", { taskId: current.id });
+                showToast(`Completed ${current.title}`);
+              } catch {
+                showToast("Could not complete the current task.", true);
+              } finally {
+                complete.disabled = false;
+              }
             });
             currentActions.append(complete);
           }
           const queue = active.slice(1, 5);
-          renderList(byId("focus-queue"), queue, (task) => taskRow(task, true), "Nothing queued. Empty is allowed.");
+          renderList(
+            byId("focus-queue"),
+            queue,
+            (task) => taskRow(task, true),
+            "Nothing queued. Empty is allowed.",
+          );
           text(byId("queue-count"), `${Math.max(0, active.length - 1)} queued`);
-          text(byId("active-count"), state.counts.activeTasks); text(byId("done-count"), state.counts.completedTasks); text(byId("reminder-count"), state.counts.reminders);
+          text(byId("active-count"), state.counts.activeTasks);
+          text(byId("done-count"), state.counts.completedTasks);
+          text(byId("reminder-count"), state.counts.reminders);
         }
         function renderBoard() {
-          const active = state.tasks.filter((task) => !task.completed); const done = state.tasks.filter((task) => task.completed).slice().reverse();
-          renderList(byId("active-list"), active, (task) => taskRow(task, true), "No active tasks.");
-          renderList(byId("done-list"), done, (task) => taskRow(task, false), "No completed tasks yet.");
-          text(byId("board-active-count"), `${active.length} active`); text(byId("board-done-count"), `${done.length} complete`);
+          const active = state.tasks.filter((task) => !task.completed);
+          const done = state.tasks
+            .filter((task) => task.completed)
+            .slice()
+            .reverse();
+          renderList(
+            byId("active-list"),
+            active,
+            (task) => taskRow(task, true),
+            "No active tasks.",
+          );
+          renderList(
+            byId("done-list"),
+            done,
+            (task) => taskRow(task, false),
+            "No completed tasks yet.",
+          );
+          text(byId("board-active-count"), `${active.length} active`);
+          text(byId("board-done-count"), `${done.length} complete`);
         }
         function renderReminders() {
-          const reminders = state.reminders.slice().sort((a, b) => (a.dueAt || Number.MAX_SAFE_INTEGER) - (b.dueAt || Number.MAX_SAFE_INTEGER));
-          renderList(byId("reminder-list"), reminders, reminderRow, "No reminders set."); text(byId("reminders-total"), `${reminders.length} total`);
+          const reminders = state.reminders
+            .slice()
+            .sort(
+              (a, b) => (a.dueAt || Number.MAX_SAFE_INTEGER) - (b.dueAt || Number.MAX_SAFE_INTEGER),
+            );
+          renderList(byId("reminder-list"), reminders, reminderRow, "No reminders set.");
+          text(byId("reminders-total"), `${reminders.length} total`);
         }
         function renderSystems() {
-          const status = state.status; const pill = byId("status-pill"); pill.classList.remove("ok", "bad");
-          if (!status) { text(byId("status-label"), "Connecting"); return; }
-          const healthy = status.status === "ok"; pill.classList.add(healthy ? "ok" : "bad"); text(byId("status-label"), healthy ? "Operational" : status.status);
-          text(byId("system-status"), status.status); text(byId("z-state"), status.zState);
-          text(byId("provider"), `${status.provider?.name || "unknown"} · ${status.provider?.reachability || "unknown"}`);
-          text(byId("deployment"), status.provider?.deploymentVersion || "development"); text(byId("source-version"), status.sourceVersion || "unknown"); text(byId("timezone"), status.timezone || "unknown");
-          text(byId("checked-at"), status.checkedAt ? new Date(status.checkedAt).toLocaleString() : "");
-          const layers = byId("layer-grid"); layers.replaceChildren();
+          const status = state.status;
+          const pill = byId("status-pill");
+          pill.classList.remove("ok", "bad");
+          if (!status) {
+            text(byId("status-label"), "Connecting");
+            return;
+          }
+          const healthy = status.status === "ok";
+          pill.classList.add(healthy ? "ok" : "bad");
+          text(byId("status-label"), healthy ? "Operational" : status.status);
+          text(byId("system-status"), status.status);
+          text(byId("z-state"), status.zState);
+          text(
+            byId("provider"),
+            `${status.provider?.name || "unknown"} · ${status.provider?.reachability || "unknown"}`,
+          );
+          text(byId("deployment"), status.provider?.deploymentVersion || "development");
+          text(byId("source-version"), status.sourceVersion || "unknown");
+          text(byId("timezone"), status.timezone || "unknown");
+          text(
+            byId("checked-at"),
+            status.checkedAt ? new Date(status.checkedAt).toLocaleString() : "",
+          );
+          const layers = byId("layer-grid");
+          layers.replaceChildren();
           Object.entries(status.layers || {}).forEach(([name, value]) => {
-            const item = document.createElement("div"); item.className = `layer ${value.status}`;
-            const title = document.createElement("b"); const stateLabel = document.createElement("span");
-            text(title, name); text(stateLabel, value.status); item.append(title, stateLabel); layers.append(item);
+            const item = document.createElement("div");
+            item.className = `layer ${value.status}`;
+            const title = document.createElement("b");
+            const stateLabel = document.createElement("span");
+            text(title, name);
+            text(stateLabel, value.status);
+            item.append(title, stateLabel);
+            layers.append(item);
           });
         }
-        function render() { recalculateCounts(); renderFocus(); renderBoard(); renderReminders(); renderSystems(); }
+        function render() {
+          recalculateCounts();
+          renderFocus();
+          renderBoard();
+          renderReminders();
+          renderSystems();
+        }
         document.querySelectorAll("[data-view]").forEach((button) => {
           button.addEventListener("click", () => {
-            document.querySelectorAll("[data-view]").forEach((candidate) => candidate.classList.toggle("active", candidate === button));
-            document.querySelectorAll(".view").forEach((view) => view.classList.toggle("active", view.id === `view-${button.dataset.view}`));
+            document
+              .querySelectorAll("[data-view]")
+              .forEach((candidate) => candidate.classList.toggle("active", candidate === button));
+            document
+              .querySelectorAll(".view")
+              .forEach((view) =>
+                view.classList.toggle("active", view.id === `view-${button.dataset.view}`),
+              );
           });
         });
         byId("refresh").addEventListener("click", async () => {
-          const button = byId("refresh"); button.disabled = true;
-          try { await callTool("show_jarvis_dashboard"); showToast("Jarvis refreshed."); }
-          catch { showToast("Jarvis refresh failed.", true); }
-          finally { button.disabled = false; }
+          const button = byId("refresh");
+          button.disabled = true;
+          try {
+            await callTool("show_jarvis_dashboard");
+            showToast("Jarvis refreshed.");
+          } catch {
+            showToast("Jarvis refresh failed.", true);
+          } finally {
+            button.disabled = false;
+          }
         });
         byId("task-form").addEventListener("submit", async (event) => {
-          event.preventDefault(); const titleInput = byId("task-title"); const categoryInput = byId("task-category"); const title = titleInput.value.trim(); if (!title) return;
-          const button = event.currentTarget.querySelector("button[type=submit]"); button.disabled = true;
-          try { await callTool("create_task", { title, category: categoryInput.value }); titleInput.value = ""; showToast(`Added ${title}`); }
-          catch { showToast("Could not add that task.", true); }
-          finally { button.disabled = false; }
+          event.preventDefault();
+          const titleInput = byId("task-title");
+          const categoryInput = byId("task-category");
+          const title = titleInput.value.trim();
+          if (!title) return;
+          const button = event.currentTarget.querySelector("button[type=submit]");
+          button.disabled = true;
+          try {
+            await callTool("create_task", { title, category: categoryInput.value });
+            titleInput.value = "";
+            showToast(`Added ${title}`);
+          } catch {
+            showToast("Could not add that task.", true);
+          } finally {
+            button.disabled = false;
+          }
         });
         byId("reminder-form").addEventListener("submit", async (event) => {
-          event.preventDefault(); const titleInput = byId("reminder-title"); const dueInput = byId("reminder-due"); const title = titleInput.value.trim(); const dueText = dueInput.value.trim(); if (!title) return;
-          const button = event.currentTarget.querySelector("button[type=submit]"); button.disabled = true;
-          try { await callTool("create_reminder", { title, ...(dueText ? { due: { text: dueText } } : {}) }); titleInput.value = ""; dueInput.value = ""; showToast(`Added reminder ${title}`); }
-          catch { showToast("Could not add that reminder.", true); }
-          finally { button.disabled = false; }
+          event.preventDefault();
+          const titleInput = byId("reminder-title");
+          const dueInput = byId("reminder-due");
+          const title = titleInput.value.trim();
+          const dueText = dueInput.value.trim();
+          if (!title) return;
+          const button = event.currentTarget.querySelector("button[type=submit]");
+          button.disabled = true;
+          try {
+            await callTool("create_reminder", {
+              title,
+              ...(dueText ? { due: { text: dueText } } : {}),
+            });
+            titleInput.value = "";
+            dueInput.value = "";
+            showToast(`Added reminder ${title}`);
+          } catch {
+            showToast("Could not add that reminder.", true);
+          } finally {
+            button.disabled = false;
+          }
         });
         bridgeReady.catch(() => showToast("The ChatGPT app bridge did not initialise.", true));
         render();

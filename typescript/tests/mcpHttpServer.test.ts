@@ -30,12 +30,9 @@ describe("Jarvis MCP HTTP boundary", () => {
         serviceToken: "never-print-this-token",
       },
     };
-    const client = new JarvisApiClient(
-      config.api,
-      (async () => {
-        throw new Error("The health endpoint must not call Jarvis HTTP.");
-      }) as typeof fetch,
-    );
+    const client = new JarvisApiClient(config.api, (async () => {
+      throw new Error("The health endpoint must not call Jarvis HTTP.");
+    }) as typeof fetch);
     const running = await startJarvisMcpHttpServer(config, client);
     try {
       const response = await fetch(running.url.replace(/\/mcp$/, "/"));

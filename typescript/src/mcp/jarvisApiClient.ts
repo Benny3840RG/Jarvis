@@ -136,10 +136,7 @@ export class JarvisApiClient {
 
   async getTask(taskId: string): Promise<Task> {
     return (
-      await this.request<DataResponse<Task>>(
-        "GET",
-        `/api/v1/tasks/${encodeURIComponent(taskId)}`,
-      )
+      await this.request<DataResponse<Task>>("GET", `/api/v1/tasks/${encodeURIComponent(taskId)}`)
     ).data;
   }
 
@@ -205,10 +202,7 @@ export class JarvisApiClient {
     ).data;
   }
 
-  async updateReminder(
-    reminderId: string,
-    update: ReminderRequestUpdate,
-  ): Promise<Reminder> {
+  async updateReminder(reminderId: string, update: ReminderRequestUpdate): Promise<Reminder> {
     return (
       await this.request<DataResponse<Reminder>>(
         "PATCH",

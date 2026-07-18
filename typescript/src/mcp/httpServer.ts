@@ -33,9 +33,7 @@ export async function startJarvisMcpHttpServer(
 ): Promise<RunningJarvisMcpServer> {
   const httpServer = createServer(async (request, response) => {
     if (!request.url) {
-      response
-        .writeHead(400, { "content-type": "text/plain; charset=utf-8" })
-        .end("Missing URL");
+      response.writeHead(400, { "content-type": "text/plain; charset=utf-8" }).end("Missing URL");
       return;
     }
 
@@ -49,9 +47,7 @@ export async function startJarvisMcpHttpServer(
           "cache-control": "no-store",
           "x-content-type-options": "nosniff",
         })
-        .end(
-          JSON.stringify({ status: "ok", service: "jarvis-mcp-preview", endpoint: MCP_PATH }),
-        );
+        .end(JSON.stringify({ status: "ok", service: "jarvis-mcp-preview", endpoint: MCP_PATH }));
       return;
     }
 

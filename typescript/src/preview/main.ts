@@ -21,8 +21,7 @@ async function main(): Promise<void> {
 
   const mcpConfig = resolveJarvisMcpConfig({
     ...process.env,
-    JARVIS_API_BASE_URL:
-      process.env.JARVIS_API_BASE_URL ?? `http://127.0.0.1:${httpListen.port}`,
+    JARVIS_API_BASE_URL: process.env.JARVIS_API_BASE_URL ?? `http://127.0.0.1:${httpListen.port}`,
   });
 
   let mcpServer;
