@@ -86,7 +86,17 @@ jobs:
         run: npm ci
 
       - name: Run complete verification gate
-        run: npm run check
+        run: |
+          env \
+            -u CONVEX_DEPLOYMENT \
+            -u CONVEX_URL \
+            -u PERSISTENCE_PROVIDER \
+            -u JARVIS_SOURCE_VERSION \
+            -u JARVIS_DEPLOYMENT_VERSION \
+            -u CONVEX_DEPLOY_KEY \
+            -u JARVIS_SERVICE_TOKEN \
+            -u OPENAI_API_KEY \
+            npm run check
 
       - name: Sync functions to authorised development deployment
         run: npx convex dev --once --tail-logs disable
