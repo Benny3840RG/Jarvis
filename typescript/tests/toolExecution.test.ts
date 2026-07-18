@@ -70,11 +70,18 @@ describe("tool execution stage", () => {
       dryRun: true,
     });
     assert.equal(dryRun.status, "dry-run");
+    // Dry-run must not be persisted: same idempotency key must allow a subsequent real execution.
+    const afterDryRun = await executor.execute({
+      action,
+      authority: "T1",
+      idempotencyKey: "same",
+    });
+    assert.equal(afterDryRun.status, "succeeded");
     const first = await executor.execute({ action, authority: "T1", idempotencyKey: "execute" });
     const replay = await executor.execute({ action, authority: "T1", idempotencyKey: "execute" });
     assert.equal(first.status, "succeeded");
     assert.deepEqual(replay, first);
-    assert.equal(executions, 1);
+    assert.equal(executions, 2);
   });
 
   it("records timeouts without exposing tool output", async () => {
