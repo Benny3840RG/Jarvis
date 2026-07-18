@@ -1,5 +1,10 @@
 name: TypeScript checks
 
+# This is the required CI gate for the main branch and all pull requests targeting main.
+# The `typecheck-lint-format-test` job must pass before any PR can be merged.
+# See docs/operations/ci-health.md for diagnostics and docs/operations/branch-protection.md
+# for required branch protection settings.
+
 on:
   push:
     branches: [main]

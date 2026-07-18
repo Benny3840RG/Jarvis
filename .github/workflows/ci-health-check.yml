@@ -1,0 +1,63 @@
+name: CI health check
+
+# Scheduled check that confirms the TypeScript verification gate is still green
+# on the most recent main commit. Results are available in the Actions tab.
+# This is a diagnostic-only run — it does not trigger commissioning.
+# See docs/operations/ci-health.md for workflow expectations.
+
+on:
+  schedule:
+    # Run at 00:00 UTC daily
+    - cron: "0 0 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  health-check:
+    name: Verify TypeScript gate on main
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: typescript
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: typescript/.nvmrc
+          cache: npm
+          cache-dependency-path: typescript/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type-check
+        run: npm run type-check
+
+      - name: Lint TypeScript and Convex
+        run: npm run lint
+
+      - name: Check formatting
+        run: npm run format:check
+
+      - name: Validate OpenAPI contract
+        run: npm run openapi:lint
+
+      - name: Run tests
+        run: npm run test
+
+      - name: Health check summary
+        if: always()
+        run: |
+          {
+            echo "## CI health check"
+            echo
+            echo "- Ref: \`$GITHUB_SHA\`"
+            echo "- Branch: \`main\`"
+            echo "- Triggered by: \`$GITHUB_EVENT_NAME\`"
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -66,6 +66,46 @@ typescript/data/jarvis-state.json
 
 The file, its lock file, temporary writes, backups, and corrupt-file quarantine copies must not be committed.
 
+## Environment variables
+
+All environment variables are loaded from `typescript/.env.local` at startup. Variables marked **required** cause a hard startup failure if absent or malformed. Variables marked **optional** have safe defaults.
+
+| Variable | Required / Optional | Default | Purpose |
+| --- | --- | --- | --- |
+| `JARVIS_SERVICE_TOKEN` | **Required** | — | Current bearer token required by all authenticated HTTP and Convex operations. Must be a strong random secret; whitespace is rejected. |
+| `JARVIS_SERVICE_TOKEN_PREVIOUS` | Optional | — | Previous token accepted during a controlled rotation window only. Remove after rotation is complete. |
+| `JARVIS_TIMEZONE` | **Required** for Totality | — | IANA timezone string (e.g. `Australia/Melbourne`). Invalid values cause the status and Totality endpoints to return `503`. |
+| `PERSISTENCE_PROVIDER` | Optional | `json` | `json` or `convex`. With `json`, data is stored in `typescript/data/jarvis-state.json`. With `convex`, `CONVEX_URL` is required. |
+| `CONVEX_URL` | **Required** when `PERSISTENCE_PROVIDER=convex` | — | Full URL of the authorised Convex deployment (e.g. `https://outgoing-ram-798.convex.cloud`). |
+| `OPENAI_API_KEY` | **Required** for Totality reasoning | — | Server-side OpenAI API key. Never expose this in browser code, logs, issues, or chat. |
+| `JARVIS_HTTP_HOST` | Optional | `127.0.0.1` | Listener address for the HTTP service. Change only to expose the service on a non-loopback interface. |
+| `JARVIS_HTTP_PORT` | Optional | `3000` | Listener TCP port for the HTTP service. Must be in the valid port range. |
+| `JARVIS_SOURCE_VERSION` | Optional | `development` | Git SHA or version string embedded in health and status responses for diagnostics. |
+| `JARVIS_DEPLOYMENT_VERSION` | Optional | — | Deployment identifier (e.g. `dev:outgoing-ram-798`) embedded in status responses. |
+
+## Startup validation
+
+Jarvis validates all required configuration at startup before accepting requests. Validation failures produce a clear error message and prevent the service from starting.
+
+To verify that startup configuration is correct before going live:
+
+```bash
+cd typescript
+npm run start:http &
+sleep 3
+
+# Public liveness check (no token required)
+curl -f http://127.0.0.1:3000/healthz
+
+# Authenticated status check (token required)
+TOKEN="$(grep JARVIS_SERVICE_TOKEN .env.local | cut -d= -f2)"
+curl -f -H "Authorization: ******" http://127.0.0.1:3000/api/v1/status | jq .
+```
+
+A healthy status response has `"status": "ok"`, provider `"reachability": "ok"`, and (for Convex) `"authentication": "ok"`.
+
+If the status endpoint returns `503`, check the error detail: it will name either `timezone-unavailable` or `persistence-unavailable` as the `type` field.
+
 ## HTTP service configuration
 
 The HTTP server starts with:
@@ -75,18 +115,16 @@ cd typescript
 npm run start:http
 ```
 
-Relevant variables:
+The full environment variable reference is in the table above. The most common local configuration is:
 
-| Variable | Purpose |
-| --- | --- |
-| `JARVIS_SERVICE_TOKEN` | Current Bearer token required by authenticated HTTP and Convex operations |
-| `JARVIS_SERVICE_TOKEN_PREVIOUS` | Optional previous token during a controlled rotation window |
-| `JARVIS_HTTP_HOST` | Listen host; defaults to `127.0.0.1` |
-| `JARVIS_HTTP_PORT` | Listen port; defaults to `3000` |
-| `JARVIS_TIMEZONE` | IANA timezone, normally `Australia/Melbourne` |
-| `PERSISTENCE_PROVIDER` | `json` or `convex` |
-| `CONVEX_URL` | Required for Convex persistence |
-| `OPENAI_API_KEY` | Required for live Totality reasoning |
+```text
+PERSISTENCE_PROVIDER=convex
+JARVIS_SERVICE_TOKEN=<strong random development secret>
+JARVIS_TIMEZONE=Australia/Melbourne
+CONVEX_DEPLOYMENT=dev:outgoing-ram-798
+CONVEX_URL=https://outgoing-ram-798.convex.cloud
+OPENAI_API_KEY=<server-side OpenAI API key>
+```
 
 ## Service-token rotation
 
