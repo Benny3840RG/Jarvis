@@ -24,22 +24,25 @@ describe("Jarvis MCP preview configuration", () => {
     );
   });
 
-  it("fails closed for non-loopback binding without an explicit override", () => {
+  it("fails closed for every non-loopback binding", () => {
     assert.throws(
       () =>
         resolveJarvisMcpConfig({
           JARVIS_SERVICE_TOKEN: "test-service-token",
           JARVIS_MCP_HOST: "0.0.0.0",
         }),
-      /JARVIS_MCP_ALLOW_REMOTE=true/,
+      /Remote MCP exposure is disabled/,
     );
 
-    const config = resolveJarvisMcpConfig({
-      JARVIS_SERVICE_TOKEN: "test-service-token",
-      JARVIS_MCP_HOST: "0.0.0.0",
-      JARVIS_MCP_ALLOW_REMOTE: "true",
-    });
-    assert.equal(config.host, "0.0.0.0");
+    assert.throws(
+      () =>
+        resolveJarvisMcpConfig({
+          JARVIS_SERVICE_TOKEN: "test-service-token",
+          JARVIS_MCP_HOST: "0.0.0.0",
+          JARVIS_MCP_ALLOW_REMOTE: "true",
+        }),
+      /Remote MCP exposure is disabled/,
+    );
   });
 
   it("accepts only absolute HTTP API URLs and valid ports", () => {

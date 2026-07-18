@@ -52,9 +52,9 @@ function isLoopbackHost(host: string): boolean {
 function resolveHost(env: NodeJS.ProcessEnv): string {
   const host = optionalText(env.JARVIS_MCP_HOST) ?? "127.0.0.1";
   if (!validHost(host)) throw new Error("JARVIS_MCP_HOST must be a valid IP address or hostname.");
-  if (!isLoopbackHost(host) && env.JARVIS_MCP_ALLOW_REMOTE !== "true") {
+  if (!isLoopbackHost(host)) {
     throw new Error(
-      "Non-loopback JARVIS_MCP_HOST requires JARVIS_MCP_ALLOW_REMOTE=true for an explicit preview-only override.",
+      "Remote MCP exposure is disabled until the approved OAuth 2.1, TLS, and deployment boundary exists.",
     );
   }
   return host;
