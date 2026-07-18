@@ -44,7 +44,8 @@ Reasoning depth, task risk, data access, tool authority, and action state are in
 - Risk: `low`, `moderate`, `high`, `critical`
 - Tool authority: `T0` to `T3`
 - Data access: `D0` to `D3`
-- Action state: `read`, `propose`, `approve`, `execute`
+- Action state: `read`, `propose`, `approve`; `execute` is reserved for a future
+  independently reviewed executor stage
 
 A hazardous task may require deep reasoning while remaining read-only or proposal-only. Risk never grants execution authority.
 
