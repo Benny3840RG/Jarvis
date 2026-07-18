@@ -152,10 +152,84 @@ jobs:
           set -euo pipefail
 
           server_log="$RUNNER_TEMP/jarvis-http.log"
+          server_log_tail="$RUNNER_TEMP/jarvis-http-tail.log"
+          redacted_server_log_tail="$RUNNER_TEMP/jarvis-http-tail.redacted.log"
           health_response="$RUNNER_TEMP/jarvis-health.json"
           status_response="$RUNNER_TEMP/jarvis-status.json"
           totality_request="$RUNNER_TEMP/jarvis-totality-request.json"
           totality_response="$RUNNER_TEMP/jarvis-totality-response.json"
+          redacted_totality_response="$RUNNER_TEMP/jarvis-totality-response.redacted.json"
+
+          redact_file() {
+            local input_file="$1"
+            local output_file="$2"
+
+            node --input-type=module - "$input_file" "$output_file" <<'NODE'
+          import fs from "node:fs";
+
+          const inputPath = process.argv[2];
+          const outputPath = process.argv[3];
+          let text = fs.existsSync(inputPath) ? fs.readFileSync(inputPath, "utf8") : "";
+
+          for (const secret of [
+            process.env.OPENAI_API_KEY,
+            process.env.JARVIS_SERVICE_TOKEN,
+            process.env.CONVEX_DEPLOY_KEY,
+          ]) {
+            if (secret) {
+              text = text.split(secret).join("[REDACTED]");
+            }
+          }
+
+          text = text
+            .replace(/(Authorization\s*:\s*Bearer\s+)[^\s"',]+/gi, "$1[REDACTED]")
+            .replace(/(Bearer\s+)[A-Za-z0-9._~+\/-]+/g, "$1[REDACTED]")
+            .replace(/\bsk-(?:proj-)?[A-Za-z0-9_-]{8,}\b/g, "[REDACTED_OPENAI_KEY]")
+            .replace(
+              /((?:OPENAI_API_KEY|JARVIS_SERVICE_TOKEN|CONVEX_DEPLOY_KEY)\s*[:=]\s*)[^\s"',]+/g,
+              "$1[REDACTED]",
+            );
+
+          fs.writeFileSync(outputPath, text);
+          NODE
+          }
+
+          publish_totality_diagnostic() {
+            local message="$1"
+            local http_status="$2"
+            local curl_status="$3"
+
+            redact_file "$totality_response" "$redacted_totality_response"
+            tail -n 100 "$server_log" >"$server_log_tail" || true
+            redact_file "$server_log_tail" "$redacted_server_log_tail"
+
+            echo "::error::$message"
+            echo "Totality HTTP status: $http_status"
+            echo "curl exit status: $curl_status"
+            echo "Jarvis problem-details response (redacted):"
+            if [[ -s "$redacted_totality_response" ]]; then
+              sed 's/^/  /' "$redacted_totality_response"
+            else
+              echo "  (empty response body)"
+            fi
+            echo "Jarvis server log tail (redacted):"
+            if [[ -s "$redacted_server_log_tail" ]]; then
+              sed 's/^/  /' "$redacted_server_log_tail"
+            else
+              echo "  (empty server log)"
+            fi
+
+            {
+              echo "### Totality probe diagnostic"
+              echo
+              echo "- Source: \`$GITHUB_SHA\`"
+              echo "- HTTP status: \`$http_status\`"
+              echo "- curl exit status: \`$curl_status\`"
+              echo "- Result: $message"
+              echo "- Response body and server-log tail were printed in redacted form above."
+              echo "- Production deployment: **not authorised and not performed**"
+            } >>"$GITHUB_STEP_SUMMARY"
+          }
 
           npm run start:http >"$server_log" 2>&1 &
           server_pid=$!
@@ -179,7 +253,9 @@ jobs:
 
           if [[ "$ready" != true ]]; then
             echo "::error::Jarvis HTTP service did not become healthy."
-            sed -E 's/(Bearer )[A-Za-z0-9._~+\/-]+/\1[REDACTED]/g' "$server_log" || true
+            tail -n 100 "$server_log" >"$server_log_tail" || true
+            redact_file "$server_log_tail" "$redacted_server_log_tail"
+            sed 's/^/  /' "$redacted_server_log_tail" || true
             exit 1
           fi
 
@@ -242,15 +318,48 @@ jobs:
           }
           JSON
 
-          curl --silent --show-error --fail --config - \
-            --request POST \
-            --header "Content-Type: application/json" \
-            --data-binary "@$totality_request" \
-            --output "$totality_response" <<EOF
+          set +e
+          http_status="$(
+            curl \
+              --silent \
+              --show-error \
+              --output "$totality_response" \
+              --write-out "%{http_code}" \
+              --config - \
+              --request POST \
+              --header "Content-Type: application/json" \
+              --data-binary "@$totality_request" <<EOF
           url = "http://127.0.0.1:3000/api/v1/totality/reason"
           header = "Authorization: Bearer $JARVIS_SERVICE_TOKEN"
           header = "X-Request-Id: commissioning-totality-${GITHUB_RUN_ID}"
           EOF
+          )"
+          curl_status=$?
+          set -e
+
+          if [[ "$curl_status" -ne 0 ]]; then
+            publish_totality_diagnostic \
+              "Totality probe transport failed before a successful HTTP response." \
+              "${http_status:-unavailable}" \
+              "$curl_status"
+            exit "$curl_status"
+          fi
+
+          if [[ ! "$http_status" =~ ^[0-9]{3}$ ]]; then
+            publish_totality_diagnostic \
+              "Totality probe returned an invalid HTTP status value." \
+              "${http_status:-unavailable}" \
+              "$curl_status"
+            exit 1
+          fi
+
+          if (( 10#$http_status < 200 || 10#$http_status >= 300 )); then
+            publish_totality_diagnostic \
+              "Totality probe returned HTTP $http_status." \
+              "$http_status" \
+              "$curl_status"
+            exit 1
+          fi
 
           node --input-type=module - "$totality_response" <<'NODE'
           import fs from "node:fs";
