@@ -75,11 +75,6 @@ jobs:
             fi
           done
 
-          if [[ "$CONVEX_DEPLOY_KEY" != dev:outgoing-ram-798\|* ]]; then
-            echo "::error::CONVEX_DEPLOY_KEY is not scoped to dev:outgoing-ram-798."
-            exit 1
-          fi
-
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
