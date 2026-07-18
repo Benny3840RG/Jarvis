@@ -1,3 +1,3 @@
 COMMISSION DEV
-request: 2026-07-18T11:00:00Z
-source: publish canonical current commissioning status in issue body
+request: 2026-07-18T11:15:00Z
+source: diagnose Totality HTTP failure with redacted response and server logs
