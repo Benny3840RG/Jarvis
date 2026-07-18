@@ -1,0 +1,134 @@
+name: Add MCP preview commissioning stage
+
+on:
+  push:
+    branches:
+      - feat/chatgpt-preview
+    paths:
+      - .github/workflows/preview-commissioning-patch.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/chatgpt-preview
+      - name: Patch commissioning workflow
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('.github/workflows/development-commissioning.yml')
+          text = path.read_text()
+          anchor = '      - name: Export and verify development backup\n'
+          if 'Start controlled preview and verify MCP boundary' in text:
+              raise SystemExit('MCP commissioning stage already exists.')
+          if anchor not in text:
+              raise SystemExit('Backup stage anchor was not found.')
+
+          insert = '''      - name: Start controlled preview and verify MCP boundary
+            run: |
+              set -euo pipefail
+
+              preview_log="$RUNNER_TEMP/jarvis-preview.log"
+              preview_log_tail="$RUNNER_TEMP/jarvis-preview-tail.log"
+              redacted_preview_log_tail="$RUNNER_TEMP/jarvis-preview-tail.redacted.log"
+
+              redact_preview_log() {
+                local input_file="$1"
+                local output_file="$2"
+
+                node --input-type=module - "$input_file" "$output_file" <<'NODE'
+              import fs from "node:fs";
+
+              const inputPath = process.argv[2];
+              const outputPath = process.argv[3];
+              let text = fs.existsSync(inputPath) ? fs.readFileSync(inputPath, "utf8") : "";
+
+              for (const secret of [
+                process.env.OPENAI_API_KEY,
+                process.env.JARVIS_SERVICE_TOKEN,
+                process.env.CONVEX_DEPLOY_KEY,
+              ]) {
+                if (secret) text = text.split(secret).join("[REDACTED]");
+              }
+
+              text = text
+                .replace(/(Authorization\\s*:\\s*Bearer\\s+)[^\\s"',]+/gi, "$1[REDACTED]")
+                .replace(/(Bearer\\s+)[A-Za-z0-9._~+\\/-]+/g, "$1[REDACTED]")
+                .replace(/\\bsk-(?:proj-)?[A-Za-z0-9_-]{8,}\\b/g, "[REDACTED_OPENAI_KEY]")
+                .replace(
+                  /((?:OPENAI_API_KEY|JARVIS_SERVICE_TOKEN|CONVEX_DEPLOY_KEY)\\s*[:=]\\s*)[^\\s"',]+/g,
+                  "$1[REDACTED]",
+                );
+
+              fs.writeFileSync(outputPath, text);
+              NODE
+              }
+
+              npm run start:preview >"$preview_log" 2>&1 &
+              preview_pid=$!
+
+              cleanup() {
+                kill "$preview_pid" 2>/dev/null || true
+                wait "$preview_pid" 2>/dev/null || true
+              }
+              trap cleanup EXIT
+
+              ready=false
+              for _ in {1..30}; do
+                if curl --silent --show-error --fail \
+                  "http://127.0.0.1:8787/" \
+                  --output /dev/null; then
+                  ready=true
+                  break
+                fi
+                sleep 1
+              done
+
+              if [[ "$ready" != true ]]; then
+                echo "::error::Jarvis controlled preview did not become healthy."
+                tail -n 100 "$preview_log" >"$preview_log_tail" || true
+                redact_preview_log "$preview_log_tail" "$redacted_preview_log_tail"
+                sed 's/^/  /' "$redacted_preview_log_tail" || true
+                exit 1
+              fi
+
+              set +e
+              npm run smoke:mcp
+              smoke_status=$?
+              set -e
+
+              if [[ "$smoke_status" -ne 0 ]]; then
+                echo "::error::Jarvis MCP preview smoke failed."
+                tail -n 100 "$preview_log" >"$preview_log_tail" || true
+                redact_preview_log "$preview_log_tail" "$redacted_preview_log_tail"
+                sed 's/^/  /' "$redacted_preview_log_tail" || true
+                exit "$smoke_status"
+              fi
+
+          '''
+          text = text.replace(anchor, insert + anchor, 1)
+
+          summary = '            echo "- OpenAI Totality reasoning boundary: passed"\n'
+          if summary not in text:
+              raise SystemExit('Commissioning summary anchor was not found.')
+          text = text.replace(
+              summary,
+              summary + '            echo "- MCP preview transport, widget and self-cleaning tool smoke: passed"\n',
+              1,
+          )
+          path.write_text(text)
+          PY
+      - name: Commit commissioning stage
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/workflows/development-commissioning.yml
+          git commit -m "ci: commission the controlled MCP preview"
+          git push origin HEAD:feat/chatgpt-preview
