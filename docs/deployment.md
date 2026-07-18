@@ -82,6 +82,7 @@ All environment variables are loaded from `typescript/.env.local` at startup. Va
 | `JARVIS_HTTP_PORT` | Optional | `3000` | Listener TCP port for the HTTP service. Must be in the valid port range. |
 | `JARVIS_SOURCE_VERSION` | Optional | `development` | Git SHA or version string embedded in health and status responses for diagnostics. |
 | `JARVIS_DEPLOYMENT_VERSION` | Optional | — | Deployment identifier (e.g. `dev:outgoing-ram-798`) embedded in status responses. |
+| `CONVEX_DEPLOYMENT` | Set by Convex | — | Set automatically by `npx convex dev` when the project is linked. Required by the Convex SDK and the smoke test (`npm run smoke:convex`). Do not set manually. |
 
 ## Startup validation
 
