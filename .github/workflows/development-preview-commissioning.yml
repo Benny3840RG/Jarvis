@@ -1,0 +1,204 @@
+name: Development preview commissioning
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - typescript/src/mcp/**
+      - typescript/src/preview/**
+      - typescript/src/tools/runMcpSmoke.ts
+      - typescript/tests/mcp*.test.ts
+      - typescript/tests/jarvisApiClient.test.ts
+      - typescript/package.json
+      - typescript/package-lock.json
+      - .github/workflows/development-preview-commissioning.yml
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type PREVIEW DEV to run against the authorised development stack
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: jarvis-development-preview-commissioning
+  cancel-in-progress: false
+
+jobs:
+  commission-preview:
+    name: Commission controlled development preview
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      CONVEX_DEPLOYMENT: dev:outgoing-ram-798
+      CONVEX_URL: https://outgoing-ram-798.convex.cloud
+      PERSISTENCE_PROVIDER: convex
+      JARVIS_TIMEZONE: Australia/Melbourne
+      JARVIS_HTTP_HOST: 127.0.0.1
+      JARVIS_HTTP_PORT: "3000"
+      JARVIS_MCP_HOST: 127.0.0.1
+      JARVIS_MCP_PORT: "8787"
+      JARVIS_MCP_URL: http://127.0.0.1:8787/mcp
+      JARVIS_SOURCE_VERSION: ${{ github.sha }}
+      JARVIS_DEPLOYMENT_VERSION: dev:outgoing-ram-798
+      JARVIS_SERVICE_TOKEN: ${{ secrets.JARVIS_SERVICE_TOKEN }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+
+    defaults:
+      run:
+        working-directory: typescript
+        shell: bash
+
+    steps:
+      - name: Check out exact main commit
+        uses: actions/checkout@v4
+
+      - name: Guard preview boundary
+        env:
+          PREVIEW_CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+
+          if [[ "$GITHUB_REF" != "refs/heads/main" ]]; then
+            echo "::error::Development preview commissioning may run only from main."
+            exit 1
+          fi
+
+          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" && "$PREVIEW_CONFIRMATION" != "PREVIEW DEV" ]]; then
+            echo "::error::Confirmation must exactly match PREVIEW DEV."
+            exit 1
+          fi
+
+          if [[ "$CONVEX_DEPLOYMENT" != "dev:outgoing-ram-798" ]]; then
+            echo "::error::Unexpected Convex deployment identity."
+            exit 1
+          fi
+
+          if [[ "$CONVEX_URL" != "https://outgoing-ram-798.convex.cloud" ]]; then
+            echo "::error::Unexpected Convex deployment URL."
+            exit 1
+          fi
+
+          for variable in JARVIS_SERVICE_TOKEN OPENAI_API_KEY; do
+            if [[ -z "${!variable:-}" ]]; then
+              echo "::error::Required repository secret $variable is unavailable."
+              exit 1
+            fi
+          done
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: typescript/.nvmrc
+          cache: npm
+          cache-dependency-path: typescript/package-lock.json
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Run complete verification gate
+        run: |
+          env \
+            -u CONVEX_DEPLOYMENT \
+            -u CONVEX_URL \
+            -u PERSISTENCE_PROVIDER \
+            -u JARVIS_SOURCE_VERSION \
+            -u JARVIS_DEPLOYMENT_VERSION \
+            -u JARVIS_SERVICE_TOKEN \
+            -u OPENAI_API_KEY \
+            npm run check
+
+      - name: Start preview and run self-cleaning MCP smoke
+        run: |
+          set -euo pipefail
+
+          preview_log="$RUNNER_TEMP/jarvis-development-preview.log"
+          preview_log_tail="$RUNNER_TEMP/jarvis-development-preview-tail.log"
+          redacted_preview_log_tail="$RUNNER_TEMP/jarvis-development-preview-tail.redacted.log"
+
+          redact_preview_log() {
+            local input_file="$1"
+            local output_file="$2"
+
+            node --input-type=module - "$input_file" "$output_file" <<'NODE'
+          import fs from "node:fs";
+
+          const inputPath = process.argv[2];
+          const outputPath = process.argv[3];
+          let text = fs.existsSync(inputPath) ? fs.readFileSync(inputPath, "utf8") : "";
+
+          for (const secret of [process.env.OPENAI_API_KEY, process.env.JARVIS_SERVICE_TOKEN]) {
+            if (secret) text = text.split(secret).join("[REDACTED]");
+          }
+
+          text = text
+            .replace(/(Authorization\s*:\s*Bearer\s+)[^\s"',]+/gi, "$1[REDACTED]")
+            .replace(/(Bearer\s+)[A-Za-z0-9._~+\/-]+/g, "$1[REDACTED]")
+            .replace(/\bsk-(?:proj-)?[A-Za-z0-9_-]{8,}\b/g, "[REDACTED_OPENAI_KEY]")
+            .replace(
+              /((?:OPENAI_API_KEY|JARVIS_SERVICE_TOKEN)\s*[:=]\s*)[^\s"',]+/g,
+              "$1[REDACTED]",
+            );
+
+          fs.writeFileSync(outputPath, text);
+          NODE
+          }
+
+          npm run start:preview >"$preview_log" 2>&1 &
+          preview_pid=$!
+
+          cleanup() {
+            kill "$preview_pid" 2>/dev/null || true
+            wait "$preview_pid" 2>/dev/null || true
+          }
+          trap cleanup EXIT
+
+          ready=false
+          for _ in {1..30}; do
+            if curl --silent --show-error --fail \
+              "http://127.0.0.1:8787/" \
+              --output /dev/null; then
+              ready=true
+              break
+            fi
+            sleep 1
+          done
+
+          if [[ "$ready" != true ]]; then
+            echo "::error::Jarvis controlled preview did not become healthy."
+            tail -n 100 "$preview_log" >"$preview_log_tail" || true
+            redact_preview_log "$preview_log_tail" "$redacted_preview_log_tail"
+            sed 's/^/  /' "$redacted_preview_log_tail" || true
+            exit 1
+          fi
+
+          set +e
+          npm run smoke:mcp
+          smoke_status=$?
+          set -e
+
+          if [[ "$smoke_status" -ne 0 ]]; then
+            echo "::error::Jarvis MCP preview smoke failed."
+            tail -n 100 "$preview_log" >"$preview_log_tail" || true
+            redact_preview_log "$preview_log_tail" "$redacted_preview_log_tail"
+            sed 's/^/  /' "$redacted_preview_log_tail" || true
+            exit "$smoke_status"
+          fi
+
+      - name: Preview commissioning summary
+        run: |
+          {
+            echo "## Jarvis development preview commissioned"
+            echo
+            echo "- Source: \`${GITHUB_SHA}\`"
+            echo "- Deployment: \`dev:outgoing-ram-798\`"
+            echo "- Static verification: passed"
+            echo "- MCP transport and tool catalogue: passed"
+            echo "- Dashboard widget resource: passed"
+            echo "- Convex status through the preview: passed"
+            echo "- Self-cleaning task and reminder lifecycle: passed"
+            echo "- Production deployment: not performed"
+          } >>"$GITHUB_STEP_SUMMARY"

@@ -9,6 +9,8 @@
   "scripts": {
     "start": "tsx src/index.ts",
     "start:http": "node --import tsx src/http/main.ts",
+    "start:mcp": "node --import tsx src/mcp/main.ts",
+    "start:preview": "node --import tsx src/preview/main.ts",
     "test": "node --import tsx --test tests/*.test.ts",
     "test:coverage": "node --import tsx --test --experimental-test-coverage tests/*.test.ts",
     "type-check": "tsc -p tsconfig.json",
@@ -19,16 +21,20 @@
     "openapi:lint": "redocly lint openapi/jarvis.openapi.json",
     "check": "npm run type-check && npm run lint && npm run format:check && npm run openapi:lint && npm test",
     "smoke:convex": "tsx src/tools/runConvexSmoke.ts",
+    "smoke:mcp": "tsx src/tools/runMcpSmoke.ts",
     "backup": "tsx src/tools/runBackup.ts"
   },
   "dependencies": {
+    "@modelcontextprotocol/ext-apps": "^1.7.4",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "@nestjs/common": "^11.1.28",
     "@nestjs/core": "^11.1.28",
     "@nestjs/platform-fastify": "^11.1.28",
     "convex": "^1.42.1",
     "fastify": "^5.10.0",
     "reflect-metadata": "^0.2.2",
-    "rxjs": "^7.8.2"
+    "rxjs": "^7.8.2",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@convex-dev/eslint-plugin": "^2.0.0",

@@ -4,8 +4,8 @@
   "info": {
     "title": "Jarvis Operator API",
     "summary": "A safety-gated API for the Jarvis Z-State runtime and durable operator data.",
-    "description": "Jarvis accepts structured operator requests, routes work through its runtime and safety envelope, persists tasks and reminders through the configured JSON or Convex provider, runs proposal-only Totality reasoning, stages revision-checked project-memory changes, and now stores revision-bound tool-action proposals for explicit approval or rejection without execution. This contract is intentionally single-user and private. The future ChatGPT App MCP server must keep Jarvis and OpenAI service credentials server-side and expose only operations marked with x-mcp-tool.exposed=true.",
-    "version": "0.6.0",
+    "description": "Jarvis accepts structured operator requests, routes work through its runtime and safety envelope, persists tasks and reminders through the configured JSON or Convex provider, runs proposal-only Totality reasoning, stages revision-checked project-memory changes, and stores revision-bound tool-action proposals for explicit approval or rejection without execution. The private development ChatGPT App preview now provides a stateless Streamable HTTP MCP adapter and versioned dashboard widget for the operations marked with x-mcp-tool.exposed=true. Jarvis and OpenAI credentials remain server-side. This contract is intentionally single-user and private.",
+    "version": "0.7.0",
     "license": {
       "name": "Proprietary",
       "identifier": "LicenseRef-Proprietary"
@@ -120,7 +120,11 @@
       "getToolAction",
       "approveToolAction",
       "rejectToolAction"
-    ]
+    ],
+    "implementationStatus": "private-development-preview",
+    "transport": "streamable-http-stateless",
+    "localDefaultEndpoint": "http://127.0.0.1:8787/mcp",
+    "runbook": "typescript/docs/operators/chatgpt-preview.md"
   },
   "paths": {
     "/healthz": {
