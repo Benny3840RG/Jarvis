@@ -1,8 +1,13 @@
 # Jarvis
 
+[![TypeScript checks](https://github.com/Benny3840/Jarvis/actions/workflows/typescript.yml/badge.svg?branch=main)](https://github.com/Benny3840/Jarvis/actions/workflows/typescript.yml)
+[![Python checks](https://github.com/Benny3840/Jarvis/actions/workflows/python-app.yml/badge.svg?branch=main)](https://github.com/Benny3840/Jarvis/actions/workflows/python-app.yml)
+
 Jarvis is a local command-line assistant with durable JSON or Convex persistence.
 
 The maintained application is the TypeScript CLI in `typescript/`. The root Python package is the original local-notes prototype; it is retained only for reference and does not share data, commands, tests, or persistence with the maintained application. See [Scaffold and runtime boundaries](typescript/docs/architecture/scaffold-and-runtime-boundaries.md).
+
+Operational runbooks live in [`docs/operations/`](docs/operations/).
 
 ## Legacy Python prototype
 
