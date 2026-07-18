@@ -1,0 +1,46 @@
+name: Preview diagnostics
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - typescript/src/mcp/**
+      - typescript/src/preview/**
+      - typescript/tests/*mcp*
+      - typescript/tests/jarvisApiClient.test.ts
+      - .github/workflows/preview-diagnostics.yml
+
+permissions:
+  contents: read
+
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: typescript/.nvmrc
+          cache: npm
+          cache-dependency-path: typescript/package-lock.json
+      - working-directory: typescript
+        run: npm ci
+      - name: Capture type-check output
+        working-directory: typescript
+        shell: bash
+        run: |
+          set +e
+          npm run type-check >"$RUNNER_TEMP/preview-typecheck.log" 2>&1
+          status=$?
+          echo "$status" >"$RUNNER_TEMP/preview-typecheck.status"
+          exit 0
+      - uses: actions/upload-artifact@v4
+        with:
+          name: preview-typecheck-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/preview-typecheck.log
+            ${{ runner.temp }}/preview-typecheck.status
+          if-no-files-found: error
+          retention-days: 1
