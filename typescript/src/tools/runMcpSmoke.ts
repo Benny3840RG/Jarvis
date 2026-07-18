@@ -65,7 +65,11 @@ async function callDashboardTool(
   name: string,
   args: Record<string, unknown> = {},
 ): Promise<DashboardSnapshot> {
-  return dashboardFrom(await client.callTool({ name, arguments: args }));
+  const result = await client.callTool({ name, arguments: args });
+  if (!("content" in result)) {
+    throw new Error("Jarvis MCP tool unexpectedly returned an asynchronous task handle.");
+  }
+  return dashboardFrom(result);
 }
 
 async function cleanupTool(
