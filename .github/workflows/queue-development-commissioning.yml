@@ -89,17 +89,21 @@ jobs:
           echo "run_id=$run_id" >>"$GITHUB_OUTPUT"
           echo "run_url=$run_url" >>"$GITHUB_OUTPUT"
 
-          queued_comment="$RUNNER_TEMP/commissioning-queued.md"
-          cat >"$queued_comment" <<EOF
-          ### Development commissioning queued
+          queued_status="$RUNNER_TEMP/commissioning-queued.md"
+          cat >"$queued_status" <<EOF
+          # Jarvis development commissioning status
+
+          **Current state: queued**
 
           - Source: \`$GITHUB_SHA\`
           - Deployment: \`dev:outgoing-ram-798\`
           - Run: $run_url
           - Production deployment: **not authorised and not performed**
+
+          This issue body is the canonical current status. Historical commissioning records remain in the issue comments.
           EOF
 
-          gh issue comment "$STATUS_ISSUE" --body-file "$queued_comment"
+          gh issue edit "$STATUS_ISSUE" --body-file "$queued_status"
 
       - name: Wait for development commissioning
         id: watch
@@ -124,7 +128,7 @@ jobs:
           run_json="$RUNNER_TEMP/commissioning-run.json"
           failed_log="$RUNNER_TEMP/commissioning-failed.log"
           redacted_log="$RUNNER_TEMP/commissioning-failed-redacted.log"
-          comment_file="$RUNNER_TEMP/commissioning-comment.md"
+          status_file="$RUNNER_TEMP/commissioning-status.md"
 
           gh run view "$RUN_ID" \
             --json conclusion,status,url,headSha,createdAt,updatedAt,jobs \
@@ -163,8 +167,10 @@ jobs:
             fi
           fi
 
-          cat >"$comment_file" <<EOF
-          ### Development commissioning ${conclusion}
+          cat >"$status_file" <<EOF
+          # Jarvis development commissioning status
+
+          **Current state: ${conclusion}**
 
           - Source: \`$GITHUB_SHA\`
           - Deployment: \`dev:outgoing-ram-798\`
@@ -173,16 +179,18 @@ jobs:
           - Run: ${RUN_URL}
           - Production deployment: **not authorised and not performed**
 
-          **Failed steps**
+          ## Failed steps
           ${failed_steps}
 
-          **Redacted failed-log excerpt**
+          ## Redacted failed-log excerpt
           \`\`\`text
           ${failed_log_excerpt}
           \`\`\`
+
+          This issue body is the canonical current status. Historical commissioning records remain in the issue comments.
           EOF
 
-          gh issue comment "$STATUS_ISSUE" --body-file "$comment_file"
+          gh issue edit "$STATUS_ISSUE" --body-file "$status_file"
 
           if [[ "$conclusion" != "success" ]]; then
             echo "::error::Development commissioning concluded with: $conclusion"
