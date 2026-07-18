@@ -1,3 +1,3 @@
 COMMISSION DEV
-request: 2026-07-18T11:15:00Z
-source: diagnose Totality HTTP failure with redacted response and server logs
+request: 2026-07-18T11:30:00Z
+source: classify persistent OpenAI 429 quota versus transient rate limiting

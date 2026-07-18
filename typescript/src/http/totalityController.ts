@@ -1,6 +1,7 @@
 import { Body, Controller, HttpCode, Inject, Post, Req } from "@nestjs/common";
 import type { FastifyRequest } from "fastify";
 
+import { categorizeOpenAIRequestError } from "../integrations/openai/errorCategory.js";
 import { OpenAIRequestError } from "../integrations/openai/totalityReasoner.js";
 import type { TotalityResponse } from "../runtime/totalityContracts.js";
 import type { TotalityPipeline, TotalityReasoningResult } from "../totality/totalityPipeline.js";
@@ -64,15 +65,24 @@ export class TotalityController {
     try {
       return await this.pipeline.run(input);
     } catch (error: unknown) {
-      if (error instanceof OpenAIRequestError && error.status === 429) {
-        throw new JarvisProblem(
-          429,
-          "reasoning-rate-limited",
-          "Reasoning Rate Limited",
-          "The reasoning provider is temporarily rate limited.",
-        );
-      }
       if (error instanceof OpenAIRequestError) {
+        const category = categorizeOpenAIRequestError(error);
+        if (category === "quota_exhausted") {
+          throw new JarvisProblem(
+            503,
+            "reasoning-quota-exhausted",
+            "Reasoning Quota Exhausted",
+            "The configured reasoning provider account has no available API quota.",
+          );
+        }
+        if (category === "rate_limited") {
+          throw new JarvisProblem(
+            429,
+            "reasoning-rate-limited",
+            "Reasoning Rate Limited",
+            "The reasoning provider is temporarily rate limited.",
+          );
+        }
         throw new JarvisProblem(
           503,
           "reasoning-dependency-failed",
