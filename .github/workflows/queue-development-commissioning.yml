@@ -89,12 +89,17 @@ jobs:
           echo "run_id=$run_id" >>"$GITHUB_OUTPUT"
           echo "run_url=$run_url" >>"$GITHUB_OUTPUT"
 
-          gh issue comment "$STATUS_ISSUE" --body "### Development commissioning queued
+          queued_comment="$RUNNER_TEMP/commissioning-queued.md"
+          cat >"$queued_comment" <<EOF
+          ### Development commissioning queued
 
-- Source: \`$GITHUB_SHA\`
-- Deployment: \`dev:outgoing-ram-798\`
-- Run: $run_url
-- Production deployment: **not authorised and not performed**"
+          - Source: \`$GITHUB_SHA\`
+          - Deployment: \`dev:outgoing-ram-798\`
+          - Run: $run_url
+          - Production deployment: **not authorised and not performed**
+          EOF
+
+          gh issue comment "$STATUS_ISSUE" --body-file "$queued_comment"
 
       - name: Wait for development commissioning
         id: watch
