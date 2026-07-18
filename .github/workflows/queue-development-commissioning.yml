@@ -10,12 +10,17 @@ on:
 permissions:
   actions: write
   contents: read
+  issues: write
+
+concurrency:
+  group: jarvis-development-commissioning-queue
+  cancel-in-progress: false
 
 jobs:
   queue-development-commissioning:
-    name: Queue guarded development commissioning
+    name: Queue and report guarded development commissioning
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 40
 
     steps:
       - name: Check out exact main commit
@@ -43,9 +48,112 @@ jobs:
           fi
 
       - name: Queue guarded commissioning workflow
+        id: dispatch
         env:
           GH_TOKEN: ${{ github.token }}
+          STATUS_ISSUE: "54"
         run: |
+          set -euo pipefail
+
           gh workflow run development-commissioning.yml \
             --ref main \
             --field confirmation='COMMISSION DEV'
+
+          run_id=""
+          run_url=""
+
+          for _ in {1..30}; do
+            candidate="$({
+              gh run list \
+                --workflow development-commissioning.yml \
+                --branch main \
+                --event workflow_dispatch \
+                --limit 20 \
+                --json databaseId,headSha,url \
+                --jq ".[] | select(.headSha == \"$GITHUB_SHA\") | [.databaseId, .url] | @tsv"
+            } | head -n 1)"
+
+            if [[ -n "$candidate" ]]; then
+              IFS=$'\t' read -r run_id run_url <<<"$candidate"
+              break
+            fi
+
+            sleep 2
+          done
+
+          if [[ -z "$run_id" || -z "$run_url" ]]; then
+            echo "::error::Commissioning workflow was dispatched but its run could not be resolved."
+            exit 1
+          fi
+
+          echo "run_id=$run_id" >>"$GITHUB_OUTPUT"
+          echo "run_url=$run_url" >>"$GITHUB_OUTPUT"
+
+          gh issue comment "$STATUS_ISSUE" --body "### Development commissioning queued
+
+- Source: \`$GITHUB_SHA\`
+- Deployment: \`dev:outgoing-ram-798\`
+- Run: $run_url
+- Production deployment: **not authorised and not performed**"
+
+      - name: Wait for development commissioning
+        id: watch
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ steps.dispatch.outputs.run_id }}
+        run: |
+          set -euo pipefail
+          gh run watch "$RUN_ID" --exit-status --interval 10
+
+      - name: Report development commissioning result
+        if: ${{ always() && steps.dispatch.outputs.run_id != '' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ steps.dispatch.outputs.run_id }}
+          RUN_URL: ${{ steps.dispatch.outputs.run_url }}
+          STATUS_ISSUE: "54"
+        run: |
+          set -euo pipefail
+
+          run_json="$RUNNER_TEMP/commissioning-run.json"
+          comment_file="$RUNNER_TEMP/commissioning-comment.md"
+
+          gh run view "$RUN_ID" \
+            --json conclusion,status,url,headSha,createdAt,updatedAt,jobs \
+            >"$run_json"
+
+          status="$(jq -r '.status' "$run_json")"
+          conclusion="$(jq -r '.conclusion // "pending"' "$run_json")"
+          failed_steps="$(jq -r '
+            [
+              .jobs[]
+              | select(.conclusion == "failure")
+              | .name as $job
+              | .steps[]
+              | select(.conclusion == "failure")
+              | "- " + $job + " → " + .name
+            ]
+            | if length == 0 then "- None" else join("\n") end
+          ' "$run_json")"
+
+          cat >"$comment_file" <<EOF
+          ### Development commissioning ${conclusion}
+
+          - Source: \`$GITHUB_SHA\`
+          - Deployment: \`dev:outgoing-ram-798\`
+          - Status: \`${status}\`
+          - Conclusion: \`${conclusion}\`
+          - Run: ${RUN_URL}
+          - Production deployment: **not authorised and not performed**
+
+          **Failed steps**
+          ${failed_steps}
+          EOF
+
+          gh issue comment "$STATUS_ISSUE" --body-file "$comment_file"
+
+          if [[ "$conclusion" != "success" ]]; then
+            echo "::error::Development commissioning concluded with: $conclusion"
+            exit 1
+          fi
