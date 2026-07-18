@@ -21,6 +21,7 @@
     "openapi:lint": "redocly lint openapi/jarvis.openapi.json",
     "check": "npm run type-check && npm run lint && npm run format:check && npm run openapi:lint && npm test",
     "smoke:convex": "tsx src/tools/runConvexSmoke.ts",
+    "smoke:mcp": "tsx src/tools/runMcpSmoke.ts",
     "backup": "tsx src/tools/runBackup.ts"
   },
   "dependencies": {
