@@ -236,7 +236,7 @@ jobs:
             "inputs": [],
             "outputStyle": "default",
             "actionPolicy": {
-              "maximumToolAuthority": "T0",
+              "maximumToolAuthority": "T1",
               "requireApprovalBeforeExecution": true
             }
           }
