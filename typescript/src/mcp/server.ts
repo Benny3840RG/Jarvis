@@ -270,6 +270,7 @@ export function createJarvisMcpServer(client: JarvisApiClient): McpServer {
       inputSchema: { taskId: z.string().min(1) },
       outputSchema: { task: taskSchema },
       annotations: readAnnotations,
+      _meta: { ui: { visibility: ["model"] } },
     },
     async ({ taskId }) => {
       try {
@@ -426,6 +427,7 @@ export function createJarvisMcpServer(client: JarvisApiClient): McpServer {
       inputSchema: { reminderId: z.string().min(1) },
       outputSchema: { reminder: reminderSchema },
       annotations: readAnnotations,
+      _meta: { ui: { visibility: ["model"] } },
     },
     async ({ reminderId }) => {
       try {
