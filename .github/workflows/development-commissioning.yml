@@ -99,7 +99,7 @@ jobs:
             npm run check
 
       - name: Sync functions to authorised development deployment
-        run: npx convex dev --once --tail-logs disable
+        run: npx convex deploy
 
       - name: Run self-cleaning Convex smoke test
         run: npm run smoke:convex
