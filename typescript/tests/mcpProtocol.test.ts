@@ -153,9 +153,11 @@ describe("Jarvis MCP preview protocol", () => {
 
       const resource = await client.readResource({ uri: JARVIS_DASHBOARD_URI });
       assert.equal(resource.contents.length, 1);
-      assert.equal(resource.contents[0]?.uri, JARVIS_DASHBOARD_URI);
-      assert.equal(resource.contents[0]?.mimeType, "text/html;profile=mcp-app");
-      assert.match(String(resource.contents[0]?.text), /JARVIS \/\/ OPERATOR CONSOLE/);
+      const widget = resource.contents[0];
+      assert.equal(widget?.uri, JARVIS_DASHBOARD_URI);
+      assert.equal(widget?.mimeType, "text/html;profile=mcp-app");
+      assert.ok(widget && "text" in widget);
+      assert.match(widget.text, /JARVIS \/\/ OPERATOR CONSOLE/);
     } finally {
       await client.close();
       await running.close();
