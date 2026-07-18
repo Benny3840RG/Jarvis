@@ -7,6 +7,8 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import type { DashboardSnapshot } from "../mcp/jarvisApiClient.js";
 import { JARVIS_DASHBOARD_URI } from "../mcp/server.js";
 
+type ToolCallResponse = Awaited<ReturnType<Client["callTool"]>>;
+
 const REQUIRED_TOOLS = [
   "show_jarvis_dashboard",
   "get_jarvis_status",
@@ -50,6 +52,10 @@ function resultText(result: CallToolResult): string {
     .trim();
 }
 
+function isImmediateToolResult(result: ToolCallResponse): result is CallToolResult {
+  return "content" in result;
+}
+
 function dashboardFrom(result: CallToolResult): DashboardSnapshot {
   if (result.isError) {
     throw new Error(resultText(result) || "Jarvis MCP tool returned an error.");
@@ -66,7 +72,7 @@ async function callDashboardTool(
   args: Record<string, unknown> = {},
 ): Promise<DashboardSnapshot> {
   const result = await client.callTool({ name, arguments: args });
-  if (!("content" in result)) {
+  if (!isImmediateToolResult(result)) {
     throw new Error("Jarvis MCP tool unexpectedly returned an asynchronous task handle.");
   }
   return dashboardFrom(result);
@@ -141,7 +147,8 @@ async function main(): Promise<void> {
       category: "commissioning",
     });
     const createdTask = dashboard.tasks.find((task) => task.title === taskTitle);
-    if (!createdTask) throw new Error("MCP task creation was not visible in the refreshed dashboard.");
+    if (!createdTask)
+      throw new Error("MCP task creation was not visible in the refreshed dashboard.");
     taskId = createdTask.id;
 
     dashboard = await callDashboardTool(client, "update_task", {
