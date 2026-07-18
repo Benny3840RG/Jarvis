@@ -1,7 +1,7 @@
 # Local operator HTTP API
 
 Jarvis exposes a localhost-first NestJS/Fastify system boundary alongside the maintained CLI.
-This stage implements only the system operations whose runtime behaviour is complete:
+This stage implements only the operations whose runtime behaviour is complete:
 
 | Method           | Path                             | Authentication | Purpose                                                     |
 | ---------------- | -------------------------------- | -------------- | ----------------------------------------------------------- |
@@ -12,7 +12,8 @@ This stage implements only the system operations whose runtime behaviour is comp
 | POST             | `/api/v1/reminders`              | ******         | Creates a durable reminder.                                 |
 | GET/PATCH/DELETE | `/api/v1/reminders/{reminderId}` | ******         | Reads, updates, or removes one reminder.                    |
 
-The complete implementation target remains
+The task and Totality routes are also implemented by the maintained adapter; proposal routes are
+review-only and approval never executes a tool. The complete implementation target remains
 [`../../openapi/jarvis.openapi.json`](../../openapi/jarvis.openapi.json). Operations not listed
 above are not yet HTTP routes. Reminder creation requires an `Idempotency-Key`; due input preserves
 the exact `text` and optionally normalizes it using the supplied `timezone`.
