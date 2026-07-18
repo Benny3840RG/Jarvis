@@ -1,0 +1,51 @@
+name: Queue development commissioning
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/commission-development
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  queue-development-commissioning:
+    name: Queue guarded development commissioning
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Check out exact main commit
+        uses: actions/checkout@v4
+
+      - name: Guard one-shot development request
+        run: |
+          set -euo pipefail
+
+          if [[ "$GITHUB_REF" != "refs/heads/main" ]]; then
+            echo "::error::Development commissioning may be queued only from main."
+            exit 1
+          fi
+
+          trigger_file="$GITHUB_WORKSPACE/.github/commission-development"
+          if [[ ! -f "$trigger_file" ]]; then
+            echo "::error::Development commissioning trigger file is missing."
+            exit 1
+          fi
+
+          first_line="$(head -n 1 "$trigger_file")"
+          if [[ "$first_line" != "COMMISSION DEV" ]]; then
+            echo "::error::Trigger file must begin with the exact text COMMISSION DEV."
+            exit 1
+          fi
+
+      - name: Queue guarded commissioning workflow
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh workflow run development-commissioning.yml \
+            --ref main \
+            --field confirmation='COMMISSION DEV'
