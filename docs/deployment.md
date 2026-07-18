@@ -98,8 +98,8 @@ sleep 3
 curl -f http://127.0.0.1:3000/healthz
 
 # Authenticated status check (token required)
-TOKEN="$(grep JARVIS_SERVICE_TOKEN .env.local | cut -d= -f2)"
-curl -f -H "Authorization: ******" http://127.0.0.1:3000/api/v1/status | jq .
+TOKEN="$(grep '^JARVIS_SERVICE_TOKEN=' .env.local | cut -d= -f2)"
+curl -f -H "Authorization: Bearer $TOKEN" http://127.0.0.1:3000/api/v1/status | jq .
 ```
 
 A healthy status response has `"status": "ok"`, provider `"reachability": "ok"`, and (for Convex) `"authentication": "ok"`.
