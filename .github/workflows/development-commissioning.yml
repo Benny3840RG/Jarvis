@@ -41,7 +41,7 @@ jobs:
 
     steps:
       - name: Check out exact main commit
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Guard commissioning boundary
         env:
@@ -77,7 +77,7 @@ jobs:
           done
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version-file: typescript/.nvmrc
           cache: npm
