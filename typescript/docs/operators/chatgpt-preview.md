@@ -21,7 +21,7 @@ The first preview includes:
 Totality reasoning, memory changes, tool-action approvals, backups and broad conversation execution
 remain REST-only. They are not exposed as preview MCP tools.
 
-## Local start
+## Development configuration
 
 Configure the existing development values in `typescript/.env.local`, including:
 
@@ -29,12 +29,42 @@ Configure the existing development values in `typescript/.env.local`, including:
 PERSISTENCE_PROVIDER=convex
 CONVEX_URL=https://outgoing-ram-798.convex.cloud
 CONVEX_DEPLOYMENT=dev:outgoing-ram-798
+JARVIS_DEPLOYMENT_VERSION=dev:outgoing-ram-798
 JARVIS_SERVICE_TOKEN=<development service token>
 OPENAI_API_KEY=<development API key>
 JARVIS_TIMEZONE=Australia/Melbourne
 ```
 
-Then start both the Jarvis HTTP service and MCP adapter:
+`JARVIS_DEPLOYMENT_VERSION` is the deployment identity reported by the HTTP status contract. The
+preview derives it from `CONVEX_DEPLOYMENT` when it is omitted, while explicit mismatches fail the
+paddock readiness check.
+
+## Recommended local start
+
+Run the guarded one-command launcher:
+
+```bash
+cd typescript
+nvm use
+npm ci
+npm run paddock
+```
+
+The launcher validates the authorised development boundary, starts HTTP and MCP, verifies the live
+Convex status, reads the dashboard resource, calls the read-only dashboard tool, and then reports:
+
+```text
+JARVIS PADDOCK READY
+Convex: dev:outgoing-ram-798
+HTTP:   http://127.0.0.1:3000/
+MCP:    http://127.0.0.1:8787/mcp
+```
+
+It does not create, update or delete tasks or reminders. Press `Ctrl+C` to stop both local services.
+
+## Manual local start
+
+To start the commissioned Jarvis HTTP service and MCP adapter without the readiness wrapper:
 
 ```bash
 cd typescript
@@ -55,9 +85,9 @@ Jarvis MCP:  http://127.0.0.1:8787/mcp
 
 ## Binding guard
 
-The MCP adapter binds to `127.0.0.1` by default. A non-loopback `JARVIS_MCP_HOST` fails closed unless
-`JARVIS_MCP_ALLOW_REMOTE=true` is explicitly set. That override is for controlled development only;
-it does not provide multi-user authentication.
+The HTTP and MCP adapters bind to loopback by default. Any non-loopback `JARVIS_HTTP_HOST` or
+`JARVIS_MCP_HOST` fails closed. There is no environment override for remote binding. OAuth 2.1,
+TLS, origin policy and an approved deployment boundary are required before remote service exposure.
 
 ## Connect from ChatGPT Developer Mode
 
