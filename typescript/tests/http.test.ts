@@ -4,8 +4,8 @@ import { afterEach, describe, it } from "node:test";
 
 import type { NestFastifyApplication } from "@nestjs/platform-fastify";
 
-import { createJarvisHttpApp } from "../src/http/app.js";
-import { IMPLEMENTED_CAPABILITIES } from "../src/http/contracts.js";
+import { createJarvisHttpApp, type RegisteredRoute } from "../src/http/app.js";
+import { IMPLEMENTED_CAPABILITIES, type Capability } from "../src/http/contracts.js";
 import {
   resolveHttpAppConfig,
   resolveHttpListenConfig,
@@ -272,53 +272,93 @@ describe("Jarvis HTTP system boundary", () => {
         >
       >;
     };
-    const implementedRoutes = [
-      ["/healthz", "get"],
-      ["/api/v1/help", "get"],
-      ["/api/v1/status", "get"],
-      ["/api/v1/totality/reason", "post"],
-      ["/api/v1/projects/{projectId}/memory-change-sets", "post"],
-      ["/api/v1/projects/{projectId}/memory-change-sets", "get"],
-      ["/api/v1/projects/{projectId}/memory-change-sets/{changeSetId}", "get"],
-      ["/api/v1/projects/{projectId}/memory-change-sets/{changeSetId}/approve", "post"],
-      ["/api/v1/projects/{projectId}/memory-change-sets/{changeSetId}/reject", "post"],
-      ["/api/v1/projects/{projectId}/memory-change-sets/{changeSetId}/apply", "post"],
-      ["/api/v1/tasks", "get"],
-      ["/api/v1/tasks", "post"],
-      ["/api/v1/tasks/{taskId}", "get"],
-      ["/api/v1/tasks/{taskId}", "patch"],
-      ["/api/v1/tasks/{taskId}", "delete"],
-      ["/api/v1/tasks/{taskId}/complete", "post"],
-      ["/api/v1/reminders", "get"],
-      ["/api/v1/reminders", "post"],
-      ["/api/v1/reminders/{reminderId}", "get"],
-      ["/api/v1/reminders/{reminderId}", "patch"],
-      ["/api/v1/reminders/{reminderId}", "delete"],
-    ] as const;
-    const contractCapabilities = implementedRoutes.map(([path, method]) => {
-      const operation = contract.paths[path][method];
-      return {
-        operationId: operation.operationId,
-        summary: operation.summary,
-        mutating: method !== "get",
-        destructive: operation["x-mcp-tool"].annotations.destructiveHint,
-        mcpExposed: operation["x-mcp-tool"].exposed,
-      };
-    });
-    const app = await makeApp();
-    const response = await app
-      .getHttpAdapter()
-      .getInstance()
-      .inject({
-        method: "GET",
-        url: "/api/v1/help",
-        headers: { authorization: "Bearer current-secret" },
-      });
+    // Index the OpenAPI operations by operationId, recording the concrete
+    // (METHOD path) each one is, so capabilities are checked against the
+    // contract without a hand-maintained route table.
+    const httpMethods = new Set(["get", "post", "put", "patch", "delete"]);
+    const contractByOperationId = new Map<
+      string,
+      { method: string; path: string; summary: string; destructive: boolean; mcpExposed: boolean }
+    >();
+    for (const [path, item] of Object.entries(contract.paths)) {
+      for (const [method, operation] of Object.entries(item)) {
+        if (!httpMethods.has(method)) continue;
+        contractByOperationId.set(operation.operationId, {
+          method: method.toUpperCase(),
+          path,
+          summary: operation.summary,
+          destructive: operation["x-mcp-tool"].annotations.destructiveHint,
+          mcpExposed: operation["x-mcp-tool"].exposed,
+        });
+      }
+    }
 
-    assert.deepEqual(
-      response.json<{ capabilities: unknown[] }>().capabilities,
-      contractCapabilities,
+    // Enumerate the routes the app actually serves from the live app rather than
+    // a hard-coded list, normalising Fastify ':param' to OpenAPI '{param}'.
+    const registeredRoutes: RegisteredRoute[] = [];
+    const app = await createJarvisHttpApp({
+      persistence: makePersistence(),
+      providerName: "json",
+      config: BASE_CONFIG,
+      logger: false,
+      onRoute: (route) => registeredRoutes.push(route),
+    });
+    openApps.push(app);
+    const servedOperations = new Set(
+      registeredRoutes
+        .filter((route) => httpMethods.has(route.method.toLowerCase()))
+        .map(
+          (route) =>
+            `${route.method.toUpperCase()} ${route.url.replace(/:([A-Za-z0-9_]+)/g, "{$1}")}`,
+        ),
     );
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/v1/help",
+      headers: { authorization: "Bearer current-secret" },
+    });
+    const { capabilities } = response.json<{ capabilities: Capability[] }>();
+
+    // The endpoint returns the source capability list unaltered...
+    assert.deepEqual(
+      capabilities,
+      IMPLEMENTED_CAPABILITIES.map((capability) => ({ ...capability })),
+    );
+
+    // ...and each advertised capability aligns with the OpenAPI contract and a
+    // route the app actually serves.
+    for (const capability of capabilities) {
+      const operation = contractByOperationId.get(capability.operationId);
+      assert.ok(
+        operation,
+        `Capability ${capability.operationId} is absent from the OpenAPI contract.`,
+      );
+      assert.equal(
+        capability.summary,
+        operation.summary,
+        `${capability.operationId} summary drifted from the OpenAPI contract.`,
+      );
+      assert.equal(
+        capability.mutating,
+        operation.method !== "GET",
+        `${capability.operationId} mutating flag disagrees with its HTTP method.`,
+      );
+      assert.equal(
+        capability.destructive,
+        operation.destructive,
+        `${capability.operationId} destructive flag drifted from the OpenAPI contract.`,
+      );
+      assert.equal(
+        capability.mcpExposed,
+        operation.mcpExposed,
+        `${capability.operationId} mcpExposed flag drifted from the OpenAPI contract.`,
+      );
+      assert.ok(
+        servedOperations.has(`${operation.method} ${operation.path}`),
+        `${capability.operationId} advertises ${operation.method} ${operation.path}, which the app does not serve.`,
+      );
+    }
   });
 
   it("exposes durable task operations through the authenticated boundary", async () => {
