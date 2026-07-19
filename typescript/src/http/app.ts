@@ -32,6 +32,8 @@ type InjectedPersistenceOptions = {
   providerName: PersistenceProviderName;
 };
 
+export type RegisteredRoute = { method: string; url: string };
+
 export type CreateJarvisHttpAppOptions = (
   DefaultPersistenceOptions | InjectedPersistenceOptions
 ) & {
@@ -40,6 +42,12 @@ export type CreateJarvisHttpAppOptions = (
   totalityPipeline?: TotalityPipeline | null;
   memoryChangeSetService?: MemoryChangeSetService | null;
   toolActionService?: ToolActionService | null;
+  /**
+   * Invoked once per Fastify route as it is registered. Exposed so contract
+   * tests can enumerate the routes the app actually serves without parsing the
+   * formatted `printRoutes` tree. The `url` is in Fastify `:param` form.
+   */
+  onRoute?: (route: RegisteredRoute) => void;
 };
 
 export async function createJarvisHttpApp(
@@ -77,6 +85,15 @@ export async function createJarvisHttpApp(
         config.previousToken,
       ]),
   });
+  if (options.onRoute) {
+    const collect = options.onRoute;
+    adapter.getInstance().addHook("onRoute", (routeOptions) => {
+      const methods = Array.isArray(routeOptions.method)
+        ? routeOptions.method
+        : [routeOptions.method];
+      for (const method of methods) collect({ method, url: routeOptions.url });
+    });
+  }
   const app = await NestFactory.create<NestFastifyApplication>(
     JarvisHttpModule.register({
       persistence,

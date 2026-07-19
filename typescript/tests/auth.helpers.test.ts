@@ -62,4 +62,17 @@ describe("Jarvis service authentication", () => {
     process.env.JARVIS_SERVICE_TOKEN_PREVIOUS = "orphaned-old-token";
     assert.throws(() => requireOwner("orphaned-old-token"), /Server misconfigured/);
   });
+
+  it("rejects candidates that only share a prefix with the configured token", () => {
+    process.env.JARVIS_SERVICE_TOKEN = "correct-horse-battery-staple";
+    assert.throws(() => requireOwner("correct-horse-battery-stapl"), /Unauthorized/);
+    assert.throws(() => requireOwner("correct-horse-battery-staple-extra"), /Unauthorized/);
+    assert.throws(() => requireOwner("c"), /Unauthorized/);
+    assert.equal(requireOwner("correct-horse-battery-staple"), "jarvis-cli");
+  });
+
+  it("rejects an empty candidate without matching an empty misconfiguration", () => {
+    process.env.JARVIS_SERVICE_TOKEN = "current-token";
+    assert.throws(() => requireOwner(""), /Unauthorized/);
+  });
 });
