@@ -11,6 +11,7 @@
     "start:http": "node --import tsx src/http/main.ts",
     "start:mcp": "node --import tsx src/mcp/main.ts",
     "start:preview": "node --import tsx src/preview/main.ts",
+    "paddock": "node --import tsx src/tools/runPaddock.ts",
     "test": "node --import tsx --test tests/*.test.ts",
     "test:coverage": "node --import tsx --test --experimental-test-coverage tests/*.test.ts",
     "type-check": "tsc -p tsconfig.json",
