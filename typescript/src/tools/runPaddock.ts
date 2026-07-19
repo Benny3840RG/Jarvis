@@ -6,7 +6,10 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 
-import { JarvisApiClient, type DashboardSnapshot } from "../mcp/jarvisApiClient.js";
+import {
+  JarvisApiClient,
+  type DashboardSnapshot,
+} from "../mcp/jarvisApiClient.js";
 import { JARVIS_DASHBOARD_URI } from "../mcp/server.js";
 import {
   REQUIRED_PADDOCK_TOOLS,
@@ -19,7 +22,8 @@ function loadLocalEnvironment(): void {
   try {
     loadEnvFile(".env.local");
   } catch (error: unknown) {
-    if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
+    if (!(error instanceof Error && "code" in error && error.code === "ENOENT"))
+      throw error;
   }
 }
 
@@ -38,7 +42,8 @@ function isImmediateToolResult(result: unknown): result is CallToolResult {
 async function probeHttp(config: PaddockConfig): Promise<void> {
   const healthUrl = new URL("healthz", config.httpUrl);
   const health = await fetch(healthUrl);
-  if (!health.ok) throw new Error(`Jarvis health probe returned HTTP ${health.status}.`);
+  if (!health.ok)
+    throw new Error(`Jarvis health probe returned HTTP ${health.status}.`);
 
   const api = new JarvisApiClient({
     baseUrl: config.httpUrl,
@@ -55,7 +60,8 @@ async function probeMcp(config: PaddockConfig): Promise<void> {
     const toolList = await client.listTools();
     const toolNames = new Set(toolList.tools.map((tool) => tool.name));
     for (const tool of REQUIRED_PADDOCK_TOOLS) {
-      if (!toolNames.has(tool)) throw new Error(`Required MCP tool is missing: ${tool}`);
+      if (!toolNames.has(tool))
+        throw new Error(`Required MCP tool is missing: ${tool}`);
     }
 
     const resource = await client.readResource({ uri: JARVIS_DASHBOARD_URI });
@@ -67,12 +73,23 @@ async function probeMcp(config: PaddockConfig): Promise<void> {
       !("text" in widget) ||
       !widget.text.includes("JARVIS // OPERATOR CONSOLE")
     ) {
-      throw new Error("Jarvis MCP dashboard resource is unavailable or invalid.");
+      throw new Error(
+        "Jarvis MCP dashboard resource is unavailable or invalid.",
+      );
     }
 
-    const result = await client.callTool({ name: "show_jarvis_dashboard", arguments: {} });
-    if (!isImmediateToolResult(result) || result.isError || !isRecord(result.structuredContent)) {
-      throw new Error("Jarvis MCP dashboard tool did not return a valid snapshot.");
+    const result = await client.callTool({
+      name: "show_jarvis_dashboard",
+      arguments: {},
+    });
+    if (
+      !isImmediateToolResult(result) ||
+      result.isError ||
+      !isRecord(result.structuredContent)
+    ) {
+      throw new Error(
+        "Jarvis MCP dashboard tool did not return a valid snapshot.",
+      );
     }
     const dashboard = result.structuredContent as DashboardSnapshot;
     assertPaddockStatus(dashboard.status, config.deployment);
@@ -89,7 +106,9 @@ async function waitForProbe(
   let lastError: unknown;
   for (let attempt = 1; attempt <= 40; attempt += 1) {
     if (child.exitCode !== null) {
-      throw new Error(`Jarvis preview exited before the ${name} probe completed.`);
+      throw new Error(
+        `Jarvis preview exited before the ${name} probe completed.`,
+      );
     }
     try {
       await probe();
@@ -110,7 +129,9 @@ function waitForChildExit(child: ChildProcess): Promise<void> {
   if (child.exitCode !== null) {
     return child.exitCode === 0
       ? Promise.resolve()
-      : Promise.reject(new Error(`Jarvis preview exited with code ${child.exitCode}.`));
+      : Promise.reject(
+          new Error(`Jarvis preview exited with code ${child.exitCode}.`),
+        );
   }
   return new Promise((resolve, reject) => {
     child.once("exit", (code, signal) => {
@@ -126,11 +147,15 @@ function waitForChildExit(child: ChildProcess): Promise<void> {
 async function main(): Promise<void> {
   loadLocalEnvironment();
   const config = resolvePaddockConfig(process.env);
-  const child = spawn(process.execPath, ["--import", "tsx", "src/preview/main.ts"], {
-    cwd: process.cwd(),
-    env: config.environment,
-    stdio: "inherit",
-  });
+  const child = spawn(
+    process.execPath,
+    ["--import", "tsx", "src/preview/main.ts"],
+    {
+      cwd: process.cwd(),
+      env: config.environment,
+      stdio: "inherit",
+    },
+  );
 
   const shutdown = () => stopChild(child);
   process.once("SIGINT", shutdown);
