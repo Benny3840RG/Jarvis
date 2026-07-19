@@ -10,8 +10,7 @@ function loadLocalEnvironment(): void {
   try {
     loadEnvFile(".env.local");
   } catch (error: unknown) {
-    if (!(error instanceof Error && "code" in error && error.code === "ENOENT"))
-      throw error;
+    if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
   }
 }
 
@@ -24,8 +23,7 @@ async function main(): Promise<void> {
 
   const mcpConfig = resolveJarvisMcpConfig({
     ...process.env,
-    JARVIS_API_BASE_URL:
-      process.env.JARVIS_API_BASE_URL ?? `http://127.0.0.1:${httpListen.port}`,
+    JARVIS_API_BASE_URL: process.env.JARVIS_API_BASE_URL ?? `http://127.0.0.1:${httpListen.port}`,
   });
 
   let mcpServer;
@@ -36,9 +34,7 @@ async function main(): Promise<void> {
     throw error;
   }
 
-  console.log(
-    `Jarvis HTTP is listening on http://${httpListen.host}:${httpListen.port}`,
-  );
+  console.log(`Jarvis HTTP is listening on http://${httpListen.host}:${httpListen.port}`);
   console.log(`Jarvis controlled preview is listening on ${mcpServer.url}`);
 
   let closing = false;
