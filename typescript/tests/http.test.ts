@@ -664,6 +664,14 @@ describe("Jarvis HTTP configuration", () => {
       () => resolveHttpListenConfig({ JARVIS_HTTP_HOST: "bad host" }),
       /JARVIS_HTTP_HOST/,
     );
+    assert.throws(
+      () => resolveHttpListenConfig({ JARVIS_HTTP_HOST: "0.0.0.0" }),
+      /Remote HTTP exposure is disabled/,
+    );
+    assert.throws(
+      () => resolveHttpListenConfig({ JARVIS_HTTP_HOST: "example.com" }),
+      /Remote HTTP exposure is disabled/,
+    );
     assert.throws(() => resolveHttpListenConfig({ JARVIS_HTTP_PORT: "0" }), /JARVIS_HTTP_PORT/);
     assert.throws(() => resolveHttpListenConfig({ JARVIS_HTTP_PORT: "3.5" }), /JARVIS_HTTP_PORT/);
     assert.throws(
