@@ -4,6 +4,7 @@ import { createJarvisHttpApp } from "../http/app.js";
 import { resolveHttpListenConfig } from "../http/config.js";
 import { resolveJarvisMcpConfig } from "../mcp/config.js";
 import { startJarvisMcpHttpServer } from "../mcp/httpServer.js";
+import { applyPreviewEnvironment } from "./environment.js";
 
 function loadLocalEnvironment(): void {
   try {
@@ -15,6 +16,7 @@ function loadLocalEnvironment(): void {
 
 async function main(): Promise<void> {
   loadLocalEnvironment();
+  applyPreviewEnvironment();
   const httpListen = resolveHttpListenConfig();
   const httpApp = await createJarvisHttpApp();
   await httpApp.listen(httpListen);
