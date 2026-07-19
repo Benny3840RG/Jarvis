@@ -2,6 +2,22 @@
 
 This runbook documents Jarvis's current development deployment, local environment, GitHub Actions secrets, backups, and service-token rotation.
 
+## Deployment decision
+
+The confirmed target for this deployment is the existing private Convex development stack:
+
+```text
+Runtime: Node.js 24
+Persistence: Convex
+Deployment: dev:outgoing-ram-798
+HTTP/MCP exposure: localhost only
+```
+
+The repository does not currently have an authorised private-server or managed-platform target.
+The guarded `Development commissioning` workflow is the supported way to validate and sync this
+development stack. It must be run from `main`, requires the exact `COMMISSION DEV` confirmation,
+and refuses any deployment identity other than the one listed above.
+
 ## Hard deployment boundary
 
 Jarvis currently has one authorised Convex deployment:
@@ -55,6 +71,21 @@ OPENAI_API_KEY
 `CONVEX_DEPLOY_KEY` must be a deploy key generated for the existing development deployment `dev:outgoing-ram-798`. Do not add a production deploy key to this repository.
 
 GitHub hides secret values after they are saved. Only the secret names should be visible in repository settings.
+
+## Development commissioning
+
+After the three development-only repository secrets are configured, open
+**Actions → Development commissioning → Run workflow** on the `main` branch and enter
+`COMMISSION DEV`. The workflow installs the Node.js version from `typescript/.nvmrc`, runs the
+complete TypeScript verification gate, syncs Convex with:
+
+```text
+npx convex dev --once --tail-logs disable
+```
+
+It then runs the self-cleaning Convex smoke test and starts the HTTP service to verify liveness,
+authenticated status, and operator boundaries. The workflow redacts configured credentials from
+diagnostics and explicitly reports that production was not performed.
 
 ## JSON provider
 
@@ -126,6 +157,16 @@ CONVEX_DEPLOYMENT=dev:outgoing-ram-798
 CONVEX_URL=https://outgoing-ram-798.convex.cloud
 OPENAI_API_KEY=<server-side OpenAI API key>
 ```
+
+The HTTP and MCP services must retain their loopback defaults:
+
+```text
+JARVIS_HTTP_HOST=127.0.0.1
+JARVIS_MCP_HOST=127.0.0.1
+```
+
+Do not change either value for a remote deployment. Remote exposure requires an approved OAuth 2.1
+or equivalent user-authentication boundary, TLS, origin policy, and deployment review.
 
 ## Service-token rotation
 
@@ -200,4 +241,8 @@ The smoke command independently refuses any deployment whose `CONVEX_DEPLOYMENT`
 
 ## Production
 
-Production commands are intentionally omitted from this operational runbook. Production remains blocked until Benny gives an explicit deployment checkpoint and the deployment identity, backup, migration, rollback, and smoke strategy are reviewed first.
+Production commands and automation are intentionally omitted from this operational runbook.
+Production remains blocked until Benny gives an explicit deployment checkpoint and the deployment
+identity, backup, migration, rollback, secret-rotation, health-check, and smoke-test strategy are
+reviewed first. Do not create or use a production Convex deployment, production deploy key, or
+public HTTP/MCP endpoint before that approval.

@@ -64,6 +64,11 @@ function validHost(host: string): boolean {
   );
 }
 
+function isLoopbackHost(host: string): boolean {
+  const normalized = host.toLowerCase();
+  return normalized === "localhost" || normalized === "127.0.0.1" || normalized === "::1";
+}
+
 export function resolveHttpAppConfig(env: JarvisEnvironment = process.env): HttpAppConfig {
   const timezone = optionalText(env.JARVIS_TIMEZONE);
   const currentToken = optionalSecret(env.JARVIS_SERVICE_TOKEN);
@@ -76,11 +81,6 @@ export function resolveHttpAppConfig(env: JarvisEnvironment = process.env): Http
     ...(currentToken === undefined ? {} : { currentToken }),
     ...(previousToken === undefined ? {} : { previousToken }),
   };
-}
-
-function isLoopbackHost(host: string): boolean {
-  const normalized = host.toLowerCase();
-  return normalized === "localhost" || normalized === "127.0.0.1" || normalized === "::1";
 }
 
 export function resolveHttpListenConfig(env: JarvisEnvironment = process.env): HttpListenConfig {
