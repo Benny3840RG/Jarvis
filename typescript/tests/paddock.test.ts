@@ -19,7 +19,9 @@ const validEnvironment: NodeJS.ProcessEnv = {
   OPENAI_API_KEY: "test-openai-key",
 };
 
-function healthyStatus(deployment = AUTHORISED_DEVELOPMENT_DEPLOYMENT): SystemStatus {
+function healthyStatus(
+  deployment = AUTHORISED_DEVELOPMENT_DEPLOYMENT,
+): SystemStatus {
   return {
     status: "ok",
     version: "0.1.0",
@@ -55,22 +57,36 @@ class ScriptedReadline implements ReadlineAdapter {
 describe("Jarvis development paddock", () => {
   it("derives the status deployment identity from the authorised Convex deployment", () => {
     const environment = resolvePreviewEnvironment(validEnvironment);
-    assert.equal(environment.JARVIS_DEPLOYMENT_VERSION, AUTHORISED_DEVELOPMENT_DEPLOYMENT);
+    assert.equal(
+      environment.JARVIS_DEPLOYMENT_VERSION,
+      AUTHORISED_DEVELOPMENT_DEPLOYMENT,
+    );
 
     const config = resolvePaddockConfig(validEnvironment);
     assert.equal(config.deployment, AUTHORISED_DEVELOPMENT_DEPLOYMENT);
-    assert.equal(config.environment.JARVIS_DEPLOYMENT_VERSION, AUTHORISED_DEVELOPMENT_DEPLOYMENT);
+    assert.equal(
+      config.environment.JARVIS_DEPLOYMENT_VERSION,
+      AUTHORISED_DEVELOPMENT_DEPLOYMENT,
+    );
     assert.equal(config.httpUrl.toString(), "http://127.0.0.1:3000/");
     assert.equal(config.mcpUrl.toString(), "http://127.0.0.1:8787/mcp");
   });
 
   it("fails closed for non-Convex or unauthorised deployment configuration", () => {
     assert.throws(
-      () => resolvePaddockConfig({ ...validEnvironment, PERSISTENCE_PROVIDER: "json" }),
+      () =>
+        resolvePaddockConfig({
+          ...validEnvironment,
+          PERSISTENCE_PROVIDER: "json",
+        }),
       /must be convex/,
     );
     assert.throws(
-      () => resolvePaddockConfig({ ...validEnvironment, CONVEX_DEPLOYMENT: "prod:jarvis" }),
+      () =>
+        resolvePaddockConfig({
+          ...validEnvironment,
+          CONVEX_DEPLOYMENT: "prod:jarvis",
+        }),
       /production is not authorised/,
     );
     assert.throws(
