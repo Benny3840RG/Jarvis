@@ -1,6 +1,8 @@
-import { loadEnvFile } from "node:process";
+import * as readlinePromises from "node:readline/promises";
+import { stdin as input, loadEnvFile, stdout as output } from "node:process";
 
 import { runCli } from "./cli.js";
+import { NonBlankReadline } from "./cli/nonBlankReadline.js";
 
 function loadLocalEnvironment(): void {
   try {
@@ -12,7 +14,8 @@ function loadLocalEnvironment(): void {
 
 async function main(): Promise<void> {
   loadLocalEnvironment();
-  await runCli();
+  const readline = readlinePromises.createInterface({ input, output });
+  await runCli({ readline: new NonBlankReadline(readline) });
 }
 
 main().catch((error: unknown) => {
