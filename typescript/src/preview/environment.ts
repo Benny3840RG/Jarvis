@@ -17,7 +17,9 @@ export function resolvePreviewEnvironment(
   return resolved;
 }
 
-export function applyPreviewEnvironment(env: NodeJS.ProcessEnv = process.env): void {
+export function applyPreviewEnvironment(
+  env: NodeJS.ProcessEnv = process.env,
+): void {
   const resolved = resolvePreviewEnvironment(env);
   const deploymentVersion = optionalText(resolved.JARVIS_DEPLOYMENT_VERSION);
 
