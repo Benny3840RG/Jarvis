@@ -8,8 +8,7 @@ function loadLocalEnvironment(): void {
   try {
     loadEnvFile(".env.local");
   } catch (error: unknown) {
-    if (!(error instanceof Error && "code" in error && error.code === "ENOENT"))
-      throw error;
+    if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
   }
 }
 
