@@ -143,15 +143,7 @@ export class ToolExecutionService {
       return receipt;
     }
     if (input.dryRun) {
-      const receipt = blockedReceipt(
-        input.action,
-        input.idempotencyKey,
-        "dry-run",
-        undefined,
-        startedAt,
-      );
-      await this.receipts.save(key, receipt);
-      return receipt;
+      return blockedReceipt(input.action, input.idempotencyKey, "dry-run", undefined, startedAt);
     }
 
     const timeoutMs = input.timeoutMs ?? 5_000;
