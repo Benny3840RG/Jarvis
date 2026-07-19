@@ -23,7 +23,8 @@ export type PaddockConfig = {
 
 function requiredText(value: string | undefined, field: string): string {
   const cleaned = value?.trim();
-  if (!cleaned) throw new Error(`${field} is required for the Jarvis development paddock.`);
+  if (!cleaned)
+    throw new Error(`${field} is required for the Jarvis development paddock.`);
   return cleaned;
 }
 
@@ -35,21 +36,33 @@ function urlHost(host: string): string {
   return host.includes(":") && !host.startsWith("[") ? `[${host}]` : host;
 }
 
-export function resolvePaddockConfig(env: NodeJS.ProcessEnv = process.env): PaddockConfig {
+export function resolvePaddockConfig(
+  env: NodeJS.ProcessEnv = process.env,
+): PaddockConfig {
   const environment = resolvePreviewEnvironment(env);
-  const provider = requiredText(environment.PERSISTENCE_PROVIDER, "PERSISTENCE_PROVIDER");
+  const provider = requiredText(
+    environment.PERSISTENCE_PROVIDER,
+    "PERSISTENCE_PROVIDER",
+  );
   if (provider !== "convex") {
-    throw new Error("PERSISTENCE_PROVIDER must be convex for the Jarvis development paddock.");
+    throw new Error(
+      "PERSISTENCE_PROVIDER must be convex for the Jarvis development paddock.",
+    );
   }
 
-  const deployment = requiredText(environment.CONVEX_DEPLOYMENT, "CONVEX_DEPLOYMENT");
+  const deployment = requiredText(
+    environment.CONVEX_DEPLOYMENT,
+    "CONVEX_DEPLOYMENT",
+  );
   if (deployment !== AUTHORISED_DEVELOPMENT_DEPLOYMENT) {
     throw new Error(
       `CONVEX_DEPLOYMENT must be ${AUTHORISED_DEVELOPMENT_DEPLOYMENT}; production is not authorised.`,
     );
   }
 
-  const convexUrl = normalizedUrl(requiredText(environment.CONVEX_URL, "CONVEX_URL"));
+  const convexUrl = normalizedUrl(
+    requiredText(environment.CONVEX_URL, "CONVEX_URL"),
+  );
   if (convexUrl !== AUTHORISED_CONVEX_URL) {
     throw new Error(`CONVEX_URL must be ${AUTHORISED_CONVEX_URL}.`);
   }
@@ -78,7 +91,8 @@ export function resolvePaddockConfig(env: NodeJS.ProcessEnv = process.env): Padd
       CONVEX_DEPLOYMENT: deployment,
       CONVEX_URL: convexUrl,
       JARVIS_DEPLOYMENT_VERSION: deploymentVersion,
-      JARVIS_API_BASE_URL: environment.JARVIS_API_BASE_URL ?? httpUrl.toString(),
+      JARVIS_API_BASE_URL:
+        environment.JARVIS_API_BASE_URL ?? httpUrl.toString(),
     },
     deployment,
     httpUrl,
@@ -87,11 +101,18 @@ export function resolvePaddockConfig(env: NodeJS.ProcessEnv = process.env): Padd
   };
 }
 
-export function assertPaddockStatus(status: SystemStatus, deployment: string): void {
-  if (status.status !== "ok") throw new Error(`Jarvis status is ${status.status}.`);
-  if (status.provider.name !== "convex") throw new Error("Jarvis is not using Convex persistence.");
-  if (status.provider.reachability !== "ok") throw new Error("Convex is not reachable.");
-  if (status.provider.authentication !== "ok") throw new Error("Convex authentication failed.");
+export function assertPaddockStatus(
+  status: SystemStatus,
+  deployment: string,
+): void {
+  if (status.status !== "ok")
+    throw new Error(`Jarvis status is ${status.status}.`);
+  if (status.provider.name !== "convex")
+    throw new Error("Jarvis is not using Convex persistence.");
+  if (status.provider.reachability !== "ok")
+    throw new Error("Convex is not reachable.");
+  if (status.provider.authentication !== "ok")
+    throw new Error("Convex authentication failed.");
   if (status.provider.schemaCompatibility !== "compatible") {
     throw new Error("Convex schema compatibility check failed.");
   }
