@@ -51,6 +51,22 @@ A preview feature may graduate to the stable baseline when:
 5. The feature has been exercised by a dedicated smoke test or commissioning stage.
 6. The PR is no longer a draft and has received a review.
 
+## Preview smoke coverage
+
+Criterion 5 for the ChatGPT App / MCP adapter is satisfied by the development
+paddock readiness probe. The acceptance logic that `npm run paddock` runs against
+a live preview — required MCP tools present, the operator-console dashboard
+resource valid, and the dashboard snapshot matching the commissioned Convex
+deployment — is factored into `typescript/src/preview/paddockProbe.ts` and covered
+by `typescript/tests/paddockProbe.test.ts`.
+
+That test stands up the real in-process MCP server against a mocked Jarvis HTTP
+API, so the readiness contract runs unattended inside `npm run check` (and CI)
+without an authorised Convex deployment or OpenAI credentials. It exercises both
+the healthy end-to-end path and the fail-closed branches (missing tool, malformed
+or duplicated dashboard resource, error tool result, and provider-state drift from
+the commissioned deployment).
+
 ## Current preview status
 
 | Feature | Branch | PR | CI status | Notes |
