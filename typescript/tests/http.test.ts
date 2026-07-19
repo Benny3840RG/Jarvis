@@ -660,6 +660,10 @@ describe("Jarvis HTTP configuration", () => {
       resolveHttpListenConfig({ JARVIS_HTTP_HOST: "::1", JARVIS_HTTP_PORT: "8080" }),
       { host: "::1", port: 8080 },
     );
+    assert.deepEqual(resolveHttpListenConfig({ JARVIS_HTTP_HOST: "LOCALHOST" }), {
+      host: "localhost",
+      port: 3000,
+    });
     assert.throws(
       () => resolveHttpListenConfig({ JARVIS_HTTP_HOST: "bad host" }),
       /JARVIS_HTTP_HOST/,

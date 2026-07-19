@@ -65,7 +65,8 @@ function validHost(host: string): boolean {
 }
 
 function isLoopbackHost(host: string): boolean {
-  return host === "localhost" || host === "127.0.0.1" || host === "::1";
+  const normalized = host.toLowerCase();
+  return normalized === "localhost" || normalized === "127.0.0.1" || normalized === "::1";
 }
 
 export function resolveHttpAppConfig(env: JarvisEnvironment = process.env): HttpAppConfig {
@@ -83,10 +84,11 @@ export function resolveHttpAppConfig(env: JarvisEnvironment = process.env): Http
 }
 
 export function resolveHttpListenConfig(env: JarvisEnvironment = process.env): HttpListenConfig {
-  const host = optionalText(env.JARVIS_HTTP_HOST) ?? "127.0.0.1";
-  if (!validHost(host)) {
+  const rawHost = optionalText(env.JARVIS_HTTP_HOST) ?? "127.0.0.1";
+  if (!validHost(rawHost)) {
     throw new Error("JARVIS_HTTP_HOST must be a valid IP address or hostname.");
   }
+  const host = rawHost.toLowerCase();
   if (!isLoopbackHost(host)) {
     throw new Error(
       "Remote HTTP exposure is disabled until the approved OAuth 2.1, TLS, and deployment boundary exists.",
