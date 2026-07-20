@@ -1,0 +1,71 @@
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
+
+import { OrchestrationGraph } from "../src/orchestration/graph.js";
+
+const createTask = {
+  operationId: "createTask" as const,
+  input: { title: "Inspect mounts" },
+};
+
+const completeTask = {
+  operationId: "completeTask" as const,
+  input: { taskId: "task-1" },
+};
+
+describe("OrchestrationGraph", () => {
+  it("preserves the legacy node and edge plan surface", () => {
+    const graph = new OrchestrationGraph();
+    graph.addNode({ id: "runtime", kind: "module" });
+    graph.addEdge({ from: "runtime", to: "safety" });
+
+    assert.deepEqual(graph.getPlan(), {
+      nodes: [{ id: "runtime", kind: "module" }],
+      edges: [{ from: "runtime", to: "safety" }],
+    });
+  });
+
+  it("orders dependencies before dependent commands", () => {
+    const graph = new OrchestrationGraph([
+      { id: "complete", command: completeTask, dependsOn: ["create"] },
+      { id: "create", command: createTask },
+    ]);
+
+    assert.deepEqual(
+      graph.orderedNodes().map((node) => node.id),
+      ["create", "complete"],
+    );
+  });
+
+  it("rejects duplicate node IDs", () => {
+    assert.throws(
+      () =>
+        new OrchestrationGraph([
+          { id: "task", command: createTask },
+          { id: "task", command: completeTask },
+        ]),
+      /Duplicate orchestration node ID/,
+    );
+  });
+
+  it("rejects missing dependencies", () => {
+    assert.throws(
+      () =>
+        new OrchestrationGraph([
+          { id: "complete", command: completeTask, dependsOn: ["missing"] },
+        ]),
+      /depends on unknown node missing/,
+    );
+  });
+
+  it("rejects cycles", () => {
+    assert.throws(
+      () =>
+        new OrchestrationGraph([
+          { id: "one", command: createTask, dependsOn: ["two"] },
+          { id: "two", command: completeTask, dependsOn: ["one"] },
+        ]),
+      /contains a cycle/,
+    );
+  });
+});
