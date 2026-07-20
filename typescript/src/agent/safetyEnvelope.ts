@@ -34,6 +34,24 @@ function isErrorOutput(value: unknown): value is { error: string } {
   );
 }
 
+function isActivatedScene(value: unknown): value is { activated: string } {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "activated" in value &&
+    typeof (value as { activated: unknown }).activated === "string"
+  );
+}
+
+function isCompletedJob(value: unknown): boolean {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "status" in value &&
+    (value as { status: unknown }).status === "completed"
+  );
+}
+
 export class SafetyEnvelope {
   evaluate(ctx: SafetyContext): SafetyResult {
     const reasons: string[] = [];
@@ -54,6 +72,12 @@ export class SafetyEnvelope {
       if (job && job.status !== "completed") {
         reasons.push("Job completion output inconsistent");
       }
+    }
+
+    // Cross-domain consistency: a home scene must not be activated within a plan
+    // unless that plan also completed a job.
+    if (ctx.outputs.some(isActivatedScene) && !ctx.outputs.some(isCompletedJob)) {
+      reasons.push("Home scene activated without a completed job");
     }
 
     // Output-consistency check: a step that returned an error is not a safe result.

@@ -43,3 +43,18 @@ and a memory-consolidation layer.
 | `memoryTypes.ts` / `memoryConsolidator.ts` / `memoryManager.ts` | Short/long-term memory, bounded pruning, lineage                     |
 | `validationSuite.ts` / `systemCheck.ts`                         | Self-audit and end-to-end scenario                                   |
 | `system.ts` / `main.ts`                                         | Composition root and runnable entry                                  |
+
+## Stage coverage
+
+Each stage from the Jarvis v2 checklist, mapped to where it lives here — implemented against the code that actually exists, no invented real-world safety:
+
+1. **Safety envelope** — `safetyEnvelope.ts`: tool/quantity rules, business `complete_job` consistency, error-output detection, and a home-scene-requires-completed-job cross-domain rule.
+2. **Intent mapping** — `conversationService.ts`: canonical job intents with synonym phrasings (`start`/`kick off`/`begin`, `prepare`/`prep`/`set up`, `complete`/`finish`/`close`) plus `jobId` extraction.
+3. **Orchestration graph** — `graph.ts`: config-driven intent → weighted nodes (`defaultGraphConfig`).
+4. **Adaptive layer** — `learningEngine.ts` (per-intent success stats) and `predictionEngine.ts` (lifecycle next-intent prediction).
+5. **Autonomy layer** — `workflowGenerator.ts` / `ruleEvolution.ts`: data-driven, advisory proposals that are never auto-applied.
+6. **Reliability** — `healthMonitor.ts`: metric-derived status that gates autonomy (critical health blocks activation).
+7. **Memory** — `memoryConsolidator.ts` / `memoryManager.ts`: bounded short-term pruning, orphan-free lineage, usable profiles.
+8. **Z-state** — `zState.ts`: activates only when safety is ok, reliability is healthy, and enough history exists.
+9. **Validation suite** — `validationSuite.ts`: per-subsystem self-checks.
+10. **Full system test** — `systemCheck.ts` + `autonomyDemo.ts`: end-to-end scenario and governed-autonomy demonstration, exercised by `npm run agent:check` and `tests/agentSystem.test.ts` / `tests/agentMemory.test.ts`.
