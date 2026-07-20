@@ -5,6 +5,7 @@ import { ConversationService } from "../src/agent/conversationService.js";
 import { SafetyEnvelope } from "../src/agent/safetyEnvelope.js";
 import { WorkshopEngine } from "../src/agent/workshopEngine.js";
 import { createAgentSystem } from "../src/agent/system.js";
+import { runGovernedAutonomyDemo } from "../src/agent/autonomyDemo.js";
 import { runSystemCheck } from "../src/agent/systemCheck.js";
 import type { InteractionRecord } from "../src/agent/learningEngine.js";
 
@@ -94,6 +95,24 @@ describe("agent Z-state gating", () => {
     assert.equal(report.active, true);
     assert.ok(report.proposals);
     assert.equal(report.proposals?.workflow.intent, "start_job");
+  });
+});
+
+describe("agent governed autonomy demo", () => {
+  it("gates autonomy without history, then activates with advisory proposals", () => {
+    const report = runGovernedAutonomyDemo(createAgentSystem());
+
+    assert.equal(report.beforeWarmup.active, false);
+    assert.ok(report.beforeWarmup.reasons.includes("Insufficient adaptive history"));
+
+    assert.equal(report.afterWarmup.active, true);
+    assert.ok(report.afterWarmup.proposals);
+    assert.equal(report.afterWarmup.proposals?.workflow.intent, "start_job");
+    // Five successful interactions cross the rule-evolution threshold.
+    assert.deepEqual(
+      report.afterWarmup.proposals?.ruleChanges.map((change) => change.change),
+      ["increase_weight"],
+    );
   });
 });
 
