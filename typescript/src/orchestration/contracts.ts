@@ -27,10 +27,7 @@ export type ReasonWithTotalityCommand = {
 };
 
 export type OrchestrationCommand =
-  | CreateTaskCommand
-  | CompleteTaskCommand
-  | CreateReminderCommand
-  | ReasonWithTotalityCommand;
+  CreateTaskCommand | CompleteTaskCommand | CreateReminderCommand | ReasonWithTotalityCommand;
 
 export type OrchestrationValue = Task | Reminder | TotalityResponse<unknown>;
 
@@ -57,8 +54,7 @@ export type DomainFailure = {
   retryable: boolean;
 };
 
-export type DomainResult<T = OrchestrationValue> =
-  DomainSuccess<T> | DomainFailure;
+export type DomainResult<T = OrchestrationValue> = DomainSuccess<T> | DomainFailure;
 
 export type OrchestrationContext = {
   runId: string;
@@ -66,10 +62,7 @@ export type OrchestrationContext = {
 };
 
 export interface OrchestrationExecutor {
-  execute(
-    command: OrchestrationCommand,
-    context: OrchestrationContext,
-  ): Promise<DomainResult>;
+  execute(command: OrchestrationCommand, context: OrchestrationContext): Promise<DomainResult>;
 }
 
 export type OrchestrationOutcome = {
