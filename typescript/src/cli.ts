@@ -446,6 +446,7 @@ export async function runCli(deps: RunCliDependencies = {}): Promise<void> {
         contextMemory.remember(inputText);
         const plan = orchestrator.plan(parsed);
         const result = await orchestrator.execute(plan);
+        learningEngine.record(intent, result.safetyStatus === "ok");
         const reply = responseFormatter.format(intent, inputText);
 
         if (lower.includes("summary")) {
