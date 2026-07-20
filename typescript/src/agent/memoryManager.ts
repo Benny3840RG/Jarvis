@@ -22,6 +22,14 @@ export class MemoryManager {
     this.consolidator.addShortTerm(intent, context);
   }
 
+  rememberProfile(id: string, name: string, traits: Payload): Profile {
+    return this.consolidator.upsertProfile(id, name, traits);
+  }
+
+  getProfile(id: string): Profile | undefined {
+    return this.consolidator.getProfile(id);
+  }
+
   consolidate(history: InteractionRecord[]): LongTermMemoryEntry | null {
     return this.consolidator.consolidateInteractions(history);
   }

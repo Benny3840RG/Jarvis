@@ -32,6 +32,23 @@ export class MemoryConsolidator {
     return entry;
   }
 
+  /** Stores or updates a stable profile of traits, keyed by id. */
+  upsertProfile(id: string, name: string, traits: Payload): Profile {
+    const existing = this.profiles.find((profile) => profile.id === id);
+    if (existing) {
+      existing.name = name;
+      existing.traits = { ...existing.traits, ...traits };
+      return existing;
+    }
+    const profile: Profile = { id, name, traits };
+    this.profiles.push(profile);
+    return profile;
+  }
+
+  getProfile(id: string): Profile | undefined {
+    return this.profiles.find((profile) => profile.id === id);
+  }
+
   consolidateInteractions(history: InteractionRecord[]): LongTermMemoryEntry | null {
     if (history.length === 0) return null;
 
