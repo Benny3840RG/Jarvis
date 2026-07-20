@@ -23,10 +23,8 @@ export class OrchestrationGraph {
     const byId = new Map<string, OrchestrationNode>();
 
     for (const node of copies) {
-      if (node.id.trim().length === 0)
-        throw new Error("Orchestration node IDs must not be blank.");
-      if (byId.has(node.id))
-        throw new Error(`Duplicate orchestration node ID: ${node.id}`);
+      if (node.id.trim().length === 0) throw new Error("Orchestration node IDs must not be blank.");
+      if (byId.has(node.id)) throw new Error(`Duplicate orchestration node ID: ${node.id}`);
       byId.set(node.id, node);
     }
 
@@ -37,14 +35,10 @@ export class OrchestrationGraph {
       }
       for (const dependencyId of dependencies) {
         if (dependencyId === node.id) {
-          throw new Error(
-            `Orchestration node ${node.id} cannot depend on itself.`,
-          );
+          throw new Error(`Orchestration node ${node.id} cannot depend on itself.`);
         }
         if (!byId.has(dependencyId)) {
-          throw new Error(
-            `Orchestration node ${node.id} depends on unknown node ${dependencyId}.`,
-          );
+          throw new Error(`Orchestration node ${node.id} depends on unknown node ${dependencyId}.`);
         }
       }
     }
@@ -74,18 +68,14 @@ export class OrchestrationGraph {
       const current = state.get(node.id);
       if (current === "visited") return;
       if (current === "visiting") {
-        throw new Error(
-          `Orchestration graph contains a cycle involving ${node.id}.`,
-        );
+        throw new Error(`Orchestration graph contains a cycle involving ${node.id}.`);
       }
 
       state.set(node.id, "visiting");
       for (const dependencyId of node.dependsOn ?? []) {
         const dependency = this.commandNodesById.get(dependencyId);
         if (!dependency) {
-          throw new Error(
-            `Orchestration node ${node.id} depends on unknown node ${dependencyId}.`,
-          );
+          throw new Error(`Orchestration node ${node.id} depends on unknown node ${dependencyId}.`);
         }
         visit(dependency);
       }
