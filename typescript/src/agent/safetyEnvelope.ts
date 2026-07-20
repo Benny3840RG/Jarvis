@@ -25,6 +25,15 @@ function hasStatusForJob(
   );
 }
 
+function isErrorOutput(value: unknown): value is { error: string } {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "error" in value &&
+    typeof (value as { error: unknown }).error === "string"
+  );
+}
+
 export class SafetyEnvelope {
   evaluate(ctx: SafetyContext): SafetyResult {
     const reasons: string[] = [];
@@ -45,6 +54,12 @@ export class SafetyEnvelope {
       if (job && job.status !== "completed") {
         reasons.push("Job completion output inconsistent");
       }
+    }
+
+    // Output-consistency check: a step that returned an error is not a safe result.
+    const errorCount = ctx.outputs.filter(isErrorOutput).length;
+    if (errorCount > 0) {
+      reasons.push(`${errorCount} step output(s) reported an error`);
     }
 
     if (reasons.length === 0) return { status: "ok", reasons: [] };

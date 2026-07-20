@@ -51,6 +51,17 @@ describe("agent safety envelope", () => {
       "ok",
     );
   });
+
+  it("flags a step that returned an error output as a consistency warning", () => {
+    const result = safety.evaluate({
+      domain: "business",
+      action: "start_job",
+      payload: { jobId: "j1" },
+      outputs: [{ error: "Job not found" }, { jobId: "j1", status: "prepared" }],
+    });
+    assert.equal(result.status, "warning");
+    assert.ok(result.reasons.some((reason) => reason.includes("error")));
+  });
 });
 
 describe("agent domain engine", () => {
