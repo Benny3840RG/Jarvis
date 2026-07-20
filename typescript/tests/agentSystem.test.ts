@@ -103,6 +103,8 @@ describe("agent full system check", () => {
     assert.equal(report.parsed.intent, "start_job");
     assert.ok(report.plan.steps.length > 0);
     assert.equal(report.allValid, true, JSON.stringify(report.validation, null, 2));
+    // After a start_job interaction, the prediction layer suggests prepare_job.
+    assert.equal(report.predictedNextIntent, "prepare_job");
     // The consolidation lineage must reference a short-term entry that exists.
     const lineage = report.memorySnapshot.lineage[0];
     assert.ok(lineage);

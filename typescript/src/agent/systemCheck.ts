@@ -13,6 +13,7 @@ export interface SystemCheckReport {
   learningHistory: InteractionRecord[];
   memoryConsolidation: LongTermMemoryEntry | null;
   memorySnapshot: MemorySnapshot;
+  predictedNextIntent: string | null;
   validation: ValidationResult[];
   allValid: boolean;
 }
@@ -35,6 +36,7 @@ export async function runSystemCheck(
   const learningHistory = system.learning.getHistory();
   const memoryConsolidation = system.memoryManager.consolidate(learningHistory);
   const memorySnapshot = system.memoryManager.snapshot();
+  const predictedNextIntent = system.prediction.predictNextIntent(learningHistory);
   const validation = system.validation.runAll();
 
   return {
@@ -44,6 +46,7 @@ export async function runSystemCheck(
     learningHistory,
     memoryConsolidation,
     memorySnapshot,
+    predictedNextIntent,
     validation,
     allValid: validation.every((result) => result.passed),
   };
