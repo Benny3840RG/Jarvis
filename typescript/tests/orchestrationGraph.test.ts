@@ -51,9 +51,7 @@ describe("OrchestrationGraph", () => {
   it("rejects missing dependencies", () => {
     assert.throws(
       () =>
-        new OrchestrationGraph([
-          { id: "complete", command: completeTask, dependsOn: ["missing"] },
-        ]),
+        new OrchestrationGraph([{ id: "complete", command: completeTask, dependsOn: ["missing"] }]),
       /depends on unknown node missing/,
     );
   });
