@@ -25,6 +25,7 @@ import type * as toolActionLogic from "../toolActionLogic.js";
 import type * as toolActions from "../toolActions.js";
 import type * as toolActionValidators from "../toolActionValidators.js";
 import type * as totalityValidators from "../totalityValidators.js";
+import type * as upgrades from "../upgrades.js";
 import type * as validationReports from "../validationReports.js";
 
 import type {
@@ -51,6 +52,7 @@ declare const fullApi: ApiFromModules<{
   toolActions: typeof toolActions;
   toolActionValidators: typeof toolActionValidators;
   totalityValidators: typeof totalityValidators;
+  upgrades: typeof upgrades;
   validationReports: typeof validationReports;
 }>;
 

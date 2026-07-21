@@ -173,4 +173,17 @@ export default defineSchema({
     occurredAt: v.optional(v.number()),
     createdAt: v.number(),
   }).index("by_owner", ["ownerId"]),
+  upgrades: defineTable({
+    ownerId: v.string(),
+    buildId: v.string(),
+    title: v.string(),
+    reason: v.optional(v.string()),
+    beforeState: v.optional(v.string()),
+    afterState: v.optional(v.string()),
+    outcome: v.optional(v.string()),
+    parts: v.optional(v.array(v.string())),
+    version: v.optional(v.string()),
+    occurredAt: v.optional(v.number()),
+    createdAt: v.number(),
+  }).index("by_owner", ["ownerId"]),
 });
