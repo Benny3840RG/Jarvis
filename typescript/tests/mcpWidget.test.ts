@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { Script } from "node:vm";
 import { describe, it } from "node:test";
 
 const widget = readFileSync(
@@ -25,6 +26,12 @@ describe("Jarvis preview widget", () => {
     assert.match(widget, /status\.layers/);
     assert.match(widget, /Task load by domain/);
     assert.match(widget, /Reminder timing distribution/);
+  });
+
+  it("ships syntactically valid embedded dashboard JavaScript", () => {
+    const source = widget.match(/<script>([\s\S]*?)<\/script>/)?.[1];
+    assert.ok(source, "dashboard script was not found");
+    assert.doesNotThrow(() => new Script(source));
   });
 
   it("uses the violet-green HUD treatment while retaining Beez Treez branding", () => {
