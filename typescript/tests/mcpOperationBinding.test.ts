@@ -101,6 +101,16 @@ function sampleBuild(id = "build-1") {
   };
 }
 
+function sampleBuildLog(id = "build-log-1") {
+  return {
+    id,
+    buildId: "build-1",
+    kind: "milestone",
+    title: "First clean crawl",
+    createdAt: 1,
+  };
+}
+
 function sampleBrief() {
   return {
     generatedAt: "2026-07-21T08:00:00.000Z",
@@ -171,6 +181,12 @@ function mockResponse(method: string, path: string): Response {
       : Response.json({ data: [sampleBuild()], count: 1 });
   }
   if (/^\/api\/v1\/builds\/[^/]+$/.test(path)) return Response.json({ data: sampleBuild() });
+  if (path === "/api/v1/build-logs") {
+    return method === "POST"
+      ? Response.json({ data: sampleBuildLog() })
+      : Response.json({ data: [sampleBuildLog()], count: 1 });
+  }
+  if (/^\/api\/v1\/build-logs\/[^/]+$/.test(path)) return Response.json({ data: sampleBuildLog() });
   return Response.json({ title: "Not Found", status: 404 }, { status: 404 });
 }
 
@@ -271,6 +287,11 @@ const TOOL_INVOCATIONS: Record<string, Record<string, unknown>> = {
   create_build: { name: "Recorded build", kind: "RC crawler" },
   update_build: { buildId: "build-1", status: "active" },
   delete_build: { buildId: "build-1" },
+  list_build_log: {},
+  get_build_log: { entryId: "build-log-1" },
+  create_build_log: { buildId: "build-1", title: "First clean crawl" },
+  update_build_log: { entryId: "build-log-1", kind: "note" },
+  delete_build_log: { entryId: "build-log-1" },
 };
 
 describe("MCP tool operation bindings", () => {

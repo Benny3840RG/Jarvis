@@ -4,6 +4,7 @@ import type { DailyBrief } from "../briefs/brief.js";
 import type { Client, ClientInput, ClientUpdate } from "../clients/client.js";
 import type { Errand, ErrandInput, ErrandUpdate } from "../errands/errand.js";
 import type { Build, BuildInput, BuildUpdate } from "../builds/build.js";
+import type { BuildLogEntry, BuildLogInput, BuildLogUpdate } from "../buildLog/buildLogEntry.js";
 import type { Project, ProjectInput, ProjectUpdate } from "../projects/project.js";
 import type { Quote, QuoteInput, QuoteUpdate } from "../quotes/quote.js";
 import type { SystemStatus } from "../http/contracts.js";
@@ -408,6 +409,44 @@ export class JarvisApiClient {
       await this.request<DataResponse<Build>>(
         "DELETE",
         `/api/v1/builds/${encodeURIComponent(buildId)}`,
+      )
+    ).data;
+  }
+
+  async listBuildLogs(): Promise<BuildLogEntry[]> {
+    return (await this.request<ListResponse<BuildLogEntry>>("GET", "/api/v1/build-logs")).data;
+  }
+
+  async getBuildLog(entryId: string): Promise<BuildLogEntry> {
+    return (
+      await this.request<DataResponse<BuildLogEntry>>(
+        "GET",
+        `/api/v1/build-logs/${encodeURIComponent(entryId)}`,
+      )
+    ).data;
+  }
+
+  async createBuildLog(input: BuildLogInput): Promise<BuildLogEntry> {
+    return (
+      await this.request<DataResponse<BuildLogEntry>>("POST", "/api/v1/build-logs", { body: input })
+    ).data;
+  }
+
+  async updateBuildLog(entryId: string, update: BuildLogUpdate): Promise<BuildLogEntry> {
+    return (
+      await this.request<DataResponse<BuildLogEntry>>(
+        "PATCH",
+        `/api/v1/build-logs/${encodeURIComponent(entryId)}`,
+        { body: update },
+      )
+    ).data;
+  }
+
+  async deleteBuildLog(entryId: string): Promise<BuildLogEntry> {
+    return (
+      await this.request<DataResponse<BuildLogEntry>>(
+        "DELETE",
+        `/api/v1/build-logs/${encodeURIComponent(entryId)}`,
       )
     ).data;
   }
