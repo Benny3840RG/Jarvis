@@ -12,3 +12,4 @@ export const HTTP_BUILD_STORE = Symbol("HTTP_BUILD_STORE");
 export const HTTP_BUILD_LOG_STORE = Symbol("HTTP_BUILD_LOG_STORE");
 export const HTTP_UPGRADE_STORE = Symbol("HTTP_UPGRADE_STORE");
 export const HTTP_ASSET_STORE = Symbol("HTTP_ASSET_STORE");
+export const HTTP_PREFERENCE_STORE = Symbol("HTTP_PREFERENCE_STORE");
