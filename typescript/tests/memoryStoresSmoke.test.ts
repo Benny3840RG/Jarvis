@@ -19,8 +19,8 @@ type RealStores = {
 
 /**
  * Shared in-memory stores plus factories that hand back the same instance each
- * call, so "visibility from a new store instance" is exercised against a real
- * store implementation rather than a mock.
+ * call, so the smoke runner is exercised against real store implementations
+ * rather than mocks.
  */
 function realStores(overrides: Partial<RealStores> = {}): {
   stores: RealStores;
@@ -120,6 +120,30 @@ describe("Memory stores smoke runner", () => {
 
     // The record created before the forced failure must have been cleaned up,
     // and the later domains must never have run.
+    assert.deepEqual(await stores.builds.list(), []);
+    assert.deepEqual(await stores.buildLogs.list(), []);
+  });
+
+  it("fails when remove returns the record without deleting it", async () => {
+    class FirstRemoveDoesNotDeleteBuildStore extends InMemoryBuildStore {
+      private removeCalls = 0;
+
+      override async remove(id: string): Promise<Build | null> {
+        this.removeCalls += 1;
+        if (this.removeCalls === 1) return this.get(id);
+        return super.remove(id);
+      }
+    }
+
+    const builds = new FirstRemoveDoesNotDeleteBuildStore();
+    const { stores, factories } = realStores({ builds });
+
+    await assert.rejects(
+      () => runMemoryStoresSmoke(factories, "dev:test", () => undefined),
+      /record remained after removal/,
+    );
+
+    // Cleanup retries removal after the failed verification and leaves no smoke record behind.
     assert.deepEqual(await stores.builds.list(), []);
     assert.deepEqual(await stores.buildLogs.list(), []);
   });
