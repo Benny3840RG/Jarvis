@@ -8,6 +8,7 @@ import type { BuildLogEntry, BuildLogInput, BuildLogUpdate } from "../buildLog/b
 import type { Upgrade, UpgradeInput, UpgradeUpdate } from "../upgrades/upgrade.js";
 import type { AssetInput, AssetUpdate } from "../assets/asset.js";
 import type { AssetView } from "../assets/assetView.js";
+import type { Preference, PreferenceInput, PreferenceUpdate } from "../preferences/preference.js";
 import type { Project, ProjectInput, ProjectUpdate } from "../projects/project.js";
 import type { Quote, QuoteInput, QuoteUpdate } from "../quotes/quote.js";
 import type { SystemStatus } from "../http/contracts.js";
@@ -524,6 +525,44 @@ export class JarvisApiClient {
       await this.request<DataResponse<AssetView>>(
         "DELETE",
         `/api/v1/assets/${encodeURIComponent(assetId)}`,
+      )
+    ).data;
+  }
+
+  async listPreferences(): Promise<Preference[]> {
+    return (await this.request<ListResponse<Preference>>("GET", "/api/v1/preferences")).data;
+  }
+
+  async getPreference(preferenceId: string): Promise<Preference> {
+    return (
+      await this.request<DataResponse<Preference>>(
+        "GET",
+        `/api/v1/preferences/${encodeURIComponent(preferenceId)}`,
+      )
+    ).data;
+  }
+
+  async createPreference(input: PreferenceInput): Promise<Preference> {
+    return (
+      await this.request<DataResponse<Preference>>("POST", "/api/v1/preferences", { body: input })
+    ).data;
+  }
+
+  async updatePreference(preferenceId: string, update: PreferenceUpdate): Promise<Preference> {
+    return (
+      await this.request<DataResponse<Preference>>(
+        "PATCH",
+        `/api/v1/preferences/${encodeURIComponent(preferenceId)}`,
+        { body: update },
+      )
+    ).data;
+  }
+
+  async deletePreference(preferenceId: string): Promise<Preference> {
+    return (
+      await this.request<DataResponse<Preference>>(
+        "DELETE",
+        `/api/v1/preferences/${encodeURIComponent(preferenceId)}`,
       )
     ).data;
   }
