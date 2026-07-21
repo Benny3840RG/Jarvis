@@ -9,6 +9,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 
 import type { Client } from "../clients/client.js";
+import type { Errand } from "../errands/errand.js";
 import type { Project } from "../projects/project.js";
 import type { Quote } from "../quotes/quote.js";
 import type { Reminder, Task } from "../persistence/persistence.js";
@@ -93,6 +94,35 @@ const quoteLineItemInputSchema = z.object({
   description: z.string().trim().min(1).max(500),
   quantity: z.number().min(0),
   unitPrice: z.number().min(0),
+});
+
+const errandLocationSchema = z.object({
+  label: z.string(),
+  address: z.string().optional(),
+  lat: z.number().optional(),
+  lon: z.number().optional(),
+});
+
+const errandSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  quantity: z.number().optional(),
+  status: z.enum(["open", "done"]),
+  location: errandLocationSchema.optional(),
+  projectId: z.string().optional(),
+  notes: z.string().optional(),
+  createdAt: z.number(),
+  updatedAt: z.number(),
+  completedAt: z.number().optional(),
+});
+
+// Location input mirrors the HTTP contract: label required, coordinates only
+// meaningful as a pair, resolved by the assistant's maps tooling beforehand.
+const errandLocationInputSchema = z.object({
+  label: z.string().trim().min(1).max(200),
+  address: z.string().trim().min(1).max(500).optional(),
+  lat: z.number().min(-90).max(90).optional(),
+  lon: z.number().min(-180).max(180).optional(),
 });
 
 const briefSchema = z.object({
@@ -257,6 +287,13 @@ function quoteResult(quote: Quote, message: string) {
   return {
     content: [{ type: "text" as const, text: message }],
     structuredContent: { quote },
+  };
+}
+
+function errandResult(errand: Errand, message: string) {
+  return {
+    content: [{ type: "text" as const, text: message }],
+    structuredContent: { errand },
   };
 }
 
@@ -1137,6 +1174,161 @@ export function createJarvisMcpServer(client: JarvisApiClient): McpServer {
           content: [{ type: "text" as const, text: brief.headline }],
           structuredContent: { brief },
         };
+      } catch (error: unknown) {
+        return safeError(error);
+      }
+    },
+  );
+
+  registerAppTool(
+    server,
+    "list_errands",
+    {
+      title: "List errands",
+      description:
+        "Use this when Benny asks what he needs to pick up or do while out, or mentions being at or near a shop — check the open errands and their stored locations.",
+      inputSchema: {},
+      outputSchema: { errands: z.array(errandSchema), count: z.number().int().nonnegative() },
+      annotations: readAnnotations,
+      _meta: { ui: { visibility: ["model"] } },
+    },
+    async () => {
+      try {
+        const errands = await client.listErrands();
+        return {
+          content: [{ type: "text" as const, text: `Found ${errands.length} errands.` }],
+          structuredContent: { errands, count: errands.length },
+        };
+      } catch (error: unknown) {
+        return safeError(error);
+      }
+    },
+  );
+
+  registerAppTool(
+    server,
+    "get_errand",
+    {
+      title: "Get an errand",
+      description: "Use this when the user refers to one known errand by its identifier.",
+      inputSchema: { errandId: z.string().min(1) },
+      outputSchema: { errand: errandSchema },
+      annotations: readAnnotations,
+      _meta: { ui: { visibility: ["model"] } },
+    },
+    async ({ errandId }) => {
+      try {
+        return errandResult(await client.getErrand(errandId), "Errand details.");
+      } catch (error: unknown) {
+        return safeError(error);
+      }
+    },
+  );
+
+  registerAppTool(
+    server,
+    "create_errand",
+    {
+      title: "Create an errand",
+      description:
+        "Use this when Benny mentions something to pick up or do while out (e.g. milk, silicone x2 at Bunnings). If a place is known, resolve it with maps tooling first and pass the structured location — the server only stores it and never geocodes.",
+      inputSchema: {
+        title: z.string().trim().min(1).max(500),
+        quantity: z.number().positive().optional(),
+        status: z.enum(["open", "done"]).optional(),
+        location: errandLocationInputSchema.optional(),
+        projectId: z.string().trim().min(1).max(200).optional(),
+        notes: z.string().trim().min(1).max(2000).optional(),
+      },
+      outputSchema: { errand: errandSchema },
+      annotations: createAnnotations,
+      _meta: { ui: { visibility: ["model"] } },
+    },
+    async ({ title, quantity, status, location, projectId, notes }) => {
+      try {
+        const created = await client.createErrand({
+          title,
+          ...(quantity === undefined ? {} : { quantity }),
+          ...(status === undefined ? {} : { status }),
+          ...(location === undefined ? {} : { location }),
+          ...(projectId === undefined ? {} : { projectId }),
+          ...(notes === undefined ? {} : { notes }),
+        });
+        return errandResult(created, `Created errand "${created.title}".`);
+      } catch (error: unknown) {
+        return safeError(error);
+      }
+    },
+  );
+
+  registerAppTool(
+    server,
+    "update_errand",
+    {
+      title: "Update an errand",
+      description:
+        'Use this when the user explicitly asks to change an errand, or has picked something up — status "done" marks it complete and stamps the completion time.',
+      inputSchema: {
+        errandId: z.string().min(1),
+        title: z.string().trim().min(1).max(500).optional(),
+        quantity: z.number().positive().nullable().optional(),
+        status: z.enum(["open", "done"]).optional(),
+        location: errandLocationInputSchema.nullable().optional(),
+        projectId: z.string().trim().min(1).max(200).nullable().optional(),
+        notes: z.string().trim().min(1).max(2000).nullable().optional(),
+      },
+      outputSchema: { errand: errandSchema },
+      annotations: writeAnnotations,
+      _meta: { ui: { visibility: ["model"] } },
+    },
+    async ({ errandId, title, quantity, status, location, projectId, notes }) => {
+      try {
+        if (
+          title === undefined &&
+          quantity === undefined &&
+          status === undefined &&
+          location === undefined &&
+          projectId === undefined &&
+          notes === undefined
+        ) {
+          return {
+            isError: true,
+            content: [
+              { type: "text" as const, text: "Errand update requires at least one changed field." },
+            ],
+          };
+        }
+        const updated = await client.updateErrand(errandId, {
+          ...(title === undefined ? {} : { title }),
+          ...(quantity === undefined ? {} : { quantity }),
+          ...(status === undefined ? {} : { status }),
+          ...(location === undefined ? {} : { location }),
+          ...(projectId === undefined ? {} : { projectId }),
+          ...(notes === undefined ? {} : { notes }),
+        });
+        return errandResult(updated, `Updated errand "${updated.title}".`);
+      } catch (error: unknown) {
+        return safeError(error);
+      }
+    },
+  );
+
+  registerAppTool(
+    server,
+    "delete_errand",
+    {
+      title: "Delete an errand",
+      description:
+        "Use this only when the user explicitly asks to permanently remove an errand by identifier.",
+      inputSchema: { errandId: z.string().min(1) },
+      outputSchema: { errand: errandSchema },
+      annotations: destructiveAnnotations,
+      _meta: { ui: { visibility: ["model"] } },
+    },
+    async ({ errandId }) => {
+      try {
+        const removed = await client.deleteErrand(errandId);
+        return errandResult(removed, `Deleted errand "${removed.title}".`);
       } catch (error: unknown) {
         return safeError(error);
       }
