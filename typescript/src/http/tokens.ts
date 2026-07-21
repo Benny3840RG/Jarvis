@@ -6,3 +6,4 @@ export const HTTP_MEMORY_CHANGE_SETS = Symbol("HTTP_MEMORY_CHANGE_SETS");
 export const HTTP_TOOL_ACTIONS = Symbol("HTTP_TOOL_ACTIONS");
 export const HTTP_CLIENT_STORE = Symbol("HTTP_CLIENT_STORE");
 export const HTTP_PROJECT_STORE = Symbol("HTTP_PROJECT_STORE");
+export const HTTP_QUOTE_STORE = Symbol("HTTP_QUOTE_STORE");
