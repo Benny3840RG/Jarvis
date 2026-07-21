@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import type { DailyBrief } from "../briefs/brief.js";
 import type { Client, ClientInput, ClientUpdate } from "../clients/client.js";
 import type { Errand, ErrandInput, ErrandUpdate } from "../errands/errand.js";
+import type { Build, BuildInput, BuildUpdate } from "../builds/build.js";
 import type { Project, ProjectInput, ProjectUpdate } from "../projects/project.js";
 import type { Quote, QuoteInput, QuoteUpdate } from "../quotes/quote.js";
 import type { SystemStatus } from "../http/contracts.js";
@@ -370,6 +371,43 @@ export class JarvisApiClient {
       await this.request<DataResponse<Errand>>(
         "DELETE",
         `/api/v1/errands/${encodeURIComponent(errandId)}`,
+      )
+    ).data;
+  }
+
+  async listBuilds(): Promise<Build[]> {
+    return (await this.request<ListResponse<Build>>("GET", "/api/v1/builds")).data;
+  }
+
+  async getBuild(buildId: string): Promise<Build> {
+    return (
+      await this.request<DataResponse<Build>>(
+        "GET",
+        `/api/v1/builds/${encodeURIComponent(buildId)}`,
+      )
+    ).data;
+  }
+
+  async createBuild(input: BuildInput): Promise<Build> {
+    return (await this.request<DataResponse<Build>>("POST", "/api/v1/builds", { body: input }))
+      .data;
+  }
+
+  async updateBuild(buildId: string, update: BuildUpdate): Promise<Build> {
+    return (
+      await this.request<DataResponse<Build>>(
+        "PATCH",
+        `/api/v1/builds/${encodeURIComponent(buildId)}`,
+        { body: update },
+      )
+    ).data;
+  }
+
+  async deleteBuild(buildId: string): Promise<Build> {
+    return (
+      await this.request<DataResponse<Build>>(
+        "DELETE",
+        `/api/v1/builds/${encodeURIComponent(buildId)}`,
       )
     ).data;
   }

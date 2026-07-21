@@ -9,6 +9,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 
 import type { Client } from "../clients/client.js";
+import type { Build } from "../builds/build.js";
 import type { Errand } from "../errands/errand.js";
 import type { Project } from "../projects/project.js";
 import type { Quote } from "../quotes/quote.js";
@@ -124,6 +125,18 @@ const errandLocationInputSchema = z.object({
   address: z.string().trim().min(1).max(500).optional(),
   lat: z.number().min(-90).max(90).optional(),
   lon: z.number().min(-180).max(180).optional(),
+});
+
+const buildSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  kind: z.string(),
+  status: z.enum(["planning", "active", "shelved", "retired"]),
+  description: z.string().optional(),
+  nickname: z.string().optional(),
+  notes: z.string().optional(),
+  createdAt: z.number(),
+  updatedAt: z.number(),
 });
 
 const briefSchema = z.object({
@@ -295,6 +308,13 @@ function errandResult(errand: Errand, message: string) {
   return {
     content: [{ type: "text" as const, text: message }],
     structuredContent: { errand },
+  };
+}
+
+function buildResult(build: Build, message: string) {
+  return {
+    content: [{ type: "text" as const, text: message }],
+    structuredContent: { build },
   };
 }
 
@@ -1350,6 +1370,161 @@ export function createJarvisMcpServer(client: JarvisApiClient): McpServer {
       try {
         const removed = await client.deleteErrand(errandId);
         return errandResult(removed, `Deleted errand "${removed.title}".`);
+      } catch (error: unknown) {
+        return safeError(error);
+      }
+    },
+  );
+
+  registerAppTool(
+    server,
+    "list_builds",
+    {
+      title: "List builds",
+      description:
+        "Use this when Benny wants to see or review his builds and machines — the RC crawler, the trailer, his tools.",
+      inputSchema: {},
+      outputSchema: { builds: z.array(buildSchema), count: z.number().int().nonnegative() },
+      annotations: readAnnotations,
+      _meta: { ui: { visibility: ["model"] } },
+    },
+    async () => {
+      try {
+        const builds = await client.listBuilds();
+        return {
+          content: [{ type: "text" as const, text: `Found ${builds.length} builds.` }],
+          structuredContent: { builds, count: builds.length },
+        };
+      } catch (error: unknown) {
+        return safeError(error);
+      }
+    },
+  );
+
+  registerAppTool(
+    server,
+    "get_build",
+    {
+      title: "Get a build",
+      description: "Use this when the user refers to one known build by its identifier.",
+      inputSchema: { buildId: z.string().min(1) },
+      outputSchema: { build: buildSchema },
+      annotations: readAnnotations,
+      _meta: { ui: { visibility: ["model"] } },
+    },
+    async ({ buildId }) => {
+      try {
+        return buildResult(await client.getBuild(buildId), "Build details.");
+      } catch (error: unknown) {
+        return safeError(error);
+      }
+    },
+  );
+
+  registerAppTool(
+    server,
+    "create_build",
+    {
+      title: "Create a build",
+      description:
+        "Use this when Benny starts or mentions a machine or project worth tracking (his RC crawler, the trailer, a tool).",
+      inputSchema: {
+        name: z.string().trim().min(1).max(200),
+        kind: z.string().trim().min(1).max(100),
+        status: z.enum(["planning", "active", "shelved", "retired"]).optional(),
+        description: z.string().trim().min(1).max(2000).optional(),
+        nickname: z.string().trim().min(1).max(100).optional(),
+        notes: z.string().trim().min(1).max(2000).optional(),
+      },
+      outputSchema: { build: buildSchema },
+      annotations: createAnnotations,
+      _meta: { ui: { visibility: ["model"] } },
+    },
+    async ({ name, kind, status, description, nickname, notes }) => {
+      try {
+        const created = await client.createBuild({
+          name,
+          kind,
+          ...(status === undefined ? {} : { status }),
+          ...(description === undefined ? {} : { description }),
+          ...(nickname === undefined ? {} : { nickname }),
+          ...(notes === undefined ? {} : { notes }),
+        });
+        return buildResult(created, `Created build "${created.name}".`);
+      } catch (error: unknown) {
+        return safeError(error);
+      }
+    },
+  );
+
+  registerAppTool(
+    server,
+    "update_build",
+    {
+      title: "Update a build",
+      description:
+        "Use this when the user explicitly asks to change a build's name, kind, status, description, nickname, or notes.",
+      inputSchema: {
+        buildId: z.string().min(1),
+        name: z.string().trim().min(1).max(200).optional(),
+        kind: z.string().trim().min(1).max(100).optional(),
+        status: z.enum(["planning", "active", "shelved", "retired"]).optional(),
+        description: z.string().trim().min(1).max(2000).nullable().optional(),
+        nickname: z.string().trim().min(1).max(100).nullable().optional(),
+        notes: z.string().trim().min(1).max(2000).nullable().optional(),
+      },
+      outputSchema: { build: buildSchema },
+      annotations: writeAnnotations,
+      _meta: { ui: { visibility: ["model"] } },
+    },
+    async ({ buildId, name, kind, status, description, nickname, notes }) => {
+      try {
+        if (
+          name === undefined &&
+          kind === undefined &&
+          status === undefined &&
+          description === undefined &&
+          nickname === undefined &&
+          notes === undefined
+        ) {
+          return {
+            isError: true,
+            content: [
+              { type: "text" as const, text: "Build update requires at least one changed field." },
+            ],
+          };
+        }
+        const updated = await client.updateBuild(buildId, {
+          ...(name === undefined ? {} : { name }),
+          ...(kind === undefined ? {} : { kind }),
+          ...(status === undefined ? {} : { status }),
+          ...(description === undefined ? {} : { description }),
+          ...(nickname === undefined ? {} : { nickname }),
+          ...(notes === undefined ? {} : { notes }),
+        });
+        return buildResult(updated, `Updated build "${updated.name}".`);
+      } catch (error: unknown) {
+        return safeError(error);
+      }
+    },
+  );
+
+  registerAppTool(
+    server,
+    "delete_build",
+    {
+      title: "Delete a build",
+      description:
+        "Use this only when the user explicitly asks to permanently remove a build by identifier.",
+      inputSchema: { buildId: z.string().min(1) },
+      outputSchema: { build: buildSchema },
+      annotations: destructiveAnnotations,
+      _meta: { ui: { visibility: ["model"] } },
+    },
+    async ({ buildId }) => {
+      try {
+        const removed = await client.deleteBuild(buildId);
+        return buildResult(removed, `Deleted build "${removed.name}".`);
       } catch (error: unknown) {
         return safeError(error);
       }
