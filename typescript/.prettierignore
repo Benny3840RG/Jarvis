@@ -7,3 +7,4 @@ data/
 dist/
 package-lock.json
 src/mcp/dashboard-v1.html
+**/src/mcp/dashboard-v1.html
