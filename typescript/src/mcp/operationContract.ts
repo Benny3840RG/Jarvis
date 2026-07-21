@@ -38,6 +38,11 @@ export const MCP_TOOL_OPERATIONS: Readonly<Record<string, readonly OpenApiOperat
   create_reminder: [{ method: "POST", path: "/api/v1/reminders" }],
   update_reminder: [{ method: "PATCH", path: "/api/v1/reminders/{reminderId}" }],
   delete_reminder: [{ method: "DELETE", path: "/api/v1/reminders/{reminderId}" }],
+  list_clients: [{ method: "GET", path: "/api/v1/clients" }],
+  get_client: [{ method: "GET", path: "/api/v1/clients/{clientId}" }],
+  create_client: [{ method: "POST", path: "/api/v1/clients" }],
+  update_client: [{ method: "PATCH", path: "/api/v1/clients/{clientId}" }],
+  delete_client: [{ method: "DELETE", path: "/api/v1/clients/{clientId}" }],
 } as const;
 
 /** Formats an operation as the `METHOD /path` key used for set comparisons. */

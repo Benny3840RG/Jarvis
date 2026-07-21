@@ -56,6 +56,10 @@ function sampleReminder(id = "reminder-1") {
   return { id, title: "Recorded reminder", dueRaw: "Friday 9am", createdAt: 1 };
 }
 
+function sampleClient(id = "client-1") {
+  return { id, name: "Recorded client", contacts: [], createdAt: 1, updatedAt: 1 };
+}
+
 /** Schema-valid mock responses so tool output validation never short-circuits a probe. */
 function mockResponse(method: string, path: string): Response {
   if (path === "/api/v1/status") return Response.json(STATUS);
@@ -73,6 +77,12 @@ function mockResponse(method: string, path: string): Response {
       : Response.json({ data: [sampleReminder()], count: 1 });
   }
   if (/^\/api\/v1\/reminders\/[^/]+$/.test(path)) return Response.json({ data: sampleReminder() });
+  if (path === "/api/v1/clients") {
+    return method === "POST"
+      ? Response.json({ data: sampleClient() })
+      : Response.json({ data: [sampleClient()], count: 1 });
+  }
+  if (/^\/api\/v1\/clients\/[^/]+$/.test(path)) return Response.json({ data: sampleClient() });
   return Response.json({ title: "Not Found", status: 404 }, { status: 404 });
 }
 
@@ -147,6 +157,11 @@ const TOOL_INVOCATIONS: Record<string, Record<string, unknown>> = {
   create_reminder: { title: "Recorded reminder" },
   update_reminder: { reminderId: "reminder-1", title: "Renamed" },
   delete_reminder: { reminderId: "reminder-1" },
+  list_clients: {},
+  get_client: { clientId: "client-1" },
+  create_client: { name: "Recorded client" },
+  update_client: { clientId: "client-1", name: "Renamed" },
+  delete_client: { clientId: "client-1" },
 };
 
 describe("MCP tool operation bindings", () => {
