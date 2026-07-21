@@ -2319,6 +2319,255 @@
           }
         }
       }
+    },
+    "/api/v1/projects": {
+      "get": {
+        "operationId": "listProjects",
+        "summary": "List business projects",
+        "description": "Returns the authoritative project list.",
+        "tags": ["Projects"],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Current projects.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createProject",
+        "summary": "Create a business project",
+        "description": "Creates one project linked to a client.",
+        "tags": ["Projects"],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": false
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateProjectRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Project created.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{projectId}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ProjectId"
+        }
+      ],
+      "get": {
+        "operationId": "getProject",
+        "summary": "Get one business project",
+        "description": "Returns one project by identifier.",
+        "tags": ["Projects"],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Project found.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      },
+      "patch": {
+        "operationId": "updateProject",
+        "summary": "Update a business project",
+        "description": "Updates client, title, status, or notes.",
+        "tags": ["Projects"],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateProjectRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Project updated.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteProject",
+        "summary": "Delete a business project",
+        "description": "Permanently removes one project.",
+        "tags": ["Projects"],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": true,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Project deleted.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -2376,6 +2625,15 @@
         "in": "path",
         "required": true,
         "description": "Opaque client identifier returned by Jarvis.",
+        "schema": {
+          "$ref": "#/components/schemas/RecordId"
+        }
+      },
+      "ProjectId": {
+        "name": "projectId",
+        "in": "path",
+        "required": true,
+        "description": "Opaque project identifier returned by Jarvis.",
         "schema": {
           "$ref": "#/components/schemas/RecordId"
         }
@@ -4210,6 +4468,119 @@
             "items": {
               "$ref": "#/components/schemas/ClientContact"
             }
+          },
+          "notes": {
+            "type": ["string", "null"],
+            "maxLength": 2000
+          }
+        }
+      },
+      "Project": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "clientId", "title", "status", "createdAt", "updatedAt"],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/RecordId"
+          },
+          "clientId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "status": {
+            "type": "string",
+            "enum": ["lead", "quoted", "active", "on_hold", "done"]
+          },
+          "notes": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          },
+          "createdAt": {
+            "$ref": "#/components/schemas/TimestampMs"
+          },
+          "updatedAt": {
+            "$ref": "#/components/schemas/TimestampMs"
+          }
+        }
+      },
+      "ProjectResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["data"],
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/Project"
+          }
+        }
+      },
+      "ProjectListResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["data", "count"],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Project"
+            }
+          },
+          "count": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "CreateProjectRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["clientId", "title"],
+        "properties": {
+          "clientId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "status": {
+            "type": "string",
+            "enum": ["lead", "quoted", "active", "on_hold", "done"]
+          },
+          "notes": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          }
+        }
+      },
+      "UpdateProjectRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "minProperties": 1,
+        "properties": {
+          "clientId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "status": {
+            "type": "string",
+            "enum": ["lead", "quoted", "active", "on_hold", "done"]
           },
           "notes": {
             "type": ["string", "null"],
