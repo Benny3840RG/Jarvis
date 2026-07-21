@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import type { Client, ClientInput, ClientUpdate } from "../clients/client.js";
+import type { Project, ProjectInput, ProjectUpdate } from "../projects/project.js";
 import type { SystemStatus } from "../http/contracts.js";
 import type { Reminder, Task } from "../persistence/persistence.js";
 import type { TaskUpdate } from "../persistence/updates.js";
@@ -255,6 +256,43 @@ export class JarvisApiClient {
       await this.request<DataResponse<Client>>(
         "DELETE",
         `/api/v1/clients/${encodeURIComponent(clientId)}`,
+      )
+    ).data;
+  }
+
+  async listProjects(): Promise<Project[]> {
+    return (await this.request<ListResponse<Project>>("GET", "/api/v1/projects")).data;
+  }
+
+  async getProject(projectId: string): Promise<Project> {
+    return (
+      await this.request<DataResponse<Project>>(
+        "GET",
+        `/api/v1/projects/${encodeURIComponent(projectId)}`,
+      )
+    ).data;
+  }
+
+  async createProject(input: ProjectInput): Promise<Project> {
+    return (await this.request<DataResponse<Project>>("POST", "/api/v1/projects", { body: input }))
+      .data;
+  }
+
+  async updateProject(projectId: string, update: ProjectUpdate): Promise<Project> {
+    return (
+      await this.request<DataResponse<Project>>(
+        "PATCH",
+        `/api/v1/projects/${encodeURIComponent(projectId)}`,
+        { body: update },
+      )
+    ).data;
+  }
+
+  async deleteProject(projectId: string): Promise<Project> {
+    return (
+      await this.request<DataResponse<Project>>(
+        "DELETE",
+        `/api/v1/projects/${encodeURIComponent(projectId)}`,
       )
     ).data;
   }

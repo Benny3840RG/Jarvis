@@ -60,6 +60,17 @@ function sampleClient(id = "client-1") {
   return { id, name: "Recorded client", contacts: [], createdAt: 1, updatedAt: 1 };
 }
 
+function sampleProject(id = "project-1") {
+  return {
+    id,
+    clientId: "client-1",
+    title: "Recorded project",
+    status: "active",
+    createdAt: 1,
+    updatedAt: 1,
+  };
+}
+
 /** Schema-valid mock responses so tool output validation never short-circuits a probe. */
 function mockResponse(method: string, path: string): Response {
   if (path === "/api/v1/status") return Response.json(STATUS);
@@ -83,6 +94,12 @@ function mockResponse(method: string, path: string): Response {
       : Response.json({ data: [sampleClient()], count: 1 });
   }
   if (/^\/api\/v1\/clients\/[^/]+$/.test(path)) return Response.json({ data: sampleClient() });
+  if (path === "/api/v1/projects") {
+    return method === "POST"
+      ? Response.json({ data: sampleProject() })
+      : Response.json({ data: [sampleProject()], count: 1 });
+  }
+  if (/^\/api\/v1\/projects\/[^/]+$/.test(path)) return Response.json({ data: sampleProject() });
   return Response.json({ title: "Not Found", status: 404 }, { status: 404 });
 }
 
@@ -162,6 +179,11 @@ const TOOL_INVOCATIONS: Record<string, Record<string, unknown>> = {
   create_client: { name: "Recorded client" },
   update_client: { clientId: "client-1", name: "Renamed" },
   delete_client: { clientId: "client-1" },
+  list_projects: {},
+  get_project: { projectId: "project-1" },
+  create_project: { clientId: "client-1", title: "Recorded project" },
+  update_project: { projectId: "project-1", status: "done" },
+  delete_project: { projectId: "project-1" },
 };
 
 describe("MCP tool operation bindings", () => {

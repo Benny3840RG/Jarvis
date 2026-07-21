@@ -2327,7 +2327,7 @@
         "description": "Returns the authoritative project list.",
         "tags": ["Projects"],
         "x-mcp-tool": {
-          "exposed": false,
+          "exposed": true,
           "annotations": {
             "readOnlyHint": true,
             "destructiveHint": false,
@@ -2368,7 +2368,7 @@
         "description": "Creates one project linked to a client.",
         "tags": ["Projects"],
         "x-mcp-tool": {
-          "exposed": false,
+          "exposed": true,
           "annotations": {
             "readOnlyHint": false,
             "destructiveHint": false,
@@ -2429,7 +2429,7 @@
         "description": "Returns one project by identifier.",
         "tags": ["Projects"],
         "x-mcp-tool": {
-          "exposed": false,
+          "exposed": true,
           "annotations": {
             "readOnlyHint": true,
             "destructiveHint": false,
@@ -2473,7 +2473,7 @@
         "description": "Updates client, title, status, or notes.",
         "tags": ["Projects"],
         "x-mcp-tool": {
-          "exposed": false,
+          "exposed": true,
           "annotations": {
             "readOnlyHint": false,
             "destructiveHint": false,
@@ -2530,7 +2530,7 @@
         "description": "Permanently removes one project.",
         "tags": ["Projects"],
         "x-mcp-tool": {
-          "exposed": false,
+          "exposed": true,
           "annotations": {
             "readOnlyHint": false,
             "destructiveHint": true,
