@@ -11,6 +11,7 @@
 import type * as assistantState from "../assistantState.js";
 import type * as auditEvents from "../auditEvents.js";
 import type * as authHelpers from "../authHelpers.js";
+import type * as builds from "../builds.js";
 import type * as memoryChangeSetLogic from "../memoryChangeSetLogic.js";
 import type * as memoryChangeSets from "../memoryChangeSets.js";
 import type * as memoryChangeSetValidators from "../memoryChangeSetValidators.js";
@@ -35,6 +36,7 @@ declare const fullApi: ApiFromModules<{
   assistantState: typeof assistantState;
   auditEvents: typeof auditEvents;
   authHelpers: typeof authHelpers;
+  builds: typeof builds;
   memoryChangeSetLogic: typeof memoryChangeSetLogic;
   memoryChangeSets: typeof memoryChangeSets;
   memoryChangeSetValidators: typeof memoryChangeSetValidators;

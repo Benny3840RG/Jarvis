@@ -23,6 +23,7 @@ import { JsonErrandStore } from "../errands/jsonErrandStore.js";
 import type { BuildStore } from "../builds/build.js";
 import { InMemoryBuildStore } from "../builds/inMemoryBuildStore.js";
 import { JsonBuildStore } from "../builds/jsonBuildStore.js";
+import { ConvexBuildStore } from "../builds/convexBuildStore.js";
 import type { BuildLogStore } from "../buildLog/buildLogEntry.js";
 import { InMemoryBuildLogStore } from "../buildLog/inMemoryBuildLogStore.js";
 import { JsonBuildLogStore } from "../buildLog/jsonBuildLogStore.js";
@@ -86,6 +87,23 @@ export type CreateJarvisHttpAppOptions = (
   onRoute?: (route: RegisteredRoute) => void;
 };
 
+/**
+ * Chooses a durable-memory store. An injected store always wins (tests). With a
+ * real environment the provider decides: Convex when configured, JSON otherwise.
+ * Without an environment (an injected core persistence, i.e. tests) the store is
+ * in-memory so nothing touches disk or a deployment.
+ */
+function selectMemoryStore<T>(
+  injected: T | undefined,
+  usesEnvironment: boolean,
+  providerName: PersistenceProviderName,
+  make: { json: () => T; convex: () => T; inMemory: () => T },
+): T {
+  if (injected !== undefined) return injected;
+  if (!usesEnvironment) return make.inMemory();
+  return providerName === "convex" ? make.convex() : make.json();
+}
+
 export async function createJarvisHttpApp(
   options: CreateJarvisHttpAppOptions = {},
 ): Promise<NestFastifyApplication> {
@@ -122,8 +140,11 @@ export async function createJarvisHttpApp(
     options.quoteStore ?? (usesEnvironment ? new JsonQuoteStore() : new InMemoryQuoteStore());
   const errandStore =
     options.errandStore ?? (usesEnvironment ? new JsonErrandStore() : new InMemoryErrandStore());
-  const buildStore =
-    options.buildStore ?? (usesEnvironment ? new JsonBuildStore() : new InMemoryBuildStore());
+  const buildStore = selectMemoryStore(options.buildStore, usesEnvironment, providerName, {
+    json: () => new JsonBuildStore(),
+    convex: () => new ConvexBuildStore(),
+    inMemory: () => new InMemoryBuildStore(),
+  });
   const buildLogStore =
     options.buildLogStore ??
     (usesEnvironment ? new JsonBuildLogStore() : new InMemoryBuildLogStore());
