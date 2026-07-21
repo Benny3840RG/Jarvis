@@ -13,6 +13,14 @@ describe("Jarvis preview widget", () => {
     assert.match(widget, /JARVIS \/\/ OPERATOR CONSOLE/);
   });
 
+  it("carries the Beez Treez brand in orange, black, and green", () => {
+    // Green is a genuine second accent (brand colour + gradient), not just a
+    // status dot, and the console is badged for Beez Treez Property Solutions.
+    assert.match(widget, /#3fbf6a/i);
+    assert.match(widget, /--brand-gradient/);
+    assert.match(widget, /Beez Treez/);
+  });
+
   it("does not contain Jarvis or OpenAI credential names", () => {
     assert.doesNotMatch(widget, /JARVIS_SERVICE_TOKEN/);
     assert.doesNotMatch(widget, /OPENAI_API_KEY/);

@@ -16,6 +16,9 @@
         --orange: #ff7a18;
         --orange-soft: rgba(255, 122, 24, 0.14);
         --green: #42d392;
+        --green-brand: #3fbf6a;
+        --green-soft: rgba(63, 191, 106, 0.16);
+        --brand-gradient: linear-gradient(120deg, #ff7a18 0%, #ffab4c 42%, #3fbf6a 100%);
         --red: #ff5c67;
         --yellow: #f0c75e;
         --radius: 18px;
@@ -35,7 +38,8 @@
         margin: 0;
         min-width: 0;
         background:
-          radial-gradient(circle at 10% 0%, rgba(255, 122, 24, 0.12), transparent 32rem), var(--bg);
+          radial-gradient(circle at 8% -4%, rgba(255, 122, 24, 0.14), transparent 30rem),
+          radial-gradient(circle at 100% 8%, rgba(63, 191, 106, 0.12), transparent 34rem), var(--bg);
         color: var(--text);
       }
       button,
@@ -68,15 +72,22 @@
         gap: 11px;
       }
       .mark {
+        position: relative;
         display: grid;
         place-items: center;
         width: 40px;
         height: 40px;
-        border: 1px solid rgba(255, 122, 24, 0.45);
         border-radius: 12px;
-        background: var(--orange-soft);
-        color: var(--orange);
+        background: var(--brand-gradient);
+        color: #14100b;
         font-weight: 900;
+      }
+      .mark::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        border-radius: inherit;
+        box-shadow: 0 6px 18px rgba(255, 122, 24, 0.35);
       }
       .brand h1 {
         margin: 0;
@@ -87,6 +98,19 @@
         margin: 3px 0 0;
         color: var(--muted);
         font-size: 12px;
+      }
+      .brand p b {
+        color: var(--green-brand);
+        font-weight: 800;
+      }
+      /* Thin orange→green brand rule under the top bar. */
+      .brandbar {
+        height: 2px;
+        border: 0;
+        border-radius: 2px;
+        margin: 0 0 14px;
+        background: var(--brand-gradient);
+        opacity: 0.7;
       }
       .status-line {
         display: flex;
@@ -296,6 +320,9 @@
         display: block;
         font-size: 24px;
       }
+      .stat.done b {
+        color: var(--green-brand);
+      }
       .stat span {
         color: var(--muted);
         font-size: 11px;
@@ -439,7 +466,7 @@
           <div class="mark">J</div>
           <div>
             <h1>JARVIS // OPERATOR CONSOLE</h1>
-            <p>Private development preview 0.1</p>
+            <p><b>Beez Treez</b> Property Solutions</p>
           </div>
         </div>
         <div class="status-line">
@@ -451,6 +478,7 @@
           </button>
         </div>
       </header>
+      <hr class="brandbar" />
       <nav class="nav" aria-label="Dashboard sections">
         <button class="active" type="button" data-view="focus">Focus</button>
         <button type="button" data-view="board">Board</button>
@@ -479,7 +507,7 @@
               <div class="section-title"><h3>Today at a glance</h3></div>
               <div class="stats">
                 <div class="stat"><b id="active-count">0</b><span>active</span></div>
-                <div class="stat"><b id="done-count">0</b><span>cleared</span></div>
+                <div class="stat done"><b id="done-count">0</b><span>cleared</span></div>
                 <div class="stat"><b id="reminder-count">0</b><span>reminders</span></div>
               </div>
             </article>
