@@ -71,6 +71,21 @@ function sampleProject(id = "project-1") {
   };
 }
 
+function sampleQuote(id = "quote-1") {
+  return {
+    id,
+    clientId: "client-1",
+    number: "Q-1001",
+    status: "draft",
+    lineItems: [{ description: "Recorded item", quantity: 1, unitPrice: 100 }],
+    subtotal: 100,
+    tax: 0,
+    total: 100,
+    createdAt: 1,
+    updatedAt: 1,
+  };
+}
+
 /** Schema-valid mock responses so tool output validation never short-circuits a probe. */
 function mockResponse(method: string, path: string): Response {
   if (path === "/api/v1/status") return Response.json(STATUS);
@@ -100,6 +115,12 @@ function mockResponse(method: string, path: string): Response {
       : Response.json({ data: [sampleProject()], count: 1 });
   }
   if (/^\/api\/v1\/projects\/[^/]+$/.test(path)) return Response.json({ data: sampleProject() });
+  if (path === "/api/v1/quotes") {
+    return method === "POST"
+      ? Response.json({ data: sampleQuote() })
+      : Response.json({ data: [sampleQuote()], count: 1 });
+  }
+  if (/^\/api\/v1\/quotes\/[^/]+$/.test(path)) return Response.json({ data: sampleQuote() });
   return Response.json({ title: "Not Found", status: 404 }, { status: 404 });
 }
 
@@ -184,6 +205,11 @@ const TOOL_INVOCATIONS: Record<string, Record<string, unknown>> = {
   create_project: { clientId: "client-1", title: "Recorded project" },
   update_project: { projectId: "project-1", status: "done" },
   delete_project: { projectId: "project-1" },
+  list_quotes: {},
+  get_quote: { quoteId: "quote-1" },
+  create_quote: { clientId: "client-1", number: "Q-1001" },
+  update_quote: { quoteId: "quote-1", status: "sent" },
+  delete_quote: { quoteId: "quote-1" },
 };
 
 describe("MCP tool operation bindings", () => {
