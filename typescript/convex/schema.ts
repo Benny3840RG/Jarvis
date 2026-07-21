@@ -158,4 +158,19 @@ export default defineSchema({
     createdAt: v.number(),
     updatedAt: v.number(),
   }).index("by_owner", ["ownerId"]),
+  buildLogs: defineTable({
+    ownerId: v.string(),
+    buildId: v.string(),
+    kind: v.union(
+      v.literal("origin"),
+      v.literal("milestone"),
+      v.literal("failure"),
+      v.literal("anecdote"),
+      v.literal("note"),
+    ),
+    title: v.string(),
+    body: v.optional(v.string()),
+    occurredAt: v.optional(v.number()),
+    createdAt: v.number(),
+  }).index("by_owner", ["ownerId"]),
 });
