@@ -8,6 +8,7 @@ import type { ProjectStore } from "../projects/project.js";
 import type { QuoteStore } from "../quotes/quote.js";
 import type { ErrandStore } from "../errands/errand.js";
 import type { BuildStore } from "../builds/build.js";
+import type { BuildLogStore } from "../buildLog/buildLogEntry.js";
 import type { MemoryChangeSetService } from "../memory/memoryChangeSets.js";
 import type { PersistenceProvider } from "../persistence/persistence.js";
 import type { PersistenceProviderName } from "../persistence/providerSelection.js";
@@ -15,6 +16,7 @@ import type { TotalityPipeline } from "../totality/totalityPipeline.js";
 import type { HttpAppConfig } from "./config.js";
 import { BriefController } from "./briefController.js";
 import { BuildController } from "./buildController.js";
+import { BuildLogController } from "./buildLogController.js";
 import { ErrandController } from "./errandController.js";
 import { MemoryChangeSetController } from "./memoryChangeSetController.js";
 import { ProblemDetailsFilter } from "./problemDetails.js";
@@ -36,6 +38,7 @@ import {
   HTTP_QUOTE_STORE,
   HTTP_ERRAND_STORE,
   HTTP_BUILD_STORE,
+  HTTP_BUILD_LOG_STORE,
   HTTP_MEMORY_CHANGE_SETS,
   HTTP_PERSISTENCE,
   HTTP_PROVIDER_NAME,
@@ -55,6 +58,7 @@ export type JarvisHttpModuleOptions = {
   quoteStore: QuoteStore;
   errandStore: ErrandStore;
   buildStore: BuildStore;
+  buildLogStore: BuildLogStore;
 };
 
 @Module({})
@@ -75,6 +79,7 @@ export class JarvisHttpModule {
         QuoteController,
         ErrandController,
         BuildController,
+        BuildLogController,
         BriefController,
       ],
       providers: [
@@ -85,6 +90,7 @@ export class JarvisHttpModule {
         { provide: HTTP_QUOTE_STORE, useValue: options.quoteStore },
         { provide: HTTP_ERRAND_STORE, useValue: options.errandStore },
         { provide: HTTP_BUILD_STORE, useValue: options.buildStore },
+        { provide: HTTP_BUILD_LOG_STORE, useValue: options.buildLogStore },
         { provide: HTTP_PROVIDER_NAME, useValue: options.providerName },
         { provide: HTTP_TOTALITY_PIPELINE, useValue: options.totalityPipeline },
         { provide: HTTP_MEMORY_CHANGE_SETS, useValue: options.memoryChangeSetService },
