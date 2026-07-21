@@ -13,6 +13,7 @@ import type { Build } from "../builds/build.js";
 import type { BuildLogEntry } from "../buildLog/buildLogEntry.js";
 import type { Upgrade } from "../upgrades/upgrade.js";
 import type { AssetView } from "../assets/assetView.js";
+import type { Preference } from "../preferences/preference.js";
 import type { Errand } from "../errands/errand.js";
 import type { Project } from "../projects/project.js";
 import type { Quote } from "../quotes/quote.js";
@@ -175,6 +176,15 @@ const assetSchema = z.object({
   notes: z.string().optional(),
   nextDueAt: z.number().optional(),
   due: z.boolean(),
+  createdAt: z.number(),
+  updatedAt: z.number(),
+});
+
+const preferenceSchema = z.object({
+  id: z.string(),
+  key: z.string(),
+  value: z.string(),
+  category: z.string().optional(),
   createdAt: z.number(),
   updatedAt: z.number(),
 });
@@ -382,6 +392,13 @@ function assetResult(asset: AssetView, message: string) {
   return {
     content: [{ type: "text" as const, text: message }],
     structuredContent: { asset },
+  };
+}
+
+function preferenceResult(preference: Preference, message: string) {
+  return {
+    content: [{ type: "text" as const, text: message }],
+    structuredContent: { preference },
   };
 }
 
@@ -2104,6 +2121,148 @@ export function createJarvisMcpServer(client: JarvisApiClient): McpServer {
       try {
         const removed = await client.deleteAsset(assetId);
         return assetResult(removed, `Deleted asset "${removed.name}".`);
+      } catch (error: unknown) {
+        return safeError(error);
+      }
+    },
+  );
+
+  registerAppTool(
+    server,
+    "list_preference",
+    {
+      title: "List preferences",
+      description:
+        "Use this when Benny wants to see his standing choices — brands, tools, naming, defaults — or when you need to check how he likes something done.",
+      inputSchema: {},
+      outputSchema: {
+        preferences: z.array(preferenceSchema),
+        count: z.number().int().nonnegative(),
+      },
+      annotations: readAnnotations,
+      _meta: { ui: { visibility: ["model"] } },
+    },
+    async () => {
+      try {
+        const preferences = await client.listPreferences();
+        return {
+          content: [{ type: "text" as const, text: `Found ${preferences.length} preferences.` }],
+          structuredContent: { preferences, count: preferences.length },
+        };
+      } catch (error: unknown) {
+        return safeError(error);
+      }
+    },
+  );
+
+  registerAppTool(
+    server,
+    "get_preference",
+    {
+      title: "Get a preference",
+      description: "Use this when the user refers to one known preference by its identifier.",
+      inputSchema: { preferenceId: z.string().min(1) },
+      outputSchema: { preference: preferenceSchema },
+      annotations: readAnnotations,
+      _meta: { ui: { visibility: ["model"] } },
+    },
+    async ({ preferenceId }) => {
+      try {
+        return preferenceResult(await client.getPreference(preferenceId), "Preference details.");
+      } catch (error: unknown) {
+        return safeError(error);
+      }
+    },
+  );
+
+  registerAppTool(
+    server,
+    "create_preference",
+    {
+      title: "Record a preference",
+      description:
+        "Use this when Benny states a standing choice worth remembering — a brand he favours, a tool he reaches for, a naming convention, a default. Store it as a key and value, with an optional category to group related ones.",
+      inputSchema: {
+        key: z.string().trim().min(1).max(200),
+        value: z.string().trim().min(1).max(2000),
+        category: z.string().trim().min(1).max(100).optional(),
+      },
+      outputSchema: { preference: preferenceSchema },
+      annotations: createAnnotations,
+      _meta: { ui: { visibility: ["model"] } },
+    },
+    async ({ key, value, category }) => {
+      try {
+        const created = await client.createPreference({
+          key,
+          value,
+          ...(category === undefined ? {} : { category }),
+        });
+        return preferenceResult(created, `Recorded preference "${created.key}".`);
+      } catch (error: unknown) {
+        return safeError(error);
+      }
+    },
+  );
+
+  registerAppTool(
+    server,
+    "update_preference",
+    {
+      title: "Update a preference",
+      description:
+        "Use this when the user explicitly asks to change a preference's key, value, or category.",
+      inputSchema: {
+        preferenceId: z.string().min(1),
+        key: z.string().trim().min(1).max(200).optional(),
+        value: z.string().trim().min(1).max(2000).optional(),
+        category: z.string().trim().min(1).max(100).nullable().optional(),
+      },
+      outputSchema: { preference: preferenceSchema },
+      annotations: writeAnnotations,
+      _meta: { ui: { visibility: ["model"] } },
+    },
+    async ({ preferenceId, key, value, category }) => {
+      try {
+        if (key === undefined && value === undefined && category === undefined) {
+          return {
+            isError: true,
+            content: [
+              {
+                type: "text" as const,
+                text: "Preference update requires at least one changed field.",
+              },
+            ],
+          };
+        }
+        const updated = await client.updatePreference(preferenceId, {
+          ...(key === undefined ? {} : { key }),
+          ...(value === undefined ? {} : { value }),
+          ...(category === undefined ? {} : { category }),
+        });
+        return preferenceResult(updated, `Updated preference "${updated.key}".`);
+      } catch (error: unknown) {
+        return safeError(error);
+      }
+    },
+  );
+
+  registerAppTool(
+    server,
+    "delete_preference",
+    {
+      title: "Delete a preference",
+      description:
+        "Use this only when the user explicitly asks to permanently remove a preference by identifier.",
+      inputSchema: { preferenceId: z.string().min(1) },
+      outputSchema: { preference: preferenceSchema },
+      annotations: destructiveAnnotations,
+      _meta: { ui: { visibility: ["model"] } },
+    },
+    async ({ preferenceId }) => {
+      try {
+        const removed = await client.deletePreference(preferenceId);
+        return preferenceResult(removed, `Deleted preference "${removed.key}".`);
       } catch (error: unknown) {
         return safeError(error);
       }

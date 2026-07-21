@@ -131,6 +131,16 @@ function sampleAsset(id = "asset-1") {
   };
 }
 
+function samplePreference(id = "pref-1") {
+  return {
+    id,
+    key: "paint brand",
+    value: "Dulux",
+    createdAt: 1,
+    updatedAt: 1,
+  };
+}
+
 function sampleBrief() {
   return {
     generatedAt: "2026-07-21T08:00:00.000Z",
@@ -220,6 +230,13 @@ function mockResponse(method: string, path: string): Response {
       : Response.json({ data: [sampleAsset()], count: 1 });
   }
   if (/^\/api\/v1\/assets\/[^/]+$/.test(path)) return Response.json({ data: sampleAsset() });
+  if (path === "/api/v1/preferences") {
+    return method === "POST"
+      ? Response.json({ data: samplePreference() })
+      : Response.json({ data: [samplePreference()], count: 1 });
+  }
+  if (/^\/api\/v1\/preferences\/[^/]+$/.test(path))
+    return Response.json({ data: samplePreference() });
   return Response.json({ title: "Not Found", status: 404 }, { status: 404 });
 }
 
@@ -335,6 +352,11 @@ const TOOL_INVOCATIONS: Record<string, Record<string, unknown>> = {
   create_asset: { name: "Ride-on mower", kind: "machine" },
   update_asset: { assetId: "asset-1", notes: "Greased" },
   delete_asset: { assetId: "asset-1" },
+  list_preference: {},
+  get_preference: { preferenceId: "pref-1" },
+  create_preference: { key: "paint brand", value: "Dulux" },
+  update_preference: { preferenceId: "pref-1", value: "Taubmans" },
+  delete_preference: { preferenceId: "pref-1" },
 };
 
 describe("MCP tool operation bindings", () => {
