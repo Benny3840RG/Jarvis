@@ -1,7 +1,13 @@
 import { loadEnvFile } from "node:process";
 
+import { ConvexAssetStore } from "../assets/convexAssetStore.js";
+import { ConvexBuildLogStore } from "../buildLog/convexBuildLogStore.js";
+import { ConvexBuildStore } from "../builds/convexBuildStore.js";
+import { ConvexPreferenceStore } from "../preferences/convexPreferenceStore.js";
+import { ConvexUpgradeStore } from "../upgrades/convexUpgradeStore.js";
 import { ConvexPersistence } from "../persistence/persistence.js";
 import { redactSecret, runConvexSmoke } from "./convexSmoke.js";
+import { runMemoryStoresSmoke } from "./memoryStoresSmoke.js";
 
 function loadLocalEnvironment(): void {
   try {
@@ -13,7 +19,18 @@ function loadLocalEnvironment(): void {
 
 async function main(): Promise<void> {
   loadLocalEnvironment();
-  await runConvexSmoke(() => new ConvexPersistence(), process.env.CONVEX_DEPLOYMENT);
+  const deployment = process.env.CONVEX_DEPLOYMENT;
+  await runConvexSmoke(() => new ConvexPersistence(), deployment);
+  await runMemoryStoresSmoke(
+    {
+      builds: () => new ConvexBuildStore(),
+      buildLogs: () => new ConvexBuildLogStore(),
+      upgrades: () => new ConvexUpgradeStore(),
+      assets: () => new ConvexAssetStore(),
+      preferences: () => new ConvexPreferenceStore(),
+    },
+    deployment,
+  );
 }
 
 main().catch((error: unknown) => {
