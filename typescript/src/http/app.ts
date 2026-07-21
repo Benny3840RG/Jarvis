@@ -35,6 +35,7 @@ import { ConvexUpgradeStore } from "../upgrades/convexUpgradeStore.js";
 import type { AssetStore } from "../assets/asset.js";
 import { InMemoryAssetStore } from "../assets/inMemoryAssetStore.js";
 import { JsonAssetStore } from "../assets/jsonAssetStore.js";
+import { ConvexAssetStore } from "../assets/convexAssetStore.js";
 import type { PreferenceStore } from "../preferences/preference.js";
 import { InMemoryPreferenceStore } from "../preferences/inMemoryPreferenceStore.js";
 import { JsonPreferenceStore } from "../preferences/jsonPreferenceStore.js";
@@ -157,8 +158,11 @@ export async function createJarvisHttpApp(
     convex: () => new ConvexUpgradeStore(),
     inMemory: () => new InMemoryUpgradeStore(),
   });
-  const assetStore =
-    options.assetStore ?? (usesEnvironment ? new JsonAssetStore() : new InMemoryAssetStore());
+  const assetStore = selectMemoryStore(options.assetStore, usesEnvironment, providerName, {
+    json: () => new JsonAssetStore(),
+    convex: () => new ConvexAssetStore(),
+    inMemory: () => new InMemoryAssetStore(),
+  });
   const preferenceStore =
     options.preferenceStore ??
     (usesEnvironment ? new JsonPreferenceStore() : new InMemoryPreferenceStore());
