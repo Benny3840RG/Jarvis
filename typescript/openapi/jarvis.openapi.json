@@ -6410,7 +6410,8 @@
           "tasks",
           "reminders",
           "projects",
-          "quotes"
+          "quotes",
+          "maintenance"
         ],
         "properties": {
           "generatedAt": {
@@ -6537,6 +6538,33 @@
                 "maxItems": 5,
                 "items": {
                   "$ref": "#/components/schemas/Quote"
+                }
+              }
+            }
+          },
+          "maintenance": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["dueCount", "dueSoonCount", "due", "dueSoon"],
+            "properties": {
+              "dueCount": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "dueSoonCount": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "due": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/Asset"
+                }
+              },
+              "dueSoon": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/Asset"
                 }
               }
             }

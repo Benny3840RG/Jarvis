@@ -120,6 +120,17 @@ function sampleUpgrade(id = "upgrade-1") {
   };
 }
 
+function sampleAsset(id = "asset-1") {
+  return {
+    id,
+    name: "Ride-on mower",
+    kind: "machine",
+    due: false,
+    createdAt: 1,
+    updatedAt: 1,
+  };
+}
+
 function sampleBrief() {
   return {
     generatedAt: "2026-07-21T08:00:00.000Z",
@@ -139,6 +150,7 @@ function sampleBrief() {
       awaitingResponse: [],
       drafts: [sampleQuote()],
     },
+    maintenance: { dueCount: 0, dueSoonCount: 0, due: [], dueSoon: [] },
   };
 }
 
@@ -202,6 +214,12 @@ function mockResponse(method: string, path: string): Response {
       : Response.json({ data: [sampleUpgrade()], count: 1 });
   }
   if (/^\/api\/v1\/upgrades\/[^/]+$/.test(path)) return Response.json({ data: sampleUpgrade() });
+  if (path === "/api/v1/assets") {
+    return method === "POST"
+      ? Response.json({ data: sampleAsset() })
+      : Response.json({ data: [sampleAsset()], count: 1 });
+  }
+  if (/^\/api\/v1\/assets\/[^/]+$/.test(path)) return Response.json({ data: sampleAsset() });
   return Response.json({ title: "Not Found", status: 404 }, { status: 404 });
 }
 
@@ -312,6 +330,11 @@ const TOOL_INVOCATIONS: Record<string, Record<string, unknown>> = {
   create_upgrade: { buildId: "build-1", title: "Fitted a metal-gear servo" },
   update_upgrade: { upgradeId: "upgrade-1", outcome: "Held all day" },
   delete_upgrade: { upgradeId: "upgrade-1" },
+  list_asset: {},
+  get_asset: { assetId: "asset-1" },
+  create_asset: { name: "Ride-on mower", kind: "machine" },
+  update_asset: { assetId: "asset-1", notes: "Greased" },
+  delete_asset: { assetId: "asset-1" },
 };
 
 describe("MCP tool operation bindings", () => {

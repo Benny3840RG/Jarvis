@@ -1,3 +1,5 @@
+import type { Asset } from "../assets/asset.js";
+import { deriveAssetView, type AssetView } from "../assets/assetView.js";
 import type { Reminder, Task } from "../persistence/types.js";
 import { PROJECT_STATUSES, type Project, type ProjectStatus } from "../projects/project.js";
 import { QUOTE_STATUSES, roundMoney, type Quote, type QuoteStatus } from "../quotes/quote.js";
@@ -7,6 +9,9 @@ export const BRIEF_HIGHLIGHT_LIMIT = 5;
 
 /** Reminders due within this window of "now" count as upcoming. */
 export const BRIEF_UPCOMING_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+/** Assets whose next service falls within this window of "now" count as due soon. */
+export const BRIEF_MAINTENANCE_SOON_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
 
 export interface BriefTasks {
   openCount: number;
@@ -44,6 +49,15 @@ export interface BriefQuotes {
   drafts: Quote[];
 }
 
+export interface BriefMaintenance {
+  dueCount: number;
+  dueSoonCount: number;
+  /** Assets whose service is overdue, soonest-due first, capped. */
+  due: AssetView[];
+  /** Assets not yet due but due within the soon window, soonest-due first, capped. */
+  dueSoon: AssetView[];
+}
+
 export interface DailyBrief {
   generatedAt: string;
   timezone: string;
@@ -52,6 +66,7 @@ export interface DailyBrief {
   reminders: BriefReminders;
   projects: BriefProjects;
   quotes: BriefQuotes;
+  maintenance: BriefMaintenance;
 }
 
 export interface BriefInputs {
@@ -61,6 +76,7 @@ export interface BriefInputs {
   reminders: Reminder[];
   projects: Project[];
   quotes: Quote[];
+  assets: Asset[];
 }
 
 function countLabel(count: number, singular: string, plural = `${singular}s`): string {
@@ -113,6 +129,18 @@ export function composeDailyBrief(inputs: BriefInputs): DailyBrief {
   const sumTotals = (quotes: Quote[]) =>
     roundMoney(quotes.reduce((sum, quote) => sum + quote.total, 0));
 
+  const assetViews = inputs.assets.map((asset) => deriveAssetView(asset, inputs.now));
+  const byNextDue = (a: AssetView, b: AssetView) => (a.nextDueAt ?? 0) - (b.nextDueAt ?? 0);
+  const dueAssets = assetViews.filter((asset) => asset.due).sort(byNextDue);
+  const dueSoonAssets = assetViews
+    .filter(
+      (asset) =>
+        !asset.due &&
+        asset.nextDueAt !== undefined &&
+        asset.nextDueAt <= inputs.now + BRIEF_MAINTENANCE_SOON_WINDOW_MS,
+    )
+    .sort(byNextDue);
+
   const headline = [
     countLabel(openTasks.length, "open task"),
     countLabel(due.length, "reminder due", "reminders due"),
@@ -147,6 +175,12 @@ export function composeDailyBrief(inputs: BriefInputs): DailyBrief {
       acceptedTotal: sumTotals(inputs.quotes.filter((quote) => quote.status === "accepted")),
       awaitingResponse: cap(awaitingResponse),
       drafts: cap(drafts),
+    },
+    maintenance: {
+      dueCount: dueAssets.length,
+      dueSoonCount: dueSoonAssets.length,
+      due: cap(dueAssets),
+      dueSoon: cap(dueSoonAssets),
     },
   };
 }

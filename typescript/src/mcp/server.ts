@@ -12,6 +12,7 @@ import type { Client } from "../clients/client.js";
 import type { Build } from "../builds/build.js";
 import type { BuildLogEntry } from "../buildLog/buildLogEntry.js";
 import type { Upgrade } from "../upgrades/upgrade.js";
+import type { AssetView } from "../assets/assetView.js";
 import type { Errand } from "../errands/errand.js";
 import type { Project } from "../projects/project.js";
 import type { Quote } from "../quotes/quote.js";
@@ -165,6 +166,19 @@ const upgradeSchema = z.object({
   createdAt: z.number(),
 });
 
+const assetSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  kind: z.string(),
+  serviceIntervalDays: z.number().int().optional(),
+  lastServicedAt: z.number().optional(),
+  notes: z.string().optional(),
+  nextDueAt: z.number().optional(),
+  due: z.boolean(),
+  createdAt: z.number(),
+  updatedAt: z.number(),
+});
+
 const briefSchema = z.object({
   generatedAt: z.string(),
   timezone: z.string(),
@@ -203,6 +217,12 @@ const briefSchema = z.object({
     acceptedTotal: z.number().nonnegative(),
     awaitingResponse: z.array(quoteSchema),
     drafts: z.array(quoteSchema),
+  }),
+  maintenance: z.object({
+    dueCount: z.number().int().nonnegative(),
+    dueSoonCount: z.number().int().nonnegative(),
+    due: z.array(assetSchema),
+    dueSoon: z.array(assetSchema),
   }),
 });
 
@@ -355,6 +375,13 @@ function upgradeResult(upgrade: Upgrade, message: string) {
   return {
     content: [{ type: "text" as const, text: message }],
     structuredContent: { upgrade },
+  };
+}
+
+function assetResult(asset: AssetView, message: string) {
+  return {
+    content: [{ type: "text" as const, text: message }],
+    structuredContent: { asset },
   };
 }
 
@@ -1918,6 +1945,165 @@ export function createJarvisMcpServer(client: JarvisApiClient): McpServer {
       try {
         const removed = await client.deleteUpgrade(upgradeId);
         return upgradeResult(removed, `Deleted upgrade "${removed.title}".`);
+      } catch (error: unknown) {
+        return safeError(error);
+      }
+    },
+  );
+
+  registerAppTool(
+    server,
+    "list_asset",
+    {
+      title: "List assets",
+      description:
+        "Use this when Benny wants to see his tools and machines and their maintenance status — what's due or coming due for a service.",
+      inputSchema: {},
+      outputSchema: {
+        assets: z.array(assetSchema),
+        count: z.number().int().nonnegative(),
+      },
+      annotations: readAnnotations,
+      _meta: { ui: { visibility: ["model"] } },
+    },
+    async () => {
+      try {
+        const assets = await client.listAssets();
+        const dueCount = assets.filter((asset) => asset.due).length;
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: `Found ${assets.length} assets${dueCount > 0 ? `, ${dueCount} due for service` : ""}.`,
+            },
+          ],
+          structuredContent: { assets, count: assets.length },
+        };
+      } catch (error: unknown) {
+        return safeError(error);
+      }
+    },
+  );
+
+  registerAppTool(
+    server,
+    "get_asset",
+    {
+      title: "Get an asset",
+      description: "Use this when the user refers to one known asset by its identifier.",
+      inputSchema: { assetId: z.string().min(1) },
+      outputSchema: { asset: assetSchema },
+      annotations: readAnnotations,
+      _meta: { ui: { visibility: ["model"] } },
+    },
+    async ({ assetId }) => {
+      try {
+        return assetResult(await client.getAsset(assetId), "Asset details.");
+      } catch (error: unknown) {
+        return safeError(error);
+      }
+    },
+  );
+
+  registerAppTool(
+    server,
+    "create_asset",
+    {
+      title: "Create an asset",
+      description:
+        "Use this when Benny wants to track a tool or machine for servicing. An optional service interval (in days) and last-serviced date let Jarvis work out when the next service is due.",
+      inputSchema: {
+        name: z.string().trim().min(1).max(200),
+        kind: z.string().trim().min(1).max(100),
+        serviceIntervalDays: z.number().int().positive().optional(),
+        lastServicedAt: z.number().optional(),
+        notes: z.string().trim().min(1).max(2000).optional(),
+      },
+      outputSchema: { asset: assetSchema },
+      annotations: createAnnotations,
+      _meta: { ui: { visibility: ["model"] } },
+    },
+    async ({ name, kind, serviceIntervalDays, lastServicedAt, notes }) => {
+      try {
+        const created = await client.createAsset({
+          name,
+          kind,
+          ...(serviceIntervalDays === undefined ? {} : { serviceIntervalDays }),
+          ...(lastServicedAt === undefined ? {} : { lastServicedAt }),
+          ...(notes === undefined ? {} : { notes }),
+        });
+        return assetResult(created, `Created asset "${created.name}".`);
+      } catch (error: unknown) {
+        return safeError(error);
+      }
+    },
+  );
+
+  registerAppTool(
+    server,
+    "update_asset",
+    {
+      title: "Update an asset",
+      description:
+        "Use this when the user explicitly asks to change an asset's name, kind, service interval, last-serviced date, or notes — for example after servicing it.",
+      inputSchema: {
+        assetId: z.string().min(1),
+        name: z.string().trim().min(1).max(200).optional(),
+        kind: z.string().trim().min(1).max(100).optional(),
+        serviceIntervalDays: z.number().int().positive().nullable().optional(),
+        lastServicedAt: z.number().nullable().optional(),
+        notes: z.string().trim().min(1).max(2000).nullable().optional(),
+      },
+      outputSchema: { asset: assetSchema },
+      annotations: writeAnnotations,
+      _meta: { ui: { visibility: ["model"] } },
+    },
+    async ({ assetId, name, kind, serviceIntervalDays, lastServicedAt, notes }) => {
+      try {
+        if (
+          name === undefined &&
+          kind === undefined &&
+          serviceIntervalDays === undefined &&
+          lastServicedAt === undefined &&
+          notes === undefined
+        ) {
+          return {
+            isError: true,
+            content: [
+              { type: "text" as const, text: "Asset update requires at least one changed field." },
+            ],
+          };
+        }
+        const updated = await client.updateAsset(assetId, {
+          ...(name === undefined ? {} : { name }),
+          ...(kind === undefined ? {} : { kind }),
+          ...(serviceIntervalDays === undefined ? {} : { serviceIntervalDays }),
+          ...(lastServicedAt === undefined ? {} : { lastServicedAt }),
+          ...(notes === undefined ? {} : { notes }),
+        });
+        return assetResult(updated, `Updated asset "${updated.name}".`);
+      } catch (error: unknown) {
+        return safeError(error);
+      }
+    },
+  );
+
+  registerAppTool(
+    server,
+    "delete_asset",
+    {
+      title: "Delete an asset",
+      description:
+        "Use this only when the user explicitly asks to permanently remove an asset by identifier.",
+      inputSchema: { assetId: z.string().min(1) },
+      outputSchema: { asset: assetSchema },
+      annotations: destructiveAnnotations,
+      _meta: { ui: { visibility: ["model"] } },
+    },
+    async ({ assetId }) => {
+      try {
+        const removed = await client.deleteAsset(assetId);
+        return assetResult(removed, `Deleted asset "${removed.name}".`);
       } catch (error: unknown) {
         return safeError(error);
       }
