@@ -97,4 +97,22 @@ describe("Jarvis persona", () => {
     assert.match(JARVIS_PERSONA_MARKDOWN, /Gardening & landscaping/i);
     assert.match(JARVIS_PERSONA_MARKDOWN, /mate-in-the-shed/i);
   });
+
+  it("records the five durable-memory domains in the charter", () => {
+    // Each of these maps to a shipped store->HTTP->MCP domain; the charter must
+    // name what Jarvis actually keeps, so the voice can never drift from the
+    // capabilities behind it.
+    assert.match(JARVIS_PERSONA_MARKDOWN, /\*\*Builds\*\*/);
+    assert.match(JARVIS_PERSONA_MARKDOWN, /\*\*Build log\*\*/);
+    assert.match(JARVIS_PERSONA_MARKDOWN, /\*\*Upgrade chronicle\*\*/);
+    assert.match(JARVIS_PERSONA_MARKDOWN, /\*\*Assets & maintenance\*\*/);
+    assert.match(JARVIS_PERSONA_MARKDOWN, /\*\*Preferences\*\*/);
+    // And the same domains are named in the always-on brief.
+    assert.match(JARVIS_INSTRUCTIONS, /builds/i);
+    assert.match(JARVIS_INSTRUCTIONS, /upgrade chronicle/i);
+    assert.match(JARVIS_INSTRUCTIONS, /maintenance/i);
+    assert.match(JARVIS_INSTRUCTIONS, /preferences/i);
+    // Kept honest: recalled from what he logs, not sensed live.
+    assert.match(JARVIS_PERSONA_MARKDOWN, /recalled from what Benny has logged/i);
+  });
 });
