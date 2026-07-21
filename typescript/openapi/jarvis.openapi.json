@@ -4105,6 +4105,255 @@
           }
         }
       }
+    },
+    "/api/v1/preferences": {
+      "get": {
+        "operationId": "listPreferences",
+        "summary": "List preferences",
+        "description": "Returns Benny's settings and standing choices — brands, tools, naming, defaults.",
+        "tags": ["Preferences"],
+        "x-mcp-tool": {
+          "exposed": true,
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Current preferences.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreferenceListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createPreference",
+        "summary": "Create a preference",
+        "description": "Records one standing choice as a key/value pair, with an optional category.",
+        "tags": ["Preferences"],
+        "x-mcp-tool": {
+          "exposed": true,
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": false
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePreferenceRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Preference created.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreferenceResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/preferences/{preferenceId}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/PreferenceId"
+        }
+      ],
+      "get": {
+        "operationId": "getPreference",
+        "summary": "Get one preference",
+        "description": "Returns one preference by identifier.",
+        "tags": ["Preferences"],
+        "x-mcp-tool": {
+          "exposed": true,
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Preference found.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreferenceResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      },
+      "patch": {
+        "operationId": "updatePreference",
+        "summary": "Update a preference",
+        "description": "Updates a preference's key, value, or category.",
+        "tags": ["Preferences"],
+        "x-mcp-tool": {
+          "exposed": true,
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdatePreferenceRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Preference updated.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreferenceResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deletePreference",
+        "summary": "Delete a preference",
+        "description": "Permanently removes one preference.",
+        "tags": ["Preferences"],
+        "x-mcp-tool": {
+          "exposed": true,
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": true,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Preference deleted.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreferenceResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -4225,6 +4474,15 @@
         "in": "path",
         "required": true,
         "description": "Opaque asset identifier returned by Jarvis.",
+        "schema": {
+          "$ref": "#/components/schemas/RecordId"
+        }
+      },
+      "PreferenceId": {
+        "name": "preferenceId",
+        "in": "path",
+        "required": true,
+        "description": "Opaque preference identifier returned by Jarvis.",
         "schema": {
           "$ref": "#/components/schemas/RecordId"
         }
@@ -7393,6 +7651,108 @@
             "type": ["string", "null"],
             "minLength": 1,
             "maxLength": 2000
+          }
+        }
+      },
+      "Preference": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "key", "value", "createdAt", "updatedAt"],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/RecordId"
+          },
+          "key": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "value": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          },
+          "category": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "createdAt": {
+            "$ref": "#/components/schemas/TimestampMs"
+          },
+          "updatedAt": {
+            "$ref": "#/components/schemas/TimestampMs"
+          }
+        }
+      },
+      "PreferenceResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["data"],
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/Preference"
+          }
+        }
+      },
+      "PreferenceListResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["data", "count"],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Preference"
+            }
+          },
+          "count": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "CreatePreferenceRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["key", "value"],
+        "properties": {
+          "key": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "value": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          },
+          "category": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          }
+        }
+      },
+      "UpdatePreferenceRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "minProperties": 1,
+        "properties": {
+          "key": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "value": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          },
+          "category": {
+            "type": ["string", "null"],
+            "minLength": 1,
+            "maxLength": 100
           }
         }
       }
