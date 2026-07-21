@@ -7,12 +7,14 @@ import type { ClientStore } from "../clients/client.js";
 import type { ProjectStore } from "../projects/project.js";
 import type { QuoteStore } from "../quotes/quote.js";
 import type { ErrandStore } from "../errands/errand.js";
+import type { BuildStore } from "../builds/build.js";
 import type { MemoryChangeSetService } from "../memory/memoryChangeSets.js";
 import type { PersistenceProvider } from "../persistence/persistence.js";
 import type { PersistenceProviderName } from "../persistence/providerSelection.js";
 import type { TotalityPipeline } from "../totality/totalityPipeline.js";
 import type { HttpAppConfig } from "./config.js";
 import { BriefController } from "./briefController.js";
+import { BuildController } from "./buildController.js";
 import { ErrandController } from "./errandController.js";
 import { MemoryChangeSetController } from "./memoryChangeSetController.js";
 import { ProblemDetailsFilter } from "./problemDetails.js";
@@ -33,6 +35,7 @@ import {
   HTTP_PROJECT_STORE,
   HTTP_QUOTE_STORE,
   HTTP_ERRAND_STORE,
+  HTTP_BUILD_STORE,
   HTTP_MEMORY_CHANGE_SETS,
   HTTP_PERSISTENCE,
   HTTP_PROVIDER_NAME,
@@ -51,6 +54,7 @@ export type JarvisHttpModuleOptions = {
   projectStore: ProjectStore;
   quoteStore: QuoteStore;
   errandStore: ErrandStore;
+  buildStore: BuildStore;
 };
 
 @Module({})
@@ -70,6 +74,7 @@ export class JarvisHttpModule {
         ProjectController,
         QuoteController,
         ErrandController,
+        BuildController,
         BriefController,
       ],
       providers: [
@@ -79,6 +84,7 @@ export class JarvisHttpModule {
         { provide: HTTP_PROJECT_STORE, useValue: options.projectStore },
         { provide: HTTP_QUOTE_STORE, useValue: options.quoteStore },
         { provide: HTTP_ERRAND_STORE, useValue: options.errandStore },
+        { provide: HTTP_BUILD_STORE, useValue: options.buildStore },
         { provide: HTTP_PROVIDER_NAME, useValue: options.providerName },
         { provide: HTTP_TOTALITY_PIPELINE, useValue: options.totalityPipeline },
         { provide: HTTP_MEMORY_CHANGE_SETS, useValue: options.memoryChangeSetService },
