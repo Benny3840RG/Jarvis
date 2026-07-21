@@ -142,4 +142,20 @@ export default defineSchema({
   })
     .index("by_owner_and_scope_key", ["ownerId", "scopeKey"])
     .index("by_owner_and_request_id", ["ownerId", "requestId"]),
+  builds: defineTable({
+    ownerId: v.string(),
+    name: v.string(),
+    kind: v.string(),
+    status: v.union(
+      v.literal("planning"),
+      v.literal("active"),
+      v.literal("shelved"),
+      v.literal("retired"),
+    ),
+    description: v.optional(v.string()),
+    nickname: v.optional(v.string()),
+    notes: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_owner", ["ownerId"]),
 });

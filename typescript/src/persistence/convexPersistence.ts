@@ -63,7 +63,7 @@ function reminderFromConvex(row: {
   };
 }
 
-function isInvalidIdError(error: unknown): boolean {
+export function isInvalidIdError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
   return /(?:invalid|malformed)(?: convex)?(?: document)? id|not a valid(?: convex)? id|document id.*not found/i.test(
     message,
