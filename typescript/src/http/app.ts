@@ -8,6 +8,9 @@ import { FastifyAdapter, type NestFastifyApplication } from "@nestjs/platform-fa
 
 import { createToolActionServiceFromEnv } from "../actions/toolActionFactory.js";
 import type { ToolActionService } from "../actions/toolActions.js";
+import type { ClientStore } from "../clients/client.js";
+import { InMemoryClientStore } from "../clients/inMemoryClientStore.js";
+import { JsonClientStore } from "../clients/jsonClientStore.js";
 import { createMemoryChangeSetServiceFromEnv } from "../memory/memoryChangeSetFactory.js";
 import type { MemoryChangeSetService } from "../memory/memoryChangeSets.js";
 import {
@@ -42,6 +45,7 @@ export type CreateJarvisHttpAppOptions = (
   totalityPipeline?: TotalityPipeline | null;
   memoryChangeSetService?: MemoryChangeSetService | null;
   toolActionService?: ToolActionService | null;
+  clientStore?: ClientStore;
   /**
    * Invoked once per Fastify route as it is registered. Exposed so contract
    * tests can enumerate the routes the app actually serves without parsing the
@@ -78,6 +82,8 @@ export async function createJarvisHttpApp(
       : usesEnvironment
         ? createToolActionServiceFromEnv()
         : null;
+  const clientStore =
+    options.clientStore ?? (usesEnvironment ? new JsonClientStore() : new InMemoryClientStore());
   const adapter = new FastifyAdapter({
     genReqId: (request: IncomingMessage) =>
       resolveRequestId(request.headers[REQUEST_ID_HEADER], [
@@ -102,6 +108,7 @@ export async function createJarvisHttpApp(
       totalityPipeline,
       memoryChangeSetService,
       toolActionService,
+      clientStore,
     }),
     adapter,
     { logger: options.logger, abortOnError: false },

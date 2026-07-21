@@ -3,6 +3,7 @@ import { Module } from "@nestjs/common";
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from "@nestjs/core";
 
 import type { ToolActionService } from "../actions/toolActions.js";
+import type { ClientStore } from "../clients/client.js";
 import type { MemoryChangeSetService } from "../memory/memoryChangeSets.js";
 import type { PersistenceProvider } from "../persistence/persistence.js";
 import type { PersistenceProviderName } from "../persistence/providerSelection.js";
@@ -10,6 +11,7 @@ import type { TotalityPipeline } from "../totality/totalityPipeline.js";
 import type { HttpAppConfig } from "./config.js";
 import { MemoryChangeSetController } from "./memoryChangeSetController.js";
 import { ProblemDetailsFilter } from "./problemDetails.js";
+import { ClientController } from "./clientController.js";
 import { ReminderController } from "./reminderController.js";
 import { RequestIdInterceptor } from "./requestId.js";
 import { ServiceTokenGuard } from "./serviceTokenGuard.js";
@@ -20,6 +22,7 @@ import { ToolActionController } from "./toolActionController.js";
 import { TotalityController } from "./totalityController.js";
 import {
   HTTP_APP_CONFIG,
+  HTTP_CLIENT_STORE,
   HTTP_MEMORY_CHANGE_SETS,
   HTTP_PERSISTENCE,
   HTTP_PROVIDER_NAME,
@@ -34,6 +37,7 @@ export type JarvisHttpModuleOptions = {
   totalityPipeline: TotalityPipeline | null;
   memoryChangeSetService: MemoryChangeSetService | null;
   toolActionService: ToolActionService | null;
+  clientStore: ClientStore;
 };
 
 @Module({})
@@ -49,10 +53,12 @@ export class JarvisHttpModule {
         TaskController,
         ReminderController,
         ToolActionController,
+        ClientController,
       ],
       providers: [
         { provide: HTTP_APP_CONFIG, useValue: options.config },
         { provide: HTTP_PERSISTENCE, useValue: options.persistence },
+        { provide: HTTP_CLIENT_STORE, useValue: options.clientStore },
         { provide: HTTP_PROVIDER_NAME, useValue: options.providerName },
         { provide: HTTP_TOTALITY_PIPELINE, useValue: options.totalityPipeline },
         { provide: HTTP_MEMORY_CHANGE_SETS, useValue: options.memoryChangeSetService },
