@@ -29,6 +29,9 @@ import { JsonBuildLogStore } from "../buildLog/jsonBuildLogStore.js";
 import type { UpgradeStore } from "../upgrades/upgrade.js";
 import { InMemoryUpgradeStore } from "../upgrades/inMemoryUpgradeStore.js";
 import { JsonUpgradeStore } from "../upgrades/jsonUpgradeStore.js";
+import type { AssetStore } from "../assets/asset.js";
+import { InMemoryAssetStore } from "../assets/inMemoryAssetStore.js";
+import { JsonAssetStore } from "../assets/jsonAssetStore.js";
 import { createMemoryChangeSetServiceFromEnv } from "../memory/memoryChangeSetFactory.js";
 import type { MemoryChangeSetService } from "../memory/memoryChangeSets.js";
 import {
@@ -70,6 +73,7 @@ export type CreateJarvisHttpAppOptions = (
   buildStore?: BuildStore;
   buildLogStore?: BuildLogStore;
   upgradeStore?: UpgradeStore;
+  assetStore?: AssetStore;
   /**
    * Invoked once per Fastify route as it is registered. Exposed so contract
    * tests can enumerate the routes the app actually serves without parsing the
@@ -121,6 +125,8 @@ export async function createJarvisHttpApp(
     (usesEnvironment ? new JsonBuildLogStore() : new InMemoryBuildLogStore());
   const upgradeStore =
     options.upgradeStore ?? (usesEnvironment ? new JsonUpgradeStore() : new InMemoryUpgradeStore());
+  const assetStore =
+    options.assetStore ?? (usesEnvironment ? new JsonAssetStore() : new InMemoryAssetStore());
   const adapter = new FastifyAdapter({
     genReqId: (request: IncomingMessage) =>
       resolveRequestId(request.headers[REQUEST_ID_HEADER], [
@@ -152,6 +158,7 @@ export async function createJarvisHttpApp(
       buildStore,
       buildLogStore,
       upgradeStore,
+      assetStore,
     }),
     adapter,
     { logger: options.logger, abortOnError: false },
