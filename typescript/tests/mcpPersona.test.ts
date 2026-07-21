@@ -41,6 +41,11 @@ describe("Jarvis persona", () => {
       assert.match(instructions ?? "", /Jarvis/);
       assert.match(instructions ?? "", /Beez Treez/);
       assert.match(instructions ?? "", /no phone GPS|geofencing/i);
+      // ...the advisory remit that makes Jarvis a shed engineer...
+      assert.match(instructions ?? "", /shed engineer|fabrication/i);
+      assert.match(instructions ?? "", /safety guardian/i);
+      // ...and the advisory-honesty line that keeps that remit truthful.
+      assert.match(instructions ?? "", /datasheet|test|professional/i);
     } finally {
       await client.close();
       await server.close();
@@ -74,6 +79,22 @@ describe("Jarvis persona", () => {
     // them should break the build, not ship silently.
     assert.match(JARVIS_PERSONA_MARKDOWN, /no phone GPS|geofencing/i);
     assert.match(JARVIS_PERSONA_MARKDOWN, /safety equipment/i);
-    assert.match(JARVIS_PERSONA_MARKDOWN, /server-computed|computed by the system|totals/i);
+    assert.match(
+      JARVIS_PERSONA_MARKDOWN,
+      /computed by the system|the system does the sums|totals/i,
+    );
+    // The advisory remit stays honest: judgement, not a device, and it defers
+    // to a real test or a licensed professional when the job demands one.
+    assert.match(JARVIS_PERSONA_MARKDOWN, /judgement, not certified safety gear|not a device/i);
+    assert.match(JARVIS_PERSONA_MARKDOWN, /licensed professional/i);
+  });
+
+  it("declares the shed-engineer advisory remit in the charter", () => {
+    // The reasoning surface Benny asked for is a first-class part of the voice.
+    assert.match(JARVIS_PERSONA_MARKDOWN, /Fabrication & CAD/i);
+    assert.match(JARVIS_PERSONA_MARKDOWN, /RC & robotics/i);
+    assert.match(JARVIS_PERSONA_MARKDOWN, /Electrical/i);
+    assert.match(JARVIS_PERSONA_MARKDOWN, /Gardening & landscaping/i);
+    assert.match(JARVIS_PERSONA_MARKDOWN, /mate-in-the-shed/i);
   });
 });
