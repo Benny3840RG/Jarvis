@@ -11,8 +11,7 @@ import type {
 import type { OrchestrationGraph, OrchestrationNode } from "./graph.js";
 
 export type SafetyDecision =
-  | { status: "ok"; reasons: readonly [] }
-  | { status: "blocked"; reasons: readonly string[] };
+  { status: "ok"; reasons: readonly [] } | { status: "blocked"; reasons: readonly string[] };
 
 export type CompletedStep = {
   nodeId: string;
