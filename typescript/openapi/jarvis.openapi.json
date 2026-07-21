@@ -3607,6 +3607,255 @@
           }
         }
       }
+    },
+    "/api/v1/upgrades": {
+      "get": {
+        "operationId": "listUpgrades",
+        "summary": "List upgrades",
+        "description": "Returns the upgrade chronicle — the changes made to Benny's builds over time.",
+        "tags": ["Upgrades"],
+        "x-mcp-tool": {
+          "exposed": true,
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Current upgrades.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpgradeListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createUpgrade",
+        "summary": "Record an upgrade",
+        "description": "Records one change to a build — what was swapped or modified, why, the before/after, the outcome, and the parts involved.",
+        "tags": ["Upgrades"],
+        "x-mcp-tool": {
+          "exposed": true,
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": false
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateUpgradeRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Upgrade created.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpgradeResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/upgrades/{upgradeId}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/UpgradeId"
+        }
+      ],
+      "get": {
+        "operationId": "getUpgrade",
+        "summary": "Get one upgrade",
+        "description": "Returns one upgrade by identifier.",
+        "tags": ["Upgrades"],
+        "x-mcp-tool": {
+          "exposed": true,
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Upgrade found.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpgradeResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      },
+      "patch": {
+        "operationId": "updateUpgrade",
+        "summary": "Update an upgrade",
+        "description": "Updates an upgrade's build, title, reason, before/after state, outcome, parts, version, or occurred time.",
+        "tags": ["Upgrades"],
+        "x-mcp-tool": {
+          "exposed": true,
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateUpgradeRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Upgrade updated.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpgradeResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteUpgrade",
+        "summary": "Delete an upgrade",
+        "description": "Permanently removes one upgrade.",
+        "tags": ["Upgrades"],
+        "x-mcp-tool": {
+          "exposed": true,
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": true,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Upgrade deleted.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpgradeResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -3709,6 +3958,15 @@
         "in": "path",
         "required": true,
         "description": "Opaque build log entry identifier returned by Jarvis.",
+        "schema": {
+          "$ref": "#/components/schemas/RecordId"
+        }
+      },
+      "UpgradeId": {
+        "name": "upgradeId",
+        "in": "path",
+        "required": true,
+        "description": "Opaque upgrade identifier returned by Jarvis.",
         "schema": {
           "$ref": "#/components/schemas/RecordId"
         }
@@ -6517,6 +6775,201 @@
             "type": ["string", "null"],
             "minLength": 1,
             "maxLength": 4000
+          },
+          "occurredAt": {
+            "type": ["integer", "null"],
+            "format": "int64",
+            "minimum": 0
+          }
+        }
+      },
+      "Upgrade": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "buildId", "title", "createdAt"],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/RecordId"
+          },
+          "buildId": {
+            "$ref": "#/components/schemas/RecordId"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4000
+          },
+          "beforeState": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4000
+          },
+          "afterState": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4000
+          },
+          "outcome": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4000
+          },
+          "parts": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "maxItems": 100
+          },
+          "version": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "occurredAt": {
+            "$ref": "#/components/schemas/TimestampMs"
+          },
+          "createdAt": {
+            "$ref": "#/components/schemas/TimestampMs"
+          }
+        }
+      },
+      "UpgradeResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["data"],
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/Upgrade"
+          }
+        }
+      },
+      "UpgradeListResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["data", "count"],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Upgrade"
+            }
+          },
+          "count": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "CreateUpgradeRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["buildId", "title"],
+        "properties": {
+          "buildId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4000
+          },
+          "beforeState": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4000
+          },
+          "afterState": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4000
+          },
+          "outcome": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4000
+          },
+          "parts": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "maxItems": 100
+          },
+          "version": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "occurredAt": {
+            "$ref": "#/components/schemas/TimestampMs"
+          }
+        }
+      },
+      "UpdateUpgradeRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "minProperties": 1,
+        "properties": {
+          "buildId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "reason": {
+            "type": ["string", "null"],
+            "minLength": 1,
+            "maxLength": 4000
+          },
+          "beforeState": {
+            "type": ["string", "null"],
+            "minLength": 1,
+            "maxLength": 4000
+          },
+          "afterState": {
+            "type": ["string", "null"],
+            "minLength": 1,
+            "maxLength": 4000
+          },
+          "outcome": {
+            "type": ["string", "null"],
+            "minLength": 1,
+            "maxLength": 4000
+          },
+          "parts": {
+            "type": ["array", "null"],
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "maxItems": 100
+          },
+          "version": {
+            "type": ["string", "null"],
+            "minLength": 1,
+            "maxLength": 100
           },
           "occurredAt": {
             "type": ["integer", "null"],
