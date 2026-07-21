@@ -1,3 +1,6 @@
 COMMISSION DEV
-request: 2026-07-18T11:30:00Z
-source: classify persistent OpenAI 429 quota versus transient rate limiting
+request: 2026-07-21T11:06:24Z
+source: validate merged typed safety-gated orchestration core from PR #127 on current main
+scope: full verification gate, authorised Convex development sync, self-cleaning Convex smoke test, HTTP/provider boundary checks, Totality reasoning probe
+expected-main-baseline: 27ed5bd21d07d9cd9c76ca9cdf826b64e51d76f0
+production: not authorised
