@@ -90,6 +90,17 @@ function sampleErrand(id = "errand-1") {
   return { id, title: "Recorded errand", status: "open", createdAt: 1, updatedAt: 1 };
 }
 
+function sampleBuild(id = "build-1") {
+  return {
+    id,
+    name: "Recorded build",
+    kind: "RC crawler",
+    status: "planning",
+    createdAt: 1,
+    updatedAt: 1,
+  };
+}
+
 function sampleBrief() {
   return {
     generatedAt: "2026-07-21T08:00:00.000Z",
@@ -154,6 +165,12 @@ function mockResponse(method: string, path: string): Response {
       : Response.json({ data: [sampleErrand()], count: 1 });
   }
   if (/^\/api\/v1\/errands\/[^/]+$/.test(path)) return Response.json({ data: sampleErrand() });
+  if (path === "/api/v1/builds") {
+    return method === "POST"
+      ? Response.json({ data: sampleBuild() })
+      : Response.json({ data: [sampleBuild()], count: 1 });
+  }
+  if (/^\/api\/v1\/builds\/[^/]+$/.test(path)) return Response.json({ data: sampleBuild() });
   return Response.json({ title: "Not Found", status: 404 }, { status: 404 });
 }
 
@@ -249,6 +266,11 @@ const TOOL_INVOCATIONS: Record<string, Record<string, unknown>> = {
   create_errand: { title: "Recorded errand" },
   update_errand: { errandId: "errand-1", status: "done" },
   delete_errand: { errandId: "errand-1" },
+  list_builds: {},
+  get_build: { buildId: "build-1" },
+  create_build: { name: "Recorded build", kind: "RC crawler" },
+  update_build: { buildId: "build-1", status: "active" },
+  delete_build: { buildId: "build-1" },
 };
 
 describe("MCP tool operation bindings", () => {
