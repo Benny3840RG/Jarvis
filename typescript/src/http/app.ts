@@ -11,6 +11,9 @@ import type { ToolActionService } from "../actions/toolActions.js";
 import type { ClientStore } from "../clients/client.js";
 import { InMemoryClientStore } from "../clients/inMemoryClientStore.js";
 import { JsonClientStore } from "../clients/jsonClientStore.js";
+import type { ProjectStore } from "../projects/project.js";
+import { InMemoryProjectStore } from "../projects/inMemoryProjectStore.js";
+import { JsonProjectStore } from "../projects/jsonProjectStore.js";
 import { createMemoryChangeSetServiceFromEnv } from "../memory/memoryChangeSetFactory.js";
 import type { MemoryChangeSetService } from "../memory/memoryChangeSets.js";
 import {
@@ -46,6 +49,7 @@ export type CreateJarvisHttpAppOptions = (
   memoryChangeSetService?: MemoryChangeSetService | null;
   toolActionService?: ToolActionService | null;
   clientStore?: ClientStore;
+  projectStore?: ProjectStore;
   /**
    * Invoked once per Fastify route as it is registered. Exposed so contract
    * tests can enumerate the routes the app actually serves without parsing the
@@ -84,6 +88,8 @@ export async function createJarvisHttpApp(
         : null;
   const clientStore =
     options.clientStore ?? (usesEnvironment ? new JsonClientStore() : new InMemoryClientStore());
+  const projectStore =
+    options.projectStore ?? (usesEnvironment ? new JsonProjectStore() : new InMemoryProjectStore());
   const adapter = new FastifyAdapter({
     genReqId: (request: IncomingMessage) =>
       resolveRequestId(request.headers[REQUEST_ID_HEADER], [
@@ -109,6 +115,7 @@ export async function createJarvisHttpApp(
       memoryChangeSetService,
       toolActionService,
       clientStore,
+      projectStore,
     }),
     adapter,
     { logger: options.logger, abortOnError: false },
