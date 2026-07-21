@@ -10,6 +10,7 @@ import { z } from "zod";
 
 import type { Client } from "../clients/client.js";
 import type { Build } from "../builds/build.js";
+import type { BuildLogEntry } from "../buildLog/buildLogEntry.js";
 import type { Errand } from "../errands/errand.js";
 import type { Project } from "../projects/project.js";
 import type { Quote } from "../quotes/quote.js";
@@ -137,6 +138,16 @@ const buildSchema = z.object({
   notes: z.string().optional(),
   createdAt: z.number(),
   updatedAt: z.number(),
+});
+
+const buildLogSchema = z.object({
+  id: z.string(),
+  buildId: z.string(),
+  kind: z.enum(["origin", "milestone", "failure", "anecdote", "note"]),
+  title: z.string(),
+  body: z.string().optional(),
+  occurredAt: z.number().optional(),
+  createdAt: z.number(),
 });
 
 const briefSchema = z.object({
@@ -315,6 +326,13 @@ function buildResult(build: Build, message: string) {
   return {
     content: [{ type: "text" as const, text: message }],
     structuredContent: { build },
+  };
+}
+
+function buildLogResult(entry: BuildLogEntry, message: string) {
+  return {
+    content: [{ type: "text" as const, text: message }],
+    structuredContent: { entry },
   };
 }
 
@@ -1525,6 +1543,162 @@ export function createJarvisMcpServer(client: JarvisApiClient): McpServer {
       try {
         const removed = await client.deleteBuild(buildId);
         return buildResult(removed, `Deleted build "${removed.name}".`);
+      } catch (error: unknown) {
+        return safeError(error);
+      }
+    },
+  );
+
+  registerAppTool(
+    server,
+    "list_build_log",
+    {
+      title: "List build log entries",
+      description:
+        "Use this when Benny wants the story of a build — its origins, milestones, failures, anecdotes, and notes across all builds.",
+      inputSchema: {},
+      outputSchema: {
+        entries: z.array(buildLogSchema),
+        count: z.number().int().nonnegative(),
+      },
+      annotations: readAnnotations,
+      _meta: { ui: { visibility: ["model"] } },
+    },
+    async () => {
+      try {
+        const entries = await client.listBuildLogs();
+        return {
+          content: [{ type: "text" as const, text: `Found ${entries.length} build log entries.` }],
+          structuredContent: { entries, count: entries.length },
+        };
+      } catch (error: unknown) {
+        return safeError(error);
+      }
+    },
+  );
+
+  registerAppTool(
+    server,
+    "get_build_log",
+    {
+      title: "Get a build log entry",
+      description: "Use this when the user refers to one known build log entry by its identifier.",
+      inputSchema: { entryId: z.string().min(1) },
+      outputSchema: { entry: buildLogSchema },
+      annotations: readAnnotations,
+      _meta: { ui: { visibility: ["model"] } },
+    },
+    async ({ entryId }) => {
+      try {
+        return buildLogResult(await client.getBuildLog(entryId), "Build log entry.");
+      } catch (error: unknown) {
+        return safeError(error);
+      }
+    },
+  );
+
+  registerAppTool(
+    server,
+    "create_build_log",
+    {
+      title: "Record a build log entry",
+      description:
+        "Use this when Benny recounts something worth remembering about a build — why it started, a milestone reached, a failure, an anecdote, or a loose note. Attach it to the build by its identifier.",
+      inputSchema: {
+        buildId: z.string().trim().min(1).max(200),
+        kind: z.enum(["origin", "milestone", "failure", "anecdote", "note"]).optional(),
+        title: z.string().trim().min(1).max(200),
+        body: z.string().trim().min(1).max(4000).optional(),
+        occurredAt: z.number().optional(),
+      },
+      outputSchema: { entry: buildLogSchema },
+      annotations: createAnnotations,
+      _meta: { ui: { visibility: ["model"] } },
+    },
+    async ({ buildId, kind, title, body, occurredAt }) => {
+      try {
+        const created = await client.createBuildLog({
+          buildId,
+          title,
+          ...(kind === undefined ? {} : { kind }),
+          ...(body === undefined ? {} : { body }),
+          ...(occurredAt === undefined ? {} : { occurredAt }),
+        });
+        return buildLogResult(created, `Recorded build log entry "${created.title}".`);
+      } catch (error: unknown) {
+        return safeError(error);
+      }
+    },
+  );
+
+  registerAppTool(
+    server,
+    "update_build_log",
+    {
+      title: "Update a build log entry",
+      description:
+        "Use this when the user explicitly asks to change a build log entry's build, kind, title, body, or occurred time.",
+      inputSchema: {
+        entryId: z.string().min(1),
+        buildId: z.string().trim().min(1).max(200).optional(),
+        kind: z.enum(["origin", "milestone", "failure", "anecdote", "note"]).optional(),
+        title: z.string().trim().min(1).max(200).optional(),
+        body: z.string().trim().min(1).max(4000).nullable().optional(),
+        occurredAt: z.number().nullable().optional(),
+      },
+      outputSchema: { entry: buildLogSchema },
+      annotations: writeAnnotations,
+      _meta: { ui: { visibility: ["model"] } },
+    },
+    async ({ entryId, buildId, kind, title, body, occurredAt }) => {
+      try {
+        if (
+          buildId === undefined &&
+          kind === undefined &&
+          title === undefined &&
+          body === undefined &&
+          occurredAt === undefined
+        ) {
+          return {
+            isError: true,
+            content: [
+              {
+                type: "text" as const,
+                text: "Build log update requires at least one changed field.",
+              },
+            ],
+          };
+        }
+        const updated = await client.updateBuildLog(entryId, {
+          ...(buildId === undefined ? {} : { buildId }),
+          ...(kind === undefined ? {} : { kind }),
+          ...(title === undefined ? {} : { title }),
+          ...(body === undefined ? {} : { body }),
+          ...(occurredAt === undefined ? {} : { occurredAt }),
+        });
+        return buildLogResult(updated, `Updated build log entry "${updated.title}".`);
+      } catch (error: unknown) {
+        return safeError(error);
+      }
+    },
+  );
+
+  registerAppTool(
+    server,
+    "delete_build_log",
+    {
+      title: "Delete a build log entry",
+      description:
+        "Use this only when the user explicitly asks to permanently remove a build log entry by identifier.",
+      inputSchema: { entryId: z.string().min(1) },
+      outputSchema: { entry: buildLogSchema },
+      annotations: destructiveAnnotations,
+      _meta: { ui: { visibility: ["model"] } },
+    },
+    async ({ entryId }) => {
+      try {
+        const removed = await client.deleteBuildLog(entryId);
+        return buildLogResult(removed, `Deleted build log entry "${removed.title}".`);
       } catch (error: unknown) {
         return safeError(error);
       }

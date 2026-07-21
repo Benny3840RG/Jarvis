@@ -64,6 +64,11 @@ export const MCP_TOOL_OPERATIONS: Readonly<Record<string, readonly OpenApiOperat
   create_build: [{ method: "POST", path: "/api/v1/builds" }],
   update_build: [{ method: "PATCH", path: "/api/v1/builds/{buildId}" }],
   delete_build: [{ method: "DELETE", path: "/api/v1/builds/{buildId}" }],
+  list_build_log: [{ method: "GET", path: "/api/v1/build-logs" }],
+  get_build_log: [{ method: "GET", path: "/api/v1/build-logs/{entryId}" }],
+  create_build_log: [{ method: "POST", path: "/api/v1/build-logs" }],
+  update_build_log: [{ method: "PATCH", path: "/api/v1/build-logs/{entryId}" }],
+  delete_build_log: [{ method: "DELETE", path: "/api/v1/build-logs/{entryId}" }],
 } as const;
 
 /** Formats an operation as the `METHOD /path` key used for set comparisons. */
