@@ -3155,7 +3155,7 @@
       "post": {
         "operationId": "createBuild",
         "summary": "Create a build",
-        "description": "Records one machine or project \u2014 the RC crawler, the trailer, a tool.",
+        "description": "Records one machine or project — the RC crawler, the trailer, a tool.",
         "tags": ["Builds"],
         "x-mcp-tool": {
           "exposed": true,
@@ -3358,6 +3358,255 @@
           }
         }
       }
+    },
+    "/api/v1/build-logs": {
+      "get": {
+        "operationId": "listBuildLogs",
+        "summary": "List build log entries",
+        "description": "Returns the dated lore attached to Benny's builds — origins, milestones, failures, anecdotes, notes.",
+        "tags": ["Build Log"],
+        "x-mcp-tool": {
+          "exposed": true,
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Current build log entries.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BuildLogListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createBuildLog",
+        "summary": "Record a build log entry",
+        "description": "Adds one dated entry to a build's story — why it started, a milestone, a failure, an anecdote, or a loose note.",
+        "tags": ["Build Log"],
+        "x-mcp-tool": {
+          "exposed": true,
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": false
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateBuildLogRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Build log entry created.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BuildLogResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/build-logs/{entryId}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/BuildLogEntryId"
+        }
+      ],
+      "get": {
+        "operationId": "getBuildLog",
+        "summary": "Get one build log entry",
+        "description": "Returns one build log entry by identifier.",
+        "tags": ["Build Log"],
+        "x-mcp-tool": {
+          "exposed": true,
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Build log entry found.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BuildLogResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      },
+      "patch": {
+        "operationId": "updateBuildLog",
+        "summary": "Update a build log entry",
+        "description": "Updates a build log entry's build, kind, title, body, or occurred time.",
+        "tags": ["Build Log"],
+        "x-mcp-tool": {
+          "exposed": true,
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateBuildLogRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Build log entry updated.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BuildLogResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteBuildLog",
+        "summary": "Delete a build log entry",
+        "description": "Permanently removes one build log entry.",
+        "tags": ["Build Log"],
+        "x-mcp-tool": {
+          "exposed": true,
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": true,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Build log entry deleted.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BuildLogResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -3451,6 +3700,15 @@
         "in": "path",
         "required": true,
         "description": "Opaque build identifier returned by Jarvis.",
+        "schema": {
+          "$ref": "#/components/schemas/RecordId"
+        }
+      },
+      "BuildLogEntryId": {
+        "name": "entryId",
+        "in": "path",
+        "required": true,
+        "description": "Opaque build log entry identifier returned by Jarvis.",
         "schema": {
           "$ref": "#/components/schemas/RecordId"
         }
@@ -6144,6 +6402,126 @@
           "notes": {
             "type": ["string", "null"],
             "maxLength": 2000
+          }
+        }
+      },
+      "BuildLogEntry": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "buildId", "kind", "title", "createdAt"],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/RecordId"
+          },
+          "buildId": {
+            "$ref": "#/components/schemas/RecordId"
+          },
+          "kind": {
+            "type": "string",
+            "enum": ["origin", "milestone", "failure", "anecdote", "note"]
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "body": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4000
+          },
+          "occurredAt": {
+            "$ref": "#/components/schemas/TimestampMs"
+          },
+          "createdAt": {
+            "$ref": "#/components/schemas/TimestampMs"
+          }
+        }
+      },
+      "BuildLogResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["data"],
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/BuildLogEntry"
+          }
+        }
+      },
+      "BuildLogListResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["data", "count"],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BuildLogEntry"
+            }
+          },
+          "count": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "CreateBuildLogRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["buildId", "title"],
+        "properties": {
+          "buildId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "kind": {
+            "type": "string",
+            "enum": ["origin", "milestone", "failure", "anecdote", "note"]
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "body": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4000
+          },
+          "occurredAt": {
+            "$ref": "#/components/schemas/TimestampMs"
+          }
+        }
+      },
+      "UpdateBuildLogRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "minProperties": 1,
+        "properties": {
+          "buildId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "kind": {
+            "type": "string",
+            "enum": ["origin", "milestone", "failure", "anecdote", "note"]
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "body": {
+            "type": ["string", "null"],
+            "minLength": 1,
+            "maxLength": 4000
+          },
+          "occurredAt": {
+            "type": ["integer", "null"],
+            "format": "int64",
+            "minimum": 0
           }
         }
       }
