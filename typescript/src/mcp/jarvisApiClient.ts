@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import type { DailyBrief } from "../briefs/brief.js";
 import type { Client, ClientInput, ClientUpdate } from "../clients/client.js";
+import type { Errand, ErrandInput, ErrandUpdate } from "../errands/errand.js";
 import type { Project, ProjectInput, ProjectUpdate } from "../projects/project.js";
 import type { Quote, QuoteInput, QuoteUpdate } from "../quotes/quote.js";
 import type { SystemStatus } from "../http/contracts.js";
@@ -332,6 +333,43 @@ export class JarvisApiClient {
       await this.request<DataResponse<Quote>>(
         "DELETE",
         `/api/v1/quotes/${encodeURIComponent(quoteId)}`,
+      )
+    ).data;
+  }
+
+  async listErrands(): Promise<Errand[]> {
+    return (await this.request<ListResponse<Errand>>("GET", "/api/v1/errands")).data;
+  }
+
+  async getErrand(errandId: string): Promise<Errand> {
+    return (
+      await this.request<DataResponse<Errand>>(
+        "GET",
+        `/api/v1/errands/${encodeURIComponent(errandId)}`,
+      )
+    ).data;
+  }
+
+  async createErrand(input: ErrandInput): Promise<Errand> {
+    return (await this.request<DataResponse<Errand>>("POST", "/api/v1/errands", { body: input }))
+      .data;
+  }
+
+  async updateErrand(errandId: string, update: ErrandUpdate): Promise<Errand> {
+    return (
+      await this.request<DataResponse<Errand>>(
+        "PATCH",
+        `/api/v1/errands/${encodeURIComponent(errandId)}`,
+        { body: update },
+      )
+    ).data;
+  }
+
+  async deleteErrand(errandId: string): Promise<Errand> {
+    return (
+      await this.request<DataResponse<Errand>>(
+        "DELETE",
+        `/api/v1/errands/${encodeURIComponent(errandId)}`,
       )
     ).data;
   }

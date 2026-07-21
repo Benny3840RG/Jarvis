@@ -86,6 +86,10 @@ function sampleQuote(id = "quote-1") {
   };
 }
 
+function sampleErrand(id = "errand-1") {
+  return { id, title: "Recorded errand", status: "open", createdAt: 1, updatedAt: 1 };
+}
+
 function sampleBrief() {
   return {
     generatedAt: "2026-07-21T08:00:00.000Z",
@@ -144,6 +148,12 @@ function mockResponse(method: string, path: string): Response {
   }
   if (/^\/api\/v1\/quotes\/[^/]+$/.test(path)) return Response.json({ data: sampleQuote() });
   if (path === "/api/v1/brief") return Response.json({ data: sampleBrief() });
+  if (path === "/api/v1/errands") {
+    return method === "POST"
+      ? Response.json({ data: sampleErrand() })
+      : Response.json({ data: [sampleErrand()], count: 1 });
+  }
+  if (/^\/api\/v1\/errands\/[^/]+$/.test(path)) return Response.json({ data: sampleErrand() });
   return Response.json({ title: "Not Found", status: 404 }, { status: 404 });
 }
 
@@ -234,6 +244,11 @@ const TOOL_INVOCATIONS: Record<string, Record<string, unknown>> = {
   update_quote: { quoteId: "quote-1", status: "sent" },
   delete_quote: { quoteId: "quote-1" },
   get_daily_brief: {},
+  list_errands: {},
+  get_errand: { errandId: "errand-1" },
+  create_errand: { title: "Recorded errand" },
+  update_errand: { errandId: "errand-1", status: "done" },
+  delete_errand: { errandId: "errand-1" },
 };
 
 describe("MCP tool operation bindings", () => {
