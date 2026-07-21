@@ -19,6 +19,7 @@ import {
   type DashboardSnapshot,
   type ReminderRequestUpdate,
 } from "./jarvisApiClient.js";
+import { JARVIS_INSTRUCTIONS, JARVIS_PERSONA_MARKDOWN, JARVIS_PERSONA_URI } from "./persona.js";
 
 export const JARVIS_DASHBOARD_URI = "ui://jarvis/dashboard-v1.html";
 
@@ -316,10 +317,30 @@ async function refreshedDashboard(
 }
 
 export function createJarvisMcpServer(client: JarvisApiClient): McpServer {
-  const server = new McpServer({
-    name: "jarvis-private-preview",
-    version: "0.1.0",
-  });
+  const server = new McpServer(
+    {
+      name: "jarvis-private-preview",
+      version: "0.1.0",
+    },
+    { instructions: JARVIS_INSTRUCTIONS },
+  );
+
+  // Jarvis's full persona charter, readable on demand. Plain markdown, not a UI
+  // resource — it describes how Jarvis should sound, not something to render.
+  server.registerResource(
+    "jarvis-persona",
+    JARVIS_PERSONA_URI,
+    {
+      title: "Jarvis persona (Beez Treez)",
+      description: "The voice, priorities, and honesty guardrails Jarvis operates by for Benny.",
+      mimeType: "text/markdown",
+    },
+    async () => ({
+      contents: [
+        { uri: JARVIS_PERSONA_URI, mimeType: "text/markdown", text: JARVIS_PERSONA_MARKDOWN },
+      ],
+    }),
+  );
 
   registerAppResource(server, "jarvis-dashboard", JARVIS_DASHBOARD_URI, {}, async () => ({
     contents: [
