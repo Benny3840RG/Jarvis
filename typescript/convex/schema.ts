@@ -186,4 +186,14 @@ export default defineSchema({
     occurredAt: v.optional(v.number()),
     createdAt: v.number(),
   }).index("by_owner", ["ownerId"]),
+  assets: defineTable({
+    ownerId: v.string(),
+    name: v.string(),
+    kind: v.string(),
+    serviceIntervalDays: v.optional(v.number()),
+    lastServicedAt: v.optional(v.number()),
+    notes: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_owner", ["ownerId"]),
 });
