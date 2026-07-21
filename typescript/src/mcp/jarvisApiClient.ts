@@ -6,6 +6,8 @@ import type { Errand, ErrandInput, ErrandUpdate } from "../errands/errand.js";
 import type { Build, BuildInput, BuildUpdate } from "../builds/build.js";
 import type { BuildLogEntry, BuildLogInput, BuildLogUpdate } from "../buildLog/buildLogEntry.js";
 import type { Upgrade, UpgradeInput, UpgradeUpdate } from "../upgrades/upgrade.js";
+import type { AssetInput, AssetUpdate } from "../assets/asset.js";
+import type { AssetView } from "../assets/assetView.js";
 import type { Project, ProjectInput, ProjectUpdate } from "../projects/project.js";
 import type { Quote, QuoteInput, QuoteUpdate } from "../quotes/quote.js";
 import type { SystemStatus } from "../http/contracts.js";
@@ -485,6 +487,43 @@ export class JarvisApiClient {
       await this.request<DataResponse<Upgrade>>(
         "DELETE",
         `/api/v1/upgrades/${encodeURIComponent(upgradeId)}`,
+      )
+    ).data;
+  }
+
+  async listAssets(): Promise<AssetView[]> {
+    return (await this.request<ListResponse<AssetView>>("GET", "/api/v1/assets")).data;
+  }
+
+  async getAsset(assetId: string): Promise<AssetView> {
+    return (
+      await this.request<DataResponse<AssetView>>(
+        "GET",
+        `/api/v1/assets/${encodeURIComponent(assetId)}`,
+      )
+    ).data;
+  }
+
+  async createAsset(input: AssetInput): Promise<AssetView> {
+    return (await this.request<DataResponse<AssetView>>("POST", "/api/v1/assets", { body: input }))
+      .data;
+  }
+
+  async updateAsset(assetId: string, update: AssetUpdate): Promise<AssetView> {
+    return (
+      await this.request<DataResponse<AssetView>>(
+        "PATCH",
+        `/api/v1/assets/${encodeURIComponent(assetId)}`,
+        { body: update },
+      )
+    ).data;
+  }
+
+  async deleteAsset(assetId: string): Promise<AssetView> {
+    return (
+      await this.request<DataResponse<AssetView>>(
+        "DELETE",
+        `/api/v1/assets/${encodeURIComponent(assetId)}`,
       )
     ).data;
   }

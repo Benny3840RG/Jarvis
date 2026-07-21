@@ -74,6 +74,11 @@ export const MCP_TOOL_OPERATIONS: Readonly<Record<string, readonly OpenApiOperat
   create_upgrade: [{ method: "POST", path: "/api/v1/upgrades" }],
   update_upgrade: [{ method: "PATCH", path: "/api/v1/upgrades/{upgradeId}" }],
   delete_upgrade: [{ method: "DELETE", path: "/api/v1/upgrades/{upgradeId}" }],
+  list_asset: [{ method: "GET", path: "/api/v1/assets" }],
+  get_asset: [{ method: "GET", path: "/api/v1/assets/{assetId}" }],
+  create_asset: [{ method: "POST", path: "/api/v1/assets" }],
+  update_asset: [{ method: "PATCH", path: "/api/v1/assets/{assetId}" }],
+  delete_asset: [{ method: "DELETE", path: "/api/v1/assets/{assetId}" }],
 } as const;
 
 /** Formats an operation as the `METHOD /path` key used for set comparisons. */

@@ -6,11 +6,25 @@ import {
   BRIEF_UPCOMING_WINDOW_MS,
   composeDailyBrief,
 } from "../src/briefs/brief.js";
+import type { Asset } from "../src/assets/asset.js";
 import type { Reminder, Task } from "../src/persistence/types.js";
 import type { Project } from "../src/projects/project.js";
 import type { Quote, QuoteStatus } from "../src/quotes/quote.js";
 
 const NOW = Date.UTC(2026, 6, 21, 8, 0, 0);
+const MS_PER_DAY = 86_400_000;
+
+function asset(id: string, serviceIntervalDays?: number, lastServicedAt?: number): Asset {
+  return {
+    id,
+    name: `Asset ${id}`,
+    kind: "machine",
+    ...(serviceIntervalDays === undefined ? {} : { serviceIntervalDays }),
+    ...(lastServicedAt === undefined ? {} : { lastServicedAt }),
+    createdAt: 1,
+    updatedAt: 1,
+  };
+}
 
 function task(id: string, createdAt: number, completed = false): Task {
   return { id, title: `Task ${id}`, completed, category: "general", createdAt };
@@ -54,6 +68,7 @@ function baseInputs() {
     reminders: [] as Reminder[],
     projects: [] as Project[],
     quotes: [] as Quote[],
+    assets: [] as Asset[],
   };
 }
 
@@ -160,5 +175,29 @@ describe("composeDailyBrief", () => {
     );
     assert.deepEqual(brief.tasks.open, []);
     assert.equal(brief.quotes.pipelineTotal, 0);
+    assert.equal(brief.maintenance.dueCount, 0);
+    assert.equal(brief.maintenance.dueSoonCount, 0);
+  });
+
+  it("surfaces assets that are overdue or due soon in the maintenance section", () => {
+    const brief = composeDailyBrief({
+      ...baseInputs(),
+      assets: [
+        // Overdue: serviced 40 days ago on a 30-day interval.
+        asset("overdue", 30, NOW - 40 * MS_PER_DAY),
+        // Due soon: serviced 3 days ago on a 10-day interval (next due in 7 days).
+        asset("soon", 10, NOW - 3 * MS_PER_DAY),
+        // Not due: serviced today on a 365-day interval.
+        asset("fresh", 365, NOW),
+        // No schedule: never counts.
+        asset("unscheduled"),
+      ],
+    });
+    assert.equal(brief.maintenance.dueCount, 1);
+    assert.equal(brief.maintenance.due[0].id, "overdue");
+    assert.equal(brief.maintenance.due[0].due, true);
+    assert.equal(brief.maintenance.dueSoonCount, 1);
+    assert.equal(brief.maintenance.dueSoon[0].id, "soon");
+    assert.equal(brief.maintenance.dueSoon[0].due, false);
   });
 });
