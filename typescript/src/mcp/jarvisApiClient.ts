@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 
+import type { Client, ClientInput, ClientUpdate } from "../clients/client.js";
 import type { SystemStatus } from "../http/contracts.js";
 import type { Reminder, Task } from "../persistence/persistence.js";
 import type { TaskUpdate } from "../persistence/updates.js";
@@ -217,6 +218,43 @@ export class JarvisApiClient {
       await this.request<DataResponse<Reminder>>(
         "DELETE",
         `/api/v1/reminders/${encodeURIComponent(reminderId)}`,
+      )
+    ).data;
+  }
+
+  async listClients(): Promise<Client[]> {
+    return (await this.request<ListResponse<Client>>("GET", "/api/v1/clients")).data;
+  }
+
+  async getClient(clientId: string): Promise<Client> {
+    return (
+      await this.request<DataResponse<Client>>(
+        "GET",
+        `/api/v1/clients/${encodeURIComponent(clientId)}`,
+      )
+    ).data;
+  }
+
+  async createClient(input: ClientInput): Promise<Client> {
+    return (await this.request<DataResponse<Client>>("POST", "/api/v1/clients", { body: input }))
+      .data;
+  }
+
+  async updateClient(clientId: string, update: ClientUpdate): Promise<Client> {
+    return (
+      await this.request<DataResponse<Client>>(
+        "PATCH",
+        `/api/v1/clients/${encodeURIComponent(clientId)}`,
+        { body: update },
+      )
+    ).data;
+  }
+
+  async deleteClient(clientId: string): Promise<Client> {
+    return (
+      await this.request<DataResponse<Client>>(
+        "DELETE",
+        `/api/v1/clients/${encodeURIComponent(clientId)}`,
       )
     ).data;
   }

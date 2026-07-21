@@ -8,6 +8,7 @@ import {
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 
+import type { Client } from "../clients/client.js";
 import type { Reminder, Task } from "../persistence/persistence.js";
 import {
   JarvisApiClient,
@@ -35,6 +36,20 @@ const reminderSchema = z.object({
   dueAt: z.number().optional(),
   dueTimezone: z.string().optional(),
   createdAt: z.number(),
+});
+
+const clientContactSchema = z.object({
+  label: z.string().optional(),
+  value: z.string(),
+});
+
+const clientSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  contacts: z.array(clientContactSchema),
+  notes: z.string().optional(),
+  createdAt: z.number(),
+  updatedAt: z.number(),
 });
 
 const layerSchema = z.object({
@@ -137,6 +152,13 @@ function reminderResult(reminder: Reminder, message: string) {
   return {
     content: [{ type: "text" as const, text: message }],
     structuredContent: { reminder },
+  };
+}
+
+function clientResult(client: Client, message: string) {
+  return {
+    content: [{ type: "text" as const, text: message }],
+    structuredContent: { client },
   };
 }
 
@@ -521,6 +543,154 @@ export function createJarvisMcpServer(client: JarvisApiClient): McpServer {
       try {
         const reminder = await client.deleteReminder(reminderId);
         return refreshedDashboard(client, `Deleted reminder "${reminder.title}".`);
+      } catch (error: unknown) {
+        return safeError(error);
+      }
+    },
+  );
+
+  registerAppTool(
+    server,
+    "list_clients",
+    {
+      title: "List business clients",
+      description: "Use this when Benny wants to see or review his business clients.",
+      inputSchema: {},
+      outputSchema: { clients: z.array(clientSchema), count: z.number().int().nonnegative() },
+      annotations: readAnnotations,
+      _meta: { ui: { visibility: ["model"] } },
+    },
+    async () => {
+      try {
+        const clients = await client.listClients();
+        return {
+          content: [{ type: "text" as const, text: `Found ${clients.length} clients.` }],
+          structuredContent: { clients, count: clients.length },
+        };
+      } catch (error: unknown) {
+        return safeError(error);
+      }
+    },
+  );
+
+  registerAppTool(
+    server,
+    "get_client",
+    {
+      title: "Get a business client",
+      description: "Use this when the user refers to one known client by its identifier.",
+      inputSchema: { clientId: z.string().min(1) },
+      outputSchema: { client: clientSchema },
+      annotations: readAnnotations,
+      _meta: { ui: { visibility: ["model"] } },
+    },
+    async ({ clientId }) => {
+      try {
+        return clientResult(await client.getClient(clientId), "Client details.");
+      } catch (error: unknown) {
+        return safeError(error);
+      }
+    },
+  );
+
+  registerAppTool(
+    server,
+    "create_client",
+    {
+      title: "Create a business client",
+      description: "Use this when the user explicitly asks to add a business client.",
+      inputSchema: {
+        name: z.string().trim().min(1).max(200),
+        contacts: z
+          .array(
+            z.object({
+              label: z.string().trim().min(1).optional(),
+              value: z.string().trim().min(1),
+            }),
+          )
+          .optional(),
+        notes: z.string().trim().min(1).max(2000).optional(),
+      },
+      outputSchema: { client: clientSchema },
+      annotations: createAnnotations,
+      _meta: { ui: { visibility: ["model"] } },
+    },
+    async ({ name, contacts, notes }) => {
+      try {
+        const created = await client.createClient({
+          name,
+          ...(contacts === undefined ? {} : { contacts }),
+          ...(notes === undefined ? {} : { notes }),
+        });
+        return clientResult(created, `Created client "${created.name}".`);
+      } catch (error: unknown) {
+        return safeError(error);
+      }
+    },
+  );
+
+  registerAppTool(
+    server,
+    "update_client",
+    {
+      title: "Update a business client",
+      description:
+        "Use this when the user explicitly asks to change a client's name, contacts, or notes.",
+      inputSchema: {
+        clientId: z.string().min(1),
+        name: z.string().trim().min(1).max(200).optional(),
+        contacts: z
+          .array(
+            z.object({
+              label: z.string().trim().min(1).optional(),
+              value: z.string().trim().min(1),
+            }),
+          )
+          .optional(),
+        notes: z.string().trim().min(1).max(2000).nullable().optional(),
+      },
+      outputSchema: { client: clientSchema },
+      annotations: writeAnnotations,
+      _meta: { ui: { visibility: ["model"] } },
+    },
+    async ({ clientId, name, contacts, notes }) => {
+      try {
+        if (name === undefined && contacts === undefined && notes === undefined) {
+          return {
+            isError: true,
+            content: [
+              { type: "text" as const, text: "Client update requires a name, contacts, or notes." },
+            ],
+          };
+        }
+        const updated = await client.updateClient(clientId, {
+          ...(name === undefined ? {} : { name }),
+          ...(contacts === undefined ? {} : { contacts }),
+          ...(notes === undefined ? {} : { notes }),
+        });
+        return clientResult(updated, `Updated client "${updated.name}".`);
+      } catch (error: unknown) {
+        return safeError(error);
+      }
+    },
+  );
+
+  registerAppTool(
+    server,
+    "delete_client",
+    {
+      title: "Delete a business client",
+      description:
+        "Use this only when the user explicitly asks to permanently remove a client by identifier.",
+      inputSchema: { clientId: z.string().min(1) },
+      outputSchema: { client: clientSchema },
+      annotations: destructiveAnnotations,
+      _meta: { ui: { visibility: ["model"] } },
+    },
+    async ({ clientId }) => {
+      try {
+        const removed = await client.deleteClient(clientId);
+        return clientResult(removed, `Deleted client "${removed.name}".`);
       } catch (error: unknown) {
         return safeError(error);
       }

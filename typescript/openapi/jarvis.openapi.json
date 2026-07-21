@@ -2078,7 +2078,7 @@
         "description": "Returns the authoritative client list from the configured client store.",
         "tags": ["Clients"],
         "x-mcp-tool": {
-          "exposed": false,
+          "exposed": true,
           "annotations": {
             "readOnlyHint": true,
             "destructiveHint": false,
@@ -2119,7 +2119,7 @@
         "description": "Creates one client after explicit user intent.",
         "tags": ["Clients"],
         "x-mcp-tool": {
-          "exposed": false,
+          "exposed": true,
           "annotations": {
             "readOnlyHint": false,
             "destructiveHint": false,
@@ -2180,7 +2180,7 @@
         "description": "Returns one client by its opaque identifier.",
         "tags": ["Clients"],
         "x-mcp-tool": {
-          "exposed": false,
+          "exposed": true,
           "annotations": {
             "readOnlyHint": true,
             "destructiveHint": false,
@@ -2224,7 +2224,7 @@
         "description": "Updates the name, contacts, or notes of one client.",
         "tags": ["Clients"],
         "x-mcp-tool": {
-          "exposed": false,
+          "exposed": true,
           "annotations": {
             "readOnlyHint": false,
             "destructiveHint": false,
@@ -2281,7 +2281,7 @@
         "description": "Permanently removes one client by its identifier.",
         "tags": ["Clients"],
         "x-mcp-tool": {
-          "exposed": false,
+          "exposed": true,
           "annotations": {
             "readOnlyHint": false,
             "destructiveHint": true,
