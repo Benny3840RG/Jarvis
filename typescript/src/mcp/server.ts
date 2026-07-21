@@ -11,6 +11,7 @@ import { z } from "zod";
 import type { Client } from "../clients/client.js";
 import type { Build } from "../builds/build.js";
 import type { BuildLogEntry } from "../buildLog/buildLogEntry.js";
+import type { Upgrade } from "../upgrades/upgrade.js";
 import type { Errand } from "../errands/errand.js";
 import type { Project } from "../projects/project.js";
 import type { Quote } from "../quotes/quote.js";
@@ -146,6 +147,20 @@ const buildLogSchema = z.object({
   kind: z.enum(["origin", "milestone", "failure", "anecdote", "note"]),
   title: z.string(),
   body: z.string().optional(),
+  occurredAt: z.number().optional(),
+  createdAt: z.number(),
+});
+
+const upgradeSchema = z.object({
+  id: z.string(),
+  buildId: z.string(),
+  title: z.string(),
+  reason: z.string().optional(),
+  beforeState: z.string().optional(),
+  afterState: z.string().optional(),
+  outcome: z.string().optional(),
+  parts: z.array(z.string()).optional(),
+  version: z.string().optional(),
   occurredAt: z.number().optional(),
   createdAt: z.number(),
 });
@@ -333,6 +348,13 @@ function buildLogResult(entry: BuildLogEntry, message: string) {
   return {
     content: [{ type: "text" as const, text: message }],
     structuredContent: { entry },
+  };
+}
+
+function upgradeResult(upgrade: Upgrade, message: string) {
+  return {
+    content: [{ type: "text" as const, text: message }],
+    structuredContent: { upgrade },
   };
 }
 
@@ -1699,6 +1721,203 @@ export function createJarvisMcpServer(client: JarvisApiClient): McpServer {
       try {
         const removed = await client.deleteBuildLog(entryId);
         return buildLogResult(removed, `Deleted build log entry "${removed.title}".`);
+      } catch (error: unknown) {
+        return safeError(error);
+      }
+    },
+  );
+
+  registerAppTool(
+    server,
+    "list_upgrade",
+    {
+      title: "List upgrades",
+      description:
+        "Use this when Benny wants the upgrade chronicle — the changes made to his builds over time, across all builds.",
+      inputSchema: {},
+      outputSchema: {
+        upgrades: z.array(upgradeSchema),
+        count: z.number().int().nonnegative(),
+      },
+      annotations: readAnnotations,
+      _meta: { ui: { visibility: ["model"] } },
+    },
+    async () => {
+      try {
+        const upgrades = await client.listUpgrades();
+        return {
+          content: [{ type: "text" as const, text: `Found ${upgrades.length} upgrades.` }],
+          structuredContent: { upgrades, count: upgrades.length },
+        };
+      } catch (error: unknown) {
+        return safeError(error);
+      }
+    },
+  );
+
+  registerAppTool(
+    server,
+    "get_upgrade",
+    {
+      title: "Get an upgrade",
+      description: "Use this when the user refers to one known upgrade by its identifier.",
+      inputSchema: { upgradeId: z.string().min(1) },
+      outputSchema: { upgrade: upgradeSchema },
+      annotations: readAnnotations,
+      _meta: { ui: { visibility: ["model"] } },
+    },
+    async ({ upgradeId }) => {
+      try {
+        return upgradeResult(await client.getUpgrade(upgradeId), "Upgrade details.");
+      } catch (error: unknown) {
+        return safeError(error);
+      }
+    },
+  );
+
+  registerAppTool(
+    server,
+    "create_upgrade",
+    {
+      title: "Record an upgrade",
+      description:
+        "Use this when Benny changes something on a build worth remembering — a swap or modification. Attach it to the build by its identifier; capture why, the before/after, the outcome, and the parts involved.",
+      inputSchema: {
+        buildId: z.string().trim().min(1).max(200),
+        title: z.string().trim().min(1).max(200),
+        reason: z.string().trim().min(1).max(4000).optional(),
+        beforeState: z.string().trim().min(1).max(4000).optional(),
+        afterState: z.string().trim().min(1).max(4000).optional(),
+        outcome: z.string().trim().min(1).max(4000).optional(),
+        parts: z.array(z.string().trim().min(1).max(200)).max(100).optional(),
+        version: z.string().trim().min(1).max(100).optional(),
+        occurredAt: z.number().optional(),
+      },
+      outputSchema: { upgrade: upgradeSchema },
+      annotations: createAnnotations,
+      _meta: { ui: { visibility: ["model"] } },
+    },
+    async ({
+      buildId,
+      title,
+      reason,
+      beforeState,
+      afterState,
+      outcome,
+      parts,
+      version,
+      occurredAt,
+    }) => {
+      try {
+        const created = await client.createUpgrade({
+          buildId,
+          title,
+          ...(reason === undefined ? {} : { reason }),
+          ...(beforeState === undefined ? {} : { beforeState }),
+          ...(afterState === undefined ? {} : { afterState }),
+          ...(outcome === undefined ? {} : { outcome }),
+          ...(parts === undefined ? {} : { parts }),
+          ...(version === undefined ? {} : { version }),
+          ...(occurredAt === undefined ? {} : { occurredAt }),
+        });
+        return upgradeResult(created, `Recorded upgrade "${created.title}".`);
+      } catch (error: unknown) {
+        return safeError(error);
+      }
+    },
+  );
+
+  registerAppTool(
+    server,
+    "update_upgrade",
+    {
+      title: "Update an upgrade",
+      description:
+        "Use this when the user explicitly asks to change an upgrade's build, title, reason, before/after state, outcome, parts, version, or occurred time.",
+      inputSchema: {
+        upgradeId: z.string().min(1),
+        buildId: z.string().trim().min(1).max(200).optional(),
+        title: z.string().trim().min(1).max(200).optional(),
+        reason: z.string().trim().min(1).max(4000).nullable().optional(),
+        beforeState: z.string().trim().min(1).max(4000).nullable().optional(),
+        afterState: z.string().trim().min(1).max(4000).nullable().optional(),
+        outcome: z.string().trim().min(1).max(4000).nullable().optional(),
+        parts: z.array(z.string().trim().min(1).max(200)).max(100).nullable().optional(),
+        version: z.string().trim().min(1).max(100).nullable().optional(),
+        occurredAt: z.number().nullable().optional(),
+      },
+      outputSchema: { upgrade: upgradeSchema },
+      annotations: writeAnnotations,
+      _meta: { ui: { visibility: ["model"] } },
+    },
+    async ({
+      upgradeId,
+      buildId,
+      title,
+      reason,
+      beforeState,
+      afterState,
+      outcome,
+      parts,
+      version,
+      occurredAt,
+    }) => {
+      try {
+        if (
+          buildId === undefined &&
+          title === undefined &&
+          reason === undefined &&
+          beforeState === undefined &&
+          afterState === undefined &&
+          outcome === undefined &&
+          parts === undefined &&
+          version === undefined &&
+          occurredAt === undefined
+        ) {
+          return {
+            isError: true,
+            content: [
+              {
+                type: "text" as const,
+                text: "Upgrade update requires at least one changed field.",
+              },
+            ],
+          };
+        }
+        const updated = await client.updateUpgrade(upgradeId, {
+          ...(buildId === undefined ? {} : { buildId }),
+          ...(title === undefined ? {} : { title }),
+          ...(reason === undefined ? {} : { reason }),
+          ...(beforeState === undefined ? {} : { beforeState }),
+          ...(afterState === undefined ? {} : { afterState }),
+          ...(outcome === undefined ? {} : { outcome }),
+          ...(parts === undefined ? {} : { parts }),
+          ...(version === undefined ? {} : { version }),
+          ...(occurredAt === undefined ? {} : { occurredAt }),
+        });
+        return upgradeResult(updated, `Updated upgrade "${updated.title}".`);
+      } catch (error: unknown) {
+        return safeError(error);
+      }
+    },
+  );
+
+  registerAppTool(
+    server,
+    "delete_upgrade",
+    {
+      title: "Delete an upgrade",
+      description:
+        "Use this only when the user explicitly asks to permanently remove an upgrade by identifier.",
+      inputSchema: { upgradeId: z.string().min(1) },
+      outputSchema: { upgrade: upgradeSchema },
+      annotations: destructiveAnnotations,
+      _meta: { ui: { visibility: ["model"] } },
+    },
+    async ({ upgradeId }) => {
+      try {
+        const removed = await client.deleteUpgrade(upgradeId);
+        return upgradeResult(removed, `Deleted upgrade "${removed.title}".`);
       } catch (error: unknown) {
         return safeError(error);
       }
