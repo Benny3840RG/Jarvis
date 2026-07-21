@@ -53,6 +53,7 @@ export const MCP_TOOL_OPERATIONS: Readonly<Record<string, readonly OpenApiOperat
   create_quote: [{ method: "POST", path: "/api/v1/quotes" }],
   update_quote: [{ method: "PATCH", path: "/api/v1/quotes/{quoteId}" }],
   delete_quote: [{ method: "DELETE", path: "/api/v1/quotes/{quoteId}" }],
+  get_daily_brief: [{ method: "GET", path: "/api/v1/brief" }],
 } as const;
 
 /** Formats an operation as the `METHOD /path` key used for set comparisons. */

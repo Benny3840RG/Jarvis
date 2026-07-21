@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 
+import type { DailyBrief } from "../briefs/brief.js";
 import type { Client, ClientInput, ClientUpdate } from "../clients/client.js";
 import type { Project, ProjectInput, ProjectUpdate } from "../projects/project.js";
 import type { Quote, QuoteInput, QuoteUpdate } from "../quotes/quote.js";
@@ -333,6 +334,10 @@ export class JarvisApiClient {
         `/api/v1/quotes/${encodeURIComponent(quoteId)}`,
       )
     ).data;
+  }
+
+  async getDailyBrief(): Promise<DailyBrief> {
+    return (await this.request<DataResponse<DailyBrief>>("GET", "/api/v1/brief")).data;
   }
 
   async dashboard(): Promise<DashboardSnapshot> {
