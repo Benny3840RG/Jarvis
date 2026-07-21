@@ -86,6 +86,28 @@ function sampleQuote(id = "quote-1") {
   };
 }
 
+function sampleBrief() {
+  return {
+    generatedAt: "2026-07-21T08:00:00.000Z",
+    timezone: "Australia/Melbourne",
+    headline: "1 open task, 0 reminders due, 0 active projects, 0 quotes awaiting response.",
+    tasks: { openCount: 1, completedCount: 0, open: [sampleTask()] },
+    reminders: { dueCount: 0, upcomingCount: 0, undatedCount: 1, due: [], upcoming: [] },
+    projects: {
+      activeCount: 0,
+      countsByStatus: { lead: 0, quoted: 0, active: 0, on_hold: 0, done: 0 },
+      active: [],
+    },
+    quotes: {
+      countsByStatus: { draft: 1, sent: 0, accepted: 0, declined: 0 },
+      pipelineTotal: 0,
+      acceptedTotal: 0,
+      awaitingResponse: [],
+      drafts: [sampleQuote()],
+    },
+  };
+}
+
 /** Schema-valid mock responses so tool output validation never short-circuits a probe. */
 function mockResponse(method: string, path: string): Response {
   if (path === "/api/v1/status") return Response.json(STATUS);
@@ -121,6 +143,7 @@ function mockResponse(method: string, path: string): Response {
       : Response.json({ data: [sampleQuote()], count: 1 });
   }
   if (/^\/api\/v1\/quotes\/[^/]+$/.test(path)) return Response.json({ data: sampleQuote() });
+  if (path === "/api/v1/brief") return Response.json({ data: sampleBrief() });
   return Response.json({ title: "Not Found", status: 404 }, { status: 404 });
 }
 
@@ -210,6 +233,7 @@ const TOOL_INVOCATIONS: Record<string, Record<string, unknown>> = {
   create_quote: { clientId: "client-1", number: "Q-1001" },
   update_quote: { quoteId: "quote-1", status: "sent" },
   delete_quote: { quoteId: "quote-1" },
+  get_daily_brief: {},
 };
 
 describe("MCP tool operation bindings", () => {

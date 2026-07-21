@@ -2817,6 +2817,49 @@
           }
         }
       }
+    },
+    "/api/v1/brief": {
+      "get": {
+        "operationId": "getDailyBrief",
+        "summary": "Get the daily brief",
+        "description": "Composes a read-only digest of open tasks, due reminders, active projects, and outstanding quotes. Derived on request from the authoritative stores; nothing is stored.",
+        "tags": ["Briefs"],
+        "x-mcp-tool": {
+          "exposed": true,
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Current daily brief.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BriefResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -5064,6 +5107,209 @@
           "notes": {
             "type": ["string", "null"],
             "maxLength": 2000
+          }
+        }
+      },
+      "DailyBrief": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "generatedAt",
+          "timezone",
+          "headline",
+          "tasks",
+          "reminders",
+          "projects",
+          "quotes"
+        ],
+        "properties": {
+          "generatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "timezone": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "headline": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "tasks": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["openCount", "completedCount", "open"],
+            "properties": {
+              "openCount": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "completedCount": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "open": {
+                "type": "array",
+                "maxItems": 5,
+                "items": {
+                  "$ref": "#/components/schemas/Task"
+                }
+              }
+            }
+          },
+          "reminders": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["dueCount", "upcomingCount", "undatedCount", "due", "upcoming"],
+            "properties": {
+              "dueCount": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "upcomingCount": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "undatedCount": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "due": {
+                "type": "array",
+                "maxItems": 5,
+                "items": {
+                  "$ref": "#/components/schemas/Reminder"
+                }
+              },
+              "upcoming": {
+                "type": "array",
+                "maxItems": 5,
+                "items": {
+                  "$ref": "#/components/schemas/Reminder"
+                }
+              }
+            }
+          },
+          "projects": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["activeCount", "countsByStatus", "active"],
+            "properties": {
+              "activeCount": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "countsByStatus": {
+                "$ref": "#/components/schemas/BriefProjectStatusCounts"
+              },
+              "active": {
+                "type": "array",
+                "maxItems": 5,
+                "items": {
+                  "$ref": "#/components/schemas/Project"
+                }
+              }
+            }
+          },
+          "quotes": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "countsByStatus",
+              "pipelineTotal",
+              "acceptedTotal",
+              "awaitingResponse",
+              "drafts"
+            ],
+            "properties": {
+              "countsByStatus": {
+                "$ref": "#/components/schemas/BriefQuoteStatusCounts"
+              },
+              "pipelineTotal": {
+                "type": "number",
+                "minimum": 0
+              },
+              "acceptedTotal": {
+                "type": "number",
+                "minimum": 0
+              },
+              "awaitingResponse": {
+                "type": "array",
+                "maxItems": 5,
+                "items": {
+                  "$ref": "#/components/schemas/Quote"
+                }
+              },
+              "drafts": {
+                "type": "array",
+                "maxItems": 5,
+                "items": {
+                  "$ref": "#/components/schemas/Quote"
+                }
+              }
+            }
+          }
+        }
+      },
+      "BriefProjectStatusCounts": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["lead", "quoted", "active", "on_hold", "done"],
+        "properties": {
+          "lead": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "quoted": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "active": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "on_hold": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "done": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "BriefQuoteStatusCounts": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["draft", "sent", "accepted", "declined"],
+        "properties": {
+          "draft": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "sent": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "accepted": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "declined": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "BriefResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["data"],
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/DailyBrief"
           }
         }
       }

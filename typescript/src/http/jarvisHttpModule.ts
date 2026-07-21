@@ -11,6 +11,7 @@ import type { PersistenceProvider } from "../persistence/persistence.js";
 import type { PersistenceProviderName } from "../persistence/providerSelection.js";
 import type { TotalityPipeline } from "../totality/totalityPipeline.js";
 import type { HttpAppConfig } from "./config.js";
+import { BriefController } from "./briefController.js";
 import { MemoryChangeSetController } from "./memoryChangeSetController.js";
 import { ProblemDetailsFilter } from "./problemDetails.js";
 import { ClientController } from "./clientController.js";
@@ -64,6 +65,7 @@ export class JarvisHttpModule {
         ClientController,
         ProjectController,
         QuoteController,
+        BriefController,
       ],
       providers: [
         { provide: HTTP_APP_CONFIG, useValue: options.config },

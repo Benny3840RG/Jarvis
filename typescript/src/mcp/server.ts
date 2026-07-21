@@ -95,6 +95,47 @@ const quoteLineItemInputSchema = z.object({
   unitPrice: z.number().min(0),
 });
 
+const briefSchema = z.object({
+  generatedAt: z.string(),
+  timezone: z.string(),
+  headline: z.string(),
+  tasks: z.object({
+    openCount: z.number().int().nonnegative(),
+    completedCount: z.number().int().nonnegative(),
+    open: z.array(taskSchema),
+  }),
+  reminders: z.object({
+    dueCount: z.number().int().nonnegative(),
+    upcomingCount: z.number().int().nonnegative(),
+    undatedCount: z.number().int().nonnegative(),
+    due: z.array(reminderSchema),
+    upcoming: z.array(reminderSchema),
+  }),
+  projects: z.object({
+    activeCount: z.number().int().nonnegative(),
+    countsByStatus: z.object({
+      lead: z.number().int().nonnegative(),
+      quoted: z.number().int().nonnegative(),
+      active: z.number().int().nonnegative(),
+      on_hold: z.number().int().nonnegative(),
+      done: z.number().int().nonnegative(),
+    }),
+    active: z.array(projectSchema),
+  }),
+  quotes: z.object({
+    countsByStatus: z.object({
+      draft: z.number().int().nonnegative(),
+      sent: z.number().int().nonnegative(),
+      accepted: z.number().int().nonnegative(),
+      declined: z.number().int().nonnegative(),
+    }),
+    pipelineTotal: z.number().nonnegative(),
+    acceptedTotal: z.number().nonnegative(),
+    awaitingResponse: z.array(quoteSchema),
+    drafts: z.array(quoteSchema),
+  }),
+});
+
 const layerSchema = z.object({
   status: z.enum(["ready", "partial", "inactive", "blocked"]),
   reason: z.string().optional(),
@@ -1071,6 +1112,31 @@ export function createJarvisMcpServer(client: JarvisApiClient): McpServer {
       try {
         const removed = await client.deleteQuote(quoteId);
         return quoteResult(removed, `Deleted quote "${removed.number}".`);
+      } catch (error: unknown) {
+        return safeError(error);
+      }
+    },
+  );
+
+  registerAppTool(
+    server,
+    "get_daily_brief",
+    {
+      title: "Get the daily brief",
+      description:
+        "Use this when Benny asks what's on today, wants a morning summary, or asks what matters right now. Digests open tasks, due reminders, active projects, and outstanding quotes from the live stores.",
+      inputSchema: {},
+      outputSchema: { brief: briefSchema },
+      annotations: readAnnotations,
+      _meta: { ui: { visibility: ["model"] } },
+    },
+    async () => {
+      try {
+        const brief = await client.getDailyBrief();
+        return {
+          content: [{ type: "text" as const, text: brief.headline }],
+          structuredContent: { brief },
+        };
       } catch (error: unknown) {
         return safeError(error);
       }
