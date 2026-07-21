@@ -8,3 +8,4 @@ export const HTTP_CLIENT_STORE = Symbol("HTTP_CLIENT_STORE");
 export const HTTP_PROJECT_STORE = Symbol("HTTP_PROJECT_STORE");
 export const HTTP_QUOTE_STORE = Symbol("HTTP_QUOTE_STORE");
 export const HTTP_ERRAND_STORE = Symbol("HTTP_ERRAND_STORE");
+export const HTTP_BUILD_STORE = Symbol("HTTP_BUILD_STORE");

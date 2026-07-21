@@ -20,6 +20,9 @@ import { JsonQuoteStore } from "../quotes/jsonQuoteStore.js";
 import type { ErrandStore } from "../errands/errand.js";
 import { InMemoryErrandStore } from "../errands/inMemoryErrandStore.js";
 import { JsonErrandStore } from "../errands/jsonErrandStore.js";
+import type { BuildStore } from "../builds/build.js";
+import { InMemoryBuildStore } from "../builds/inMemoryBuildStore.js";
+import { JsonBuildStore } from "../builds/jsonBuildStore.js";
 import { createMemoryChangeSetServiceFromEnv } from "../memory/memoryChangeSetFactory.js";
 import type { MemoryChangeSetService } from "../memory/memoryChangeSets.js";
 import {
@@ -58,6 +61,7 @@ export type CreateJarvisHttpAppOptions = (
   projectStore?: ProjectStore;
   quoteStore?: QuoteStore;
   errandStore?: ErrandStore;
+  buildStore?: BuildStore;
   /**
    * Invoked once per Fastify route as it is registered. Exposed so contract
    * tests can enumerate the routes the app actually serves without parsing the
@@ -102,6 +106,8 @@ export async function createJarvisHttpApp(
     options.quoteStore ?? (usesEnvironment ? new JsonQuoteStore() : new InMemoryQuoteStore());
   const errandStore =
     options.errandStore ?? (usesEnvironment ? new JsonErrandStore() : new InMemoryErrandStore());
+  const buildStore =
+    options.buildStore ?? (usesEnvironment ? new JsonBuildStore() : new InMemoryBuildStore());
   const adapter = new FastifyAdapter({
     genReqId: (request: IncomingMessage) =>
       resolveRequestId(request.headers[REQUEST_ID_HEADER], [
@@ -130,6 +136,7 @@ export async function createJarvisHttpApp(
       projectStore,
       quoteStore,
       errandStore,
+      buildStore,
     }),
     adapter,
     { logger: options.logger, abortOnError: false },
