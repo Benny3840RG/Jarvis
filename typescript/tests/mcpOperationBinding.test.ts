@@ -111,6 +111,15 @@ function sampleBuildLog(id = "build-log-1") {
   };
 }
 
+function sampleUpgrade(id = "upgrade-1") {
+  return {
+    id,
+    buildId: "build-1",
+    title: "Fitted a metal-gear servo",
+    createdAt: 1,
+  };
+}
+
 function sampleBrief() {
   return {
     generatedAt: "2026-07-21T08:00:00.000Z",
@@ -187,6 +196,12 @@ function mockResponse(method: string, path: string): Response {
       : Response.json({ data: [sampleBuildLog()], count: 1 });
   }
   if (/^\/api\/v1\/build-logs\/[^/]+$/.test(path)) return Response.json({ data: sampleBuildLog() });
+  if (path === "/api/v1/upgrades") {
+    return method === "POST"
+      ? Response.json({ data: sampleUpgrade() })
+      : Response.json({ data: [sampleUpgrade()], count: 1 });
+  }
+  if (/^\/api\/v1\/upgrades\/[^/]+$/.test(path)) return Response.json({ data: sampleUpgrade() });
   return Response.json({ title: "Not Found", status: 404 }, { status: 404 });
 }
 
@@ -292,6 +307,11 @@ const TOOL_INVOCATIONS: Record<string, Record<string, unknown>> = {
   create_build_log: { buildId: "build-1", title: "First clean crawl" },
   update_build_log: { entryId: "build-log-1", kind: "note" },
   delete_build_log: { entryId: "build-log-1" },
+  list_upgrade: {},
+  get_upgrade: { upgradeId: "upgrade-1" },
+  create_upgrade: { buildId: "build-1", title: "Fitted a metal-gear servo" },
+  update_upgrade: { upgradeId: "upgrade-1", outcome: "Held all day" },
+  delete_upgrade: { upgradeId: "upgrade-1" },
 };
 
 describe("MCP tool operation bindings", () => {

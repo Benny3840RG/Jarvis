@@ -5,6 +5,7 @@ import type { Client, ClientInput, ClientUpdate } from "../clients/client.js";
 import type { Errand, ErrandInput, ErrandUpdate } from "../errands/errand.js";
 import type { Build, BuildInput, BuildUpdate } from "../builds/build.js";
 import type { BuildLogEntry, BuildLogInput, BuildLogUpdate } from "../buildLog/buildLogEntry.js";
+import type { Upgrade, UpgradeInput, UpgradeUpdate } from "../upgrades/upgrade.js";
 import type { Project, ProjectInput, ProjectUpdate } from "../projects/project.js";
 import type { Quote, QuoteInput, QuoteUpdate } from "../quotes/quote.js";
 import type { SystemStatus } from "../http/contracts.js";
@@ -447,6 +448,43 @@ export class JarvisApiClient {
       await this.request<DataResponse<BuildLogEntry>>(
         "DELETE",
         `/api/v1/build-logs/${encodeURIComponent(entryId)}`,
+      )
+    ).data;
+  }
+
+  async listUpgrades(): Promise<Upgrade[]> {
+    return (await this.request<ListResponse<Upgrade>>("GET", "/api/v1/upgrades")).data;
+  }
+
+  async getUpgrade(upgradeId: string): Promise<Upgrade> {
+    return (
+      await this.request<DataResponse<Upgrade>>(
+        "GET",
+        `/api/v1/upgrades/${encodeURIComponent(upgradeId)}`,
+      )
+    ).data;
+  }
+
+  async createUpgrade(input: UpgradeInput): Promise<Upgrade> {
+    return (await this.request<DataResponse<Upgrade>>("POST", "/api/v1/upgrades", { body: input }))
+      .data;
+  }
+
+  async updateUpgrade(upgradeId: string, update: UpgradeUpdate): Promise<Upgrade> {
+    return (
+      await this.request<DataResponse<Upgrade>>(
+        "PATCH",
+        `/api/v1/upgrades/${encodeURIComponent(upgradeId)}`,
+        { body: update },
+      )
+    ).data;
+  }
+
+  async deleteUpgrade(upgradeId: string): Promise<Upgrade> {
+    return (
+      await this.request<DataResponse<Upgrade>>(
+        "DELETE",
+        `/api/v1/upgrades/${encodeURIComponent(upgradeId)}`,
       )
     ).data;
   }
