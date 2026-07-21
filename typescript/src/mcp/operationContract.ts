@@ -43,6 +43,11 @@ export const MCP_TOOL_OPERATIONS: Readonly<Record<string, readonly OpenApiOperat
   create_client: [{ method: "POST", path: "/api/v1/clients" }],
   update_client: [{ method: "PATCH", path: "/api/v1/clients/{clientId}" }],
   delete_client: [{ method: "DELETE", path: "/api/v1/clients/{clientId}" }],
+  list_projects: [{ method: "GET", path: "/api/v1/projects" }],
+  get_project: [{ method: "GET", path: "/api/v1/projects/{projectId}" }],
+  create_project: [{ method: "POST", path: "/api/v1/projects" }],
+  update_project: [{ method: "PATCH", path: "/api/v1/projects/{projectId}" }],
+  delete_project: [{ method: "DELETE", path: "/api/v1/projects/{projectId}" }],
 } as const;
 
 /** Formats an operation as the `METHOD /path` key used for set comparisons. */

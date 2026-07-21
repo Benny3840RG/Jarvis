@@ -9,6 +9,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 
 import type { Client } from "../clients/client.js";
+import type { Project } from "../projects/project.js";
 import type { Reminder, Task } from "../persistence/persistence.js";
 import {
   JarvisApiClient,
@@ -47,6 +48,16 @@ const clientSchema = z.object({
   id: z.string(),
   name: z.string(),
   contacts: z.array(clientContactSchema),
+  notes: z.string().optional(),
+  createdAt: z.number(),
+  updatedAt: z.number(),
+});
+
+const projectSchema = z.object({
+  id: z.string(),
+  clientId: z.string(),
+  title: z.string(),
+  status: z.enum(["lead", "quoted", "active", "on_hold", "done"]),
   notes: z.string().optional(),
   createdAt: z.number(),
   updatedAt: z.number(),
@@ -159,6 +170,13 @@ function clientResult(client: Client, message: string) {
   return {
     content: [{ type: "text" as const, text: message }],
     structuredContent: { client },
+  };
+}
+
+function projectResult(project: Project, message: string) {
+  return {
+    content: [{ type: "text" as const, text: message }],
+    structuredContent: { project },
   };
 }
 
@@ -691,6 +709,152 @@ export function createJarvisMcpServer(client: JarvisApiClient): McpServer {
       try {
         const removed = await client.deleteClient(clientId);
         return clientResult(removed, `Deleted client "${removed.name}".`);
+      } catch (error: unknown) {
+        return safeError(error);
+      }
+    },
+  );
+
+  registerAppTool(
+    server,
+    "list_projects",
+    {
+      title: "List business projects",
+      description: "Use this when Benny wants to see or review his projects (jobs).",
+      inputSchema: {},
+      outputSchema: { projects: z.array(projectSchema), count: z.number().int().nonnegative() },
+      annotations: readAnnotations,
+      _meta: { ui: { visibility: ["model"] } },
+    },
+    async () => {
+      try {
+        const projects = await client.listProjects();
+        return {
+          content: [{ type: "text" as const, text: `Found ${projects.length} projects.` }],
+          structuredContent: { projects, count: projects.length },
+        };
+      } catch (error: unknown) {
+        return safeError(error);
+      }
+    },
+  );
+
+  registerAppTool(
+    server,
+    "get_project",
+    {
+      title: "Get a business project",
+      description: "Use this when the user refers to one known project by its identifier.",
+      inputSchema: { projectId: z.string().min(1) },
+      outputSchema: { project: projectSchema },
+      annotations: readAnnotations,
+      _meta: { ui: { visibility: ["model"] } },
+    },
+    async ({ projectId }) => {
+      try {
+        return projectResult(await client.getProject(projectId), "Project details.");
+      } catch (error: unknown) {
+        return safeError(error);
+      }
+    },
+  );
+
+  registerAppTool(
+    server,
+    "create_project",
+    {
+      title: "Create a business project",
+      description: "Use this when the user explicitly asks to add a project (job) for a client.",
+      inputSchema: {
+        clientId: z.string().trim().min(1).max(200),
+        title: z.string().trim().min(1).max(200),
+        status: z.enum(["lead", "quoted", "active", "on_hold", "done"]).optional(),
+        notes: z.string().trim().min(1).max(2000).optional(),
+      },
+      outputSchema: { project: projectSchema },
+      annotations: createAnnotations,
+      _meta: { ui: { visibility: ["model"] } },
+    },
+    async ({ clientId, title, status, notes }) => {
+      try {
+        const created = await client.createProject({
+          clientId,
+          title,
+          ...(status === undefined ? {} : { status }),
+          ...(notes === undefined ? {} : { notes }),
+        });
+        return projectResult(created, `Created project "${created.title}".`);
+      } catch (error: unknown) {
+        return safeError(error);
+      }
+    },
+  );
+
+  registerAppTool(
+    server,
+    "update_project",
+    {
+      title: "Update a business project",
+      description:
+        "Use this when the user explicitly asks to change a project's client, title, status, or notes.",
+      inputSchema: {
+        projectId: z.string().min(1),
+        clientId: z.string().trim().min(1).max(200).optional(),
+        title: z.string().trim().min(1).max(200).optional(),
+        status: z.enum(["lead", "quoted", "active", "on_hold", "done"]).optional(),
+        notes: z.string().trim().min(1).max(2000).nullable().optional(),
+      },
+      outputSchema: { project: projectSchema },
+      annotations: writeAnnotations,
+      _meta: { ui: { visibility: ["model"] } },
+    },
+    async ({ projectId, clientId, title, status, notes }) => {
+      try {
+        if (
+          clientId === undefined &&
+          title === undefined &&
+          status === undefined &&
+          notes === undefined
+        ) {
+          return {
+            isError: true,
+            content: [
+              {
+                type: "text" as const,
+                text: "Project update requires a client, title, status, or notes.",
+              },
+            ],
+          };
+        }
+        const updated = await client.updateProject(projectId, {
+          ...(clientId === undefined ? {} : { clientId }),
+          ...(title === undefined ? {} : { title }),
+          ...(status === undefined ? {} : { status }),
+          ...(notes === undefined ? {} : { notes }),
+        });
+        return projectResult(updated, `Updated project "${updated.title}".`);
+      } catch (error: unknown) {
+        return safeError(error);
+      }
+    },
+  );
+
+  registerAppTool(
+    server,
+    "delete_project",
+    {
+      title: "Delete a business project",
+      description:
+        "Use this only when the user explicitly asks to permanently remove a project by identifier.",
+      inputSchema: { projectId: z.string().min(1) },
+      outputSchema: { project: projectSchema },
+      annotations: destructiveAnnotations,
+      _meta: { ui: { visibility: ["model"] } },
+    },
+    async ({ projectId }) => {
+      try {
+        const removed = await client.deleteProject(projectId);
+        return projectResult(removed, `Deleted project "${removed.title}".`);
       } catch (error: unknown) {
         return safeError(error);
       }
