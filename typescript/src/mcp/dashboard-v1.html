@@ -3,943 +3,467 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Jarvis Operator Console</title>
+    <title>Jarvis // Operator Console</title>
     <style>
       :root {
         color-scheme: dark;
-        --bg: #090a0c;
-        --panel: #121419;
-        --panel-2: #181b21;
-        --line: #2a2f39;
-        --text: #f4f5f7;
-        --muted: #9da4b0;
+        --bg: #05060a;
+        --panel: #0b0e15;
+        --panel-2: #111522;
+        --panel-3: #171b29;
+        --line: #282d3d;
+        --line-bright: #494f68;
+        --text: #f4f5fb;
+        --muted: #949bb0;
+        --violet: #b933ff;
+        --violet-soft: rgba(185, 51, 255, 0.14);
+        --magenta: #ff2fbf;
+        --green: #39ff88;
+        --green-soft: rgba(57, 255, 136, 0.12);
         --orange: #ff7a18;
         --orange-soft: rgba(255, 122, 24, 0.14);
-        --green: #42d392;
-        --green-brand: #3fbf6a;
-        --green-soft: rgba(63, 191, 106, 0.16);
-        --brand-gradient: linear-gradient(120deg, #ff7a18 0%, #ffab4c 42%, #3fbf6a 100%);
-        --red: #ff5c67;
+        --red: #ff5c75;
         --yellow: #f0c75e;
-        --radius: 18px;
-        font-family:
-          Inter,
-          ui-sans-serif,
-          system-ui,
-          -apple-system,
-          BlinkMacSystemFont,
-          "Segoe UI",
-          sans-serif;
+        --brand-gradient: linear-gradient(90deg, #ff7a18 0%, #b933ff 48%, #39ff88 100%);
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       }
-      * {
-        box-sizing: border-box;
-      }
+      * { box-sizing: border-box; }
+      html { background: var(--bg); }
       body {
         margin: 0;
         min-width: 0;
+        min-height: 100vh;
+        overflow-x: hidden;
+        color: var(--text);
         background:
-          radial-gradient(circle at 8% -4%, rgba(255, 122, 24, 0.14), transparent 30rem),
-          radial-gradient(circle at 100% 8%, rgba(63, 191, 106, 0.12), transparent 34rem), var(--bg);
-        color: var(--text);
+          radial-gradient(circle at 10% -5%, rgba(185, 51, 255, 0.19), transparent 34rem),
+          radial-gradient(circle at 96% 25%, rgba(57, 255, 136, 0.1), transparent 31rem),
+          linear-gradient(180deg, #06070c, var(--bg));
       }
-      button,
-      input,
-      select {
-        font: inherit;
+      button, input, select { font: inherit; }
+      button { cursor: pointer; }
+      button:disabled { cursor: not-allowed; opacity: 0.5; }
+      .shell { width: min(100%, 1580px); margin: 0 auto; padding: 10px; }
+      .hud-frame {
+        overflow: hidden;
+        border: 1px solid rgba(185, 51, 255, 0.42);
+        border-radius: 18px;
+        background: rgba(5, 6, 10, 0.95);
+        box-shadow: 0 22px 70px rgba(0,0,0,.5), inset 0 0 42px rgba(185,51,255,.05);
       }
-      button {
-        cursor: pointer;
-      }
-      button:disabled {
-        cursor: not-allowed;
-        opacity: 0.5;
-      }
-      .shell {
-        width: min(100%, 1100px);
-        margin: 0 auto;
-        padding: 18px;
-      }
+      .top-glow { height: 3px; background: var(--brand-gradient); box-shadow: 0 0 22px rgba(185,51,255,.72); }
       .topbar {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 14px;
-        margin-bottom: 14px;
+        display: flex; align-items: center; justify-content: space-between; gap: 14px;
+        min-height: 60px; padding: 10px 14px; border-bottom: 1px solid var(--line);
+        background: rgba(8,10,16,.97);
       }
-      .brand {
-        display: flex;
-        align-items: center;
-        gap: 11px;
-      }
+      .brand { display: flex; align-items: center; gap: 11px; min-width: 0; }
       .mark {
-        position: relative;
+        position: relative; display: grid; flex: 0 0 auto; place-items: center;
+        width: 42px; height: 42px; border: 1px solid var(--violet); border-radius: 12px;
+        background: radial-gradient(circle, rgba(57,255,136,.18), transparent 45%), var(--violet-soft);
+        color: var(--green); font-weight: 950; letter-spacing: .08em;
+        box-shadow: 0 0 20px rgba(185,51,255,.35), inset 0 0 18px rgba(185,51,255,.14);
+      }
+      .mark::before, .mark::after { content: ""; position: absolute; border: 1px solid rgba(57,255,136,.62); border-radius: 50%; }
+      .mark::before { width: 25px; height: 25px; animation: pulse 2.6s ease-in-out infinite; }
+      .mark::after { width: 31px; height: 31px; border-style: dashed; animation: spin 10s linear infinite; }
+      .brand h1 { margin: 0; overflow: hidden; font-size: 15px; letter-spacing: .16em; text-overflow: ellipsis; white-space: nowrap; }
+      .brand p { margin: 3px 0 0; color: var(--muted); font-size: 11px; }
+      .brand p b { color: var(--orange); }
+      .top-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 7px; }
+      .pill, .icon-button {
+        min-height: 34px; border: 1px solid var(--line); border-radius: 9px;
+        background: rgba(13,16,24,.92); color: var(--muted); font-size: 11px; font-weight: 800;
+      }
+      .pill { display: inline-flex; align-items: center; gap: 7px; padding: 0 11px; }
+      .pill.ok { border-color: rgba(57,255,136,.35); background: var(--green-soft); color: var(--green); }
+      .pill.bad { border-color: rgba(255,92,117,.5); color: var(--red); }
+      .pill.pending { border-color: rgba(240,199,94,.5); color: var(--yellow); }
+      .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; box-shadow: 0 0 11px currentColor; }
+      .icon-button { width: 34px; padding: 0; color: var(--text); }
+      .icon-button:hover, .rail-button:hover, .ghost:hover { border-color: var(--line-bright); background: var(--panel-3); }
+      .telemetry {
+        display: grid; grid-template-columns: repeat(6, minmax(0,1fr)); border-bottom: 1px solid var(--line);
+        background-image: linear-gradient(rgba(185,51,255,.035) 1px, transparent 1px), linear-gradient(90deg,rgba(185,51,255,.035) 1px,transparent 1px);
+        background-size: 22px 22px;
+      }
+      .telemetry > div { min-width: 0; padding: 8px 10px; border-right: 1px solid var(--line); }
+      .telemetry > div:last-child { border-right: 0; }
+      .telemetry span { display: block; color: var(--muted); font-size: 9px; font-weight: 850; letter-spacing: .13em; text-transform: uppercase; }
+      .telemetry b { display: block; margin-top: 3px; overflow: hidden; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+      .good { color: var(--green); } .guard { color: var(--orange); }
+      .hud-grid {
         display: grid;
-        place-items: center;
-        width: 40px;
-        height: 40px;
-        border-radius: 12px;
-        background: var(--brand-gradient);
-        color: #14100b;
-        font-weight: 900;
-      }
-      .mark::after {
-        content: "";
-        position: absolute;
-        inset: 0;
-        border-radius: inherit;
-        box-shadow: 0 6px 18px rgba(255, 122, 24, 0.35);
-      }
-      .brand h1 {
-        margin: 0;
-        font-size: 15px;
-        letter-spacing: 0.14em;
-      }
-      .brand p {
-        margin: 3px 0 0;
-        color: var(--muted);
-        font-size: 12px;
-      }
-      .brand p b {
-        color: var(--green-brand);
-        font-weight: 800;
-      }
-      /* Thin orange→green brand rule under the top bar. */
-      .brandbar {
-        height: 2px;
-        border: 0;
-        border-radius: 2px;
-        margin: 0 0 14px;
-        background: var(--brand-gradient);
-        opacity: 0.7;
-      }
-      .status-line {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-      }
-      .status-pill {
-        display: inline-flex;
-        align-items: center;
-        gap: 7px;
-        min-height: 34px;
-        padding: 0 12px;
-        border: 1px solid var(--line);
-        border-radius: 999px;
-        background: rgba(18, 20, 25, 0.85);
-        color: var(--muted);
-        font-size: 12px;
-        font-weight: 700;
-      }
-      .dot {
-        width: 8px;
-        height: 8px;
-        border-radius: 50%;
-        background: var(--yellow);
-        box-shadow: 0 0 12px currentColor;
-      }
-      .status-pill.ok .dot {
-        background: var(--green);
-      }
-      .status-pill.bad .dot {
-        background: var(--red);
-      }
-      .icon-button {
-        width: 36px;
-        height: 36px;
-        border: 1px solid var(--line);
-        border-radius: 11px;
-        background: var(--panel);
-        color: var(--text);
-      }
-      .nav {
-        display: grid;
-        grid-template-columns: repeat(4, 1fr);
-        gap: 7px;
-        padding: 6px;
-        border: 1px solid var(--line);
-        border-radius: 14px;
-        background: rgba(18, 20, 25, 0.92);
-        margin-bottom: 14px;
-      }
-      .nav button {
-        min-height: 38px;
-        border: 0;
-        border-radius: 10px;
-        background: transparent;
-        color: var(--muted);
-        font-weight: 750;
-      }
-      .nav button.active {
-        background: var(--orange-soft);
-        color: var(--orange);
-      }
-      .view {
-        display: none;
-      }
-      .view.active {
-        display: block;
-      }
-      .grid {
-        display: grid;
-        grid-template-columns: minmax(0, 1.55fr) minmax(250px, 0.8fr);
-        gap: 14px;
-      }
-      .card {
-        border: 1px solid var(--line);
-        border-radius: var(--radius);
-        background: linear-gradient(155deg, rgba(26, 29, 36, 0.96), rgba(16, 18, 23, 0.97));
-        padding: 18px;
-        box-shadow: 0 16px 45px rgba(0, 0, 0, 0.22);
-      }
-      .card + .card {
-        margin-top: 14px;
-      }
-      .eyebrow {
-        margin: 0 0 9px;
-        color: var(--orange);
-        font-size: 11px;
-        font-weight: 900;
-        letter-spacing: 0.18em;
-      }
-      .hero h2 {
-        margin: 0;
-        font-size: clamp(25px, 5vw, 42px);
-        line-height: 1.04;
-        letter-spacing: -0.045em;
-      }
-      .hero .empty-title {
-        color: var(--muted);
-      }
-      .meta-row {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 7px;
-        margin-top: 16px;
-      }
-      .chip {
-        display: inline-flex;
-        align-items: center;
-        min-height: 28px;
-        padding: 0 9px;
-        border: 1px solid var(--line);
-        border-radius: 999px;
-        color: var(--muted);
-        font-size: 11px;
-        font-weight: 700;
-      }
-      .primary,
-      .secondary,
-      .complete-button {
-        min-height: 42px;
-        border-radius: 11px;
-        font-weight: 850;
-      }
-      .primary,
-      .complete-button {
-        border: 1px solid var(--orange);
-        background: var(--orange);
-        color: #15100c;
-      }
-      .secondary {
-        border: 1px solid var(--line);
-        background: var(--panel-2);
-        color: var(--text);
-      }
-      .hero-actions {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 9px;
-        margin-top: 20px;
-      }
-      .hero-actions button {
-        padding: 0 16px;
-      }
-      .section-title {
-        display: flex;
-        align-items: end;
-        justify-content: space-between;
-        gap: 12px;
-        margin-bottom: 12px;
-      }
-      .section-title h2,
-      .section-title h3 {
-        margin: 0;
-        font-size: 17px;
-      }
-      .section-title span {
-        color: var(--muted);
-        font-size: 12px;
-      }
-      .list {
-        display: grid;
-        gap: 8px;
-        list-style: none;
-        padding: 0;
-        margin: 0;
-      }
-      .row {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) auto;
-        align-items: center;
-        gap: 12px;
-        min-height: 58px;
-        padding: 11px 12px;
-        border: 1px solid var(--line);
-        border-radius: 12px;
-        background: rgba(8, 9, 12, 0.36);
-      }
-      .row strong {
-        display: block;
-        overflow-wrap: anywhere;
-      }
-      .row small {
-        display: block;
-        margin-top: 4px;
-        color: var(--muted);
-      }
-      .row.done strong {
-        color: var(--muted);
-        text-decoration: line-through;
-      }
-      .row button {
-        min-height: 36px;
-        padding: 0 11px;
-      }
-      .stats {
-        display: grid;
-        grid-template-columns: repeat(3, 1fr);
-        gap: 8px;
-      }
-      .stat {
-        padding: 12px 10px;
-        border: 1px solid var(--line);
-        border-radius: 12px;
-        background: rgba(8, 9, 12, 0.34);
-      }
-      .stat b {
-        display: block;
-        font-size: 24px;
-      }
-      .stat.done b {
-        color: var(--green-brand);
-      }
-      .stat span {
-        color: var(--muted);
-        font-size: 11px;
-      }
-      form {
-        display: grid;
-        gap: 9px;
-      }
-      .field-grid {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) minmax(110px, 0.42fr);
-        gap: 8px;
-      }
-      label {
-        display: grid;
-        gap: 5px;
-        color: var(--muted);
-        font-size: 11px;
-        font-weight: 750;
-      }
-      input,
-      select {
-        width: 100%;
-        min-height: 42px;
-        border: 1px solid var(--line);
-        border-radius: 11px;
-        outline: none;
-        background: #0d0f13;
-        color: var(--text);
-        padding: 0 12px;
-      }
-      input:focus,
-      select:focus {
-        border-color: var(--orange);
-        box-shadow: 0 0 0 3px var(--orange-soft);
-      }
-      .empty {
-        color: var(--muted);
-        font-size: 13px;
-      }
-      .system-grid {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 10px;
-      }
-      .system-item {
-        padding: 13px;
-        border: 1px solid var(--line);
-        border-radius: 12px;
-      }
-      .system-item span {
-        display: block;
-        color: var(--muted);
-        font-size: 11px;
-      }
-      .system-item b {
-        display: block;
-        margin-top: 5px;
-        overflow-wrap: anywhere;
-      }
-      .layer-grid {
-        display: grid;
-        grid-template-columns: repeat(4, minmax(0, 1fr));
-        gap: 8px;
-        margin-top: 12px;
-      }
-      .layer {
-        min-height: 66px;
-        padding: 10px;
-        border: 1px solid var(--line);
-        border-radius: 11px;
-      }
-      .layer b {
-        display: block;
-        font-size: 11px;
-        text-transform: capitalize;
-      }
-      .layer span {
-        display: block;
-        margin-top: 8px;
-        color: var(--green);
-        font-size: 10px;
-        text-transform: uppercase;
-        letter-spacing: 0.09em;
-      }
-      .layer.partial span,
-      .layer.inactive span {
-        color: var(--yellow);
-      }
-      .layer.blocked span {
-        color: var(--red);
-      }
-      .toast {
-        position: fixed;
-        left: 50%;
-        bottom: 18px;
-        z-index: 20;
-        width: min(calc(100% - 28px), 520px);
-        transform: translate(-50%, 140%);
-        padding: 12px 14px;
-        border: 1px solid var(--line);
-        border-radius: 12px;
-        background: #171a20;
-        box-shadow: 0 18px 55px rgba(0, 0, 0, 0.5);
-        transition: transform 180ms ease;
-      }
-      .toast.show {
-        transform: translate(-50%, 0);
-      }
-      .toast.error {
-        border-color: rgba(255, 92, 103, 0.55);
-      }
-      @media (max-width: 760px) {
-        .shell {
-          padding: 12px;
-        }
-        .topbar {
-          align-items: flex-start;
-        }
-        .grid,
-        .field-grid {
-          grid-template-columns: 1fr;
-        }
-        .nav {
-          overflow-x: auto;
-          grid-template-columns: repeat(4, minmax(90px, 1fr));
-        }
-        .layer-grid {
-          grid-template-columns: repeat(2, minmax(0, 1fr));
-        }
-        .status-pill span:last-child {
-          display: none;
-        }
-      }
+        grid-template-columns: minmax(218px,.76fr) minmax(500px,2.05fr) minmax(245px,.92fr);
+        grid-template-rows: minmax(570px, auto) 172px;
+        gap: 9px; padding: 9px;
+      }
+      .panel {
+        position: relative; min-width: 0; overflow: hidden; border: 1px solid var(--line); border-radius: 15px;
+        background: linear-gradient(145deg, rgba(18,21,34,.95), rgba(8,10,16,.98));
+        box-shadow: inset 0 0 28px rgba(185,51,255,.035);
+      }
+      .panel::before {
+        content: ""; position: absolute; inset: 0; pointer-events: none;
+        background-image: linear-gradient(rgba(185,51,255,.032) 1px,transparent 1px), linear-gradient(90deg,rgba(185,51,255,.032) 1px,transparent 1px);
+        background-size: 24px 24px; mask-image: linear-gradient(180deg,rgba(0,0,0,.92),transparent 88%);
+      }
+      .panel.violet { border-color: rgba(185,51,255,.43); box-shadow: inset 0 0 32px rgba(185,51,255,.05), 0 0 16px rgba(185,51,255,.06); }
+      .panel.green { border-color: rgba(57,255,136,.3); }
+      .panel-content { position: relative; z-index: 1; height: 100%; }
+      .panel-header {
+        display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 39px;
+        padding: 9px 11px; border-bottom: 1px solid var(--line); background: rgba(8,10,16,.72);
+      }
+      .panel-header h2, .panel-header h3 { margin: 0; font-size: 11px; letter-spacing: .13em; text-transform: uppercase; }
+      .panel-header span { color: var(--muted); font-size: 10px; }
+      .left-rail, .right-rail { display: grid; min-height: 0; gap: 9px; grid-template-rows: auto minmax(0,1fr) auto; }
+      .nav-stack { display: grid; gap: 4px; padding: 7px; }
+      .rail-button {
+        display: grid; grid-template-columns: 30px minmax(0,1fr) auto; align-items: center; gap: 8px;
+        width: 100%; min-height: 48px; padding: 7px 8px; border: 1px solid transparent;
+        border-left: 2px solid transparent; border-radius: 9px; background: transparent; color: var(--muted); text-align: left;
+      }
+      .rail-button.active { border-color: rgba(185,51,255,.25); border-left-color: var(--violet); background: var(--violet-soft); color: var(--text); }
+      .rail-icon { display: grid; place-items: center; width: 29px; height: 29px; border: 1px solid var(--line); border-radius: 8px; color: var(--violet); font-size: 12px; font-weight: 900; }
+      .rail-button strong { display: block; font-size: 12px; }
+      .rail-button small { display: block; margin-top: 2px; color: var(--muted); font-size: 9px; }
+      .rail-count { min-width: 23px; padding: 3px 6px; border: 1px solid var(--line); border-radius: 999px; color: var(--green); font-size: 9px; font-weight: 900; text-align: center; }
+      .core-wrap { display: grid; place-items: center; padding: 9px 8px 4px; }
+      .core-gauge { position: relative; width: min(178px,84%); aspect-ratio: 1; }
+      .core-gauge svg { width: 100%; height: 100%; }
+      .spin { transform-origin: center; animation: spin 18s linear infinite; }
+      .spin.reverse { animation-direction: reverse; animation-duration: 12s; }
+      .core-label { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; }
+      .core-label span { color: var(--muted); font-size: 8px; font-weight: 850; letter-spacing: .16em; }
+      .core-label b { margin-top: 2px; color: var(--green); font-size: 26px; font-variant-numeric: tabular-nums; }
+      .core-label small { color: var(--muted); font-size: 8px; }
+      .mini-stats { display: grid; grid-template-columns: repeat(3,1fr); gap: 5px; padding: 0 8px 8px; }
+      .mini-stat { padding: 8px 4px; border: 1px solid var(--line); border-radius: 8px; background: rgba(5,6,10,.46); text-align: center; }
+      .mini-stat b { display: block; color: var(--violet); font-size: 17px; }
+      .mini-stat:nth-child(2) b { color: var(--green); }
+      .mini-stat span { display: block; color: var(--muted); font-size: 8px; text-transform: uppercase; }
+      .priority-list, .activity-list, .compact-list { display: grid; gap: 6px; margin: 0; padding: 8px; list-style: none; }
+      .priority-row, .activity-row, .compact-row { min-width: 0; padding: 8px; border: 1px solid var(--line); border-radius: 8px; background: rgba(5,6,10,.42); }
+      .priority-row { display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: center; gap: 7px; }
+      .priority-row strong, .activity-row strong, .compact-row strong { display: block; overflow: hidden; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+      .priority-row small, .activity-row small, .compact-row small { display: block; margin-top: 3px; color: var(--muted); font-size: 8px; }
+      .ghost { min-height: 29px; padding: 0 8px; border: 1px solid var(--line); border-radius: 7px; background: var(--panel-2); color: var(--text); font-size: 8px; font-weight: 900; }
+      .workspace { min-height: 0; }
+      .view { display: none; height: 100%; }
+      .view.active { display: block; }
+      .focus-layout { display: grid; grid-template-columns: minmax(0,1.16fr) minmax(245px,.84fr); gap: 9px; height: 100%; padding: 9px; }
+      .mission-panel { display: grid; grid-template-rows: minmax(0,1fr) auto; }
+      .mission-core { display: grid; grid-template-columns: minmax(0,1fr) 250px; align-items: center; gap: 10px; min-height: 0; padding: 14px; }
+      .eyebrow { margin: 0 0 8px; color: var(--violet); font-size: 10px; font-weight: 900; letter-spacing: .17em; }
+      .mission-copy h2 { margin: 0; font-size: clamp(25px,4vw,44px); line-height: 1.02; letter-spacing: -.045em; overflow-wrap: anywhere; }
+      .mission-copy p { margin: 9px 0 0; color: var(--muted); font-size: 11px; }
+      .chips, .actions { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 14px; }
+      .chip { display: inline-flex; align-items: center; min-height: 26px; padding: 0 8px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); font-size: 9px; font-weight: 800; }
+      .primary-button { min-height: 37px; padding: 0 13px; border: 1px solid var(--violet); border-radius: 8px; background: var(--violet); color: #0d0612; font-size: 10px; font-weight: 950; }
+      .mission-ring { position: relative; width: min(230px,100%); margin: auto; aspect-ratio: 1; }
+      .mission-ring svg { width: 100%; height: 100%; }
+      .mission-ring-copy { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; }
+      .mission-ring-copy span { color: var(--muted); font-size: 9px; letter-spacing: .15em; }
+      .mission-ring-copy b { color: var(--green); font-size: 20px; }
+      .mission-footer { display: grid; grid-template-columns: repeat(3,1fr); border-top: 1px solid var(--line); }
+      .mission-footer div { padding: 10px; border-right: 1px solid var(--line); }
+      .mission-footer div:last-child { border-right: 0; }
+      .mission-footer span { display: block; color: var(--muted); font-size: 8px; text-transform: uppercase; }
+      .mission-footer b { display: block; margin-top: 3px; font-size: 15px; }
+      .queue-panel { display: grid; grid-template-rows: auto minmax(0,1fr); }
+      .scroll-list { min-height: 0; overflow: auto; scrollbar-color: var(--violet) transparent; }
+      .two-column-view { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 9px; height: 100%; padding: 9px; }
+      .list-panel { display: grid; grid-template-rows: auto minmax(0,1fr); }
+      .board-row, .reminder-row { display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: center; gap: 10px; min-height: 55px; padding: 9px 10px; border-bottom: 1px solid var(--line); }
+      .board-row strong, .reminder-row strong { display: block; font-size: 11px; overflow-wrap: anywhere; }
+      .board-row small, .reminder-row small { display: block; margin-top: 3px; color: var(--muted); font-size: 9px; }
+      .board-row.done strong { color: var(--muted); text-decoration: line-through; }
+      .chart-wrap { display: grid; place-items: center; min-height: 0; padding: 10px; }
+      .chart-wrap svg { width: min(100%,500px); max-height: 390px; }
+      .systems-view { display: grid; grid-template-columns: minmax(280px,.88fr) minmax(0,1.12fr); gap: 9px; height: 100%; padding: 9px; }
+      .system-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 6px; padding: 8px; }
+      .system-item, .matrix-item { padding: 9px; border: 1px solid var(--line); border-radius: 8px; background: rgba(5,6,10,.4); }
+      .system-item span, .matrix-item span { display: block; color: var(--muted); font-size: 8px; text-transform: uppercase; }
+      .system-item b, .matrix-item b { display: block; margin-top: 4px; overflow: hidden; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+      .layer-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 6px; padding: 8px; }
+      .layer { padding: 9px; border: 1px solid var(--line); border-radius: 8px; background: rgba(5,6,10,.36); }
+      .layer b { display: block; font-size: 9px; text-transform: uppercase; }
+      .layer span { display: block; margin-top: 5px; color: var(--green); font-size: 8px; font-weight: 900; text-transform: uppercase; }
+      .layer.partial span, .layer.inactive span { color: var(--yellow); } .layer.blocked span { color: var(--red); }
+      .radar-grid polygon, .radar-axes line { fill: none; stroke: var(--line); stroke-width: 1; }
+      .radar-labels text { fill: var(--muted); font-size: 9px; }
+      .provider-card { margin: 8px; padding: 9px; border: 1px solid rgba(57,255,136,.24); border-radius: 9px; background: var(--green-soft); }
+      .provider-card span { display: block; color: var(--muted); font-size: 8px; text-transform: uppercase; }
+      .provider-card b { display: block; margin-top: 5px; color: var(--green); font-size: 12px; }
+      .matrix { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 5px; margin-top: 7px; }
+      .activity-row:first-child { border-color: rgba(185,51,255,.4); background: var(--violet-soft); }
+      .bottom-band { grid-column: 1/-1; display: grid; grid-template-columns: minmax(0,1.12fr) minmax(300px,.88fr); gap: 9px; }
+      .category-content { display: grid; grid-template-columns: minmax(0,1fr) 170px; gap: 12px; height: calc(100% - 39px); padding: 9px 11px; }
+      .category-bars { display: grid; align-content: center; gap: 7px; }
+      .category-row { display: grid; grid-template-columns: 72px minmax(0,1fr) 27px; align-items: center; gap: 7px; font-size: 9px; }
+      .bar-track { height: 8px; overflow: hidden; border: 1px solid var(--line); border-radius: 999px; background: rgba(5,6,10,.52); }
+      .bar-fill { height: 100%; border-radius: inherit; background: linear-gradient(90deg,var(--violet),var(--magenta)); transition: width .24s ease; }
+      .category-row:nth-child(even) .bar-fill { background: linear-gradient(90deg,var(--green),#50dcff); }
+      .completion-card { display: grid; place-items: center; border-left: 1px solid var(--line); }
+      .completion-ring { position: relative; width: 112px; aspect-ratio: 1; }
+      .completion-ring svg { width: 100%; height: 100%; }
+      .completion-copy { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; }
+      .completion-copy b { color: var(--green); font-size: 22px; } .completion-copy span { color: var(--muted); font-size: 8px; text-transform: uppercase; }
+      .capture-body { display: grid; grid-template-rows: auto minmax(0,1fr); height: calc(100% - 39px); padding: 8px 10px 10px; }
+      .capture-tabs { display: flex; gap: 5px; margin-bottom: 7px; }
+      .capture-tab { min-height: 29px; padding: 0 10px; border: 1px solid var(--line); border-radius: 7px; background: var(--panel-2); color: var(--muted); font-size: 9px; font-weight: 900; }
+      .capture-tab.active { border-color: var(--violet); background: var(--violet-soft); color: var(--violet); }
+      .capture-form { display: grid; grid-template-columns: minmax(0,1fr) 116px auto; align-items: end; gap: 7px; }
+      .capture-form label { display: grid; gap: 4px; min-width: 0; color: var(--muted); font-size: 8px; font-weight: 850; letter-spacing: .08em; text-transform: uppercase; }
+      input, select { width: 100%; min-width: 0; min-height: 37px; border: 1px solid var(--line); border-radius: 8px; outline: none; background: #080a10; color: var(--text); padding: 0 10px; font-size: 11px; }
+      input:focus, select:focus { border-color: var(--violet); box-shadow: 0 0 0 3px var(--violet-soft); }
+      .capture-submit { min-height: 37px; padding: 0 13px; border: 1px solid var(--violet); border-radius: 8px; background: var(--violet); color: #0d0612; font-size: 10px; font-weight: 950; }
+      .empty { display: grid; place-items: center; min-height: 70px; padding: 14px; color: var(--muted); font-size: 10px; text-align: center; }
+      .footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 7px; min-height: 33px; padding: 6px 12px; border-top: 1px solid var(--line); color: var(--muted); font-size: 9px; }
+      .stream { display: flex; flex-wrap: wrap; gap: 14px; } .live { color: var(--green); font-weight: 900; }
+      .toast { position: fixed; left: 50%; bottom: 18px; z-index: 30; width: min(calc(100% - 28px),520px); transform: translate(-50%,140%); padding: 12px 14px; border: 1px solid rgba(185,51,255,.5); border-radius: 11px; background: #11141d; box-shadow: 0 18px 55px rgba(0,0,0,.58); font-size: 11px; transition: transform .18s ease; }
+      .toast.show { transform: translate(-50%,0); } .toast.error { border-color: rgba(255,92,117,.62); }
+      @keyframes spin { to { transform: rotate(360deg); } }
+      @keyframes pulse { 0%,100% { opacity:.38; transform:scale(.93); } 50% { opacity:1; transform:scale(1.05); } }
+      @media (max-width:1120px) {
+        .hud-grid { grid-template-columns: 210px minmax(470px,1fr); grid-template-rows: minmax(570px,auto) auto auto; }
+        .right-rail { grid-column:1/-1; grid-row:2; grid-template-columns:repeat(3,minmax(0,1fr)); }
+        .bottom-band { grid-row:3; }
+      }
+      @media (max-width:780px) {
+        .shell { padding:0; } .hud-frame { border-left:0; border-right:0; border-radius:0; }
+        .source-pill { display:none; } .telemetry { grid-template-columns:repeat(3,minmax(0,1fr)); }
+        .hud-grid { display:block; padding:7px; } .left-rail { display:block; margin-bottom:7px; }
+        .left-core, .left-priorities, .right-rail, .bottom-band { display:none; }
+        .nav-stack { grid-template-columns:repeat(4,minmax(84px,1fr)); overflow-x:auto; }
+        .rail-button { grid-template-columns:24px minmax(64px,1fr); } .rail-button small, .rail-count { display:none; }
+        .workspace { min-height:650px; } .focus-layout, .two-column-view, .systems-view { grid-template-columns:1fr; }
+        .mission-core { grid-template-columns:1fr; } .mission-ring { width:170px; }
+      }
+      @media (prefers-reduced-motion:reduce) { *,*::before,*::after { animation-duration:.01ms!important; animation-iteration-count:1!important; transition-duration:.01ms!important; } }
     </style>
   </head>
   <body>
     <main class="shell">
-      <header class="topbar">
-        <div class="brand">
-          <div class="mark">J</div>
-          <div>
-            <h1>JARVIS // OPERATOR CONSOLE</h1>
-            <p><b>Beez Treez</b> Property Solutions</p>
+      <section class="hud-frame" aria-label="Jarvis landscape command centre">
+        <div class="top-glow"></div>
+        <header class="topbar">
+          <div class="brand">
+            <div class="mark">J</div>
+            <div>
+              <h1>JARVIS // OPERATOR CONSOLE</h1>
+              <p><b>Beez Treez</b> Property Solutions · LANDSCAPE COMMAND CENTRE</p>
+            </div>
           </div>
-        </div>
-        <div class="status-line">
-          <div class="status-pill" id="status-pill">
-            <span class="dot"></span><span id="status-label">Connecting</span>
+          <div class="top-actions">
+            <span class="pill source-pill" id="source-pill">SOURCE · CONNECTING</span>
+            <span class="pill ok" id="status-pill"><span class="dot"></span><span id="status-label">CONNECTING</span></span>
+            <span class="pill" id="clock">00:00:00</span>
+            <button class="icon-button" id="refresh" type="button" aria-label="Refresh Jarvis">↻</button>
           </div>
-          <button class="icon-button" id="refresh" type="button" aria-label="Refresh dashboard">
-            ↻
-          </button>
-        </div>
-      </header>
-      <hr class="brandbar" />
-      <nav class="nav" aria-label="Dashboard sections">
-        <button class="active" type="button" data-view="focus">Focus</button>
-        <button type="button" data-view="board">Board</button>
-        <button type="button" data-view="reminders">Reminders</button>
-        <button type="button" data-view="systems">Systems</button>
-      </nav>
-      <section class="view active" id="view-focus">
-        <div class="grid">
-          <div>
-            <article class="card hero">
-              <p class="eyebrow">NOW</p>
-              <h2 id="current-task" class="empty-title">Waiting for Jarvis…</h2>
-              <div class="meta-row" id="current-meta"></div>
-              <div class="hero-actions" id="current-actions"></div>
-            </article>
-            <article class="card">
-              <div class="section-title">
-                <h3>Next in line</h3>
-                <span id="queue-count">0 queued</span>
+        </header>
+        <section class="telemetry" aria-label="Live Jarvis state">
+          <div><span>Owner</span><b>BENNY</b></div>
+          <div><span>Persistence</span><b class="good" id="telemetry-provider">CONNECTING</b></div>
+          <div><span>Deployment</span><b id="telemetry-deployment">DEVELOPMENT</b></div>
+          <div><span>Command queue</span><b id="telemetry-queue">0 TASKS</b></div>
+          <div><span>Z-State</span><b id="telemetry-z-state">UNKNOWN</b></div>
+          <div><span>Production</span><b class="guard">NOT AUTHORISED</b></div>
+        </section>
+        <section class="hud-grid">
+          <aside class="left-rail">
+            <section class="panel violet left-core">
+              <div class="panel-content">
+                <div class="panel-header"><h2>System readiness</h2><span id="ready-layer-count">0 / 8 READY</span></div>
+                <div class="core-wrap">
+                  <div class="core-gauge">
+                    <svg viewBox="0 0 120 120" aria-hidden="true">
+                      <circle cx="60" cy="60" r="51" fill="none" stroke="var(--line)" stroke-width="2" />
+                      <circle class="spin" cx="60" cy="60" r="45" fill="none" stroke="var(--violet)" stroke-width="2" stroke-dasharray="12 7 2 6" />
+                      <circle class="spin reverse" cx="60" cy="60" r="37" fill="none" stroke="var(--green)" stroke-width="1.3" stroke-dasharray="5 6" />
+                      <circle cx="60" cy="60" r="29" fill="var(--violet-soft)" stroke="var(--violet)" />
+                      <circle id="readiness-ring" cx="60" cy="60" r="23" pathLength="100" fill="none" stroke="var(--green)" stroke-width="4" stroke-linecap="round" stroke-dasharray="0 100" transform="rotate(-90 60 60)" />
+                    </svg>
+                    <div class="core-label"><span>READINESS</span><b id="readiness-percent">0%</b><small id="readiness-state">AWAITING STATUS</small></div>
+                  </div>
+                </div>
+                <div class="mini-stats">
+                  <div class="mini-stat"><b id="active-count">0</b><span>Active</span></div>
+                  <div class="mini-stat"><b id="done-count">0</b><span>Cleared</span></div>
+                  <div class="mini-stat"><b id="reminder-count">0</b><span>Reminders</span></div>
+                </div>
               </div>
-              <ul class="list" id="focus-queue"></ul>
-            </article>
-          </div>
-          <aside>
-            <article class="card">
-              <div class="section-title"><h3>Today at a glance</h3></div>
-              <div class="stats">
-                <div class="stat"><b id="active-count">0</b><span>active</span></div>
-                <div class="stat done"><b id="done-count">0</b><span>cleared</span></div>
-                <div class="stat"><b id="reminder-count">0</b><span>reminders</span></div>
+            </section>
+            <nav class="panel green" aria-label="Command centre sections">
+              <div class="panel-content nav-stack">
+                <button class="rail-button active" type="button" data-view="focus"><span class="rail-icon">◎</span><span><strong>Focus</strong><small>Current mission</small></span><span class="rail-count" id="nav-focus-count">0</span></button>
+                <button class="rail-button" type="button" data-view="board"><span class="rail-icon">▦</span><span><strong>Task Board</strong><small>Durable queue</small></span><span class="rail-count" id="nav-board-count">0</span></button>
+                <button class="rail-button" type="button" data-view="reminders"><span class="rail-icon">◷</span><span><strong>Reminders</strong><small>Time contacts</small></span><span class="rail-count" id="nav-reminder-count">0</span></button>
+                <button class="rail-button" type="button" data-view="systems"><span class="rail-icon">◇</span><span><strong>Systems</strong><small>Runtime layers</small></span><span class="rail-count" id="nav-system-count">0</span></button>
               </div>
-            </article>
-            <article class="card">
-              <div class="section-title"><h3>Capture a task</h3></div>
-              <form id="task-form">
-                <label
-                  >What needs doing?<input
-                    id="task-title"
-                    maxlength="100"
-                    autocomplete="off"
-                    required /></label
-                ><label
-                  >Category<select id="task-category">
-                    <option value="personal">Personal</option>
-                    <option value="work">Work</option>
-                    <option value="builds">Builds</option>
-                    <option value="money">Money</option>
-                    <option value="life">Life</option>
-                  </select></label
-                ><button class="primary" type="submit">Add task</button>
-              </form>
-            </article>
+            </nav>
+            <section class="panel violet left-priorities">
+              <div class="panel-content">
+                <div class="panel-header"><h2>Priority stack</h2><span id="priority-count">0 QUEUED</span></div>
+                <ul class="priority-list" id="left-priority-list"></ul>
+              </div>
+            </section>
           </aside>
-        </div>
-      </section>
-      <section class="view" id="view-board">
-        <div class="grid">
-          <article class="card">
-            <div class="section-title">
-              <h2>Active tasks</h2>
-              <span id="board-active-count"></span>
+          <section class="panel violet workspace">
+            <div class="panel-content">
+              <section class="view active" id="view-focus">
+                <div class="focus-layout">
+                  <article class="panel mission-panel green">
+                    <div class="mission-core">
+                      <div class="mission-copy">
+                        <p class="eyebrow">PRIMARY MISSION</p>
+                        <h2 id="current-task">Waiting for Jarvis…</h2>
+                        <p id="current-subtitle">Live durable task state will appear here.</p>
+                        <div class="chips" id="current-meta"></div>
+                        <div class="actions" id="current-actions"></div>
+                      </div>
+                      <div class="mission-ring">
+                        <svg viewBox="0 0 160 160" aria-hidden="true">
+                          <circle cx="80" cy="80" r="68" fill="none" stroke="var(--line)" />
+                          <circle class="spin" cx="80" cy="80" r="61" fill="none" stroke="var(--violet)" stroke-width="2" stroke-dasharray="16 8 3 8" />
+                          <circle class="spin reverse" cx="80" cy="80" r="51" fill="none" stroke="var(--green)" stroke-dasharray="6 8" />
+                          <circle id="mission-progress-ring" cx="80" cy="80" r="40" pathLength="100" fill="var(--violet-soft)" stroke="var(--green)" stroke-width="4" stroke-linecap="round" stroke-dasharray="0 100" transform="rotate(-90 80 80)" />
+                        </svg>
+                        <div class="mission-ring-copy"><span>MISSION STATE</span><b id="mission-state">STANDBY</b></div>
+                      </div>
+                    </div>
+                    <div class="mission-footer">
+                      <div><span>Active tasks</span><b id="focus-active">0</b></div>
+                      <div><span>Cleared tasks</span><b id="focus-done">0</b></div>
+                      <div><span>Reminders</span><b id="focus-reminders">0</b></div>
+                    </div>
+                  </article>
+                  <article class="panel queue-panel violet">
+                    <div class="panel-header"><h3>Next in line</h3><span id="queue-count">0 QUEUED</span></div>
+                    <ul class="priority-list scroll-list" id="focus-queue"></ul>
+                  </article>
+                </div>
+              </section>
+              <section class="view" id="view-board">
+                <div class="two-column-view">
+                  <article class="panel list-panel violet"><div class="panel-header"><h2>Active tasks</h2><span id="board-active-count"></span></div><div class="scroll-list" id="active-list"></div></article>
+                  <article class="panel list-panel green"><div class="panel-header"><h2>Completed</h2><span id="board-done-count"></span></div><div class="scroll-list" id="done-list"></div></article>
+                </div>
+              </section>
+              <section class="view" id="view-reminders">
+                <div class="two-column-view">
+                  <article class="panel list-panel violet"><div class="panel-header"><h2>Reminder contacts</h2><span id="reminders-total"></span></div><div class="scroll-list" id="reminder-list"></div></article>
+                  <article class="panel green"><div class="panel-header"><h2>Reminder timing distribution</h2><span>REAL DUE STATE</span></div><div class="chart-wrap"><svg viewBox="0 0 420 300" role="img" aria-label="Reminder timing distribution"><g stroke="var(--line)"><path d="M35 40H395 M35 100H395 M35 160H395 M35 220H395 M35 270H395" /></g><g id="reminder-chart-bars"></g><g fill="var(--muted)" font-size="11" text-anchor="middle"><text x="75" y="289">DUE</text><text x="165" y="289">24H</text><text x="255" y="289">LATER</text><text x="347" y="289">OPEN</text></g></svg></div></article>
+                </div>
+              </section>
+              <section class="view" id="view-systems">
+                <div class="systems-view">
+                  <article class="panel violet">
+                    <div class="panel-header"><h2>Runtime health</h2><span id="checked-at"></span></div>
+                    <div class="system-grid">
+                      <div class="system-item"><span>Overall</span><b id="system-status">UNKNOWN</b></div>
+                      <div class="system-item"><span>Z-State</span><b id="z-state">UNKNOWN</b></div>
+                      <div class="system-item"><span>Persistence</span><b id="provider">UNKNOWN</b></div>
+                      <div class="system-item"><span>Deployment</span><b id="deployment">UNKNOWN</b></div>
+                      <div class="system-item"><span>Source</span><b id="source-version">UNKNOWN</b></div>
+                      <div class="system-item"><span>Timezone</span><b id="timezone">UNKNOWN</b></div>
+                    </div>
+                    <div class="layer-grid" id="layer-grid"></div>
+                  </article>
+                  <article class="panel green"><div class="panel-header"><h2>Layer readiness radar</h2><span>LIVE STATUS</span></div><div class="chart-wrap"><svg viewBox="0 0 400 400" role="img" aria-label="Jarvis runtime layer readiness"><g class="radar-grid" id="radar-grid"></g><g class="radar-axes" id="radar-axes"></g><polygon id="layer-radar-polygon" points="200,200" fill="rgba(185,51,255,.18)" stroke="var(--violet)" stroke-width="3" /><g class="radar-labels" id="radar-labels"></g></svg></div></article>
+                </div>
+              </section>
             </div>
-            <ul class="list" id="active-list"></ul>
-          </article>
-          <article class="card">
-            <div class="section-title">
-              <h2>Completed</h2>
-              <span id="board-done-count"></span>
-            </div>
-            <ul class="list" id="done-list"></ul>
-          </article>
-        </div>
-      </section>
-      <section class="view" id="view-reminders">
-        <div class="grid">
-          <article class="card">
-            <div class="section-title">
-              <h2>Reminders</h2>
-              <span id="reminders-total"></span>
-            </div>
-            <ul class="list" id="reminder-list"></ul>
-          </article>
-          <article class="card">
-            <div class="section-title"><h2>Add reminder</h2></div>
-            <form id="reminder-form">
-              <label
-                >Reminder<input
-                  id="reminder-title"
-                  maxlength="500"
-                  autocomplete="off"
-                  required /></label
-              ><label
-                >When (optional)<input
-                  id="reminder-due"
-                  maxlength="500"
-                  placeholder="Friday 9am"
-                  autocomplete="off" /></label
-              ><button class="primary" type="submit">Add reminder</button>
-            </form>
-          </article>
-        </div>
-      </section>
-      <section class="view" id="view-systems">
-        <article class="card">
-          <div class="section-title">
-            <h2>Runtime health</h2>
-            <span id="checked-at"></span>
-          </div>
-          <div class="system-grid">
-            <div class="system-item"><span>Overall</span><b id="system-status">Unknown</b></div>
-            <div class="system-item"><span>Z-State</span><b id="z-state">Unknown</b></div>
-            <div class="system-item"><span>Persistence</span><b id="provider">Unknown</b></div>
-            <div class="system-item"><span>Deployment</span><b id="deployment">Unknown</b></div>
-            <div class="system-item"><span>Source</span><b id="source-version">Unknown</b></div>
-            <div class="system-item"><span>Timezone</span><b id="timezone">Unknown</b></div>
-          </div>
-          <div class="layer-grid" id="layer-grid"></div>
-        </article>
+          </section>
+          <aside class="right-rail">
+            <section class="panel green">
+              <div class="panel-content">
+                <div class="panel-header"><h2>Persistence link</h2><span id="provider-link-state">CONNECTING</span></div>
+                <div class="provider-card"><span>Authorised provider</span><b id="right-provider">AWAITING SNAPSHOT</b></div>
+                <div class="matrix">
+                  <div class="matrix-item"><span>Reachability</span><b id="provider-reachability">UNKNOWN</b></div>
+                  <div class="matrix-item"><span>Authentication</span><b id="provider-authentication">UNKNOWN</b></div>
+                  <div class="matrix-item"><span>Schema</span><b id="provider-schema">UNKNOWN</b></div>
+                  <div class="matrix-item"><span>Version</span><b id="provider-version">DEVELOPMENT</b></div>
+                </div>
+              </div>
+            </section>
+            <section class="panel violet">
+              <div class="panel-content"><div class="panel-header"><h2>Live operator feed</h2><span>SESSION</span></div><ul class="activity-list" id="activity-list"></ul></div>
+            </section>
+            <section class="panel green">
+              <div class="panel-content"><div class="panel-header"><h2>Next reminders</h2><span id="right-reminder-count">0 TRACKED</span></div><ul class="compact-list" id="right-reminder-list"></ul></div>
+            </section>
+          </aside>
+          <section class="bottom-band">
+            <article class="panel violet">
+              <div class="panel-content"><div class="panel-header"><h2>Task load by domain</h2><span>LIVE DURABLE STATE</span></div><div class="category-content"><div class="category-bars" id="category-bars"></div><div class="completion-card"><div class="completion-ring"><svg viewBox="0 0 120 120" aria-hidden="true"><circle cx="60" cy="60" r="49" fill="none" stroke="var(--line)" stroke-width="8" /><circle id="completion-ring" cx="60" cy="60" r="49" pathLength="100" fill="none" stroke="var(--green)" stroke-width="8" stroke-linecap="round" stroke-dasharray="0 100" transform="rotate(-90 60 60)" /></svg><div class="completion-copy"><b id="completion-percent">0%</b><span>Complete</span></div></div></div></div></div>
+            </article>
+            <article class="panel green">
+              <div class="panel-content"><div class="panel-header"><h2>Command capture</h2><span>REAL MCP OPERATIONS</span></div><div class="capture-body"><div class="capture-tabs"><button class="capture-tab active" type="button" data-capture="task">TASK</button><button class="capture-tab" type="button" data-capture="reminder">REMINDER</button></div><form class="capture-form" id="capture-form"><label><span id="capture-title-label">Task command</span><input id="capture-title" maxlength="500" autocomplete="off" required /></label><label id="capture-detail-label"><span id="capture-detail-copy">Category</span><select id="capture-category"><option value="personal">Personal</option><option value="work">Work</option><option value="builds">Builds</option><option value="money">Money</option><option value="life">Life</option></select><input id="capture-due" maxlength="500" placeholder="Friday 9am" autocomplete="off" hidden /></label><button class="capture-submit" id="capture-submit" type="submit">ADD TASK</button></form></div></div>
+            </article>
+          </section>
+        </section>
+        <footer class="footer"><div class="stream"><span class="live">● LIVE</span><span id="footer-status">Jarvis bridge initialising</span><span>Task and reminder state only</span><span class="guard">Production boundary secured</span></div><span>JARVIS PRIME OMNI · DEVELOPMENT</span></footer>
       </section>
     </main>
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
     <script>
       (() => {
         "use strict";
-        const state = {
-          status: null,
-          tasks: [],
-          reminders: [],
-          counts: { activeTasks: 0, completedTasks: 0, reminders: 0 },
-        };
+        const state = { status: null, tasks: [], reminders: [], counts: { activeTasks: 0, completedTasks: 0, reminders: 0 }, captureMode: "task", activities: [] };
         let rpcId = 0;
         let toastTimer = null;
-        const pendingRequests = new Map();
+        const pending = new Map();
         const byId = (id) => document.getElementById(id);
-        const text = (element, value) => {
-          element.textContent = value == null ? "" : String(value);
-        };
-        function notify(method, params) {
-          window.parent.postMessage({ jsonrpc: "2.0", method, params }, "*");
-        }
-        function request(method, params) {
-          return new Promise((resolve, reject) => {
-            const id = ++rpcId;
-            pendingRequests.set(id, { resolve, reject });
-            window.parent.postMessage({ jsonrpc: "2.0", id, method, params }, "*");
-          });
-        }
-        function showToast(message, isError = false) {
-          const toast = byId("toast");
-          text(toast, message);
-          toast.classList.toggle("error", isError);
-          toast.classList.add("show");
-          clearTimeout(toastTimer);
-          toastTimer = setTimeout(() => toast.classList.remove("show"), 3000);
-        }
-        function safeStructuredContent(result) {
-          return result && typeof result === "object" && result.structuredContent
-            ? result.structuredContent
-            : result;
-        }
-        function recalculateCounts() {
-          state.counts = {
-            activeTasks: state.tasks.filter((task) => !task.completed).length,
-            completedTasks: state.tasks.filter((task) => task.completed).length,
-            reminders: state.reminders.length,
-          };
-        }
-        function updateFromResult(result) {
-          const data = safeStructuredContent(result);
-          if (!data || typeof data !== "object") return;
-          if (data.status && typeof data.status === "object") state.status = data.status;
-          if (Array.isArray(data.tasks)) state.tasks = data.tasks;
-          if (Array.isArray(data.reminders)) state.reminders = data.reminders;
-          if (data.counts && typeof data.counts === "object") state.counts = data.counts;
-          else recalculateCounts();
-          render();
-        }
-        window.addEventListener(
-          "message",
-          (event) => {
-            if (event.source !== window.parent) return;
-            const message = event.data;
-            if (!message || message.jsonrpc !== "2.0") return;
-            if (typeof message.id === "number") {
-              const pending = pendingRequests.get(message.id);
-              if (!pending) return;
-              pendingRequests.delete(message.id);
-              if (message.error) pending.reject(message.error);
-              else pending.resolve(message.result);
-              return;
-            }
-            if (message.method === "ui/notifications/tool-result") updateFromResult(message.params);
-          },
-          { passive: true },
-        );
-        const bridgeReady = (async () => {
-          await request("ui/initialize", {
-            appInfo: { name: "jarvis-dashboard", version: "0.1.0" },
-            appCapabilities: {},
-            protocolVersion: "2026-01-26",
-          });
-          notify("ui/notifications/initialized", {});
-        })();
-        async function callTool(name, args = {}) {
-          await bridgeReady;
-          const result = await request("tools/call", { name, arguments: args });
-          updateFromResult(result);
-          return result;
-        }
-        function taskSubtitle(task) {
-          return `${task.category || "personal"} · ${task.completed ? "complete" : "active"}`;
-        }
-        function reminderSubtitle(reminder) {
-          if (reminder.dueRaw) return reminder.dueRaw;
-          if (reminder.dueAt) return new Date(reminder.dueAt).toLocaleString();
-          return "No due time";
-        }
-        function emptyRow(message) {
-          const item = document.createElement("li");
-          item.className = "row empty";
-          text(item, message);
-          return item;
-        }
-        function taskRow(task, allowComplete) {
-          const item = document.createElement("li");
-          item.className = `row${task.completed ? " done" : ""}`;
-          const details = document.createElement("div");
-          const title = document.createElement("strong");
-          const subtitle = document.createElement("small");
-          text(title, task.title);
-          text(subtitle, taskSubtitle(task));
-          details.append(title, subtitle);
-          item.append(details);
-          if (allowComplete && !task.completed) {
-            const button = document.createElement("button");
-            button.className = "complete-button";
-            button.type = "button";
-            text(button, "Complete");
-            button.addEventListener("click", async () => {
-              button.disabled = true;
-              try {
-                await callTool("complete_task", { taskId: task.id });
-                showToast(`Completed ${task.title}`);
-              } catch {
-                showToast("Could not complete that task.", true);
-              } finally {
-                button.disabled = false;
-              }
-            });
-            item.append(button);
-          }
-          return item;
-        }
-        function reminderRow(reminder) {
-          const item = document.createElement("li");
-          item.className = "row";
-          const details = document.createElement("div");
-          const title = document.createElement("strong");
-          const subtitle = document.createElement("small");
-          text(title, reminder.title);
-          text(subtitle, reminderSubtitle(reminder));
-          details.append(title, subtitle);
-          item.append(details);
-          return item;
-        }
-        function renderList(element, items, renderer, emptyMessage) {
-          element.replaceChildren();
-          if (!items.length) {
-            element.append(emptyRow(emptyMessage));
-            return;
-          }
-          items.forEach((item) => element.append(renderer(item)));
-        }
-        function renderFocus() {
-          const active = state.tasks.filter((task) => !task.completed);
-          const current = active[0];
-          const currentTitle = byId("current-task");
-          const currentMeta = byId("current-meta");
-          const currentActions = byId("current-actions");
-          currentMeta.replaceChildren();
-          currentActions.replaceChildren();
-          if (!current) {
-            text(currentTitle, "Deck cleared.");
-            currentTitle.classList.add("empty-title");
-          } else {
-            text(currentTitle, current.title);
-            currentTitle.classList.remove("empty-title");
-            const category = document.createElement("span");
-            category.className = "chip";
-            text(category, current.category || "personal");
-            currentMeta.append(category);
-            const complete = document.createElement("button");
-            complete.className = "complete-button";
-            complete.type = "button";
-            text(complete, "✓ Complete");
-            complete.addEventListener("click", async () => {
-              complete.disabled = true;
-              try {
-                await callTool("complete_task", { taskId: current.id });
-                showToast(`Completed ${current.title}`);
-              } catch {
-                showToast("Could not complete the current task.", true);
-              } finally {
-                complete.disabled = false;
-              }
-            });
-            currentActions.append(complete);
-          }
-          const queue = active.slice(1, 5);
-          renderList(
-            byId("focus-queue"),
-            queue,
-            (task) => taskRow(task, true),
-            "Nothing queued. Empty is allowed.",
-          );
-          text(byId("queue-count"), `${Math.max(0, active.length - 1)} queued`);
-          text(byId("active-count"), state.counts.activeTasks);
-          text(byId("done-count"), state.counts.completedTasks);
-          text(byId("reminder-count"), state.counts.reminders);
-        }
-        function renderBoard() {
-          const active = state.tasks.filter((task) => !task.completed);
-          const done = state.tasks
-            .filter((task) => task.completed)
-            .slice()
-            .reverse();
-          renderList(
-            byId("active-list"),
-            active,
-            (task) => taskRow(task, true),
-            "No active tasks.",
-          );
-          renderList(
-            byId("done-list"),
-            done,
-            (task) => taskRow(task, false),
-            "No completed tasks yet.",
-          );
-          text(byId("board-active-count"), `${active.length} active`);
-          text(byId("board-done-count"), `${done.length} complete`);
-        }
-        function renderReminders() {
-          const reminders = state.reminders
-            .slice()
-            .sort(
-              (a, b) => (a.dueAt || Number.MAX_SAFE_INTEGER) - (b.dueAt || Number.MAX_SAFE_INTEGER),
-            );
-          renderList(byId("reminder-list"), reminders, reminderRow, "No reminders set.");
-          text(byId("reminders-total"), `${reminders.length} total`);
-        }
-        function renderSystems() {
-          const status = state.status;
-          const pill = byId("status-pill");
-          pill.classList.remove("ok", "bad");
-          if (!status) {
-            text(byId("status-label"), "Connecting");
-            return;
-          }
-          const healthy = status.status === "ok";
-          pill.classList.add(healthy ? "ok" : "bad");
-          text(byId("status-label"), healthy ? "Operational" : status.status);
-          text(byId("system-status"), status.status);
-          text(byId("z-state"), status.zState);
-          text(
-            byId("provider"),
-            `${status.provider?.name || "unknown"} · ${status.provider?.reachability || "unknown"}`,
-          );
-          text(byId("deployment"), status.provider?.deploymentVersion || "development");
-          text(byId("source-version"), status.sourceVersion || "unknown");
-          text(byId("timezone"), status.timezone || "unknown");
-          text(
-            byId("checked-at"),
-            status.checkedAt ? new Date(status.checkedAt).toLocaleString() : "",
-          );
-          const layers = byId("layer-grid");
-          layers.replaceChildren();
-          Object.entries(status.layers || {}).forEach(([name, value]) => {
-            const item = document.createElement("div");
-            item.className = `layer ${value.status}`;
-            const title = document.createElement("b");
-            const stateLabel = document.createElement("span");
-            text(title, name);
-            text(stateLabel, value.status);
-            item.append(title, stateLabel);
-            layers.append(item);
-          });
-        }
-        function render() {
-          recalculateCounts();
-          renderFocus();
-          renderBoard();
-          renderReminders();
-          renderSystems();
-        }
-        document.querySelectorAll("[data-view]").forEach((button) => {
-          button.addEventListener("click", () => {
-            document
-              .querySelectorAll("[data-view]")
-              .forEach((candidate) => candidate.classList.toggle("active", candidate === button));
-            document
-              .querySelectorAll(".view")
-              .forEach((view) =>
-                view.classList.toggle("active", view.id === `view-${button.dataset.view}`),
-              );
-          });
-        });
-        byId("refresh").addEventListener("click", async () => {
-          const button = byId("refresh");
-          button.disabled = true;
-          try {
-            await callTool("show_jarvis_dashboard");
-            showToast("Jarvis refreshed.");
-          } catch {
-            showToast("Jarvis refresh failed.", true);
-          } finally {
-            button.disabled = false;
-          }
-        });
-        byId("task-form").addEventListener("submit", async (event) => {
-          event.preventDefault();
-          const titleInput = byId("task-title");
-          const categoryInput = byId("task-category");
-          const title = titleInput.value.trim();
-          if (!title) return;
-          const button = event.currentTarget.querySelector("button[type=submit]");
-          button.disabled = true;
-          try {
-            await callTool("create_task", { title, category: categoryInput.value });
-            titleInput.value = "";
-            showToast(`Added ${title}`);
-          } catch {
-            showToast("Could not add that task.", true);
-          } finally {
-            button.disabled = false;
-          }
-        });
-        byId("reminder-form").addEventListener("submit", async (event) => {
-          event.preventDefault();
-          const titleInput = byId("reminder-title");
-          const dueInput = byId("reminder-due");
-          const title = titleInput.value.trim();
-          const dueText = dueInput.value.trim();
-          if (!title) return;
-          const button = event.currentTarget.querySelector("button[type=submit]");
-          button.disabled = true;
-          try {
-            await callTool("create_reminder", {
-              title,
-              ...(dueText ? { due: { text: dueText } } : {}),
-            });
-            titleInput.value = "";
-            dueInput.value = "";
-            showToast(`Added reminder ${title}`);
-          } catch {
-            showToast("Could not add that reminder.", true);
-          } finally {
-            button.disabled = false;
-          }
-        });
-        bridgeReady.catch(() => showToast("The ChatGPT app bridge did not initialise.", true));
-        render();
+        const text = (el, value) => { el.textContent = value == null ? "" : String(value); };
+        function notify(method, params) { window.parent.postMessage({ jsonrpc: "2.0", method, params }, "*"); }
+        function request(method, params) { return new Promise((resolve, reject) => { const id = ++rpcId; pending.set(id, { resolve, reject }); window.parent.postMessage({ jsonrpc: "2.0", id, method, params }, "*"); }); }
+        function toast(message, error = false) { const el = byId("toast"); text(el, message); el.classList.toggle("error", error); el.classList.add("show"); clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove("show"), 3000); }
+        function activity(title, detail) { state.activities.unshift({ title, detail, at: new Date() }); state.activities = state.activities.slice(0, 7); renderActivity(); }
+        function structured(result) { return result && typeof result === "object" && result.structuredContent ? result.structuredContent : result; }
+        function recalc() { state.counts = { activeTasks: state.tasks.filter((task) => !task.completed).length, completedTasks: state.tasks.filter((task) => task.completed).length, reminders: state.reminders.length }; }
+        function update(result) { const data = structured(result); if (!data || typeof data !== "object") return; if (data.status && typeof data.status === "object") state.status = data.status; if (Array.isArray(data.tasks)) state.tasks = data.tasks; if (Array.isArray(data.reminders)) state.reminders = data.reminders; if (data.counts && typeof data.counts === "object") state.counts = data.counts; else recalc(); render(); }
+        window.addEventListener("message", (event) => { if (event.source !== window.parent) return; const message = event.data; if (!message || message.jsonrpc !== "2.0") return; if (typeof message.id === "number") { const waiting = pending.get(message.id); if (!waiting) return; pending.delete(message.id); if (message.error) waiting.reject(message.error); else waiting.resolve(message.result); return; } if (message.method === "ui/notifications/tool-result") update(message.params); }, { passive: true });
+        const bridgeReady = (async () => { await request("ui/initialize", { appInfo: { name: "jarvis-dashboard", version: "0.2.0" }, appCapabilities: {}, protocolVersion: "2026-01-26" }); notify("ui/notifications/initialized", {}); activity("HUD bridge online", "MCP Apps connection initialised"); })();
+        async function callTool(name, args = {}) { await bridgeReady; const result = await request("tools/call", { name, arguments: args }); update(result); return result; }
+        const activeTasks = () => state.tasks.filter((task) => !task.completed);
+        const completedTasks = () => state.tasks.filter((task) => task.completed).slice().reverse();
+        const subtitle = (task) => `${task.category || "personal"} · ${task.completed ? "complete" : "active"}`;
+        const reminderTime = (reminder) => reminder.dueRaw || (reminder.dueAt ? new Date(reminder.dueAt).toLocaleString("en-AU") : "No due time");
+        function empty(message, className = "empty") { const el = document.createElement("div"); el.className = className; text(el, message); return el; }
+        function completeButton(task, compact = false) { const button = document.createElement("button"); button.className = compact ? "ghost" : "primary-button"; button.type = "button"; text(button, compact ? "CLEAR" : "✓ CLEAR TASK"); button.addEventListener("click", async () => { button.disabled = true; try { await callTool("complete_task", { taskId: task.id }); activity("Task cleared", task.title); toast(`Completed ${task.title}`); } catch { toast("Could not complete that task.", true); } finally { button.disabled = false; } }); return button; }
+        function taskRow(task, compact = false, allowComplete = true) { const row = document.createElement(compact ? "li" : "div"); row.className = compact ? "priority-row" : `board-row${task.completed ? " done" : ""}`; const copy = document.createElement("div"); const title = document.createElement("strong"); const meta = document.createElement("small"); text(title, task.title); text(meta, subtitle(task)); copy.append(title, meta); row.append(copy); if (allowComplete && !task.completed) row.append(completeButton(task, true)); return row; }
+        function reminderRow(reminder) { const row = document.createElement("div"); row.className = "reminder-row"; const copy = document.createElement("div"); const title = document.createElement("strong"); const meta = document.createElement("small"); text(title, reminder.title); text(meta, reminderTime(reminder)); copy.append(title, meta); const chip = document.createElement("span"); chip.className = "chip"; text(chip, reminder.dueAt ? "TIMED" : "OPEN"); row.append(copy, chip); return row; }
+        function fillList(el, items, renderer, message) { el.replaceChildren(); if (!items.length) { el.append(empty(message)); return; } items.forEach((item) => el.append(renderer(item))); }
+        function layerEntries() { return Object.entries(state.status?.layers || {}); }
+        function layerWeight(status) { return status === "ready" ? 1 : status === "partial" ? 0.68 : status === "inactive" ? 0.34 : 0.08; }
+        function renderReadiness() { const layers = layerEntries(); const ready = layers.filter(([, value]) => value.status === "ready").length; const percent = layers.length ? Math.round((ready / layers.length) * 100) : 0; text(byId("ready-layer-count"), `${ready} / ${layers.length || 8} READY`); text(byId("readiness-percent"), `${percent}%`); text(byId("readiness-state"), state.status ? state.status.status.toUpperCase() : "AWAITING STATUS"); byId("readiness-ring").setAttribute("stroke-dasharray", `${percent} ${100 - percent}`); text(byId("nav-system-count"), ready); }
+        function renderFocus() { const active = activeTasks(); const current = active[0]; const title = byId("current-task"); const sub = byId("current-subtitle"); const meta = byId("current-meta"); const actions = byId("current-actions"); meta.replaceChildren(); actions.replaceChildren(); if (!current) { text(title, "Deck cleared."); text(sub, "No active task is holding the command queue"); text(byId("mission-state"), "CLEAR"); } else { text(title, current.title); text(sub, subtitle(current).toUpperCase()); text(byId("mission-state"), "ACTIVE"); [current.category || "personal", "DURABLE TASK"].forEach((label) => { const chip = document.createElement("span"); chip.className = "chip"; text(chip, label); meta.append(chip); }); actions.append(completeButton(current)); }
+          const total = state.counts.activeTasks + state.counts.completedTasks; const complete = total ? Math.round((state.counts.completedTasks / total) * 100) : 0; byId("mission-progress-ring").setAttribute("stroke-dasharray", `${complete} ${100 - complete}`); fillList(byId("focus-queue"), active.slice(1, 6), (task) => taskRow(task, true), "Nothing queued. The command deck is clear."); text(byId("queue-count"), `${Math.max(0, active.length - 1)} QUEUED`); text(byId("focus-active"), state.counts.activeTasks); text(byId("focus-done"), state.counts.completedTasks); text(byId("focus-reminders"), state.counts.reminders); }
+        function renderBoard() { const active = activeTasks(); const done = completedTasks(); fillList(byId("active-list"), active, (task) => taskRow(task), "No active tasks."); fillList(byId("done-list"), done, (task) => taskRow(task, false, false), "No completed tasks yet."); text(byId("board-active-count"), `${active.length} ACTIVE`); text(byId("board-done-count"), `${done.length} COMPLETE`); }
+        function timingBuckets() { const now = Date.now(); const day = 86400000; const buckets = [0,0,0,0]; state.reminders.forEach((reminder) => { if (!reminder.dueAt) buckets[3] += 1; else if (reminder.dueAt <= now) buckets[0] += 1; else if (reminder.dueAt <= now + day) buckets[1] += 1; else buckets[2] += 1; }); return buckets; }
+        function renderReminderChart() { const values = timingBuckets(); const max = Math.max(1, ...values); const group = byId("reminder-chart-bars"); group.replaceChildren(); const xs = [75,165,255,347]; values.forEach((value, index) => { const height = Math.max(3, Math.round((value / max) * 180)); const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect"); rect.setAttribute("x", String(xs[index] - 22)); rect.setAttribute("y", String(255 - height)); rect.setAttribute("width", "44"); rect.setAttribute("height", String(height)); rect.setAttribute("rx", "6"); rect.setAttribute("fill", index % 2 ? "var(--green)" : "var(--violet)"); const label = document.createElementNS("http://www.w3.org/2000/svg", "text"); label.setAttribute("x", String(xs[index])); label.setAttribute("y", String(Math.max(35, 246 - height))); label.setAttribute("text-anchor", "middle"); label.setAttribute("fill", "var(--text)"); label.setAttribute("font-size", "13"); label.textContent = String(value); group.append(rect, label); }); }
+        function renderReminders() { const reminders = state.reminders.slice().sort((a,b) => (a.dueAt || Number.MAX_SAFE_INTEGER) - (b.dueAt || Number.MAX_SAFE_INTEGER)); fillList(byId("reminder-list"), reminders, reminderRow, "No reminders set."); text(byId("reminders-total"), `${reminders.length} TOTAL`); renderReminderChart(); }
+        function point(index, count, radius, centre = 200) { const angle = -Math.PI / 2 + (index * Math.PI * 2) / count; return [centre + Math.cos(angle) * radius, centre + Math.sin(angle) * radius]; }
+        function renderRadar() { const entries = layerEntries(); const names = entries.length ? entries.map(([name]) => name) : ["runtime","domains","integration","orchestration","safety","adaptive","autonomy","reliability"]; const values = entries.length ? entries.map(([, value]) => layerWeight(value.status)) : names.map(() => 0.08); const count = names.length; byId("layer-radar-polygon").setAttribute("points", values.map((value,index) => point(index,count,138 * value).join(",")).join(" ")); const grid = byId("radar-grid"); const axes = byId("radar-axes"); const labels = byId("radar-labels"); grid.replaceChildren(); axes.replaceChildren(); labels.replaceChildren(); [0.25,0.5,0.75,1].forEach((scale) => { const polygon = document.createElementNS("http://www.w3.org/2000/svg", "polygon"); polygon.setAttribute("points", names.map((_,index) => point(index,count,138 * scale).join(",")).join(" ")); grid.append(polygon); }); names.forEach((name,index) => { const [x,y] = point(index,count,138); const line = document.createElementNS("http://www.w3.org/2000/svg", "line"); line.setAttribute("x1","200"); line.setAttribute("y1","200"); line.setAttribute("x2",String(x)); line.setAttribute("y2",String(y)); axes.append(line); const [lx,ly] = point(index,count,160); const label = document.createElementNS("http://www.w3.org/2000/svg", "text"); label.setAttribute("x",String(lx)); label.setAttribute("y",String(ly)); label.setAttribute("text-anchor",lx < 190 ? "end" : lx > 210 ? "start" : "middle"); label.setAttribute("dominant-baseline","middle"); label.textContent = name.toUpperCase(); labels.append(label); }); }
+        function renderSystems() { const status = state.status; const pill = byId("status-pill"); pill.classList.remove("bad","pending"); if (!status) { pill.classList.add("pending"); text(byId("status-label"),"CONNECTING"); renderReadiness(); renderRadar(); return; } const healthy = status.status === "ok"; if (!healthy) pill.classList.add("bad"); text(byId("status-label"), healthy ? "OPERATIONAL" : status.status.toUpperCase()); text(byId("system-status"),status.status.toUpperCase()); text(byId("z-state"),status.zState.toUpperCase()); text(byId("provider"),`${status.provider?.name || "unknown"} · ${status.provider?.reachability || "unknown"}`); text(byId("deployment"),status.provider?.deploymentVersion || "development"); text(byId("source-version"),status.sourceVersion || "unknown"); text(byId("timezone"),status.timezone || "unknown"); text(byId("checked-at"),status.checkedAt ? new Date(status.checkedAt).toLocaleTimeString("en-AU") : ""); const grid = byId("layer-grid"); grid.replaceChildren(); Object.entries(status.layers || {}).forEach(([name,value]) => { const item = document.createElement("div"); item.className = `layer ${value.status}`; const title = document.createElement("b"); const label = document.createElement("span"); text(title,name); text(label,value.status); item.append(title,label); grid.append(item); }); const provider = status.provider || {}; text(byId("right-provider"),`${provider.name || "UNKNOWN"} PERSISTENCE`); text(byId("provider-reachability"),(provider.reachability || "unknown").toUpperCase()); text(byId("provider-authentication"),(provider.authentication || "unknown").toUpperCase()); text(byId("provider-schema"),(provider.schemaCompatibility || "unknown").toUpperCase()); text(byId("provider-version"),provider.deploymentVersion || "DEVELOPMENT"); text(byId("provider-link-state"),provider.reachability === "ok" ? "LINK ONLINE" : "LINK DEGRADED"); text(byId("telemetry-provider"),(provider.name || "unknown").toUpperCase()); text(byId("telemetry-deployment"),provider.deploymentVersion || "DEVELOPMENT"); text(byId("telemetry-z-state"),status.zState.toUpperCase()); text(byId("source-pill"),`SOURCE · ${status.sourceVersion || "UNKNOWN"}`); text(byId("footer-status"),`Jarvis ${status.status} · ${provider.name || "unknown"} persistence`); renderReadiness(); renderRadar(); }
+        function renderCategories() { const counts = new Map(); state.tasks.forEach((task) => { const category = task.category || "personal"; counts.set(category,(counts.get(category) || 0) + 1); }); const entries = [...counts.entries()].sort((a,b) => b[1] - a[1]).slice(0,5); const max = Math.max(1,...entries.map(([,value]) => value)); const bars = byId("category-bars"); bars.replaceChildren(); if (!entries.length) bars.append(empty("No task-domain data yet.")); else entries.forEach(([category,value]) => { const row = document.createElement("div"); row.className = "category-row"; const name = document.createElement("span"); text(name,category); const track = document.createElement("div"); track.className = "bar-track"; const fill = document.createElement("div"); fill.className = "bar-fill"; fill.style.width = `${Math.round((value / max) * 100)}%`; track.append(fill); const count = document.createElement("b"); text(count,value); row.append(name,track,count); bars.append(row); }); const total = state.counts.activeTasks + state.counts.completedTasks; const percent = total ? Math.round((state.counts.completedTasks / total) * 100) : 0; text(byId("completion-percent"),`${percent}%`); byId("completion-ring").setAttribute("stroke-dasharray",`${percent} ${100 - percent}`); }
+        function renderPriorities() { const tasks = activeTasks().slice(0,4); fillList(byId("left-priority-list"),tasks,(task) => taskRow(task,true,false),"No active priorities."); text(byId("priority-count"),`${tasks.length} QUEUED`); }
+        function renderRightReminders() { const reminders = state.reminders.slice().sort((a,b) => (a.dueAt || Number.MAX_SAFE_INTEGER) - (b.dueAt || Number.MAX_SAFE_INTEGER)).slice(0,3); const list = byId("right-reminder-list"); list.replaceChildren(); if (!reminders.length) list.append(empty("No reminder contacts.","compact-row empty")); else reminders.forEach((reminder) => { const row = document.createElement("li"); row.className = "compact-row"; const title = document.createElement("strong"); const meta = document.createElement("small"); text(title,reminder.title); text(meta,reminderTime(reminder)); row.append(title,meta); list.append(row); }); text(byId("right-reminder-count"),`${state.reminders.length} TRACKED`); }
+        function renderActivity() { const list = byId("activity-list"); list.replaceChildren(); if (!state.activities.length) { list.append(empty("No operator activity yet.","activity-row empty")); return; } state.activities.slice(0,6).forEach((item) => { const row = document.createElement("li"); row.className = "activity-row"; const title = document.createElement("strong"); const meta = document.createElement("small"); text(title,item.title); text(meta,`${item.detail} · ${item.at.toLocaleTimeString("en-AU",{hour:"2-digit",minute:"2-digit"})}`); row.append(title,meta); list.append(row); }); }
+        function renderCounts() { recalc(); text(byId("active-count"),state.counts.activeTasks); text(byId("done-count"),state.counts.completedTasks); text(byId("reminder-count"),state.counts.reminders); text(byId("telemetry-queue"),`${state.counts.activeTasks} TASKS`); text(byId("nav-focus-count"),state.counts.activeTasks ? 1 : 0); text(byId("nav-board-count"),state.tasks.length); text(byId("nav-reminder-count"),state.counts.reminders); }
+        function render() { renderCounts(); renderFocus(); renderBoard(); renderReminders(); renderSystems(); renderCategories(); renderPriorities(); renderRightReminders(); renderActivity(); }
+        function setCaptureMode(mode) { state.captureMode = mode; document.querySelectorAll("[data-capture]").forEach((button) => button.classList.toggle("active",button.dataset.capture === mode)); const category = byId("capture-category"); const due = byId("capture-due"); if (mode === "task") { text(byId("capture-title-label"),"Task command"); text(byId("capture-detail-copy"),"Category"); category.hidden = false; due.hidden = true; text(byId("capture-submit"),"ADD TASK"); } else { text(byId("capture-title-label"),"Reminder command"); text(byId("capture-detail-copy"),"When"); category.hidden = true; due.hidden = false; text(byId("capture-submit"),"SET REMINDER"); } }
+        document.querySelectorAll("[data-view]").forEach((button) => button.addEventListener("click",() => { document.querySelectorAll("[data-view]").forEach((candidate) => candidate.classList.toggle("active",candidate === button)); document.querySelectorAll(".view").forEach((view) => view.classList.toggle("active",view.id === `view-${button.dataset.view}`)); }));
+        document.querySelectorAll("[data-capture]").forEach((button) => button.addEventListener("click",() => setCaptureMode(button.dataset.capture)));
+        byId("refresh").addEventListener("click",async () => { const button = byId("refresh"); button.disabled = true; try { await callTool("show_jarvis_dashboard"); activity("Snapshot refreshed","Live dashboard state reloaded"); toast("Jarvis HUD refreshed."); } catch { toast("Jarvis refresh failed.",true); } finally { button.disabled = false; } });
+        byId("capture-form").addEventListener("submit",async (event) => { event.preventDefault(); const input = byId("capture-title"); const title = input.value.trim(); if (!title) return; const button = byId("capture-submit"); button.disabled = true; try { if (state.captureMode === "task") { await callTool("create_task",{ title, category: byId("capture-category").value }); activity("Task captured",title); toast(`Added ${title}`); } else { const due = byId("capture-due").value.trim(); await callTool("create_reminder",{ title, ...(due ? { due: { text: due } } : {}) }); byId("capture-due").value = ""; activity("Reminder captured",title); toast(`Added reminder ${title}`); } input.value = ""; } catch { toast(state.captureMode === "task" ? "Could not add that task." : "Could not add that reminder.",true); } finally { button.disabled = false; } });
+        function clock() { text(byId("clock"),new Date().toLocaleTimeString("en-AU",{hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:false})); }
+        bridgeReady.catch(() => { activity("HUD bridge failed","ChatGPT Apps bridge did not initialise"); toast("The ChatGPT app bridge did not initialise.",true); });
+        setCaptureMode("task"); render(); clock(); window.setInterval(clock,1000);
       })();
     </script>
   </body>

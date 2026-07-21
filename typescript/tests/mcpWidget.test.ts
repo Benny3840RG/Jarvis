@@ -1,24 +1,49 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { Script } from "node:vm";
 import { describe, it } from "node:test";
 
-const widget = readFileSync(new URL("../src/mcp/dashboard-v1.html", import.meta.url), "utf8");
+const widget = readFileSync(
+  new URL("../src/mcp/dashboard-v1.html", import.meta.url),
+  "utf8",
+);
 
 describe("Jarvis preview widget", () => {
-  it("uses the MCP Apps bridge and the established black-orange operator style", () => {
+  it("uses the MCP Apps bridge inside the landscape command-centre HUD", () => {
     assert.match(widget, /ui\/initialize/);
     assert.match(widget, /ui\/notifications\/tool-result/);
     assert.match(widget, /tools\/call/);
-    assert.match(widget, /#ff7a18/i);
     assert.match(widget, /JARVIS \/\/ OPERATOR CONSOLE/);
+    assert.match(widget, /LANDSCAPE COMMAND CENTRE/);
+    assert.match(widget, /class="hud-grid"/);
   });
 
-  it("carries the Beez Treez brand in orange, black, and green", () => {
-    // Green is a genuine second accent (brand colour + gradient), not just a
-    // status dot, and the console is badged for Beez Treez Property Solutions.
-    assert.match(widget, /#3fbf6a/i);
+  it("keeps real Jarvis task, reminder, refresh, and system controls wired", () => {
+    assert.match(widget, /show_jarvis_dashboard/);
+    assert.match(widget, /create_task/);
+    assert.match(widget, /complete_task/);
+    assert.match(widget, /create_reminder/);
+    assert.match(widget, /status\.layers/);
+    assert.match(widget, /Task load by domain/);
+    assert.match(widget, /Reminder timing distribution/);
+  });
+
+  it("ships syntactically valid embedded dashboard JavaScript", () => {
+    const source = widget.match(/<script>([\s\S]*?)<\/script>/)?.[1];
+    assert.ok(source, "dashboard script was not found");
+    assert.doesNotThrow(() => new Script(source));
+  });
+
+  it("uses the violet-green HUD treatment while retaining Beez Treez branding", () => {
+    assert.match(widget, /#b933ff/i);
+    assert.match(widget, /#39ff88/i);
+    assert.match(widget, /#ff7a18/i);
     assert.match(widget, /--brand-gradient/);
     assert.match(widget, /Beez Treez/);
+  });
+
+  it("does not pretend unsupported telemetry exists", () => {
+    assert.doesNotMatch(widget, /\bCPU\b|\bGPU\b|token usage|API latency/i);
   });
 
   it("does not contain Jarvis or OpenAI credential names", () => {

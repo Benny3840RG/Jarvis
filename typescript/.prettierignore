@@ -1,3 +1,4 @@
+.prettierignore
 node_modules/
 convex/_generated/
 .agents/
@@ -6,3 +7,7 @@ backups/
 data/
 dist/
 package-lock.json
+src/mcp/dashboard-v1.html
+**/src/mcp/dashboard-v1.html
+tests/mcpWidget.test.ts
+**/tests/mcpWidget.test.ts
