@@ -114,13 +114,13 @@ async function runDomainSmoke<T extends { id: string }, I, U>(
       removed?.id === created.id,
       `${spec.label}: remove did not return the removed record.`,
     );
-    createdId = undefined;
 
     const remaining = await spec.makeStore().list();
     requireCondition(
       !remaining.some((entry) => entry.id === created.id),
       `${spec.label}: record remained after removal.`,
     );
+    createdId = undefined;
 
     result = { created: true, updated: true, restartVisible: true, removed: true };
   } catch (error: unknown) {
@@ -130,10 +130,12 @@ async function runDomainSmoke<T extends { id: string }, I, U>(
   const cleanupErrors: unknown[] = [];
   if (createdId !== undefined) {
     try {
-      await spec
-        .makeStore()
-        .remove(createdId)
-        .catch((error: unknown) => cleanupErrors.push(error));
+      await spec.makeStore().remove(createdId);
+      const remaining = await spec.makeStore().list();
+      requireCondition(
+        !remaining.some((entry) => entry.id === createdId),
+        `${spec.label}: record remained after cleanup removal.`,
+      );
     } catch (error: unknown) {
       cleanupErrors.push(error);
     }
