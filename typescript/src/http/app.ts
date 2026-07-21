@@ -39,6 +39,7 @@ import { ConvexAssetStore } from "../assets/convexAssetStore.js";
 import type { PreferenceStore } from "../preferences/preference.js";
 import { InMemoryPreferenceStore } from "../preferences/inMemoryPreferenceStore.js";
 import { JsonPreferenceStore } from "../preferences/jsonPreferenceStore.js";
+import { ConvexPreferenceStore } from "../preferences/convexPreferenceStore.js";
 import { createMemoryChangeSetServiceFromEnv } from "../memory/memoryChangeSetFactory.js";
 import type { MemoryChangeSetService } from "../memory/memoryChangeSets.js";
 import {
@@ -163,9 +164,16 @@ export async function createJarvisHttpApp(
     convex: () => new ConvexAssetStore(),
     inMemory: () => new InMemoryAssetStore(),
   });
-  const preferenceStore =
-    options.preferenceStore ??
-    (usesEnvironment ? new JsonPreferenceStore() : new InMemoryPreferenceStore());
+  const preferenceStore = selectMemoryStore(
+    options.preferenceStore,
+    usesEnvironment,
+    providerName,
+    {
+      json: () => new JsonPreferenceStore(),
+      convex: () => new ConvexPreferenceStore(),
+      inMemory: () => new InMemoryPreferenceStore(),
+    },
+  );
   const adapter = new FastifyAdapter({
     genReqId: (request: IncomingMessage) =>
       resolveRequestId(request.headers[REQUEST_ID_HEADER], [

@@ -196,4 +196,12 @@ export default defineSchema({
     createdAt: v.number(),
     updatedAt: v.number(),
   }).index("by_owner", ["ownerId"]),
+  preferences: defineTable({
+    ownerId: v.string(),
+    key: v.string(),
+    value: v.string(),
+    category: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_owner", ["ownerId"]),
 });
