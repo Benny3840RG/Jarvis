@@ -11,10 +11,16 @@ and a memory-consolidation layer.
 - A self-contained subsystem under the `src/agent/` namespace. It does **not**
   import or modify the maintained Jarvis runtime (task/reminder CLI, HTTP, MCP,
   persistence). It collides with nothing.
-- Fully typed and covered by `tests/agentSystem.test.ts`, and runnable end to
-  end with `npm run agent:check`, which drives one scenario ("Start job j1")
-  through parse → plan → execute → learn → consolidate → validate and prints a
-  report plus an ALL VALIDATIONS PASSED / FAILURES line.
+- Fully typed and covered by `tests/agentSystem.test.ts`, and runnable in two
+  ways:
+  - `npm run agent:check` — a one-shot run that drives one scenario ("Start job
+    j1") through parse → plan → execute → learn → consolidate → validate and
+    prints a report plus an ALL VALIDATIONS PASSED / FAILURES line.
+  - `npm run agent:repl` — an **interactive** session that keeps one in-memory
+    system alive and lets you type utterances (`start job j1`, `prepare job j1`,
+    `complete job j1`), plus `snapshot`, `help`, and `exit`. Each utterance is
+    parsed, planned, executed, and learned from live. State lasts only for the
+    session (nothing is persisted).
 
 ## What it is NOT
 
