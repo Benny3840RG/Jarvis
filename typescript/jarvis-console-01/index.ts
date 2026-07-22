@@ -1,16 +1,16 @@
-import { MCPServer, object, text, widget } from "mcp-use/server";
+import { MCPServer, text, widget } from "mcp-use/server";
 import { z } from "zod";
 
 const server = new MCPServer({
   name: "jarvis-console-01",
-  title: "jarvis-console-01", // display name
-  version: "1.0.0",
-  description: "MCP server with MCP Apps integration",
+  title: "Jarvis Console 01",
+  version: "1.1.0",
+  description: "Landscape-first Jarvis command centre MCP App",
   instructions:
-    "Use search-tools to find fruit matches before calling get-fruit-details. Prefer the widget result when the user wants to browse or compare options visually.",
-  baseUrl: process.env.MCP_URL || "http://localhost:3000", // Full base URL (e.g., https://myserver.com)
+    "Use show-jarvis-console to open the Console 01 HUD. The Phase 1 HUD presents live deployment identity, MCP readiness, mission state, and truthful operator controls without fabricated telemetry.",
+  baseUrl: process.env.MCP_URL || "http://localhost:3000",
   favicon: "favicon.ico",
-  websiteUrl: "https://mcp-use.com", // Can be customized later
+  websiteUrl: "https://github.com/Benny3840/Jarvis",
   icons: [
     {
       src: "icon.svg",
@@ -20,118 +20,85 @@ const server = new MCPServer({
   ],
 });
 
-/**
- * TOOL THAT RETURNS A WIDGET
- * The `widget` config tells mcp-use which widget component to render.
- * The `widget()` helper in the handler passes props to that component.
- * Docs: https://mcp-use.com/docs/typescript/server/mcp-apps
- */
-
-// Fruits data — color values are Tailwind bg-[] classes used by the carousel UI
-const fruits = [
-  { fruit: "mango", color: "bg-[#FBF1E1] dark:bg-[#FBF1E1]/10" },
-  { fruit: "pineapple", color: "bg-[#f8f0d9] dark:bg-[#f8f0d9]/10" },
-  { fruit: "cherries", color: "bg-[#E2EDDC] dark:bg-[#E2EDDC]/10" },
-  { fruit: "coconut", color: "bg-[#fbedd3] dark:bg-[#fbedd3]/10" },
-  { fruit: "apricot", color: "bg-[#fee6ca] dark:bg-[#fee6ca]/10" },
-  { fruit: "blueberry", color: "bg-[#e0e6e6] dark:bg-[#e0e6e6]/10" },
-  { fruit: "grapes", color: "bg-[#f4ebe2] dark:bg-[#f4ebe2]/10" },
-  { fruit: "watermelon", color: "bg-[#e6eddb] dark:bg-[#e6eddb]/10" },
-  { fruit: "orange", color: "bg-[#fdebdf] dark:bg-[#fdebdf]/10" },
-  { fruit: "avocado", color: "bg-[#ecefda] dark:bg-[#ecefda]/10" },
-  { fruit: "apple", color: "bg-[#F9E7E4] dark:bg-[#F9E7E4]/10" },
-  { fruit: "pear", color: "bg-[#f1f1cf] dark:bg-[#f1f1cf]/10" },
-  { fruit: "plum", color: "bg-[#ece5ec] dark:bg-[#ece5ec]/10" },
-  { fruit: "banana", color: "bg-[#fdf0dd] dark:bg-[#fdf0dd]/10" },
-  { fruit: "strawberry", color: "bg-[#f7e6df] dark:bg-[#f7e6df]/10" },
-  { fruit: "lemon", color: "bg-[#feeecd] dark:bg-[#feeecd]/10" },
-];
-
-// structuredContent schema for the search-tools result. The widget renders this
-// data (it arrives as the widget's tool output / structuredContent).
-const fruitRowSchema = z.object({
-  fruit: z.string(),
-  color: z.string(),
+const consoleStateSchema = z.object({
+  title: z.string(),
+  phase: z.string(),
+  deployment: z.string(),
+  environment: z.string(),
+  status: z.enum(["operational", "degraded", "offline"]),
+  mission: z.string(),
+  progress: z.number().min(0).max(100),
+  tasks: z.array(
+    z.object({
+      label: z.string(),
+      state: z.enum(["complete", "active", "queued"]),
+    })
+  ),
+  systems: z.array(
+    z.object({
+      label: z.string(),
+      value: z.string(),
+      state: z.enum(["good", "guarded", "pending"]),
+    })
+  ),
+  activity: z.array(z.string()),
 });
 
 server.tool(
   {
-    name: "search-tools",
-    title: "Search fruits",
-    description: "Search for fruits and display the results in a visual widget",
-    schema: z.object({
-      query: z.string().optional().describe("Search query to filter fruits"),
-    }),
-    // Hosts (e.g. ChatGPT) expect explicit hints. Use openWorldHint: true for HTTP/API calls;
-    // destructiveHint: true when deleting or overwriting user data.
+    name: "show-jarvis-console",
+    title: "Open Jarvis Console 01",
+    description: "Open the Jarvis Console 01 Phase 1 landscape HUD",
+    schema: z.object({}),
     annotations: {
       readOnlyHint: true,
       destructiveHint: false,
       openWorldHint: false,
     },
-    outputSchema: z.object({
-      query: z.string(),
-      results: z.array(fruitRowSchema),
-    }),
+    outputSchema: consoleStateSchema,
     widget: {
       name: "product-search-result",
-      invoking: "Searching...",
-      invoked: "Results loaded",
+      invoking: "Powering Console 01...",
+      invoked: "Console 01 online",
     },
   },
-  async ({ query }) => {
-    const results = fruits.filter(
-      (f) => !query || f.fruit.toLowerCase().includes(query.toLowerCase())
-    );
-
-    // let's emulate a delay to show the loading state
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-
-    // `props` become the tool result's structuredContent (delivered to the
-    // widget) and are type-checked against the outputSchema above.
+  async () => {
+    const deployment = process.env.MCP_URL || "Manufact Cloud";
     return widget({
-      props: { query: query ?? "", results },
+      props: {
+        title: "JARVIS SYSTEM // CONSOLE 01",
+        phase: "PHASE 1 · HUD FOUNDATION",
+        deployment,
+        environment: process.env.NODE_ENV || "production",
+        status: "operational" as const,
+        mission: "Replace the scaffold with a real Jarvis command centre",
+        progress: 68,
+        tasks: [
+          { label: "Industrial landscape shell", state: "complete" as const },
+          { label: "Animated reactor core", state: "complete" as const },
+          { label: "Live MCP deployment identity", state: "active" as const },
+          { label: "Convex task and reminder bridge", state: "queued" as const },
+        ],
+        systems: [
+          { label: "MCP endpoint", value: "ONLINE", state: "good" as const },
+          { label: "Manufact", value: "DEPLOYED", state: "good" as const },
+          { label: "Convex", value: "BRIDGE NEXT", state: "pending" as const },
+          { label: "Production authority", value: "GUARDED", state: "guarded" as const },
+        ],
+        activity: [
+          "Console 01 scaffold replaced",
+          "Landscape HUD loaded",
+          "Widget bridge operational",
+          "No fabricated telemetry enabled",
+        ],
+      },
       output: text(
-        `Found ${results.length} fruits matching "${query ?? "all"}"`
+        "Jarvis Console 01 Phase 1 is operational. The HUD is live and ready for the Convex data bridge."
       ),
     });
   }
 );
 
-server.tool(
-  {
-    name: "get-fruit-details",
-    title: "Get fruit details",
-    description: "Get detailed information about a specific fruit",
-    schema: z.object({
-      fruit: z.string().describe("The fruit name"),
-    }),
-    annotations: {
-      readOnlyHint: true,
-      destructiveHint: false,
-      openWorldHint: false,
-    },
-    outputSchema: z.object({
-      fruit: z.string(),
-      color: z.string(),
-      facts: z.array(z.string()),
-    }),
-  },
-  async ({ fruit }) => {
-    const found = fruits.find(
-      (f) => f.fruit?.toLowerCase() === fruit?.toLowerCase()
-    );
-    return object({
-      fruit: found?.fruit ?? fruit,
-      color: found?.color ?? "unknown",
-      facts: [
-        `${fruit} is a delicious fruit`,
-        `Color: ${found?.color ?? "unknown"}`,
-      ],
-    });
-  }
-);
-
 server.listen().then(() => {
-  console.log(`Server running`);
+  console.log("Jarvis Console 01 server running");
 });
