@@ -7,6 +7,9 @@ on:
     paths:
       - typescript/scripts/apply-console01-hud.mjs
       - .github/workflows/apply-console01-hud.yml
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: write
