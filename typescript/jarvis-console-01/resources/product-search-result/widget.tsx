@@ -153,9 +153,13 @@ const JarvisConsole: React.FC = () => {
     const prompt = command.trim();
     if (!prompt) return;
     sendFollowUpMessage(
-      `Jarvis Console 01 operator command: ${prompt}. Respect the existing authority tiers and do not deploy to Convex production.`,
+      `Jarvis Console 01 operator note: "${prompt}". Analyse this against the current console ` +
+        "snapshot and propose next steps. Console 01 itself exposes no tool beyond show-jarvis-console, " +
+        "create-jarvis-task, complete-jarvis-task, create-jarvis-reminder, and remove-jarvis-reminder " +
+        "— it has no deploy, infrastructure, or Convex-schema tool of any kind, so treat this as a " +
+        "request for analysis and a proposed plan, not an instruction to execute anything outside that set.",
     );
-    setFeedback("Command handed to Jarvis for controlled interpretation.");
+    setFeedback("Note sent to Jarvis for analysis — it cannot execute anything beyond this console's own typed tools.");
     setCommand("");
   };
 
