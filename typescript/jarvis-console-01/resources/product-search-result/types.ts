@@ -1,20 +1,27 @@
 import { z } from "zod";
 
 export const propSchema = z.object({
-  query: z.string().describe("The search query"),
-  results: z.array(
+  title: z.string(),
+  phase: z.string(),
+  deployment: z.string(),
+  environment: z.string(),
+  status: z.enum(["operational", "degraded", "offline"]),
+  mission: z.string(),
+  progress: z.number().min(0).max(100),
+  tasks: z.array(
     z.object({
-      fruit: z.string().describe("Fruit name"),
-      color: z.string().describe("Tailwind background color class"),
+      label: z.string(),
+      state: z.enum(["complete", "active", "queued"]),
     })
   ),
+  systems: z.array(
+    z.object({
+      label: z.string(),
+      value: z.string(),
+      state: z.enum(["good", "guarded", "pending"]),
+    })
+  ),
+  activity: z.array(z.string()),
 });
 
-export type ProductSearchResultProps = z.infer<typeof propSchema>;
-
-export type AccordionItemProps = {
-  question: string;
-  answer: string;
-  isOpen: boolean;
-  onToggle: () => void;
-};
+export type JarvisConsoleProps = z.infer<typeof propSchema>;

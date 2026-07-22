@@ -1,288 +1,243 @@
 import { AppsSDKUIProvider } from "@openai/apps-sdk-ui/components/AppsSDKUIProvider";
+import { Button } from "@openai/apps-sdk-ui/components/Button";
+import { Expand, PictureInPicture } from "@openai/apps-sdk-ui/components/Icon";
 import {
-  Image,
   McpUseProvider,
-  useCallTool,
   useWidget,
   type WidgetMetadata,
 } from "mcp-use/react";
-import React, { useCallback } from "react";
+import React from "react";
 import { Link } from "react-router";
 import "../styles.css";
-import { Carousel } from "./components/Carousel";
-import { CarouselSkeleton } from "./components/CarouselSkeleton";
-import { Accordion } from "./components/Accordion";
-import type { ProductSearchResultProps } from "./types";
+import type { JarvisConsoleProps } from "./types";
 import { propSchema } from "./types";
-import { Button } from "@openai/apps-sdk-ui/components/Button";
-import {
-  Expand,
-  HeartFilled,
-  HeartXs,
-  PictureInPicture,
-} from "@openai/apps-sdk-ui/components/Icon";
+
 export const widgetMetadata: WidgetMetadata = {
-  description:
-    "Display product search results with filtering, state management, and tool interactions",
+  description: "Jarvis Console 01 landscape command centre HUD",
   props: propSchema,
   exposeAsTool: false,
   metadata: {
     prefersBorder: false,
-    invoking: "Loading product search results...",
-    invoked: "Product search results loaded",
-    csp: {
-      // Widget-specific
-      resourceDomains: ["https://cdn.openai.com"],
-    },
+    invoking: "Powering Console 01...",
+    invoked: "Console 01 online",
   },
 };
-type FavoritesState = { favorites: string[] };
 
-const ProductSearchResult: React.FC = () => {
+const statusClass = (state: "good" | "guarded" | "pending") =>
+  `status-chip status-${state}`;
+
+const JarvisConsole: React.FC = () => {
   const {
     props,
     isPending,
     displayMode,
     requestDisplayMode,
     sendFollowUpMessage,
-    locale,
-    state,
-    setState,
-  } = useWidget<ProductSearchResultProps, FavoritesState>();
-
-  const {
-    callTool: getFruitDetails,
-    data: fruitDetails,
-    isPending: isLoadingDetails,
-  } = useCallTool("get-fruit-details");
-
-  const selectedFruit = fruitDetails?.structuredContent as
-    | { fruit: string; facts?: string[] }
-    | undefined;
-  const favorites = state?.favorites ?? [];
-
-  const toggleFavorite = useCallback(
-    (fruit: string) => {
-      const current = state?.favorites ?? [];
-      const next = current.includes(fruit)
-        ? current.filter((f: string) => f !== fruit)
-        : [...current, fruit];
-      setState({ favorites: next });
-    },
-    [state, setState]
-  );
-
-  const accordionItems = [
-    {
-      question: "Demo of the autosize feature",
-      answer:
-        "This is a demo of the autosize feature. The widget will automatically resize to fit the content, as supported by the mcp-apps specification",
-    },
-  ];
+  } = useWidget<JarvisConsoleProps>();
 
   if (isPending) {
     return (
       <McpUseProvider>
-        <div className="relative bg-surface-elevated border border-default rounded-3xl">
-          <div className="p-8 pb-4">
-            <h5 className="text-secondary mb-1">MCP-Apps Template</h5>
-            <h2 className="heading-xl mb-3">Lovely Little Fruit Shop</h2>
-            <div className="h-5 w-48 rounded-md bg-default/10 animate-pulse" />
-          </div>
-          <CarouselSkeleton />
+        <div className="jarvis-shell jarvis-loading">
+          <div className="loading-core" />
+          <p>Powering Jarvis Console 01...</p>
         </div>
       </McpUseProvider>
     );
   }
 
-  const { query, results } = props;
-  const isFullscreen = displayMode === "fullscreen";
-  const isPip = displayMode === "pip";
-  const lang = locale?.split("-")[0] ?? "en";
+  const isExpanded = displayMode === "fullscreen" || displayMode === "pip";
 
   return (
     <McpUseProvider>
       <AppsSDKUIProvider linkComponent={Link}>
-        <div className="relative bg-surface-elevated border border-default rounded-3xl">
-          {/* Toolbar — top-right badges and controls */}
-          <div className="absolute top-4 right-4 z-10 flex items-center gap-2">
-            {/* Locale badge */}
-            <span className="px-2.5 py-1 text-xs font-medium rounded-full text-secondary uppercase tracking-wide">
-              {lang}
-            </span>
-
-            {/* Favorites count */}
-            {favorites.length > 0 && (
-              <Button
-                color="secondary"
-                pill
-                size="lg"
-                uniform
-                variant="ghost"
-                className="text-danger/80"
-              >
-                <HeartFilled />
-                {favorites.length}
-              </Button>
-            )}
-
-            {/* Display mode buttons */}
-            {!isFullscreen && !isPip && (
-              <>
-                <Button
-                  color="secondary"
-                  pill
-                  size="lg"
-                  uniform
-                  variant="outline"
-                  onClick={() => requestDisplayMode("pip")}
-                  title="Picture-in-picture"
-                >
-                  <PictureInPicture />
-                </Button>
-                <Button
-                  color="secondary"
-                  pill
-                  size="lg"
-                  uniform
-                  variant="outline"
-                  onClick={() => requestDisplayMode("fullscreen")}
-                  title="Fullscreen"
-                >
-                  <Expand />
-                </Button>
-              </>
-            )}
-
-            {(isFullscreen || isPip) && (
-              <Button
-                color="secondary"
-                pill
-                size="lg"
-                uniform
-                variant="outline"
-                onClick={() => requestDisplayMode("inline")}
-                title="Exit"
-              >
-                <svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <line x1="18" y1="6" x2="6" y2="18" />
-                  <line x1="6" y1="6" x2="18" y2="18" />
-                </svg>
-              </Button>
-            )}
-          </div>
-
-          {/* Header */}
-          <div className="p-8 pb-4">
-            <h5 className="text-secondary mb-1">MCP-Apps Template</h5>
-            <h2 className="heading-xl mb-1">Lovely Little Fruit Shop</h2>
-            <p className="text-md text-secondary">
-              {query
-                ? `Showing results for "${query}"`
-                : "Tap a fruit to see details"}
-            </p>
-          </div>
-
-          {/* Carousel */}
-          <Carousel
-            results={results}
-            favorites={favorites}
-            onSelectFruit={(fruit: string) => getFruitDetails({ fruit })}
-            onToggleFavorite={toggleFavorite}
-          />
-
-          {/* Detail view */}
-          {selectedFruit && (
-            <div className="mx-8 my-6 rounded-2xl border border-default bg-surface p-5 flex items-center gap-6">
-              <div
-                className={`rounded-xl p-4 shrink-0 ${
-                  results.find(
-                    (r: { fruit: string }) => r.fruit === selectedFruit.fruit
-                  )?.color ?? ""
-                }`}
-              >
-                <Image
-                  src={`/fruits/${selectedFruit.fruit}.png`}
-                  alt={selectedFruit.fruit}
-                  className="w-24 h-24 object-contain"
-                />
+        <main className="jarvis-shell">
+          <header className="console-header">
+            <div className="brand-lockup">
+              <div className="mascot-mark" aria-hidden="true">
+                <span className="mascot-eye left" />
+                <span className="mascot-eye right" />
+                <span className="mascot-mouth" />
               </div>
-              <div className="flex-1">
-                {isLoadingDetails ? (
-                  <div className="animate-pulse h-4 w-32 bg-surface-elevated rounded" />
-                ) : (
-                  <>
-                    <div className="flex items-center gap-2 mb-2">
-                      <h3 className="font-semibold text-lg capitalize">
-                        {selectedFruit.fruit}
-                      </h3>
-                      <Button
-                        color="secondary"
-                        pill
-                        size="md"
-                        uniform
-                        variant="ghost"
-                        onClick={() => toggleFavorite(selectedFruit.fruit)}
-                        title={
-                          favorites.includes(selectedFruit.fruit)
-                            ? "Remove from favorites"
-                            : "Add to favorites"
-                        }
-                        className={
-                          favorites.includes(selectedFruit.fruit)
-                            ? "text-danger/80"
-                            : "text-secondary"
-                        }
-                      >
-                        {favorites.includes(selectedFruit.fruit) ? (
-                          <HeartFilled />
-                        ) : (
-                          <HeartXs />
-                        )}
-                      </Button>
-                    </div>
-                    <ul className="space-y-1">
-                      {(selectedFruit.facts ?? []).map((fact: string) => (
-                        <li
-                          key={fact}
-                          className="text-sm text-secondary flex items-start gap-2"
-                        >
-                          <span className="text-info mt-0.5">•</span>
-                          {fact}
-                        </li>
-                      ))}
-                    </ul>
-                    {/* Follow-up message demo — sends a message to the LLM from the widget */}
-                    <button
-                      onClick={() =>
-                        sendFollowUpMessage(
-                          `Tell me more interesting facts about ${selectedFruit.fruit}`
-                        )
-                      }
-                      className="mt-3 px-3 py-1.5 text-xs font-medium rounded-lg bg-info/10 text-info hover:bg-info/20 transition-colors cursor-pointer"
-                    >
-                      Ask the AI for more about {selectedFruit.fruit}
-                    </button>
-                  </>
-                )}
+              <div>
+                <p className="eyebrow">{props.phase}</p>
+                <h1>{props.title}</h1>
               </div>
             </div>
-          )}
+            <div className="header-actions">
+              <span className={`live-pill live-${props.status}`}>
+                {props.status.toUpperCase()}
+              </span>
+              {!isExpanded ? (
+                <>
+                  <Button
+                    color="secondary"
+                    pill
+                    size="md"
+                    uniform
+                    variant="outline"
+                    onClick={() => requestDisplayMode("pip")}
+                    title="Picture in picture"
+                  >
+                    <PictureInPicture />
+                  </Button>
+                  <Button
+                    color="secondary"
+                    pill
+                    size="md"
+                    uniform
+                    variant="outline"
+                    onClick={() => requestDisplayMode("fullscreen")}
+                    title="Fullscreen"
+                  >
+                    <Expand />
+                  </Button>
+                </>
+              ) : (
+                <Button
+                  color="secondary"
+                  pill
+                  size="md"
+                  variant="outline"
+                  onClick={() => requestDisplayMode("inline")}
+                >
+                  EXIT
+                </Button>
+              )}
+            </div>
+          </header>
 
-          <Accordion items={accordionItems} />
-        </div>
+          <section className="telemetry-strip">
+            <div><span>DEPLOYMENT</span><strong>{props.deployment}</strong></div>
+            <div><span>ENVIRONMENT</span><strong>{props.environment.toUpperCase()}</strong></div>
+            <div><span>AUTHORITY</span><strong>CONTROLLED</strong></div>
+            <div><span>TELEMETRY</span><strong>TRUTHFUL ONLY</strong></div>
+          </section>
+
+          <section className="console-grid">
+            <aside className="left-rail">
+              <div className="hud-panel system-core-panel">
+                <div className="panel-title">SYSTEM CORE</div>
+                <div className="mini-reactor">
+                  <div className="mini-ring ring-a" />
+                  <div className="mini-ring ring-b" />
+                  <div className="mini-core">J</div>
+                </div>
+                <div className="core-stats">
+                  <div><span>PHASE</span><strong>01</strong></div>
+                  <div><span>HUD</span><strong>LIVE</strong></div>
+                  <div><span>FAKE DATA</span><strong>0</strong></div>
+                </div>
+              </div>
+
+              <div className="hud-panel task-stack">
+                <div className="panel-title">MISSION STACK</div>
+                {props.tasks.map((task, index) => (
+                  <div className={`task-row task-${task.state}`} key={task.label}>
+                    <span className="task-index">0{index + 1}</span>
+                    <div>
+                      <strong>{task.label}</strong>
+                      <small>{task.state.toUpperCase()}</small>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </aside>
+
+            <section className="centre-stage">
+              <div className="mission-copy">
+                <p className="eyebrow">PRIMARY MISSION</p>
+                <h2>{props.mission}</h2>
+              </div>
+
+              <div className="reactor-stage" aria-label={`${props.progress}% mission progress`}>
+                <div className="energy-flare flare-a" />
+                <div className="energy-flare flare-b" />
+                <div className="reactor-ring outer" />
+                <div className="reactor-ring middle" />
+                <div className="reactor-ring inner" />
+                <div className="reactor-progress" style={{ "--progress": `${props.progress}%` } as React.CSSProperties} />
+                <div className="reactor-mascot" aria-hidden="true">
+                  <span className="mascot-eye left" />
+                  <span className="mascot-eye right" />
+                  <span className="mascot-mouth" />
+                </div>
+                <div className="progress-copy">
+                  <strong>{props.progress}%</strong>
+                  <span>PHASE 1</span>
+                </div>
+              </div>
+
+              <div className="command-row">
+                <Button
+                  color="primary"
+                  size="lg"
+                  onClick={() =>
+                    sendFollowUpMessage({
+                      prompt: "Continue Jarvis Console 01 Phase 1 with the Convex task and reminder bridge.",
+                    })
+                  }
+                >
+                  CONTINUE BUILD
+                </Button>
+                <Button
+                  color="secondary"
+                  size="lg"
+                  variant="outline"
+                  onClick={() =>
+                    sendFollowUpMessage({
+                      prompt: "Inspect the live Jarvis Console 01 deployment and report any faults.",
+                    })
+                  }
+                >
+                  RUN INSPECTION
+                </Button>
+              </div>
+            </section>
+
+            <aside className="right-rail">
+              <div className="hud-panel systems-panel">
+                <div className="panel-title">SYSTEM MATRIX</div>
+                {props.systems.map((system) => (
+                  <div className="system-row" key={system.label}>
+                    <div>
+                      <span>{system.label}</span>
+                      <strong>{system.value}</strong>
+                    </div>
+                    <span className={statusClass(system.state)}>{system.state}</span>
+                  </div>
+                ))}
+              </div>
+
+              <div className="hud-panel waveform-panel">
+                <div className="panel-title">JARVIS SIGNAL</div>
+                <svg viewBox="0 0 360 120" role="img" aria-label="Decorative Jarvis signal waveform">
+                  <path className="wave-grid" d="M0 20H360M0 60H360M0 100H360" />
+                  <path className="wave purple" d="M0 70 C40 20 70 105 110 55 S180 15 220 65 S300 100 360 32" />
+                  <path className="wave cyan" d="M0 78 C45 92 70 28 120 67 S185 102 230 44 S300 25 360 74" />
+                </svg>
+              </div>
+
+              <div className="hud-panel activity-panel">
+                <div className="panel-title">LIVE ACTIVITY</div>
+                {props.activity.map((item, index) => (
+                  <div className="activity-row" key={item}>
+                    <span className="activity-dot" />
+                    <div><strong>{item}</strong><small>EVENT {String(index + 1).padStart(2, "0")}</small></div>
+                  </div>
+                ))}
+              </div>
+            </aside>
+          </section>
+
+          <footer className="console-footer">
+            <span>JARVIS PRIME OMNI · CONSOLE 01</span>
+            <span>MANUFACT CLOUD · MCP APPS</span>
+          </footer>
+        </main>
       </AppsSDKUIProvider>
     </McpUseProvider>
   );
 };
 
-export default ProductSearchResult;
+export default JarvisConsole;
