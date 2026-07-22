@@ -6,6 +6,7 @@ convex/_generated/
 backups/
 data/
 dist/
+jarvis-console-01/
 package-lock.json
 src/mcp/dashboard-v1.html
 **/src/mcp/dashboard-v1.html
