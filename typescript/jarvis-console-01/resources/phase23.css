@@ -1,0 +1,263 @@
+.phase23-shell {
+  min-height: 720px;
+}
+
+.phase23-telemetry {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.phase23-grid {
+  min-height: 520px;
+}
+
+.phase23-centre {
+  display: grid;
+  grid-template-rows: auto minmax(280px, 1fr) auto auto;
+  align-items: center;
+}
+
+.hud-refresh,
+.interactive-row button,
+.operator-command button,
+.capture-card button {
+  min-height: 32px;
+  border: 1px solid rgba(69, 255, 138, 0.45);
+  border-radius: 8px;
+  background: rgba(69, 255, 138, 0.1);
+  color: var(--green);
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+}
+
+.hud-refresh {
+  padding: 0 11px;
+}
+
+.hud-refresh:hover,
+.interactive-row button:hover,
+.operator-command button:hover,
+.capture-card button:hover {
+  border-color: var(--green);
+  background: rgba(69, 255, 138, 0.18);
+}
+
+.hud-refresh:disabled,
+.interactive-row button:disabled,
+.capture-card button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.live-task-stack {
+  max-height: 330px;
+  overflow: hidden;
+}
+
+.interactive-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+}
+
+.interactive-row button {
+  min-height: 28px;
+  padding: 0 8px;
+}
+
+.row-copy {
+  min-width: 0;
+}
+
+.row-copy strong,
+.row-copy small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.console-empty {
+  padding: 18px 12px;
+  color: var(--muted);
+  font-size: 10px;
+  text-align: center;
+}
+
+.reminder-panel {
+  max-height: 260px;
+  overflow: hidden;
+}
+
+.reminder-row {
+  position: relative;
+  z-index: 2;
+  gap: 9px;
+  padding: 9px 10px;
+  border-bottom: 1px solid #2c3341;
+}
+
+.reminder-row:last-child {
+  border-bottom: 0;
+}
+
+.operator-command {
+  width: min(100%, 760px);
+  margin: 0 auto;
+  padding: 10px;
+  border: 1px solid rgba(185, 51, 255, 0.4);
+  border-radius: 12px;
+  background: rgba(5, 6, 10, 0.72);
+}
+
+.operator-command label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--orange);
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.14em;
+}
+
+.operator-command > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.operator-command input,
+.capture-card input,
+.capture-card select {
+  width: 100%;
+  min-width: 0;
+  min-height: 36px;
+  border: 1px solid #343c4d;
+  border-radius: 8px;
+  outline: none;
+  background: #070910;
+  color: #f6f7fb;
+  padding: 0 10px;
+  font-size: 10px;
+}
+
+.operator-command input:focus,
+.capture-card input:focus,
+.capture-card select:focus {
+  border-color: var(--cyan);
+  box-shadow: 0 0 0 3px rgba(53, 228, 255, 0.09);
+}
+
+.operator-command button {
+  padding: 0 14px;
+  border-color: rgba(185, 51, 255, 0.55);
+  background: rgba(185, 51, 255, 0.14);
+  color: #d891ff;
+}
+
+.feedback-strip {
+  width: min(100%, 760px);
+  margin: 8px auto 0;
+  color: var(--muted);
+  font-size: 9px;
+  text-align: center;
+}
+
+.command-deck {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: 1fr 1fr 0.8fr;
+  gap: 10px;
+  padding: 0 10px 10px;
+}
+
+.capture-card {
+  display: grid;
+  grid-template-columns: minmax(140px, 0.85fr) minmax(160px, 1.15fr) minmax(110px, 0.7fr) auto;
+  align-items: end;
+  gap: 7px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid #343c4d;
+  border-radius: 12px;
+  background: linear-gradient(145deg, rgba(21, 26, 38, 0.96), rgba(7, 9, 14, 0.97));
+}
+
+.capture-card > div:first-child span,
+.capture-card > div:first-child strong {
+  display: block;
+}
+
+.capture-card > div:first-child span {
+  color: var(--orange);
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+}
+
+.capture-card > div:first-child strong {
+  margin-top: 4px;
+  font-size: 10px;
+}
+
+.capture-card button {
+  padding: 0 10px;
+}
+
+.completion-card {
+  display: block;
+}
+
+.completion-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 9px;
+}
+
+.completion-list span {
+  max-width: 100%;
+  overflow: hidden;
+  padding: 4px 7px;
+  border: 1px solid #303747;
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 8px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 1080px) {
+  .command-deck {
+    grid-template-columns: 1fr;
+  }
+
+  .capture-card {
+    grid-template-columns: minmax(130px, 0.8fr) minmax(170px, 1.2fr) minmax(120px, 0.8fr) auto;
+  }
+}
+
+@media (max-width: 760px) {
+  .phase23-shell {
+    min-height: 0;
+  }
+
+  .phase23-telemetry {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .phase23-grid {
+    display: block;
+  }
+
+  .left-rail,
+  .right-rail {
+    display: block;
+  }
+
+  .hud-panel {
+    margin-bottom: 8px;
+  }
+
+  .capture-card {
+    grid-template-columns: 1fr;
+  }
+}
