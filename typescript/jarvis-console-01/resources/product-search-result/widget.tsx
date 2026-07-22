@@ -63,15 +63,18 @@ const JarvisConsole: React.FC = () => {
 
   const [snapshot, setSnapshot] = useState<JarvisConsoleProps | null>(null);
   const [taskTitle, setTaskTitle] = useState("");
-  const [taskCategory, setTaskCategory] = useState("work");
+  const [taskCategory, setTaskCategory] =
+    useState<"personal" | "work" | "builds" | "money" | "life">("work");
   const [reminderTitle, setReminderTitle] = useState("");
   const [reminderDue, setReminderDue] = useState("");
   const [command, setCommand] = useState("");
   const [feedback, setFeedback] = useState("Console controls ready.");
 
   useEffect(() => {
-    if (props) setSnapshot(props);
-  }, [props]);
+    // Once isPending is false the widget lifecycle guarantees props is fully
+    // populated, even though the hook's static type stays Partial throughout.
+    if (!isPending) setSnapshot(props as JarvisConsoleProps);
+  }, [isPending, props]);
 
   const applyToolResult = (result: unknown, message: string) => {
     const structuredContent =
@@ -82,6 +85,15 @@ const JarvisConsole: React.FC = () => {
     if (parsed.success) setSnapshot(parsed.data);
     setFeedback(message);
   };
+
+  const activeTasks = useMemo(
+    () => snapshot?.tasks.filter((task) => !task.completed) ?? [],
+    [snapshot],
+  );
+  const completedTasks = useMemo(
+    () => snapshot?.tasks.filter((task) => task.completed) ?? [],
+    [snapshot],
+  );
 
   if (isPending || !snapshot) {
     return (
@@ -95,14 +107,6 @@ const JarvisConsole: React.FC = () => {
   }
 
   const isExpanded = displayMode === "fullscreen" || displayMode === "pip";
-  const activeTasks = useMemo(
-    () => snapshot.tasks.filter((task) => !task.completed),
-    [snapshot.tasks],
-  );
-  const completedTasks = useMemo(
-    () => snapshot.tasks.filter((task) => task.completed),
-    [snapshot.tasks],
-  );
   const currentTask = activeTasks[0];
   const busy =
     refreshing || creatingTask || completingTask || creatingReminder || removingReminder;
@@ -148,9 +152,9 @@ const JarvisConsole: React.FC = () => {
     event.preventDefault();
     const prompt = command.trim();
     if (!prompt) return;
-    sendFollowUpMessage({
-      prompt: `Jarvis Console 01 operator command: ${prompt}. Respect the existing authority tiers and do not deploy to Convex production.`,
-    });
+    sendFollowUpMessage(
+      `Jarvis Console 01 operator command: ${prompt}. Respect the existing authority tiers and do not deploy to Convex production.`,
+    );
     setFeedback("Command handed to Jarvis for controlled interpretation.");
     setCommand("");
   };
@@ -307,7 +311,14 @@ const JarvisConsole: React.FC = () => {
             <form className="capture-card" onSubmit={submitTask}>
               <div><span>TASK CAPTURE</span><strong>Durable Convex task</strong></div>
               <input value={taskTitle} onChange={(event) => setTaskTitle(event.target.value)} placeholder="Task title" />
-              <select value={taskCategory} onChange={(event) => setTaskCategory(event.target.value)}>
+              <select
+                value={taskCategory}
+                onChange={(event) =>
+                  setTaskCategory(
+                    event.target.value as "personal" | "work" | "builds" | "money" | "life",
+                  )
+                }
+              >
                 <option value="personal">Personal</option><option value="work">Work</option><option value="builds">Builds</option><option value="money">Money</option><option value="life">Life</option>
               </select>
               <button type="submit" disabled={busy || !taskTitle.trim()}>{creatingTask ? "ADDING" : "ADD TASK"}</button>
