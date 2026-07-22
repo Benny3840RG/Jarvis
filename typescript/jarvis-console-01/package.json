@@ -1,23 +1,17 @@
 {
   "name": "jarvis-console-01",
   "type": "module",
-  "version": "1.0.0",
-  "description": "MCP server: jarvis-console-01",
-  "author": "",
+  "version": "1.2.0",
+  "description": "Jarvis Console 01 MCP command centre",
+  "author": "Benny3840",
   "license": "MIT",
   "keywords": [
+    "jarvis",
     "mcp",
-    "server",
-    "starter",
-    "tools",
-    "resources",
-    "prompts",
-    "uiresource",
-    "ui",
-    "react",
-    "widgets",
-    "mcp-ui",
-    "apps-sdk"
+    "mcp-apps",
+    "convex",
+    "command-centre",
+    "widgets"
   ],
   "main": "dist/index.js",
   "scripts": {
@@ -29,15 +23,16 @@
   },
   "dependencies": {
     "@openai/apps-sdk-ui": "^0.2.1",
+    "convex": "^1.42.3",
     "mcp-use": "latest",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "react-router": "^7.13.0",
     "tailwindcss": "^4.2.0",
-    "zod": "4.3.5"
+    "zod": "4.4.3"
   },
   "devDependencies": {
-    "@types/node": "^25.3.0",
+    "@types/node": "^26.1.1",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "tsx": "^4.21.0",
