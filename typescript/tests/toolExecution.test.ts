@@ -130,6 +130,46 @@ describe("tool execution stage", () => {
     assert.deepEqual(second, first);
   });
 
+  it("blocks a concurrent call carrying different action content instead of returning the in-flight result", async () => {
+    // Red-team finding: the in-flight de-duplication map used to hand back
+    // whatever was already executing under the same actionId:idempotencyKey
+    // pair without checking whether the *new* caller's action content
+    // actually matched it. A second, differently-shaped concurrent call
+    // would silently receive the first caller's receipt — and its own
+    // arguments would never be validated or executed at all.
+    const executed: Array<Record<string, unknown>> = [];
+    const executor = new ToolExecutionService([
+      {
+        tool: "clock",
+        operation: "read",
+        schema: z.object({ zone: z.string() }),
+        async execute(args) {
+          executed.push(args);
+          await new Promise((resolve) => setTimeout(resolve, 10));
+          return { now: "2026-07-18T00:00:00.000Z" };
+        },
+      },
+    ]);
+    const differentAction = { ...action, arguments: { zone: "Australia/Melbourne" } };
+
+    const [first, second] = await Promise.all([
+      executor.execute({ action, authority: "T1", idempotencyKey: "racing" }),
+      executor.execute({
+        action: differentAction,
+        authority: "T1",
+        idempotencyKey: "racing",
+      }),
+    ]);
+
+    assert.equal(first.status, "succeeded");
+    assert.equal(second.status, "blocked");
+    assert.equal(second.errorCode, "fingerprint-mismatch");
+    assert.notDeepEqual(second, first);
+    // The second caller's own arguments must never reach the executor.
+    assert.equal(executed.length, 1);
+    assert.deepEqual(executed[0], { zone: "UTC" });
+  });
+
   it("blocks replay when the approved action payload changes", async () => {
     const receipts = new InMemoryToolExecutionReceiptStore();
     const executor = new ToolExecutionService(
