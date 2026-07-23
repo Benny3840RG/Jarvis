@@ -44,14 +44,8 @@ jobs:
         run: npm run type-check
       - name: Lint TypeScript and Convex
         run: npm run lint
-      - name: Produce formatter diagnostic
-        run: npm run format
-      - name: Upload formatter diagnostic
-        uses: actions/upload-artifact@v4
-        with:
-          name: prettier-corrected-typescript
-          path: typescript
-          retention-days: 1
+      - name: Check formatting
+        run: npm run format:check
       - name: Validate OpenAPI contract
         run: npm run openapi:lint
       - name: Test interactive CLI and persistence with coverage
