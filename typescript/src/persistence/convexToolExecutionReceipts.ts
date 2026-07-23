@@ -1,10 +1,7 @@
 import { ConvexHttpClient } from "convex/browser";
 
 import { api } from "../../convex/_generated/api.js";
-import type {
-  ToolExecutionReceipt,
-  ToolExecutionReceiptStore,
-} from "../actions/toolExecution.js";
+import type { ToolExecutionReceipt, ToolExecutionReceiptStore } from "../actions/toolExecution.js";
 import type { ConvexClientLike } from "./convexPersistence.js";
 
 export const toolExecutionReceiptFunctions = api.toolExecutionReceipts;
@@ -46,10 +43,7 @@ export class ConvexToolExecutionReceiptStore implements ToolExecutionReceiptStor
   private readonly client: ConvexClientLike;
   private readonly serviceToken: string;
 
-  constructor(
-    client?: ConvexClientLike,
-    serviceToken = process.env.JARVIS_SERVICE_TOKEN,
-  ) {
+  constructor(client?: ConvexClientLike, serviceToken = process.env.JARVIS_SERVICE_TOKEN) {
     if (!serviceToken) throw new Error("Tool execution receipts require JARVIS_SERVICE_TOKEN.");
     this.serviceToken = serviceToken;
 
