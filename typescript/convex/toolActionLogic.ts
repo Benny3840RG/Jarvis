@@ -63,6 +63,14 @@ function validateArgumentKey(value: string, path: string): string {
       `Tool action argument key at ${path} exceeds ${MAX_ARGUMENT_KEY_LENGTH} characters.`,
     );
   }
+  // Non-ASCII characters (Cyrillic "а" vs Latin "a", etc.) must be rejected
+  // outright rather than stripped during fingerprinting below — stripping an
+  // unrecognised character lets a homoglyph-spoofed key like "аpiKey" collapse
+  // to "pikey" and silently evade the credential-key check instead of being
+  // caught by it.
+  if (!/^[\x20-\x7e]*$/.test(cleaned)) {
+    throw new Error(`Tool action argument key ${cleaned} must be ASCII.`);
+  }
   if (cleaned.startsWith("$") || cleaned.startsWith("_")) {
     throw new Error(`Tool action argument key ${cleaned} is reserved.`);
   }

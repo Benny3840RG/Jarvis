@@ -58,6 +58,16 @@ describe("tool action proposal validation", () => {
     assert.throws(() => normaliseToolArguments({ clientSecret: "secret" }), /credentials/);
   });
 
+  it("rejects non-ASCII argument keys instead of silently stripping confusable characters", () => {
+    // "аpiKey" below uses a Cyrillic "а" (U+0430), not Latin "a". Stripping
+    // unrecognised characters during fingerprinting (rather than rejecting
+    // them) would collapse this to "pikey", which doesn't match "apikey" —
+    // silently letting a credential-shaped key past the filter under a name
+    // that looks identical to a human reviewer.
+    assert.throws(() => normaliseToolArguments({ аpiKey: "secret" }), /must be ASCII/);
+    assert.throws(() => normaliseToolArguments({ ɑpiKey: "secret" }), /must be ASCII/);
+  });
+
   it("rejects oversized string values", () => {
     assert.throws(() => normaliseToolArguments({ body: "x".repeat(16_385) }), /16384 characters/);
   });
