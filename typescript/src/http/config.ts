@@ -23,10 +23,17 @@ function optionalText(value: string | undefined): string | undefined {
   return cleaned ? cleaned : undefined;
 }
 
+const MIN_SERVICE_TOKEN_LENGTH = 32;
+
 function optionalSecret(value: string | undefined): string | undefined {
   if (value === undefined || value.trim().length === 0) return undefined;
   if (/\s/.test(value)) {
     throw new Error("Jarvis service tokens must not contain whitespace.");
+  }
+  if (value.length < MIN_SERVICE_TOKEN_LENGTH) {
+    throw new Error(
+      `Jarvis service tokens must be at least ${MIN_SERVICE_TOKEN_LENGTH} characters.`,
+    );
   }
   return value;
 }

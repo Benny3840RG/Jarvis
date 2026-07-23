@@ -734,6 +734,15 @@ describe("Jarvis HTTP configuration", () => {
       () => resolveHttpAppConfig({ JARVIS_SERVICE_TOKEN: "unsafe token" }),
       /must not contain whitespace/,
     );
+    assert.throws(
+      () => resolveHttpAppConfig({ JARVIS_SERVICE_TOKEN: "short-token-12345" }),
+      /must be at least 32 characters/,
+    );
+    assert.doesNotThrow(() =>
+      resolveHttpAppConfig({
+        JARVIS_SERVICE_TOKEN: "a".repeat(32),
+      }),
+    );
   });
 
   it("normalises the persistence provider name without silently falling back", () => {

@@ -264,6 +264,36 @@ describe("Tool action approval HTTP boundary", () => {
     assert.doesNotMatch(response.body, /must-not-be-stored/);
   });
 
+  it("rejects a homoglyph-spoofed credential key instead of silently stripping it", async () => {
+    // "аpiKey" uses a Cyrillic "а" (U+0430). Stripping unrecognised characters
+    // during fingerprinting would collapse this to "pikey" and let it past
+    // the credential-key filter under a name that looks identical to
+    // "apiKey" to a human reviewing the proposal.
+    let called = false;
+    const app = await makeApp(
+      successfulService({
+        async stage() {
+          called = true;
+          return action();
+        },
+      }),
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/v1/projects/project-1/tool-actions",
+      headers: authHeaders(),
+      payload: {
+        ...stageBody(),
+        arguments: { аpiKey: "must-not-be-stored" },
+      },
+    });
+
+    assert.equal(response.statusCode, 422);
+    assert.equal(called, false);
+    assert.doesNotMatch(response.body, /must-not-be-stored/);
+  });
+
   it("passes state and limit filters to the service", async () => {
     let captured: Parameters<ToolActionService["list"]>[0] | null = null;
     const app = await makeApp(
