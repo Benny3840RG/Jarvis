@@ -1,0 +1,103 @@
+name: Governance validation
+
+on:
+  pull_request:
+    paths:
+      - 'docs/requirements/**'
+      - 'docs/traceability/**'
+      - 'docs/governance/**'
+      - '.github/workflows/governance-validation.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'docs/requirements/**'
+      - 'docs/traceability/**'
+      - 'docs/governance/**'
+      - '.github/workflows/governance-validation.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  validate-governance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check required governance files
+        shell: bash
+        run: |
+          set -euo pipefail
+          required=(
+            docs/governance/README.md
+            docs/requirements/requirements.yaml
+            docs/requirements/jarvis-requirements-v2.2.md
+            docs/requirements/state-glossary.md
+            docs/traceability/requirements-matrix.md
+            docs/traceability/test-matrix.md
+            docs/traceability/evidence-matrix.md
+            docs/governance/decision-register.md
+            docs/governance/gap-register.md
+            docs/governance/risk-register.md
+            docs/governance/handover-dossier.md
+          )
+          for file in "${required[@]}"; do
+            test -f "$file" || { echo "Missing required governance artifact: $file"; exit 1; }
+          done
+
+      - name: Validate frozen namespace and deployment boundary
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+          import sys
+
+          authority = Path('docs/requirements/requirements.yaml').read_text()
+          index = Path('docs/governance/README.md').read_text()
+          risks = Path('docs/governance/risk-register.md').read_text()
+
+          required_authority_fragments = [
+              'frozen_start: R-001',
+              'frozen_end: R-150',
+              'development_target: dev:outgoing-ram-798',
+              'production_deployment: prohibited_without_explicit_production_specific_approval',
+              'approvals_bind_to_exact_action_fingerprints: true',
+              'ids_never_recycled: true',
+              'generated_action_map_read_only: true',
+          ]
+          missing = [item for item in required_authority_fragments if item not in authority]
+          if missing:
+              print('Missing canonical controls:', *missing, sep='\n- ')
+              sys.exit(1)
+
+          required_index_fragments = [
+              'authority: navigational_only',
+              'namespace: R-001–R-150',
+              'Where artifacts conflict, the higher-ranked artifact governs.',
+              'Never deploy to Convex production without Benny',
+          ]
+          missing = [item for item in required_index_fragments if item not in index]
+          if missing:
+              print('Missing governance-index controls:', *missing, sep='\n- ')
+              sys.exit(1)
+
+          risk_ids = re.findall(r'\|\s*(RSK-[^|\s]+)\s*\|', risks)
+          invalid = [risk_id for risk_id in risk_ids if not re.fullmatch(r'RSK-[0-9]{3}', risk_id)]
+          if invalid:
+              print('Invalid risk IDs:', ', '.join(invalid))
+              sys.exit(1)
+
+          if re.search(r'\|\s*R-[0-9]{3}\s*\|', risks):
+              print('Requirement-style IDs are prohibited in the risk ID column.')
+              sys.exit(1)
+
+          print('Governance baseline controls validated.')
+
+      - name: Reject placeholder citations
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -RInE '\[[0-9]+\]' docs/governance docs/requirements docs/traceability; then
+            echo 'Numeric placeholder citations are not permitted in controlled governance artifacts.'
+            exit 1
+          fi
