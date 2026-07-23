@@ -40,13 +40,11 @@ jobs:
       - name: Lint TypeScript and Convex
         run: npm run lint
       - name: Produce formatter manifest
-        run: |
-          npm run format
-          git diff --name-only > formatter-diff.txt
+        run: ./node_modules/.bin/prettier . --list-different --ignore-path .prettierignore > formatter-diff.txt || true
       - name: Upload formatter manifest
         uses: actions/upload-artifact@v4
         with:
-          name: prettier-diff-manifest
+          name: prettier-list-different
           path: typescript/formatter-diff.txt
           retention-days: 1
       - name: Validate OpenAPI contract
