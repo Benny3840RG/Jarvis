@@ -10,7 +10,9 @@ function receiptRow(overrides: Partial<Record<string, unknown>> = {}) {
     receiptKey: "action-1:exec-1",
     receiptId: "a1b2c3d4e5f6",
     actionId: "action-1",
+    projectId: "project-1",
     idempotencyKey: "exec-1",
+    actionFingerprint: "fingerprint-1",
     tool: "calendar",
     operation: "create_event",
     status: "succeeded",
@@ -44,6 +46,8 @@ describe("ConvexToolExecutionReceiptStore", () => {
     });
     assert.equal(receipt?.receiptId, "a1b2c3d4e5f6");
     assert.notEqual(receipt?.receiptId, "action-1:exec-1");
+    assert.equal(receipt?.projectId, "project-1");
+    assert.equal(receipt?.actionFingerprint, "fingerprint-1");
     assert.equal(receipt?.startedAt, "2026-07-15T00:00:00.000Z");
     assert.equal(receipt?.completedAt, "2026-07-15T00:00:00.500Z");
   });
@@ -62,7 +66,7 @@ describe("ConvexToolExecutionReceiptStore", () => {
     assert.equal(await store.get("missing-key"), null);
   });
 
-  it("saves a receipt, preserving its own receiptId separately from the lookup key", async () => {
+  it("saves a receipt with project and action fingerprint", async () => {
     const calls: Array<{ args: unknown }> = [];
     const client = {
       async query() {
@@ -78,7 +82,9 @@ describe("ConvexToolExecutionReceiptStore", () => {
     const receipt: ToolExecutionReceipt = {
       receiptId: "a1b2c3d4e5f6",
       actionId: "action-1",
+      projectId: "project-1",
       idempotencyKey: "exec-1",
+      actionFingerprint: "fingerprint-1",
       tool: "calendar",
       operation: "create_event",
       status: "succeeded",
@@ -94,7 +100,9 @@ describe("ConvexToolExecutionReceiptStore", () => {
       receiptKey: "action-1:exec-1",
       receiptId: "a1b2c3d4e5f6",
       actionId: "action-1",
+      projectId: "project-1",
       idempotencyKey: "exec-1",
+      actionFingerprint: "fingerprint-1",
       tool: "calendar",
       operation: "create_event",
       status: "succeeded",
@@ -124,7 +132,9 @@ describe("ConvexToolExecutionReceiptStore", () => {
     const receipt: ToolExecutionReceipt = {
       receiptId: "a1b2c3d4e5f6",
       actionId: "action-1",
+      projectId: "project-1",
       idempotencyKey: "exec-1",
+      actionFingerprint: "fingerprint-1",
       tool: "calendar",
       operation: "create_event",
       status: "blocked",
