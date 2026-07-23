@@ -48,14 +48,8 @@ export const save = mutation({
     const receiptId = cleanRequiredText(args.receiptId, "Receipt ID");
     const actionId = cleanRequiredText(args.actionId, "Tool action ID");
     const projectId = cleanRequiredText(args.projectId, "Project ID");
-    const idempotencyKey = cleanRequiredText(
-      args.idempotencyKey,
-      "Execution idempotency key",
-    );
-    const actionFingerprint = cleanRequiredText(
-      args.actionFingerprint,
-      "Action fingerprint",
-    );
+    const idempotencyKey = cleanRequiredText(args.idempotencyKey, "Execution idempotency key");
+    const actionFingerprint = cleanRequiredText(args.actionFingerprint, "Action fingerprint");
     const tool = cleanRequiredText(args.tool, "Tool name");
     const operation = cleanRequiredText(args.operation, "Tool operation");
 
