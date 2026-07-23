@@ -1,5 +1,10 @@
 name: TypeScript checks
 
+# This is the required CI gate for the main branch and all pull requests targeting main.
+# The `typecheck-lint-format-test` job must pass before any PR can be merged.
+# See docs/operations/ci-health.md for diagnostics and docs/operations/branch-protection.md
+# for required branch protection settings.
+
 on:
   push:
     branches: [main]
@@ -39,14 +44,8 @@ jobs:
         run: npm run type-check
       - name: Lint TypeScript and Convex
         run: npm run lint
-      - name: Produce formatter manifest
-        run: ./node_modules/.bin/prettier . --list-different --ignore-path .prettierignore > formatter-diff.txt || true
-      - name: Upload formatter manifest
-        uses: actions/upload-artifact@v4
-        with:
-          name: prettier-list-different
-          path: typescript/formatter-diff.txt
-          retention-days: 1
+      - name: Check formatting
+        run: npm run format:check
       - name: Validate OpenAPI contract
         run: npm run openapi:lint
       - name: Test interactive CLI and persistence with coverage
