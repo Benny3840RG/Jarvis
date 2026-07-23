@@ -42,7 +42,11 @@ describe("tool execution stage", () => {
         },
       },
     ]);
-    const unauthorized = await executor.execute({ action, authority: "T0", idempotencyKey: "one" });
+    const unauthorized = await executor.execute({
+      action,
+      authority: "T0",
+      idempotencyKey: "one",
+    });
     assert.equal(unauthorized.errorCode, "not-authorized");
     const unknown = await executor.execute({
       action: { ...action, operation: "write" },
@@ -74,11 +78,23 @@ describe("tool execution stage", () => {
     });
     assert.equal(dryRun.status, "dry-run");
     assert.equal(executions, 0);
-    const real = await executor.execute({ action, authority: "T1", idempotencyKey: "same" });
+    const real = await executor.execute({
+      action,
+      authority: "T1",
+      idempotencyKey: "same",
+    });
     assert.equal(real.status, "succeeded");
     assert.equal(executions, 1);
-    const first = await executor.execute({ action, authority: "T1", idempotencyKey: "execute" });
-    const replay = await executor.execute({ action, authority: "T1", idempotencyKey: "execute" });
+    const first = await executor.execute({
+      action,
+      authority: "T1",
+      idempotencyKey: "execute",
+    });
+    const replay = await executor.execute({
+      action,
+      authority: "T1",
+      idempotencyKey: "execute",
+    });
     assert.equal(first.status, "succeeded");
     assert.deepEqual(replay, first);
     assert.equal(executions, 2);
@@ -99,8 +115,16 @@ describe("tool execution stage", () => {
       },
     ]);
     const [first, second] = await Promise.all([
-      executor.execute({ action, authority: "T1", idempotencyKey: "concurrent" }),
-      executor.execute({ action, authority: "T1", idempotencyKey: "concurrent" }),
+      executor.execute({
+        action,
+        authority: "T1",
+        idempotencyKey: "concurrent",
+      }),
+      executor.execute({
+        action,
+        authority: "T1",
+        idempotencyKey: "concurrent",
+      }),
     ]);
     assert.equal(executions, 1);
     assert.deepEqual(second, first);
@@ -121,7 +145,11 @@ describe("tool execution stage", () => {
       ],
       receipts,
     );
-    const first = await executor.execute({ action, authority: "T1", idempotencyKey: "bound" });
+    const first = await executor.execute({
+      action,
+      authority: "T1",
+      idempotencyKey: "bound",
+    });
     assert.equal(first.status, "succeeded");
     const changed = await executor.execute({
       action: { ...action, arguments: { zone: "Australia/Melbourne" } },
