@@ -36,6 +36,7 @@ jobs:
             docs/traceability/requirements-matrix.md
             docs/traceability/test-matrix.md
             docs/traceability/evidence-matrix.md
+            docs/traceability/action-family-registry.yaml
             docs/governance/decision-register.md
             docs/governance/gap-register.md
             docs/governance/risk-register.md
@@ -92,6 +93,75 @@ jobs:
               sys.exit(1)
 
           print('Governance baseline controls validated.')
+
+      - name: Validate action-family machine contract
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+          import sys
+
+          text = Path('docs/traceability/action-family-registry.yaml').read_text()
+
+          required_fragments = [
+              'authoritative_for:',
+              'subordinate_to:',
+              'policy_overlay: internal_mutation',
+              'policy_overlay: send_with_approval',
+              'name: Finalize quote',
+              'name: Send quote',
+              'id: WF-QUOTE-001',
+              'binding: exact_action_fingerprint',
+              'retry_policy: no_blind_retry',
+              'generated_action_map:',
+              'authoritative: false',
+          ]
+          missing = [item for item in required_fragments if item not in text]
+          if missing:
+              print('Missing action-family controls:', *missing, sep='\n- ')
+              sys.exit(1)
+
+          forbidden = ['usually_true', 'usually_no', 'external_side_effects: possible']
+          present = [item for item in forbidden if item in text]
+          if present:
+              print('Vague machine-policy values are prohibited:', *present, sep='\n- ')
+              sys.exit(1)
+
+          action_ids = re.findall(r'^  - id: (AM-[^\s]+)$', text, re.MULTILINE)
+          invalid_actions = [item for item in action_ids if not re.fullmatch(r'AM-[0-9]{3}', item)]
+          if invalid_actions:
+              print('Invalid action-family IDs:', ', '.join(invalid_actions))
+              sys.exit(1)
+          if len(action_ids) != len(set(action_ids)):
+              print('Duplicate action-family IDs are prohibited.')
+              sys.exit(1)
+
+          workflow_ids = re.findall(r'^  - id: (WF-[^\s]+)$', text, re.MULTILINE)
+          invalid_workflows = [item for item in workflow_ids if not re.fullmatch(r'WF-[A-Z0-9-]+', item)]
+          if invalid_workflows:
+              print('Invalid workflow IDs:', ', '.join(invalid_workflows))
+              sys.exit(1)
+
+          if 'name: Finalize quote\n' in text:
+              finalize_block = text.split('name: Finalize quote\n', 1)[1].split('\n  - id: AM-013', 1)[0]
+              if 'mode: true' in finalize_block or 'policy_overlay: send_with_approval' in finalize_block:
+                  print('Finalize quote must remain an internal mutation without external side effects.')
+                  sys.exit(1)
+
+          send_block = text.split('name: Send quote\n', 1)[1].split('\nworkflows:', 1)[0]
+          send_requirements = [
+              'policy_overlay: send_with_approval',
+              'mode: always',
+              'binding: exact_action_fingerprint',
+              'required: true',
+              'retry_policy: no_blind_retry',
+          ]
+          missing = [item for item in send_requirements if item not in send_block]
+          if missing:
+              print('Send quote is missing required safety controls:', *missing, sep='\n- ')
+              sys.exit(1)
+
+          print('Action-family machine contract validated.')
 
       - name: Reject placeholder citations
         shell: bash
