@@ -2071,6 +2071,87 @@
         }
       }
     },
+    "/api/v1/projects/{projectId}/tool-actions/{actionId}/execute": {
+      "post": {
+        "operationId": "executeToolAction",
+        "summary": "Execute an approved tool-action proposal",
+        "description": "Runs an approved proposal against the tool/operation allowlist and returns a durable receipt. Blocked, timed-out, and failed outcomes are returned as a receipt with a 200 status, not as an error, since the attempt itself always completes. Currently no tool/operation is allowlisted, so every call returns a receipt with status \"blocked\" and errorCode \"not-allowlisted\" until a specific definition is registered server-side.",
+        "tags": ["Tool Actions"],
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "actionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          }
+        ],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": true,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExecuteToolActionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Execution attempt completed (successfully, blocked, timed out, or failed) and recorded as a durable receipt.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ToolExecutionReceipt"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
     "/api/v1/clients": {
       "get": {
         "operationId": "listClients",
@@ -6199,6 +6280,89 @@
         "type": "array",
         "items": {
           "$ref": "#/components/schemas/ToolAction"
+        }
+      },
+      "ExecuteToolActionRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["idempotencyKey"],
+        "properties": {
+          "idempotencyKey": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256,
+            "description": "Replay key for this specific execution attempt. The same key against the same action returns the identical receipt rather than executing again."
+          },
+          "dryRun": {
+            "type": "boolean",
+            "description": "When true, validates authority/allowlist/arguments and returns a receipt without calling the tool."
+          },
+          "timeoutMs": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 30000,
+            "description": "Bounds how long the executed operation may run before it is aborted as timed out. Defaults to 5000ms."
+          }
+        }
+      },
+      "ToolExecutionReceipt": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "receiptId",
+          "actionId",
+          "idempotencyKey",
+          "tool",
+          "operation",
+          "status",
+          "startedAt",
+          "completedAt"
+        ],
+        "properties": {
+          "receiptId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "actionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "tool": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "operation": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "status": {
+            "type": "string",
+            "enum": ["dry-run", "succeeded", "failed", "timed-out", "blocked"]
+          },
+          "outputDigest": {
+            "type": "string",
+            "description": "SHA-256 digest of the tool's output. The output itself is never persisted or returned."
+          },
+          "errorCode": {
+            "type": "string",
+            "enum": ["not-authorized", "not-allowlisted", "invalid-arguments", "timeout", "failed"]
+          },
+          "startedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "completedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
         }
       },
       "ClientContact": {
