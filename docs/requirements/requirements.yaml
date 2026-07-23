@@ -1,0 +1,48 @@
+schema_version: 1
+spec_version: "2.2"
+status: frozen
+frozen_at: "2026-07-23"
+source: docs/requirements/jarvis-requirements-v2.2.md
+id_policy:
+  stable: true
+  recyclable: false
+  subordinate_suffix: "uppercase only"
+lifecycle_values: [implemented, partial, planned, deferred, rejected]
+defaults:
+  status: planned
+  priority: must
+  owner: unassigned
+  tests: []
+  evidence: []
+sections:
+  purpose_scope: [R-001, R-002, R-003, R-004]
+  core_modes: [R-005, R-006, R-007, R-008, R-009, R-010, R-011, R-012, R-013, R-014]
+  requirement_lifecycle: [R-015, R-016, R-017, R-018, R-019, R-020, R-021]
+  operational_locality: [R-022, R-023, R-024, R-024A, R-024B, R-024C, R-024D, R-024E, R-024F]
+  memory_model: [R-025, R-026, R-027, R-028, R-029, R-030, R-031, R-032, R-033]
+  action_effect_sensitivity: [R-034, R-035, R-036, R-037, R-038, R-038A, R-038B, R-038C]
+  idempotency_correlation: [R-039, R-040, R-041, R-042, R-043]
+  approvals: [R-044, R-045, R-046, R-047, R-048, R-049, R-050, R-051, R-052, R-053, R-054]
+  tool_architecture: [R-055, R-056, R-057, R-058, R-059, R-060, R-061, R-062]
+  credential_handling: [R-063, R-064, R-065, R-066]
+  data_model: [R-067, R-068, R-069, R-070, R-071, R-072]
+  state_transitions: [R-073, R-074, R-075, R-076]
+  retention_history: [R-077, R-078, R-079, R-080, R-081]
+  safety_rules: [R-082, R-083, R-084, R-085, R-086, R-087, R-088, R-089, R-090]
+  execution_flow: [R-091, R-092, R-093, R-094, R-095, R-096, R-097, R-098, R-098A, R-098B, R-098C]
+  error_handling: [R-099, R-100, R-101, R-102, R-103, R-104]
+  testing_evidence: [R-105, R-106, R-107, R-108, R-109, R-110, R-111]
+  release_strategy: [R-112, R-113, R-114, R-115, R-116]
+  operations: [R-117, R-118, R-119, R-120, R-121]
+  roadmap_linkage: [R-122, R-123, R-124]
+  definition_of_done: [R-125, R-126, R-127]
+  concurrency_consistency: [R-128, R-129, R-130, R-131]
+  policy_versioning: [R-132, R-133, R-134, R-135]
+  time_timezone: [R-136, R-137, R-138, R-139, R-140]
+  indeterminate_outcomes: [R-141, R-142, R-143]
+  revision_freeze: [R-144, R-145, R-146, R-147, R-148, R-149, R-150]
+validation:
+  forbidden_ranges:
+    architectural_use_of_R_105_to_R_127: true
+  duplicate_ids_allowed: false
+  lowercase_suffixes_allowed: false
