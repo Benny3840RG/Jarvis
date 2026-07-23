@@ -4,7 +4,7 @@ export const toolExecutionStatusValidator = v.union(
   v.literal("dry-run"),
   v.literal("succeeded"),
   v.literal("failed"),
-  v.literal("timed-out"),
+  v.literal("indeterminate"),
   v.literal("blocked"),
 );
 
@@ -12,8 +12,9 @@ export const toolExecutionErrorCodeValidator = v.union(
   v.literal("not-authorized"),
   v.literal("not-allowlisted"),
   v.literal("invalid-arguments"),
-  v.literal("timeout"),
+  v.literal("indeterminate"),
   v.literal("failed"),
+  v.literal("fingerprint-mismatch"),
 );
 
 export const toolExecutionReceiptDocumentValidator = v.object({
@@ -23,7 +24,9 @@ export const toolExecutionReceiptDocumentValidator = v.object({
   receiptKey: v.string(),
   receiptId: v.string(),
   actionId: v.string(),
+  projectId: v.string(),
   idempotencyKey: v.string(),
+  actionFingerprint: v.string(),
   tool: v.string(),
   operation: v.string(),
   status: toolExecutionStatusValidator,

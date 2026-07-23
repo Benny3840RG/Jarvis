@@ -10,7 +10,9 @@ type ToolExecutionReceiptRow = {
   receiptKey: string;
   receiptId: string;
   actionId: string;
+  projectId: string;
   idempotencyKey: string;
+  actionFingerprint: string;
   tool: string;
   operation: string;
   status: ToolExecutionReceipt["status"];
@@ -24,7 +26,9 @@ function receiptFromConvex(row: ToolExecutionReceiptRow): ToolExecutionReceipt {
   return {
     receiptId: row.receiptId,
     actionId: row.actionId,
+    projectId: row.projectId,
     idempotencyKey: row.idempotencyKey,
+    actionFingerprint: row.actionFingerprint,
     tool: row.tool,
     operation: row.operation,
     status: row.status,
@@ -67,7 +71,9 @@ export class ConvexToolExecutionReceiptStore implements ToolExecutionReceiptStor
       receiptKey: key,
       receiptId: receipt.receiptId,
       actionId: receipt.actionId,
+      projectId: receipt.projectId,
       idempotencyKey: receipt.idempotencyKey,
+      actionFingerprint: receipt.actionFingerprint,
       tool: receipt.tool,
       operation: receipt.operation,
       status: receipt.status,

@@ -30,7 +30,9 @@ export const save = mutation({
     receiptKey: v.string(),
     receiptId: v.string(),
     actionId: v.string(),
+    projectId: v.string(),
     idempotencyKey: v.string(),
+    actionFingerprint: v.string(),
     tool: v.string(),
     operation: v.string(),
     status: toolExecutionStatusValidator,
@@ -45,7 +47,9 @@ export const save = mutation({
     const receiptKey = cleanRequiredText(args.receiptKey, "Receipt key");
     const receiptId = cleanRequiredText(args.receiptId, "Receipt ID");
     const actionId = cleanRequiredText(args.actionId, "Tool action ID");
+    const projectId = cleanRequiredText(args.projectId, "Project ID");
     const idempotencyKey = cleanRequiredText(args.idempotencyKey, "Execution idempotency key");
+    const actionFingerprint = cleanRequiredText(args.actionFingerprint, "Action fingerprint");
     const tool = cleanRequiredText(args.tool, "Tool name");
     const operation = cleanRequiredText(args.operation, "Tool operation");
 
@@ -55,14 +59,21 @@ export const save = mutation({
         q.eq("ownerId", ownerId).eq("receiptKey", receiptKey),
       )
       .unique();
-    if (existing) return existing;
+    if (existing) {
+      if (existing.actionFingerprint !== actionFingerprint) {
+        throw new Error("Execution receipt fingerprint conflict.");
+      }
+      return existing;
+    }
 
     const id = await ctx.db.insert("toolExecutionReceipts", {
       ownerId,
       receiptKey,
       receiptId,
       actionId,
+      projectId,
       idempotencyKey,
+      actionFingerprint,
       tool,
       operation,
       status: args.status,

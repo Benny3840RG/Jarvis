@@ -4,7 +4,10 @@ import { describe, it } from "node:test";
 import { z } from "zod";
 
 import type { ToolAction } from "../src/actions/toolActions.js";
-import { ToolExecutionService } from "../src/actions/toolExecution.js";
+import {
+  InMemoryToolExecutionReceiptStore,
+  ToolExecutionService,
+} from "../src/actions/toolExecution.js";
 
 const action: ToolAction = {
   actionId: "action-1",
@@ -39,7 +42,11 @@ describe("tool execution stage", () => {
         },
       },
     ]);
-    const unauthorized = await executor.execute({ action, authority: "T0", idempotencyKey: "one" });
+    const unauthorized = await executor.execute({
+      action,
+      authority: "T0",
+      idempotencyKey: "one",
+    });
     assert.equal(unauthorized.errorCode, "not-authorized");
     const unknown = await executor.execute({
       action: { ...action, operation: "write" },
@@ -71,18 +78,89 @@ describe("tool execution stage", () => {
     });
     assert.equal(dryRun.status, "dry-run");
     assert.equal(executions, 0);
-    // dry-run must not persist — the same key must allow a real execution
-    const real = await executor.execute({ action, authority: "T1", idempotencyKey: "same" });
+    const real = await executor.execute({
+      action,
+      authority: "T1",
+      idempotencyKey: "same",
+    });
     assert.equal(real.status, "succeeded");
     assert.equal(executions, 1);
-    const first = await executor.execute({ action, authority: "T1", idempotencyKey: "execute" });
-    const replay = await executor.execute({ action, authority: "T1", idempotencyKey: "execute" });
+    const first = await executor.execute({
+      action,
+      authority: "T1",
+      idempotencyKey: "execute",
+    });
+    const replay = await executor.execute({
+      action,
+      authority: "T1",
+      idempotencyKey: "execute",
+    });
     assert.equal(first.status, "succeeded");
     assert.deepEqual(replay, first);
     assert.equal(executions, 2);
   });
 
-  it("records timeouts without exposing tool output", async () => {
+  it("deduplicates concurrent execution in one runtime", async () => {
+    let executions = 0;
+    const executor = new ToolExecutionService([
+      {
+        tool: "clock",
+        operation: "read",
+        schema: z.object({ zone: z.string() }),
+        async execute() {
+          executions += 1;
+          await new Promise((resolve) => setTimeout(resolve, 10));
+          return { now: "2026-07-18T00:00:00.000Z" };
+        },
+      },
+    ]);
+    const [first, second] = await Promise.all([
+      executor.execute({
+        action,
+        authority: "T1",
+        idempotencyKey: "concurrent",
+      }),
+      executor.execute({
+        action,
+        authority: "T1",
+        idempotencyKey: "concurrent",
+      }),
+    ]);
+    assert.equal(executions, 1);
+    assert.deepEqual(second, first);
+  });
+
+  it("blocks replay when the approved action payload changes", async () => {
+    const receipts = new InMemoryToolExecutionReceiptStore();
+    const executor = new ToolExecutionService(
+      [
+        {
+          tool: "clock",
+          operation: "read",
+          schema: z.object({ zone: z.string() }),
+          async execute() {
+            return { now: "2026-07-18T00:00:00.000Z" };
+          },
+        },
+      ],
+      receipts,
+    );
+    const first = await executor.execute({
+      action,
+      authority: "T1",
+      idempotencyKey: "bound",
+    });
+    assert.equal(first.status, "succeeded");
+    const changed = await executor.execute({
+      action: { ...action, arguments: { zone: "Australia/Melbourne" } },
+      authority: "T1",
+      idempotencyKey: "bound",
+    });
+    assert.equal(changed.status, "blocked");
+    assert.equal(changed.errorCode, "fingerprint-mismatch");
+  });
+
+  it("records timeouts as indeterminate without exposing tool output", async () => {
     const executor = new ToolExecutionService([
       {
         tool: "slow",
@@ -100,8 +178,16 @@ describe("tool execution stage", () => {
       idempotencyKey: "timeout",
       timeoutMs: 1,
     });
-    assert.equal(result.status, "timed-out");
+    assert.equal(result.status, "indeterminate");
+    assert.equal(result.errorCode, "indeterminate");
     assert.equal(result.outputDigest, undefined);
     assert.equal(JSON.stringify(result).includes("never stored"), false);
+
+    const replay = await executor.execute({
+      action: { ...action, tool: "slow", arguments: {} },
+      authority: "T1",
+      idempotencyKey: "timeout",
+    });
+    assert.deepEqual(replay, result);
   });
 });
