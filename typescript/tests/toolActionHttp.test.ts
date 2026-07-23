@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
 
 import type { NestFastifyApplication } from "@nestjs/platform-fastify";
+import { z } from "zod";
 
 import type { ToolAction, ToolActionService } from "../src/actions/toolActions.js";
+import { ToolExecutionService } from "../src/actions/toolExecution.js";
 import { createJarvisHttpApp } from "../src/http/app.js";
 import type { HttpAppConfig } from "../src/http/config.js";
 import type {
@@ -111,7 +113,10 @@ function successfulService(overrides: Partial<ToolActionService> = {}): ToolActi
   };
 }
 
-async function makeApp(service: ToolActionService | null): Promise<NestFastifyApplication> {
+async function makeApp(
+  service: ToolActionService | null,
+  executionService: ToolExecutionService | null = null,
+): Promise<NestFastifyApplication> {
   const app = await createJarvisHttpApp({
     persistence: makePersistence(),
     providerName: "json",
@@ -120,6 +125,7 @@ async function makeApp(service: ToolActionService | null): Promise<NestFastifyAp
     totalityPipeline: null,
     memoryChangeSetService: null,
     toolActionService: service,
+    toolExecutionService: executionService,
   });
   openApps.push(app);
   return app;
@@ -381,8 +387,115 @@ describe("Tool action approval HTTP boundary", () => {
     assert.doesNotMatch(response.body, /current-secret|belongs to another action/);
   });
 
-  it("has no execution route in this stage", async () => {
-    const app = await makeApp(successfulService());
+  it("returns 503 when the execution service is unavailable", async () => {
+    const app = await makeApp(successfulService(), null);
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/v1/projects/project-1/tool-actions/action-1/execute",
+      headers: authHeaders(),
+      payload: { idempotencyKey: "exec-1" },
+    });
+
+    assert.equal(response.statusCode, 503);
+    assert.equal(response.json().type, "urn:jarvis:problem:tool-action-execution-unavailable");
+  });
+
+  it("returns 404 when the action to execute does not exist", async () => {
+    const app = await makeApp(
+      successfulService({ get: async () => null }),
+      new ToolExecutionService([]),
+    );
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/v1/projects/project-1/tool-actions/action-1/execute",
+      headers: authHeaders(),
+      payload: { idempotencyKey: "exec-1" },
+    });
+
+    assert.equal(response.statusCode, 404);
+    assert.equal(response.json().type, "urn:jarvis:problem:tool-action-not-found");
+  });
+
+  it("blocks every execution attempt as not-allowlisted with the production (empty) allowlist", async () => {
+    // This is the load-bearing safety proof: the real ToolExecutionService,
+    // constructed exactly as toolExecutionFactory.ts does in production (an
+    // empty definitions array), must refuse to run anything through this
+    // route no matter how the action was approved.
+    const app = await makeApp(
+      successfulService({ get: async () => action("approved") }),
+      new ToolExecutionService([]),
+    );
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/v1/projects/project-1/tool-actions/action-1/execute",
+      headers: authHeaders(),
+      payload: { idempotencyKey: "exec-1" },
+    });
+
+    assert.equal(response.statusCode, 200);
+    const body = response.json();
+    assert.equal(body.status, "blocked");
+    assert.equal(body.errorCode, "not-allowlisted");
+  });
+
+  it("forwards idempotencyKey and dryRun from the request body to the execution service", async () => {
+    let executions = 0;
+    const executionService = new ToolExecutionService([
+      {
+        tool: "calendar",
+        operation: "create_event",
+        schema: z.object({ durationMinutes: z.number(), title: z.string() }),
+        async execute() {
+          executions += 1;
+          return { eventId: "evt-1" };
+        },
+      },
+    ]);
+    const app = await makeApp(
+      successfulService({ get: async () => action("approved") }),
+      executionService,
+    );
+
+    const dryRunResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/projects/project-1/tool-actions/action-1/execute",
+      headers: authHeaders(),
+      payload: { idempotencyKey: "exec-1", dryRun: true },
+    });
+    assert.equal(dryRunResponse.json().status, "dry-run");
+    assert.equal(executions, 0);
+
+    const realResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/projects/project-1/tool-actions/action-1/execute",
+      headers: authHeaders(),
+      payload: { idempotencyKey: "exec-1" },
+    });
+    assert.equal(realResponse.json().status, "succeeded");
+    assert.equal(executions, 1);
+
+    const replayResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/projects/project-1/tool-actions/action-1/execute",
+      headers: authHeaders(),
+      payload: { idempotencyKey: "exec-1" },
+    });
+    assert.deepEqual(replayResponse.json(), realResponse.json());
+    assert.equal(executions, 1);
+  });
+
+  it("rejects an execute request without an idempotencyKey before touching the service", async () => {
+    let called = false;
+    const executionService = new ToolExecutionService([]);
+    const originalExecute = executionService.execute.bind(executionService);
+    executionService.execute = async (input) => {
+      called = true;
+      return originalExecute(input);
+    };
+    const app = await makeApp(
+      successfulService({ get: async () => action("approved") }),
+      executionService,
+    );
     const response = await app.inject({
       method: "POST",
       url: "/api/v1/projects/project-1/tool-actions/action-1/execute",
@@ -390,6 +503,7 @@ describe("Tool action approval HTTP boundary", () => {
       payload: {},
     });
 
-    assert.equal(response.statusCode, 404);
+    assert.equal(response.statusCode, 422);
+    assert.equal(called, false);
   });
 });

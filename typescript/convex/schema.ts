@@ -12,6 +12,10 @@ import {
   toolAuthorityValidator,
 } from "./toolActionValidators.js";
 import {
+  toolExecutionErrorCodeValidator,
+  toolExecutionStatusValidator,
+} from "./toolExecutionValidators.js";
+import {
   projectPreferencesValidator,
   projectRecordValidator,
   projectStatusValidator,
@@ -119,6 +123,23 @@ export default defineSchema({
     .index("by_owner_and_project_key", ["ownerId", "projectKey"])
     .index("by_owner_and_project_key_and_state", ["ownerId", "projectKey", "state"])
     .index("by_owner_and_request_id", ["ownerId", "requestId"]),
+  toolExecutionReceipts: defineTable({
+    ownerId: v.string(),
+    receiptKey: v.string(),
+    receiptId: v.string(),
+    actionId: v.string(),
+    idempotencyKey: v.string(),
+    tool: v.string(),
+    operation: v.string(),
+    status: toolExecutionStatusValidator,
+    outputDigest: v.optional(v.string()),
+    errorCode: v.optional(toolExecutionErrorCodeValidator),
+    startedAt: v.number(),
+    completedAt: v.number(),
+    createdAt: v.number(),
+  })
+    .index("by_owner_and_receipt_key", ["ownerId", "receiptKey"])
+    .index("by_owner_and_action_id", ["ownerId", "actionId"]),
   validationReports: defineTable({
     ownerId: v.string(),
     requestId: v.string(),

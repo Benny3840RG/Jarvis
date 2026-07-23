@@ -2,16 +2,18 @@ import { Body, Controller, Get, HttpCode, Inject, Param, Post, Query, Req } from
 import type { FastifyRequest } from "fastify";
 
 import type { ToolActionService } from "../actions/toolActions.js";
+import type { ToolExecutionService } from "../actions/toolExecution.js";
 import { JarvisProblem } from "./problemDetails.js";
 import { requestIdFor } from "./requestId.js";
 import {
+  parseExecuteToolAction,
   parseStageToolAction,
   parseToolActionExpectedRevision,
   parseToolActionListLimit,
   parseToolActionRejectionReason,
   parseToolActionState,
 } from "./toolActionRequest.js";
-import { HTTP_TOOL_ACTIONS } from "./tokens.js";
+import { HTTP_TOOL_ACTIONS, HTTP_TOOL_EXECUTION } from "./tokens.js";
 
 function unavailable(): JarvisProblem {
   return new JarvisProblem(
@@ -19,6 +21,15 @@ function unavailable(): JarvisProblem {
     "tool-action-approval-unavailable",
     "Tool Action Approval Unavailable",
     "Tool action approval requires the configured Convex persistence provider.",
+  );
+}
+
+function executionUnavailable(): JarvisProblem {
+  return new JarvisProblem(
+    503,
+    "tool-action-execution-unavailable",
+    "Tool Action Execution Unavailable",
+    "Tool action execution requires the configured Convex persistence provider.",
   );
 }
 
@@ -65,11 +76,18 @@ export class ToolActionController {
   constructor(
     @Inject(HTTP_TOOL_ACTIONS)
     private readonly service: ToolActionService | null,
+    @Inject(HTTP_TOOL_EXECUTION)
+    private readonly executionService: ToolExecutionService | null,
   ) {}
 
   private requireService(): ToolActionService {
     if (!this.service) throw unavailable();
     return this.service;
+  }
+
+  private requireExecutionService(): ToolExecutionService {
+    if (!this.executionService) throw executionUnavailable();
+    return this.executionService;
   }
 
   @Post()
@@ -195,5 +213,47 @@ export class ToolActionController {
       if (error instanceof JarvisProblem) throw error;
       throw operationProblem(error);
     }
+  }
+
+  @Post(":actionId/execute")
+  @HttpCode(200)
+  async execute(
+    @Param("projectId") projectId: string,
+    @Param("actionId") actionId: string,
+    @Body() body: unknown,
+  ) {
+    let parsed;
+    try {
+      parsed = parseExecuteToolAction(body);
+    } catch {
+      throw new JarvisProblem(
+        422,
+        "invalid-tool-action-execution",
+        "Invalid Tool Action Execution",
+        "Tool action execution requires a valid idempotencyKey.",
+      );
+    }
+    let action;
+    try {
+      action = await this.requireService().get({ actionId, projectId });
+    } catch (error: unknown) {
+      if (error instanceof JarvisProblem) throw error;
+      throw operationProblem(error);
+    }
+    if (!action) throw operationProblem(new Error("Tool action does not exist."));
+
+    // A single flat Bearer service token gates every request this controller
+    // serves — there is no separate per-caller authority signal at the HTTP
+    // boundary. T3 is therefore the ceiling any authenticated caller may
+    // assert; the real gate already happened when the owner approved the
+    // action, and ToolExecutionService still re-checks it against the
+    // action's own requiredAuthority before doing anything else.
+    return this.requireExecutionService().execute({
+      action,
+      authority: "T3",
+      idempotencyKey: parsed.idempotencyKey,
+      ...(parsed.dryRun === undefined ? {} : { dryRun: parsed.dryRun }),
+      ...(parsed.timeoutMs === undefined ? {} : { timeoutMs: parsed.timeoutMs }),
+    });
   }
 }

@@ -1,8 +1,9 @@
 # Tool action approval
 
 Jarvis stores tool actions as explicit project-scoped proposals before any external operation may be
-considered. This stage provides proposal, inspection, approval, and rejection only. It does not include
-an executor.
+considered. Proposal, inspection, approval, and rejection are one durable stage. Execution is a second,
+separately gated stage: the pipeline exists and is fully wired, but it ships with an empty allowlist, so
+no tool:operation can actually run through it yet (see [Execution](#execution) below).
 
 ## State machine
 
@@ -11,8 +12,11 @@ proposed -> approved
          -> rejected
 ```
 
-There is deliberately no `executed` transition in this stage. Approval records operator intent; it does
-not call a tool, mutate an external system, or grant Jarvis a general execution capability.
+There is deliberately no `executed` state on the `ToolAction` record itself. Approval records operator
+intent; it does not call a tool or mutate an external system. Execution is tracked separately, as an
+immutable receipt keyed by the action and a caller-supplied idempotency key — an approved action can be
+the subject of an execution attempt any number of times (each with its own key), without the proposal's
+own state ever changing.
 
 ## Proposal requirements
 
@@ -48,8 +52,11 @@ inside Convex optimistic concurrency control, so only one proposal can acquire t
 | `T3`  | Highest authority; mandatory for proposals marked destructive          |
 
 A destructive proposal below `T3` is rejected before persistence. This is a classification boundary,
-not permission to execute. An approved `T3` proposal is still only approved data until a later,
-allowlisted executor stage is built and independently reviewed.
+not permission to execute. Reaching `approved` state still does not authorise a specific tool call —
+`ToolExecutionService` separately checks the acting authority against `requiredAuthority`, and beyond
+that, requires the exact `tool`:`operation` pair to be explicitly registered server-side. No pair is
+registered yet, so every execution attempt is blocked with `errorCode: "not-allowlisted"` regardless of
+authority or approval state.
 
 ## Revision boundary
 
@@ -61,15 +68,45 @@ must then be reviewed and restaged against current project context rather than s
 
 All routes require the existing Jarvis Bearer service token.
 
-| Method | Path                                                           | Result                |
-| ------ | -------------------------------------------------------------- | --------------------- |
-| POST   | `/api/v1/projects/{projectId}/tool-actions`                    | Stage a proposal      |
-| GET    | `/api/v1/projects/{projectId}/tool-actions`                    | List recent proposals |
-| GET    | `/api/v1/projects/{projectId}/tool-actions/{actionId}`         | Inspect one proposal  |
-| POST   | `/api/v1/projects/{projectId}/tool-actions/{actionId}/approve` | Approve after review  |
-| POST   | `/api/v1/projects/{projectId}/tool-actions/{actionId}/reject`  | Reject with a reason  |
+| Method | Path                                                           | Result                        |
+| ------ | -------------------------------------------------------------- | ----------------------------- |
+| POST   | `/api/v1/projects/{projectId}/tool-actions`                    | Stage a proposal              |
+| GET    | `/api/v1/projects/{projectId}/tool-actions`                    | List recent proposals         |
+| GET    | `/api/v1/projects/{projectId}/tool-actions/{actionId}`         | Inspect one proposal          |
+| POST   | `/api/v1/projects/{projectId}/tool-actions/{actionId}/approve` | Approve after review          |
+| POST   | `/api/v1/projects/{projectId}/tool-actions/{actionId}/reject`  | Reject with a reason          |
+| POST   | `/api/v1/projects/{projectId}/tool-actions/{actionId}/execute` | Attempt execution (see below) |
 
-No `/execute` route exists. Requests to such a route return `404`.
+## Execution
+
+`ToolExecutionService` (`src/actions/toolExecution.ts`) is the executor referenced above as a future
+stage — it now exists, is fully tested, and is wired to the `/execute` route. It satisfies the controls
+that were previously listed as required before this stage could be built:
+
+1. **Explicit allowlist** — `POST /execute` loads the approved `ToolAction`, then looks up a
+   `ToolExecutionDefinition` by `tool:operation`. **The allowlist registered in
+   `src/actions/toolExecutionFactory.ts` is currently empty.** Every call therefore returns a receipt
+   with `status: "blocked"` and `errorCode: "not-allowlisted"`, regardless of the action's own approval
+   or authority. Registering the first real definition is a deliberate, separate decision — not a side
+   effect of this stage shipping.
+2. **Exact argument schemas per operation** — each registered definition carries its own zod schema;
+   the action's stored `arguments` are re-validated against it immediately before any call.
+3. **Authority and destructive-operation checks** — the acting authority (asserted server-side as `T3`,
+   since a single Bearer service token gates this whole HTTP surface and there is no separate per-caller
+   authority signal) must meet or exceed the action's `requiredAuthority`.
+4. **Idempotency and replay protection** — the request body's `idempotencyKey`, combined with the
+   action ID, is the receipt's lookup key. Replaying the same key returns the original receipt
+   byte-for-byte rather than executing again. A `dryRun: true` request validates everything but is never
+   persisted, so the same key can still be used for a real attempt afterward.
+5. **Bounded timeouts and redacted failures** — `timeoutMs` is clamped to 1–30000ms (default 5000ms).
+   Failure receipts carry a fixed `errorCode` enum, never a raw error message or the tool's output.
+6. **Durable execution receipts** — receipts are stored in the `toolExecutionReceipts` Convex table,
+   scoped by owner, and are the authoritative record of every execution attempt. They are not currently
+   mirrored into the general `auditEvents` table (unlike proposal/approval/rejection) — the receipts
+   table is itself the complete, durable audit trail for executions specifically.
+7. **Dry-run tests and a smoke checkpoint** — covered in `tests/toolExecution.test.ts` and
+   `tests/toolActionHttp.test.ts`. A live Convex smoke checkpoint is still outstanding, matching every
+   other domain's `smoke:convex` pattern, and should be added before the first real definition ships.
 
 ## Audit evidence
 
@@ -80,18 +117,5 @@ Convex appends project-scoped audit events for:
 - `tool.action.rejected`.
 
 Audit payloads contain identifiers and decision metadata, not service credentials. The service-token
-boundary remains server-side.
-
-## Next controlled stage
-
-A future executor must be a separate slice with:
-
-1. an explicit tool/operation allowlist;
-2. exact argument schemas per operation;
-3. authority and destructive-operation policy checks;
-4. idempotency and replay protection;
-5. bounded timeouts and redacted failures;
-6. durable execution receipts;
-7. dry-run tests and a development-only live smoke checkpoint.
-
-Until those controls exist, approval cannot cause side effects. That is intentional.
+boundary remains server-side. Execution attempts are recorded as receipts (see above), not as
+`auditEvents` rows.

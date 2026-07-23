@@ -8,6 +8,8 @@ import { FastifyAdapter, type NestFastifyApplication } from "@nestjs/platform-fa
 
 import { createToolActionServiceFromEnv } from "../actions/toolActionFactory.js";
 import type { ToolActionService } from "../actions/toolActions.js";
+import { createToolExecutionServiceFromEnv } from "../actions/toolExecutionFactory.js";
+import type { ToolExecutionService } from "../actions/toolExecution.js";
 import type { ClientStore } from "../clients/client.js";
 import { InMemoryClientStore } from "../clients/inMemoryClientStore.js";
 import { JsonClientStore } from "../clients/jsonClientStore.js";
@@ -74,6 +76,7 @@ export type CreateJarvisHttpAppOptions = (
   totalityPipeline?: TotalityPipeline | null;
   memoryChangeSetService?: MemoryChangeSetService | null;
   toolActionService?: ToolActionService | null;
+  toolExecutionService?: ToolExecutionService | null;
   clientStore?: ClientStore;
   projectStore?: ProjectStore;
   quoteStore?: QuoteStore;
@@ -135,6 +138,12 @@ export async function createJarvisHttpApp(
       ? options.toolActionService
       : usesEnvironment
         ? createToolActionServiceFromEnv()
+        : null;
+  const toolExecutionService =
+    options.toolExecutionService !== undefined
+      ? options.toolExecutionService
+      : usesEnvironment
+        ? createToolExecutionServiceFromEnv()
         : null;
   const clientStore =
     options.clientStore ?? (usesEnvironment ? new JsonClientStore() : new InMemoryClientStore());
@@ -198,6 +207,7 @@ export async function createJarvisHttpApp(
       totalityPipeline,
       memoryChangeSetService,
       toolActionService,
+      toolExecutionService,
       clientStore,
       projectStore,
       quoteStore,

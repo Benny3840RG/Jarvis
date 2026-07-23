@@ -3,6 +3,7 @@ import { Module } from "@nestjs/common";
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from "@nestjs/core";
 
 import type { ToolActionService } from "../actions/toolActions.js";
+import type { ToolExecutionService } from "../actions/toolExecution.js";
 import type { ClientStore } from "../clients/client.js";
 import type { ProjectStore } from "../projects/project.js";
 import type { QuoteStore } from "../quotes/quote.js";
@@ -52,6 +53,7 @@ import {
   HTTP_PERSISTENCE,
   HTTP_PROVIDER_NAME,
   HTTP_TOOL_ACTIONS,
+  HTTP_TOOL_EXECUTION,
   HTTP_TOTALITY_PIPELINE,
 } from "./tokens.js";
 
@@ -62,6 +64,7 @@ export type JarvisHttpModuleOptions = {
   totalityPipeline: TotalityPipeline | null;
   memoryChangeSetService: MemoryChangeSetService | null;
   toolActionService: ToolActionService | null;
+  toolExecutionService: ToolExecutionService | null;
   clientStore: ClientStore;
   projectStore: ProjectStore;
   quoteStore: QuoteStore;
@@ -113,6 +116,7 @@ export class JarvisHttpModule {
         { provide: HTTP_TOTALITY_PIPELINE, useValue: options.totalityPipeline },
         { provide: HTTP_MEMORY_CHANGE_SETS, useValue: options.memoryChangeSetService },
         { provide: HTTP_TOOL_ACTIONS, useValue: options.toolActionService },
+        { provide: HTTP_TOOL_EXECUTION, useValue: options.toolExecutionService },
         SystemStatusService,
         { provide: APP_GUARD, useClass: ServiceTokenGuard },
         { provide: APP_INTERCEPTOR, useClass: RequestIdInterceptor },

@@ -194,3 +194,20 @@ export function parseToolActionListLimit(value: unknown): number | undefined {
   }
   return parsed;
 }
+
+export function parseExecuteToolAction(body: unknown): {
+  idempotencyKey: string;
+  dryRun?: boolean;
+  timeoutMs?: number;
+} {
+  if (!isRecord(body)) throw new Error("Request body must be a JSON object.");
+  const idempotencyKey = requiredString(body.idempotencyKey, "idempotencyKey");
+  const dryRun = body.dryRun === undefined ? undefined : booleanValue(body.dryRun, "dryRun");
+  const timeoutMs =
+    body.timeoutMs === undefined ? undefined : positiveInteger(body.timeoutMs, "timeoutMs");
+  return {
+    idempotencyKey,
+    ...(dryRun === undefined ? {} : { dryRun }),
+    ...(timeoutMs === undefined ? {} : { timeoutMs }),
+  };
+}
