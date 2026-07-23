@@ -1,4 +1,5 @@
 const OWNER_ID = "jarvis-cli";
+const MIN_SERVICE_TOKEN_LENGTH = 32;
 
 /**
  * Constant-time string equality.
@@ -28,11 +29,25 @@ export function requireOwner(serviceToken: string): string {
   if (!current) {
     throw new Error("Server misconfigured: JARVIS_SERVICE_TOKEN is not set.");
   }
+  if (current.length < MIN_SERVICE_TOKEN_LENGTH) {
+    throw new Error(
+      `Server misconfigured: JARVIS_SERVICE_TOKEN must be at least ${MIN_SERVICE_TOKEN_LENGTH} characters.`,
+    );
+  }
+  if (previous !== undefined && previous.length < MIN_SERVICE_TOKEN_LENGTH) {
+    throw new Error(
+      `Server misconfigured: JARVIS_SERVICE_TOKEN_PREVIOUS must be at least ${MIN_SERVICE_TOKEN_LENGTH} characters.`,
+    );
+  }
 
   const matchesCurrent = serviceToken.length > 0 && constantTimeEquals(serviceToken, current);
   const matchesPrevious =
     previous !== undefined && serviceToken.length > 0 && constantTimeEquals(serviceToken, previous);
   if (!matchesCurrent && !matchesPrevious) {
+    // No candidate or configured-token content here — only that a mismatch
+    // occurred — so this is safe to leave visible in Convex's function logs
+    // for brute-force detection without becoming a secondary leak surface.
+    console.warn("Jarvis service token rejected: candidate did not match current or previous.");
     throw new Error("Unauthorized: invalid Jarvis service token.");
   }
 

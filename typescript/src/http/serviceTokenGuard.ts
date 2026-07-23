@@ -1,7 +1,7 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 
 import type { CanActivate, ExecutionContext } from "@nestjs/common";
-import { HttpStatus, Inject, Injectable } from "@nestjs/common";
+import { HttpStatus, Inject, Injectable, Logger } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 import type { FastifyRequest } from "fastify";
 
@@ -34,6 +34,8 @@ function matchesConfiguredToken(
 
 @Injectable()
 export class ServiceTokenGuard implements CanActivate {
+  private readonly logger = new Logger(ServiceTokenGuard.name);
+
   constructor(
     @Inject(Reflector) private readonly reflector: Reflector,
     @Inject(HTTP_APP_CONFIG) private readonly config: HttpAppConfig,
@@ -61,6 +63,10 @@ export class ServiceTokenGuard implements CanActivate {
       candidate === undefined ||
       !matchesConfiguredToken(candidate, this.config.currentToken, this.config.previousToken)
     ) {
+      // Never logs the candidate or configured token — only that a rejection
+      // happened and where from — so this is safe to leave on for brute-force
+      // detection without becoming a secondary leak surface.
+      this.logger.warn(`Rejected an invalid Bearer service token from ${request.ip}.`);
       throw new JarvisProblem(
         HttpStatus.UNAUTHORIZED,
         "unauthorized",
