@@ -1,0 +1,426 @@
+schema_version: "1.0"
+
+project:
+  name: Jarvis
+  baseline: v2.2
+  namespace:
+    frozen_start: R-001
+    frozen_end: R-150
+
+authority:
+  action_family_registry:
+    authoritative_for:
+      - action_family_definitions
+      - action_map_generation
+    subordinate_to:
+      - requirements_yaml
+      - requirements_md
+      - state_glossary
+  generated_views_non_authoritative: true
+
+action_family_defaults:
+  lifecycle_status: planned
+  owner: unassigned
+  version: 1
+
+controlled_vocabularies:
+  domains: [business, home, workshop, governance, recovery, shared]
+  effect_classes: [read, draft, mutate, send, execute, destructive]
+  sensitivity_modes: [fixed, parameter_derived]
+  sensitivity_classes: [public, internal, private, secret]
+  approval_modes: [never, always, conditional]
+  side_effect_modes: [false, true, conditional]
+  lifecycle_statuses: [planned, active, deprecated, superseded, rejected]
+  retention_classes: [ephemeral, standard, long_term]
+
+identity_rules:
+  action_family_id_pattern: "^AM-[0-9]{3}$"
+  workflow_id_pattern: "^WF-[A-Z0-9-]+$"
+  test_id_pattern: "^TEST-[A-Z0-9-]+$"
+  evidence_id_pattern: "^EVD-[A-Z0-9-]+$"
+  tool_id_pattern: "^TOOL-[A-Z0-9-]+$"
+  state_target_id_pattern: "^STORE-[A-Z0-9-]+$"
+
+overlay_resolution:
+  precedence:
+    - action_family_policy_overrides
+    - policy_overlay
+    - action_family_defaults
+  conflicting_explicit_values_fail_validation: true
+
+policy_overlays:
+  read_only:
+    effect_class: read
+    approval:
+      mode: never
+    external_side_effects:
+      mode: false
+    reconciliation:
+      required: false
+    offline_support: true
+    retention_default: standard
+
+  draft_only:
+    effect_class: draft
+    approval:
+      mode: never
+    external_side_effects:
+      mode: false
+    reconciliation:
+      required: false
+    offline_support: true
+    retention_default: standard
+
+  internal_mutation:
+    effect_class: mutate
+    approval:
+      mode: never
+    external_side_effects:
+      mode: false
+    reconciliation:
+      required: false
+    offline_support: true
+    retention_default: standard
+
+  send_with_approval:
+    effect_class: send
+    approval:
+      mode: always
+      binding: exact_action_fingerprint
+    external_side_effects:
+      mode: true
+    reconciliation:
+      required: true
+      retry_policy: no_blind_retry
+    offline_support: false
+    retention_default: long_term
+
+  external_execute_with_reconciliation:
+    effect_class: execute
+    approval:
+      mode: always
+      binding: exact_action_fingerprint
+    external_side_effects:
+      mode: true
+    reconciliation:
+      required: true
+      retry_policy: no_blind_retry
+    offline_support: false
+    retention_default: long_term
+
+  recovery_mutation:
+    effect_class: mutate
+    approval:
+      mode: conditional
+      condition_policy: recovery_action_policy
+    external_side_effects:
+      mode: conditional
+      condition_policy: recovery_target_external
+    reconciliation:
+      required: true
+      retry_policy: no_blind_retry
+    offline_support: true
+    retention_default: long_term
+
+  governance_read:
+    effect_class: read
+    approval:
+      mode: never
+    external_side_effects:
+      mode: false
+    reconciliation:
+      required: false
+    offline_support: true
+    retention_default: long_term
+
+  governance_mutation:
+    effect_class: mutate
+    approval:
+      mode: conditional
+      condition_policy: governance_change_policy
+    external_side_effects:
+      mode: false
+    reconciliation:
+      required: false
+    offline_support: true
+    retention_default: long_term
+
+action_families:
+  - id: AM-003
+    name: Create note
+    lifecycle_status: active
+    owner: notes_domain
+    version: 1
+    classification:
+      verb: create
+      object: note
+      domains: [business, home, workshop, shared]
+      capability: notes
+    policy_overlay: internal_mutation
+    sensitivity:
+      mode: parameter_derived
+      parameter: sensitivity
+      allowed: [internal, private, secret]
+      default: private
+    execution:
+      external_side_effects:
+        mode: false
+      offline_support: true
+    idempotency:
+      enabled: true
+      key_strategy: normalized_payload_hash
+      scope: owner_and_action_family
+      replay_policy: return_original_result
+      collision_policy: reject_and_log
+    bindings:
+      executor_id: TOOL-NOTES-CREATE
+      state_target_id: STORE-NOTES
+      tool_contract_version: "1"
+    state_impact:
+      entity: note
+      transition: create
+    reconciliation:
+      required: false
+    traceability:
+      requirements:
+        primary: [R-030, R-034]
+        supporting: [R-031, R-032, R-033, R-035, R-036, R-037, R-038]
+      test_ids: [TEST-AM-003-001, TEST-AM-003-NEG-001]
+      evidence_ids: [EVD-AM-003-001]
+    parameters:
+      - name: title
+        type: string
+        required: true
+        constraints:
+          min_length: 1
+          max_length: 200
+      - name: body
+        type: string
+        required: true
+      - name: tags
+        type: array[string]
+        required: false
+      - name: domain
+        type: enum
+        required: true
+        values: [business, home, workshop, shared]
+      - name: sensitivity
+        type: enum
+        required: true
+        values: [internal, private, secret]
+      - name: retention
+        type: enum
+        required: false
+        values: [ephemeral, standard, long_term]
+
+  - id: AM-012
+    name: Finalize quote
+    lifecycle_status: planned
+    owner: quoting_domain
+    version: 1
+    classification:
+      verb: finalize
+      object: quote
+      domains: [business]
+      capability: quoting
+    policy_overlay: internal_mutation
+    sensitivity:
+      mode: fixed
+      value: private
+    execution:
+      external_side_effects:
+        mode: false
+      offline_support: true
+    idempotency:
+      enabled: true
+      key_strategy: quote_revision_fingerprint
+      scope: owner_quote_revision
+      replay_policy: return_original_result
+      collision_policy: reject_and_log
+    bindings:
+      executor_id: TOOL-QUOTE-FINALIZE
+      state_target_id: STORE-QUOTES
+      tool_contract_version: "1"
+    state_impact:
+      entity: quote
+      from: [draft, reviewed]
+      to: finalized
+    reconciliation:
+      required: false
+    traceability:
+      requirements:
+        primary: [R-034, R-073]
+        supporting: [R-035, R-036, R-037, R-038, R-074, R-075, R-076]
+      test_ids: [TEST-AM-012-001, TEST-AM-012-NEG-001]
+      evidence_ids: [EVD-AM-012-001]
+    parameters:
+      - name: quote_id
+        type: string
+        required: true
+      - name: quote_revision
+        type: integer
+        required: true
+      - name: total
+        type: number
+        required: true
+      - name: currency
+        type: string
+        required: true
+        default: AUD
+      - name: validity_days
+        type: integer
+        required: false
+      - name: include_terms
+        type: boolean
+        required: false
+        default: true
+
+  - id: AM-013
+    name: Send quote
+    lifecycle_status: planned
+    owner: quoting_domain
+    version: 1
+    classification:
+      verb: send
+      object: quote
+      domains: [business]
+      capability: quoting
+    policy_overlay: send_with_approval
+    policy_overrides:
+      approver_scope: business_owner
+    sensitivity:
+      mode: fixed
+      value: private
+    execution:
+      external_side_effects:
+        mode: true
+      offline_support: false
+    approval:
+      mode: always
+      binding: exact_action_fingerprint
+      fingerprint_fields:
+        - action_family_id
+        - owner_id
+        - quote_id
+        - quote_revision
+        - recipient
+        - delivery_channel
+    idempotency:
+      enabled: true
+      key_strategy: quote_send_fingerprint
+      scope: owner_quote_revision_recipient_channel
+      replay_policy: return_original_result
+      collision_policy: reject_and_log
+    bindings:
+      executor_id: TOOL-QUOTE-SEND
+      state_target_id: STORE-QUOTES
+      tool_contract_version: "1"
+    state_impact:
+      entity: quote
+      from: [finalized]
+      to: sent
+    reconciliation:
+      required: true
+      strategy: provider_status_then_internal_record
+      indeterminate_state: Indeterminate
+      success_state: Reconciled
+      retry_policy: no_blind_retry
+      correlation_field: correlation_id
+      provider_reference_required: true
+    traceability:
+      requirements:
+        primary: [R-044, R-055, R-095, R-141]
+        supporting: [R-045, R-046, R-047, R-048, R-049, R-050, R-051, R-052, R-053, R-054, R-082, R-083, R-084, R-085, R-086, R-087, R-088, R-089, R-090, R-096, R-097, R-098, R-142, R-143]
+      test_ids: [TEST-AM-013-001, TEST-AM-013-NEG-001, TEST-AM-013-IND-001]
+      evidence_ids: [EVD-AM-013-001]
+    parameters:
+      - name: quote_id
+        type: string
+        required: true
+      - name: quote_revision
+        type: integer
+        required: true
+      - name: recipient
+        type: string
+        required: true
+      - name: delivery_channel
+        type: enum
+        required: true
+        values: [email]
+
+workflows:
+  - id: WF-QUOTE-001
+    name: Finalize and send quote
+    lifecycle_status: planned
+    owner: quoting_domain
+    steps:
+      - sequence: 1
+        action_family: AM-012
+      - sequence: 2
+        action_family: AM-013
+        requires_success_of: AM-012
+    failure_policy:
+      stop_on_failure: true
+      preserve_completed_steps: true
+      reconcile_indeterminate_external_step: true
+
+variant_rules:
+  new_variant_allowed_when:
+    - same_action_family
+    - same_core_effect_class
+    - same_safety_model
+    - same_tool_family
+  split_into_new_family_when:
+    - approval_model_changes
+    - reconciliation_model_changes
+    - external_side_effect_model_changes
+    - sensitivity_model_changes_materially
+    - state_target_changes_materially
+
+validation:
+  fail_if:
+    - unknown_requirement_reference
+    - missing_policy_overlay
+    - unknown_policy_overlay
+    - conflicting_explicit_policy_values
+    - missing_effect_class_after_overlay_resolution
+    - missing_sensitivity_model
+    - invalid_approval_mode
+    - missing_approval_policy_when_required
+    - missing_fingerprint_policy_when_approval_required
+    - missing_fingerprint_policy_for_external_side_effect
+    - missing_reconciliation_for_external_side_effect
+    - unknown_tool_binding
+    - unknown_state_target
+    - incompatible_tool_contract_version
+    - recycled_or_missing_test_id
+    - recycled_or_missing_evidence_id
+    - generated_view_used_as_source_of_truth
+    - invalid_action_family_id
+    - invalid_workflow_id
+    - workflow_references_unknown_action_family
+
+generation:
+  generated_action_map:
+    source: action_families
+    overlays: policy_overlays
+    output: docs/traceability/action-map.generated.md
+    authoritative: false
+    sort_by: [domain, capability, id]
+    include_fields:
+      - id
+      - name
+      - lifecycle_status
+      - domains
+      - capability
+      - requirements
+      - resolved_effect_class
+      - sensitivity
+      - offline_support
+      - approval
+      - idempotency
+      - bindings
+      - state_impact
+      - reconciliation
+      - tests
+      - evidence
