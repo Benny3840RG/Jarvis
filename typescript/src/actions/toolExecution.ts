@@ -166,21 +166,41 @@ export class ToolExecutionService {
     key: string,
   ): Promise<ToolExecutionReceipt> {
     const startedAt = new Date().toISOString();
-    const definition = this.definitions.get(`${input.action.tool}:${input.action.operation}`);
+    const definition = this.definitions.get(
+      `${input.action.tool}:${input.action.operation}`,
+    );
 
     if (
       input.action.state !== "approved" ||
       AUTHORITY_LEVEL[input.authority] < AUTHORITY_LEVEL[input.action.requiredAuthority]
     ) {
-      return receipt(input.action, input.idempotencyKey, "blocked", "not-authorized", startedAt);
+      return receipt(
+        input.action,
+        input.idempotencyKey,
+        "blocked",
+        "not-authorized",
+        startedAt,
+      );
     }
     if (!definition) {
-      return receipt(input.action, input.idempotencyKey, "blocked", "not-allowlisted", startedAt);
+      return receipt(
+        input.action,
+        input.idempotencyKey,
+        "blocked",
+        "not-allowlisted",
+        startedAt,
+      );
     }
 
     const parsed = definition.schema.safeParse(input.action.arguments);
     if (!parsed.success) {
-      return receipt(input.action, input.idempotencyKey, "blocked", "invalid-arguments", startedAt);
+      return receipt(
+        input.action,
+        input.idempotencyKey,
+        "blocked",
+        "invalid-arguments",
+        startedAt,
+      );
     }
     if (input.dryRun) {
       return receipt(input.action, input.idempotencyKey, "dry-run", undefined, startedAt);
@@ -203,7 +223,13 @@ export class ToolExecutionService {
         ),
       ]);
       const result: ToolExecutionReceipt = {
-        ...receipt(input.action, input.idempotencyKey, "succeeded", undefined, startedAt),
+        ...receipt(
+          input.action,
+          input.idempotencyKey,
+          "succeeded",
+          undefined,
+          startedAt,
+        ),
         outputDigest: digest(output),
       };
       await this.receipts.save(key, result);
