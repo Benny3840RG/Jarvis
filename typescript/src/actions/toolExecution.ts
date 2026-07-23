@@ -5,17 +5,30 @@ import type { z } from "zod";
 import type { ToolAction } from "./toolActions.js";
 import type { ToolAuthority } from "../runtime/totalityPolicy.js";
 
-export type ToolExecutionStatus = "dry-run" | "succeeded" | "failed" | "timed-out" | "blocked";
+export type ToolExecutionStatus =
+  | "dry-run"
+  | "succeeded"
+  | "failed"
+  | "indeterminate"
+  | "blocked";
 
 export type ToolExecutionReceipt = {
   receiptId: string;
   actionId: string;
+  projectId: string;
   idempotencyKey: string;
+  actionFingerprint: string;
   tool: string;
   operation: string;
   status: ToolExecutionStatus;
   outputDigest?: string;
-  errorCode?: "not-authorized" | "not-allowlisted" | "invalid-arguments" | "timeout" | "failed";
+  errorCode?:
+    | "not-authorized"
+    | "not-allowlisted"
+    | "invalid-arguments"
+    | "indeterminate"
+    | "failed"
+    | "fingerprint-mismatch";
   startedAt: string;
   completedAt: string;
 };
@@ -53,11 +66,24 @@ function digest(value: unknown): string {
     .digest("hex");
 }
 
+export function fingerprintToolAction(action: ToolAction): string {
+  return digest({
+    actionId: action.actionId,
+    projectId: action.projectId,
+    baseRevision: action.baseRevision,
+    tool: action.tool,
+    operation: action.operation,
+    arguments: action.arguments,
+    requiredAuthority: action.requiredAuthority,
+    destructive: action.destructive,
+  });
+}
+
 function receiptId(action: ToolAction, idempotencyKey: string): string {
   return digest(`${action.actionId}:${idempotencyKey}`).slice(0, 32);
 }
 
-function blockedReceipt(
+function receipt(
   action: ToolAction,
   idempotencyKey: string,
   status: ToolExecutionStatus,
@@ -67,7 +93,9 @@ function blockedReceipt(
   return {
     receiptId: receiptId(action, idempotencyKey),
     actionId: action.actionId,
+    projectId: action.projectId,
     idempotencyKey,
+    actionFingerprint: fingerprintToolAction(action),
     tool: action.tool,
     operation: action.operation,
     status,
@@ -79,6 +107,7 @@ function blockedReceipt(
 
 export class ToolExecutionService {
   private readonly definitions = new Map<string, ToolExecutionDefinition>();
+  private readonly inFlight = new Map<string, Promise<ToolExecutionReceipt>>();
 
   constructor(
     definitions: readonly ToolExecutionDefinition[],
@@ -98,58 +127,70 @@ export class ToolExecutionService {
     timeoutMs?: number;
     dryRun?: boolean;
   }): Promise<ToolExecutionReceipt> {
-    const startedAt = new Date().toISOString();
     const key = `${input.action.actionId}:${input.idempotencyKey}`;
+    const expectedFingerprint = fingerprintToolAction(input.action);
     const existing = await this.receipts.get(key);
-    if (existing) return existing;
+    if (existing) {
+      if (existing.actionFingerprint !== expectedFingerprint) {
+        return receipt(
+          input.action,
+          input.idempotencyKey,
+          "blocked",
+          "fingerprint-mismatch",
+          new Date().toISOString(),
+        );
+      }
+      return existing;
+    }
 
+    const active = this.inFlight.get(key);
+    if (active) return active;
+
+    const execution = this.executeOnce(input, key);
+    this.inFlight.set(key, execution);
+    try {
+      return await execution;
+    } finally {
+      this.inFlight.delete(key);
+    }
+  }
+
+  private async executeOnce(
+    input: {
+      action: ToolAction;
+      authority: ToolAuthority;
+      idempotencyKey: string;
+      timeoutMs?: number;
+      dryRun?: boolean;
+    },
+    key: string,
+  ): Promise<ToolExecutionReceipt> {
+    const startedAt = new Date().toISOString();
     const definition = this.definitions.get(`${input.action.tool}:${input.action.operation}`);
+
     if (
       input.action.state !== "approved" ||
       AUTHORITY_LEVEL[input.authority] < AUTHORITY_LEVEL[input.action.requiredAuthority]
     ) {
-      const receipt = blockedReceipt(
-        input.action,
-        input.idempotencyKey,
-        "blocked",
-        "not-authorized",
-        startedAt,
-      );
-      await this.receipts.save(key, receipt);
-      return receipt;
+      return receipt(input.action, input.idempotencyKey, "blocked", "not-authorized", startedAt);
     }
     if (!definition) {
-      const receipt = blockedReceipt(
-        input.action,
-        input.idempotencyKey,
-        "blocked",
-        "not-allowlisted",
-        startedAt,
-      );
-      await this.receipts.save(key, receipt);
-      return receipt;
+      return receipt(input.action, input.idempotencyKey, "blocked", "not-allowlisted", startedAt);
     }
 
     const parsed = definition.schema.safeParse(input.action.arguments);
     if (!parsed.success) {
-      const receipt = blockedReceipt(
-        input.action,
-        input.idempotencyKey,
-        "blocked",
-        "invalid-arguments",
-        startedAt,
-      );
-      await this.receipts.save(key, receipt);
-      return receipt;
+      return receipt(input.action, input.idempotencyKey, "blocked", "invalid-arguments", startedAt);
     }
     if (input.dryRun) {
-      return blockedReceipt(input.action, input.idempotencyKey, "dry-run", undefined, startedAt);
+      return receipt(input.action, input.idempotencyKey, "dry-run", undefined, startedAt);
     }
 
     const timeoutMs = input.timeoutMs ?? 5_000;
     if (!Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > MAX_TIMEOUT_MS) {
       throw new Error(`timeoutMs must be an integer between 1 and ${MAX_TIMEOUT_MS}.`);
     }
+
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
     try {
@@ -161,23 +202,23 @@ export class ToolExecutionService {
           }),
         ),
       ]);
-      const receipt: ToolExecutionReceipt = {
-        ...blockedReceipt(input.action, input.idempotencyKey, "succeeded", undefined, startedAt),
+      const result: ToolExecutionReceipt = {
+        ...receipt(input.action, input.idempotencyKey, "succeeded", undefined, startedAt),
         outputDigest: digest(output),
       };
-      await this.receipts.save(key, receipt);
-      return receipt;
+      await this.receipts.save(key, result);
+      return result;
     } catch (error: unknown) {
       const timedOut = error instanceof Error && error.message === "timeout";
-      const receipt = blockedReceipt(
+      const result = receipt(
         input.action,
         input.idempotencyKey,
-        timedOut ? "timed-out" : "failed",
-        timedOut ? "timeout" : "failed",
+        timedOut ? "indeterminate" : "failed",
+        timedOut ? "indeterminate" : "failed",
         startedAt,
       );
-      await this.receipts.save(key, receipt);
-      return receipt;
+      await this.receipts.save(key, result);
+      return result;
     } finally {
       clearTimeout(timeout);
     }
