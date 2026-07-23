@@ -6,6 +6,7 @@ on:
       - 'docs/requirements/**'
       - 'docs/traceability/**'
       - 'docs/governance/**'
+      - 'scripts/generate-action-map.rb'
       - '.github/workflows/governance-validation.yml'
   push:
     branches: [main]
@@ -13,6 +14,7 @@ on:
       - 'docs/requirements/**'
       - 'docs/traceability/**'
       - 'docs/governance/**'
+      - 'scripts/generate-action-map.rb'
       - '.github/workflows/governance-validation.yml'
 
 permissions:
@@ -37,14 +39,19 @@ jobs:
             docs/traceability/test-matrix.md
             docs/traceability/evidence-matrix.md
             docs/traceability/action-family-registry.yaml
+            docs/traceability/action-map.generated.md
             docs/governance/decision-register.md
             docs/governance/gap-register.md
             docs/governance/risk-register.md
             docs/governance/handover-dossier.md
+            scripts/generate-action-map.rb
           )
           for file in "${required[@]}"; do
             test -f "$file" || { echo "Missing required governance artifact: $file"; exit 1; }
           done
+
+      - name: Validate generated action map
+        run: ruby scripts/generate-action-map.rb --check
 
       - name: Validate frozen namespace and deployment boundary
         shell: python
