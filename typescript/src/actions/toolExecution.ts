@@ -35,11 +35,25 @@ export type ToolExecutionReceipt = {
   completedAt: string;
 };
 
+export type ToolExecutionContext = {
+  action: ToolAction;
+  idempotencyKey: string;
+  actionFingerprint: string;
+  correlationId: string;
+  source: string;
+  approvalId?: string;
+  policyVersion: string;
+};
+
 export type ToolExecutionDefinition = {
   tool: string;
   operation: string;
   schema: z.ZodType<Record<string, unknown>>;
-  execute: (argumentsValue: Record<string, unknown>, signal: AbortSignal) => Promise<unknown>;
+  execute: (
+    argumentsValue: Record<string, unknown>,
+    signal: AbortSignal,
+    context: ToolExecutionContext,
+  ) => Promise<unknown>;
 };
 
 export interface ToolExecutionReceiptStore {
@@ -280,9 +294,19 @@ export class ToolExecutionService {
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    const actionFingerprint = fingerprintToolAction(input.action);
+    const context: ToolExecutionContext = {
+      action: input.action,
+      idempotencyKey: input.idempotencyKey,
+      actionFingerprint,
+      correlationId: input.correlationId ?? input.action.requestId,
+      source: input.source ?? "tool-execution-service",
+      ...(input.approvalId === undefined ? {} : { approvalId: input.approvalId }),
+      policyVersion: input.policyVersion ?? "totality-policy:v1",
+    };
     try {
       const output = await Promise.race([
-        definition.execute(parsed.data, controller.signal),
+        definition.execute(parsed.data, controller.signal, context),
         new Promise<never>((_, reject) =>
           controller.signal.addEventListener("abort", () => reject(new Error("timeout")), {
             once: true,
