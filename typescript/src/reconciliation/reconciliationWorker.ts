@@ -64,7 +64,9 @@ function positiveInteger(value: number, name: string): number {
 function cleanErrorCode(value: unknown): string {
   if (!(value instanceof Error)) return "provider-reconciliation-error";
   const message = value.message.trim();
-  return message ? `provider-reconciliation-error:${message}` : "provider-reconciliation-error";
+  return message
+    ? `provider-reconciliation-error:${message}`
+    : "provider-reconciliation-error";
 }
 
 export class ReconciliationWorker {
@@ -81,9 +83,18 @@ export class ReconciliationWorker {
     this.registry = new ProviderAdapterRegistry(options.adapters);
     this.now = options.now ?? Date.now;
     this.leaseToken = options.leaseToken ?? randomUUID;
-    this.maxAttempts = positiveInteger(options.maxAttempts ?? 5, "Maximum reconciliation attempts");
-    this.baseRetryMs = positiveInteger(options.baseRetryMs ?? 1_000, "Base reconciliation retry");
-    this.maxRetryMs = positiveInteger(options.maxRetryMs ?? 60_000, "Maximum reconciliation retry");
+    this.maxAttempts = positiveInteger(
+      options.maxAttempts ?? 5,
+      "Maximum reconciliation attempts",
+    );
+    this.baseRetryMs = positiveInteger(
+      options.baseRetryMs ?? 1_000,
+      "Base reconciliation retry",
+    );
+    this.maxRetryMs = positiveInteger(
+      options.maxRetryMs ?? 60_000,
+      "Maximum reconciliation retry",
+    );
     if (this.baseRetryMs > this.maxRetryMs) {
       throw new Error("Base reconciliation retry cannot exceed the maximum retry.");
     }
@@ -123,14 +134,24 @@ export class ReconciliationWorker {
     const adapter = this.registry.get(reference.provider);
     if (!adapter) {
       const reason = `unknown-provider:${reference.provider}`;
-      return this.release(reconciliationId, input.workerId, leaseToken, now, reason, now, 1);
+      return this.release(
+        reconciliationId,
+        input.workerId,
+        leaseToken,
+        now,
+        reason,
+        now,
+        1,
+      );
     }
 
     let providerResult: ProviderReconciliationResult;
     try {
       providerResult = await adapter.reconcile(reference, input.signal);
     } catch (error: unknown) {
-      const errorCode = input.signal.aborted ? "provider-reconciliation-aborted" : cleanErrorCode(error);
+      const errorCode = input.signal.aborted
+        ? "provider-reconciliation-aborted"
+        : cleanErrorCode(error);
       const nextAttemptAt = now + this.retryDelay(claim.reconciliation.attemptCount);
       return this.release(
         reconciliationId,
@@ -207,6 +228,10 @@ export class ReconciliationWorker {
         reason: released.escalationReason ?? errorCode,
       };
     }
-    return { status: "released", reconciliationId, nextAttemptAt: released.nextAttemptAt };
+    return {
+      status: "released",
+      reconciliationId,
+      nextAttemptAt: released.nextAttemptAt,
+    };
   }
 }
