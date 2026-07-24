@@ -14,6 +14,8 @@ import type * as auditEvents from "../auditEvents.js";
 import type * as authHelpers from "../authHelpers.js";
 import type * as buildLogs from "../buildLogs.js";
 import type * as builds from "../builds.js";
+import type * as externalReconciliations from "../externalReconciliations.js";
+import type * as externalReconciliationValidators from "../externalReconciliationValidators.js";
 import type * as memoryChangeSetLogic from "../memoryChangeSetLogic.js";
 import type * as memoryChangeSets from "../memoryChangeSets.js";
 import type * as memoryChangeSetValidators from "../memoryChangeSetValidators.js";
@@ -47,6 +49,8 @@ declare const fullApi: ApiFromModules<{
   authHelpers: typeof authHelpers;
   buildLogs: typeof buildLogs;
   builds: typeof builds;
+  externalReconciliations: typeof externalReconciliations;
+  externalReconciliationValidators: typeof externalReconciliationValidators;
   memoryChangeSetLogic: typeof memoryChangeSetLogic;
   memoryChangeSets: typeof memoryChangeSets;
   memoryChangeSetValidators: typeof memoryChangeSetValidators;
