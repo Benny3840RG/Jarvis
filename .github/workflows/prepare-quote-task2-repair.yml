@@ -1,0 +1,117 @@
+name: Prepare quote task 2 repair
+
+on:
+  push:
+    branches:
+      - fix/quote-task2-review
+    paths:
+      - .github/workflows/prepare-quote-task2-repair.yml
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CONVEX_DEPLOYMENT: dev:outgoing-ram-798
+      CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: fix/quote-task2-review
+          fetch-depth: 0
+
+      - name: Publish exact preparation run
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh pr comment 176 --body "Quote Task 2 repair preparation: https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}\n\n- Source: \`${GITHUB_SHA}\`\n- Operation: dependency install, local codegen and tests only; no deployment sync"
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: typescript/.nvmrc
+          cache: npm
+          cache-dependency-path: typescript/package-lock.json
+
+      - name: Install locked dependencies
+        working-directory: typescript
+        run: npm ci
+
+      - name: Remove caller-authorised cleanup
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path("typescript/convex/quotes.ts")
+          source = path.read_text()
+          source = source.replace("const MAX_CLEANUP_REVISIONS = 1_000;\n", "")
+          marker = "\nexport const cleanupDevelopmentQuote = mutation({"
+          if marker not in source:
+              raise SystemExit("cleanupDevelopmentQuote marker missing")
+          source = source[:source.index(marker)].rstrip() + "\n"
+          path.write_text(source)
+          PY
+
+      - name: Install pinned Convex test harness
+        working-directory: typescript
+        run: |
+          npm install --save-dev --save-exact \
+            convex-test@0.0.54 \
+            vitest@1.6.1 \
+            @edge-runtime/vm@5.0.0
+
+      - name: Wire persisted tests into standard test commands
+        working-directory: typescript
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from "node:fs";
+          const path = "package.json";
+          const packageJson = JSON.parse(fs.readFileSync(path, "utf8"));
+          packageJson.scripts["test:node"] = "node --import tsx --test tests/*.test.ts";
+          packageJson.scripts["test:convex"] = "vitest run --config vitest.config.mts";
+          packageJson.scripts.test = "npm run test:node && npm run test:convex";
+          packageJson.scripts["test:coverage"] =
+            "node --import tsx --test --experimental-test-coverage tests/*.test.ts && npm run test:convex";
+          fs.writeFileSync(path, `${JSON.stringify(packageJson, null, 2)}\n`);
+          NODE
+
+      - name: Regenerate Convex bindings without syncing functions
+        working-directory: typescript
+        run: npx convex codegen --typecheck=disable
+
+      - name: Format repair files
+        working-directory: typescript
+        run: |
+          npm exec prettier -- --write \
+            package.json \
+            package-lock.json \
+            vitest.config.mts \
+            convex/test.setup.ts \
+            convex/quotes.test.ts \
+            convex/quotes.ts \
+            convex/_generated/api.d.ts \
+            tests/quoteConvexContracts.test.ts
+
+      - name: Verify focused repair
+        working-directory: typescript
+        run: |
+          npm run type-check
+          npm run lint
+          npm run format:check
+          node --import tsx --test tests/quoteConvexContracts.test.ts
+          npm run test:convex
+
+      - name: Remove preparer and commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          rm .github/workflows/prepare-quote-task2-repair.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix(quotes): add persisted Convex lifecycle verification"
+          git push origin HEAD:fix/quote-task2-review
+          gh pr comment 176 --body "Quote Task 2 repair preparation passed in run https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}; preparer removed itself."
