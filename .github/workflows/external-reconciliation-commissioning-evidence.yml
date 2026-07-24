@@ -1,0 +1,122 @@
+name: External reconciliation commissioning evidence
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/external-reconciliation-commissioning-evidence.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: external-reconciliation-development-commissioning
+  cancel-in-progress: false
+
+jobs:
+  commission-external-reconciliation:
+    name: Commission external reconciliation on authorised development
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CONVEX_DEPLOYMENT: dev:outgoing-ram-798
+      CONVEX_URL: https://outgoing-ram-798.convex.cloud
+      PERSISTENCE_PROVIDER: convex
+      JARVIS_TIMEZONE: Australia/Melbourne
+      JARVIS_SOURCE_VERSION: ${{ github.sha }}
+      JARVIS_DEPLOYMENT_VERSION: dev:outgoing-ram-798
+      CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
+      JARVIS_SERVICE_TOKEN: ${{ secrets.JARVIS_SERVICE_TOKEN }}
+
+    defaults:
+      run:
+        working-directory: typescript
+        shell: bash
+
+    steps:
+      - name: Check out exact main commit
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Guard authorised source and target
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_REF" != "refs/heads/main" ]]; then
+            echo "::error::Evidence commissioning may run only from main."
+            exit 1
+          fi
+          if [[ "$CONVEX_DEPLOYMENT" != "dev:outgoing-ram-798" ]]; then
+            echo "::error::Unexpected Convex deployment identity."
+            exit 1
+          fi
+          if [[ "$CONVEX_URL" != "https://outgoing-ram-798.convex.cloud" ]]; then
+            echo "::error::Unexpected Convex deployment URL."
+            exit 1
+          fi
+          git merge-base --is-ancestor 0646b1a1f1fff13e12913259c2618d50fe334526 "$GITHUB_SHA"
+          for variable in CONVEX_DEPLOY_KEY JARVIS_SERVICE_TOKEN; do
+            if [[ -z "${!variable:-}" ]]; then
+              echo "::error::Required repository secret $variable is unavailable."
+              exit 1
+            fi
+          done
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: typescript/.nvmrc
+          cache: npm
+          cache-dependency-path: typescript/package-lock.json
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Run complete verification gate
+        run: |
+          env \
+            -u CONVEX_DEPLOYMENT \
+            -u CONVEX_URL \
+            -u PERSISTENCE_PROVIDER \
+            -u JARVIS_SOURCE_VERSION \
+            -u JARVIS_DEPLOYMENT_VERSION \
+            -u CONVEX_DEPLOY_KEY \
+            -u JARVIS_SERVICE_TOKEN \
+            npm run check
+
+      - name: Sync functions to authorised development deployment
+        run: npx convex dev --once --tail-logs disable
+
+      - name: Run self-cleaning Convex smoke including external reconciliation
+        run: npm run smoke:convex
+
+      - name: Build immutable evidence manifest
+        run: |
+          set -euo pipefail
+          evidence_dir="$RUNNER_TEMP/external-reconciliation-evidence"
+          mkdir -p "$evidence_dir"
+          manifest="$evidence_dir/manifest.md"
+          cat >"$manifest" <<EOF
+          # External Reconciliation — Development Commissioning Evidence
+
+          - Runtime merge: \`0646b1a1f1fff13e12913259c2618d50fe334526\`
+          - Workflow source: \`$GITHUB_SHA\`
+          - Workflow run: \`$GITHUB_RUN_ID\`
+          - Workflow attempt: \`$GITHUB_RUN_ATTEMPT\`
+          - Deployment: \`dev:outgoing-ram-798\`
+          - URL: \`https://outgoing-ram-798.convex.cloud\`
+          - Complete verification gate: passed
+          - Convex development sync: passed
+          - Self-cleaning Convex smoke including external reconciliation: passed
+          - Production deployment: not authorised and not performed
+          - External action activation: not performed
+          EOF
+          sha256sum "$manifest" >"$evidence_dir/manifest.sha256"
+
+      - name: Upload immutable evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: external-reconciliation-development-commissioning-${{ github.run_id }}
+          path: ${{ runner.temp }}/external-reconciliation-evidence
+          if-no-files-found: error
+          retention-days: 90
