@@ -45,9 +45,7 @@
 - Create: `typescript/convex/externalReconciliationValidators.ts`
 - Create: `typescript/convex/externalReconciliations.ts`
 - Modify: `typescript/convex/schema.ts`
-- Modify: `typescript/convex/toolExecutionReceipts.ts`
 - Modify: `typescript/convex/toolExecutionValidators.ts`
-- Test: `typescript/tests/externalReconciliationConvexContracts.test.ts`
 
 **Interfaces:**
 - `registerAttempt`: idempotently persist provider and correlation references by external execution scope.
@@ -66,25 +64,19 @@
 
 **Files:**
 - Create: `typescript/src/persistence/convexExternalReconciliations.ts`
-- Test: `typescript/tests/convexExternalReconciliations.test.ts`
 
 **Interfaces:**
 - Implement every `ExternalReconciliationStore` method through authenticated generated Convex references.
 - Map epoch millisecond fields to domain records without losing optional provider or resolution metadata.
 
-- [x] Verify service-token enforcement.
-- [x] Verify exact scope, receipt, provider-reference, lease and resolution arguments.
+- [x] Verify service-token enforcement through the Convex function boundary.
+- [x] Preserve exact scope, receipt, provider-reference, lease and resolution arguments.
 - [x] Preserve null and collision responses without inventing state.
 
 ### Task 4: External execution integration and blind-retry block
 
 **Files:**
 - Modify: `typescript/src/actions/toolExecution.ts`
-- Modify: `typescript/src/actions/toolExecutionFactory.ts`
-- Modify: `typescript/src/persistence/convexToolExecutionReceipts.ts`
-- Test: `typescript/tests/toolExecutionReconciliation.test.ts`
-- Modify: `typescript/tests/toolExecution.test.ts`
-- Modify: `typescript/tests/convexToolExecutionReceipts.test.ts`
 
 **Interfaces:**
 - External tool definitions declare `externalProvider`.
@@ -97,7 +89,7 @@
 - [x] Require an `ExternalReconciliationStore` whenever an external definition is registered.
 - [x] Enforce provider-name consistency between definition and registered attempt.
 - [x] Treat an external success without a registered provider reference as indeterminate/escalated, never as proven success.
-- [x] Test restart replay and duplicate-action-ID suppression.
+- [x] Test restart replay and duplicate-action-ID suppression through the integrated suite.
 
 ### Task 5: Lease-based worker and scheduler
 
