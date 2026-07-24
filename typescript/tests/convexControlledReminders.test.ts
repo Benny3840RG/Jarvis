@@ -125,7 +125,9 @@ describe("ConvexControlledReminderStore", () => {
       async mutation(_ref: unknown, args: unknown) {
         calls.push(args);
         const values = args as Record<string, unknown>;
-        return "title" in values ? reminderRow({ dueRaw: undefined, dueAt: undefined, dueTimezone: undefined }) : null;
+        return "title" in values
+          ? reminderRow({ dueRaw: undefined, dueAt: undefined, dueTimezone: undefined })
+          : null;
       },
     } as unknown as ConvexClientLike;
     const store = new ConvexControlledReminderStore(client, "owner-service-token");

@@ -1,6 +1,9 @@
 import { randomUUID } from "node:crypto";
 
-import type { ControlledReminderRecord, ControlledReminderStore } from "../reminders/controlledReminder.js";
+import type {
+  ControlledReminderRecord,
+  ControlledReminderStore,
+} from "../reminders/controlledReminder.js";
 import type { ControlledTaskRecord, ControlledTaskStore } from "../tasks/controlledTask.js";
 import type { SmokeWriter } from "./convexSmoke.js";
 
@@ -84,7 +87,10 @@ export async function runTaskReminderActionsSmoke(
     requireCondition(taskReplay.id === task.id, "tasks: create replay produced a second record.");
 
     const fetchedTask = await makeTaskStore().get(projectId, task.id);
-    requireCondition(fetchedTask?.id === task.id, "tasks: fresh store could not fetch created task.");
+    requireCondition(
+      fetchedTask?.id === task.id,
+      "tasks: fresh store could not fetch created task.",
+    );
 
     const taskComplete = {
       projectId,
@@ -100,7 +106,8 @@ export async function runTaskReminderActionsSmoke(
     requireCondition(completed.revision === 2, "tasks: completion revision mismatch.");
     const completionReplay = await makeTaskStore().complete(taskComplete);
     requireCondition(
-      completionReplay?.id === completed.id && completionReplay.completedAt === completed.completedAt,
+      completionReplay?.id === completed.id &&
+        completionReplay.completedAt === completed.completedAt,
       "tasks: completion replay did not return the original result.",
     );
 
@@ -129,7 +136,10 @@ export async function runTaskReminderActionsSmoke(
       source: "development-commissioning",
     };
     const cancelled = await makeReminderStore().cancel(reminderCancel);
-    requireCondition(cancelled?.cancelledAt !== undefined, "reminders: cancellation result missing.");
+    requireCondition(
+      cancelled?.cancelledAt !== undefined,
+      "reminders: cancellation result missing.",
+    );
     requireCondition(cancelled.revision === 2, "reminders: cancellation revision mismatch.");
     const cancellationReplay = await makeReminderStore().cancel(reminderCancel);
     requireCondition(
@@ -138,7 +148,10 @@ export async function runTaskReminderActionsSmoke(
       "reminders: cancellation replay did not return the retained result.",
     );
     const afterCancellation = await makeReminderStore().get(projectId, reminder.id);
-    requireCondition(afterCancellation === null, "reminders: live record remained after cancellation.");
+    requireCondition(
+      afterCancellation === null,
+      "reminders: live record remained after cancellation.",
+    );
 
     requireCondition(
       await makeTaskStore().cleanup(projectId, task.id),

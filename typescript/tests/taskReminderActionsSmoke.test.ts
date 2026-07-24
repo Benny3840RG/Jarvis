@@ -97,7 +97,8 @@ class MemoryTaskStore implements ControlledTaskStore {
     const removed = record?.projectId === projectId;
     if (removed) this.state.tasks.delete(taskId);
     for (const [key, value] of this.state.taskCreateResults) {
-      if (value.projectId === projectId && value.id === taskId) this.state.taskCreateResults.delete(key);
+      if (value.projectId === projectId && value.id === taskId)
+        this.state.taskCreateResults.delete(key);
     }
     for (const [key, value] of this.state.taskCompleteResults) {
       if (value.projectId === projectId && value.id === taskId) {

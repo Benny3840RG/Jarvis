@@ -135,9 +135,6 @@ describe("ConvexControlledTaskStore", () => {
       null,
     );
     assert.equal(await store.get("project-1", "missing"), null);
-    assert.throws(
-      () => new ConvexControlledTaskStore(client, ""),
-      /require JARVIS_SERVICE_TOKEN/,
-    );
+    assert.throws(() => new ConvexControlledTaskStore(client, ""), /require JARVIS_SERVICE_TOKEN/);
   });
 });
