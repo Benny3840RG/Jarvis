@@ -1,0 +1,102 @@
+name: AM-003 development commissioning once
+
+on:
+  push:
+    branches:
+      - commission/am-003-dev-smoke-0ed8627
+    paths:
+      - ".github/workflows/am003-dev-commission-once.yml"
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: jarvis-am003-development-commissioning
+  cancel-in-progress: false
+
+jobs:
+  commission-am003-development:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      EXPECTED_SOURCE_SHA: 0ed8627b5b5b119444f2821bbe0a7380afb5ee87
+      CONVEX_DEPLOYMENT: dev:outgoing-ram-798
+      CONVEX_URL: https://outgoing-ram-798.convex.cloud
+      PERSISTENCE_PROVIDER: convex
+      JARVIS_TIMEZONE: Australia/Melbourne
+      JARVIS_SOURCE_VERSION: 0ed8627b5b5b119444f2821bbe0a7380afb5ee87
+      JARVIS_DEPLOYMENT_VERSION: dev:outgoing-ram-798
+      CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
+      JARVIS_SERVICE_TOKEN: ${{ secrets.JARVIS_SERVICE_TOKEN }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+
+    defaults:
+      run:
+        working-directory: typescript
+        shell: bash
+
+    steps:
+      - name: Check out exact merged source
+        uses: actions/checkout@v7
+        with:
+          ref: 0ed8627b5b5b119444f2821bbe0a7380afb5ee87
+
+      - name: Guard development boundary
+        run: |
+          set -euo pipefail
+          actual_sha="$(git rev-parse HEAD)"
+          [[ "$actual_sha" == "$EXPECTED_SOURCE_SHA" ]]
+          [[ "$CONVEX_DEPLOYMENT" == "dev:outgoing-ram-798" ]]
+          [[ "$CONVEX_URL" == "https://outgoing-ram-798.convex.cloud" ]]
+          for variable in CONVEX_DEPLOY_KEY JARVIS_SERVICE_TOKEN OPENAI_API_KEY; do
+            [[ -n "${!variable:-}" ]] || { echo "::error::Missing $variable"; exit 1; }
+          done
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: typescript/.nvmrc
+          cache: npm
+          cache-dependency-path: typescript/package-lock.json
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Run complete verification gate
+        run: |
+          env \
+            -u CONVEX_DEPLOYMENT \
+            -u CONVEX_URL \
+            -u PERSISTENCE_PROVIDER \
+            -u JARVIS_SOURCE_VERSION \
+            -u JARVIS_DEPLOYMENT_VERSION \
+            -u CONVEX_DEPLOY_KEY \
+            -u JARVIS_SERVICE_TOKEN \
+            -u OPENAI_API_KEY \
+            npm run check
+
+      - name: Sync exact source to authorised development deployment
+        run: npx convex dev --once --tail-logs disable
+
+      - name: Run self-cleaning Convex smoke suite
+        run: npm run smoke:convex
+
+      - name: Record commissioning result
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          set -euo pipefail
+          result_file="$RUNNER_TEMP/am003-commissioning-result.md"
+          cat >"$result_file" <<EOF
+          ## AM-003 development commissioning: ${JOB_STATUS}
+
+          - Source commit: \`${EXPECTED_SOURCE_SHA}\`
+          - Deployment: \`dev:outgoing-ram-798\`
+          - Verification, Convex sync and self-cleaning smoke: \`${JOB_STATUS}\`
+          - Production deployment: **not authorised and not performed**
+          - Workflow run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}
+          EOF
+          gh issue comment 150 --body-file "$result_file"
