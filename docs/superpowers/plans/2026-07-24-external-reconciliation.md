@@ -24,12 +24,14 @@
 
 - Runtime implementation branch: `feat/external-reconciliation-154`
 - Runtime PR: `#170`
+- Final reviewed source before this evidence-only commit: `6925974dcc4fc764fea87f232e02fe35be1dce55`
+- Permanent TypeScript verification run: `30078294682`
 - Implemented files include the Convex ledger, authenticated adapter, execution integration, worker, scheduler and development smoke.
 - Tests cover effect collisions, replay suppression, lease ownership, worker concurrency, unknown providers, scheduler overlap and smoke cleanup.
 - Final safety review proves resolution uses a post-provider timestamp and treats lease-expiry equality as stale.
 - Reconciliation read outages are audit-classified as `reconciliation-unavailable`; only known effect conflicts use `fingerprint-mismatch`.
 - Pinned formatting has been applied and all temporary formatter and patcher helpers have been removed from the final tree.
-- The permanent TypeScript workflow now matches `main` and is the only runtime merge gate.
+- The permanent TypeScript workflow matches `main` and is the only runtime merge gate.
 - All external action families remain planned until separate commissioning evidence and governance activation.
 
 ---
