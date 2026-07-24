@@ -44,10 +44,7 @@ async function main(): Promise<void> {
     () => new ConvexControlledReminderStore(),
     deployment,
   );
-  await runExternalReconciliationSmoke(
-    () => new ConvexExternalReconciliationStore(),
-    deployment,
-  );
+  await runExternalReconciliationSmoke(() => new ConvexExternalReconciliationStore(), deployment);
 }
 
 main().catch((error: unknown) => {
