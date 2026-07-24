@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+  normaliseAuditPayload,
   normaliseToolArguments,
   sameToolActionProposal,
   validateToolAuthority,
@@ -93,5 +94,33 @@ describe("tool action proposal validation", () => {
       false,
     );
     assert.equal(sameToolActionProposal(first, proposal({ destructive: true })), false);
+  });
+});
+
+describe("audit payload sanitisation", () => {
+  it("normalises a clean payload deterministically", () => {
+    assert.deepEqual(normaliseAuditPayload({ actionId: "a-1", nested: { b: 2, a: 1 }, count: 3 }), {
+      actionId: "a-1",
+      count: 3,
+      nested: { a: 1, b: 2 },
+    });
+  });
+
+  it("rejects credential-shaped keys so a secret cannot enter the audit trail", () => {
+    assert.throws(() => normaliseAuditPayload({ apiKey: "secret" }), /credentials/);
+    assert.throws(
+      () => normaliseAuditPayload({ meta: { Authorization: "Bearer secret" } }),
+      /credentials/,
+    );
+    assert.throws(() => normaliseAuditPayload({ serviceToken: "secret" }), /credentials/);
+  });
+
+  it("rejects reserved and non-ASCII keys, mirroring tool-action arguments", () => {
+    assert.throws(() => normaliseAuditPayload({ _internal: "no" }), /reserved/);
+    assert.throws(() => normaliseAuditPayload({ аpiKey: "secret" }), /must be ASCII/);
+  });
+
+  it("labels its errors as audit payload rejections, not tool-action arguments", () => {
+    assert.throws(() => normaliseAuditPayload({ apiKey: "secret" }), /Audit payload key/);
   });
 });
