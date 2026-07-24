@@ -2,8 +2,7 @@ name: Task and reminder development commissioning
 
 on:
   push:
-    branches:
-      - commission/task-reminder-dev-48a7b69
+    branches: [main]
     paths:
       - ".github/workflows/task-reminder-development-commissioning.yml"
 
@@ -38,10 +37,9 @@ jobs:
         shell: bash
 
     steps:
-      - name: Check out exact commissioning branch
+      - name: Check out exact main commit
         uses: actions/checkout@v7
         with:
-          ref: commission/task-reminder-dev-48a7b69
           fetch-depth: 0
 
       - name: Guard exact source and development-only boundary
@@ -49,9 +47,8 @@ jobs:
         run: |
           set -euo pipefail
           expected_source="48a7b69390eef65d010581d4b2ebe1c382ed50b7"
-          expected_ref="refs/heads/commission/task-reminder-dev-48a7b69"
-          if [[ "$GITHUB_REF" != "$expected_ref" ]]; then
-            echo "::error::Commissioning may run only from $expected_ref."
+          if [[ "$GITHUB_REF" != "refs/heads/main" ]]; then
+            echo "::error::Commissioning may run only from main."
             exit 1
           fi
           git merge-base --is-ancestor "$expected_source" HEAD
