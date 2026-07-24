@@ -1,0 +1,81 @@
+name: Fix quote lifecycle task 2 lint
+
+on:
+  push:
+    branches:
+      - feat/quote-lifecycle-152
+    paths:
+      - .github/workflows/fix-quote-task-2-lint.yml
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: feat/quote-lifecycle-152
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: typescript/.nvmrc
+          cache: npm
+          cache-dependency-path: typescript/package-lock.json
+
+      - name: Install locked dependencies
+        working-directory: typescript
+        run: npm ci
+
+      - name: Remove unused imports
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path("typescript/convex/quotes.ts")
+          source = path.read_text()
+          source = source.replace("  quoteAggregateDocumentValidator,\n", "")
+          source = source.replace("  quoteRevisionDocumentValidator,\n", "")
+          path.write_text(source)
+          PY
+
+      - name: Verify lint or publish diagnostics
+        env:
+          GH_TOKEN: ${{ github.token }}
+        working-directory: typescript
+        run: |
+          set +e
+          npm run lint > "$RUNNER_TEMP/lint.log" 2>&1
+          status=$?
+          set -e
+          if [[ $status -ne 0 ]]; then
+            tail -n 120 "$RUNNER_TEMP/lint.log" > "$RUNNER_TEMP/lint-tail.log"
+            {
+              echo 'Task 2 lint diagnostics:'
+              echo '```text'
+              cat "$RUNNER_TEMP/lint-tail.log"
+              echo '```'
+            } > "$RUNNER_TEMP/comment.md"
+            gh pr comment 174 --body-file "$RUNNER_TEMP/comment.md"
+            exit $status
+          fi
+
+      - name: Format, remove helper and commit
+        working-directory: typescript
+        run: npm exec prettier -- --write convex/quotes.ts
+
+      - name: Commit verified fix
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          rm .github/workflows/fix-quote-task-2-lint.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix(quotes): satisfy Convex lifecycle lint"
+          git push origin HEAD:feat/quote-lifecycle-152
+          gh pr comment 174 --body "Task 2 lint fix passed in run https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}; helper removed itself."
