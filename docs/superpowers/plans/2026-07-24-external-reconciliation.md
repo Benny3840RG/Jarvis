@@ -24,6 +24,8 @@
 
 - Runtime implementation branch: `feat/external-reconciliation-154`
 - Runtime PR: `#170`
+- Implemented files include the Convex ledger, authenticated adapter, execution integration, worker, scheduler and development smoke.
+- Tests cover effect collisions, replay suppression, lease ownership, worker concurrency, unknown providers, scheduler overlap and smoke cleanup.
 - All external action families remain planned until separate commissioning evidence and governance activation.
 
 ---
@@ -38,13 +40,13 @@
 ### Task 2: Durable Convex ledger and lease transitions
 
 - [x] Add indexes for scope uniqueness, due pending work, expired claims, receipt binding, and auditable status listing.
-- [x] Use indexed `.take(1)`/`.unique()` queries only; do not add unbounded scans.
+- [x] Use indexed queries only; do not add unbounded scans.
 - [x] Reject fingerprint or provider-reference collisions.
 - [x] Prove stale lease tokens cannot resolve or release another worker's claim.
 
 ### Task 3: Convex reconciliation adapter
 
-- [x] Verify service-token enforcement through the Convex function boundary.
+- [x] Enforce service-token authentication through every Convex function boundary.
 - [x] Preserve exact scope, receipt, provider-reference, lease and resolution arguments.
 - [x] Preserve null and collision responses without inventing state.
 
@@ -53,7 +55,7 @@
 - [x] Keep internal definition execution unchanged.
 - [x] Require an `ExternalReconciliationStore` whenever an external definition is registered.
 - [x] Enforce provider-name consistency between definition and registered attempt.
-- [x] Treat an external success without a registered provider reference as indeterminate/escalated, never as proven success.
+- [x] Treat external success without a registered provider reference as indeterminate/escalated, never as proven success.
 - [x] Test restart replay and duplicate-action-ID suppression through the integrated suite.
 
 ### Task 5: Lease-based worker and scheduler
@@ -62,6 +64,7 @@
 - [x] Leave unknown-provider records indeterminate and escalated with an auditable reason.
 - [x] Prove concurrent workers produce one claim and one terminal resolution.
 - [x] Prove expired claims are recoverable after a process restart.
+- [x] Prevent overlapping scheduler cycles and bound each drain batch.
 
 ### Task 6: Self-cleaning development smoke
 
