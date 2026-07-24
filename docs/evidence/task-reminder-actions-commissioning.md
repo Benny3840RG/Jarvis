@@ -17,6 +17,10 @@ This record does not authorise or record a Convex or Manufact production deploym
 - Artifact name: `task-reminder-development-commissioning-30065629012`
 - Artifact digest: `sha256:f061c997413034144bfe82bfb50c49bec579019168f1ac0076c384b19fa7883a`
 - Evidence issue comment: https://github.com/Benny3840/Jarvis/issues/155#issuecomment-5066008811
+- Governance activation commit: `04bcc348626451779c0d2912c7cda7db360383fc`
+- Governance preparation and validation run: `30067310304`
+- Governance preparation job: `89400701282`
+- Governance validation job: `89400701297`
 
 ## Authorised target
 
@@ -37,6 +41,10 @@ This record does not authorise or record a Convex or Manufact production deploym
 - Cancellation replay after live-record deletion
 - Authenticated cleanup and post-cleanup absence
 - Development-only target guard
+- Action-map schema validation
+- Registry reference validation
+- Semantic governance rule validation
+- Generated action-map drift validation
 
 ## Bound implementation
 
