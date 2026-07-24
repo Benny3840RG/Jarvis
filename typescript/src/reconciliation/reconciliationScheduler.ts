@@ -1,7 +1,4 @@
-import type {
-  ReconciliationRunResult,
-  ReconciliationWorker,
-} from "./reconciliationWorker.js";
+import type { ReconciliationRunResult, ReconciliationWorker } from "./reconciliationWorker.js";
 
 type ReconciliationWorkerLike = Pick<ReconciliationWorker, "runOnce">;
 
@@ -25,10 +22,7 @@ function positiveInteger(value: number, name: string): number {
   return value;
 }
 
-async function abortableSleep(
-  milliseconds: number,
-  signal: AbortSignal,
-): Promise<void> {
+async function abortableSleep(milliseconds: number, signal: AbortSignal): Promise<void> {
   if (signal.aborted) return;
   await new Promise<void>((resolve) => {
     const finish = () => {
@@ -46,10 +40,7 @@ export class ReconciliationScheduler {
   private readonly leaseMs: number;
   private readonly intervalMs: number;
   private readonly maxBatchSize: number;
-  private readonly sleep: (
-    milliseconds: number,
-    signal: AbortSignal,
-  ) => Promise<void>;
+  private readonly sleep: (milliseconds: number, signal: AbortSignal) => Promise<void>;
   private cycleRunning = false;
 
   constructor(
@@ -58,14 +49,8 @@ export class ReconciliationScheduler {
   ) {
     this.workerId = options.workerId.trim();
     if (!this.workerId) throw new Error("Reconciliation scheduler worker ID is required.");
-    this.leaseMs = positiveInteger(
-      options.leaseMs,
-      "Reconciliation scheduler lease duration",
-    );
-    this.intervalMs = positiveInteger(
-      options.intervalMs,
-      "Reconciliation scheduler interval",
-    );
+    this.leaseMs = positiveInteger(options.leaseMs, "Reconciliation scheduler lease duration");
+    this.intervalMs = positiveInteger(options.intervalMs, "Reconciliation scheduler interval");
     this.maxBatchSize = positiveInteger(
       options.maxBatchSize,
       "Reconciliation scheduler batch size",
