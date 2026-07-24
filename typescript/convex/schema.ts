@@ -2,6 +2,10 @@ import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
 import {
+  externalReconciliationStateValidator,
+  externalReconciliationTerminalStatusValidator,
+} from "./externalReconciliationValidators.js";
+import {
   internalActionFamilyValidator,
   internalActionResultValidator,
 } from "./internalActionValidators.js";
@@ -192,6 +196,7 @@ export default defineSchema({
     projectId: v.string(),
     idempotencyKey: v.string(),
     actionFingerprint: v.string(),
+    effectFingerprint: v.optional(v.string()),
     tool: v.string(),
     operation: v.string(),
     actor: v.optional(toolActionActorValidator),
@@ -199,15 +204,58 @@ export default defineSchema({
     policyVersion: v.optional(v.string()),
     correlationId: v.optional(v.string()),
     source: v.optional(v.string()),
+    provider: v.optional(v.string()),
+    providerRequestId: v.optional(v.string()),
+    providerCorrelationId: v.optional(v.string()),
+    reconciliationId: v.optional(v.string()),
     status: toolExecutionStatusValidator,
     outputDigest: v.optional(v.string()),
     errorCode: v.optional(toolExecutionErrorCodeValidator),
+    providerErrorCode: v.optional(v.string()),
     startedAt: v.number(),
     completedAt: v.number(),
     createdAt: v.number(),
   })
     .index("by_owner_and_receipt_key", ["ownerId", "receiptKey"])
     .index("by_owner_and_action_id", ["ownerId", "actionId"]),
+  externalReconciliations: defineTable({
+    ownerId: v.string(),
+    reconciliationId: v.string(),
+    executionKey: v.string(),
+    actionId: v.string(),
+    requestId: v.string(),
+    projectId: v.string(),
+    idempotencyKey: v.string(),
+    actionFingerprint: v.string(),
+    effectFingerprint: v.string(),
+    tool: v.string(),
+    operation: v.string(),
+    provider: v.string(),
+    providerRequestId: v.optional(v.string()),
+    providerCorrelationId: v.string(),
+    receiptKey: v.optional(v.string()),
+    receiptId: v.optional(v.string()),
+    state: externalReconciliationStateValidator,
+    attemptCount: v.number(),
+    nextAttemptAt: v.number(),
+    leaseOwner: v.optional(v.string()),
+    leaseToken: v.optional(v.string()),
+    leaseExpiresAt: v.optional(v.number()),
+    terminalStatus: v.optional(externalReconciliationTerminalStatusValidator),
+    resolutionDigest: v.optional(v.string()),
+    resolutionErrorCode: v.optional(v.string()),
+    lastErrorCode: v.optional(v.string()),
+    escalationReason: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    resolvedAt: v.optional(v.number()),
+    escalatedAt: v.optional(v.number()),
+  })
+    .index("by_owner_and_reconciliation_id", ["ownerId", "reconciliationId"])
+    .index("by_owner_and_scope", ["ownerId", "projectId", "tool", "operation", "idempotencyKey"])
+    .index("by_owner_and_state_and_next_attempt_at", ["ownerId", "state", "nextAttemptAt"])
+    .index("by_owner_and_state_and_lease_expires_at", ["ownerId", "state", "leaseExpiresAt"])
+    .index("by_owner_and_receipt_key", ["ownerId", "receiptKey"]),
   validationReports: defineTable({
     ownerId: v.string(),
     requestId: v.string(),

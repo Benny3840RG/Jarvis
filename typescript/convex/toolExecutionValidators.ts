@@ -15,6 +15,11 @@ export const toolExecutionErrorCodeValidator = v.union(
   v.literal("indeterminate"),
   v.literal("failed"),
   v.literal("fingerprint-mismatch"),
+  v.literal("provider-failed"),
+  v.literal("provider-reference-missing"),
+  v.literal("retry-blocked-pending-reconciliation"),
+  v.literal("reconciliation-escalated"),
+  v.literal("reconciliation-unavailable"),
 );
 
 export const toolExecutionActorValidator = v.union(
@@ -22,6 +27,33 @@ export const toolExecutionActorValidator = v.union(
   v.literal("agent"),
   v.literal("tool"),
 );
+
+export const toolExecutionReceiptInputValidator = v.object({
+  receiptId: v.string(),
+  actionId: v.string(),
+  requestId: v.string(),
+  projectId: v.string(),
+  idempotencyKey: v.string(),
+  actionFingerprint: v.string(),
+  effectFingerprint: v.optional(v.string()),
+  tool: v.string(),
+  operation: v.string(),
+  actor: toolExecutionActorValidator,
+  approvalId: v.optional(v.string()),
+  policyVersion: v.string(),
+  correlationId: v.string(),
+  source: v.string(),
+  provider: v.optional(v.string()),
+  providerRequestId: v.optional(v.string()),
+  providerCorrelationId: v.optional(v.string()),
+  reconciliationId: v.optional(v.string()),
+  status: toolExecutionStatusValidator,
+  outputDigest: v.optional(v.string()),
+  errorCode: v.optional(toolExecutionErrorCodeValidator),
+  providerErrorCode: v.optional(v.string()),
+  startedAt: v.number(),
+  completedAt: v.number(),
+});
 
 export const toolExecutionReceiptDocumentValidator = v.object({
   _id: v.id("toolExecutionReceipts"),
@@ -34,6 +66,7 @@ export const toolExecutionReceiptDocumentValidator = v.object({
   projectId: v.string(),
   idempotencyKey: v.string(),
   actionFingerprint: v.string(),
+  effectFingerprint: v.optional(v.string()),
   tool: v.string(),
   operation: v.string(),
   actor: v.optional(toolExecutionActorValidator),
@@ -41,9 +74,14 @@ export const toolExecutionReceiptDocumentValidator = v.object({
   policyVersion: v.optional(v.string()),
   correlationId: v.optional(v.string()),
   source: v.optional(v.string()),
+  provider: v.optional(v.string()),
+  providerRequestId: v.optional(v.string()),
+  providerCorrelationId: v.optional(v.string()),
+  reconciliationId: v.optional(v.string()),
   status: toolExecutionStatusValidator,
   outputDigest: v.optional(v.string()),
   errorCode: v.optional(toolExecutionErrorCodeValidator),
+  providerErrorCode: v.optional(v.string()),
   startedAt: v.number(),
   completedAt: v.number(),
   createdAt: v.number(),
