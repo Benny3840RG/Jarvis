@@ -51,7 +51,9 @@ class SharedFakeReconciliationStore implements ExternalReconciliationStore {
     return { reconciliation: record, receipt: this.backend.receipt };
   }
 
-  async registerAttempt(input: RegisterExternalAttemptInput): Promise<ExternalReconciliationRecord> {
+  async registerAttempt(
+    input: RegisterExternalAttemptInput,
+  ): Promise<ExternalReconciliationRecord> {
     if (this.backend.reconciliation) return this.backend.reconciliation;
     const now = Date.now();
     const record: ExternalReconciliationRecord = {
@@ -172,9 +174,7 @@ class SharedFakeReconciliationStore implements ExternalReconciliationStore {
       ...(input.result.status === "succeeded" && input.result.outputDigest
         ? { resolutionDigest: input.result.outputDigest }
         : {}),
-      ...(input.result.status === "failed"
-        ? { resolutionErrorCode: input.result.errorCode }
-        : {}),
+      ...(input.result.status === "failed" ? { resolutionErrorCode: input.result.errorCode } : {}),
       updatedAt: input.now,
       resolvedAt: input.now,
     };
@@ -200,9 +200,7 @@ class SharedFakeReconciliationStore implements ExternalReconciliationStore {
       state: escalated ? "escalated" : "pending",
       nextAttemptAt: input.nextAttemptAt,
       lastErrorCode: input.errorCode,
-      ...(escalated
-        ? { escalationReason: input.errorCode, escalatedAt: input.now }
-        : {}),
+      ...(escalated ? { escalationReason: input.errorCode, escalatedAt: input.now } : {}),
       updatedAt: input.now,
     };
     this.backend.reconciliation = updated;
@@ -223,13 +221,10 @@ describe("runExternalReconciliationSmoke", () => {
     let constructions = 0;
 
     await assert.rejects(
-      runExternalReconciliationSmoke(
-        () => {
-          constructions += 1;
-          return new SharedFakeReconciliationStore(backend());
-        },
-        "prod:jarvis",
-      ),
+      runExternalReconciliationSmoke(() => {
+        constructions += 1;
+        return new SharedFakeReconciliationStore(backend());
+      }, "prod:jarvis"),
       /must identify a development deployment/,
     );
 
