@@ -37,6 +37,9 @@ export class QuoteRecipientInvalidError extends Error {
 }
 
 function canonicalize(value: unknown): unknown {
+  if (typeof value === "number" && !Number.isFinite(value)) {
+    throw new TypeError("Quote fingerprint numbers must be finite.");
+  }
   if (Array.isArray(value)) return value.map(canonicalize);
   if (value === null || typeof value !== "object") return value;
 
