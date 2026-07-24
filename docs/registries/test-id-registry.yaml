@@ -1,13 +1,21 @@
 # Catalog of TEST-* IDs that action families in
 # docs/traceability/action-family-registry.yaml may reference under
-# traceability.test_ids. An ID must appear here before an action family
-# can cite it, and it must name a real, committed test.
-#
-# Empty for now: every action family in the registry is lifecycle_status
-# planned (no tool is wired into the live allowlist yet — see
-# typescript/src/actions/toolExecutionFactory.ts), so there is nothing
-# implemented to attach a real test to. Add entries here only alongside the
-# real test file/case they name.
+# traceability.test_ids. Each ID names committed verification code.
 schema_version: "1.0"
 
-tests: []
+tests:
+  - id: TEST-AM-003-001
+    path: typescript/tests/createNoteTool.test.ts
+    verifies: successful note creation, exact receipt replay, replay after a fresh execution service, and insufficient-authority blocking
+
+  - id: TEST-AM-003-NEG-001
+    path: typescript/tests/createNoteTool.test.ts
+    verifies: malformed input, dry-run non-mutation, changed-payload fingerprint mismatch, and exact allowlist enforcement
+
+  - id: TEST-AM-003-PERSIST-001
+    path: typescript/tests/convexNotes.test.ts
+    verifies: authenticated create, read, list, remove, record mapping, and service-token enforcement
+
+  - id: TEST-AM-003-SMOKE-001
+    path: typescript/tests/notesSmoke.test.ts
+    verifies: fresh-store visibility, idempotent replay, self-cleaning failure recovery, and refusal of non-development deployments

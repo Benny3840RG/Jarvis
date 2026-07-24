@@ -9,9 +9,9 @@ schema_version: "1.0"
 
 tools:
   - id: TOOL-NOTES-CREATE
-    lifecycle_status: planned
+    lifecycle_status: active
     implemented: true
-    description: Implements owner/project-scoped durable note creation through the single reviewed notes:create allowlist binding; operational activation awaits development smoke evidence.
+    description: Owner/project-scoped durable note creation through the single reviewed notes:create allowlist binding, commissioned on dev:outgoing-ram-798.
     implementation: typescript/src/actions/createNoteTool.ts
     allowlist: typescript/src/actions/toolExecutionFactory.ts
     bound_by: [AM-003]
