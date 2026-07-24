@@ -26,7 +26,9 @@
 - Runtime PR: `#170`
 - Implemented files include the Convex ledger, authenticated adapter, execution integration, worker, scheduler and development smoke.
 - Tests cover effect collisions, replay suppression, lease ownership, worker concurrency, unknown providers, scheduler overlap and smoke cleanup.
-- Pinned formatting has been applied and the temporary formatter helper has been removed from the final tree.
+- Final safety review proves resolution uses a post-provider timestamp and treats lease-expiry equality as stale.
+- Reconciliation read outages are audit-classified as `reconciliation-unavailable`; only known effect conflicts use `fingerprint-mismatch`.
+- Pinned formatting has been applied and all temporary formatter and patcher helpers have been removed from the final tree.
 - The permanent TypeScript workflow now matches `main` and is the only runtime merge gate.
 - All external action families remain planned until separate commissioning evidence and governance activation.
 
@@ -44,7 +46,7 @@
 - [x] Add indexes for scope uniqueness, due pending work, expired claims, receipt binding, and auditable status listing.
 - [x] Use indexed queries only; do not add unbounded scans.
 - [x] Reject fingerprint or provider-reference collisions.
-- [x] Prove stale lease tokens cannot resolve or release another worker's claim.
+- [x] Prove stale and exactly-expired lease tokens cannot resolve or release another worker's claim.
 
 ### Task 3: Convex reconciliation adapter
 
@@ -59,6 +61,7 @@
 - [x] Enforce provider-name consistency between definition and registered attempt.
 - [x] Treat external success without a registered provider reference as indeterminate/escalated, never as proven success.
 - [x] Test restart replay and duplicate-action-ID suppression through the integrated suite.
+- [x] Block execution during reconciliation-read outages without misreporting them as fingerprint collisions.
 
 ### Task 5: Lease-based worker and scheduler
 
@@ -67,6 +70,7 @@
 - [x] Prove concurrent workers produce one claim and one terminal resolution.
 - [x] Prove expired claims are recoverable after a process restart.
 - [x] Prevent overlapping scheduler cycles and bound each drain batch.
+- [x] Validate lease freshness using the completion timestamp after the provider reconciliation call.
 
 ### Task 6: Self-cleaning development smoke
 
