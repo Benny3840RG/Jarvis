@@ -10,6 +10,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: write
 
 jobs:
   verify:
@@ -20,6 +21,12 @@ jobs:
         working-directory: typescript
     steps:
       - uses: actions/checkout@v7
+      - name: Publish exact run locator
+        working-directory: .
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh pr comment 176 --body "Quote Task 2 repair verification run: https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}\n\n- Source: \`${GITHUB_SHA}\`"
       - uses: actions/setup-node@v7
         with:
           node-version-file: typescript/.nvmrc
