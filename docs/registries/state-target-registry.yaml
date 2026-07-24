@@ -1,0 +1,21 @@
+# Catalog of state targets referenced by
+# docs/traceability/action-family-registry.yaml#action_families[].bindings.state_target_id.
+#
+# `implemented` reflects whether a durable store for this entity exists in the
+# codebase today. STORE-QUOTES exists (src/quotes/quote.ts, QuoteStore) but its
+# real QuoteStatus is only draft|sent|accepted|declined — it has no
+# finalized/reviewed states, so AM-012/AM-013 remain planned until that lands.
+schema_version: "1.0"
+
+state_targets:
+  - id: STORE-NOTES
+    lifecycle_status: planned
+    implemented: false
+    description: Would hold note records. No Notes domain exists in the codebase yet.
+    bound_by: [AM-003]
+
+  - id: STORE-QUOTES
+    lifecycle_status: planned
+    implemented: true
+    note: Real QuoteStore (src/quotes/quote.ts) exists but only supports draft|sent|accepted|declined — no finalized/reviewed states yet, so the finalize/send transitions AM-012/AM-013 need remain unimplemented.
+    bound_by: [AM-012, AM-013]

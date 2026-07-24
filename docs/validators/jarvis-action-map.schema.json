@@ -1,0 +1,239 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Jarvis Action Map Schema",
+  "type": "object",
+  "required": ["schema_version", "authority", "controlled_vocabularies", "policy_overlays", "action_families"],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^1\\.[0-9]+$"
+    },
+    "project": { "type": "object" },
+    "action_family_defaults": { "type": "object" },
+    "identity_rules": { "type": "object" },
+    "overlay_resolution": { "type": "object" },
+    "variant_rules": { "type": "object" },
+    "validation": { "type": "object" },
+    "generation": { "type": "object" },
+    "authority": {
+      "type": "object",
+      "required": ["action_family_registry"],
+      "properties": {
+        "action_family_registry": {
+          "type": "object",
+          "required": ["authoritative_for", "subordinate_to"],
+          "properties": {
+            "authoritative_for": { "type": "array", "items": { "type": "string" } },
+            "subordinate_to": { "type": "array", "items": { "type": "string" } }
+          },
+          "additionalProperties": true
+        },
+        "generated_views_non_authoritative": { "type": "boolean" }
+      },
+      "additionalProperties": true
+    },
+    "controlled_vocabularies": {
+      "type": "object",
+      "required": [
+        "effect_classes",
+        "sensitivity_classes",
+        "approval_modes",
+        "lifecycle_statuses",
+        "side_effect_modes",
+        "sensitivity_modes"
+      ],
+      "properties": {
+        "domains": { "type": "array", "items": { "type": "string" } },
+        "effect_classes": { "type": "array", "items": { "type": "string" } },
+        "sensitivity_classes": { "type": "array", "items": { "type": "string" } },
+        "approval_modes": { "type": "array", "items": { "type": "string" } },
+        "lifecycle_statuses": { "type": "array", "items": { "type": "string" } },
+        "side_effect_modes": {
+          "type": "array",
+          "items": { "enum": [false, true, "conditional"] }
+        },
+        "sensitivity_modes": { "type": "array", "items": { "type": "string" } },
+        "retention_classes": { "type": "array", "items": { "type": "string" } },
+        "idempotency_key_strategies": { "type": "array", "items": { "type": "string" } },
+        "collision_policies": { "type": "array", "items": { "type": "string" } },
+        "replay_policies": { "type": "array", "items": { "type": "string" } },
+        "reconciliation_strategies": { "type": "array", "items": { "type": "string" } }
+      },
+      "additionalProperties": false
+    },
+    "policy_overlays": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "object",
+        "required": ["effect_class", "approval", "external_side_effects", "reconciliation"],
+        "properties": {
+          "effect_class": { "type": "string" },
+          "approval": {
+            "type": "object",
+            "required": ["mode"],
+            "properties": {
+              "mode": { "type": "string", "enum": ["never", "always", "conditional"] }
+            },
+            "additionalProperties": true
+          },
+          "external_side_effects": {
+            "type": "object",
+            "required": ["mode"],
+            "properties": {
+              "mode": { "enum": [false, true, "conditional"] }
+            },
+            "additionalProperties": true
+          },
+          "reconciliation": {
+            "type": "object",
+            "required": ["required"],
+            "properties": {
+              "required": { "type": "boolean" }
+            },
+            "additionalProperties": true
+          },
+          "offline_support": { "type": "boolean" },
+          "retention_default": { "type": "string" }
+        },
+        "additionalProperties": true
+      }
+    },
+    "action_families": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "lifecycle_status",
+          "classification",
+          "policy_overlay",
+          "execution",
+          "bindings",
+          "traceability",
+          "parameters"
+        ],
+        "properties": {
+          "id": { "type": "string", "pattern": "^AM-[0-9]{3}$" },
+          "name": { "type": "string", "minLength": 1 },
+          "lifecycle_status": {
+            "type": "string",
+            "enum": ["planned", "active", "deprecated", "superseded", "rejected"]
+          },
+          "classification": {
+            "type": "object",
+            "required": ["verb", "object", "domains", "capability"],
+            "properties": {
+              "verb": { "type": "string" },
+              "object": { "type": "string" },
+              "domains": { "type": "array", "items": { "type": "string" } },
+              "capability": { "type": "string" }
+            },
+            "additionalProperties": true
+          },
+          "policy_overlay": { "type": "string", "minLength": 1 },
+          "policy_overrides": { "type": "object" },
+          "execution": {
+            "type": "object",
+            "required": ["external_side_effects", "offline_support"],
+            "properties": {
+              "external_side_effects": {
+                "type": "object",
+                "required": ["mode"],
+                "properties": {
+                  "mode": { "enum": [false, true, "conditional"] }
+                },
+                "additionalProperties": true
+              },
+              "offline_support": { "type": "boolean" }
+            },
+            "additionalProperties": true
+          },
+          "bindings": {
+            "type": "object",
+            "required": ["executor_id", "state_target_id", "tool_contract_version"],
+            "properties": {
+              "executor_id": { "type": "string", "pattern": "^TOOL-[A-Z0-9-]+$" },
+              "state_target_id": { "type": "string", "pattern": "^STORE-[A-Z0-9-]+$" },
+              "tool_contract_version": { "type": "string" }
+            },
+            "additionalProperties": false
+          },
+          "traceability": {
+            "type": "object",
+            "required": ["requirements", "test_ids", "evidence_ids"],
+            "properties": {
+              "requirements": {
+                "type": "object",
+                "required": ["primary", "supporting"],
+                "properties": {
+                  "primary": {
+                    "type": "array",
+                    "items": { "type": "string", "pattern": "^R-[0-9]{3}[A-Z]?$" }
+                  },
+                  "supporting": {
+                    "type": "array",
+                    "items": { "type": "string", "pattern": "^R-[0-9]{3}[A-Z]?$" }
+                  }
+                },
+                "additionalProperties": false
+              },
+              "test_ids": {
+                "type": "array",
+                "items": { "type": "string", "pattern": "^TEST-[A-Z0-9-]+$" }
+              },
+              "evidence_ids": {
+                "type": "array",
+                "items": { "type": "string", "pattern": "^EVD-[A-Z0-9-]+$" }
+              }
+            },
+            "additionalProperties": false
+          },
+          "parameters": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["name", "type", "required"],
+              "properties": {
+                "name": { "type": "string" },
+                "type": { "type": "string" },
+                "required": { "type": "boolean" },
+                "default": {},
+                "values": { "type": "array" },
+                "constraints": { "type": "object" }
+              },
+              "additionalProperties": true
+            }
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "workflows": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "steps"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^WF-[A-Z0-9-]+$" },
+          "name": { "type": "string" },
+          "steps": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["action_family"],
+              "properties": {
+                "action_family": { "type": "string", "pattern": "^AM-[0-9]{3}$" }
+              },
+              "additionalProperties": true
+            }
+          }
+        },
+        "additionalProperties": true
+      }
+    }
+  },
+  "additionalProperties": false
+}

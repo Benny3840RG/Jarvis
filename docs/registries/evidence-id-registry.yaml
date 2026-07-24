@@ -1,0 +1,11 @@
+# Catalog of EVD-* IDs that action families in
+# docs/traceability/action-family-registry.yaml may reference under
+# traceability.evidence_ids. An ID must appear here before an action family
+# can cite it, and it must point to a real, committed evidence artifact
+# (CI run, reconciliation log sample, etc.).
+#
+# Empty for now, for the same reason as test-id-registry.yaml: no action
+# family is implemented yet, so there is no evidence to record.
+schema_version: "1.0"
+
+evidence: []

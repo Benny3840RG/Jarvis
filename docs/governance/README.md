@@ -48,25 +48,39 @@ edited to hide the divergence.
    day-to-day operational claims live, and where drift is most likely to be noticed first (see
    `tool-action-approval.md`'s execution-boundary history as the working example).
 
-6. **`[TRACE]` `docs/traceability/requirements-matrix.md`, `test-matrix.md`, `evidence-matrix.md`**
-   Traceability views mapping requirements to tests and evidence. Purely derivative of tiers 1–5:
+6. **`[ACTION-REGISTRY]` `docs/traceability/action-family-registry.yaml`**
+   The canonical, machine-readable register of action-family definitions and their policy
+   overlays — what actions exist, what approval/idempotency/reconciliation model each one uses,
+   and what it binds to (`docs/registries/policy-overlays.yaml`, `tool-registry.yaml`,
+   `state-target-registry.yaml`, `test-id-registry.yaml`, `evidence-id-registry.yaml`).
+   Authoritative for action-family definitions and action-map generation only; subordinate to
+   tiers 1–3 and must not redefine requirements, policy boundaries, or entity-state semantics.
+   Validated by `docs/validators/jarvis-action-map.schema.json` and
+   `jarvis-action-map.rules.yaml` before the generated action map (tier 9) is produced.
+
+7. **`[TRACE]` `docs/traceability/requirements-matrix.md`, `test-matrix.md`, `evidence-matrix.md`**
+   Traceability views mapping requirements to tests and evidence. Purely derivative of tiers 1–6:
    a conflict between a matrix and its source is a traceability defect, corrected to match,
    never grounds for reinterpreting the source it's supposed to reflect.
 
-7. **`docs/operations/*.md`, `docs/deployment.md`, `docs/failure-behaviour.md`**
+8. **`docs/operations/*.md`, `docs/deployment.md`, `docs/failure-behaviour.md`**
    Process and tooling docs (branch protection, CI health, preview features, deployment,
    failure behaviour). Operational detail, not product-behavior authority — these describe how
    the team runs things, not what the system is required to do.
 
-8. **`[HANDOVER]` `docs/governance/handover-dossier.md`** *(not yet created)*
+9. **`[HANDOVER]` `docs/governance/handover-dossier.md`** *(not yet created)*
    A point-in-time onboarding/handover snapshot. Explicitly a snapshot: the moment it goes
    stale, everything above it in this list governs instead. Never treat it as current-state
    authority without checking it against tier 1 first.
 
-9. **Generated views** — `[ACTION-MAP]` `docs/traceability/action-map.generated.md`
-   *(not yet created)*, and any other auto-generated artifact.
-   Read-only by construction and non-authoritative by design. Regenerate to resolve a conflict;
-   never hand-edit a generated file to make it agree with something else.
+10. **Generated views** — `[ACTION-MAP]` `docs/traceability/action-map.generated.md`,
+    and any other auto-generated artifact.
+    Read-only by construction and non-authoritative by design. Regenerate to resolve a conflict;
+    never hand-edit a generated file to make it agree with something else. As of this revision,
+    every action family in the registry is `lifecycle_status: planned` — none is bound to an
+    implemented tool or state target (`typescript/src/actions/toolExecutionFactory.ts`'s
+    allowlist is still empty) — so the generated map currently describes intended, not live,
+    behavior. Its Status column reflects that; do not read it as a record of what executes today.
 
 ### Evidentiary authority (orthogonal to the rank order above)
 
@@ -103,6 +117,7 @@ Use these labels instead of ad hoc citations:
 - `[REQ-YAML]` `docs/requirements/requirements.yaml`
 - `[REQ-MD]` `docs/requirements/jarvis-requirements-v2.2.md`
 - `[STATE]` `docs/requirements/state-glossary.md`
+- `[ACTION-REGISTRY]` `docs/traceability/action-family-registry.yaml`
 - `[TRACE]` `docs/traceability/requirements-matrix.md`
 - `[HANDOVER]` `docs/governance/handover-dossier.md`
 - `[ACTION-MAP]` `docs/traceability/action-map.generated.md`

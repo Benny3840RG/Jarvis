@@ -1,0 +1,60 @@
+name: Governance validation
+
+# Validates the action-family registry before anything is generated from it.
+# Order matters: JSON Schema (structural) -> registry-reference validation ->
+# semantic rule validation -> only then is `ruby scripts/generate-action-map.rb
+# --check` allowed to run. See docs/validators/jarvis-action-map.rules.yaml's
+# execution_order for the authoritative statement of this sequence.
+
+on:
+  pull_request:
+    paths:
+      - "docs/traceability/action-family-registry.yaml"
+      - "docs/traceability/action-map.generated.md"
+      - "docs/registries/**"
+      - "docs/validators/**"
+      - "scripts/generate-action-map.rb"
+      - "typescript/scripts/validate-action-map.mjs"
+      - ".github/workflows/governance-validation.yml"
+  push:
+    branches: [main]
+    paths:
+      - "docs/traceability/action-family-registry.yaml"
+      - "docs/traceability/action-map.generated.md"
+      - "docs/registries/**"
+      - "docs/validators/**"
+      - "scripts/generate-action-map.rb"
+      - "typescript/scripts/validate-action-map.mjs"
+      - ".github/workflows/governance-validation.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  validate-action-map:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: typescript/.nvmrc
+          cache: npm
+          cache-dependency-path: typescript/package-lock.json
+
+      - name: Install dependencies
+        working-directory: typescript
+        run: npm ci
+
+      - name: Validate registry schema, references, and semantic rules
+        working-directory: typescript
+        run: node scripts/validate-action-map.mjs
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+
+      - name: Generate action map only after validation passes
+        run: ruby scripts/generate-action-map.rb --check

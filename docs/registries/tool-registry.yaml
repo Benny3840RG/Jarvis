@@ -1,0 +1,29 @@
+# Catalog of tool executor bindings referenced by
+# docs/traceability/action-family-registry.yaml#action_families[].bindings.executor_id.
+#
+# `implemented` reflects the real allowlist in
+# typescript/src/actions/toolExecutionFactory.ts, which is deliberately empty
+# (see PR #142) — no tool:operation pair is registered for live execution yet.
+# An entry existing here means an action family names it as a future binding,
+# not that the tool exists in code. lifecycle_status must not exceed the
+# lifecycle_status of every action family that binds to it.
+schema_version: "1.0"
+
+tools:
+  - id: TOOL-NOTES-CREATE
+    lifecycle_status: planned
+    implemented: false
+    description: Would create a note record. No Notes domain exists in the codebase yet.
+    bound_by: [AM-003]
+
+  - id: TOOL-QUOTE-FINALIZE
+    lifecycle_status: planned
+    implemented: false
+    description: Would transition a quote from draft/reviewed to finalized. The real Quote domain (src/quotes/quote.ts) has no finalize/reviewed states today.
+    bound_by: [AM-012]
+
+  - id: TOOL-QUOTE-SEND
+    lifecycle_status: planned
+    implemented: false
+    description: Would send a finalized quote to a recipient and reconcile provider status. No send/delivery tool exists in the codebase today.
+    bound_by: [AM-013]
