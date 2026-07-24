@@ -94,7 +94,13 @@ describe("quote fingerprints", () => {
       () =>
         quoteRevisionFingerprint(
           revisionFingerprintInput({
-            lineItems: [{ description: "Labour", quantity: Number.POSITIVE_INFINITY, unitPrice: 100 }],
+            lineItems: [
+              {
+                description: "Labour",
+                quantity: Number.POSITIVE_INFINITY,
+                unitPrice: 100,
+              },
+            ],
           }),
         ),
       /finite/,
