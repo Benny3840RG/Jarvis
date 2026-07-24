@@ -1,0 +1,30 @@
+name: Task 3 quote adapter verifier
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "typescript/src/persistence/convexQuotes.ts"
+      - "typescript/tests/convexQuotesAdapter.test.ts"
+      - "typescript/tests/quoteRestartPersistence.test.ts"
+      - ".github/workflows/task3-quote-adapter.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  focused-task3-tests:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: typescript
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: typescript/.nvmrc
+          cache: npm
+          cache-dependency-path: typescript/package-lock.json
+      - run: npm ci
+      - name: Run Task 3 focused tests
+        run: node --import tsx --test tests/convexQuotesAdapter.test.ts
