@@ -23,12 +23,13 @@ jobs:
         uses: actions/checkout@v7
         with:
           ref: governance/activate-am003-150
+          fetch-depth: 2
 
       - name: Guard verified commissioning baseline
         run: |
           set -euo pipefail
           [[ "$GITHUB_REF" == "refs/heads/governance/activate-am003-150" ]]
-          git merge-base --is-ancestor d0f6173262be9f1848640b2c271ae43b566cebc2 HEAD
+          [[ "$(git rev-parse HEAD^)" == "d0f6173262be9f1848640b2c271ae43b566cebc2" ]]
 
       - name: Apply evidence-bound AM-003 activation
         run: |
