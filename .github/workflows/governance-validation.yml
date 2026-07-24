@@ -72,31 +72,32 @@ jobs:
           python - <<'PY'
           from pathlib import Path
 
-          path = Path('.github/scripts/activate_task_reminder_governance.py')
-          text = path.read_text(encoding='utf-8')
-          old_import = 'from textwrap import dedent\n'
-          new_import = '''from textwrap import dedent as raw_dedent, indent
+          path = Path(".github/scripts/activate_task_reminder_governance.py")
+          text = path.read_text(encoding="utf-8")
 
-
-def dedent(value: str) -> str:
-    return indent(raw_dedent(value), "  ")
-'''
-          if text.count(old_import) != 1:
-              raise SystemExit('activation script dedent import was not found exactly once')
-          text = text.replace(old_import, new_import, 1)
-          evidence_call = '''(evidence_dir / "task-reminder-actions-commissioning.md").write_text(
-    dedent(
-'''
-          if text.count(evidence_call) != 1:
-              raise SystemExit('activation evidence dedent call was not found exactly once')
-          text = text.replace(
-              evidence_call,
-              '''(evidence_dir / "task-reminder-actions-commissioning.md").write_text(
-    raw_dedent(
-''',
-              1,
+          old_import = "from textwrap import dedent\n"
+          new_import = (
+              "from textwrap import dedent as raw_dedent, indent\n\n"
+              "\n"
+              "def dedent(value: str) -> str:\n"
+              "    return indent(raw_dedent(value), \"  \")\n"
           )
-          path.write_text(text, encoding='utf-8')
+          if text.count(old_import) != 1:
+              raise SystemExit("activation script dedent import was not found exactly once")
+          text = text.replace(old_import, new_import, 1)
+
+          evidence_call = (
+              '(evidence_dir / "task-reminder-actions-commissioning.md").write_text(\n'
+              "    dedent(\n"
+          )
+          evidence_replacement = (
+              '(evidence_dir / "task-reminder-actions-commissioning.md").write_text(\n'
+              "    raw_dedent(\n"
+          )
+          if text.count(evidence_call) != 1:
+              raise SystemExit("activation evidence dedent call was not found exactly once")
+          text = text.replace(evidence_call, evidence_replacement, 1)
+          path.write_text(text, encoding="utf-8")
           PY
 
       - name: Apply evidence-bound activation records
