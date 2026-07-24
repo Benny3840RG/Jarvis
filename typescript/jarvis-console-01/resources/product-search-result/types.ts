@@ -40,6 +40,22 @@ export const propSchema = z.object({
     active: z.number().int().nonnegative(),
     completed: z.number().int().nonnegative(),
     reminders: z.number().int().nonnegative(),
+    tasksPartial: z.boolean(),
+    remindersPartial: z.boolean(),
+  }),
+  pagination: z.object({
+    tasks: z.object({
+      isDone: z.boolean(),
+      continueCursor: z.string(),
+      returnedCount: z.number().int().nonnegative(),
+      requestedPageSize: z.number().int().min(1).max(100),
+    }),
+    reminders: z.object({
+      isDone: z.boolean(),
+      continueCursor: z.string(),
+      returnedCount: z.number().int().nonnegative(),
+      requestedPageSize: z.number().int().min(1).max(100),
+    }),
   }),
 });
 

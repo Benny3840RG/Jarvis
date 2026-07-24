@@ -16,6 +16,7 @@ import type {
   JarvisReminder,
   JarvisTask,
 } from "./types";
+import { formatPartialCount, taskProgressLabel } from "../../pagination.js";
 import { propSchema } from "./types";
 
 export const widgetMetadata: WidgetMetadata = {
@@ -205,8 +206,8 @@ const JarvisConsole: React.FC = () => {
 
           <section className="telemetry-strip phase23-telemetry">
             <div><span>DEPLOYMENT</span><strong>{snapshot.deployment}</strong></div>
-            <div><span>ACTIVE TASKS</span><strong>{snapshot.counts.active}</strong></div>
-            <div><span>REMINDERS</span><strong>{snapshot.counts.reminders}</strong></div>
+            <div><span>ACTIVE TASKS</span><strong>{formatPartialCount(snapshot.counts.active, snapshot.counts.tasksPartial)}</strong></div>
+            <div><span>REMINDERS</span><strong>{formatPartialCount(snapshot.counts.reminders, snapshot.counts.remindersPartial)}</strong></div>
             <div><span>LAST SYNC</span><strong>{new Date(snapshot.lastUpdated).toLocaleTimeString("en-AU")}</strong></div>
           </section>
 
@@ -221,7 +222,7 @@ const JarvisConsole: React.FC = () => {
                 </div>
                 <div className="core-stats">
                   <div><span>ACTIVE</span><strong>{snapshot.counts.active}</strong></div>
-                  <div><span>CLEARED</span><strong>{snapshot.counts.completed}</strong></div>
+                  <div><span>CLEARED</span><strong>{formatPartialCount(snapshot.counts.completed, snapshot.counts.tasksPartial)}</strong></div>
                   <div><span>ALERTS</span><strong>{snapshot.counts.reminders}</strong></div>
                 </div>
               </div>
@@ -248,7 +249,10 @@ const JarvisConsole: React.FC = () => {
                 <h2>{currentTask?.title || snapshot.mission}</h2>
               </div>
 
-              <div className="reactor-stage" aria-label={`${snapshot.progress}% completion progress`}>
+              <div
+                className="reactor-stage"
+                aria-label={`${snapshot.progress}% ${snapshot.counts.tasksPartial ? "visible-page " : ""}completion progress`}
+              >
                 <div className="energy-flare flare-a" />
                 <div className="energy-flare flare-b" />
                 <div className="reactor-ring outer" />
@@ -260,7 +264,10 @@ const JarvisConsole: React.FC = () => {
                   <span className="mascot-eye right" />
                   <span className="mascot-mouth" />
                 </div>
-                <div className="progress-copy"><strong>{snapshot.progress}%</strong><span>LIVE STATE</span></div>
+                <div className="progress-copy">
+                  <strong>{snapshot.progress}%</strong>
+                  <span>{taskProgressLabel(snapshot.counts.tasksPartial)}</span>
+                </div>
               </div>
 
               <form className="operator-command" onSubmit={submitCommand}>
@@ -336,7 +343,13 @@ const JarvisConsole: React.FC = () => {
             </form>
 
             <div className="capture-card completion-card">
-              <div><span>COMPLETION ARCHIVE</span><strong>{completedTasks.length} cleared tasks</strong></div>
+              <div>
+                <span>COMPLETION ARCHIVE</span>
+                <strong>
+                  {formatPartialCount(completedTasks.length, snapshot.counts.tasksPartial)} cleared
+                  tasks
+                </strong>
+              </div>
               <div className="completion-list">
                 {completedTasks.slice(0, 4).map((task) => <span key={task.id}>{task.title}</span>)}
                 {completedTasks.length === 0 && <span>Nothing cleared yet.</span>}

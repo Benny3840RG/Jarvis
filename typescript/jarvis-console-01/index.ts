@@ -3,6 +3,14 @@ import { anyApi } from "convex/server";
 import { MCPServer, text, widget } from "mcp-use/server";
 import { z } from "zod";
 
+import {
+  buildConsolePageSummary,
+  DEFAULT_PAGE_SIZE,
+  normaliseConsolePageRequest,
+  type ConsolePage,
+  type ConsolePageRequest,
+} from "./pagination.js";
+
 const server = new MCPServer({
   name: "jarvis-console-01",
   title: "Jarvis Console 01",
@@ -56,6 +64,22 @@ const consoleStateSchema = z.object({
     active: z.number().int().nonnegative(),
     completed: z.number().int().nonnegative(),
     reminders: z.number().int().nonnegative(),
+    tasksPartial: z.boolean(),
+    remindersPartial: z.boolean(),
+  }),
+  pagination: z.object({
+    tasks: z.object({
+      isDone: z.boolean(),
+      continueCursor: z.string(),
+      returnedCount: z.number().int().nonnegative(),
+      requestedPageSize: z.number().int().min(1).max(100),
+    }),
+    reminders: z.object({
+      isDone: z.boolean(),
+      continueCursor: z.string(),
+      returnedCount: z.number().int().nonnegative(),
+      requestedPageSize: z.number().int().min(1).max(100),
+    }),
   }),
 });
 
@@ -110,23 +134,31 @@ function mapReminder(row: ReminderRow) {
   };
 }
 
-async function loadConsoleState(activity: string[] = []): Promise<ConsoleState> {
+async function loadConsoleState(
+  activity: string[] = [],
+  pageRequest: ConsolePageRequest = {},
+): Promise<ConsoleState> {
   const now = Date.now();
   const deployment = process.env.MCP_URL || "Manufact Cloud";
+  let requestedPageSize = DEFAULT_PAGE_SIZE;
   try {
+    const request = normaliseConsolePageRequest(pageRequest);
+    requestedPageSize = request.pageSize;
     const { client, serviceToken } = requireBridge();
-    const [taskRows, reminderRows] = await Promise.all([
-      client.query(anyApi.tasks.list, { serviceToken }) as Promise<TaskRow[]>,
-      client.query(anyApi.reminders.list, { serviceToken }) as Promise<ReminderRow[]>,
+    const [taskPage, reminderPage] = await Promise.all([
+      client.query(anyApi.tasks.listPage, {
+        serviceToken,
+        paginationOpts: { numItems: request.pageSize, cursor: request.taskCursor },
+      }) as Promise<ConsolePage<TaskRow>>,
+      client.query(anyApi.reminders.listPage, {
+        serviceToken,
+        paginationOpts: { numItems: request.pageSize, cursor: request.reminderCursor },
+      }) as Promise<ConsolePage<ReminderRow>>,
     ]);
-    const tasks = taskRows.map(mapTask).sort((a, b) => b.createdAt - a.createdAt);
-    const reminders = reminderRows
-      .map(mapReminder)
-      .sort((a, b) => (a.dueAt ?? Number.MAX_SAFE_INTEGER) - (b.dueAt ?? Number.MAX_SAFE_INTEGER));
-    const active = tasks.filter((task) => !task.completed).length;
-    const completed = tasks.length - active;
-    const total = tasks.length;
-    const progress = total === 0 ? 100 : Math.round((completed / total) * 100);
+    const tasks = taskPage.page.map(mapTask);
+    const reminders = reminderPage.page.map(mapReminder);
+    const summary = buildConsolePageSummary(taskPage, reminderPage, request.pageSize);
+    const { active } = summary.counts;
 
     return {
       title: "JARVIS SYSTEM // CONSOLE 01",
@@ -134,8 +166,13 @@ async function loadConsoleState(activity: string[] = []): Promise<ConsoleState> 
       deployment,
       environment: process.env.NODE_ENV || "production",
       status: "operational",
-      mission: active > 0 ? tasks.find((task) => !task.completed)?.title ?? "Maintain operational readiness" : "Command deck clear",
-      progress,
+      mission:
+        active > 0
+          ? tasks.find((task) => !task.completed)?.title ?? "Maintain operational readiness"
+          : summary.counts.tasksPartial
+            ? "Continue task pagination for full state"
+            : "Command deck clear",
+      progress: summary.progress,
       lastUpdated: now,
       tasks,
       reminders,
@@ -148,12 +185,13 @@ async function loadConsoleState(activity: string[] = []): Promise<ConsoleState> 
       ],
       activity: [
         ...activity,
-        `${active} active task${active === 1 ? "" : "s"} loaded`,
-        `${reminders.length} reminder${reminders.length === 1 ? "" : "s"} tracked`,
+        `${active} visible active task${active === 1 ? "" : "s"} loaded`,
+        `${reminders.length} visible reminder${reminders.length === 1 ? "" : "s"} tracked`,
         "Convex bridge authenticated server-side",
         "No fabricated telemetry enabled",
       ].slice(0, 8),
-      counts: { active, completed, reminders: reminders.length },
+      counts: summary.counts,
+      pagination: summary.pagination,
     };
   } catch (error) {
     const detail = error instanceof Error ? error.message : "Unknown bridge failure";
@@ -175,7 +213,27 @@ async function loadConsoleState(activity: string[] = []): Promise<ConsoleState> 
         { label: "Production authority", value: "GUARDED", state: "guarded" },
       ],
       activity: [...activity, detail, "Console failed closed without exposing credentials"].slice(0, 8),
-      counts: { active: 0, completed: 0, reminders: 0 },
+      counts: {
+        active: 0,
+        completed: 0,
+        reminders: 0,
+        tasksPartial: false,
+        remindersPartial: false,
+      },
+      pagination: {
+        tasks: {
+          isDone: true,
+          continueCursor: "",
+          returnedCount: 0,
+          requestedPageSize,
+        },
+        reminders: {
+          isDone: true,
+          continueCursor: "",
+          returnedCount: 0,
+          requestedPageSize,
+        },
+      },
     };
   }
 }
@@ -189,12 +247,20 @@ server.tool(
     name: "show-jarvis-console",
     title: "Open Jarvis Console 01",
     description: "Open the live Jarvis Console 01 command centre",
-    schema: z.object({}),
+    schema: z.object({
+      pageSize: z.number().int().min(1).max(100).optional(),
+      taskCursor: z.string().optional(),
+      reminderCursor: z.string().optional(),
+    }),
     annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
     outputSchema: consoleStateSchema,
     widget: { name: "product-search-result", invoking: "Synchronising Console 01...", invoked: "Console 01 online" },
   },
-  async () => consoleWidget(await loadConsoleState(["Console snapshot refreshed"]), "Jarvis Console 01 is synchronised with authenticated Convex state."),
+  async (pageRequest) =>
+    consoleWidget(
+      await loadConsoleState(["Console snapshot refreshed"], pageRequest),
+      "Jarvis Console 01 is synchronised with authenticated Convex state.",
+    ),
 );
 
 server.tool(

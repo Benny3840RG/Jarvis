@@ -1,3 +1,4 @@
+import { paginationOptsValidator, paginationResultValidator } from "convex/server";
 import { v } from "convex/values";
 
 import { requireOwner } from "./authHelpers.js";
@@ -212,6 +213,26 @@ export const list = query({
       .query("reminders")
       .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
       .collect();
+  },
+});
+
+export const listPage = query({
+  args: {
+    serviceToken: v.string(),
+    paginationOpts: paginationOptsValidator,
+  },
+  returns: paginationResultValidator(reminderValidator),
+  handler: async (ctx, args) => {
+    const ownerId = requireOwner(args.serviceToken);
+    const { numItems } = args.paginationOpts;
+    if (!Number.isInteger(numItems) || numItems < 1 || numItems > 100) {
+      throw new Error("Reminder page size must be an integer from 1 to 100.");
+    }
+    return ctx.db
+      .query("reminders")
+      .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+      .order("desc")
+      .paginate(args.paginationOpts);
   },
 });
 
