@@ -139,3 +139,18 @@ export const list = query({
       .take(validatedLimit(args.limit));
   },
 });
+
+export const remove = mutation({
+  args: { serviceToken: v.string(), projectId: v.string(), id: v.string() },
+  returns: v.union(noteDocumentValidator, v.null()),
+  handler: async (ctx, args) => {
+    const ownerId = requireOwner(args.serviceToken);
+    const projectId = cleanRequiredText(args.projectId, "Project ID");
+    const id = ctx.db.normalizeId("notes", args.id);
+    if (!id) return null;
+    const note = await ctx.db.get("notes", id);
+    if (!note || note.ownerId !== ownerId || note.projectId !== projectId) return null;
+    await ctx.db.delete("notes", id);
+    return note;
+  },
+});
