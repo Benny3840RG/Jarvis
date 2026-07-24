@@ -141,10 +141,7 @@ describe("controlled reminder actions", () => {
       ),
       /another action fingerprint/,
     );
-    assert.equal(
-      (await store.get("project-1", "reminder-1"))?.title,
-      "Check compressor pressure",
-    );
+    assert.equal((await store.get("project-1", "reminder-1"))?.title, "Check compressor pressure");
   });
 
   it("retains the cancellation result after deleting the live reminder", async () => {
