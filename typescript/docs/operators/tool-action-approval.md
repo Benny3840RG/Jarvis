@@ -109,9 +109,11 @@ that were previously listed as required before this stage could be built:
    since a single Bearer service token gates this whole HTTP surface and there is no separate per-caller
    authority signal) must meet or exceed the action's `requiredAuthority`.
 4. **Idempotency and replay protection** — the request body's `idempotencyKey`, combined with the
-   action ID, is the receipt's lookup key. Replaying the same key returns the original receipt
-   byte-for-byte rather than executing again. A `dryRun: true` request validates everything but is never
-   persisted, so the same key can still be used for a real attempt afterward.
+   action ID, is the receipt's primary lookup key. Replaying the same key returns the original receipt
+   byte-for-byte rather than executing again. A `dryRun: true` request validates everything and still
+   writes a durable receipt, but as a decision/audit record under a separate key (`…:decision:…`) rather
+   than into that primary idempotency slot — so the dry-run does not occupy the key, and the same
+   `idempotencyKey` can still be used for a real attempt afterward.
 5. **Bounded timeouts and redacted failures** — `timeoutMs` is clamped to 1–30000ms (default 5000ms).
    Failure receipts carry a fixed `errorCode` enum, never a raw error message or the tool's output.
 6. **Durable execution receipts** — receipts are stored in the `toolExecutionReceipts` Convex table,
