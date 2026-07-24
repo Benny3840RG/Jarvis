@@ -64,6 +64,34 @@ describe("ConvexToolExecutionReceiptStore", () => {
     assert.equal(receipt?.completedAt, "2026-07-15T00:00:00.500Z");
   });
 
+  it("maps legacy rows with explicit conservative metadata fallbacks", async () => {
+    const client = {
+      async query() {
+        return receiptRow({
+          requestId: undefined,
+          actor: undefined,
+          approvalId: undefined,
+          policyVersion: undefined,
+          correlationId: undefined,
+          source: undefined,
+        });
+      },
+      async mutation() {
+        throw new Error("mutation must not be called by get()");
+      },
+    } as unknown as ConvexClientLike;
+    const store = new ConvexToolExecutionReceiptStore(client, "service-token");
+
+    const receipt = await store.get("legacy-key");
+
+    assert.equal(receipt?.requestId, "action-1");
+    assert.equal(receipt?.actor, "tool");
+    assert.equal(receipt?.approvalId, undefined);
+    assert.equal(receipt?.policyVersion, "legacy-unversioned");
+    assert.equal(receipt?.correlationId, "action-1");
+    assert.equal(receipt?.source, "legacy-tool-execution-receipt");
+  });
+
   it("returns null when no receipt exists for the key", async () => {
     const client = {
       async query() {
