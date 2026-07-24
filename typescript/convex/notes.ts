@@ -71,10 +71,7 @@ export const create = mutation({
     const existing = await ctx.db
       .query("notes")
       .withIndex("by_owner_and_project_and_idempotency_key", (q) =>
-        q
-          .eq("ownerId", ownerId)
-          .eq("projectId", projectId)
-          .eq("idempotencyKey", idempotencyKey),
+        q.eq("ownerId", ownerId).eq("projectId", projectId).eq("idempotencyKey", idempotencyKey),
       )
       .unique();
     if (existing) {
