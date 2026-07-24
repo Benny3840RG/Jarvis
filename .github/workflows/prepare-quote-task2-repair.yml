@@ -94,14 +94,34 @@ jobs:
             convex/_generated/api.d.ts \
             tests/quoteConvexContracts.test.ts
 
-      - name: Verify focused repair
+      - name: Verify focused repair and publish failures
         working-directory: typescript
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          npm run type-check
-          npm run lint
-          npm run format:check
-          node --import tsx --test tests/quoteConvexContracts.test.ts
-          npm run test:convex
+          set +e
+          {
+            npm run type-check
+            npm run lint
+            npm run format:check
+            node --import tsx --test tests/quoteConvexContracts.test.ts
+            npm run test:convex
+          } > "$RUNNER_TEMP/quote-repair-verify.log" 2>&1
+          status=$?
+          set -e
+          cat "$RUNNER_TEMP/quote-repair-verify.log"
+          if [[ $status -ne 0 ]]; then
+            tail -n 180 "$RUNNER_TEMP/quote-repair-verify.log" > "$RUNNER_TEMP/quote-repair-tail.log"
+            {
+              echo 'Quote Task 2 focused verification failed:'
+              echo
+              echo '```text'
+              cat "$RUNNER_TEMP/quote-repair-tail.log"
+              echo '```'
+            } > "$RUNNER_TEMP/quote-repair-comment.md"
+            gh pr comment 176 --body-file "$RUNNER_TEMP/quote-repair-comment.md"
+            exit $status
+          fi
 
       - name: Remove preparer and commit
         env:
