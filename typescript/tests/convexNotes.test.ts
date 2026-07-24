@@ -101,6 +101,29 @@ describe("ConvexNoteStore", () => {
     );
   });
 
+  it("removes a note through the authenticated owner/project mutation", async () => {
+    const calls: Array<{ args: unknown }> = [];
+    const client = {
+      async query() {
+        throw new Error("query must not be called by remove()");
+      },
+      async mutation(_functionRef: unknown, args: unknown) {
+        calls.push({ args });
+        return noteRow();
+      },
+    } as unknown as ConvexClientLike;
+    const store = new ConvexNoteStore(client, "owner-service-token");
+
+    const removed = await store.remove("project-1", "note-1");
+
+    assert.equal(removed?.id, "note-1");
+    assert.deepEqual(calls[0]?.args, {
+      serviceToken: "owner-service-token",
+      projectId: "project-1",
+      id: "note-1",
+    });
+  });
+
   it("requires an authenticated service token", () => {
     const client = {
       async query() {
