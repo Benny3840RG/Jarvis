@@ -1,0 +1,76 @@
+name: Repair AM-003 traceability
+
+on:
+  push:
+    branches:
+      - docs/activate-am003-150
+    paths:
+      - ".github/workflows/repair-am003-traceability.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: docs/activate-am003-150
+
+      - name: Repair exact AM-003 traceability block
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("docs/traceability/action-family-registry.yaml")
+          text = path.read_text(encoding="utf-8")
+          malformed = """      test_ids:
+                - TEST-AM-003-001
+                - TEST-AM-003-NEG-001
+                - TEST-AM-003-PERSIST-001
+                - TEST-AM-003-SMOKE-001
+              evidence_ids:
+                - EVD-AM-003-001""".replace("            ", "")
+          correct = """      test_ids:
+                - TEST-AM-003-001
+                - TEST-AM-003-NEG-001
+                - TEST-AM-003-PERSIST-001
+                - TEST-AM-003-SMOKE-001
+              evidence_ids:
+                - EVD-AM-003-001"""
+          # Build the exact desired indentation without stripping leading spaces.
+          correct = (
+              "      test_ids:\n"
+              "        - TEST-AM-003-001\n"
+              "        - TEST-AM-003-NEG-001\n"
+              "        - TEST-AM-003-PERSIST-001\n"
+              "        - TEST-AM-003-SMOKE-001\n"
+              "      evidence_ids:\n"
+              "        - EVD-AM-003-001"
+          )
+          if text.count(malformed) != 1:
+              raise SystemExit("Malformed AM-003 traceability block was not found exactly once")
+          path.write_text(text.replace(malformed, correct, 1), encoding="utf-8")
+          PY
+
+      - name: Regenerate and validate generated map
+        run: |
+          ruby scripts/generate-action-map.rb
+          ruby scripts/generate-action-map.rb --check
+
+      - name: Remove repair workflow
+        run: rm .github/workflows/repair-am003-traceability.yml
+
+      - name: Commit repaired activation
+        run: |
+          set -euo pipefail
+          git config user.name "jarvis-governance-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add \
+            docs/traceability/action-family-registry.yaml \
+            docs/traceability/action-map.generated.md \
+            .github/workflows/repair-am003-traceability.yml
+          git commit -m "fix(governance): repair AM-003 traceability nesting"
+          git push origin HEAD:docs/activate-am003-150
