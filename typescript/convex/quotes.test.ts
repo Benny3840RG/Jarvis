@@ -22,7 +22,7 @@ function createInput(number = "BT-2026-001") {
     validUntil: "2026-08-24",
     notes: "Includes cleanup",
     termsIncluded: true,
-  } as const;
+  };
 }
 
 beforeEach(() => {
