@@ -86,3 +86,5 @@
 The runtime tranche is complete when the exact PR head passes the permanent TypeScript workflow and review-thread inspection. Commissioning begins only after that exact head is merged; no external action family becomes active during this runtime merge.
 
 The final review scope excludes temporary workflow helpers and includes only the permanent reconciliation runtime, tests and implementation ledger.
+
+This document is frozen for final runtime review; further changes belong to the commissioning evidence stage.
