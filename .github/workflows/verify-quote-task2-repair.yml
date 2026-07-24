@@ -1,0 +1,39 @@
+name: Verify quote task 2 repair
+
+on:
+  push:
+    branches:
+      - fix/quote-task2-review
+    paths:
+      - "typescript/**"
+      - ".github/workflows/verify-quote-task2-repair.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: typescript
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: typescript/.nvmrc
+          cache: npm
+          cache-dependency-path: typescript/package-lock.json
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Type-check
+        run: npm run type-check
+      - name: Lint
+        run: npm run lint
+      - name: Check formatting
+        run: npm run format:check
+      - name: Run existing tests
+        run: npm run test:coverage
+      - name: Run persisted Convex function tests
+        run: npx --no-install vitest run --config vitest.config.mts
