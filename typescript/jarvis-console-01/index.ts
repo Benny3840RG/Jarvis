@@ -1,3 +1,5 @@
+import { createHash, timingSafeEqual } from "node:crypto";
+
 import { ConvexHttpClient } from "convex/browser";
 import { anyApi } from "convex/server";
 import { MCPServer, text, widget } from "mcp-use/server";
@@ -14,6 +16,41 @@ const server = new MCPServer({
   favicon: "favicon.ico",
   websiteUrl: "https://github.com/Benny3840/Jarvis",
   icons: [{ src: "icon.svg", mimeType: "image/svg+xml", sizes: ["512x512"] }],
+});
+
+// The Convex service token is a server-held secret used only for the Convex
+// bridge; it is never presented by a caller, so it cannot double as a gateway
+// credential. CONSOLE_GATEWAY_TOKEN is the separate, caller-presented secret
+// that actually gates reaching the MCP surface at all.
+const gatewayToken = process.env.CONSOLE_GATEWAY_TOKEN;
+
+function parseBearerToken(header: string | null | undefined): string | undefined {
+  if (typeof header !== "string") return undefined;
+  const match = /^Bearer (\S+)$/i.exec(header);
+  return match?.[1];
+}
+
+function digest(value: string): Buffer {
+  return createHash("sha256").update(value, "utf8").digest();
+}
+
+function matchesGatewayToken(candidate: string, configured: string): boolean {
+  return timingSafeEqual(digest(candidate), digest(configured));
+}
+
+server.use(async (c, next) => {
+  const path = new URL(c.req.url).pathname;
+  const isGatedRoute = path === "/mcp" || path.startsWith("/mcp/") || path === "/sse" || path.startsWith("/sse/");
+  if (!isGatedRoute) return next();
+
+  if (!gatewayToken) {
+    return c.json({ error: "Console gateway authentication is not configured." }, 503);
+  }
+  const candidate = parseBearerToken(c.req.header("authorization"));
+  if (candidate === undefined || !matchesGatewayToken(candidate, gatewayToken)) {
+    return c.json({ error: "A valid Bearer gateway token is required." }, 401);
+  }
+  return next();
 });
 
 const taskSchema = z.object({
@@ -144,7 +181,9 @@ async function loadConsoleState(activity: string[] = []): Promise<ConsoleState> 
         { label: "Manufact", value: "DEPLOYED", state: "good" },
         { label: "Convex", value: "AUTHENTICATED", state: "good" },
         { label: "Owner scope", value: "ENFORCED", state: "good" },
-        { label: "Production authority", value: "GUARDED", state: "guarded" },
+        gatewayToken
+          ? { label: "Gateway auth", value: "ENFORCED", state: "good" }
+          : { label: "Gateway auth", value: "NOT CONFIGURED", state: "pending" },
       ],
       activity: [
         ...activity,
@@ -172,7 +211,9 @@ async function loadConsoleState(activity: string[] = []): Promise<ConsoleState> 
         { label: "MCP endpoint", value: "ONLINE", state: "good" },
         { label: "Manufact", value: "DEPLOYED", state: "good" },
         { label: "Convex", value: "BRIDGE DEGRADED", state: "pending" },
-        { label: "Production authority", value: "GUARDED", state: "guarded" },
+        gatewayToken
+          ? { label: "Gateway auth", value: "ENFORCED", state: "good" }
+          : { label: "Gateway auth", value: "NOT CONFIGURED", state: "pending" },
       ],
       activity: [...activity, detail, "Console failed closed without exposing credentials"].slice(0, 8),
       counts: { active: 0, completed: 0, reminders: 0 },

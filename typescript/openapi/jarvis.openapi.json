@@ -1945,7 +1945,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ExpectedRevisionRequest"
+                "$ref": "#/components/schemas/ToolActionApprovalRequest"
               }
             }
           }
@@ -5991,6 +5991,22 @@
           "expectedRevision": {
             "type": "integer",
             "minimum": 1
+          }
+        }
+      },
+      "ToolActionApprovalRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["expectedRevision", "approvalToken"],
+        "properties": {
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "approvalToken": {
+            "type": "string",
+            "minLength": 1,
+            "description": "A separately configured operator secret, distinct from the Bearer service token, that proves a human decided to approve this specific proposal."
           }
         }
       },

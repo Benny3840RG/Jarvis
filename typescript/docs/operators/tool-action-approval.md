@@ -68,16 +68,24 @@ must then be reviewed and restaged against current project context rather than s
 
 ## HTTP operations
 
-All routes require the existing Jarvis Bearer service token.
+All routes require the existing Jarvis Bearer service token. `POST .../approve` additionally
+requires `approvalToken` in its request body — a second, separately configured secret
+(`JARVIS_APPROVAL_TOKEN`, with optional `JARVIS_APPROVAL_TOKEN_PREVIOUS` during rotation) that
+only the human operator holds. It is checked with the same constant-time comparison as the
+service token and is never accepted from, or reused by, any other route: staging, listing, and
+executing all still authenticate with the shared Bearer token alone. This exists so that holding
+the service token — which an AI agent staging proposals necessarily does — is not by itself proof
+that a human decided to approve a specific one. If `JARVIS_APPROVAL_TOKEN` is not configured,
+`/approve` fails closed with a 503 rather than accepting any token.
 
-| Method | Path                                                           | Result                        |
-| ------ | -------------------------------------------------------------- | ----------------------------- |
-| POST   | `/api/v1/projects/{projectId}/tool-actions`                    | Stage a proposal              |
-| GET    | `/api/v1/projects/{projectId}/tool-actions`                    | List recent proposals         |
-| GET    | `/api/v1/projects/{projectId}/tool-actions/{actionId}`         | Inspect one proposal          |
-| POST   | `/api/v1/projects/{projectId}/tool-actions/{actionId}/approve` | Approve after review          |
-| POST   | `/api/v1/projects/{projectId}/tool-actions/{actionId}/reject`  | Reject with a reason          |
-| POST   | `/api/v1/projects/{projectId}/tool-actions/{actionId}/execute` | Attempt execution (see below) |
+| Method | Path                                                           | Result                                          |
+| ------ | -------------------------------------------------------------- | ----------------------------------------------- |
+| POST   | `/api/v1/projects/{projectId}/tool-actions`                    | Stage a proposal                                |
+| GET    | `/api/v1/projects/{projectId}/tool-actions`                    | List recent proposals                           |
+| GET    | `/api/v1/projects/{projectId}/tool-actions/{actionId}`         | Inspect one proposal                            |
+| POST   | `/api/v1/projects/{projectId}/tool-actions/{actionId}/approve` | Approve after review (requires `approvalToken`) |
+| POST   | `/api/v1/projects/{projectId}/tool-actions/{actionId}/reject`  | Reject with a reason                            |
+| POST   | `/api/v1/projects/{projectId}/tool-actions/{actionId}/execute` | Attempt execution (see below)                   |
 
 ## Execution
 
