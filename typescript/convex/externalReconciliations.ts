@@ -503,7 +503,9 @@ export const completeAttempt = mutation({
 
     assertEffect(reconciliation, scope.effectFingerprint);
     assertProvider(reconciliation, expectedProvider);
-    if (!( ["succeeded", "failed"] as const).includes(args.receipt.status as "succeeded" | "failed")) {
+    if (
+      !(["succeeded", "failed"] as const).includes(args.receipt.status as "succeeded" | "failed")
+    ) {
       throw new Error("completeAttempt requires a terminal receipt.");
     }
     const terminalStatus = args.receipt.status as "succeeded" | "failed";

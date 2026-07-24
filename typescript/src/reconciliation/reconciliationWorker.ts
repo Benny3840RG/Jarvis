@@ -123,7 +123,15 @@ export class ReconciliationWorker {
     const adapter = this.registry.get(reference.provider);
     if (!adapter) {
       const reason = `unknown-provider:${reference.provider}`;
-      return this.release(reconciliationId, input.workerId, leaseToken, claimNow, reason, claimNow, 1);
+      return this.release(
+        reconciliationId,
+        input.workerId,
+        leaseToken,
+        claimNow,
+        reason,
+        claimNow,
+        1,
+      );
     }
 
     let providerResult: ProviderReconciliationResult;
