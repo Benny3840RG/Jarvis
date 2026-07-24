@@ -31,3 +31,5 @@ jobs:
           node --import tsx --test
           tests/convexQuotesAdapter.test.ts
           tests/quoteRestartPersistence.test.ts
+      - name: Run repository quality gate
+        run: npm run check
