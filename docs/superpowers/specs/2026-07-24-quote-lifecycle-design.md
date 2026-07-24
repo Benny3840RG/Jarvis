@@ -8,44 +8,45 @@
 
 ## 1. Purpose
 
-Replace the current single-record quote model with an owner-scoped, revision-safe model that separates:
+Replace the current single mutable quote record with an owner-scoped model that separates:
 
-1. the stable commercial quote aggregate;
-2. immutable and auditable quote revisions; and
-3. provider-facing delivery attempts governed by the external reconciliation subsystem from issue #154.
+1. the stable quote aggregate;
+2. numbered commercial revisions; and
+3. provider-facing delivery attempts governed by the reconciliation subsystem from issue #154.
 
-The design is the prerequisite for `AM-012 Finalize quote`, `AM-013 Send quote`, and `WF-QUOTE-001`. Those action families and workflow remain `planned` until their runtime bindings, tests, development commissioning evidence, and governance activation are complete.
+This design is prerequisite architecture for `AM-012 Finalize quote`, `AM-013 Send quote`, and `WF-QUOTE-001`. All three remain `planned` until their separate runtime, testing, commissioning, evidence, and governance gates pass.
 
 ## 2. Existing-state problem
 
-The current `Quote` type combines content, commercial outcome, and delivery state in one mutable object. Its status is `draft | sent | accepted | declined`, and the generic update method permits arbitrary status and content replacement. The JSON and in-memory stores have no owner boundary, revision number, immutable finalised snapshot, optimistic concurrency guard, approval fingerprint, delivery-attempt ledger, or reconciliation binding.
+The current `Quote` combines content, commercial outcome, and delivery state in one object with `draft | sent | accepted | declined`. Its generic update operation can replace status and commercial content without a revision boundary.
 
-This creates four unacceptable failure modes:
+The existing JSON and in-memory stores have no:
 
-- sending state can overwrite or be confused with commercial acceptance state;
-- a finalised quote can be changed without producing a new auditable revision;
-- an approval can silently apply to changed content or a changed recipient;
-- provider uncertainty can lead to a blind duplicate send.
+- authenticated owner boundary;
+- revision number or immutable finalised snapshot;
+- optimistic concurrency check;
+- approval-bound content fingerprint;
+- delivery-attempt ledger;
+- provider request or correlation reference; or
+- no-blind-retry reconciliation path.
+
+Consequently, sending can be confused with acceptance, changed content can inherit stale approval, and uncertain provider outcomes can be retried unsafely.
 
 ## 3. Chosen architecture
 
-Use three independent Convex record families with narrow domain interfaces:
+Use three Convex record families with focused interfaces:
 
-- `quotes`: stable aggregate identity and commercial outcome;
-- `quoteRevisions`: versioned commercial content and finalisation lifecycle;
+- `quotes`: stable identity, current-revision pointer, and current commercial status;
+- `quoteRevisions`: versioned content, immutable finalisation, and historical commercial outcomes;
 - `quoteDeliveryAttempts`: exact send intent, provider execution state, and reconciliation linkage.
 
-The aggregate points to the current revision, but revisions and delivery attempts are separate records. This avoids unbounded document growth, isolates concurrent writes, permits indexed uniqueness checks, and lets delivery state evolve without mutating the commercial quote.
+Revisions and delivery attempts are separate records rather than embedded arrays. This prevents unbounded document growth, reduces write contention, supports indexed uniqueness checks, and keeps delivery state independent from commercial state.
 
 ### Rejected alternatives
 
-#### Single embedded quote document
+**Single embedded quote document:** simpler initially, but broad writes, document growth, and concurrent revision/send mutations make exactly-once behaviour fragile.
 
-Embedding all revisions and delivery attempts inside one quote document is initially simpler, but it creates document growth, write contention, broad replacement mutations, and difficult exactly-once guarantees.
-
-#### Full event sourcing
-
-An event-sourced quote domain would provide strong audit history, but it introduces replay, projection, migration, and operational complexity that is not justified for the current scope. The selected design retains immutable revision and attempt records without requiring a general event store.
+**Full event sourcing:** strong auditability, but projection, replay, migration, and operational complexity exceed the current requirement. Immutable revisions and delivery attempts provide the required audit boundary without a general event store.
 
 ## 4. Domain model
 
@@ -73,19 +74,19 @@ export type QuoteAggregate = {
 
 Rules:
 
-- `quoteId` is stable for the life of the commercial opportunity.
-- `ownerId` is derived exclusively through the existing authenticated `requireOwner` boundary.
-- `number` is unique per owner.
-- `aggregateVersion` increments on every aggregate mutation and is required for optimistic concurrency.
-- `currentRevision` is monotonically increasing and never decreases.
-- `commercialStatus` is independent of delivery status.
-- `accepted`, `declined`, and `expired` record the exact `commercialRevision` to which the outcome applies.
-- A later revision returns the aggregate to `open`; it does not erase the historical outcome recorded against the older revision.
+- `quoteId` is stable for the commercial opportunity.
+- `ownerId` is derived only through the existing authenticated `requireOwner` boundary.
+- `number` is unique within one owner.
+- `aggregateVersion` increments on every aggregate mutation.
+- `currentRevision` increases monotonically.
+- `commercialStatus` describes the current revision only and never reflects delivery state.
+- When a newer draft revision is created, the aggregate returns to `open`; the previous revision retains its historical outcome fields.
 
 ### 4.2 Quote revision
 
 ```ts
 export type QuoteRevisionStatus = "draft" | "reviewed" | "finalized";
+export type QuoteHistoricalOutcome = "accepted" | "declined" | "expired";
 
 export type QuoteRevisionLineItem = {
   description: string;
@@ -111,6 +112,8 @@ export type QuoteRevision = {
   termsIncluded: boolean;
   fingerprint?: string;
   predecessorRevisionId?: string;
+  historicalOutcome?: QuoteHistoricalOutcome;
+  historicalOutcomeRecordedAt?: number;
   reviewedAt?: number;
   finalizedAt?: number;
   createdAt: number;
@@ -120,19 +123,18 @@ export type QuoteRevision = {
 
 Rules:
 
-- Revision numbers are unique within `(ownerId, quoteId)`.
-- Totals are always derived server-side from line items and tax rate.
-- Content may be edited only while `status === "draft"`.
-- `draft -> reviewed` is the normal review transition.
-- `reviewed -> draft` is allowed only through an explicit `reopenForEditing` command. It clears `reviewedAt`, increments `revisionVersion`, and remains auditable through the updated timestamps and mutation receipt.
-- `reviewed -> finalized` is the only finalisation transition. Direct `draft -> finalized` is rejected; the planned `AM-012` registry state impact must be corrected before activation.
-- A finalised revision is immutable. No field, including notes, validity, totals, or terms, may be patched.
-- Editing after finalisation creates revision `N + 1` in `draft` state by atomically copying the finalised content and advancing the aggregate pointer.
-- The finalisation fingerprint is generated from canonical content, not timestamps or database IDs.
+- `(ownerId, quoteId, revision)` is unique.
+- Totals are always derived server-side.
+- Content is editable only while `status === "draft"`.
+- `draft -> reviewed` occurs through `submitForReview`.
+- `reviewed -> draft` occurs only through `reopenForEditing`; it clears `reviewedAt` and increments `revisionVersion`.
+- `reviewed -> finalized` is the only normal finalisation path.
+- Direct `draft -> finalized` is rejected. The planned `AM-012` registry transition must be corrected before activation.
+- Finalised revisions are immutable, including notes, terms, validity, totals, and fingerprint.
+- Editing after finalisation atomically creates revision `N + 1` in `draft`, copies the commercial content, and advances the aggregate pointer.
+- `historicalOutcome` is written on the exact finalised revision accepted, declined, or expired. It remains after a later revision returns the aggregate to `open`.
 
 ### 4.3 Finalised revision fingerprint
-
-The canonical revision fingerprint is:
 
 ```text
 quote-revision:v1:sha256(canonicalJson({
@@ -154,7 +156,7 @@ quote-revision:v1:sha256(canonicalJson({
 }))
 ```
 
-The fingerprint is written once during finalisation and never recomputed from mutable state. A finalisation replay with the same quote, revision, and fingerprint returns the existing finalised revision. A changed fingerprint for the same revision is rejected and audited as a collision.
+The fingerprint is written exactly once during finalisation. It excludes timestamps and database IDs. Replaying finalisation for the same revision and fingerprint returns the existing result. A different fingerprint for the same revision is rejected and audited.
 
 ### 4.4 Quote delivery attempt
 
@@ -197,85 +199,70 @@ export type QuoteDeliveryAttempt = {
 
 Rules:
 
-- A delivery attempt can reference only a `finalized` revision whose stored fingerprint matches the request.
+- Delivery can reference only a finalised revision whose stored fingerprint exactly matches.
 - Recipient addresses are normalised deterministically before fingerprinting.
-- Delivery state never changes `commercialStatus`.
-- `reconciled` is used only after an earlier `indeterminate` result. `reconciledOutcome` preserves whether the provider ultimately proved success or failure.
-- Provider request and correlation identifiers are persisted through the external reconciliation boundary before the attempt may be treated as recoverable.
-- An attempt without a durable provider reference cannot become `succeeded`; it becomes `indeterminate` or `failed` according to the existing reconciliation rules.
+- Delivery status never changes aggregate or revision commercial outcome.
+- `reconciled` is valid only after `indeterminate`; `reconciledOutcome` preserves the proven terminal result.
+- Provider request and correlation identifiers are persisted through the existing external reconciliation boundary.
+- An execution without a durable provider reference cannot become `succeeded`.
 
 ## 5. State machines
 
-### 5.1 Revision lifecycle
+### Revision lifecycle
 
 ```text
-create quote
-  -> revision 1 draft
+createQuote -> revision 1 draft
 
-draft
-  -> reviewed                 submitForReview
-
-reviewed
-  -> draft                    reopenForEditing
-  -> finalized                finalizeRevision
-
-finalized
-  -> immutable
-  -> new draft revision N+1   createRevisionFromFinalized
+draft -> reviewed                 submitForReview
+reviewed -> draft                  reopenForEditing
+reviewed -> finalized              finalizeRevision
+finalized -> revision N+1 draft    createRevisionFromFinalized
 ```
 
-Invalid transitions return a typed conflict and do not mutate state.
+Finalised content never transitions back to an editable state.
 
-### 5.2 Commercial lifecycle
+### Commercial lifecycle
 
 ```text
-open
-  -> accepted
-  -> declined
-  -> expired
-
-accepted | declined | expired
-  -> open only when a newer draft revision is created
+open -> accepted
+open -> declined
+open -> expired
+accepted | declined | expired -> open only when revision N+1 is created
 ```
 
-Commercial outcome commands require the exact aggregate version and exact revision being accepted, declined, or expired. Delivery success does not imply acceptance.
+Commercial outcome commands require the current aggregate version and the exact finalised revision. Delivery success does not imply acceptance.
 
-### 5.3 Delivery lifecycle
+### Delivery lifecycle
 
 ```text
-pending
-  -> executing
-
-executing
-  -> succeeded
-  -> failed
-  -> indeterminate
-
-indeterminate
-  -> reconciled { reconciledOutcome: succeeded }
-  -> reconciled { reconciledOutcome: failed }
+pending -> executing
+executing -> succeeded
+executing -> failed
+executing -> indeterminate
+indeterminate -> reconciled { reconciledOutcome: succeeded }
+indeterminate -> reconciled { reconciledOutcome: failed }
 ```
 
-There is no transition from `indeterminate` back to `executing`. The original external effect is never retried blindly. Only the provider-status reconciliation adapter may resolve the outcome.
+There is no `indeterminate -> executing` transition. Provider-status reconciliation resolves uncertainty; the original send is not retried blindly.
 
 ## 6. Optimistic concurrency
 
-Every write command carries explicit expected versions:
+Every write carries explicit expectations:
 
-- aggregate commands require `expectedAggregateVersion`;
-- draft revision edits and transitions require `expectedRevisionVersion`;
+- aggregate changes require `expectedAggregateVersion`;
+- draft edits and revision transitions require `expectedRevisionVersion`;
 - finalisation requires both expected versions and the expected revision number;
-- creating a new revision from a finalised revision requires the aggregate pointer and finalised fingerprint to match;
-- commercial outcome updates require the expected aggregate version and target revision;
+- revision forking requires the aggregate pointer and finalised fingerprint to match;
+- commercial outcome recording requires the expected aggregate version and target revision;
 - delivery creation requires the exact stored revision fingerprint.
 
-A mismatch returns `quote-version-conflict` with no partial write. Convex mutations update all related records atomically.
+Any mismatch returns `quote-version-conflict` with no partial mutation. Related Convex writes occur in one mutation.
 
 ## 7. Approval and execution binding
 
-Jarvis retains the existing `ToolAction` approval model. No separate approval authority or free-standing approval table is introduced.
+Jarvis retains the existing approved `ToolAction` and `ToolExecutionService` authority model. No parallel approval table or approval engine is introduced.
 
-For `AM-013 Send quote`, the approved action fingerprint must cover:
+`AM-013` approval fingerprint fields are:
 
 ```text
 action_family_id
@@ -287,20 +274,18 @@ recipient
 delivery_channel
 ```
 
-The delivery attempt stores the exact `approvalId` and `actionFingerprint` from the approved `ToolAction`.
+The delivery attempt stores the exact `approvalId` and `actionFingerprint`.
 
 Approval consumption means:
 
-1. the exact approved action enters `ToolExecutionService` once;
-2. the delivery attempt is atomically created or replayed for the exact send fingerprint;
-3. the tool-execution receipt and external reconciliation record prevent a second provider execution;
-4. changed content, revision, recipient, or channel produces a different fingerprint and requires a new approval.
+1. the exact approved action reaches `ToolExecutionService`;
+2. the exact send scope creates or replays one delivery attempt;
+3. the tool-execution receipt and reconciliation record prevent a second provider execution;
+4. changed revision content, revision number, recipient, or channel requires a new action and approval.
 
-The quote domain does not independently decide whether approval is valid. It validates that the approved action inputs still match the authoritative finalised revision and delivery request.
+The quote domain validates authoritative quote inputs; it does not independently grant approval.
 
 ## 8. Send fingerprint and idempotency
-
-The canonical send fingerprint is:
 
 ```text
 quote-send:v1:sha256(canonicalJson({
@@ -313,40 +298,33 @@ quote-send:v1:sha256(canonicalJson({
 }))
 ```
 
-The idempotency scope is `(ownerId, quoteId, revision, normalizedRecipient, channel)`.
+Scope: `(ownerId, quoteId, revision, normalizedRecipient, channel)`.
 
 Behaviour:
 
-- exact duplicate: return the original delivery attempt or terminal receipt;
-- same scope with changed revision fingerprint: reject and audit;
-- same quote revision sent to a different recipient: new scope, new approval, new attempt;
-- same quote revision sent through a different channel: new scope, new approval, new attempt;
-- unresolved attempt: return the original indeterminate state and never call the provider again;
-- reconciled attempt: return the reconciled outcome.
+- exact duplicate returns the original attempt or receipt;
+- changed fingerprint under the same scope is rejected and audited;
+- different recipient or channel creates a new scope and requires new approval;
+- unresolved attempts replay the original indeterminate result without calling the provider;
+- reconciled attempts replay the reconciled outcome.
 
-## 9. Convex persistence design
+## 9. Convex persistence
 
-### 9.1 `quotes`
-
-Required indexes:
+### `quotes` indexes
 
 - `by_owner_and_quote_id`
 - `by_owner_and_number`
 - `by_owner_and_client_id`
 - `by_owner_and_project_id`
 
-### 9.2 `quoteRevisions`
-
-Required indexes:
+### `quoteRevisions` indexes
 
 - `by_owner_quote_and_revision`
 - `by_owner_and_revision_id`
 - `by_owner_quote_and_status`
 - `by_owner_and_fingerprint`
 
-### 9.3 `quoteDeliveryAttempts`
-
-Required indexes:
+### `quoteDeliveryAttempts` indexes
 
 - `by_owner_and_delivery_attempt_id`
 - `by_owner_and_send_scope`
@@ -354,11 +332,11 @@ Required indexes:
 - `by_owner_and_reconciliation_id`
 - `by_owner_and_status`
 
-All lookups use bounded indexed queries. Unbounded `.collect()` and post-query filtering are prohibited for authoritative mutation paths.
+Authoritative paths use bounded indexed queries. Unbounded `.collect()` and post-query filtering are prohibited.
 
 ## 10. Domain interfaces
 
-The current broad `QuoteStore.update(id, update)` interface is replaced by explicit commands:
+The broad `QuoteStore.update(id, update)` interface is retired in favour of controlled commands:
 
 ```ts
 export interface QuoteRepository {
@@ -388,9 +366,7 @@ No generic status setter remains.
 
 ## 11. HTTP and tool boundaries
 
-### 11.1 HTTP quote administration
-
-The authenticated HTTP API exposes controlled quote administration:
+Authenticated administration endpoints:
 
 - `POST /api/v1/quotes`
 - `GET /api/v1/quotes`
@@ -403,17 +379,17 @@ The authenticated HTTP API exposes controlled quote administration:
 - `POST /api/v1/quotes/:quoteId/commercial-outcome`
 - `GET /api/v1/quotes/:quoteId/deliveries`
 
-The old generic `PATCH /api/v1/quotes/:quoteId` status mutation is removed after migration. Until migration completes, it must reject `status` and any mutation of a finalised record.
+The legacy generic `PATCH /api/v1/quotes/:quoteId` status mutation is removed after migration. During compatibility, it rejects `status` and all finalised-content mutation.
 
-### 11.2 Tool actions
+Tool boundaries:
 
-- `TOOL-QUOTE-FINALIZE` consumes the controlled finalisation command and remains internal-only.
-- `TOOL-QUOTE-SEND` uses `ToolExecutionService` with `externalProvider`, the exact send fingerprint, provider-attempt registration, and the reconciliation store.
-- Neither tool enters the live allowlist during the initial storage and lifecycle implementation.
+- `TOOL-QUOTE-FINALIZE` invokes the controlled finalisation command.
+- `TOOL-QUOTE-SEND` uses `ToolExecutionService`, an `externalProvider`, provider-attempt registration, and the reconciliation store.
+- Neither tool enters the live allowlist during the initial model and lifecycle tranche.
 
 ## 12. Error model
 
-Typed domain errors map to HTTP problem details and tool receipts:
+Typed errors:
 
 - `quote-not-found`
 - `quote-revision-not-found`
@@ -425,149 +401,146 @@ Typed domain errors map to HTTP problem details and tool receipts:
 - `quote-recipient-invalid`
 - `quote-delivery-collision`
 - `quote-delivery-pending-reconciliation`
-- `quote-cross-owner-access-denied`
 - `quote-persistence-failed`
 
-Cross-owner access returns the same externally visible not-found response as an absent record, while an internal audit event records the denied owner mismatch. This avoids leaking record existence.
+Absent and cross-owner records both return the same external `404`. The internal audit stream records denied owner mismatches without exposing record existence.
 
-## 13. Migration and compatibility
+## 13. Legacy migration
 
-The current JSON and in-memory quote stores remain test fixtures only after the Convex model becomes authoritative.
+The JSON and in-memory stores become compatibility fixtures after Convex is authoritative.
 
-Development migration rules:
+Development-only migration:
 
-1. read existing JSON quotes without mutating them;
-2. create one aggregate and one revision per legacy quote;
-3. map legacy `draft` to revision `draft` and commercial `open`;
-4. map legacy `sent` to a finalised revision with commercial `open`, but create no synthetic provider delivery attempt because provider evidence does not exist;
-5. map legacy `accepted` to a finalised revision and commercial `accepted`;
-6. map legacy `declined` to a finalised revision and commercial `declined`;
-7. derive totals again from line items;
-8. produce a migration report containing source ID, destination quote ID, mapped state, and any rejected row;
-9. make migration idempotent through a stable legacy-source key;
-10. retain the source file until explicit cleanup is separately authorised.
+1. reads legacy JSON without modifying it;
+2. creates one aggregate and one revision per source quote;
+3. maps legacy `draft` to revision `draft`, aggregate `open`;
+4. maps legacy `sent` to a migration-imported finalised revision, aggregate `open`, and no delivery attempt because provider evidence is absent;
+5. maps legacy `accepted` to a migration-imported finalised revision with historical and aggregate `accepted`;
+6. maps legacy `declined` to a migration-imported finalised revision with historical and aggregate `declined`;
+7. derives totals again from line items;
+8. records source ID, destination ID, mapped state, and rejected rows;
+9. uses a stable legacy-source key for idempotency; and
+10. retains the source file until separately authorised cleanup.
 
-No production migration is included in this issue.
+Migration-imported finalisation is a dedicated development-only mutation. It cannot be called by HTTP, MCP, `AM-012`, or production code, and it records `source: legacy-migration`.
 
-## 14. Testing requirements
+No production migration is part of issue #152.
 
-### Domain tests
+## 14. Testing
 
-- create revision 1 as draft with derived totals;
-- reject arbitrary status changes;
-- allow only controlled transitions;
+### Domain
+
+- create revision 1 draft with derived totals;
+- reject arbitrary status mutation;
+- enforce controlled transitions;
 - reject direct draft finalisation;
-- prove finalised revisions are immutable;
-- fork a finalised revision to N+1 draft;
-- invalidate prior send approval inputs after a new revision;
-- preserve commercial outcome independently from delivery state.
+- prove finalised immutability;
+- fork finalised N to draft N+1;
+- prove a newer revision invalidates earlier send inputs;
+- preserve historical commercial outcome independently from delivery.
 
-### Concurrency and persistence tests
+### Concurrency and persistence
 
-- reject stale aggregate version;
-- reject stale revision version;
-- atomically allocate one revision number under concurrent forks;
-- enforce owner-scoped quote number uniqueness;
+- reject stale aggregate and revision versions;
+- allocate one revision number under concurrent forks;
+- enforce owner-scoped quote-number uniqueness;
 - prevent cross-owner reads and writes;
-- prove fresh-client persistence after restart;
-- use indexed queries for all authoritative paths.
+- prove fresh-client restart persistence;
+- prove authoritative queries are index-bounded.
 
-### Delivery tests
+### Delivery
 
-- reject delivery for non-finalised revision;
-- reject changed revision fingerprint;
-- reject changed recipient under the same idempotency scope;
+- reject non-finalised revisions and changed fingerprints;
+- reject a changed recipient under the same idempotency scope;
 - replay exact duplicate without provider execution;
 - persist provider request and correlation identifiers;
-- produce one indeterminate record on timeout;
+- create one durable indeterminate outcome on timeout;
 - block blind retry while unresolved;
-- reconcile proven provider success and failure;
-- preserve commercial outcome through delivery and reconciliation;
-- consume the exact approved action once.
+- reconcile proven success and failure;
+- preserve commercial state through delivery and reconciliation;
+- bind the exact approved action once.
 
-### HTTP and OpenAPI tests
+### HTTP and OpenAPI
 
-- validate all controlled endpoints and request bodies;
+- validate controlled endpoints and request bodies;
 - return `409` for version and fingerprint conflicts;
 - return non-leaking `404` for absent and cross-owner records;
-- remove the legacy generic status mutation contract;
-- keep response totals server-derived.
+- remove legacy generic status mutation;
+- keep totals server-derived.
 
 ### Development smoke
 
-A self-cleaning smoke test must:
+The self-cleaning smoke must:
 
-1. refuse any non-`dev:` deployment before store construction;
-2. create a quote and draft revision;
-3. review and finalise it;
-4. verify immutable replay through a fresh client;
-5. fork a new revision and prove the old fingerprint remains unchanged;
-6. create a synthetic delivery attempt;
-7. register a synthetic provider reference;
-8. force an indeterminate outcome;
-9. recover and reconcile through fresh worker/store instances;
-10. verify commercial state was unchanged;
-11. remove all synthetic quote, revision, delivery, reconciliation, and receipt records.
+1. refuse any non-`dev:` deployment before constructing stores;
+2. create, review, and finalise a quote;
+3. verify immutable replay through a fresh client;
+4. fork a new draft and prove the old fingerprint remains unchanged;
+5. create a synthetic delivery attempt;
+6. register a synthetic provider reference;
+7. force an indeterminate outcome;
+8. recover and reconcile through fresh worker/store instances;
+9. prove commercial state was unchanged; and
+10. clean quote, revision, delivery, reconciliation, and receipt records.
 
-## 15. Governance and traceability
+## 15. Governance and activation
 
-Before either action family becomes active:
+Before activation:
 
 - correct `AM-012` state impact to `reviewed -> finalized`;
-- retain `AM-012` as `planned` until the finalisation store, tool, tests, and evidence exist;
-- retain `AM-013` as `planned` until a real provider adapter, send tool, approval path, reconciliation tests, and immutable evidence exist;
-- retain `WF-QUOTE-001` as `planned` until both actions are independently commissioned;
-- add real, non-recycled `TEST-AM-012-*`, `TEST-AM-013-*`, `EVD-AM-012-*`, and `EVD-AM-013-*` registry entries;
-- regenerate the non-authoritative action map only from the authoritative registry;
-- validate tool and state-target registry bindings before activation.
+- keep `AM-012` planned until its store, tool, tests, commissioning, and evidence pass;
+- keep `AM-013` planned until a real provider adapter, send tool, approval path, reconciliation tests, commissioning, and evidence pass;
+- keep `WF-QUOTE-001` planned until both actions are independently commissioned;
+- add real non-recycled `TEST-AM-012-*`, `TEST-AM-013-*`, `EVD-AM-012-*`, and `EVD-AM-013-*` entries;
+- regenerate the action map only from the authoritative registry; and
+- validate tool and state-target bindings before activation.
 
-Storage commissioning and action-family activation are separate checkpoints. Commissioning the quote store does not authorise sending.
+Storage commissioning does not authorise sending.
 
 ## 16. Security and privacy
 
-- Every Convex query and mutation derives `ownerId` from the existing service-token boundary.
-- Client IDs, project IDs, recipients, notes, terms, and line items are private business data.
-- Provider credentials remain server-side and never enter quote records, tool arguments, receipts, reconciliation records, logs, or artifacts.
-- Recipient values may appear in private delivery records but must be redacted from public diagnostics and commissioning artifacts.
-- Canonical fingerprints may be retained because they do not reveal plaintext quote content.
-- Cleanup functions are restricted to `dev:outgoing-ram-798` and synthetic smoke identifiers.
+- Every Convex query and mutation derives `ownerId` through the existing service-token boundary.
+- Client, project, recipient, notes, terms, and line-item data are private.
+- Provider credentials remain server-side and never enter quote records, arguments, receipts, reconciliation rows, logs, or artifacts.
+- Recipient plaintext is redacted from public diagnostics and commissioning evidence.
+- Fingerprints may be retained because they do not expose plaintext content.
+- Cleanup is restricted to `dev:outgoing-ram-798` and synthetic smoke identifiers.
 
 ## 17. Operational boundaries
 
-- Development deployment: `dev:outgoing-ram-798`.
-- Production deployment is prohibited without explicit production-specific approval.
-- Manufact production is untouched by this design and implementation tranche.
+- Authorised development deployment: `dev:outgoing-ram-798`.
+- Convex production requires explicit production-specific approval.
+- Manufact production is untouched.
 - No email provider is selected or activated by this design.
-- No quote send occurs during storage, lifecycle, migration, or smoke commissioning; the provider step remains synthetic until a later activation tranche.
+- No real quote send occurs during model, migration, lifecycle, or synthetic smoke commissioning.
 
 ## 18. Delivery sequence
 
-Implementation is divided into independently reviewable tranches:
-
-1. domain contracts and fingerprints;
+1. domain contracts and canonical fingerprints;
 2. Convex aggregate and revision persistence;
 3. controlled HTTP administration and legacy compatibility;
 4. finalisation tool binding while still planned;
 5. delivery-attempt persistence and reconciliation integration;
 6. synthetic development smoke and immutable storage evidence;
 7. separate real-provider send implementation;
-8. separate governance activation for `AM-012` and then `AM-013`.
+8. separate governance activation for `AM-012`, then `AM-013`.
 
-The first implementation PR may deliver the model and controlled lifecycle without activating either action family. A provider-specific send implementation must be a later PR and a later approval checkpoint.
+The first runtime PR may deliver the model and controlled lifecycle without activating either action family. Provider-specific sending is a later PR and approval checkpoint.
 
 ## 19. Acceptance criteria
 
 The design is satisfied when:
 
-- commercial quote state and delivery state are represented independently;
+- commercial and delivery state are independent;
 - every content change occurs in a numbered revision;
+- historical outcomes remain attached to exact revisions;
 - finalised revisions are immutable;
-- finalisation and delivery are bound to exact canonical fingerprints;
-- stale revisions and concurrent updates fail closed;
+- finalisation and sending use exact canonical fingerprints;
+- stale and concurrent writes fail closed;
 - delivery attempts use durable provider references and no-blind-retry reconciliation;
-- exact duplicate sends replay the original result;
-- changed content or recipient requires a new approval;
-- cross-owner access is prevented without leaking record existence;
-- real TEST and EVD registry entries exist before activation;
-- `AM-012`, `AM-013`, and `WF-QUOTE-001` remain planned until their separate exit criteria pass;
-- no production deployment or real external send is performed by the initial implementation tranche.
+- exact duplicates replay the original result;
+- changed content, recipient, or channel requires new approval;
+- cross-owner access is prevented without leaking existence;
+- real TEST and EVD entries exist before activation;
+- `AM-012`, `AM-013`, and `WF-QUOTE-001` remain planned until separate gates pass; and
+- the initial implementation performs no production deployment or real external send.
