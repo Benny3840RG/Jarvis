@@ -221,9 +221,9 @@ const JarvisConsole: React.FC = () => {
                   <div className="mini-core">J</div>
                 </div>
                 <div className="core-stats">
-                  <div><span>ACTIVE</span><strong>{snapshot.counts.active}</strong></div>
+                  <div><span>ACTIVE</span><strong>{formatPartialCount(snapshot.counts.active, snapshot.counts.tasksPartial)}</strong></div>
                   <div><span>CLEARED</span><strong>{formatPartialCount(snapshot.counts.completed, snapshot.counts.tasksPartial)}</strong></div>
-                  <div><span>ALERTS</span><strong>{snapshot.counts.reminders}</strong></div>
+                  <div><span>ALERTS</span><strong>{formatPartialCount(snapshot.counts.reminders, snapshot.counts.remindersPartial)}</strong></div>
                 </div>
               </div>
 

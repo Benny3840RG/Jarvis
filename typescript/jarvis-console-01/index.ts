@@ -4,7 +4,9 @@ import { MCPServer, text, widget } from "mcp-use/server";
 import { z } from "zod";
 
 import {
+  bridgeFailureActivity,
   buildConsolePageSummary,
+  consolePaginationInvariantIssues,
   DEFAULT_PAGE_SIZE,
   normaliseConsolePageRequest,
   type ConsolePage,
@@ -50,8 +52,8 @@ const consoleStateSchema = z.object({
   mission: z.string(),
   progress: z.number().min(0).max(100),
   lastUpdated: z.number(),
-  tasks: z.array(taskSchema),
-  reminders: z.array(reminderSchema),
+  tasks: z.array(taskSchema).max(100),
+  reminders: z.array(reminderSchema).max(100),
   systems: z.array(
     z.object({
       label: z.string(),
@@ -81,6 +83,10 @@ const consoleStateSchema = z.object({
       requestedPageSize: z.number().int().min(1).max(100),
     }),
   }),
+}).superRefine((value, ctx) => {
+  for (const issue of consolePaginationInvariantIssues(value)) {
+    ctx.addIssue({ code: "custom", ...issue });
+  }
 });
 
 type TaskRow = {
@@ -157,7 +163,10 @@ async function loadConsoleState(
     ]);
     const tasks = taskPage.page.map(mapTask);
     const reminders = reminderPage.page.map(mapReminder);
-    const summary = buildConsolePageSummary(taskPage, reminderPage, request.pageSize);
+    const summary = buildConsolePageSummary(taskPage, reminderPage, request.pageSize, {
+      taskCursor: request.taskCursor,
+      reminderCursor: request.reminderCursor,
+    });
     const { active } = summary.counts;
 
     return {
@@ -193,8 +202,7 @@ async function loadConsoleState(
       counts: summary.counts,
       pagination: summary.pagination,
     };
-  } catch (error) {
-    const detail = error instanceof Error ? error.message : "Unknown bridge failure";
+  } catch {
     return {
       title: "JARVIS SYSTEM // CONSOLE 01",
       phase: "PHASES 2 + 3 · LIVE COMMAND CENTRE",
@@ -212,7 +220,7 @@ async function loadConsoleState(
         { label: "Convex", value: "BRIDGE DEGRADED", state: "pending" },
         { label: "Production authority", value: "GUARDED", state: "guarded" },
       ],
-      activity: [...activity, detail, "Console failed closed without exposing credentials"].slice(0, 8),
+      activity: bridgeFailureActivity(activity),
       counts: {
         active: 0,
         completed: 0,

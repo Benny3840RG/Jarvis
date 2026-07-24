@@ -13,6 +13,26 @@ export type ConsolePage<Row> = {
   continueCursor: string;
 };
 
+type ConsoleCursorState = {
+  taskCursor?: string | null;
+  reminderCursor?: string | null;
+};
+
+type ConsolePaginationState = {
+  tasks: unknown[];
+  reminders: unknown[];
+  pagination: {
+    tasks: {
+      returnedCount: number;
+      requestedPageSize: number;
+    };
+    reminders: {
+      returnedCount: number;
+      requestedPageSize: number;
+    };
+  };
+};
+
 export function normaliseConsolePageRequest(request: ConsolePageRequest) {
   const pageSize = request.pageSize ?? DEFAULT_PAGE_SIZE;
   if (!Number.isInteger(pageSize) || pageSize < 1 || pageSize > MAX_PAGE_SIZE) {
@@ -34,6 +54,52 @@ function pageMetadata<Row>(result: ConsolePage<Row>, requestedPageSize: number) 
   };
 }
 
+function requireBoundedPage<Row>(
+  domain: "Task" | "Reminder",
+  result: ConsolePage<Row>,
+  requestedPageSize: number,
+) {
+  if (
+    !Number.isInteger(requestedPageSize) ||
+    requestedPageSize < 1 ||
+    requestedPageSize > MAX_PAGE_SIZE
+  ) {
+    throw new Error(`Console page size must be an integer from 1 to ${MAX_PAGE_SIZE}.`);
+  }
+  if (result.page.length > requestedPageSize) {
+    throw new Error(`${domain} page returned more rows than requested.`);
+  }
+}
+
+export function consolePaginationInvariantIssues(value: ConsolePaginationState) {
+  const issues: { path: (string | number)[]; message: string }[] = [];
+  for (const domain of ["tasks", "reminders"] as const) {
+    const rows = value[domain];
+    const metadata = value.pagination[domain];
+    if (metadata.returnedCount !== rows.length) {
+      issues.push({
+        path: ["pagination", domain, "returnedCount"],
+        message: `${domain} returned count must match the output array length.`,
+      });
+    }
+    if (metadata.returnedCount > metadata.requestedPageSize) {
+      issues.push({
+        path: ["pagination", domain, "returnedCount"],
+        message: `${domain} returned count cannot exceed the requested page size.`,
+      });
+    }
+  }
+  return issues;
+}
+
+export function bridgeFailureActivity(activity: string[]) {
+  return [
+    ...activity,
+    "Authenticated Console data is temporarily unavailable.",
+    "Console failed closed without exposing credentials.",
+  ].slice(0, 8);
+}
+
 export function buildConsolePageSummary<
   Task extends { completed: boolean },
   Reminder,
@@ -41,7 +107,10 @@ export function buildConsolePageSummary<
   taskPage: ConsolePage<Task>,
   reminderPage: ConsolePage<Reminder>,
   requestedPageSize: number,
+  cursorState: ConsoleCursorState = {},
 ) {
+  requireBoundedPage("Task", taskPage, requestedPageSize);
+  requireBoundedPage("Reminder", reminderPage, requestedPageSize);
   const active = taskPage.page.filter((task) => !task.completed).length;
   const completed = taskPage.page.length - active;
   const progress =
@@ -52,8 +121,8 @@ export function buildConsolePageSummary<
       active,
       completed,
       reminders: reminderPage.page.length,
-      tasksPartial: !taskPage.isDone,
-      remindersPartial: !reminderPage.isDone,
+      tasksPartial: cursorState.taskCursor != null || !taskPage.isDone,
+      remindersPartial: cursorState.reminderCursor != null || !reminderPage.isDone,
     },
     progress,
     pagination: {
