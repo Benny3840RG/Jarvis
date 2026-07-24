@@ -24,8 +24,9 @@
 
 - Runtime implementation branch: `feat/external-reconciliation-154`
 - Runtime PR: `#170`
-- Final reviewed source before this evidence-only commit: `6925974dcc4fc764fea87f232e02fe35be1dce55`
+- Verified runtime source: `6925974dcc4fc764fea87f232e02fe35be1dce55`
 - Permanent TypeScript verification run: `30078294682`
+- Final PR head contains only this frozen implementation ledger in addition to the verified runtime source.
 - Implemented files include the Convex ledger, authenticated adapter, execution integration, worker, scheduler and development smoke.
 - Tests cover effect collisions, replay suppression, lease ownership, worker concurrency, unknown providers, scheduler overlap and smoke cleanup.
 - Final safety review proves resolution uses a post-provider timestamp and treats lease-expiry equality as stale.
