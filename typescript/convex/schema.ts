@@ -2,6 +2,10 @@ import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
 import {
+  internalActionFamilyValidator,
+  internalActionResultValidator,
+} from "./internalActionValidators.js";
+import {
   memoryChangeSetActorValidator,
   memoryChangeSetStateValidator,
   memoryRecordValidator,
@@ -34,8 +38,13 @@ export default defineSchema({
     title: v.string(),
     completed: v.boolean(),
     category: v.string(),
+    projectId: v.optional(v.string()),
+    updatedAt: v.optional(v.number()),
+    revision: v.optional(v.number()),
     createdAt: v.number(),
-  }).index("by_owner", ["ownerId"]),
+  })
+    .index("by_owner", ["ownerId"])
+    .index("by_owner_and_project", ["ownerId", "projectId"]),
   reminders: defineTable({
     ownerId: v.string(),
     title: v.string(),
@@ -43,8 +52,34 @@ export default defineSchema({
     dueRaw: v.optional(v.string()),
     dueAt: v.optional(v.number()),
     dueTimezone: v.optional(v.string()),
+    projectId: v.optional(v.string()),
+    updatedAt: v.optional(v.number()),
+    revision: v.optional(v.number()),
     createdAt: v.number(),
-  }).index("by_owner", ["ownerId"]),
+  })
+    .index("by_owner", ["ownerId"])
+    .index("by_owner_and_project", ["ownerId", "projectId"]),
+  internalActionResults: defineTable({
+    ownerId: v.string(),
+    projectId: v.string(),
+    actionFamilyId: internalActionFamilyValidator,
+    idempotencyKey: v.string(),
+    actionFingerprint: v.string(),
+    entityType: v.union(v.literal("task"), v.literal("reminder")),
+    entityId: v.string(),
+    result: internalActionResultValidator,
+    sourceRequestId: v.string(),
+    correlationId: v.string(),
+    source: v.string(),
+    createdAt: v.number(),
+  })
+    .index("by_owner_project_family_idempotency", [
+      "ownerId",
+      "projectId",
+      "actionFamilyId",
+      "idempotencyKey",
+    ])
+    .index("by_owner_entity", ["ownerId", "entityType", "entityId"]),
   notes: defineTable({
     ownerId: v.string(),
     projectId: v.string(),
