@@ -1,0 +1,209 @@
+name: Prepare AM-003 governance activation
+
+on:
+  push:
+    branches:
+      - governance/activate-am003-150
+    paths:
+      - ".github/workflows/activate-am003-governance-once.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: jarvis-am003-governance-activation
+  cancel-in-progress: false
+
+jobs:
+  prepare-activation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out activation branch
+        uses: actions/checkout@v7
+        with:
+          ref: governance/activate-am003-150
+
+      - name: Guard verified commissioning baseline
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == "refs/heads/governance/activate-am003-150" ]]
+          git merge-base --is-ancestor d0f6173262be9f1848640b2c271ae43b566cebc2 HEAD
+
+      - name: Apply evidence-bound AM-003 activation
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          registry_path = Path("docs/traceability/action-family-registry.yaml")
+          registry = registry_path.read_text(encoding="utf-8")
+          before, after = registry.split("  - id: AM-012", 1)
+
+          old_header = """  - id: AM-003
+              name: Create note
+              lifecycle_status: planned""".replace("          ", "")
+          new_header = """  - id: AM-003
+              name: Create note
+              lifecycle_status: active""".replace("          ", "")
+          if before.count(old_header) != 1:
+              raise SystemExit("AM-003 planned header not found exactly once")
+          before = before.replace(old_header, new_header, 1)
+
+          old_trace = """      test_ids: []
+              evidence_ids: []""".replace("          ", "")
+          new_trace = """      test_ids:
+                - TEST-AM-003-001
+                - TEST-AM-003-NEG-001
+                - TEST-AM-003-PERSIST-001
+                - TEST-AM-003-SMOKE-001
+              evidence_ids:
+                - EVD-AM-003-001""".replace("          ", "")
+          if before.count(old_trace) != 1:
+              raise SystemExit("AM-003 empty traceability block not found exactly once")
+          before = before.replace(old_trace, new_trace, 1)
+          registry_path.write_text(before + "  - id: AM-012" + after, encoding="utf-8")
+
+          tool_path = Path("docs/registries/tool-registry.yaml")
+          tool = tool_path.read_text(encoding="utf-8")
+          old_tool = """  - id: TOOL-NOTES-CREATE
+              lifecycle_status: planned
+              implemented: true
+              description: Implements owner/project-scoped durable note creation through the single reviewed notes:create allowlist binding; operational activation awaits development smoke evidence.""".replace("          ", "")
+          new_tool = """  - id: TOOL-NOTES-CREATE
+              lifecycle_status: active
+              implemented: true
+              description: Creates owner/project-scoped durable notes through the single reviewed notes:create allowlist binding; commissioned on dev:outgoing-ram-798 with EVD-AM-003-001.""".replace("          ", "")
+          if tool.count(old_tool) != 1:
+              raise SystemExit("TOOL-NOTES-CREATE planned block not found exactly once")
+          tool_path.write_text(tool.replace(old_tool, new_tool, 1), encoding="utf-8")
+
+          state_path = Path("docs/registries/state-target-registry.yaml")
+          state = state_path.read_text(encoding="utf-8")
+          old_state = """  - id: STORE-NOTES
+              lifecycle_status: planned
+              implemented: true
+              description: Implements owner/project-scoped durable Convex notes with sensitivity, retention, revision, source, correlation and idempotency metadata; activation awaits development smoke evidence.""".replace("          ", "")
+          new_state = """  - id: STORE-NOTES
+              lifecycle_status: active
+              implemented: true
+              description: Owner/project-scoped durable Convex notes with sensitivity, retention, revision, source, correlation and idempotency metadata; commissioned on dev:outgoing-ram-798 with EVD-AM-003-001.""".replace("          ", "")
+          if state.count(old_state) != 1:
+              raise SystemExit("STORE-NOTES planned block not found exactly once")
+          state_path.write_text(state.replace(old_state, new_state, 1), encoding="utf-8")
+
+          Path("docs/registries/test-id-registry.yaml").write_text("""# Catalog of TEST-* IDs that action families in
+          # docs/traceability/action-family-registry.yaml may reference under
+          # traceability.test_ids. Each ID names committed verification code.
+          schema_version: \"1.0\"
+
+          tests:
+            - id: TEST-AM-003-001
+              path: typescript/tests/createNoteTool.test.ts
+              verifies: successful note creation, exact execution context, idempotent receipt replay, and replay after a fresh execution-service instance
+
+            - id: TEST-AM-003-NEG-001
+              path: typescript/tests/createNoteTool.test.ts
+              verifies: insufficient authority, malformed input, dry-run non-mutation, fingerprint mismatch, and rejection of non-allowlisted operations
+
+            - id: TEST-AM-003-PERSIST-001
+              path: typescript/tests/convexNotes.test.ts
+              verifies: authenticated owner/project-scoped create, get, list, remove, record mapping, and service-token enforcement
+
+            - id: TEST-AM-003-SMOKE-001
+              path: typescript/tests/notesSmoke.test.ts
+              verifies: idempotent replay, fresh-store persistence visibility, guaranteed cleanup after success or failure, and refusal of non-development targets
+          """.replace("          ", ""), encoding="utf-8")
+
+          Path("docs/registries/evidence-id-registry.yaml").write_text("""# Catalog of EVD-* IDs that action families in
+          # docs/traceability/action-family-registry.yaml may reference under
+          # traceability.evidence_ids. Each entry points to committed and durably
+          # addressable verification evidence for the exact commissioned revision.
+          schema_version: \"1.0\"
+
+          evidence:
+            - id: EVD-AM-003-001
+              path: docs/evidence/am-003-development-commissioning.md
+              description: AM-003 runtime CI, authorised Convex development sync, live create/replay/fresh-client visibility, authenticated cleanup, and post-cleanup absence evidence
+          """.replace("          ", ""), encoding="utf-8")
+
+          evidence_dir = Path("docs/evidence")
+          evidence_dir.mkdir(parents=True, exist_ok=True)
+          (evidence_dir / "am-003-development-commissioning.md").write_text("""# AM-003 Create Note — Development Commissioning Evidence
+
+          ## Disposition
+
+          `AM-003 Create note` is commissioned as an active internal-mutation action family on the authorised Convex development deployment.
+
+          This record does not authorise or record a Convex production deployment.
+
+          ## Verified revisions
+
+          - Runtime implementation merge: `0ed8627b5b5b119444f2821bbe0a7380afb5ee87` (PR #157)
+          - Commissioning source and workflow merge: `d0f6173262be9f1848640b2c271ae43b566cebc2` (PR #158)
+          - GitHub Actions workflow run: `30061812009`
+          - Evidence artifact: `am003-development-commissioning-30061812009`
+          - Evidence issue comment: https://github.com/Benny3840/Jarvis/issues/150#issuecomment-5065575326
+
+          ## Authorised target
+
+          - Deployment: `dev:outgoing-ram-798`
+          - URL: `https://outgoing-ram-798.convex.cloud`
+          - Production deployment: **not authorised and not performed**
+
+          ## Passed gates
+
+          - Locked dependency installation and complete `npm run check`
+          - Convex function sync using `npx convex dev --once`
+          - Notes create through authenticated owner/project-scoped persistence
+          - Mutation-level idempotent replay without a second note
+          - Fresh-client persistence visibility
+          - Authenticated cleanup
+          - Post-cleanup absence
+          - Development-only target guard
+
+          ## Bound implementation
+
+          - Action family: `AM-003`
+          - Tool binding: `TOOL-NOTES-CREATE`
+          - Runtime operation: `notes:create`
+          - State target: `STORE-NOTES`
+          - Tests: `TEST-AM-003-001`, `TEST-AM-003-NEG-001`, `TEST-AM-003-PERSIST-001`, `TEST-AM-003-SMOKE-001`
+          """.replace("          ", ""), encoding="utf-8")
+          PY
+
+      - name: Regenerate action map
+        run: ruby scripts/generate-action-map.rb
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: typescript/.nvmrc
+          cache: npm
+          cache-dependency-path: typescript/package-lock.json
+
+      - name: Install locked dependencies
+        working-directory: typescript
+        run: npm ci
+
+      - name: Validate activation records
+        run: |
+          set -euo pipefail
+          node typescript/scripts/validate-action-map.mjs
+          ruby scripts/generate-action-map.rb --check
+
+      - name: Remove one-shot workflows and commit activation
+        run: |
+          set -euo pipefail
+          git rm .github/workflows/am003-development-commissioning.yml
+          git rm .github/workflows/activate-am003-governance-once.yml
+          git config user.name "jarvis-governance-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add docs/traceability/action-family-registry.yaml \
+                  docs/traceability/action-map.generated.md \
+                  docs/registries/tool-registry.yaml \
+                  docs/registries/state-target-registry.yaml \
+                  docs/registries/test-id-registry.yaml \
+                  docs/registries/evidence-id-registry.yaml \
+                  docs/evidence/am-003-development-commissioning.md
+          git commit -m "docs(governance): activate AM-003 after live commissioning"
+          git push origin HEAD:governance/activate-am003-150
