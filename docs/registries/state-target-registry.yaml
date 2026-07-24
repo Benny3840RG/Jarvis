@@ -9,9 +9,9 @@ schema_version: "1.0"
 
 state_targets:
   - id: STORE-NOTES
-    lifecycle_status: planned
+    lifecycle_status: active
     implemented: true
-    description: Implements owner/project-scoped durable Convex notes with sensitivity, retention, revision, source, correlation and idempotency metadata; activation awaits development smoke evidence.
+    description: Owner/project-scoped durable Convex notes with sensitivity, retention, revision, source, correlation and idempotency metadata, commissioned on dev:outgoing-ram-798.
     implementation:
       - typescript/convex/schema.ts
       - typescript/convex/notes.ts
