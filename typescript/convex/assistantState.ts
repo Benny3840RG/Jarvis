@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 
-import { requireOwner } from "./authHelpers.js";
+import { collectBounded, requireOwner } from "./authHelpers.js";
 import type { Doc, Id } from "./_generated/dataModel.js";
 import { mutation, query } from "./_generated/server.js";
 
@@ -151,14 +151,14 @@ export const snapshot = query({
         .query("assistantState")
         .withIndex("by_owner_key", (q) => q.eq("ownerId", ownerId).eq("key", PRIMARY_KEY))
         .unique(),
-      ctx.db
-        .query("tasks")
-        .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
-        .collect(),
-      ctx.db
-        .query("reminders")
-        .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
-        .collect(),
+      collectBounded(
+        ctx.db.query("tasks").withIndex("by_owner", (q) => q.eq("ownerId", ownerId)),
+        "Task",
+      ),
+      collectBounded(
+        ctx.db.query("reminders").withIndex("by_owner", (q) => q.eq("ownerId", ownerId)),
+        "Reminder",
+      ),
     ]);
     return {
       state: isRecord(stateRow?.state) ? stateRow.state : {},

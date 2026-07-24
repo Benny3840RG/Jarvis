@@ -2,7 +2,7 @@ import { paginationOptsValidator, paginationResultValidator } from "convex/serve
 import { v } from "convex/values";
 
 import { taskActionResultValidator } from "./internalActionValidators.js";
-import { requireOwner } from "./authHelpers.js";
+import { collectBounded, requireOwner } from "./authHelpers.js";
 import { cleanRequiredText } from "./toolActionLogic.js";
 import { mutation, query, type MutationCtx } from "./_generated/server.js";
 
@@ -161,10 +161,10 @@ export const list = query({
   returns: v.array(taskValidator),
   handler: async (ctx, args) => {
     const ownerId = requireOwner(args.serviceToken);
-    return ctx.db
-      .query("tasks")
-      .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
-      .collect();
+    return collectBounded(
+      ctx.db.query("tasks").withIndex("by_owner", (q) => q.eq("ownerId", ownerId)),
+      "Task",
+    );
   },
 });
 
