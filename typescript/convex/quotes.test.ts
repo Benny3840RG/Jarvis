@@ -146,8 +146,8 @@ describe("persisted quote Convex lifecycle", () => {
     expect(persisted?.aggregate.currentRevision).toBe(2);
     expect(persisted?.revision.status).toBe("draft");
 
-    const revisionCount = await t.run(async (ctx) =>
-      (await ctx.db.query("quoteRevisions").collect()).length,
+    const revisionCount = await t.run(
+      async (ctx) => (await ctx.db.query("quoteRevisions").collect()).length,
     );
     expect(revisionCount).toBe(2);
   });
