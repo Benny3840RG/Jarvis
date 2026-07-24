@@ -63,11 +63,7 @@ export default defineSchema({
     createdAt: v.number(),
     updatedAt: v.number(),
   })
-    .index("by_owner_and_project_and_idempotency_key", [
-      "ownerId",
-      "projectId",
-      "idempotencyKey",
-    ])
+    .index("by_owner_and_project_and_idempotency_key", ["ownerId", "projectId", "idempotencyKey"])
     .index("by_owner_and_project_and_updated_at", ["ownerId", "projectId", "updatedAt"]),
   assistantState: defineTable({
     ownerId: v.string(),
