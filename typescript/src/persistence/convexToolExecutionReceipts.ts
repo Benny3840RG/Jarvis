@@ -10,17 +10,17 @@ type ToolExecutionReceiptRow = {
   receiptKey: string;
   receiptId: string;
   actionId: string;
-  requestId: string;
+  requestId?: string;
   projectId: string;
   idempotencyKey: string;
   actionFingerprint: string;
   tool: string;
   operation: string;
-  actor: ToolExecutionReceipt["actor"];
+  actor?: ToolExecutionReceipt["actor"];
   approvalId?: string;
-  policyVersion: string;
-  correlationId: string;
-  source: string;
+  policyVersion?: string;
+  correlationId?: string;
+  source?: string;
   status: ToolExecutionReceipt["status"];
   outputDigest?: string;
   errorCode?: ToolExecutionReceipt["errorCode"];
@@ -29,20 +29,21 @@ type ToolExecutionReceiptRow = {
 };
 
 function receiptFromConvex(row: ToolExecutionReceiptRow): ToolExecutionReceipt {
+  const requestId = row.requestId ?? row.actionId;
   return {
     receiptId: row.receiptId,
     actionId: row.actionId,
-    requestId: row.requestId,
+    requestId,
     projectId: row.projectId,
     idempotencyKey: row.idempotencyKey,
     actionFingerprint: row.actionFingerprint,
     tool: row.tool,
     operation: row.operation,
-    actor: row.actor,
+    actor: row.actor ?? "tool",
     ...(row.approvalId === undefined ? {} : { approvalId: row.approvalId }),
-    policyVersion: row.policyVersion,
-    correlationId: row.correlationId,
-    source: row.source,
+    policyVersion: row.policyVersion ?? "legacy-unversioned",
+    correlationId: row.correlationId ?? requestId,
+    source: row.source ?? "legacy-tool-execution-receipt",
     status: row.status,
     ...(row.outputDigest === undefined ? {} : { outputDigest: row.outputDigest }),
     ...(row.errorCode === undefined ? {} : { errorCode: row.errorCode }),
