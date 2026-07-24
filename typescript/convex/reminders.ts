@@ -161,13 +161,7 @@ export const createControlled = mutation({
     const correlationId = cleanRequiredText(args.correlationId, "Correlation ID");
     const source = cleanRequiredText(args.source, "Reminder source");
 
-    const existing = await findControlledResult(
-      ctx,
-      ownerId,
-      projectId,
-      "AM-006",
-      idempotencyKey,
-    );
+    const existing = await findControlledResult(ctx, ownerId, projectId, "AM-006", idempotencyKey);
     if (existing) {
       if (existing.actionFingerprint !== actionFingerprint) {
         throw new Error("Reminder create idempotency key belongs to another action fingerprint.");
@@ -306,13 +300,7 @@ export const cancelControlled = mutation({
     const correlationId = cleanRequiredText(args.correlationId, "Correlation ID");
     const source = cleanRequiredText(args.source, "Reminder source");
 
-    const existing = await findControlledResult(
-      ctx,
-      ownerId,
-      projectId,
-      "AM-007",
-      idempotencyKey,
-    );
+    const existing = await findControlledResult(ctx, ownerId, projectId, "AM-007", idempotencyKey);
     if (existing) {
       if (existing.actionFingerprint !== actionFingerprint) {
         throw new Error("Reminder cancellation idempotency key belongs to another fingerprint.");

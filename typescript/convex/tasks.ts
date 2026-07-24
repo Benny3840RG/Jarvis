@@ -114,13 +114,7 @@ export const createControlled = mutation({
     const correlationId = cleanRequiredText(args.correlationId, "Correlation ID");
     const source = cleanRequiredText(args.source, "Task source");
 
-    const existing = await findControlledResult(
-      ctx,
-      ownerId,
-      projectId,
-      "AM-004",
-      idempotencyKey,
-    );
+    const existing = await findControlledResult(ctx, ownerId, projectId, "AM-004", idempotencyKey);
     if (existing) {
       if (existing.actionFingerprint !== actionFingerprint) {
         throw new Error("Task create idempotency key belongs to another action fingerprint.");
@@ -244,19 +238,16 @@ export const completeControlled = mutation({
   handler: async (ctx, args) => {
     const ownerId = requireOwner(args.serviceToken);
     const projectId = cleanRequiredText(args.projectId, "Project ID");
-    const idempotencyKey = cleanRequiredText(args.idempotencyKey, "Task completion idempotency key");
+    const idempotencyKey = cleanRequiredText(
+      args.idempotencyKey,
+      "Task completion idempotency key",
+    );
     const actionFingerprint = cleanRequiredText(args.actionFingerprint, "Action fingerprint");
     const sourceRequestId = cleanRequiredText(args.sourceRequestId, "Source request ID");
     const correlationId = cleanRequiredText(args.correlationId, "Correlation ID");
     const source = cleanRequiredText(args.source, "Task source");
 
-    const existing = await findControlledResult(
-      ctx,
-      ownerId,
-      projectId,
-      "AM-005",
-      idempotencyKey,
-    );
+    const existing = await findControlledResult(ctx, ownerId, projectId, "AM-005", idempotencyKey);
     if (existing) {
       if (existing.actionFingerprint !== actionFingerprint) {
         throw new Error("Task completion idempotency key belongs to another action fingerprint.");
@@ -330,7 +321,8 @@ export const cleanupControlled = mutation({
       )
       .collect();
     for (const receipt of receipts) {
-      if (receipt.projectId === projectId) await ctx.db.delete("internalActionResults", receipt._id);
+      if (receipt.projectId === projectId)
+        await ctx.db.delete("internalActionResults", receipt._id);
     }
     return task !== null;
   },
