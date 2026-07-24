@@ -91,7 +91,10 @@ describe("notes development smoke", () => {
   });
 
   it("cleans up a created note when a later smoke stage fails", async () => {
-    const state: SharedState = { notes: new Map(), listFailure: new Error("simulated list failure") };
+    const state: SharedState = {
+      notes: new Map(),
+      listFailure: new Error("simulated list failure"),
+    };
 
     await assert.rejects(
       runNotesSmoke(() => new SharedNoteStore(state), "dev:outgoing-ram-798"),
@@ -103,13 +106,10 @@ describe("notes development smoke", () => {
   it("refuses any non-development deployment before touching the store", async () => {
     let factoryCalls = 0;
     await assert.rejects(
-      runNotesSmoke(
-        () => {
-          factoryCalls += 1;
-          return new SharedNoteStore({ notes: new Map() });
-        },
-        "prod:jarvis",
-      ),
+      runNotesSmoke(() => {
+        factoryCalls += 1;
+        return new SharedNoteStore({ notes: new Map() });
+      }, "prod:jarvis"),
       /must identify a development deployment/,
     );
     assert.equal(factoryCalls, 0);
