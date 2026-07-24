@@ -92,10 +92,13 @@ describe("ConvexNoteStore", () => {
 
     assert.equal(note?.id, "note-1");
     assert.equal(notes.length, 2);
-    assert.deepEqual(calls.map(({ args }) => args), [
-      { serviceToken: "owner-service-token", projectId: "project-1", id: "note-1" },
-      { serviceToken: "owner-service-token", projectId: "project-1", limit: 25 },
-    ]);
+    assert.deepEqual(
+      calls.map(({ args }) => args),
+      [
+        { serviceToken: "owner-service-token", projectId: "project-1", id: "note-1" },
+        { serviceToken: "owner-service-token", projectId: "project-1", limit: 25 },
+      ],
+    );
   });
 
   it("requires an authenticated service token", () => {
