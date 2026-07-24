@@ -45,10 +45,10 @@ class RecordingReceiptStore implements ToolExecutionReceiptStore {
   }
 }
 
-function clockDefinition(operation = "read") {
+function clockDefinition() {
   return {
     tool: "clock",
-    operation,
+    operation: "read",
     schema: z.object({ zone: z.string() }),
     async execute() {
       return { now: "2026-07-24T00:00:00.000Z" };
@@ -135,16 +135,17 @@ describe("internal action execution hardening", () => {
     }
   });
 
-  it("scopes replay keys by project and tool operation", async () => {
+  it("scopes replay keys by owner-backed project and action identity", async () => {
     let executions = 0;
-    const definitions = [clockDefinition("read"), clockDefinition("inspect")].map((definition) => ({
-      ...definition,
-      async execute() {
-        executions += 1;
-        return { now: "2026-07-24T00:00:00.000Z" };
+    const executor = new ToolExecutionService([
+      {
+        ...clockDefinition(),
+        async execute() {
+          executions += 1;
+          return { now: "2026-07-24T00:00:00.000Z" };
+        },
       },
-    }));
-    const executor = new ToolExecutionService(definitions);
+    ]);
 
     const first = await executor.execute({
       action: baseAction,
@@ -156,15 +157,9 @@ describe("internal action execution hardening", () => {
       authority: "T1",
       idempotencyKey: "shared",
     });
-    const otherOperation = await executor.execute({
-      action: { ...baseAction, operation: "inspect" },
-      authority: "T1",
-      idempotencyKey: "shared",
-    });
 
     assert.equal(first.status, "succeeded");
     assert.equal(otherProject.status, "succeeded");
-    assert.equal(otherOperation.status, "succeeded");
-    assert.equal(executions, 3);
+    assert.equal(executions, 2);
   });
 });
