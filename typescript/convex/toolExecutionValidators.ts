@@ -19,6 +19,7 @@ export const toolExecutionErrorCodeValidator = v.union(
   v.literal("provider-reference-missing"),
   v.literal("retry-blocked-pending-reconciliation"),
   v.literal("reconciliation-escalated"),
+  v.literal("reconciliation-unavailable"),
 );
 
 export const toolExecutionActorValidator = v.union(

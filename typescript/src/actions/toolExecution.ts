@@ -27,7 +27,8 @@ export type ToolExecutionErrorCode =
   | "provider-failed"
   | "provider-reference-missing"
   | "retry-blocked-pending-reconciliation"
-  | "reconciliation-escalated";
+  | "reconciliation-escalated"
+  | "reconciliation-unavailable";
 
 export type ToolExecutionReceipt = {
   receiptId: string;
@@ -106,6 +107,13 @@ function digest(value: unknown): string {
   return createHash("sha256").update(canonicalJson(value), "utf8").digest("hex");
 }
 
+function isEffectFingerprintConflict(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  return (
+    error.message.includes("another effect fingerprint") ||
+    error.message.includes("effect fingerprint collision")
+  );
+}
 export function fingerprintToolAction(action: ToolAction): string {
   const hash = digest({
     actionId: action.actionId,
@@ -347,14 +355,17 @@ export class ToolExecutionService {
     let envelope;
     try {
       envelope = await this.reconciliations.getByScope(scope);
-    } catch {
+    } catch (error: unknown) {
+      const errorCode = isEffectFingerprintConflict(error)
+        ? "fingerprint-mismatch"
+        : "reconciliation-unavailable";
       return this.persistDecision(
         key,
         receipt(
           input.action,
           input.idempotencyKey,
           "blocked",
-          "fingerprint-mismatch",
+          errorCode,
           new Date().toISOString(),
           { ...input, effectFingerprint: scope.effectFingerprint, provider },
         ),

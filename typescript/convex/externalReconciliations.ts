@@ -125,7 +125,8 @@ function receiptDocument(
       | "provider-failed"
       | "provider-reference-missing"
       | "retry-blocked-pending-reconciliation"
-      | "reconciliation-escalated";
+      | "reconciliation-escalated"
+      | "reconciliation-unavailable";
     providerErrorCode?: string;
     startedAt: number;
     completedAt: number;
