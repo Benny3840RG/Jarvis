@@ -1,6 +1,7 @@
 COMMISSION DEV
-request: 2026-07-21T11:06:24Z
-source: validate merged typed safety-gated orchestration core from PR #127 on current main
-scope: full verification gate, authorised Convex development sync, self-cleaning Convex smoke test, HTTP/provider boundary checks, Totality reasoning probe
-expected-main-baseline: 27ed5bd21d07d9cd9c76ca9cdf826b64e51d76f0
+request: 2026-07-24T08:33:00Z
+source: commission merged external-action reconciliation runtime from PR #170 on current main
+scope: full verification gate, authorised Convex development sync, self-cleaning Convex smoke including external reconciliation restart recovery, HTTP/provider boundary checks, Totality reasoning probe
+expected-main-baseline: 0646b1a1f1fff13e12913259c2618d50fe334526
+issue: 154
 production: not authorised
