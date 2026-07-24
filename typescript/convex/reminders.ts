@@ -1,7 +1,9 @@
 import { v } from "convex/values";
 
 import { requireOwner } from "./authHelpers.js";
-import { mutation, query } from "./_generated/server.js";
+import { reminderActionResultValidator } from "./internalActionValidators.js";
+import { cleanRequiredText } from "./toolActionLogic.js";
+import { mutation, query, type MutationCtx } from "./_generated/server.js";
 
 const reminderValidator = v.object({
   _id: v.id("reminders"),
@@ -12,6 +14,9 @@ const reminderValidator = v.object({
   dueRaw: v.optional(v.string()),
   dueAt: v.optional(v.number()),
   dueTimezone: v.optional(v.string()),
+  projectId: v.optional(v.string()),
+  updatedAt: v.optional(v.number()),
+  revision: v.optional(v.number()),
   createdAt: v.number(),
 });
 
@@ -19,9 +24,7 @@ type DueFields = { dueRaw?: string; dueAt?: number; dueTimezone?: string };
 
 function cleanOptionalText(value: string | undefined, field: string): string | undefined {
   if (value === undefined) return undefined;
-  const cleaned = value.trim();
-  if (cleaned.length === 0) throw new Error(`${field} cannot be empty.`);
-  return cleaned;
+  return cleanRequiredText(value, field);
 }
 
 function validatedDue(args: DueFields): DueFields {
@@ -57,6 +60,57 @@ function existingDue(reminder: {
   };
 }
 
+function controlledReminderResult(
+  reminder: {
+    _id: string;
+    title: string;
+    due?: string;
+    dueRaw?: string;
+    dueAt?: number;
+    dueTimezone?: string;
+    projectId?: string;
+    createdAt: number;
+    updatedAt?: number;
+    revision?: number;
+  },
+  overrides?: { updatedAt?: number; revision?: number; cancelledAt?: number },
+) {
+  if (!reminder.projectId || reminder.updatedAt === undefined || reminder.revision === undefined) {
+    throw new Error("Controlled reminder metadata is incomplete.");
+  }
+  const due = existingDue(reminder);
+  return {
+    kind: "reminder" as const,
+    id: reminder._id,
+    projectId: reminder.projectId,
+    title: reminder.title,
+    ...due,
+    createdAt: reminder.createdAt,
+    updatedAt: overrides?.updatedAt ?? reminder.updatedAt,
+    revision: overrides?.revision ?? reminder.revision,
+    ...(overrides?.cancelledAt === undefined ? {} : { cancelledAt: overrides.cancelledAt }),
+  };
+}
+
+async function findControlledResult(
+  ctx: MutationCtx,
+  ownerId: string,
+  projectId: string,
+  actionFamilyId: "AM-006" | "AM-007",
+  idempotencyKey: string,
+) {
+  return ctx.db
+    .query("internalActionResults")
+    .withIndex("by_owner_project_family_idempotency", (q) =>
+      q
+        .eq("ownerId", ownerId)
+        .eq("projectId", projectId)
+        .eq("actionFamilyId", actionFamilyId)
+        .eq("idempotencyKey", idempotencyKey),
+    )
+    .unique();
+}
+
 export const create = mutation({
   args: {
     serviceToken: v.string(),
@@ -81,6 +135,80 @@ export const create = mutation({
   },
 });
 
+export const createControlled = mutation({
+  args: {
+    serviceToken: v.string(),
+    projectId: v.string(),
+    title: v.string(),
+    dueRaw: v.optional(v.string()),
+    dueAt: v.optional(v.number()),
+    dueTimezone: v.optional(v.string()),
+    idempotencyKey: v.string(),
+    actionFingerprint: v.string(),
+    sourceRequestId: v.string(),
+    correlationId: v.string(),
+    source: v.string(),
+  },
+  returns: reminderActionResultValidator,
+  handler: async (ctx, args) => {
+    const ownerId = requireOwner(args.serviceToken);
+    const projectId = cleanRequiredText(args.projectId, "Project ID");
+    const title = cleanRequiredText(args.title, "Reminder title");
+    const due = validatedDue(args);
+    const idempotencyKey = cleanRequiredText(args.idempotencyKey, "Reminder idempotency key");
+    const actionFingerprint = cleanRequiredText(args.actionFingerprint, "Action fingerprint");
+    const sourceRequestId = cleanRequiredText(args.sourceRequestId, "Source request ID");
+    const correlationId = cleanRequiredText(args.correlationId, "Correlation ID");
+    const source = cleanRequiredText(args.source, "Reminder source");
+
+    const existing = await findControlledResult(
+      ctx,
+      ownerId,
+      projectId,
+      "AM-006",
+      idempotencyKey,
+    );
+    if (existing) {
+      if (existing.actionFingerprint !== actionFingerprint) {
+        throw new Error("Reminder create idempotency key belongs to another action fingerprint.");
+      }
+      if (existing.result.kind !== "reminder") {
+        throw new Error("Reminder create result kind mismatch.");
+      }
+      return existing.result;
+    }
+
+    const now = Date.now();
+    const id = await ctx.db.insert("reminders", {
+      ownerId,
+      projectId,
+      title,
+      ...due,
+      createdAt: now,
+      updatedAt: now,
+      revision: 1,
+    });
+    const reminder = await ctx.db.get("reminders", id);
+    if (!reminder) throw new Error("Controlled reminder creation failed.");
+    const result = controlledReminderResult(reminder);
+    await ctx.db.insert("internalActionResults", {
+      ownerId,
+      projectId,
+      actionFamilyId: "AM-006",
+      idempotencyKey,
+      actionFingerprint,
+      entityType: "reminder",
+      entityId: id,
+      result,
+      sourceRequestId,
+      correlationId,
+      source,
+      createdAt: now,
+    });
+    return result;
+  },
+});
+
 export const list = query({
   args: { serviceToken: v.string() },
   returns: v.array(reminderValidator),
@@ -90,6 +218,20 @@ export const list = query({
       .query("reminders")
       .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
       .collect();
+  },
+});
+
+export const getControlled = query({
+  args: { serviceToken: v.string(), projectId: v.string(), id: v.string() },
+  returns: v.union(reminderActionResultValidator, v.null()),
+  handler: async (ctx, args) => {
+    const ownerId = requireOwner(args.serviceToken);
+    const projectId = cleanRequiredText(args.projectId, "Project ID");
+    const id = ctx.db.normalizeId("reminders", args.id);
+    if (!id) return null;
+    const reminder = await ctx.db.get("reminders", id);
+    if (!reminder || reminder.ownerId !== ownerId || reminder.projectId !== projectId) return null;
+    return controlledReminderResult(reminder);
   },
 });
 
@@ -131,9 +273,83 @@ export const update = mutation({
       ownerId,
       title: title ?? reminder.title,
       ...due,
+      ...(reminder.projectId === undefined ? {} : { projectId: reminder.projectId }),
+      ...(reminder.updatedAt === undefined ? {} : { updatedAt: reminder.updatedAt }),
+      ...(reminder.revision === undefined ? {} : { revision: reminder.revision }),
       createdAt: reminder.createdAt,
     });
     return ctx.db.get("reminders", id);
+  },
+});
+
+export const cancelControlled = mutation({
+  args: {
+    serviceToken: v.string(),
+    projectId: v.string(),
+    id: v.string(),
+    idempotencyKey: v.string(),
+    actionFingerprint: v.string(),
+    sourceRequestId: v.string(),
+    correlationId: v.string(),
+    source: v.string(),
+  },
+  returns: v.union(reminderActionResultValidator, v.null()),
+  handler: async (ctx, args) => {
+    const ownerId = requireOwner(args.serviceToken);
+    const projectId = cleanRequiredText(args.projectId, "Project ID");
+    const idempotencyKey = cleanRequiredText(
+      args.idempotencyKey,
+      "Reminder cancellation idempotency key",
+    );
+    const actionFingerprint = cleanRequiredText(args.actionFingerprint, "Action fingerprint");
+    const sourceRequestId = cleanRequiredText(args.sourceRequestId, "Source request ID");
+    const correlationId = cleanRequiredText(args.correlationId, "Correlation ID");
+    const source = cleanRequiredText(args.source, "Reminder source");
+
+    const existing = await findControlledResult(
+      ctx,
+      ownerId,
+      projectId,
+      "AM-007",
+      idempotencyKey,
+    );
+    if (existing) {
+      if (existing.actionFingerprint !== actionFingerprint) {
+        throw new Error("Reminder cancellation idempotency key belongs to another fingerprint.");
+      }
+      if (existing.result.kind !== "reminder") {
+        throw new Error("Reminder cancellation result kind mismatch.");
+      }
+      return existing.result;
+    }
+
+    const id = ctx.db.normalizeId("reminders", args.id);
+    if (!id) return null;
+    const reminder = await ctx.db.get("reminders", id);
+    if (!reminder || reminder.ownerId !== ownerId || reminder.projectId !== projectId) return null;
+
+    const now = Date.now();
+    const result = controlledReminderResult(reminder, {
+      updatedAt: now,
+      revision: (reminder.revision ?? 1) + 1,
+      cancelledAt: now,
+    });
+    await ctx.db.insert("internalActionResults", {
+      ownerId,
+      projectId,
+      actionFamilyId: "AM-007",
+      idempotencyKey,
+      actionFingerprint,
+      entityType: "reminder",
+      entityId: id,
+      result,
+      sourceRequestId,
+      correlationId,
+      source,
+      createdAt: now,
+    });
+    await ctx.db.delete("reminders", id);
+    return result;
   },
 });
 
@@ -148,5 +364,32 @@ export const remove = mutation({
     if (!reminder || reminder.ownerId !== ownerId) return null;
     await ctx.db.delete("reminders", id);
     return reminder;
+  },
+});
+
+export const cleanupControlled = mutation({
+  args: { serviceToken: v.string(), projectId: v.string(), id: v.string() },
+  returns: v.boolean(),
+  handler: async (ctx, args) => {
+    const ownerId = requireOwner(args.serviceToken);
+    const projectId = cleanRequiredText(args.projectId, "Project ID");
+    const id = ctx.db.normalizeId("reminders", args.id);
+    if (!id) return false;
+    const reminder = await ctx.db.get("reminders", id);
+    if (reminder && reminder.ownerId === ownerId && reminder.projectId === projectId) {
+      await ctx.db.delete("reminders", id);
+    }
+    const results = await ctx.db
+      .query("internalActionResults")
+      .withIndex("by_owner_entity", (q) =>
+        q.eq("ownerId", ownerId).eq("entityType", "reminder").eq("entityId", id),
+      )
+      .collect();
+    for (const result of results) {
+      if (result.projectId === projectId) {
+        await ctx.db.delete("internalActionResults", result._id);
+      }
+    }
+    return reminder !== null || results.length > 0;
   },
 });
