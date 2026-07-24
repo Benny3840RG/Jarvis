@@ -27,6 +27,7 @@
 - Implemented files include the Convex ledger, authenticated adapter, execution integration, worker, scheduler and development smoke.
 - Tests cover effect collisions, replay suppression, lease ownership, worker concurrency, unknown providers, scheduler overlap and smoke cleanup.
 - Pinned formatting has been applied and the temporary formatter helper has been removed from the final tree.
+- The permanent TypeScript workflow now matches `main` and is the only runtime merge gate.
 - All external action families remain planned until separate commissioning evidence and governance activation.
 
 ---
