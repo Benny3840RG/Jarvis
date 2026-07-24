@@ -1,6 +1,6 @@
 name: Prepare task and reminder governance activation
 
-# Synchronisation marker for the trusted default-branch preparer on PR #163.
+# Synchronisation marker 2 for the trusted default-branch preparer on PR #163.
 on:
   push:
     branches:
