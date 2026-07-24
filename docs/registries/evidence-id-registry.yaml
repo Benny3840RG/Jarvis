@@ -1,11 +1,10 @@
 # Catalog of EVD-* IDs that action families in
 # docs/traceability/action-family-registry.yaml may reference under
-# traceability.evidence_ids. An ID must appear here before an action family
-# can cite it, and it must point to a real, committed evidence artifact
-# (CI run, reconciliation log sample, etc.).
-#
-# Empty for now, for the same reason as test-id-registry.yaml: no action
-# family is implemented yet, so there is no evidence to record.
+# traceability.evidence_ids. Each entry points to a real committed evidence
+# artifact; immutable final workflow run IDs are also recorded in the PR.
 schema_version: "1.0"
 
-evidence: []
+evidence:
+  - id: EVD-AM-003-001
+    path: docs/evidence/am-003-commissioning.md
+    description: AM-003 implementation, test coverage, runtime CI gate and safety-boundary record
