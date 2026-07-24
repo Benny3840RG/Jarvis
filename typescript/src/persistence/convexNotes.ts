@@ -103,4 +103,13 @@ export class ConvexNoteStore implements NoteStore {
     });
     return (rows as NoteRow[]).map(noteFromConvex);
   }
+
+  async remove(projectId: string, id: string): Promise<NoteRecord | null> {
+    const row = await this.client.mutation(noteFunctions.remove, {
+      serviceToken: this.serviceToken,
+      projectId,
+      id,
+    });
+    return row === null ? null : noteFromConvex(row as NoteRow);
+  }
 }
