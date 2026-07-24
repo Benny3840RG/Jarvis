@@ -1,0 +1,158 @@
+name: Task and reminder development commissioning
+
+on:
+  push:
+    branches:
+      - commission/task-reminder-dev-48a7b69
+    paths:
+      - ".github/workflows/task-reminder-development-commissioning.yml"
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: jarvis-development-commissioning
+  cancel-in-progress: false
+
+jobs:
+  commission-task-reminder-development:
+    name: Sync and smoke task/reminder actions on authorised development
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    environment: ConvexOutgoingRamDev
+    env:
+      CONVEX_DEPLOYMENT: dev:outgoing-ram-798
+      CONVEX_URL: https://outgoing-ram-798.convex.cloud
+      PERSISTENCE_PROVIDER: convex
+      JARVIS_TIMEZONE: Australia/Melbourne
+      JARVIS_SOURCE_VERSION: 48a7b69390eef65d010581d4b2ebe1c382ed50b7
+      JARVIS_DEPLOYMENT_VERSION: dev:outgoing-ram-798
+      CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
+      JARVIS_SERVICE_TOKEN: ${{ secrets.JARVIS_SERVICE_TOKEN }}
+      GH_TOKEN: ${{ github.token }}
+
+    defaults:
+      run:
+        working-directory: typescript
+        shell: bash
+
+    steps:
+      - name: Check out exact commissioning branch
+        uses: actions/checkout@v7
+        with:
+          ref: commission/task-reminder-dev-48a7b69
+          fetch-depth: 0
+
+      - name: Guard exact source and development-only boundary
+        working-directory: .
+        run: |
+          set -euo pipefail
+          expected_source="48a7b69390eef65d010581d4b2ebe1c382ed50b7"
+          expected_ref="refs/heads/commission/task-reminder-dev-48a7b69"
+          if [[ "$GITHUB_REF" != "$expected_ref" ]]; then
+            echo "::error::Commissioning may run only from $expected_ref."
+            exit 1
+          fi
+          git merge-base --is-ancestor "$expected_source" HEAD
+          git diff --exit-code "$expected_source" HEAD -- . \
+            ':(exclude).github/workflows/task-reminder-development-commissioning.yml'
+          if [[ "$CONVEX_DEPLOYMENT" != "dev:outgoing-ram-798" ]]; then
+            echo "::error::Unexpected Convex deployment identity."
+            exit 1
+          fi
+          if [[ "$CONVEX_URL" != "https://outgoing-ram-798.convex.cloud" ]]; then
+            echo "::error::Unexpected Convex deployment URL."
+            exit 1
+          fi
+          for variable in CONVEX_DEPLOY_KEY JARVIS_SERVICE_TOKEN; do
+            if [[ -z "${!variable:-}" ]]; then
+              echo "::error::Required development secret $variable is unavailable."
+              exit 1
+            fi
+          done
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: typescript/.nvmrc
+          cache: npm
+          cache-dependency-path: typescript/package-lock.json
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Verify exact runtime source
+        run: |
+          env \
+            -u CONVEX_DEPLOYMENT \
+            -u CONVEX_URL \
+            -u PERSISTENCE_PROVIDER \
+            -u JARVIS_SOURCE_VERSION \
+            -u JARVIS_DEPLOYMENT_VERSION \
+            -u CONVEX_DEPLOY_KEY \
+            -u JARVIS_SERVICE_TOKEN \
+            npm run check
+
+      - name: Sync functions to authorised development deployment
+        run: npx convex dev --once --tail-logs disable
+
+      - name: Run self-cleaning Convex smoke
+        run: |
+          set -euo pipefail
+          smoke_log="$RUNNER_TEMP/task-reminder-development-smoke.log"
+          npm run smoke:convex 2>&1 | tee "$smoke_log"
+          grep -F "Convex smoke passed for notes: create, idempotent replay, restart visibility, cleanup." "$smoke_log"
+          grep -F "Convex smoke passed for task/reminder actions: create, replay, fresh visibility, complete, cancel and cleanup." "$smoke_log"
+          cp "$smoke_log" "$GITHUB_WORKSPACE/task-reminder-development-smoke.log"
+
+      - name: Upload commissioning evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: task-reminder-development-commissioning-${{ github.run_id }}
+          path: task-reminder-development-smoke.log
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Publish successful commissioning evidence
+        if: success()
+        working-directory: .
+        run: |
+          cat >"$RUNNER_TEMP/task-reminder-success.md" <<EOF
+          ## Task and reminder live development commissioning passed
+
+          - Runtime source commit: \`48a7b69390eef65d010581d4b2ebe1c382ed50b7\`
+          - Commissioning workflow commit: \`$GITHUB_SHA\`
+          - Workflow run: \`$GITHUB_RUN_ID\`
+          - Deployment: \`dev:outgoing-ram-798\`
+          - Convex URL: \`https://outgoing-ram-798.convex.cloud\`
+          - Locked verification gate: passed
+          - Convex function sync: passed
+          - Task create and replay: passed
+          - Fresh-client task visibility: passed
+          - Task completion and replay: passed
+          - Reminder create and replay: passed
+          - Fresh-client reminder visibility: passed
+          - Reminder cancellation tombstone and replay: passed
+          - Authenticated cleanup and post-cleanup absence: passed
+          - Production deployment: **not authorised and not performed**
+
+          Artifact: \`task-reminder-development-commissioning-$GITHUB_RUN_ID\`
+          EOF
+          gh issue comment 155 --body-file "$RUNNER_TEMP/task-reminder-success.md"
+
+      - name: Publish failed commissioning evidence
+        if: failure()
+        working-directory: .
+        run: |
+          cat >"$RUNNER_TEMP/task-reminder-failure.md" <<EOF
+          ## Task and reminder live development commissioning failed
+
+          - Runtime source commit: \`48a7b69390eef65d010581d4b2ebe1c382ed50b7\`
+          - Commissioning workflow commit: \`$GITHUB_SHA\`
+          - Workflow run: \`$GITHUB_RUN_ID\`
+          - Deployment target: \`dev:outgoing-ram-798\`
+          - Result: failed; AM-004 through AM-007 must remain planned
+          - Production deployment: **not authorised and not performed**
+          EOF
+          gh issue comment 155 --body-file "$RUNNER_TEMP/task-reminder-failure.md"
