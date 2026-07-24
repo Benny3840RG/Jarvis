@@ -21,9 +21,7 @@ import {
 
 const NOW = 1_785_000_000_000;
 
-function receipt(
-  status: ToolExecutionReceipt["status"] = "indeterminate",
-): ToolExecutionReceipt {
+function receipt(status: ToolExecutionReceipt["status"] = "indeterminate"): ToolExecutionReceipt {
   return {
     receiptId: "receipt-1",
     actionId: "action-1",
@@ -80,9 +78,7 @@ function record(
   };
 }
 
-function claim(
-  overrides: Partial<ExternalReconciliationRecord> = {},
-): ExternalReconciliationClaim {
+function claim(overrides: Partial<ExternalReconciliationRecord> = {}): ExternalReconciliationClaim {
   return {
     reconciliation: record(overrides) as ExternalReconciliationClaim["reconciliation"],
     receipt: receipt(),
@@ -118,9 +114,7 @@ class FakeStore implements ExternalReconciliationStore {
     this.availableClaim = initialClaim;
   }
 
-  async getByScope(
-    _scope: ExternalExecutionScope,
-  ): Promise<ExternalReconciliationEnvelope | null> {
+  async getByScope(_scope: ExternalExecutionScope): Promise<ExternalReconciliationEnvelope | null> {
     return null;
   }
 
@@ -195,9 +189,7 @@ class FakeStore implements ExternalReconciliationStore {
       state: escalated ? "escalated" : "pending",
       nextAttemptAt: input.nextAttemptAt,
       lastErrorCode: input.errorCode,
-      ...(escalated
-        ? { escalationReason: input.errorCode, escalatedAt: input.now }
-        : {}),
+      ...(escalated ? { escalationReason: input.errorCode, escalatedAt: input.now } : {}),
       updatedAt: input.now,
     };
   }
@@ -245,11 +237,7 @@ describe("ReconciliationWorker", () => {
     const worker = new ReconciliationWorker({
       store,
       adapters: [
-        adapter(
-          "demo-provider",
-          { status: "succeeded", outputDigest: "digest-1" },
-          providerCalls,
-        ),
+        adapter("demo-provider", { status: "succeeded", outputDigest: "digest-1" }, providerCalls),
       ],
       now: () => NOW,
       leaseToken: () => "lease-generated",
@@ -367,14 +355,8 @@ describe("ReconciliationWorker", () => {
       worker.runOnce({ workerId: "worker-2", leaseMs: 5_000, signal }),
     ]);
 
-    assert.equal(
-      results.filter(({ status }) => status === "resolved").length,
-      1,
-    );
-    assert.equal(
-      results.filter(({ status }) => status === "idle").length,
-      1,
-    );
+    assert.equal(results.filter(({ status }) => status === "resolved").length, 1);
+    assert.equal(results.filter(({ status }) => status === "idle").length, 1);
     assert.equal(providerCalls.length, 1);
     assert.equal(store.resolveCalls.length, 1);
   });
