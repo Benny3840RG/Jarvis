@@ -2,16 +2,16 @@
 # docs/traceability/action-family-registry.yaml#action_families[].bindings.executor_id.
 #
 # `implemented` records whether reviewed implementation code and an explicit
-# allowlist binding exist. `lifecycle_status` remains planned until that binding
-# is deployed to the authorised development target and its live commissioning
-# smoke and evidence gates pass.
+# allowlist binding exist. `lifecycle_status` becomes active only after that
+# binding is deployed to the authorised development target and its live
+# commissioning smoke and evidence gates pass.
 schema_version: "1.0"
 
 tools:
   - id: TOOL-NOTES-CREATE
-    lifecycle_status: planned
+    lifecycle_status: active
     implemented: true
-    description: Implements owner/project-scoped durable note creation through the single reviewed notes:create allowlist binding; operational activation awaits development smoke evidence.
+    description: Creates owner/project-scoped durable notes through the single reviewed notes:create allowlist binding; commissioned on dev:outgoing-ram-798 with EVD-AM-003-001.
     implementation: typescript/src/actions/createNoteTool.ts
     allowlist: typescript/src/actions/toolExecutionFactory.ts
     bound_by: [AM-003]
