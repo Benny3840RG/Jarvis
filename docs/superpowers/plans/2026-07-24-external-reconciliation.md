@@ -79,3 +79,7 @@
 - [ ] Retain run, job, artifact and digest evidence.
 - [ ] Remove the one-shot commissioning workflow.
 - [ ] Close issue #154 only after final CI and immutable evidence pass.
+
+## Final runtime checkpoint
+
+The runtime tranche is complete when the exact PR head passes the permanent TypeScript workflow and review-thread inspection. Commissioning begins only after that exact head is merged; no external action family becomes active during this runtime merge.
