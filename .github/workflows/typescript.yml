@@ -69,11 +69,16 @@ jobs:
       - name: Build and type-check the MCP app
         run: npm run build
 
-  capture-reconciliation-test-formatter-patch:
+  apply-reconciliation-formatting-once:
     if: github.event_name == 'pull_request' && github.head_ref == 'feat/external-reconciliation-154'
+    permissions:
+      contents: write
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: feat/external-reconciliation-154
+          fetch-depth: 0
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
@@ -86,11 +91,17 @@ jobs:
       - name: Apply pinned formatter
         working-directory: typescript
         run: npm run format
-      - name: Capture exact patch
-        run: git diff --binary > prettier-reconciliation-tests.patch
-      - name: Upload exact patch
-        uses: actions/upload-artifact@v4
-        with:
-          name: prettier-reconciliation-tests-patch
-          path: prettier-reconciliation-tests.patch
-          if-no-files-found: error
+      - name: Restore permanent workflow and publish formatted files
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          git checkout origin/main -- .github/workflows/typescript.yml
+          git config user.name "jarvis-format-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "::error::Formatter produced no publishable change."
+            exit 1
+          fi
+          git commit -m "style(reconciliation): apply pinned formatting and remove helper"
+          git push origin HEAD:feat/external-reconciliation-154
