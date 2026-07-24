@@ -20,6 +20,12 @@ import {
   noteSensitivityValidator,
 } from "./noteValidators.js";
 import {
+  quoteCommercialStatusValidator,
+  quoteHistoricalOutcomeValidator,
+  quoteLineItemValidator,
+  quoteRevisionStatusValidator,
+} from "./quoteValidators.js";
+import {
   toolActionActorValidator,
   toolActionStateValidator,
   toolAuthorityValidator,
@@ -256,6 +262,55 @@ export default defineSchema({
     .index("by_owner_and_state_and_next_attempt_at", ["ownerId", "state", "nextAttemptAt"])
     .index("by_owner_and_state_and_lease_expires_at", ["ownerId", "state", "leaseExpiresAt"])
     .index("by_owner_and_receipt_key", ["ownerId", "receiptKey"]),
+  quotes: defineTable({
+    ownerId: v.string(),
+    quoteId: v.string(),
+    clientId: v.string(),
+    projectId: v.optional(v.string()),
+    number: v.string(),
+    currentRevision: v.number(),
+    currentRevisionId: v.string(),
+    aggregateVersion: v.number(),
+    commercialStatus: quoteCommercialStatusValidator,
+    commercialRevision: v.optional(v.number()),
+    commercialRecordedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_owner_and_quote_id", ["ownerId", "quoteId"])
+    .index("by_owner_and_number", ["ownerId", "number"])
+    .index("by_owner_and_client_id", ["ownerId", "clientId"])
+    .index("by_owner_and_project_id", ["ownerId", "projectId"])
+    .index("by_owner_and_commercial_status", ["ownerId", "commercialStatus"]),
+  quoteRevisions: defineTable({
+    ownerId: v.string(),
+    revisionId: v.string(),
+    quoteId: v.string(),
+    revision: v.number(),
+    revisionVersion: v.number(),
+    status: quoteRevisionStatusValidator,
+    lineItems: v.array(quoteLineItemValidator),
+    subtotal: v.number(),
+    taxRate: v.optional(v.number()),
+    tax: v.number(),
+    total: v.number(),
+    currency: v.literal("AUD"),
+    validUntil: v.optional(v.string()),
+    notes: v.optional(v.string()),
+    termsIncluded: v.boolean(),
+    fingerprint: v.optional(v.string()),
+    predecessorRevisionId: v.optional(v.string()),
+    historicalOutcome: v.optional(quoteHistoricalOutcomeValidator),
+    historicalOutcomeRecordedAt: v.optional(v.number()),
+    reviewedAt: v.optional(v.number()),
+    finalizedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_owner_quote_and_revision", ["ownerId", "quoteId", "revision"])
+    .index("by_owner_and_revision_id", ["ownerId", "revisionId"])
+    .index("by_owner_quote_and_status", ["ownerId", "quoteId", "status"])
+    .index("by_owner_and_fingerprint", ["ownerId", "fingerprint"]),
   validationReports: defineTable({
     ownerId: v.string(),
     requestId: v.string(),

@@ -82,11 +82,7 @@ async function findRevision(
     .unique();
 }
 
-async function currentSnapshot(
-  ctx: QueryCtx | MutationCtx,
-  ownerId: string,
-  quoteId: string,
-) {
+async function currentSnapshot(ctx: QueryCtx | MutationCtx, ownerId: string, quoteId: string) {
   const aggregate = await findAggregate(ctx, ownerId, quoteId);
   if (!aggregate) return null;
   const revision = await findRevision(ctx, ownerId, quoteId, aggregate.currentRevision);
@@ -184,7 +180,12 @@ export const list = query({
     clientId: v.optional(v.string()),
     projectId: v.optional(v.string()),
     commercialStatus: v.optional(
-      v.union(v.literal("open"), v.literal("accepted"), v.literal("declined"), v.literal("expired")),
+      v.union(
+        v.literal("open"),
+        v.literal("accepted"),
+        v.literal("declined"),
+        v.literal("expired"),
+      ),
     ),
     limit: v.optional(v.number()),
   },
@@ -205,7 +206,9 @@ export const list = query({
       aggregates = await ctx.db
         .query("quotes")
         .withIndex("by_owner_and_project_id", (q) =>
-          q.eq("ownerId", ownerId).eq("projectId", cleanRequiredText(args.projectId!, "Project ID")),
+          q
+            .eq("ownerId", ownerId)
+            .eq("projectId", cleanRequiredText(args.projectId!, "Project ID")),
         )
         .order("desc")
         .take(limit);
@@ -227,7 +230,12 @@ export const list = query({
 
     const snapshots = [];
     for (const aggregate of aggregates) {
-      const revision = await findRevision(ctx, ownerId, aggregate.quoteId, aggregate.currentRevision);
+      const revision = await findRevision(
+        ctx,
+        ownerId,
+        aggregate.quoteId,
+        aggregate.currentRevision,
+      );
       if (!revision || revision.revisionId !== aggregate.currentRevisionId) {
         throw new Error("Quote aggregate points to a missing revision.");
       }
