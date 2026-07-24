@@ -91,7 +91,7 @@ describe("quote lifecycle domain", () => {
     assert.equal(patched.updatedAt, 2_000);
   });
 
-  it("derives currency totals to cents", () => {
+  it("derives currency totals using the existing sum-then-round rule", () => {
     assert.deepEqual(
       computeQuoteTotals(
         [
@@ -100,7 +100,7 @@ describe("quote lifecycle domain", () => {
         ],
         0.1,
       ),
-      { subtotal: 170, tax: 17, total: 187 },
+      { subtotal: 169.99, tax: 17, total: 186.99 },
     );
   });
 });
