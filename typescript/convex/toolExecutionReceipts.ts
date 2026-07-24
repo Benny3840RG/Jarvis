@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import { requireOwner } from "./authHelpers.js";
 import { cleanRequiredText } from "./toolActionLogic.js";
 import {
+  toolExecutionActorValidator,
   toolExecutionErrorCodeValidator,
   toolExecutionReceiptDocumentValidator,
   toolExecutionStatusValidator,
@@ -30,11 +31,17 @@ export const save = mutation({
     receiptKey: v.string(),
     receiptId: v.string(),
     actionId: v.string(),
+    requestId: v.string(),
     projectId: v.string(),
     idempotencyKey: v.string(),
     actionFingerprint: v.string(),
     tool: v.string(),
     operation: v.string(),
+    actor: toolExecutionActorValidator,
+    approvalId: v.optional(v.string()),
+    policyVersion: v.string(),
+    correlationId: v.string(),
+    source: v.string(),
     status: toolExecutionStatusValidator,
     outputDigest: v.optional(v.string()),
     errorCode: v.optional(toolExecutionErrorCodeValidator),
@@ -47,11 +54,17 @@ export const save = mutation({
     const receiptKey = cleanRequiredText(args.receiptKey, "Receipt key");
     const receiptId = cleanRequiredText(args.receiptId, "Receipt ID");
     const actionId = cleanRequiredText(args.actionId, "Tool action ID");
+    const requestId = cleanRequiredText(args.requestId, "Request ID");
     const projectId = cleanRequiredText(args.projectId, "Project ID");
     const idempotencyKey = cleanRequiredText(args.idempotencyKey, "Execution idempotency key");
     const actionFingerprint = cleanRequiredText(args.actionFingerprint, "Action fingerprint");
     const tool = cleanRequiredText(args.tool, "Tool name");
     const operation = cleanRequiredText(args.operation, "Tool operation");
+    const approvalId =
+      args.approvalId === undefined ? undefined : cleanRequiredText(args.approvalId, "Approval ID");
+    const policyVersion = cleanRequiredText(args.policyVersion, "Policy version");
+    const correlationId = cleanRequiredText(args.correlationId, "Correlation ID");
+    const source = cleanRequiredText(args.source, "Execution source");
 
     const existing = await ctx.db
       .query("toolExecutionReceipts")
@@ -71,11 +84,17 @@ export const save = mutation({
       receiptKey,
       receiptId,
       actionId,
+      requestId,
       projectId,
       idempotencyKey,
       actionFingerprint,
       tool,
       operation,
+      actor: args.actor,
+      ...(approvalId === undefined ? {} : { approvalId }),
+      policyVersion,
+      correlationId,
+      source,
       status: args.status,
       ...(args.outputDigest === undefined ? {} : { outputDigest: args.outputDigest }),
       ...(args.errorCode === undefined ? {} : { errorCode: args.errorCode }),
