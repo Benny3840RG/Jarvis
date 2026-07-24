@@ -13,6 +13,8 @@ overlays:
     effect_class: draft
   - name: internal_mutation
     effect_class: mutate
+  - name: destructive_internal_mutation
+    effect_class: destructive
   - name: send_with_approval
     effect_class: send
   - name: external_execute_with_reconciliation

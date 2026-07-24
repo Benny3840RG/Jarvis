@@ -82,7 +82,7 @@
 
 ### Task 6: Two-stage governance activation
 
-- [ ] Merge runtime with action families still absent/planned.
-- [ ] Sync only `dev:outgoing-ram-798` and run the live self-cleaning smoke.
-- [ ] Add AM-004 through AM-007, tool/store catalogs, TEST/EVD IDs and evidence.
-- [ ] Regenerate the action map and pass final governance validation.
+- [x] Merge runtime with action families still absent/planned.
+- [x] Sync only `dev:outgoing-ram-798` and run the live self-cleaning smoke.
+- [x] Add AM-004 through AM-007, tool/store catalogs, TEST/EVD IDs and evidence.
+- [x] Regenerate the action map and pass final governance validation.

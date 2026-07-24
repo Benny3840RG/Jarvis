@@ -18,6 +18,26 @@ state_targets:
       - typescript/src/persistence/convexNotes.ts
     bound_by: [AM-003]
 
+  - id: STORE-TASKS
+    lifecycle_status: active
+    implemented: true
+    description: Owner/project-scoped Convex tasks with revision metadata and atomic internal-action results for create and complete, commissioned on dev:outgoing-ram-798.
+    implementation:
+      - typescript/convex/schema.ts
+      - typescript/convex/tasks.ts
+      - typescript/src/persistence/convexControlledTasks.ts
+    bound_by: [AM-004, AM-005]
+
+  - id: STORE-REMINDERS
+    lifecycle_status: active
+    implemented: true
+    description: Owner/project-scoped Convex reminders with preserved due text, normalized due metadata, revisions, cancellation tombstones and atomic internal-action results, commissioned on dev:outgoing-ram-798.
+    implementation:
+      - typescript/convex/schema.ts
+      - typescript/convex/reminders.ts
+      - typescript/src/persistence/convexControlledReminders.ts
+    bound_by: [AM-006, AM-007]
+
   - id: STORE-QUOTES
     lifecycle_status: planned
     implemented: true

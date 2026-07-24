@@ -8,6 +8,10 @@ Generated from `docs/traceability/action-family-registry.yaml`. This view is non
 | AM-012 | Finalize quote | planned | business | quoting | internal_mutation | mutate | never | false | false |
 | AM-013 | Send quote | planned | business | quoting | send_with_approval | send | always | true | true |
 | AM-003 | Create note | active | business, home, workshop, shared | notes | internal_mutation | mutate | never | false | false |
+| AM-006 | Create reminder | active | business, home, workshop, shared | reminders | internal_mutation | mutate | never | false | false |
+| AM-007 | Cancel reminder | active | business, home, workshop, shared | reminders | destructive_internal_mutation | destructive | always | false | false |
+| AM-004 | Create task | active | business, home, workshop, shared | tasks | internal_mutation | mutate | never | false | false |
+| AM-005 | Complete task | active | business, home, workshop, shared | tasks | internal_mutation | mutate | never | false | false |
 
 ## Workflows
 
