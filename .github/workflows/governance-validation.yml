@@ -132,22 +132,21 @@ jobs:
         if: steps.pending.outputs.run == 'true'
         run: |
           set -euo pipefail
-          git rm .github/workflows/task-reminder-development-commissioning.yml
-          git rm .github/workflows/activate-task-reminder-governance-once.yml
-          git rm .github/scripts/activate_task_reminder_governance.py
+          git rm -f --ignore-unmatch \
+            .github/workflows/task-reminder-development-commissioning.yml \
+            .github/workflows/activate-task-reminder-governance-once.yml \
+            .github/scripts/activate_task_reminder_governance.py
           git config user.name "jarvis-governance-bot"
           git config user.email "actions@users.noreply.github.com"
-          git add docs/traceability/action-family-registry.yaml \
-                  docs/traceability/action-map.generated.md \
-                  docs/registries/policy-overlays.yaml \
-                  docs/registries/tool-registry.yaml \
-                  docs/registries/state-target-registry.yaml \
-                  docs/registries/test-id-registry.yaml \
-                  docs/registries/evidence-id-registry.yaml \
-                  docs/evidence/task-reminder-actions-commissioning.md \
-                  docs/superpowers/plans/2026-07-24-task-reminder-actions.md
+          git add -A
+          git status --short
+          if git diff --cached --quiet; then
+            echo "::error::Activation transformation produced no commit."
+            exit 1
+          fi
           git commit -m "docs(governance): activate commissioned task and reminder actions"
-          git push origin HEAD:governance/activate-task-reminder-155
+          git push --force-with-lease=refs/heads/governance/activate-task-reminder-155 \
+            origin HEAD:governance/activate-task-reminder-155
 
       - name: Publish preparer result
         if: steps.pending.outputs.run == 'true'
