@@ -90,6 +90,7 @@ export interface ProviderReconciliationAdapter {
 }
 
 export type RegisterExternalAttemptInput = ExternalExecutionScope & {
+  reconciliationId: string;
   executionKey: string;
   actionId: string;
   requestId: string;
@@ -98,6 +99,7 @@ export type RegisterExternalAttemptInput = ExternalExecutionScope & {
 };
 
 export type MarkExternalIndeterminateInput = ExternalExecutionScope & {
+  reconciliationId: string;
   executionKey: string;
   actionId: string;
   requestId: string;
@@ -109,6 +111,7 @@ export type MarkExternalIndeterminateInput = ExternalExecutionScope & {
 };
 
 export type CompleteExternalAttemptInput = ExternalExecutionScope & {
+  reconciliationId: string;
   executionKey: string;
   actionId: string;
   requestId: string;
@@ -148,7 +151,9 @@ export interface ExternalReconciliationStore {
   cleanup(reconciliationId: string): Promise<boolean>;
 }
 
-export function externalExecutionScopeKey(scope: Omit<ExternalExecutionScope, "effectFingerprint">): string {
+export function externalExecutionScopeKey(
+  scope: Omit<ExternalExecutionScope, "effectFingerprint">,
+): string {
   return [scope.projectId, scope.tool, scope.operation, scope.idempotencyKey]
     .map((value) => `${value.length}:${value}`)
     .join("|");
