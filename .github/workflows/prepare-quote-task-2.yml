@@ -1,0 +1,139 @@
+name: Prepare quote lifecycle task 2
+
+on:
+  push:
+    branches:
+      - feat/quote-lifecycle-152
+    paths:
+      - .github/workflows/prepare-quote-task-2.yml
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: feat/quote-lifecycle-152
+          fetch-depth: 0
+
+      - name: Guard exact branch
+        run: test "$GITHUB_REF" = "refs/heads/feat/quote-lifecycle-152"
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: typescript/.nvmrc
+          cache: npm
+          cache-dependency-path: typescript/package-lock.json
+
+      - name: Install locked dependencies
+        working-directory: typescript
+        run: npm ci
+
+      - name: Add quote tables to the schema
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("typescript/convex/schema.ts")
+          source = path.read_text()
+          import_block = '''import {
+            quoteCommercialStatusValidator,
+            quoteHistoricalOutcomeValidator,
+            quoteLineItemValidator,
+            quoteRevisionStatusValidator,
+          } from "./quoteValidators.js";
+          '''
+          import_block = "\n".join(line[10:] if line.startswith("          ") else line for line in import_block.splitlines()) + "\n"
+          import_marker = 'import {\n  toolActionActorValidator,'
+          if './quoteValidators.js' not in source:
+              source = source.replace(import_marker, import_block + import_marker, 1)
+
+          tables = '''  quotes: defineTable({
+            ownerId: v.string(),
+            quoteId: v.string(),
+            clientId: v.string(),
+            projectId: v.optional(v.string()),
+            number: v.string(),
+            currentRevision: v.number(),
+            currentRevisionId: v.string(),
+            aggregateVersion: v.number(),
+            commercialStatus: quoteCommercialStatusValidator,
+            commercialRevision: v.optional(v.number()),
+            commercialRecordedAt: v.optional(v.number()),
+            createdAt: v.number(),
+            updatedAt: v.number(),
+          })
+            .index("by_owner_and_quote_id", ["ownerId", "quoteId"])
+            .index("by_owner_and_number", ["ownerId", "number"])
+            .index("by_owner_and_client_id", ["ownerId", "clientId"])
+            .index("by_owner_and_project_id", ["ownerId", "projectId"])
+            .index("by_owner_and_commercial_status", ["ownerId", "commercialStatus"]),
+          quoteRevisions: defineTable({
+            ownerId: v.string(),
+            revisionId: v.string(),
+            quoteId: v.string(),
+            revision: v.number(),
+            revisionVersion: v.number(),
+            status: quoteRevisionStatusValidator,
+            lineItems: v.array(quoteLineItemValidator),
+            subtotal: v.number(),
+            taxRate: v.optional(v.number()),
+            tax: v.number(),
+            total: v.number(),
+            currency: v.literal("AUD"),
+            validUntil: v.optional(v.string()),
+            notes: v.optional(v.string()),
+            termsIncluded: v.boolean(),
+            fingerprint: v.optional(v.string()),
+            predecessorRevisionId: v.optional(v.string()),
+            historicalOutcome: v.optional(quoteHistoricalOutcomeValidator),
+            historicalOutcomeRecordedAt: v.optional(v.number()),
+            reviewedAt: v.optional(v.number()),
+            finalizedAt: v.optional(v.number()),
+            createdAt: v.number(),
+            updatedAt: v.number(),
+          })
+            .index("by_owner_quote_and_revision", ["ownerId", "quoteId", "revision"])
+            .index("by_owner_and_revision_id", ["ownerId", "revisionId"])
+            .index("by_owner_quote_and_status", ["ownerId", "quoteId", "status"])
+            .index("by_owner_and_fingerprint", ["ownerId", "fingerprint"]),
+          '''
+          tables = "\n".join(line[10:] if line.startswith("          ") else line for line in tables.splitlines()) + "\n"
+          table_marker = '  validationReports: defineTable({' 
+          if 'quotes: defineTable({' not in source:
+              source = source.replace(table_marker, tables + table_marker, 1)
+          path.write_text(source)
+          PY
+
+      - name: Regenerate Convex bindings
+        working-directory: typescript
+        run: npx convex codegen
+
+      - name: Format task files
+        working-directory: typescript
+        run: |
+          npm exec prettier -- --write \
+            convex/schema.ts \
+            convex/quoteValidators.ts \
+            convex/quotes.ts \
+            convex/_generated/api.d.ts \
+            tests/quoteConvexContracts.test.ts \
+            tests/quoteConvexLifecycle.test.ts
+
+      - name: Remove helper and commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          rm .github/workflows/prepare-quote-task-2.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "feat(quotes): add Convex aggregate and revision lifecycle"
+          git push origin HEAD:feat/quote-lifecycle-152
+          gh pr comment 174 --body "Task 2 schema/codegen preparation completed in run https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}; helper removed itself."
