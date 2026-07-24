@@ -14,7 +14,7 @@ permissions:
 jobs:
   prepare:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
         with:
@@ -51,6 +51,8 @@ jobs:
           import_block = "\n".join(line[10:] if line.startswith("          ") else line for line in import_block.splitlines()) + "\n"
           import_marker = 'import {\n  toolActionActorValidator,'
           if './quoteValidators.js' not in source:
+              if import_marker not in source:
+                  raise SystemExit("schema import marker missing")
               source = source.replace(import_marker, import_block + import_marker, 1)
 
           tables = '''  quotes: defineTable({
@@ -106,13 +108,11 @@ jobs:
           tables = "\n".join(line[10:] if line.startswith("          ") else line for line in tables.splitlines()) + "\n"
           table_marker = '  validationReports: defineTable({' 
           if 'quotes: defineTable({' not in source:
+              if table_marker not in source:
+                  raise SystemExit("schema table marker missing")
               source = source.replace(table_marker, tables + table_marker, 1)
           path.write_text(source)
           PY
-
-      - name: Regenerate Convex bindings
-        working-directory: typescript
-        run: npx convex codegen
 
       - name: Format task files
         working-directory: typescript
@@ -121,7 +121,6 @@ jobs:
             convex/schema.ts \
             convex/quoteValidators.ts \
             convex/quotes.ts \
-            convex/_generated/api.d.ts \
             tests/quoteConvexContracts.test.ts \
             tests/quoteConvexLifecycle.test.ts
 
@@ -136,4 +135,4 @@ jobs:
           git add -A
           git commit -m "feat(quotes): add Convex aggregate and revision lifecycle"
           git push origin HEAD:feat/quote-lifecycle-152
-          gh pr comment 174 --body "Task 2 schema/codegen preparation completed in run https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}; helper removed itself."
+          gh pr comment 174 --body "Task 2 schema preparation completed in run https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}; helper removed itself."
