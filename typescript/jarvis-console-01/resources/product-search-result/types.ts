@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { consolePaginationInvariantIssues } from "../../pagination.js";
+
 export const taskSchema = z.object({
   id: z.string(),
   title: z.string(),
@@ -32,15 +34,35 @@ export const propSchema = z.object({
   mission: z.string(),
   progress: z.number().min(0).max(100),
   lastUpdated: z.number(),
-  tasks: z.array(taskSchema),
-  reminders: z.array(reminderSchema),
+  tasks: z.array(taskSchema).max(100),
+  reminders: z.array(reminderSchema).max(100),
   systems: z.array(systemSchema),
   activity: z.array(z.string()),
   counts: z.object({
     active: z.number().int().nonnegative(),
     completed: z.number().int().nonnegative(),
     reminders: z.number().int().nonnegative(),
+    tasksPartial: z.boolean(),
+    remindersPartial: z.boolean(),
   }),
+  pagination: z.object({
+    tasks: z.object({
+      isDone: z.boolean(),
+      continueCursor: z.string(),
+      returnedCount: z.number().int().nonnegative(),
+      requestedPageSize: z.number().int().min(1).max(100),
+    }),
+    reminders: z.object({
+      isDone: z.boolean(),
+      continueCursor: z.string(),
+      returnedCount: z.number().int().nonnegative(),
+      requestedPageSize: z.number().int().min(1).max(100),
+    }),
+  }),
+}).superRefine((value, ctx) => {
+  for (const issue of consolePaginationInvariantIssues(value)) {
+    ctx.addIssue({ code: "custom", ...issue });
+  }
 });
 
 export type JarvisTask = z.infer<typeof taskSchema>;

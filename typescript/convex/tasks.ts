@@ -1,3 +1,4 @@
+import { paginationOptsValidator, paginationResultValidator } from "convex/server";
 import { v } from "convex/values";
 
 import { taskActionResultValidator } from "./internalActionValidators.js";
@@ -164,6 +165,26 @@ export const list = query({
       .query("tasks")
       .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
       .collect();
+  },
+});
+
+export const listPage = query({
+  args: {
+    serviceToken: v.string(),
+    paginationOpts: paginationOptsValidator,
+  },
+  returns: paginationResultValidator(taskValidator),
+  handler: async (ctx, args) => {
+    const ownerId = requireOwner(args.serviceToken);
+    const { numItems } = args.paginationOpts;
+    if (!Number.isInteger(numItems) || numItems < 1 || numItems > 100) {
+      throw new Error("Task page size must be an integer from 1 to 100.");
+    }
+    return ctx.db
+      .query("tasks")
+      .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+      .order("desc")
+      .paginate(args.paginationOpts);
   },
 });
 
