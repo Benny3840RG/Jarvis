@@ -69,7 +69,9 @@ class FakeReconciliationStore implements ExternalReconciliationStore {
     return current;
   }
 
-  async registerAttempt(input: RegisterExternalAttemptInput): Promise<ExternalReconciliationRecord> {
+  async registerAttempt(
+    input: RegisterExternalAttemptInput,
+  ): Promise<ExternalReconciliationRecord> {
     this.registerCalls.push(input);
     const now = Date.now();
     const record: ExternalReconciliationRecord = {
@@ -118,7 +120,9 @@ class FakeReconciliationStore implements ExternalReconciliationStore {
         ? {}
         : { providerRequestId: current.providerRequestId }),
       providerCorrelationId:
-        current?.providerCorrelationId ?? input.receipt.providerCorrelationId ?? input.receipt.correlationId,
+        current?.providerCorrelationId ??
+        input.receipt.providerCorrelationId ??
+        input.receipt.correlationId,
       receiptKey: input.receiptKey,
       receiptId: input.receipt.receiptId,
       state: current?.providerRequestId ? "pending" : "escalated",
@@ -210,9 +214,7 @@ class FakeReconciliationStore implements ExternalReconciliationStore {
   }
 }
 
-function externalDefinition(
-  execute: ToolExecutionDefinition["execute"],
-): ToolExecutionDefinition {
+function externalDefinition(execute: ToolExecutionDefinition["execute"]): ToolExecutionDefinition {
   return {
     tool: "quotes",
     operation: "send",
@@ -255,10 +257,12 @@ describe("ToolExecutionService external reconciliation", () => {
       timeoutMs: 1,
     });
     const restarted = new ToolExecutionService(
-      [externalDefinition(async () => {
-        executions += 1;
-        return { shouldNotRun: true };
-      })],
+      [
+        externalDefinition(async () => {
+          executions += 1;
+          return { shouldNotRun: true };
+        }),
+      ],
       new InMemoryToolExecutionReceiptStore(),
       reconciliations,
     );
