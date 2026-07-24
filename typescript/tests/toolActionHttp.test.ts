@@ -24,6 +24,15 @@ const CONFIG: HttpAppConfig = {
   deploymentVersion: null,
   timezone: "Australia/Melbourne",
   currentToken: "current-secret",
+  currentApprovalToken: "approval-secret",
+};
+
+const CONFIG_NO_APPROVAL_TOKEN: HttpAppConfig = {
+  version: "0.1.0",
+  sourceVersion: "test-source",
+  deploymentVersion: null,
+  timezone: "Australia/Melbourne",
+  currentToken: "current-secret",
 };
 
 const openApps: NestFastifyApplication[] = [];
@@ -116,11 +125,12 @@ function successfulService(overrides: Partial<ToolActionService> = {}): ToolActi
 async function makeApp(
   service: ToolActionService | null,
   executionService: ToolExecutionService | null = null,
+  config: HttpAppConfig = CONFIG,
 ): Promise<NestFastifyApplication> {
   const app = await createJarvisHttpApp({
     persistence: makePersistence(),
     providerName: "json",
-    config: CONFIG,
+    config,
     logger: false,
     totalityPipeline: null,
     memoryChangeSetService: null,
@@ -340,13 +350,55 @@ describe("Tool action approval HTTP boundary", () => {
       method: "POST",
       url: "/api/v1/projects/project-1/tool-actions/action-1/approve",
       headers: authHeaders(),
-      payload: { expectedRevision: 3 },
+      payload: { expectedRevision: 3, approvalToken: "approval-secret" },
     });
 
     assert.equal(response.statusCode, 200);
     assert.equal(approved, true);
     assert.equal(response.json().state, "approved");
     assert.equal(response.json().executedAt, undefined);
+  });
+
+  it("rejects approval without a valid approval token before calling the service", async () => {
+    let called = false;
+    const app = await makeApp(
+      successfulService({
+        async approve() {
+          called = true;
+          return { ...action("approved"), approvedBy: "user" };
+        },
+      }),
+    );
+
+    const missingToken = await app.inject({
+      method: "POST",
+      url: "/api/v1/projects/project-1/tool-actions/action-1/approve",
+      headers: authHeaders(),
+      payload: { expectedRevision: 3 },
+    });
+    const wrongToken = await app.inject({
+      method: "POST",
+      url: "/api/v1/projects/project-1/tool-actions/action-1/approve",
+      headers: authHeaders(),
+      payload: { expectedRevision: 3, approvalToken: "not-the-secret" },
+    });
+
+    assert.equal(missingToken.statusCode, 422);
+    assert.equal(wrongToken.statusCode, 401);
+    assert.equal(called, false);
+  });
+
+  it("returns 503 when no approval token is configured", async () => {
+    const app = await makeApp(successfulService(), null, CONFIG_NO_APPROVAL_TOKEN);
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/v1/projects/project-1/tool-actions/action-1/approve",
+      headers: authHeaders(),
+      payload: { expectedRevision: 3, approvalToken: "anything" },
+    });
+
+    assert.equal(response.statusCode, 503);
+    assert.equal(response.json().type, "urn:jarvis:problem:tool-action-approval-token-unavailable");
   });
 
   it("rejects a proposal with a reason", async () => {
@@ -387,7 +439,7 @@ describe("Tool action approval HTTP boundary", () => {
       method: "POST",
       url: "/api/v1/projects/project-1/tool-actions/action-1/approve",
       headers: authHeaders(),
-      payload: { expectedRevision: 3 },
+      payload: { expectedRevision: 3, approvalToken: "approval-secret" },
     });
 
     assert.equal(response.statusCode, 409);
