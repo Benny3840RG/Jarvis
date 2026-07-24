@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 
-import { requireOwner } from "./authHelpers.js";
+import { collectBounded, requireOwner } from "./authHelpers.js";
 import { mutation, query } from "./_generated/server.js";
 
 const upgradeValidator = v.object({
@@ -44,10 +44,10 @@ export const list = query({
   returns: v.array(upgradeValidator),
   handler: async (ctx, args) => {
     const ownerId = requireOwner(args.serviceToken);
-    return ctx.db
-      .query("upgrades")
-      .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
-      .collect();
+    return collectBounded(
+      ctx.db.query("upgrades").withIndex("by_owner", (q) => q.eq("ownerId", ownerId)),
+      "Upgrade",
+    );
   },
 });
 

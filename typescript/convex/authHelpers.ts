@@ -53,3 +53,33 @@ export function requireOwner(serviceToken: string): string {
 
   return OWNER_ID;
 }
+
+/**
+ * Upper bound on how many documents an owner-scoped "list everything" query may
+ * return in a single call. Jarvis is single-user, so real domains sit far below
+ * this; the cap exists purely as a guard rail so an unbounded `.collect()` can
+ * never grow into a query-limit failure or an ever-more-expensive dashboard
+ * read. Callers that legitimately need more should page (see the `listPage`
+ * queries) rather than raise this number.
+ */
+export const MAX_OWNER_LIST_RESULTS = 1000;
+
+/**
+ * Runs a bounded read in place of an unbounded `.collect()`. Takes one more than
+ * the cap so an overflow is detectable, then fails closed with an explicit error
+ * rather than silently truncating the result — matching the fail-closed
+ * convention used elsewhere (e.g. development cleanup). `label` names the domain
+ * for the error message.
+ */
+export async function collectBounded<T>(
+  query: { take(count: number): Promise<T[]> },
+  label: string,
+): Promise<T[]> {
+  const rows = await query.take(MAX_OWNER_LIST_RESULTS + 1);
+  if (rows.length > MAX_OWNER_LIST_RESULTS) {
+    throw new Error(
+      `${label} list exceeds the bounded read limit of ${MAX_OWNER_LIST_RESULTS} records.`,
+    );
+  }
+  return rows;
+}

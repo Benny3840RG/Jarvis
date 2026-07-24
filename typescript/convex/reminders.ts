@@ -1,7 +1,7 @@
 import { paginationOptsValidator, paginationResultValidator } from "convex/server";
 import { v } from "convex/values";
 
-import { requireOwner } from "./authHelpers.js";
+import { collectBounded, requireOwner } from "./authHelpers.js";
 import { reminderActionResultValidator } from "./internalActionValidators.js";
 import { cleanRequiredText } from "./toolActionLogic.js";
 import { mutation, query, type MutationCtx } from "./_generated/server.js";
@@ -209,10 +209,10 @@ export const list = query({
   returns: v.array(reminderValidator),
   handler: async (ctx, args) => {
     const ownerId = requireOwner(args.serviceToken);
-    return ctx.db
-      .query("reminders")
-      .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
-      .collect();
+    return collectBounded(
+      ctx.db.query("reminders").withIndex("by_owner", (q) => q.eq("ownerId", ownerId)),
+      "Reminder",
+    );
   },
 });
 
