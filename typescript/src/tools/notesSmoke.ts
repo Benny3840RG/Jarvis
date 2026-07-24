@@ -67,7 +67,10 @@ export async function runNotesSmoke(
     requireCondition(replay.id === created.id, "notes: idempotent replay created a second record.");
 
     const fetched = await makeStore().get(projectId, created.id);
-    requireCondition(fetched?.id === created.id, "notes: fresh store could not fetch created note.");
+    requireCondition(
+      fetched?.id === created.id,
+      "notes: fresh store could not fetch created note.",
+    );
 
     const listed = await makeStore().list(projectId, 25);
     requireCondition(
@@ -76,7 +79,10 @@ export async function runNotesSmoke(
     );
 
     const removed = await makeStore().remove(projectId, created.id);
-    requireCondition(removed?.id === created.id, "notes: cleanup remove did not return created note.");
+    requireCondition(
+      removed?.id === created.id,
+      "notes: cleanup remove did not return created note.",
+    );
 
     const afterRemoval = await makeStore().get(projectId, created.id);
     requireCondition(afterRemoval === null, "notes: record remained visible after cleanup.");
