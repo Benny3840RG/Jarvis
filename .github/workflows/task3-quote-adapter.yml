@@ -27,4 +27,7 @@ jobs:
           cache-dependency-path: typescript/package-lock.json
       - run: npm ci
       - name: Run Task 3 focused tests
-        run: node --import tsx --test tests/convexQuotesAdapter.test.ts
+        run: >-
+          node --import tsx --test
+          tests/convexQuotesAdapter.test.ts
+          tests/quoteRestartPersistence.test.ts
