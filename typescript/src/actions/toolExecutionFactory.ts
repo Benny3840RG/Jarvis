@@ -1,14 +1,22 @@
+import { ConvexNoteStore } from "../persistence/convexNotes.js";
 import { ConvexToolExecutionReceiptStore } from "../persistence/convexToolExecutionReceipts.js";
 import { resolvePersistenceProviderName } from "../persistence/providerSelection.js";
-import { ToolExecutionService } from "./toolExecution.js";
+import { createNoteToolDefinition } from "./createNoteTool.js";
+import { ToolExecutionService, type ToolExecutionDefinition } from "./toolExecution.js";
+
+export function createToolExecutionDefinitionsFromEnv(): ToolExecutionDefinition[] {
+  return [createNoteToolDefinition(new ConvexNoteStore())];
+}
 
 /**
- * No tool:operation is registered yet — every execution attempt is blocked as
- * not-allowlisted until a specific, reviewed definition is added here. This is
- * deliberate: the executor is fully wired and durable, but nothing can cause a
- * side effect through it until that allowlist decision is made explicitly.
+ * Tool execution remains fail-closed. The only live definition is the reviewed
+ * internal AM-003 `notes:create` mutation; every other tool:operation pair is
+ * blocked as not-allowlisted by ToolExecutionService.
  */
 export function createToolExecutionServiceFromEnv(): ToolExecutionService | null {
   if (resolvePersistenceProviderName() !== "convex") return null;
-  return new ToolExecutionService([], new ConvexToolExecutionReceiptStore());
+  return new ToolExecutionService(
+    createToolExecutionDefinitionsFromEnv(),
+    new ConvexToolExecutionReceiptStore(),
+  );
 }
