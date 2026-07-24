@@ -1,11 +1,12 @@
+import type { NoteStore } from "../notes/note.js";
 import { ConvexNoteStore } from "../persistence/convexNotes.js";
 import { ConvexToolExecutionReceiptStore } from "../persistence/convexToolExecutionReceipts.js";
 import { resolvePersistenceProviderName } from "../persistence/providerSelection.js";
 import { createNoteToolDefinition } from "./createNoteTool.js";
 import { ToolExecutionService, type ToolExecutionDefinition } from "./toolExecution.js";
 
-export function createToolExecutionDefinitionsFromEnv(): ToolExecutionDefinition[] {
-  return [createNoteToolDefinition(new ConvexNoteStore())];
+export function createToolExecutionDefinitions(noteStore: NoteStore): ToolExecutionDefinition[] {
+  return [createNoteToolDefinition(noteStore)];
 }
 
 /**
@@ -16,7 +17,7 @@ export function createToolExecutionDefinitionsFromEnv(): ToolExecutionDefinition
 export function createToolExecutionServiceFromEnv(): ToolExecutionService | null {
   if (resolvePersistenceProviderName() !== "convex") return null;
   return new ToolExecutionService(
-    createToolExecutionDefinitionsFromEnv(),
+    createToolExecutionDefinitions(new ConvexNoteStore()),
     new ConvexToolExecutionReceiptStore(),
   );
 }
