@@ -152,7 +152,7 @@ policy_overlays:
 action_families:
   - id: AM-003
     name: Create note
-    lifecycle_status: planned
+    lifecycle_status: active
     owner: notes_domain
     version: 1
     classification:
@@ -189,8 +189,13 @@ action_families:
       requirements:
         primary: [R-030, R-034]
         supporting: [R-031, R-032, R-033, R-035, R-036, R-037, R-038]
-      test_ids: []
-      evidence_ids: []
+      test_ids:
+        - TEST-AM-003-001
+        - TEST-AM-003-NEG-001
+        - TEST-AM-003-PERSIST-001
+        - TEST-AM-003-SMOKE-001
+      evidence_ids:
+        - EVD-AM-003-001
     parameters:
       - name: title
         type: string
@@ -418,13 +423,3 @@ generation:
       - domains
       - capability
       - requirements
-      - resolved_effect_class
-      - sensitivity
-      - offline_support
-      - approval
-      - idempotency
-      - bindings
-      - state_impact
-      - reconciliation
-      - tests
-      - evidence
