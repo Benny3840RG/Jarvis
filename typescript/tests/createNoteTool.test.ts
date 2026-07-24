@@ -3,7 +3,10 @@ import { describe, it } from "node:test";
 
 import { createNoteToolDefinition } from "../src/actions/createNoteTool.js";
 import type { ToolAction } from "../src/actions/toolActions.js";
-import { ToolExecutionService } from "../src/actions/toolExecution.js";
+import {
+  InMemoryToolExecutionReceiptStore,
+  ToolExecutionService,
+} from "../src/actions/toolExecution.js";
 import { createToolExecutionDefinitions } from "../src/actions/toolExecutionFactory.js";
 import type { CreateNoteInput, NoteRecord, NoteStore } from "../src/notes/note.js";
 
@@ -103,6 +106,44 @@ describe("AM-003 create note tool", () => {
       correlationId: "correlation-note-1",
       source: "tool-action-http",
     });
+  });
+
+  it("replays the original receipt after the execution service restarts", async () => {
+    const store = new RecordingNoteStore();
+    const receipts = new InMemoryToolExecutionReceiptStore();
+    const firstService = new ToolExecutionService([createNoteToolDefinition(store)], receipts);
+
+    const first = await firstService.execute({
+      action,
+      authority: "T1",
+      idempotencyKey: "restart-note",
+    });
+
+    const restartedService = new ToolExecutionService([createNoteToolDefinition(store)], receipts);
+    const replay = await restartedService.execute({
+      action,
+      authority: "T1",
+      idempotencyKey: "restart-note",
+    });
+
+    assert.equal(first.status, "succeeded");
+    assert.deepEqual(replay, first);
+    assert.equal(store.creates.length, 1);
+  });
+
+  it("blocks insufficient authority without mutating the note store", async () => {
+    const store = new RecordingNoteStore();
+    const service = new ToolExecutionService([createNoteToolDefinition(store)]);
+
+    const result = await service.execute({
+      action,
+      authority: "T0",
+      idempotencyKey: "unauthorized-note",
+    });
+
+    assert.equal(result.status, "blocked");
+    assert.equal(result.errorCode, "not-authorized");
+    assert.equal(store.creates.length, 0);
   });
 
   it("blocks malformed input without mutating the note store", async () => {
