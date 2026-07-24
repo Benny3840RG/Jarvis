@@ -25,9 +25,9 @@
 - Create: `typescript/convex/internalActionValidators.ts`
 - Modify: `typescript/convex/schema.ts`
 
-- [ ] Define typed task and reminder result snapshots.
-- [ ] Add owner/project/family/idempotency and entity indexes.
-- [ ] Reject fingerprint reuse across different payloads.
+- [x] Define typed task and reminder result snapshots.
+- [x] Add owner/project/family/idempotency and entity indexes.
+- [x] Reject fingerprint reuse across different payloads.
 
 ### Task 2: Controlled task mutations
 
@@ -38,10 +38,10 @@
 - Test: `typescript/tests/controlledTaskActions.test.ts`
 - Test: `typescript/tests/convexControlledTasks.test.ts`
 
-- [ ] Add fingerprint-bound controlled create.
-- [ ] Add atomic controlled completion and exact result replay.
-- [ ] Keep legacy create/complete/update/remove compatible.
-- [ ] Add authenticated cleanup for commissioning only.
+- [x] Add fingerprint-bound controlled create.
+- [x] Add atomic controlled completion and exact result replay.
+- [x] Keep legacy create/complete/update/remove compatible.
+- [x] Add authenticated cleanup for commissioning only.
 
 ### Task 3: Controlled reminder mutations
 
@@ -52,11 +52,11 @@
 - Test: `typescript/tests/controlledReminderActions.test.ts`
 - Test: `typescript/tests/convexControlledReminders.test.ts`
 
-- [ ] Add fingerprint-bound controlled create.
-- [ ] Add atomic cancellation receipt plus live-record deletion.
-- [ ] Replay cancellation from the retained result.
-- [ ] Keep legacy update/remove and snapshots compatible.
-- [ ] Add authenticated cleanup for commissioning only.
+- [x] Add fingerprint-bound controlled create.
+- [x] Add atomic cancellation receipt plus live-record deletion.
+- [x] Replay cancellation from the retained result.
+- [x] Keep legacy update/remove and snapshots compatible.
+- [x] Add authenticated cleanup for commissioning only.
 
 ### Task 4: Tool contracts and allowlist
 
@@ -65,9 +65,9 @@
 - Modify: `typescript/src/actions/toolExecutionFactory.ts`
 - Test: `typescript/tests/taskReminderAllowlist.test.ts`
 
-- [ ] Register `tasks:create`, `tasks:complete`, `reminders:create`, and `reminders:cancel`.
-- [ ] Prove every other operation remains blocked.
-- [ ] Validate due-field combinations and authority.
+- [x] Register `tasks:create`, `tasks:complete`, `reminders:create`, and `reminders:cancel`.
+- [x] Prove every other operation remains blocked.
+- [x] Validate due-field combinations and authority.
 
 ### Task 5: Self-cleaning development smoke
 
@@ -76,9 +76,9 @@
 - Modify: `typescript/src/tools/runConvexSmoke.ts`
 - Test: `typescript/tests/taskReminderActionsSmoke.test.ts`
 
-- [ ] Prove create/replay/fresh-client visibility/complete/cancel.
-- [ ] Prove cleanup and absence.
-- [ ] Refuse non-development targets before touching stores.
+- [x] Prove create/replay/fresh-client visibility/complete/cancel.
+- [x] Prove cleanup and absence.
+- [x] Refuse non-development targets before touching stores.
 
 ### Task 6: Two-stage governance activation
 
