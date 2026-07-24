@@ -34,10 +34,10 @@
 - Produce `fingerprintToolEffect(action)` separately from the approval-bound action fingerprint.
 - Extend `ToolExecutionContext` with `registerProviderAttempt(reference)` for external definitions.
 
-- [ ] Define explicit reconciliation states: `observing`, `pending`, `claimed`, `resolved`, and `escalated`.
-- [ ] Define terminal provider outcomes: `succeeded` and `failed`; define `unresolved` as a non-terminal worker result.
-- [ ] Define a stable owner/project/tool/operation/idempotency scope independent of `actionId`.
-- [ ] Test same-effect duplicate detection and changed-effect collision detection.
+- [x] Define explicit reconciliation states: `observing`, `pending`, `claimed`, `resolved`, and `escalated`.
+- [x] Define terminal provider outcomes: `succeeded` and `failed`; define `unresolved` as a non-terminal worker result.
+- [x] Define a stable owner/project/tool/operation/idempotency scope independent of `actionId`.
+- [x] Test same-effect duplicate detection and changed-effect collision detection.
 
 ### Task 2: Durable Convex ledger and lease transitions
 
@@ -57,10 +57,10 @@
 - `releaseClaim`: reschedule unresolved provider status or escalate after the configured attempt ceiling.
 - `cleanup`: authenticated development-only cleanup for commissioning evidence.
 
-- [ ] Add indexes for scope uniqueness, due pending work, expired claims, receipt binding, and auditable status listing.
-- [ ] Use indexed `.take(1)`/`.unique()` queries only; do not add unbounded scans.
-- [ ] Reject fingerprint or provider-reference collisions.
-- [ ] Prove stale lease tokens cannot resolve or release another worker's claim.
+- [x] Add indexes for scope uniqueness, due pending work, expired claims, receipt binding, and auditable status listing.
+- [x] Use indexed `.take(1)`/`.unique()` queries only; do not add unbounded scans.
+- [x] Reject fingerprint or provider-reference collisions.
+- [x] Prove stale lease tokens cannot resolve or release another worker's claim.
 
 ### Task 3: Convex reconciliation adapter
 
@@ -72,9 +72,9 @@
 - Implement every `ExternalReconciliationStore` method through authenticated generated Convex references.
 - Map epoch millisecond fields to domain records without losing optional provider or resolution metadata.
 
-- [ ] Verify service-token enforcement.
-- [ ] Verify exact scope, receipt, provider-reference, lease and resolution arguments.
-- [ ] Preserve null and collision responses without inventing state.
+- [x] Verify service-token enforcement.
+- [x] Verify exact scope, receipt, provider-reference, lease and resolution arguments.
+- [x] Preserve null and collision responses without inventing state.
 
 ### Task 4: External execution integration and blind-retry block
 
@@ -93,11 +93,11 @@
 - Existing unresolved scope returns the original indeterminate receipt and never calls the tool definition.
 - A changed effect under the same scope returns a persisted fingerprint-mismatch block.
 
-- [ ] Keep internal definition execution unchanged.
-- [ ] Require an `ExternalReconciliationStore` whenever an external definition is registered.
-- [ ] Enforce provider-name consistency between definition and registered attempt.
-- [ ] Treat an external success without a registered provider reference as indeterminate/escalated, never as proven success.
-- [ ] Test restart replay and duplicate-action-ID suppression.
+- [x] Keep internal definition execution unchanged.
+- [x] Require an `ExternalReconciliationStore` whenever an external definition is registered.
+- [x] Enforce provider-name consistency between definition and registered attempt.
+- [x] Treat an external success without a registered provider reference as indeterminate/escalated, never as proven success.
+- [x] Test restart replay and duplicate-action-ID suppression.
 
 ### Task 5: Lease-based worker and scheduler
 
@@ -114,10 +114,10 @@
 - `unresolved` results release with bounded backoff; the final allowed uncertainty escalates.
 - The scheduler repeatedly drains bounded batches without overlapping ticks and stops through `AbortSignal`.
 
-- [ ] Reject duplicate provider adapter registrations.
-- [ ] Leave unknown-provider records indeterminate and escalated with an auditable reason.
-- [ ] Prove concurrent workers produce one claim and one terminal resolution.
-- [ ] Prove expired claims are recoverable after a process restart.
+- [x] Reject duplicate provider adapter registrations.
+- [x] Leave unknown-provider records indeterminate and escalated with an auditable reason.
+- [x] Prove concurrent workers produce one claim and one terminal resolution.
+- [x] Prove expired claims are recoverable after a process restart.
 
 ### Task 6: Self-cleaning development smoke
 
@@ -133,9 +133,9 @@
 - Resolve it through a deterministic fake provider adapter.
 - Verify the authoritative receipt changed exactly once and cleanup removed the synthetic data.
 
-- [ ] Refuse any non-`dev:` deployment before constructing a store.
-- [ ] Prove restart recovery using fresh adapter instances.
-- [ ] Guarantee cleanup after both success and injected failure.
+- [x] Refuse any non-`dev:` deployment before constructing a store.
+- [x] Prove restart recovery using fresh adapter instances.
+- [x] Guarantee cleanup after both success and injected failure.
 
 ### Task 7: Runtime landing and commissioning evidence
 
