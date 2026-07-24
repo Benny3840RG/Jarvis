@@ -96,12 +96,12 @@ export class ReconciliationWorker {
   }): Promise<ReconciliationRunResult> {
     if (input.signal.aborted) return { status: "idle" };
 
-    const now = this.now();
+    const claimNow = this.now();
     const leaseToken = this.leaseToken();
     const claim = await this.store.claimNext({
       workerId: input.workerId,
       leaseToken,
-      now,
+      now: claimNow,
       leaseMs: positiveInteger(input.leaseMs, "Reconciliation lease duration"),
     });
     if (!claim) return { status: "idle" };
@@ -110,12 +110,12 @@ export class ReconciliationWorker {
     const reference = providerReferenceFromRecord(claim.reconciliation);
     if (!reference) {
       return this.release(
-        claim.reconciliation.reconciliationId,
+        reconciliationId,
         input.workerId,
         leaseToken,
-        now,
+        claimNow,
         "provider-reference-missing",
-        now,
+        claimNow,
         1,
       );
     }
@@ -123,34 +123,45 @@ export class ReconciliationWorker {
     const adapter = this.registry.get(reference.provider);
     if (!adapter) {
       const reason = `unknown-provider:${reference.provider}`;
-      return this.release(reconciliationId, input.workerId, leaseToken, now, reason, now, 1);
+      return this.release(
+        reconciliationId,
+        input.workerId,
+        leaseToken,
+        claimNow,
+        reason,
+        claimNow,
+        1,
+      );
     }
 
     let providerResult: ProviderReconciliationResult;
     try {
       providerResult = await adapter.reconcile(reference, input.signal);
     } catch (error: unknown) {
+      const completionNow = this.now();
       const errorCode = input.signal.aborted
         ? "provider-reconciliation-aborted"
         : cleanErrorCode(error);
-      const nextAttemptAt = now + this.retryDelay(claim.reconciliation.attemptCount);
+      const nextAttemptAt =
+        completionNow + this.retryDelay(claim.reconciliation.attemptCount);
       return this.release(
         reconciliationId,
         input.workerId,
         leaseToken,
-        now,
+        completionNow,
         errorCode,
         nextAttemptAt,
         this.maxAttempts,
       );
     }
 
+    const completionNow = this.now();
     if (providerResult.status === "succeeded" || providerResult.status === "failed") {
       await this.store.resolveClaim({
         reconciliationId,
         workerId: input.workerId,
         leaseToken,
-        now,
+        now: completionNow,
         result: providerResult,
       });
       return {
@@ -172,9 +183,9 @@ export class ReconciliationWorker {
       reconciliationId,
       input.workerId,
       leaseToken,
-      now,
+      completionNow,
       providerResult.errorCode,
-      now + retryDelay,
+      completionNow + retryDelay,
       this.maxAttempts,
     );
   }
