@@ -67,6 +67,10 @@ class RecordingNoteStore implements NoteStore {
   async list(): Promise<NoteRecord[]> {
     return [];
   }
+
+  async remove(): Promise<NoteRecord | null> {
+    return null;
+  }
 }
 
 describe("AM-003 create note tool", () => {
