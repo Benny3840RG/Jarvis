@@ -426,7 +426,12 @@ export const cleanupDevelopmentQuote = mutation({
       .withIndex("by_owner_quote_and_revision", (q) =>
         q.eq("ownerId", ownerId).eq("quoteId", quoteId),
       )
-      .take(MAX_CLEANUP_REVISIONS);
+      .take(MAX_CLEANUP_REVISIONS + 1);
+    if (revisions.length > MAX_CLEANUP_REVISIONS) {
+      throw new Error(
+        `Quote has more than ${MAX_CLEANUP_REVISIONS} revisions; refusing cleanup to avoid orphaning revisions.`,
+      );
+    }
     for (const revision of revisions) await ctx.db.delete("quoteRevisions", revision._id);
     await ctx.db.delete("quotes", aggregate._id);
     return true;
