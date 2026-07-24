@@ -1,0 +1,68 @@
+name: Verify quote lifecycle integration
+
+on:
+  push:
+    branches:
+      - feat/quote-lifecycle-152
+    paths:
+      - "typescript/**"
+      - ".github/workflows/verify-quote-task2-repair.yml"
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Publish exact run locator
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh pr comment 174 --body "Quote lifecycle integration verification: https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}\n\n- Exact head: \`${GITHUB_SHA}\`\n- No codegen or deployment."
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: typescript/.nvmrc
+          cache: npm
+          cache-dependency-path: |
+            typescript/package-lock.json
+            typescript/jarvis-console-01/package-lock.json
+
+      - name: Install locked root dependencies
+        working-directory: typescript
+        run: npm ci
+
+      - name: Type-check
+        working-directory: typescript
+        run: npm run type-check
+
+      - name: Lint
+        working-directory: typescript
+        run: npm run lint
+
+      - name: Check formatting
+        working-directory: typescript
+        run: npm run format:check
+
+      - name: Validate OpenAPI
+        working-directory: typescript
+        run: npm run openapi:lint
+
+      - name: Run repository and persisted Convex tests
+        working-directory: typescript
+        run: npm run test:coverage
+
+      - name: Install locked Console dependencies
+        working-directory: typescript/jarvis-console-01
+        run: npm ci
+
+      - name: Build and type-check Console
+        working-directory: typescript/jarvis-console-01
+        run: |
+          npm run build
+          npm run type-check
