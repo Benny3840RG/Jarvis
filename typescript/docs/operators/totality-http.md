@@ -7,10 +7,18 @@ Jarvis exposes one narrow, authenticated reasoning operation:
 | POST   | `/api/v1/totality/reason` | Proposal-only reasoning, local validation, optional staged memory proposal, and journalling |
 
 The operation is unavailable unless the process uses `PERSISTENCE_PROVIDER=convex` and has all
-required Convex and OpenAI server-side configuration. Missing dependencies return `503`; Jarvis does
-not fall back to JSON persistence or return an unaudited model result.
+required Convex and reasoning-provider server-side configuration. Missing dependencies return `503`;
+Jarvis does not fall back to JSON persistence or return an unaudited model result.
 
-## Required server configuration
+## Reasoning provider selection
+
+`TOTALITY_REASONER_PROVIDER` selects which reasoning provider `src/totality/totalityFactory.ts` wires
+up. It defaults to `openai` when unset (backward compatible with existing deployments); the only other
+accepted value is `gemini`. Any other value is a configuration error and throws rather than silently
+falling back. Only the selected provider's API key is required — the other provider's key, if present,
+is ignored.
+
+### OpenAI (default)
 
 ```text
 PERSISTENCE_PROVIDER=convex
@@ -26,8 +34,31 @@ OPENAI_MODEL=gpt-5.6
 OPENAI_TIMEOUT_MS=60000
 ```
 
-The API key is read only by the server-side OpenAI adapter. It must not appear in request bodies,
-Convex documents, client code, logs, URLs, or tool arguments.
+### Gemini
+
+```text
+PERSISTENCE_PROVIDER=convex
+CONVEX_URL=<existing Convex development deployment URL>
+JARVIS_SERVICE_TOKEN=<existing strong service token>
+TOTALITY_REASONER_PROVIDER=gemini
+GEMINI_API_KEY=<server-side Gemini API key>
+```
+
+Optional values are:
+
+```text
+GEMINI_MODEL=gemini-2.5-flash
+GEMINI_TIMEOUT_MS=60000
+```
+
+The Gemini adapter (`src/integrations/gemini/totalityReasoner.ts`) sends the API key as an
+`x-goog-api-key` request header, never as a `?key=` URL query parameter, so it cannot end up in server
+access logs, proxy logs, or a `Referer` header. `tsx src/tools/runGeminiSmoke.ts "<goal text>"` (or
+`npm run smoke:gemini -- "<goal text>"`) makes a single ad hoc call for manual testing; it is not part
+of `npm test`/`npm run check`.
+
+Whichever provider is selected, its API key is read only by that provider's server-side adapter. It
+must not appear in request bodies, Convex documents, client code, logs, URLs, or tool arguments.
 
 ## Request contract
 
@@ -51,23 +82,26 @@ second request ID in the JSON body.
 }
 ```
 
-A non-null `projectId` must resolve to an authoritative Convex project before OpenAI is called. Jarvis
-supplies the model only the bounded project header and revision required to scope reasoning. It does
-not send the OpenAI adapter unrestricted project records or credentials.
+A non-null `projectId` must resolve to an authoritative Convex project before the configured reasoning
+provider is called. Jarvis supplies the model only the bounded project header and revision required to
+scope reasoning. It does not send the reasoning adapter unrestricted project records or credentials.
 
 The route is protected by the existing Bearer service-token guard. It returns `200` only after:
 
 1. deterministic routing and authority validation;
 2. authoritative project-context retrieval when `projectId` is supplied;
-3. an OpenAI Responses API structured-output call with `store: false` and no tools;
+3. a structured-output call to the configured reasoning provider (OpenAI's Responses API with
+   `store: false` and no tools, or Gemini's `generateContent` with `responseMimeType: application/json`)
+   — no external tool calls or project persistence happen on the provider side either way;
 4. local technical, safety, and memory-proposal validation;
 5. one transactional Convex mutation that commits the validation report, reasoning audit event, and
    any valid project-memory change set.
 
 ## Memory proposal boundary
 
-OpenAI may suggest only typed project facts, assumptions, measurements, or decisions. The model does
-not choose record IDs or authoritative timestamps. Jarvis generates those fields locally and rejects:
+The reasoning provider may suggest only typed project facts, assumptions, measurements, or decisions.
+The model does not choose record IDs or authoritative timestamps. Jarvis generates those fields locally
+and rejects:
 
 - authoritative inferred facts;
 - non-finite measurements;
@@ -89,14 +123,14 @@ memory change set is staged. The validation evidence is still journalled. Tool a
 
 ## Failure semantics
 
-| HTTP status | Meaning                                                                     |
-| ----------- | --------------------------------------------------------------------------- |
-| `401`       | Missing or invalid Jarvis service token                                     |
-| `404`       | Requested authoritative project does not exist                              |
-| `409`       | Project revision or memory-proposal conflict during atomic commit           |
-| `422`       | Invalid request or authority-policy violation                               |
-| `429`       | OpenAI rate limit                                                           |
-| `503`       | Totality disabled, OpenAI failure, or atomic Convex journal/staging failure |
+| HTTP status | Meaning                                                                                 |
+| ----------- | --------------------------------------------------------------------------------------- |
+| `401`       | Missing or invalid Jarvis service token                                                 |
+| `404`       | Requested authoritative project does not exist                                          |
+| `409`       | Project revision or memory-proposal conflict during atomic commit                       |
+| `422`       | Invalid request or authority-policy violation                                           |
+| `429`       | Reasoning provider rate limit                                                           |
+| `503`       | Totality disabled, reasoning provider failure, or atomic Convex journal/staging failure |
 
 All failures use the existing redacted `application/problem+json` envelope. Provider response text,
 credentials, stack traces, and internal persistence errors are not returned to the caller.

@@ -21,3 +21,7 @@ evidence:
   - id: EVD-AM-007-001
     path: docs/evidence/task-reminder-actions-commissioning.md
     description: Runtime CI and authorised development cancellation tombstone, replay, live-record deletion and cleanup evidence
+
+  - id: EVD-RECONCILIATION-001
+    path: docs/evidence/external-reconciliation-commissioning.md
+    description: Runtime CI, development commissioning, and self-cleaning regression evidence for the external-action reconciliation subsystem (issue #154). Infrastructure evidence only; does not activate any action family.

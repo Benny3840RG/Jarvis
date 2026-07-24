@@ -124,7 +124,7 @@ async function main(): Promise<void> {
     if (!widget.text.includes("JARVIS // OPERATOR CONSOLE")) {
       throw new Error("Jarvis dashboard resource did not contain the operator console marker.");
     }
-    if (/JARVIS_SERVICE_TOKEN|OPENAI_API_KEY|CONVEX_DEPLOY_KEY/.test(widget.text)) {
+    if (/JARVIS_SERVICE_TOKEN|OPENAI_API_KEY|GEMINI_API_KEY|CONVEX_DEPLOY_KEY/.test(widget.text)) {
       throw new Error("Jarvis dashboard resource contains a forbidden credential name.");
     }
 
