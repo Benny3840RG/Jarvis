@@ -7,7 +7,9 @@ import {
   type ExternalReconciliationRecord,
 } from "../src/reconciliation/externalReconciliation.js";
 
-function record(overrides: Partial<ExternalReconciliationRecord> = {}): ExternalReconciliationRecord {
+function record(
+  overrides: Partial<ExternalReconciliationRecord> = {},
+): ExternalReconciliationRecord {
   return {
     reconciliationId: "reconciliation-1",
     executionKey: "execution-1",

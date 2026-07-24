@@ -140,8 +140,8 @@ function receiptFromConvex(row: ReceiptRow): ToolExecutionReceipt {
     ...(row.outputDigest === undefined ? {} : { outputDigest: row.outputDigest }),
     ...(row.errorCode === undefined ? {} : { errorCode: row.errorCode }),
     ...(row.providerErrorCode === undefined ? {} : { providerErrorCode: row.providerErrorCode }),
-    startedAt: row.startedAt,
-    completedAt: row.completedAt,
+    startedAt: new Date(row.startedAt).toISOString(),
+    completedAt: new Date(row.completedAt).toISOString(),
   } as ToolExecutionReceipt;
 }
 
@@ -189,8 +189,8 @@ function receiptInput(receipt: ToolExecutionReceipt) {
     ...(receipt.providerErrorCode === undefined
       ? {}
       : { providerErrorCode: receipt.providerErrorCode }),
-    startedAt: receipt.startedAt,
-    completedAt: receipt.completedAt,
+    startedAt: new Date(receipt.startedAt).getTime(),
+    completedAt: new Date(receipt.completedAt).getTime(),
   };
 }
 
@@ -234,13 +234,17 @@ export class ConvexExternalReconciliationStore implements ExternalReconciliation
     });
     return row === null
       ? null
-      : envelopeFromConvex(row as {
-          reconciliation: ReconciliationRow;
-          receipt: ReceiptRow | null;
-        });
+      : envelopeFromConvex(
+          row as {
+            reconciliation: ReconciliationRow;
+            receipt: ReceiptRow | null;
+          },
+        );
   }
 
-  async registerAttempt(input: RegisterExternalAttemptInput): Promise<ExternalReconciliationRecord> {
+  async registerAttempt(
+    input: RegisterExternalAttemptInput,
+  ): Promise<ExternalReconciliationRecord> {
     const row = await this.client.mutation(externalReconciliationFunctions.registerAttempt, {
       serviceToken: this.serviceToken,
       ...scopeArgs(input),
@@ -274,13 +278,17 @@ export class ConvexExternalReconciliationStore implements ExternalReconciliation
         ? {}
         : { missingReferenceReason: input.missingReferenceReason }),
     });
-    return envelopeFromConvex(row as {
-      reconciliation: ReconciliationRow;
-      receipt: ReceiptRow | null;
-    });
+    return envelopeFromConvex(
+      row as {
+        reconciliation: ReconciliationRow;
+        receipt: ReceiptRow | null;
+      },
+    );
   }
 
-  async completeAttempt(input: CompleteExternalAttemptInput): Promise<ExternalReconciliationEnvelope> {
+  async completeAttempt(
+    input: CompleteExternalAttemptInput,
+  ): Promise<ExternalReconciliationEnvelope> {
     const row = await this.client.mutation(externalReconciliationFunctions.completeAttempt, {
       serviceToken: this.serviceToken,
       ...scopeArgs(input),
@@ -293,10 +301,12 @@ export class ConvexExternalReconciliationStore implements ExternalReconciliation
       receiptKey: input.receiptKey,
       receipt: receiptInput(input.receipt),
     });
-    return envelopeFromConvex(row as {
-      reconciliation: ReconciliationRow;
-      receipt: ReceiptRow | null;
-    });
+    return envelopeFromConvex(
+      row as {
+        reconciliation: ReconciliationRow;
+        receipt: ReceiptRow | null;
+      },
+    );
   }
 
   async claimNext(input: {
@@ -310,10 +320,12 @@ export class ConvexExternalReconciliationStore implements ExternalReconciliation
       ...input,
     });
     if (row === null) return null;
-    const mapped = envelopeFromConvex(row as {
-      reconciliation: ReconciliationRow;
-      receipt: ReceiptRow;
-    });
+    const mapped = envelopeFromConvex(
+      row as {
+        reconciliation: ReconciliationRow;
+        receipt: ReceiptRow;
+      },
+    );
     if (
       mapped.receipt === null ||
       mapped.reconciliation.state !== "claimed" ||

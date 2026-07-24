@@ -284,7 +284,8 @@ export const registerAttempt = mutation({
     }
 
     const duplicateId = await findByReconciliationId(ctx, ownerId, reconciliationId);
-    if (duplicateId) throw new Error("Reconciliation ID already belongs to another execution scope.");
+    if (duplicateId)
+      throw new Error("Reconciliation ID already belongs to another execution scope.");
 
     const now = Date.now();
     const id = await ctx.db.insert("externalReconciliations", {
@@ -347,7 +348,8 @@ export const markIndeterminate = mutation({
     const now = Date.now();
     if (!reconciliation) {
       const duplicateId = await findByReconciliationId(ctx, ownerId, reconciliationId);
-      if (duplicateId) throw new Error("Reconciliation ID already belongs to another execution scope.");
+      if (duplicateId)
+        throw new Error("Reconciliation ID already belongs to another execution scope.");
       const escalationReason = cleanRequiredText(
         args.missingReferenceReason ?? "provider-reference-missing",
         "Missing provider reference reason",
@@ -668,9 +670,7 @@ export const resolveClaim = mutation({
       ...(args.result.status === "succeeded" && args.result.outputDigest !== undefined
         ? { resolutionDigest: args.result.outputDigest }
         : {}),
-      ...(args.result.status === "failed"
-        ? { resolutionErrorCode: args.result.errorCode }
-        : {}),
+      ...(args.result.status === "failed" ? { resolutionErrorCode: args.result.errorCode } : {}),
       updatedAt: args.now,
       resolvedAt: args.now,
     });

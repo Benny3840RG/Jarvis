@@ -401,7 +401,8 @@ export class ToolExecutionService {
         ? { missingReferenceReason: "reconciliation-record-has-no-provider-request" }
         : {}),
     });
-    if (!bound.receipt) throw new Error("External replay did not produce an authoritative receipt.");
+    if (!bound.receipt)
+      throw new Error("External replay did not produce an authoritative receipt.");
     return bound.receipt;
   }
 

@@ -252,13 +252,7 @@ export default defineSchema({
     escalatedAt: v.optional(v.number()),
   })
     .index("by_owner_and_reconciliation_id", ["ownerId", "reconciliationId"])
-    .index("by_owner_and_scope", [
-      "ownerId",
-      "projectId",
-      "tool",
-      "operation",
-      "idempotencyKey",
-    ])
+    .index("by_owner_and_scope", ["ownerId", "projectId", "tool", "operation", "idempotencyKey"])
     .index("by_owner_and_state_and_next_attempt_at", ["ownerId", "state", "nextAttemptAt"])
     .index("by_owner_and_state_and_lease_expires_at", ["ownerId", "state", "leaseExpiresAt"])
     .index("by_owner_and_receipt_key", ["ownerId", "receiptKey"]),
