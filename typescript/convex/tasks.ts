@@ -3,7 +3,7 @@ import { v } from "convex/values";
 import { taskActionResultValidator } from "./internalActionValidators.js";
 import { requireOwner } from "./authHelpers.js";
 import { cleanRequiredText } from "./toolActionLogic.js";
-import { mutation, query } from "./_generated/server.js";
+import { mutation, query, type MutationCtx } from "./_generated/server.js";
 
 const taskValidator = v.object({
   _id: v.id("tasks"),
@@ -23,16 +23,19 @@ function cleanOptionalText(value: string | undefined, field: string): string | u
   return cleanRequiredText(value, field);
 }
 
-function controlledTaskResult(task: {
-  _id: string;
-  title: string;
-  category: string;
-  completed: boolean;
-  projectId?: string;
-  createdAt: number;
-  updatedAt?: number;
-  revision?: number;
-}, completedAt?: number) {
+function controlledTaskResult(
+  task: {
+    _id: string;
+    title: string;
+    category: string;
+    completed: boolean;
+    projectId?: string;
+    createdAt: number;
+    updatedAt?: number;
+    revision?: number;
+  },
+  completedAt?: number,
+) {
   if (!task.projectId || task.updatedAt === undefined || task.revision === undefined) {
     throw new Error("Controlled task metadata is incomplete.");
   }
@@ -51,7 +54,7 @@ function controlledTaskResult(task: {
 }
 
 async function findControlledResult(
-  ctx: Parameters<Parameters<typeof mutation>[0]["handler"]>[0],
+  ctx: MutationCtx,
   ownerId: string,
   projectId: string,
   actionFamilyId: "AM-004" | "AM-005",
