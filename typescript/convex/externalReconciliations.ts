@@ -218,7 +218,7 @@ function assertLease(
     record.leaseOwner !== workerId ||
     record.leaseToken !== leaseToken ||
     record.leaseExpiresAt === undefined ||
-    record.leaseExpiresAt < now
+    record.leaseExpiresAt <= now
   ) {
     throw new Error("Reconciliation claim lease is stale or belongs to another worker.");
   }
@@ -503,10 +503,10 @@ export const completeAttempt = mutation({
 
     assertEffect(reconciliation, scope.effectFingerprint);
     assertProvider(reconciliation, expectedProvider);
-    if (!(args.receipt.status === "succeeded" || args.receipt.status === "failed")) {
+    if (!( ["succeeded", "failed"] as const).includes(args.receipt.status as "succeeded" | "failed")) {
       throw new Error("completeAttempt requires a terminal receipt.");
     }
-    const terminalStatus = args.receipt.status;
+    const terminalStatus = args.receipt.status as "succeeded" | "failed";
     const boundReceipt = await upsertReceipt(ctx, ownerId, receiptKey, {
       ...args.receipt,
       effectFingerprint: scope.effectFingerprint,
