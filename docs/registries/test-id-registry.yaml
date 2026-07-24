@@ -19,3 +19,55 @@ tests:
   - id: TEST-AM-003-SMOKE-001
     path: typescript/tests/notesSmoke.test.ts
     verifies: fresh-store visibility, idempotent replay, self-cleaning failure recovery, and refusal of non-development deployments
+
+  - id: TEST-AM-004-DOMAIN-001
+    path: typescript/tests/controlledTaskActions.test.ts
+    verifies: task create exact replay, fingerprint collision rejection, project isolation, and initial revision semantics
+  - id: TEST-AM-004-TOOL-001
+    path: typescript/tests/taskReminderAllowlist.test.ts
+    verifies: tasks:create strict schema, immutable execution context, authority, dry-run and exact allowlist enforcement
+  - id: TEST-AM-004-PERSIST-001
+    path: typescript/tests/convexControlledTasks.test.ts
+    verifies: authenticated task creation, mapping, project scope and cleanup adapter calls
+  - id: TEST-AM-004-SMOKE-001
+    path: typescript/tests/taskReminderActionsSmoke.test.ts
+    verifies: task create, fresh-instance replay, fresh visibility and self-cleaning development execution
+
+  - id: TEST-AM-005-DOMAIN-001
+    path: typescript/tests/controlledTaskActions.test.ts
+    verifies: atomic completion decision, exact completion replay, stale completion rejection and revision advancement
+  - id: TEST-AM-005-TOOL-001
+    path: typescript/tests/taskReminderAllowlist.test.ts
+    verifies: tasks:complete strict target validation, stale or inaccessible target failure and unreviewed operation blocking
+  - id: TEST-AM-005-PERSIST-001
+    path: typescript/tests/convexControlledTasks.test.ts
+    verifies: authenticated complete, get and cleanup adapter context and null preservation
+  - id: TEST-AM-005-SMOKE-001
+    path: typescript/tests/taskReminderActionsSmoke.test.ts
+    verifies: live task completion, retained replay result, fresh visibility and cleanup
+
+  - id: TEST-AM-006-DOMAIN-001
+    path: typescript/tests/controlledReminderActions.test.ts
+    verifies: reminder create exact replay, fingerprint collision rejection, project isolation and due metadata preservation
+  - id: TEST-AM-006-TOOL-001
+    path: typescript/tests/taskReminderAllowlist.test.ts
+    verifies: reminders:create due-field coupling, authority, dry-run and exact allowlist enforcement
+  - id: TEST-AM-006-PERSIST-001
+    path: typescript/tests/convexControlledReminders.test.ts
+    verifies: authenticated reminder creation, optional due mapping, project scope and cleanup adapter calls
+  - id: TEST-AM-006-SMOKE-001
+    path: typescript/tests/taskReminderActionsSmoke.test.ts
+    verifies: reminder create, fresh-instance replay, fresh visibility and self-cleaning development execution
+
+  - id: TEST-AM-007-DOMAIN-001
+    path: typescript/tests/controlledReminderActions.test.ts
+    verifies: cancellation tombstone retention, live-record deletion, exact replay, collision rejection and stale cancellation behaviour
+  - id: TEST-AM-007-TOOL-001
+    path: typescript/tests/taskReminderAllowlist.test.ts
+    verifies: reminders:cancel target validation, execution-context propagation and rejection outside the reviewed allowlist
+  - id: TEST-AM-007-PERSIST-001
+    path: typescript/tests/convexControlledReminders.test.ts
+    verifies: authenticated cancel, retained result mapping, get and cleanup adapter context
+  - id: TEST-AM-007-SMOKE-001
+    path: typescript/tests/taskReminderActionsSmoke.test.ts
+    verifies: live cancellation tombstone replay after deletion and authenticated post-run cleanup

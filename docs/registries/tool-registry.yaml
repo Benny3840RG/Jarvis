@@ -16,6 +16,42 @@ tools:
     allowlist: typescript/src/actions/toolExecutionFactory.ts
     bound_by: [AM-003]
 
+  - id: TOOL-TASKS-CREATE
+    lifecycle_status: active
+    implemented: true
+    description: Creates owner/project-scoped durable tasks through the reviewed tasks:create allowlist binding, commissioned on dev:outgoing-ram-798.
+    implementation: typescript/src/actions/taskReminderTools.ts
+    adapter: typescript/src/persistence/convexControlledTasks.ts
+    allowlist: typescript/src/actions/toolExecutionFactory.ts
+    bound_by: [AM-004]
+
+  - id: TOOL-TASKS-COMPLETE
+    lifecycle_status: active
+    implemented: true
+    description: Atomically completes an owner/project-scoped task with fingerprint-bound replay through tasks:complete, commissioned on dev:outgoing-ram-798.
+    implementation: typescript/src/actions/taskReminderTools.ts
+    adapter: typescript/src/persistence/convexControlledTasks.ts
+    allowlist: typescript/src/actions/toolExecutionFactory.ts
+    bound_by: [AM-005]
+
+  - id: TOOL-REMINDERS-CREATE
+    lifecycle_status: active
+    implemented: true
+    description: Creates owner/project-scoped durable reminders with preserved and normalized due metadata through reminders:create, commissioned on dev:outgoing-ram-798.
+    implementation: typescript/src/actions/taskReminderTools.ts
+    adapter: typescript/src/persistence/convexControlledReminders.ts
+    allowlist: typescript/src/actions/toolExecutionFactory.ts
+    bound_by: [AM-006]
+
+  - id: TOOL-REMINDERS-CANCEL
+    lifecycle_status: active
+    implemented: true
+    description: Cancels owner/project-scoped reminders through a T3-approved fingerprint-bound tombstone mutation before deleting the live record, commissioned on dev:outgoing-ram-798.
+    implementation: typescript/src/actions/taskReminderTools.ts
+    adapter: typescript/src/persistence/convexControlledReminders.ts
+    allowlist: typescript/src/actions/toolExecutionFactory.ts
+    bound_by: [AM-007]
+
   - id: TOOL-QUOTE-FINALIZE
     lifecycle_status: planned
     implemented: false

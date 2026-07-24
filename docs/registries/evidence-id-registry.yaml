@@ -8,3 +8,16 @@ evidence:
   - id: EVD-AM-003-001
     path: docs/evidence/am-003-commissioning.md
     description: Runtime CI, governance validation, development sync, live persistence/replay/cleanup smoke, and retained artifact evidence for AM-003
+
+  - id: EVD-AM-004-001
+    path: docs/evidence/task-reminder-actions-commissioning.md
+    description: Runtime CI and authorised development create-task sync, replay, visibility and cleanup evidence
+  - id: EVD-AM-005-001
+    path: docs/evidence/task-reminder-actions-commissioning.md
+    description: Runtime CI and authorised development complete-task transition, replay and cleanup evidence
+  - id: EVD-AM-006-001
+    path: docs/evidence/task-reminder-actions-commissioning.md
+    description: Runtime CI and authorised development create-reminder sync, replay, visibility and cleanup evidence
+  - id: EVD-AM-007-001
+    path: docs/evidence/task-reminder-actions-commissioning.md
+    description: Runtime CI and authorised development cancellation tombstone, replay, live-record deletion and cleanup evidence
