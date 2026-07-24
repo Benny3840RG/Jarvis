@@ -1,0 +1,13 @@
+/docs/
+  /copilot/
+    copilot-collaboration.md
+    copilot-review-template.md
+    copilot-owner-goals.md
+    copilot-workflow.md
+
+.github/
+  PULL_REQUEST_TEMPLATE.md
+  ISSUE_TEMPLATE/
+    slice.md
+  workflows/
+    copilot-check.yml   (optional)
