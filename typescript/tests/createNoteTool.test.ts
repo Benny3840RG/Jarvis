@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import type { ToolAction } from "../src/actions/toolActions.js";
 import { createNoteToolDefinition } from "../src/actions/createNoteTool.js";
+import type { ToolAction } from "../src/actions/toolActions.js";
 import { ToolExecutionService } from "../src/actions/toolExecution.js";
+import { createToolExecutionDefinitions } from "../src/actions/toolExecutionFactory.js";
 import type { CreateNoteInput, NoteRecord, NoteStore } from "../src/notes/note.js";
 
 const action: ToolAction = {
@@ -151,5 +152,25 @@ describe("AM-003 create note tool", () => {
     assert.equal(changed.status, "blocked");
     assert.equal(changed.errorCode, "fingerprint-mismatch");
     assert.equal(store.creates.length, 1);
+  });
+
+  it("allowlists only notes:create and blocks every other operation", async () => {
+    const store = new RecordingNoteStore();
+    const definitions = createToolExecutionDefinitions(store);
+    assert.deepEqual(
+      definitions.map(({ tool, operation }) => `${tool}:${operation}`),
+      ["notes:create"],
+    );
+
+    const service = new ToolExecutionService(definitions);
+    const blocked = await service.execute({
+      action: { ...action, operation: "update" },
+      authority: "T1",
+      idempotencyKey: "not-allowlisted-note-update",
+    });
+
+    assert.equal(blocked.status, "blocked");
+    assert.equal(blocked.errorCode, "not-allowlisted");
+    assert.equal(store.creates.length, 0);
   });
 });
