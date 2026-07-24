@@ -1,0 +1,17 @@
+name: Copilot Review Check
+
+on:
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ensure Copilot Review Section Exists
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const body = context.payload.pull_request.body || "";
+            if (!body.includes("Copilot Review")) {
+              core.setFailed("PR must include a Copilot Review section.");
+            }

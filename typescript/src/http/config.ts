@@ -9,6 +9,8 @@ export type HttpAppConfig = {
   timezone?: string;
   currentToken?: string;
   previousToken?: string;
+  currentApprovalToken?: string;
+  previousApprovalToken?: string;
 };
 
 export type HttpListenConfig = {
@@ -80,6 +82,8 @@ export function resolveHttpAppConfig(env: JarvisEnvironment = process.env): Http
   const timezone = optionalText(env.JARVIS_TIMEZONE);
   const currentToken = optionalSecret(env.JARVIS_SERVICE_TOKEN);
   const previousToken = optionalSecret(env.JARVIS_SERVICE_TOKEN_PREVIOUS);
+  const currentApprovalToken = optionalSecret(env.JARVIS_APPROVAL_TOKEN);
+  const previousApprovalToken = optionalSecret(env.JARVIS_APPROVAL_TOKEN_PREVIOUS);
   return {
     version: JARVIS_VERSION,
     sourceVersion: resolveSourceVersion(env.JARVIS_SOURCE_VERSION),
@@ -87,6 +91,8 @@ export function resolveHttpAppConfig(env: JarvisEnvironment = process.env): Http
     ...(timezone === undefined ? {} : { timezone }),
     ...(currentToken === undefined ? {} : { currentToken }),
     ...(previousToken === undefined ? {} : { previousToken }),
+    ...(currentApprovalToken === undefined ? {} : { currentApprovalToken }),
+    ...(previousApprovalToken === undefined ? {} : { previousApprovalToken }),
   };
 }
 

@@ -15,7 +15,7 @@
     "agent:check": "node --import tsx src/agent/main.ts",
     "agent:repl": "node --import tsx src/agent/replMain.ts",
     "test": "npm run test:node && npm run test:convex",
-    "test:coverage": "node --import tsx --test --experimental-test-coverage tests/*.test.ts && npm run test:convex",
+    "test:coverage": "node --import tsx --test --experimental-test-coverage tests/*.test.ts jarvis-console-01/tests/*.test.ts && npm run test:convex",
     "type-check": "tsc -p tsconfig.json",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
@@ -28,7 +28,7 @@
     "smoke:gemini": "tsx src/tools/runGeminiSmoke.ts",
     "backup": "tsx src/tools/runBackup.ts",
     "import:convex": "tsx src/tools/runConvexImport.ts",
-    "test:node": "node --import tsx --test tests/*.test.ts",
+    "test:node": "node --import tsx --test tests/*.test.ts jarvis-console-01/tests/*.test.ts",
     "test:convex": "vitest run --config vitest.config.mts"
   },
   "dependencies": {
@@ -45,17 +45,21 @@
   },
   "devDependencies": {
     "@convex-dev/eslint-plugin": "^2.0.0",
-    "@edge-runtime/vm": "5.0.0",
     "@eslint/js": "^9.39.0",
     "@redocly/cli": "^2.39.0",
     "@types/node": "^26.1.1",
-    "convex-test": "0.0.54",
     "eslint": "^9.39.0",
     "globals": "^17.4.0",
     "prettier": "^3.9.5",
     "tsx": "^4.19.0",
     "typescript": "^5.6.3",
     "typescript-eslint": "^8.58.0",
+    "@edge-runtime/vm": "5.0.0",
+    "convex-test": "0.0.54",
     "vitest": "1.6.1"
+  },
+  "overrides": {
+    "find-my-way": "^9.7.0",
+    "@hono/node-server": "^2.0.11"
   }
 }

@@ -37,6 +37,12 @@ JARVIS_SOURCE_VERSION=<build commit or immutable source identifier>
 token requirements. `JARVIS_SERVICE_TOKEN_PREVIOUS` is accepted only while a current token is
 also configured, preserving the documented rotation overlap and failing closed otherwise.
 
+`JARVIS_APPROVAL_TOKEN` (with optional `JARVIS_APPROVAL_TOKEN_PREVIOUS` during rotation) is a
+second, separately held secret required by `POST .../tool-actions/{actionId}/approve` in addition
+to the Bearer service token — see [tool-action-approval.md](tool-action-approval.md). It exists
+so that possessing the service token, which any caller staging a proposal necessarily does, is not
+by itself sufficient to approve one.
+
 Optional transport values are:
 
 | Variable                    | Default     | Meaning                                                  |

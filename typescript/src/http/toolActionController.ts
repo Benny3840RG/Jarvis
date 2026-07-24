@@ -1,19 +1,56 @@
+import { createHash, timingSafeEqual } from "node:crypto";
+
 import { Body, Controller, Get, HttpCode, Inject, Param, Post, Query, Req } from "@nestjs/common";
 import type { FastifyRequest } from "fastify";
 
 import type { ToolActionService } from "../actions/toolActions.js";
 import type { ToolExecutionService } from "../actions/toolExecution.js";
+import type { HttpAppConfig } from "./config.js";
 import { JarvisProblem } from "./problemDetails.js";
 import { requestIdFor } from "./requestId.js";
 import {
   parseExecuteToolAction,
   parseStageToolAction,
-  parseToolActionExpectedRevision,
+  parseToolActionApproval,
   parseToolActionListLimit,
   parseToolActionRejectionReason,
   parseToolActionState,
 } from "./toolActionRequest.js";
-import { HTTP_TOOL_ACTIONS, HTTP_TOOL_EXECUTION } from "./tokens.js";
+import { HTTP_APP_CONFIG, HTTP_TOOL_ACTIONS, HTTP_TOOL_EXECUTION } from "./tokens.js";
+
+function digest(value: string): Buffer {
+  return createHash("sha256").update(value, "utf8").digest();
+}
+
+function matchesApprovalToken(
+  candidate: string,
+  currentToken: string,
+  previousToken: string | undefined,
+): boolean {
+  const candidateDigest = digest(candidate);
+  const currentMatch = timingSafeEqual(candidateDigest, digest(currentToken));
+  const previousMatch =
+    previousToken === undefined ? false : timingSafeEqual(candidateDigest, digest(previousToken));
+  return currentMatch || previousMatch;
+}
+
+function approvalUnavailable(): JarvisProblem {
+  return new JarvisProblem(
+    503,
+    "tool-action-approval-token-unavailable",
+    "Tool Action Approval Token Unavailable",
+    "Tool action approval requires a separately configured approval token.",
+  );
+}
+
+function approvalUnauthorized(): JarvisProblem {
+  return new JarvisProblem(
+    401,
+    "unauthorized",
+    "Unauthorized",
+    "A valid approval token is required to approve a tool action.",
+  );
+}
 
 function unavailable(): JarvisProblem {
   return new JarvisProblem(
@@ -78,6 +115,8 @@ export class ToolActionController {
     private readonly service: ToolActionService | null,
     @Inject(HTTP_TOOL_EXECUTION)
     private readonly executionService: ToolExecutionService | null,
+    @Inject(HTTP_APP_CONFIG)
+    private readonly config: HttpAppConfig,
   ) {}
 
   private requireService(): ToolActionService {
@@ -88,6 +127,25 @@ export class ToolActionController {
   private requireExecutionService(): ToolExecutionService {
     if (!this.executionService) throw executionUnavailable();
     return this.executionService;
+  }
+
+  // Staging, listing, and execution are gated only by the shared Bearer
+  // service token, so that same credential proves nothing about who decided
+  // to approve a specific proposal. approvalToken is a second, separately
+  // configured secret that only the human operator holds; requiring it here
+  // (and nowhere else) is what makes reaching "approved" actual proof of a
+  // human decision rather than just another authenticated API call.
+  private requireApprovalToken(candidate: string): void {
+    if (!this.config.currentApprovalToken) throw approvalUnavailable();
+    if (
+      !matchesApprovalToken(
+        candidate,
+        this.config.currentApprovalToken,
+        this.config.previousApprovalToken,
+      )
+    ) {
+      throw approvalUnauthorized();
+    }
   }
 
   @Post()
@@ -170,19 +228,24 @@ export class ToolActionController {
     @Param("actionId") actionId: string,
     @Body() body: unknown,
   ) {
-    let expectedRevision;
+    let parsed;
     try {
-      expectedRevision = parseToolActionExpectedRevision(body);
+      parsed = parseToolActionApproval(body);
     } catch {
       throw new JarvisProblem(
         422,
         "invalid-tool-action-approval",
         "Invalid Tool Action Approval",
-        "Tool action approval requires a valid expected project revision.",
+        "Tool action approval requires a valid expected project revision and approval token.",
       );
     }
+    this.requireApprovalToken(parsed.approvalToken);
     try {
-      return await this.requireService().approve({ actionId, projectId, expectedRevision });
+      return await this.requireService().approve({
+        actionId,
+        projectId,
+        expectedRevision: parsed.expectedRevision,
+      });
     } catch (error: unknown) {
       if (error instanceof JarvisProblem) throw error;
       throw operationProblem(error);
@@ -242,12 +305,15 @@ export class ToolActionController {
     }
     if (!action) throw operationProblem(new Error("Tool action does not exist."));
 
-    // A single flat Bearer service token gates every request this controller
-    // serves — there is no separate per-caller authority signal at the HTTP
-    // boundary. T3 is therefore the ceiling any authenticated caller may
-    // assert; the real gate already happened when the owner approved the
-    // action, and ToolExecutionService still re-checks it against the
-    // action's own requiredAuthority before doing anything else.
+    // The shared Bearer service token gates every request this controller
+    // serves, including this one — there is no separate per-caller authority
+    // signal at execute time. T3 is therefore the ceiling any authenticated
+    // caller may assert here; the real gate already happened when the action
+    // reached "approved", which (see requireApprovalToken above) requires a
+    // second, separately configured credential that only the human operator
+    // holds — staging or executing alone cannot get an action there. Beyond
+    // that, ToolExecutionService still re-checks the acting authority against
+    // the action's own requiredAuthority before doing anything else.
     return this.requireExecutionService().execute({
       action,
       authority: "T3",

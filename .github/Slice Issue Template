@@ -1,0 +1,15 @@
+# Slice Definition
+
+## Smallest Meaningful Change
+(One command / flag / provider behaviour / endpoint / reminder rule)
+
+## Operator Intent
+What operator expectation or invariant does this slice touch?
+
+## Constraints
+List relevant owner goals or non-goals.
+
+## Expected Outputs
+- Claude reasoning
+- ChatGPT implementation
+- Copilot review

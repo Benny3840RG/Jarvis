@@ -181,6 +181,17 @@ export function parseToolActionExpectedRevision(body: unknown): number {
   return positiveInteger(body.expectedRevision, "expectedRevision");
 }
 
+export function parseToolActionApproval(body: unknown): {
+  expectedRevision: number;
+  approvalToken: string;
+} {
+  if (!isRecord(body)) throw new Error("Request body must be a JSON object.");
+  return {
+    expectedRevision: positiveInteger(body.expectedRevision, "expectedRevision"),
+    approvalToken: requiredString(body.approvalToken, "approvalToken"),
+  };
+}
+
 export function parseToolActionRejectionReason(body: unknown): string {
   if (!isRecord(body)) throw new Error("Request body must be a JSON object.");
   return requiredString(body.reason, "reason");
