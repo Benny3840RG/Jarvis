@@ -123,15 +123,7 @@ export class ReconciliationWorker {
     const adapter = this.registry.get(reference.provider);
     if (!adapter) {
       const reason = `unknown-provider:${reference.provider}`;
-      return this.release(
-        reconciliationId,
-        input.workerId,
-        leaseToken,
-        claimNow,
-        reason,
-        claimNow,
-        1,
-      );
+      return this.release(reconciliationId, input.workerId, leaseToken, claimNow, reason, claimNow, 1);
     }
 
     let providerResult: ProviderReconciliationResult;
@@ -142,8 +134,7 @@ export class ReconciliationWorker {
       const errorCode = input.signal.aborted
         ? "provider-reconciliation-aborted"
         : cleanErrorCode(error);
-      const nextAttemptAt =
-        completionNow + this.retryDelay(claim.reconciliation.attemptCount);
+      const nextAttemptAt = completionNow + this.retryDelay(claim.reconciliation.attemptCount);
       return this.release(
         reconciliationId,
         input.workerId,
