@@ -4,4 +4,5 @@ Plan: `docs/superpowers/plans/2026-07-24-quote-lifecycle.md`
 Branch: `feat/quote-lifecycle-152`
 Baseline: `03553930e20ebb08064c5c8353f77c1b324b3d8d`
 
-Task 1: RED tests committed at `3022649ec4de5e035bcc27a7f6abcee722a0ed10`; implementation pending.
+Task 1: complete (`3022649..b7791ed`, review clean, permanent run `30084550977`).
+Task 2: pending.
