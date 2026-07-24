@@ -1,9 +1,13 @@
 # PR Summary
+
 Describe the slice:
+
 - Command / flag / provider / endpoint / reminder rule
 
 # Implementation (ChatGPT)
+
 Describe changes:
+
 - CLI
 - Convex
 - Tests
@@ -11,10 +15,13 @@ Describe changes:
 - Runbooks
 
 # Reasoning (Claude)
-Paste Claude’s refined problem statement.
+
+Paste Claude's refined problem statement.
 
 # Copilot Review
-Use /docs/copilot/copilot-review-template.md:
+
+Use [/docs/copilot/copilot-review-template.md](/docs/copilot/copilot-review-template.md):
+
 - CLI Contract: [...]
 - Persistence Providers: [...]
 - Backup / Restore: [...]
@@ -23,6 +30,7 @@ Use /docs/copilot/copilot-review-template.md:
 - Documentation: [...]
 
 # Operator Verification
+
 - npm run check
 - npm run test:coverage
 - Convex smoke test (dev only)
