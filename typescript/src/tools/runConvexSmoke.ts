@@ -3,11 +3,13 @@ import { loadEnvFile } from "node:process";
 import { ConvexAssetStore } from "../assets/convexAssetStore.js";
 import { ConvexBuildLogStore } from "../buildLog/convexBuildLogStore.js";
 import { ConvexBuildStore } from "../builds/convexBuildStore.js";
+import { ConvexNoteStore } from "../persistence/convexNotes.js";
 import { ConvexPreferenceStore } from "../preferences/convexPreferenceStore.js";
 import { ConvexUpgradeStore } from "../upgrades/convexUpgradeStore.js";
 import { ConvexPersistence } from "../persistence/persistence.js";
 import { redactSecret, runConvexSmoke } from "./convexSmoke.js";
 import { runMemoryStoresSmoke } from "./memoryStoresSmoke.js";
+import { runNotesSmoke } from "./notesSmoke.js";
 
 function loadLocalEnvironment(): void {
   try {
@@ -31,6 +33,7 @@ async function main(): Promise<void> {
     },
     deployment,
   );
+  await runNotesSmoke(() => new ConvexNoteStore(), deployment);
 }
 
 main().catch((error: unknown) => {

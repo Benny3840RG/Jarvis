@@ -1,7 +1,7 @@
 # Catalog of TEST-* IDs that action families in
 # docs/traceability/action-family-registry.yaml may reference under
-# traceability.test_ids. An ID must appear here before an action family can
-# cite it, and it must name a real, committed test.
+# traceability.test_ids. An ID must appear here before an action family
+# can cite it, and it must name a real, committed test.
 #
 # Empty for now: every action family in the registry is lifecycle_status
 # planned (no tool is wired into the live allowlist yet — see

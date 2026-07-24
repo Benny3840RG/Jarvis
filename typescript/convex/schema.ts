@@ -7,6 +7,11 @@ import {
   memoryRecordValidator,
 } from "./memoryChangeSetValidators.js";
 import {
+  noteDomainValidator,
+  noteRetentionValidator,
+  noteSensitivityValidator,
+} from "./noteValidators.js";
+import {
   toolActionActorValidator,
   toolActionStateValidator,
   toolAuthorityValidator,
@@ -40,6 +45,26 @@ export default defineSchema({
     dueTimezone: v.optional(v.string()),
     createdAt: v.number(),
   }).index("by_owner", ["ownerId"]),
+  notes: defineTable({
+    ownerId: v.string(),
+    projectId: v.string(),
+    title: v.string(),
+    body: v.string(),
+    tags: v.array(v.string()),
+    domain: noteDomainValidator,
+    sensitivity: noteSensitivityValidator,
+    retention: noteRetentionValidator,
+    idempotencyKey: v.string(),
+    actionFingerprint: v.string(),
+    sourceRequestId: v.string(),
+    correlationId: v.string(),
+    source: v.string(),
+    revision: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_owner_and_project_and_idempotency_key", ["ownerId", "projectId", "idempotencyKey"])
+    .index("by_owner_and_project_and_updated_at", ["ownerId", "projectId", "updatedAt"]),
   assistantState: defineTable({
     ownerId: v.string(),
     key: v.string(),

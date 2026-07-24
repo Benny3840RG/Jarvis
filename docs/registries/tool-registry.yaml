@@ -1,19 +1,19 @@
 # Catalog of tool executor bindings referenced by
 # docs/traceability/action-family-registry.yaml#action_families[].bindings.executor_id.
 #
-# `implemented` reflects the real allowlist in
-# typescript/src/actions/toolExecutionFactory.ts, which is deliberately empty
-# (see PR #142) — no tool:operation pair is registered for live execution yet.
-# An entry existing here means an action family names it as a future binding,
-# not that the tool exists in code. lifecycle_status must not exceed the
-# lifecycle_status of every action family that binds to it.
+# `implemented` records whether reviewed implementation code and an explicit
+# allowlist binding exist. `lifecycle_status` remains planned until that binding
+# is deployed to the authorised development target and its live commissioning
+# smoke and evidence gates pass.
 schema_version: "1.0"
 
 tools:
   - id: TOOL-NOTES-CREATE
     lifecycle_status: planned
-    implemented: false
-    description: Would create a note record. No Notes domain exists in the codebase yet.
+    implemented: true
+    description: Implements owner/project-scoped durable note creation through the single reviewed notes:create allowlist binding; operational activation awaits development smoke evidence.
+    implementation: typescript/src/actions/createNoteTool.ts
+    allowlist: typescript/src/actions/toolExecutionFactory.ts
     bound_by: [AM-003]
 
   - id: TOOL-QUOTE-FINALIZE

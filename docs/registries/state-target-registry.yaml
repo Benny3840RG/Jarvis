@@ -1,17 +1,21 @@
 # Catalog of state targets referenced by
 # docs/traceability/action-family-registry.yaml#action_families[].bindings.state_target_id.
 #
-# `implemented` reflects whether a durable store for this entity exists in the
-# codebase today. STORE-QUOTES exists (src/quotes/quote.ts, QuoteStore) but its
-# real QuoteStatus is only draft|sent|accepted|declined — it has no
-# finalized/reviewed states, so AM-012/AM-013 remain planned until that lands.
+# `implemented` reflects whether the required durable store and state semantics
+# exist in code. Lifecycle remains planned until the store is synced to the
+# authorised development target and passes live persistence and isolation smoke
+# evidence.
 schema_version: "1.0"
 
 state_targets:
   - id: STORE-NOTES
     lifecycle_status: planned
-    implemented: false
-    description: Would hold note records. No Notes domain exists in the codebase yet.
+    implemented: true
+    description: Implements owner/project-scoped durable Convex notes with sensitivity, retention, revision, source, correlation and idempotency metadata; activation awaits development smoke evidence.
+    implementation:
+      - typescript/convex/schema.ts
+      - typescript/convex/notes.ts
+      - typescript/src/persistence/convexNotes.ts
     bound_by: [AM-003]
 
   - id: STORE-QUOTES
