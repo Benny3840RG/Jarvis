@@ -68,3 +68,29 @@ jobs:
         run: npm ci
       - name: Build and type-check the MCP app
         run: npm run build
+
+  capture-reconciliation-formatter-patch:
+    if: github.event_name == 'pull_request' && github.head_ref == 'feat/external-reconciliation-154'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: typescript/.nvmrc
+          cache: npm
+          cache-dependency-path: typescript/package-lock.json
+      - name: Install dependencies
+        working-directory: typescript
+        run: npm ci
+      - name: Apply pinned formatter
+        working-directory: typescript
+        run: npm run format
+      - name: Capture exact patch
+        run: git diff --binary > prettier-reconciliation.patch
+      - name: Upload exact patch
+        uses: actions/upload-artifact@v4
+        with:
+          name: prettier-reconciliation-patch
+          path: prettier-reconciliation.patch
+          if-no-files-found: error
