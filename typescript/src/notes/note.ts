@@ -43,4 +43,5 @@ export interface NoteStore {
   create(input: CreateNoteInput): Promise<NoteRecord>;
   get(projectId: string, id: string): Promise<NoteRecord | null>;
   list(projectId: string, limit?: number): Promise<NoteRecord[]>;
+  remove(projectId: string, id: string): Promise<NoteRecord | null>;
 }
