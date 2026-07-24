@@ -3,13 +3,16 @@ import { loadEnvFile } from "node:process";
 import { ConvexAssetStore } from "../assets/convexAssetStore.js";
 import { ConvexBuildLogStore } from "../buildLog/convexBuildLogStore.js";
 import { ConvexBuildStore } from "../builds/convexBuildStore.js";
+import { ConvexControlledReminderStore } from "../persistence/convexControlledReminders.js";
+import { ConvexControlledTaskStore } from "../persistence/convexControlledTasks.js";
 import { ConvexNoteStore } from "../persistence/convexNotes.js";
+import { ConvexPersistence } from "../persistence/persistence.js";
 import { ConvexPreferenceStore } from "../preferences/convexPreferenceStore.js";
 import { ConvexUpgradeStore } from "../upgrades/convexUpgradeStore.js";
-import { ConvexPersistence } from "../persistence/persistence.js";
 import { redactSecret, runConvexSmoke } from "./convexSmoke.js";
 import { runMemoryStoresSmoke } from "./memoryStoresSmoke.js";
 import { runNotesSmoke } from "./notesSmoke.js";
+import { runTaskReminderActionsSmoke } from "./taskReminderActionsSmoke.js";
 
 function loadLocalEnvironment(): void {
   try {
@@ -34,6 +37,11 @@ async function main(): Promise<void> {
     deployment,
   );
   await runNotesSmoke(() => new ConvexNoteStore(), deployment);
+  await runTaskReminderActionsSmoke(
+    () => new ConvexControlledTaskStore(),
+    () => new ConvexControlledReminderStore(),
+    deployment,
+  );
 }
 
 main().catch((error: unknown) => {
