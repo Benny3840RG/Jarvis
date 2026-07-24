@@ -21,7 +21,9 @@ import {
 
 const NOW = 1_785_000_000_000;
 
-function receipt(status: ToolExecutionReceipt["status"] = "indeterminate"): ToolExecutionReceipt {
+function receipt(
+  status: ToolExecutionReceipt["status"] = "indeterminate",
+): ToolExecutionReceipt {
   return {
     receiptId: "receipt-1",
     actionId: "action-1",
@@ -47,7 +49,9 @@ function receipt(status: ToolExecutionReceipt["status"] = "indeterminate"): Tool
   };
 }
 
-function record(overrides: Partial<ExternalReconciliationRecord> = {}): ExternalReconciliationRecord {
+function record(
+  overrides: Partial<ExternalReconciliationRecord> = {},
+): ExternalReconciliationRecord {
   return {
     reconciliationId: "reconciliation-1",
     executionKey: "project-1:action-1:external-1",
@@ -76,7 +80,9 @@ function record(overrides: Partial<ExternalReconciliationRecord> = {}): External
   };
 }
 
-function claim(overrides: Partial<ExternalReconciliationRecord> = {}): ExternalReconciliationClaim {
+function claim(
+  overrides: Partial<ExternalReconciliationRecord> = {},
+): ExternalReconciliationClaim {
   return {
     reconciliation: record(overrides) as ExternalReconciliationClaim["reconciliation"],
     receipt: receipt(),
@@ -112,11 +118,15 @@ class FakeStore implements ExternalReconciliationStore {
     this.availableClaim = initialClaim;
   }
 
-  async getByScope(_scope: ExternalExecutionScope): Promise<ExternalReconciliationEnvelope | null> {
+  async getByScope(
+    _scope: ExternalExecutionScope,
+  ): Promise<ExternalReconciliationEnvelope | null> {
     return null;
   }
 
-  async registerAttempt(_input: RegisterExternalAttemptInput): Promise<ExternalReconciliationRecord> {
+  async registerAttempt(
+    _input: RegisterExternalAttemptInput,
+  ): Promise<ExternalReconciliationRecord> {
     throw new Error("not used");
   }
 
@@ -228,10 +238,19 @@ describe("ReconciliationWorker", () => {
 
   it("claims one record and resolves a proven provider success exactly once", async () => {
     const store = new FakeStore();
-    const providerCalls: Array<{ providerRequestId: string; providerCorrelationId: string }> = [];
+    const providerCalls: Array<{
+      providerRequestId: string;
+      providerCorrelationId: string;
+    }> = [];
     const worker = new ReconciliationWorker({
       store,
-      adapters: [adapter("demo-provider", { status: "succeeded", outputDigest: "digest-1" }, providerCalls)],
+      adapters: [
+        adapter(
+          "demo-provider",
+          { status: "succeeded", outputDigest: "digest-1" },
+          providerCalls,
+        ),
+      ],
       now: () => NOW,
       leaseToken: () => "lease-generated",
     });
@@ -328,7 +347,10 @@ describe("ReconciliationWorker", () => {
 
   it("allows concurrent workers to produce only one claim and one terminal resolution", async () => {
     const store = new FakeStore();
-    const providerCalls: Array<{ providerRequestId: string; providerCorrelationId: string }> = [];
+    const providerCalls: Array<{
+      providerRequestId: string;
+      providerCorrelationId: string;
+    }> = [];
     const worker = new ReconciliationWorker({
       store,
       adapters: [adapter("demo-provider", { status: "succeeded" }, providerCalls)],
@@ -345,8 +367,14 @@ describe("ReconciliationWorker", () => {
       worker.runOnce({ workerId: "worker-2", leaseMs: 5_000, signal }),
     ]);
 
-    assert.equal(results.filter(({ status }) => status === "resolved").length, 1);
-    assert.equal(results.filter(({ status }) => status === "idle").length, 1);
+    assert.equal(
+      results.filter(({ status }) => status === "resolved").length,
+      1,
+    );
+    assert.equal(
+      results.filter(({ status }) => status === "idle").length,
+      1,
+    );
     assert.equal(providerCalls.length, 1);
     assert.equal(store.resolveCalls.length, 1);
   });
