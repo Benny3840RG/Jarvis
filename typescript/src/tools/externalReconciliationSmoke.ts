@@ -115,8 +115,7 @@ export async function runExternalReconciliationSmoke(
       receipt: indeterminateReceipt,
     });
     requireCondition(
-      pending.reconciliation.state === "pending" &&
-        pending.receipt?.status === "indeterminate",
+      pending.reconciliation.state === "pending" && pending.receipt?.status === "indeterminate",
       "reconciliation: indeterminate receipt and pending queue record were not bound atomically.",
     );
 
@@ -204,7 +203,10 @@ export async function runExternalReconciliationSmoke(
     );
   }
   if (primaryError !== undefined) throw primaryError;
-  requireCondition(result !== undefined, "external reconciliation smoke finished without a result.");
+  requireCondition(
+    result !== undefined,
+    "external reconciliation smoke finished without a result.",
+  );
 
   write(
     "Convex smoke passed for external reconciliation: provider reference, indeterminate persistence, restart recovery, terminal resolution and cleanup.",
