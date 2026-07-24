@@ -17,6 +17,12 @@ export const toolExecutionErrorCodeValidator = v.union(
   v.literal("fingerprint-mismatch"),
 );
 
+export const toolExecutionActorValidator = v.union(
+  v.literal("user"),
+  v.literal("agent"),
+  v.literal("tool"),
+);
+
 export const toolExecutionReceiptDocumentValidator = v.object({
   _id: v.id("toolExecutionReceipts"),
   _creationTime: v.number(),
@@ -24,11 +30,17 @@ export const toolExecutionReceiptDocumentValidator = v.object({
   receiptKey: v.string(),
   receiptId: v.string(),
   actionId: v.string(),
+  requestId: v.optional(v.string()),
   projectId: v.string(),
   idempotencyKey: v.string(),
   actionFingerprint: v.string(),
   tool: v.string(),
   operation: v.string(),
+  actor: v.optional(toolExecutionActorValidator),
+  approvalId: v.optional(v.string()),
+  policyVersion: v.optional(v.string()),
+  correlationId: v.optional(v.string()),
+  source: v.optional(v.string()),
   status: toolExecutionStatusValidator,
   outputDigest: v.optional(v.string()),
   errorCode: v.optional(toolExecutionErrorCodeValidator),

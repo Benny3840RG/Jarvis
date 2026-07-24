@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 
 import type { z } from "zod";
 
+import { canonicalJson } from "./canonicalJson.js";
 import type { ToolAction } from "./toolActions.js";
 import type { ToolAuthority } from "../runtime/totalityPolicy.js";
 
@@ -10,11 +11,17 @@ export type ToolExecutionStatus = "dry-run" | "succeeded" | "failed" | "indeterm
 export type ToolExecutionReceipt = {
   receiptId: string;
   actionId: string;
+  requestId: string;
   projectId: string;
   idempotencyKey: string;
   actionFingerprint: string;
   tool: string;
   operation: string;
+  actor: ToolAction["proposedBy"];
+  approvalId?: string;
+  policyVersion: string;
+  correlationId: string;
+  source: string;
   status: ToolExecutionStatus;
   outputDigest?: string;
   errorCode?:
@@ -54,15 +61,14 @@ export class InMemoryToolExecutionReceiptStore implements ToolExecutionReceiptSt
 
 const AUTHORITY_LEVEL: Record<ToolAuthority, number> = { T0: 0, T1: 1, T2: 2, T3: 3 };
 const MAX_TIMEOUT_MS = 30_000;
+const FINGERPRINT_VERSION = "jarvis-action-fingerprint:v1";
 
 function digest(value: unknown): string {
-  return createHash("sha256")
-    .update(JSON.stringify(value) ?? "undefined", "utf8")
-    .digest("hex");
+  return createHash("sha256").update(canonicalJson(value), "utf8").digest("hex");
 }
 
 export function fingerprintToolAction(action: ToolAction): string {
-  return digest({
+  const hash = digest({
     actionId: action.actionId,
     projectId: action.projectId,
     baseRevision: action.baseRevision,
@@ -72,11 +78,32 @@ export function fingerprintToolAction(action: ToolAction): string {
     requiredAuthority: action.requiredAuthority,
     destructive: action.destructive,
   });
+  return `${FINGERPRINT_VERSION}:${hash}`;
 }
 
-function receiptId(action: ToolAction, idempotencyKey: string): string {
-  return digest(`${action.actionId}:${idempotencyKey}`).slice(0, 32);
+function executionKey(action: ToolAction, idempotencyKey: string): string {
+  return `${action.projectId}:${action.actionId}:${idempotencyKey}`;
 }
+
+function receiptId(
+  action: ToolAction,
+  idempotencyKey: string,
+  status: ToolExecutionStatus,
+): string {
+  return digest({
+    projectId: action.projectId,
+    actionId: action.actionId,
+    idempotencyKey,
+    status,
+  }).slice(0, 32);
+}
+
+type ExecutionMetadata = {
+  approvalId?: string;
+  policyVersion?: string;
+  correlationId?: string;
+  source?: string;
+};
 
 function receipt(
   action: ToolAction,
@@ -84,15 +111,22 @@ function receipt(
   status: ToolExecutionStatus,
   errorCode: ToolExecutionReceipt["errorCode"],
   startedAt: string,
+  metadata: ExecutionMetadata,
 ): ToolExecutionReceipt {
   return {
-    receiptId: receiptId(action, idempotencyKey),
+    receiptId: receiptId(action, idempotencyKey, status),
     actionId: action.actionId,
+    requestId: action.requestId,
     projectId: action.projectId,
     idempotencyKey,
     actionFingerprint: fingerprintToolAction(action),
     tool: action.tool,
     operation: action.operation,
+    actor: action.proposedBy,
+    ...(metadata.approvalId === undefined ? {} : { approvalId: metadata.approvalId }),
+    policyVersion: metadata.policyVersion ?? "totality-policy:v1",
+    correlationId: metadata.correlationId ?? action.requestId,
+    source: metadata.source ?? "tool-execution-service",
     status,
     ...(errorCode === undefined ? {} : { errorCode }),
     startedAt,
@@ -124,18 +158,26 @@ export class ToolExecutionService {
     idempotencyKey: string;
     timeoutMs?: number;
     dryRun?: boolean;
+    approvalId?: string;
+    policyVersion?: string;
+    correlationId?: string;
+    source?: string;
   }): Promise<ToolExecutionReceipt> {
-    const key = `${input.action.actionId}:${input.idempotencyKey}`;
+    const key = executionKey(input.action, input.idempotencyKey);
     const expectedFingerprint = fingerprintToolAction(input.action);
     const existing = await this.receipts.get(key);
     if (existing) {
       if (existing.actionFingerprint !== expectedFingerprint) {
-        return receipt(
-          input.action,
-          input.idempotencyKey,
-          "blocked",
-          "fingerprint-mismatch",
-          new Date().toISOString(),
+        return this.persistDecision(
+          key,
+          receipt(
+            input.action,
+            input.idempotencyKey,
+            "blocked",
+            "fingerprint-mismatch",
+            new Date().toISOString(),
+            input,
+          ),
         );
       }
       return existing;
@@ -144,16 +186,16 @@ export class ToolExecutionService {
     const active = this.inFlight.get(key);
     if (active) {
       if (active.fingerprint !== expectedFingerprint) {
-        // A different action is already executing under this key. Handing
-        // back its in-flight promise would silently substitute another
-        // action's outcome for this caller's request without ever
-        // validating or running what they actually asked for.
-        return receipt(
-          input.action,
-          input.idempotencyKey,
-          "blocked",
-          "fingerprint-mismatch",
-          new Date().toISOString(),
+        return this.persistDecision(
+          key,
+          receipt(
+            input.action,
+            input.idempotencyKey,
+            "blocked",
+            "fingerprint-mismatch",
+            new Date().toISOString(),
+            input,
+          ),
         );
       }
       return active.promise;
@@ -168,6 +210,15 @@ export class ToolExecutionService {
     }
   }
 
+  private async persistDecision(
+    key: string,
+    decision: ToolExecutionReceipt,
+  ): Promise<ToolExecutionReceipt> {
+    const decisionKey = `${key}:decision:${decision.receiptId}:${decision.completedAt}`;
+    await this.receipts.save(decisionKey, decision);
+    return decision;
+  }
+
   private async executeOnce(
     input: {
       action: ToolAction;
@@ -175,6 +226,10 @@ export class ToolExecutionService {
       idempotencyKey: string;
       timeoutMs?: number;
       dryRun?: boolean;
+      approvalId?: string;
+      policyVersion?: string;
+      correlationId?: string;
+      source?: string;
     },
     key: string,
   ): Promise<ToolExecutionReceipt> {
@@ -185,18 +240,37 @@ export class ToolExecutionService {
       input.action.state !== "approved" ||
       AUTHORITY_LEVEL[input.authority] < AUTHORITY_LEVEL[input.action.requiredAuthority]
     ) {
-      return receipt(input.action, input.idempotencyKey, "blocked", "not-authorized", startedAt);
+      return this.persistDecision(
+        key,
+        receipt(input.action, input.idempotencyKey, "blocked", "not-authorized", startedAt, input),
+      );
     }
     if (!definition) {
-      return receipt(input.action, input.idempotencyKey, "blocked", "not-allowlisted", startedAt);
+      return this.persistDecision(
+        key,
+        receipt(input.action, input.idempotencyKey, "blocked", "not-allowlisted", startedAt, input),
+      );
     }
 
     const parsed = definition.schema.safeParse(input.action.arguments);
     if (!parsed.success) {
-      return receipt(input.action, input.idempotencyKey, "blocked", "invalid-arguments", startedAt);
+      return this.persistDecision(
+        key,
+        receipt(
+          input.action,
+          input.idempotencyKey,
+          "blocked",
+          "invalid-arguments",
+          startedAt,
+          input,
+        ),
+      );
     }
     if (input.dryRun) {
-      return receipt(input.action, input.idempotencyKey, "dry-run", undefined, startedAt);
+      return this.persistDecision(
+        key,
+        receipt(input.action, input.idempotencyKey, "dry-run", undefined, startedAt, input),
+      );
     }
 
     const timeoutMs = input.timeoutMs ?? 5_000;
@@ -216,7 +290,7 @@ export class ToolExecutionService {
         ),
       ]);
       const result: ToolExecutionReceipt = {
-        ...receipt(input.action, input.idempotencyKey, "succeeded", undefined, startedAt),
+        ...receipt(input.action, input.idempotencyKey, "succeeded", undefined, startedAt, input),
         outputDigest: digest(output),
       };
       await this.receipts.save(key, result);
@@ -229,6 +303,7 @@ export class ToolExecutionService {
         timedOut ? "indeterminate" : "failed",
         timedOut ? "indeterminate" : "failed",
         startedAt,
+        input,
       );
       await this.receipts.save(key, result);
       return result;
