@@ -95,7 +95,9 @@ describe("ReconciliationScheduler", () => {
       sleep: async (_milliseconds, signal) => {
         sleepCalls += 1;
         controller.abort();
-        if (!signal.aborted) throw new Error("Abort signal was not propagated to scheduler sleep.");
+        if (!signal.aborted) {
+          throw new Error("Abort signal was not propagated to scheduler sleep.");
+        }
       },
     });
 
