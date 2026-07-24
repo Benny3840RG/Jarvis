@@ -85,6 +85,22 @@ describe("quote fingerprints", () => {
     );
   });
 
+  it("rejects non-finite commercial numbers before hashing", () => {
+    assert.throws(
+      () => quoteRevisionFingerprint(revisionFingerprintInput({ total: Number.NaN })),
+      /finite/,
+    );
+    assert.throws(
+      () =>
+        quoteRevisionFingerprint(
+          revisionFingerprintInput({
+            lineItems: [{ description: "Labour", quantity: Number.POSITIVE_INFINITY, unitPrice: 100 }],
+          }),
+        ),
+      /finite/,
+    );
+  });
+
   it("normalizes recipients before producing a send fingerprint", () => {
     assert.equal(normalizeQuoteRecipient("  CLIENT@Example.COM "), "client@example.com");
     assert.equal(
