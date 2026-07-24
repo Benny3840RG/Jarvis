@@ -55,13 +55,9 @@ describe("external reconciliation Convex contracts", () => {
 
   it("restricts cleanup to the authorised development deployment", () => {
     assert.ok(reconciliationSource.includes('args.deployment !== "dev:outgoing-ram-798"'));
+    assert.ok(reconciliationSource.includes('ctx.db.delete("toolExecutionReceipts", receipt._id)'));
     assert.ok(
-      reconciliationSource.includes('ctx.db.delete("toolExecutionReceipts", receipt._id)'),
-    );
-    assert.ok(
-      reconciliationSource.includes(
-        'ctx.db.delete("externalReconciliations", reconciliation._id)',
-      ),
+      reconciliationSource.includes('ctx.db.delete("externalReconciliations", reconciliation._id)'),
     );
   });
 });
