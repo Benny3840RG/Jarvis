@@ -2,8 +2,10 @@
 
 Jarvis stores tool actions as explicit project-scoped proposals before any external operation may be
 considered. Proposal, inspection, approval, and rejection are one durable stage. Execution is a second,
-separately gated stage: the pipeline exists and is fully wired, but it ships with an empty allowlist, so
-no tool:operation can actually run through it yet (see [Execution](#execution) below).
+separately gated stage, wired to a small, reviewed allowlist: `notes:create`, `tasks:create`,
+`tasks:complete`, `reminders:create`, and `reminders:cancel` (see [Execution](#execution) below). Every
+other `tool:operation` pair — including quote finalize/send, which have no implemented tool or state
+transition yet — is blocked with `errorCode: "not-allowlisted"`.
 
 ## State machine
 
@@ -54,9 +56,9 @@ inside Convex optimistic concurrency control, so only one proposal can acquire t
 A destructive proposal below `T3` is rejected before persistence. This is a classification boundary,
 not permission to execute. Reaching `approved` state still does not authorise a specific tool call —
 `ToolExecutionService` separately checks the acting authority against `requiredAuthority`, and beyond
-that, requires the exact `tool`:`operation` pair to be explicitly registered server-side. No pair is
-registered yet, so every execution attempt is blocked with `errorCode: "not-allowlisted"` regardless of
-authority or approval state.
+that, requires the exact `tool`:`operation` pair to be explicitly registered server-side. Only the five
+pairs listed above are registered; every other attempt is blocked with `errorCode: "not-allowlisted"`
+regardless of authority or approval state.
 
 ## Revision boundary
 
@@ -85,10 +87,14 @@ that were previously listed as required before this stage could be built:
 
 1. **Explicit allowlist** — `POST /execute` loads the approved `ToolAction`, then looks up a
    `ToolExecutionDefinition` by `tool:operation`. **The allowlist registered in
-   `src/actions/toolExecutionFactory.ts` is currently empty.** Every call therefore returns a receipt
-   with `status: "blocked"` and `errorCode: "not-allowlisted"`, regardless of the action's own approval
-   or authority. Registering the first real definition is a deliberate, separate decision — not a side
-   effect of this stage shipping.
+   `src/actions/toolExecutionFactory.ts` currently holds five reviewed definitions:**
+   `notes:create`, `tasks:create`, `tasks:complete`, `reminders:create`, and `reminders:cancel`, each
+   backed by an implemented, tested Convex-persisted store (see
+   `docs/registries/tool-registry.yaml` and `state-target-registry.yaml` for exact file bindings). Any
+   other `tool:operation` pair returns a receipt with `status: "blocked"` and
+   `errorCode: "not-allowlisted"`, regardless of the action's own approval or authority. Registering each
+   new definition remains a deliberate, separately reviewed decision — not a side effect of this stage
+   having shipped.
 2. **Exact argument schemas per operation** — each registered definition carries its own zod schema;
    the action's stored `arguments` are re-validated against it immediately before any call.
 3. **Authority and destructive-operation checks** — the acting authority (asserted server-side as `T3`,
@@ -104,9 +110,11 @@ that were previously listed as required before this stage could be built:
    scoped by owner, and are the authoritative record of every execution attempt. They are not currently
    mirrored into the general `auditEvents` table (unlike proposal/approval/rejection) — the receipts
    table is itself the complete, durable audit trail for executions specifically.
-7. **Dry-run tests and a smoke checkpoint** — covered in `tests/toolExecution.test.ts` and
-   `tests/toolActionHttp.test.ts`. A live Convex smoke checkpoint is still outstanding, matching every
-   other domain's `smoke:convex` pattern, and should be added before the first real definition ships.
+7. **Dry-run tests and live smoke checkpoints** — the executor itself is covered in
+   `tests/toolExecution.test.ts` and `tests/toolActionHttp.test.ts`. Each registered definition has its
+   own domain, tool, persistence, and self-cleaning development-smoke tests (for example
+   `tests/notesSmoke.test.ts` and `tests/taskReminderActionsSmoke.test.ts`), matching every other
+   domain's `smoke:convex` pattern.
 
 ## Audit evidence
 

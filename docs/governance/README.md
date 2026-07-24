@@ -77,10 +77,15 @@ edited to hide the divergence.
     and any other auto-generated artifact.
     Read-only by construction and non-authoritative by design. Regenerate to resolve a conflict;
     never hand-edit a generated file to make it agree with something else. As of this revision,
-    every action family in the registry is `lifecycle_status: planned` — none is bound to an
-    implemented tool or state target (`typescript/src/actions/toolExecutionFactory.ts`'s
-    allowlist is still empty) — so the generated map currently describes intended, not live,
-    behavior. Its Status column reflects that; do not read it as a record of what executes today.
+    AM-003 (create note), AM-004 (create task), AM-005 (complete task), AM-006 (create reminder)
+    and AM-007 (cancel reminder) are `lifecycle_status: active`, each bound to an implemented,
+    tested tool and state target in `typescript/src/actions/toolExecutionFactory.ts`'s allowlist
+    (see `docs/registries/tool-registry.yaml` and `state-target-registry.yaml` for the
+    implementation paths). AM-012/AM-013 (finalize/send quote) remain `planned` — the real Quote
+    store has no finalized/reviewed states yet — and no external-side-effect action family may
+    become active until reconciliation lands (tracked in #170/issue #154). The Status column is a
+    live record for active families and an intent record for planned ones; check it per family,
+    don't assume the whole map is one or the other.
 
 ### Evidentiary authority (orthogonal to the rank order above)
 
