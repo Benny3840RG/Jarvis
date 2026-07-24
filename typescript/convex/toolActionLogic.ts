@@ -56,12 +56,10 @@ function sensitiveKeyFingerprint(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
-function validateArgumentKey(value: string, path: string): string {
-  const cleaned = cleanRequiredText(value, `Tool action argument key at ${path}`);
+function validateArgumentKey(value: string, path: string, label: string): string {
+  const cleaned = cleanRequiredText(value, `${label} key at ${path}`);
   if (cleaned.length > MAX_ARGUMENT_KEY_LENGTH) {
-    throw new Error(
-      `Tool action argument key at ${path} exceeds ${MAX_ARGUMENT_KEY_LENGTH} characters.`,
-    );
+    throw new Error(`${label} key at ${path} exceeds ${MAX_ARGUMENT_KEY_LENGTH} characters.`);
   }
   // Non-ASCII characters (Cyrillic "а" vs Latin "a", etc.) must be rejected
   // outright rather than stripped during fingerprinting below — stripping an
@@ -69,15 +67,13 @@ function validateArgumentKey(value: string, path: string): string {
   // to "pikey" and silently evade the credential-key check instead of being
   // caught by it.
   if (!/^[\x20-\x7e]*$/.test(cleaned)) {
-    throw new Error(`Tool action argument key ${cleaned} must be ASCII.`);
+    throw new Error(`${label} key ${cleaned} must be ASCII.`);
   }
   if (cleaned.startsWith("$") || cleaned.startsWith("_")) {
-    throw new Error(`Tool action argument key ${cleaned} is reserved.`);
+    throw new Error(`${label} key ${cleaned} is reserved.`);
   }
   if (SENSITIVE_ARGUMENT_KEYS.has(sensitiveKeyFingerprint(cleaned))) {
-    throw new Error(
-      `Tool action argument key ${cleaned} may contain credentials and is not permitted.`,
-    );
+    throw new Error(`${label} key ${cleaned} may contain credentials and is not permitted.`);
   }
   return cleaned;
 }
@@ -87,13 +83,14 @@ function normaliseValue(
   path: string,
   depth: number,
   counter: { nodes: number },
+  label: string,
 ): unknown {
   counter.nodes += 1;
   if (counter.nodes > MAX_ARGUMENT_NODES) {
-    throw new Error(`Tool action arguments exceed ${MAX_ARGUMENT_NODES} values.`);
+    throw new Error(`${label} tree exceeds ${MAX_ARGUMENT_NODES} values.`);
   }
   if (depth > MAX_ARGUMENT_DEPTH) {
-    throw new Error(`Tool action arguments exceed maximum depth ${MAX_ARGUMENT_DEPTH}.`);
+    throw new Error(`${label} tree exceeds maximum depth ${MAX_ARGUMENT_DEPTH}.`);
   }
   if (value === null || typeof value === "boolean") return value;
   if (typeof value === "string") {
@@ -108,18 +105,24 @@ function normaliseValue(
   }
   if (Array.isArray(value)) {
     return value.map((entry, index) =>
-      normaliseValue(entry, `${path}[${index}]`, depth + 1, counter),
+      normaliseValue(entry, `${path}[${index}]`, depth + 1, counter, label),
     );
   }
   if (typeof value === "object") {
     const entries = Object.entries(value as Record<string, unknown>);
     if (entries.length > MAX_ARGUMENT_KEYS) {
-      throw new Error(`Tool action argument object ${path} exceeds ${MAX_ARGUMENT_KEYS} keys.`);
+      throw new Error(`${label} object ${path} exceeds ${MAX_ARGUMENT_KEYS} keys.`);
     }
     const output: Record<string, unknown> = {};
     for (const [key, entry] of entries.sort(([left], [right]) => left.localeCompare(right))) {
-      const cleanedKey = validateArgumentKey(key, path);
-      output[cleanedKey] = normaliseValue(entry, `${path}.${cleanedKey}`, depth + 1, counter);
+      const cleanedKey = validateArgumentKey(key, path, label);
+      output[cleanedKey] = normaliseValue(
+        entry,
+        `${path}.${cleanedKey}`,
+        depth + 1,
+        counter,
+        label,
+      );
     }
     return output;
   }
@@ -127,7 +130,24 @@ function normaliseValue(
 }
 
 export function normaliseToolArguments(value: Record<string, unknown>): Record<string, unknown> {
-  return normaliseValue(value, "arguments", 0, { nodes: 0 }) as Record<string, unknown>;
+  return normaliseValue(value, "arguments", 0, { nodes: 0 }, "Tool action argument") as Record<
+    string,
+    unknown
+  >;
+}
+
+/**
+ * Sanitises an audit-event payload with the same rules as tool-action
+ * arguments: rejects reserved, non-ASCII, credential-shaped keys (so a secret
+ * can never be written into the audit trail), bounds depth/size, and drops
+ * unsupported value types. Distinct from `normaliseToolArguments` only in the
+ * label used for error messages.
+ */
+export function normaliseAuditPayload(value: Record<string, unknown>): Record<string, unknown> {
+  return normaliseValue(value, "payload", 0, { nodes: 0 }, "Audit payload") as Record<
+    string,
+    unknown
+  >;
 }
 
 export function validateToolAuthority(

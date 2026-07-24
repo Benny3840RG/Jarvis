@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 
 import { requireOwner } from "./authHelpers.js";
+import { normaliseAuditPayload } from "./toolActionLogic.js";
 import { auditEventValidator } from "./totalityValidators.js";
 import { mutation, query } from "./_generated/server.js";
 
@@ -43,7 +44,7 @@ export const append = mutation({
       scopeKey: scopeKey(args.projectKey),
       eventType,
       actor: args.actor,
-      payload: args.payload,
+      payload: normaliseAuditPayload(args.payload),
       createdAt: Date.now(),
     });
     const created = await ctx.db.get("auditEvents", id);
