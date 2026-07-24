@@ -1,6 +1,6 @@
 name: Prepare task and reminder governance activation
 
-# Synchronisation marker 3 for the repaired trusted preparer on PR #163.
+# Synchronisation marker 4 for the idempotent trusted preparer on PR #163.
 on:
   push:
     branches:
