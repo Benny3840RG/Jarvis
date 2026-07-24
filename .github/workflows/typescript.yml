@@ -103,14 +103,8 @@ jobs:
               raise SystemExit("tool execution error-code union anchor was not found exactly once")
           text = text.replace(old_union, new_union, 1)
 
-          digest_anchor = '''function digest(value: unknown): string {
-            return createHash("sha256").update(canonicalJson(value), "utf8").digest("hex");
-          }
-          '''
-          helper = '''function digest(value: unknown): string {
-            return createHash("sha256").update(canonicalJson(value), "utf8").digest("hex");
-          }
-
+          export_marker = "\nexport function fingerprintToolAction"
+          helper = """
           function isEffectFingerprintConflict(error: unknown): boolean {
             if (!(error instanceof Error)) return false;
             return (
@@ -118,42 +112,44 @@ jobs:
               error.message.includes("effect fingerprint collision")
             );
           }
-          '''
-          if text.count(digest_anchor) != 1:
-              raise SystemExit("tool execution digest anchor was not found exactly once")
-          text = text.replace(digest_anchor, helper, 1)
+          """.strip("\n")
+          if text.count(export_marker) != 1:
+              raise SystemExit("fingerprint export marker was not found exactly once")
+          text = text.replace(export_marker, f"\n{helper}\n{export_marker.lstrip()}", 1)
 
-          old_catch = '''    } catch {
-              return this.persistDecision(
-                key,
-                receipt(
-                  input.action,
-                  input.idempotencyKey,
-                  "blocked",
-                  "fingerprint-mismatch",
-                  new Date().toISOString(),
-                  { ...input, effectFingerprint: scope.effectFingerprint, provider },
-                ),
-              );
-            }
-          '''
-          new_catch = '''    } catch (error: unknown) {
-              const errorCode = isEffectFingerprintConflict(error)
-                ? "fingerprint-mismatch"
-                : "reconciliation-unavailable";
-              return this.persistDecision(
-                key,
-                receipt(
-                  input.action,
-                  input.idempotencyKey,
-                  "blocked",
-                  errorCode,
-                  new Date().toISOString(),
-                  { ...input, effectFingerprint: scope.effectFingerprint, provider },
-                ),
-              );
-            }
-          '''
+          old_catch = "\n".join([
+              "    } catch {",
+              "      return this.persistDecision(",
+              "        key,",
+              "        receipt(",
+              "          input.action,",
+              "          input.idempotencyKey,",
+              "          \"blocked\",",
+              "          \"fingerprint-mismatch\",",
+              "          new Date().toISOString(),",
+              "          { ...input, effectFingerprint: scope.effectFingerprint, provider },",
+              "        ),",
+              "      );",
+              "    }",
+          ])
+          new_catch = "\n".join([
+              "    } catch (error: unknown) {",
+              "      const errorCode = isEffectFingerprintConflict(error)",
+              "        ? \"fingerprint-mismatch\"",
+              "        : \"reconciliation-unavailable\";",
+              "      return this.persistDecision(",
+              "        key,",
+              "        receipt(",
+              "          input.action,",
+              "          input.idempotencyKey,",
+              "          \"blocked\",",
+              "          errorCode,",
+              "          new Date().toISOString(),",
+              "          { ...input, effectFingerprint: scope.effectFingerprint, provider },",
+              "        ),",
+              "      );",
+              "    }",
+          ])
           if text.count(old_catch) != 1:
               raise SystemExit("external replay catch block was not found exactly once")
           execution.write_text(text.replace(old_catch, new_catch, 1), encoding="utf-8")
