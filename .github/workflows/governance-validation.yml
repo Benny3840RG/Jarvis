@@ -66,6 +66,39 @@ jobs:
           [[ "$(git branch --show-current)" == "governance/activate-task-reminder-155" ]]
           git merge-base --is-ancestor 5fc8c3f477bfa9ce121b56575b0336105c37de8f HEAD
 
+      - name: Normalise activation YAML indentation
+        if: steps.pending.outputs.run == 'true'
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('.github/scripts/activate_task_reminder_governance.py')
+          text = path.read_text(encoding='utf-8')
+          old_import = 'from textwrap import dedent\n'
+          new_import = '''from textwrap import dedent as raw_dedent, indent
+
+
+def dedent(value: str) -> str:
+    return indent(raw_dedent(value), "  ")
+'''
+          if text.count(old_import) != 1:
+              raise SystemExit('activation script dedent import was not found exactly once')
+          text = text.replace(old_import, new_import, 1)
+          evidence_call = '''(evidence_dir / "task-reminder-actions-commissioning.md").write_text(
+    dedent(
+'''
+          if text.count(evidence_call) != 1:
+              raise SystemExit('activation evidence dedent call was not found exactly once')
+          text = text.replace(
+              evidence_call,
+              '''(evidence_dir / "task-reminder-actions-commissioning.md").write_text(
+    raw_dedent(
+''',
+              1,
+          )
+          path.write_text(text, encoding='utf-8')
+          PY
+
       - name: Apply evidence-bound activation records
         if: steps.pending.outputs.run == 'true'
         run: python .github/scripts/activate_task_reminder_governance.py
