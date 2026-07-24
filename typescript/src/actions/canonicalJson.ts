@@ -23,13 +23,15 @@ function normalize(value: unknown, seen: Set<object>): unknown {
     throw new TypeError(`Canonical JSON rejects values of type ${typeof value}.`);
   }
 
-  if (typeof value !== "object") throw new TypeError("Canonical JSON received an unsupported value.");
+  if (typeof value !== "object")
+    throw new TypeError("Canonical JSON received an unsupported value.");
   if (seen.has(value)) throw new TypeError("Canonical JSON rejects cyclic values.");
 
   seen.add(value);
   try {
     if (Array.isArray(value)) return value.map((entry) => normalize(entry, seen));
-    if (!isPlainObject(value)) throw new TypeError("Canonical JSON accepts only arrays and plain objects.");
+    if (!isPlainObject(value))
+      throw new TypeError("Canonical JSON accepts only arrays and plain objects.");
 
     const normalized: Record<string, unknown> = {};
     for (const key of Object.keys(value).sort()) {
