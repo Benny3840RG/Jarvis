@@ -2,12 +2,7 @@ export type QuoteRevisionStatus = "draft" | "reviewed" | "finalized";
 export type QuoteCommercialStatus = "open" | "accepted" | "declined" | "expired";
 export type QuoteHistoricalOutcome = Exclude<QuoteCommercialStatus, "open">;
 export type QuoteDeliveryStatus =
-  | "pending"
-  | "executing"
-  | "succeeded"
-  | "failed"
-  | "indeterminate"
-  | "reconciled";
+  "pending" | "executing" | "succeeded" | "failed" | "indeterminate" | "reconciled";
 
 export type QuoteRevisionLineItem = {
   description: string;
@@ -166,7 +161,8 @@ export function computeQuoteTotals(
   lineItems: readonly QuoteRevisionLineItem[],
   taxRate?: number,
 ): QuoteTotals {
-  const normalizedTaxRate = taxRate === undefined ? 0 : requireFiniteNonNegative(taxRate, "taxRate");
+  const normalizedTaxRate =
+    taxRate === undefined ? 0 : requireFiniteNonNegative(taxRate, "taxRate");
   if (normalizedTaxRate > 1) {
     throw new TypeError("taxRate must not exceed 1.");
   }
@@ -183,12 +179,11 @@ export function computeQuoteTotals(
   return { subtotal, tax, total: roundMoney(subtotal + tax) };
 }
 
-export function assertRevisionTransition(
-  from: QuoteRevisionStatus,
-  to: QuoteRevisionStatus,
-): void {
+export function assertRevisionTransition(from: QuoteRevisionStatus, to: QuoteRevisionStatus): void {
   if (!ALLOWED_REVISION_TRANSITIONS.has(`${from}:${to}`)) {
-    throw new QuoteInvalidTransitionError(`Quote revision cannot transition from ${from} to ${to}.`);
+    throw new QuoteInvalidTransitionError(
+      `Quote revision cannot transition from ${from} to ${to}.`,
+    );
   }
 }
 

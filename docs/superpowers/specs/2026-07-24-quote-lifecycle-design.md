@@ -53,7 +53,8 @@ Revisions and delivery attempts are separate records rather than embedded arrays
 ### 4.1 Quote aggregate
 
 ```ts
-export type QuoteCommercialStatus = "open" | "accepted" | "declined" | "expired";
+export type QuoteCommercialStatus =
+  "open" | "accepted" | "declined" | "expired";
 
 export type QuoteAggregate = {
   quoteId: string;
@@ -347,17 +348,25 @@ export interface QuoteRepository {
   submitForReview(input: QuoteRevisionCommand): Promise<QuoteSnapshot>;
   reopenForEditing(input: QuoteRevisionCommand): Promise<QuoteSnapshot>;
   finalizeRevision(input: FinalizeQuoteRevisionInput): Promise<QuoteSnapshot>;
-  createRevisionFromFinalized(input: CreateQuoteRevisionInput): Promise<QuoteSnapshot>;
-  recordCommercialOutcome(input: RecordQuoteCommercialOutcomeInput): Promise<QuoteSnapshot>;
+  createRevisionFromFinalized(
+    input: CreateQuoteRevisionInput,
+  ): Promise<QuoteSnapshot>;
+  recordCommercialOutcome(
+    input: RecordQuoteCommercialOutcomeInput,
+  ): Promise<QuoteSnapshot>;
 }
 
 export interface QuoteDeliveryRepository {
   getBySendScope(input: QuoteSendScope): Promise<QuoteDeliveryAttempt | null>;
   createPending(input: CreateQuoteDeliveryInput): Promise<QuoteDeliveryAttempt>;
   markExecuting(input: StartQuoteDeliveryInput): Promise<QuoteDeliveryAttempt>;
-  bindProviderReference(input: BindQuoteProviderReferenceInput): Promise<QuoteDeliveryAttempt>;
+  bindProviderReference(
+    input: BindQuoteProviderReferenceInput,
+  ): Promise<QuoteDeliveryAttempt>;
   complete(input: CompleteQuoteDeliveryInput): Promise<QuoteDeliveryAttempt>;
-  markIndeterminate(input: MarkQuoteDeliveryIndeterminateInput): Promise<QuoteDeliveryAttempt>;
+  markIndeterminate(
+    input: MarkQuoteDeliveryIndeterminateInput,
+  ): Promise<QuoteDeliveryAttempt>;
   reconcile(input: ReconcileQuoteDeliveryInput): Promise<QuoteDeliveryAttempt>;
 }
 ```

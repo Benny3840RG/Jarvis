@@ -70,6 +70,7 @@
 ### Task 1: Domain contracts, transitions, and fingerprints
 
 **Files:**
+
 - Create: `typescript/src/quotes/quoteLifecycle.ts`
 - Create: `typescript/src/quotes/quoteFingerprints.ts`
 - Create: `typescript/src/quotes/quoteRepository.ts`
@@ -78,6 +79,7 @@
 - Test: `typescript/tests/quoteFingerprints.test.ts`
 
 **Interfaces:**
+
 - Produces `QuoteAggregate`, `QuoteRevision`, `QuoteDeliveryAttempt`, `QuoteSnapshot`.
 - Produces `computeQuoteTotals`, `assertRevisionTransition`, `normalizeQuoteRecipient`, `quoteRevisionFingerprint`, and `quoteSendFingerprint`.
 - Produces repository interfaces consumed by Tasks 3-7.
@@ -88,13 +90,17 @@
 it("allows draft -> reviewed -> finalized and rejects draft -> finalized", () => {
   assert.doesNotThrow(() => assertRevisionTransition("draft", "reviewed"));
   assert.doesNotThrow(() => assertRevisionTransition("reviewed", "finalized"));
-  assert.throws(() => assertRevisionTransition("draft", "finalized"), QuoteInvalidTransitionError);
+  assert.throws(
+    () => assertRevisionTransition("draft", "finalized"),
+    QuoteInvalidTransitionError,
+  );
 });
 
 it("refuses content mutation on finalized revisions", () => {
   const revision = finalizedRevisionFixture();
   assert.throws(
-    () => applyDraftPatch(revision, { notes: "changed" }, revision.revisionVersion),
+    () =>
+      applyDraftPatch(revision, { notes: "changed" }, revision.revisionVersion),
     QuoteFinalizedImmutableError,
   );
 });
@@ -115,7 +121,8 @@ Expected: FAIL because the new domain modules do not exist.
 
 ```ts
 export type QuoteRevisionStatus = "draft" | "reviewed" | "finalized";
-export type QuoteCommercialStatus = "open" | "accepted" | "declined" | "expired";
+export type QuoteCommercialStatus =
+  "open" | "accepted" | "declined" | "expired";
 export type QuoteHistoricalOutcome = Exclude<QuoteCommercialStatus, "open">;
 export type QuoteDeliveryStatus =
   | "pending"
@@ -153,10 +160,16 @@ it("produces the same revision fingerprint for canonical-equivalent objects", ()
 
 it("changes the send fingerprint when recipient or revision fingerprint changes", () => {
   const base = sendFingerprintInput();
-  assert.notEqual(quoteSendFingerprint(base), quoteSendFingerprint({ ...base, recipient: "other@example.com" }));
   assert.notEqual(
     quoteSendFingerprint(base),
-    quoteSendFingerprint({ ...base, revisionFingerprint: "quote-revision:v1:sha256:different" }),
+    quoteSendFingerprint({ ...base, recipient: "other@example.com" }),
+  );
+  assert.notEqual(
+    quoteSendFingerprint(base),
+    quoteSendFingerprint({
+      ...base,
+      revisionFingerprint: "quote-revision:v1:sha256:different",
+    }),
   );
 });
 ```
@@ -198,6 +211,7 @@ git commit -m "feat(quotes): define revision and delivery domain contracts"
 ### Task 2: Convex schema and atomic aggregate/revision lifecycle
 
 **Files:**
+
 - Create: `typescript/convex/quoteValidators.ts`
 - Create: `typescript/convex/quotes.ts`
 - Modify: `typescript/convex/schema.ts`
@@ -205,6 +219,7 @@ git commit -m "feat(quotes): define revision and delivery domain contracts"
 - Test: `typescript/tests/quoteConvexLifecycle.test.ts`
 
 **Interfaces:**
+
 - Produces Convex functions `create`, `get`, `list`, `updateDraft`, `submitForReview`, `reopenForEditing`, `finalizeRevision`, `forkRevision`, `recordCommercialOutcome`, and development cleanup.
 - Every public function accepts `serviceToken`; every function calls `requireOwner` before reading records.
 
@@ -287,11 +302,13 @@ git commit -m "feat(quotes): add atomic Convex revision lifecycle"
 ### Task 3: Authenticated Convex quote repository adapter
 
 **Files:**
+
 - Create: `typescript/src/persistence/convexQuotes.ts`
 - Test: `typescript/tests/convexQuotesAdapter.test.ts`
 - Test: `typescript/tests/quoteRestartPersistence.test.ts`
 
 **Interfaces:**
+
 - Implements `QuoteRepository` from Task 1.
 - Constructor accepts `{ client, serviceToken }` following existing Convex adapters.
 
@@ -342,6 +359,7 @@ git commit -m "feat(quotes): add authenticated Convex repository adapter"
 ### Task 4: Controlled HTTP quote administration and OpenAPI
 
 **Files:**
+
 - Replace: `typescript/src/http/quoteRequest.ts`
 - Replace: `typescript/src/http/quoteController.ts`
 - Modify: `typescript/src/http/tokens.ts`
@@ -351,6 +369,7 @@ git commit -m "feat(quotes): add authenticated Convex repository adapter"
 - Modify: `typescript/tests/quoteHttp.test.ts`
 
 **Interfaces:**
+
 - Exposes only controlled quote endpoints from the approved spec.
 - Removes request-level `status` mutation and rejects client totals.
 
@@ -425,12 +444,14 @@ git commit -m "feat(quotes): expose controlled revision HTTP lifecycle"
 ### Task 5: Planned `AM-012` finalisation tool boundary
 
 **Files:**
+
 - Create: `typescript/src/actions/quoteFinalizeTool.ts`
 - Modify: the existing tool execution factory file only to export a test-only builder if required
 - Test: `typescript/tests/quoteFinalizeTool.test.ts`
 - Test: `typescript/tests/quoteAllowlistBoundary.test.ts`
 
 **Interfaces:**
+
 - Defines tool ID `TOOL-QUOTE-FINALIZE` and operation `quotes:finalize`.
 - Consumes exact `quoteId`, `quoteRevision`, `expectedAggregateVersion`, and `expectedRevisionVersion`.
 - Produces a deterministic internal tool result containing the finalized revision fingerprint.
@@ -468,6 +489,7 @@ git commit -m "feat(quotes): add planned finalisation tool boundary"
 ### Task 6: Delivery-attempt ledger and reconciliation binding
 
 **Files:**
+
 - Create: `typescript/convex/quoteDeliveries.ts`
 - Modify: `typescript/convex/schema.ts`
 - Create: `typescript/src/persistence/convexQuoteDeliveries.ts`
@@ -477,6 +499,7 @@ git commit -m "feat(quotes): add planned finalisation tool boundary"
 - Test: `typescript/tests/quoteSendTool.test.ts`
 
 **Interfaces:**
+
 - Implements `QuoteDeliveryRepository`.
 - Reuses `ExternalReconciliationStore`, `ToolExecutionReceiptStore`, and the existing external provider-attempt registration contract.
 - Uses synthetic provider adapters in tests only.
@@ -563,11 +586,13 @@ git commit -m "feat(quotes): add provider-neutral delivery ledger"
 ### Task 7: Development-only legacy migration
 
 **Files:**
+
 - Create: `typescript/convex/quoteMigration.ts`
 - Create: `typescript/src/tools/migrateLegacyQuotes.ts`
 - Test: `typescript/tests/quoteMigration.test.ts`
 
 **Interfaces:**
+
 - Migration functions are callable only for `dev:` deployments and synthetic/legacy source keys.
 - They are not exported through HTTP, MCP, tool actions, or production runtime wiring.
 
@@ -611,11 +636,13 @@ git commit -m "feat(quotes): add development-only legacy migration"
 ### Task 8: Self-cleaning quote lifecycle development smoke
 
 **Files:**
+
 - Create: `typescript/src/tools/quoteLifecycleSmoke.ts`
 - Modify: `typescript/src/tools/runConvexSmoke.ts`
 - Test: `typescript/tests/quoteLifecycleSmoke.test.ts`
 
 **Interfaces:**
+
 - Exports `runQuoteLifecycleSmoke(config)`.
 - Uses deterministic synthetic quote number, recipient, provider request ID, and cleanup key derived from run ID.
 
@@ -661,6 +688,7 @@ git commit -m "test(quotes): add self-cleaning development smoke"
 ### Task 9: Governance traceability while keeping actions planned
 
 **Files:**
+
 - Modify: `docs/traceability/action-family-registry.yaml`
 - Modify: `docs/registries/tool-registry.yaml`
 - Modify: `docs/registries/state-target-registry.yaml`
@@ -670,6 +698,7 @@ git commit -m "test(quotes): add self-cleaning development smoke"
 - Test: `typescript/tests/quoteGovernanceBoundary.test.ts`
 
 **Interfaces:**
+
 - Corrects `AM-012` state impact to `reviewed -> finalized`.
 - Adds real, non-recycled test/evidence IDs.
 - Does not set `AM-012`, `AM-013`, or `WF-QUOTE-001` active.
@@ -730,11 +759,13 @@ git commit -m "docs(governance): register planned quote lifecycle evidence"
 ### Task 10: Runtime PR, development commissioning, and evidence
 
 **Files:**
+
 - Update: `docs/superpowers/plans/2026-07-24-quote-lifecycle.md`
 - Create after successful commissioning: `docs/evidence/quote-lifecycle-commissioning.md`
 - Temporary one-shot workflow only during commissioning; remove it before completion.
 
 **Interfaces:**
+
 - Runtime PR activates no quote action family.
 - Commissioning deploys only to `dev:outgoing-ram-798`.
 

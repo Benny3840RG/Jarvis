@@ -33,7 +33,9 @@ function revisionFingerprintInput(
   };
 }
 
-function sendFingerprintInput(overrides: Partial<QuoteSendFingerprintInput> = {}): QuoteSendFingerprintInput {
+function sendFingerprintInput(
+  overrides: Partial<QuoteSendFingerprintInput> = {},
+): QuoteSendFingerprintInput {
   return {
     ownerId: "owner-1",
     quoteId: "quote-1",
@@ -89,7 +91,10 @@ describe("quote fingerprints", () => {
       quoteSendFingerprint(sendFingerprintInput()),
       quoteSendFingerprint(sendFingerprintInput({ recipient: "client@example.com" })),
     );
-    assert.match(quoteSendFingerprint(sendFingerprintInput()), /^quote-send:v1:sha256:[a-f0-9]{64}$/);
+    assert.match(
+      quoteSendFingerprint(sendFingerprintInput()),
+      /^quote-send:v1:sha256:[a-f0-9]{64}$/,
+    );
   });
 
   it("changes the send fingerprint when recipient or revision fingerprint changes", () => {

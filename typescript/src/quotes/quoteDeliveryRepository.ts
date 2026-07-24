@@ -64,8 +64,6 @@ export interface QuoteDeliveryRepository {
   markExecuting(input: StartQuoteDeliveryInput): Promise<QuoteDeliveryAttempt>;
   bindProviderReference(input: BindQuoteProviderReferenceInput): Promise<QuoteDeliveryAttempt>;
   complete(input: CompleteQuoteDeliveryInput): Promise<QuoteDeliveryAttempt>;
-  markIndeterminate(
-    input: MarkQuoteDeliveryIndeterminateInput,
-  ): Promise<QuoteDeliveryAttempt>;
+  markIndeterminate(input: MarkQuoteDeliveryIndeterminateInput): Promise<QuoteDeliveryAttempt>;
   reconcile(input: ReconcileQuoteDeliveryInput): Promise<QuoteDeliveryAttempt>;
 }
