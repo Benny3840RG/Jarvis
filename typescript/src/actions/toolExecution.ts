@@ -85,11 +85,17 @@ function executionKey(action: ToolAction, idempotencyKey: string): string {
   return `${action.projectId}:${action.actionId}:${idempotencyKey}`;
 }
 
-function receiptId(action: ToolAction, idempotencyKey: string, status: ToolExecutionStatus): string {
-  return digest({ projectId: action.projectId, actionId: action.actionId, idempotencyKey, status }).slice(
-    0,
-    32,
-  );
+function receiptId(
+  action: ToolAction,
+  idempotencyKey: string,
+  status: ToolExecutionStatus,
+): string {
+  return digest({
+    projectId: action.projectId,
+    actionId: action.actionId,
+    idempotencyKey,
+    status,
+  }).slice(0, 32);
 }
 
 type ExecutionMetadata = {
@@ -204,7 +210,10 @@ export class ToolExecutionService {
     }
   }
 
-  private async persistDecision(key: string, decision: ToolExecutionReceipt): Promise<ToolExecutionReceipt> {
+  private async persistDecision(
+    key: string,
+    decision: ToolExecutionReceipt,
+  ): Promise<ToolExecutionReceipt> {
     const decisionKey = `${key}:decision:${decision.receiptId}:${decision.completedAt}`;
     await this.receipts.save(decisionKey, decision);
     return decision;
@@ -247,7 +256,14 @@ export class ToolExecutionService {
     if (!parsed.success) {
       return this.persistDecision(
         key,
-        receipt(input.action, input.idempotencyKey, "blocked", "invalid-arguments", startedAt, input),
+        receipt(
+          input.action,
+          input.idempotencyKey,
+          "blocked",
+          "invalid-arguments",
+          startedAt,
+          input,
+        ),
       );
     }
     if (input.dryRun) {
