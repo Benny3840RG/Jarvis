@@ -102,7 +102,10 @@ function receipt(
 
 export class ToolExecutionService {
   private readonly definitions = new Map<string, ToolExecutionDefinition>();
-  private readonly inFlight = new Map<string, Promise<ToolExecutionReceipt>>();
+  private readonly inFlight = new Map<
+    string,
+    { fingerprint: string; promise: Promise<ToolExecutionReceipt> }
+  >();
 
   constructor(
     definitions: readonly ToolExecutionDefinition[],
@@ -139,10 +142,25 @@ export class ToolExecutionService {
     }
 
     const active = this.inFlight.get(key);
-    if (active) return active;
+    if (active) {
+      if (active.fingerprint !== expectedFingerprint) {
+        // A different action is already executing under this key. Handing
+        // back its in-flight promise would silently substitute another
+        // action's outcome for this caller's request without ever
+        // validating or running what they actually asked for.
+        return receipt(
+          input.action,
+          input.idempotencyKey,
+          "blocked",
+          "fingerprint-mismatch",
+          new Date().toISOString(),
+        );
+      }
+      return active.promise;
+    }
 
     const execution = this.executeOnce(input, key);
-    this.inFlight.set(key, execution);
+    this.inFlight.set(key, { fingerprint: expectedFingerprint, promise: execution });
     try {
       return await execution;
     } finally {
