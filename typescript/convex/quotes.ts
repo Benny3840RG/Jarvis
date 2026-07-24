@@ -16,7 +16,6 @@ import type { Doc } from "./_generated/dataModel.js";
 import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server.js";
 
 const MAX_LIST_LIMIT = 100;
-const MAX_CLEANUP_REVISIONS = 1_000;
 
 const revisionCommandArgs = {
   serviceToken: v.string(),
@@ -403,37 +402,5 @@ export const recordCommercialOutcome = mutation({
         now: Date.now(),
       }),
     );
-  },
-});
-
-export const cleanupDevelopmentQuote = mutation({
-  args: {
-    serviceToken: v.string(),
-    quoteId: v.string(),
-    deployment: v.string(),
-  },
-  returns: v.boolean(),
-  handler: async (ctx, args) => {
-    const ownerId = requireOwner(args.serviceToken);
-    if (args.deployment !== "dev:outgoing-ram-798") {
-      throw new Error("Quote cleanup is restricted to the authorised development deployment.");
-    }
-    const quoteId = cleanRequiredText(args.quoteId, "Quote ID");
-    const aggregate = await findAggregate(ctx, ownerId, quoteId);
-    if (!aggregate) return false;
-    const revisions = await ctx.db
-      .query("quoteRevisions")
-      .withIndex("by_owner_quote_and_revision", (q) =>
-        q.eq("ownerId", ownerId).eq("quoteId", quoteId),
-      )
-      .take(MAX_CLEANUP_REVISIONS + 1);
-    if (revisions.length > MAX_CLEANUP_REVISIONS) {
-      throw new Error(
-        `Quote has more than ${MAX_CLEANUP_REVISIONS} revisions; refusing cleanup to avoid orphaning revisions.`,
-      );
-    }
-    for (const revision of revisions) await ctx.db.delete("quoteRevisions", revision._id);
-    await ctx.db.delete("quotes", aggregate._id);
-    return true;
   },
 });

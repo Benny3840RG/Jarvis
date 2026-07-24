@@ -42,7 +42,6 @@ describe("quote Convex contracts", () => {
       "finalizeRevision",
       "forkRevision",
       "recordCommercialOutcome",
-      "cleanupDevelopmentQuote",
     ];
     for (const functionName of functionNames) {
       assert.ok(quotesSource.includes(`export const ${functionName} =`), `missing ${functionName}`);
@@ -69,11 +68,10 @@ describe("quote Convex contracts", () => {
     assert.ok(quotesSource.includes('ctx.db.replace("quotes"'));
   });
 
-  it("restricts cleanup and refuses to orphan excess revisions", () => {
-    assert.ok(quotesSource.includes('args.deployment !== "dev:outgoing-ram-798"'));
-    assert.ok(quotesSource.includes(".take(MAX_CLEANUP_REVISIONS + 1)"));
-    assert.ok(quotesSource.includes("revisions.length > MAX_CLEANUP_REVISIONS"));
-    assert.ok(quotesSource.includes('ctx.db.delete("quoteRevisions"'));
-    assert.ok(quotesSource.includes('ctx.db.delete("quotes"'));
+  it("does not expose caller-authorised destructive cleanup", () => {
+    assert.equal(quotesSource.includes("cleanupDevelopmentQuote"), false);
+    assert.equal(quotesSource.includes("args.deployment"), false);
+    assert.equal(quotesSource.includes('ctx.db.delete("quoteRevisions"'), false);
+    assert.equal(quotesSource.includes('ctx.db.delete("quotes"'), false);
   });
 });
