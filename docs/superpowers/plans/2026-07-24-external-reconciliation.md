@@ -26,6 +26,7 @@
 - Runtime PR: `#170`
 - Verified runtime source: `6925974dcc4fc764fea87f232e02fe35be1dce55`
 - Permanent TypeScript verification run: `30078294682`
+- Runtime merge: `0646b1a1f1fff13e12913259c2618d50fe334526`
 - Final PR head contains only this frozen implementation ledger in addition to the verified runtime source.
 - Implemented files include the Convex ledger, authenticated adapter, execution integration, worker, scheduler and development smoke.
 - Tests cover effect collisions, replay suppression, lease ownership, worker concurrency, unknown providers, scheduler overlap and smoke cleanup.
@@ -33,7 +34,18 @@
 - Reconciliation read outages are audit-classified as `reconciliation-unavailable`; only known effect conflicts use `fingerprint-mismatch`.
 - Pinned formatting has been applied and all temporary formatter and patcher helpers have been removed from the final tree.
 - The permanent TypeScript workflow matches `main` and is the only runtime merge gate.
-- All external action families remain planned until separate commissioning evidence and governance activation.
+- All external action families remain planned until separate governance activation.
+
+## Development commissioning evidence
+
+- Guarded commissioning source: `9765b0cc614e4d792cff95b98f070882ce05ef20`
+- Guarded commissioning run/job: `30079574919` / `89437852079`
+- Evidence workflow source: `820205722020216380fd2d50967b717136969c56`
+- Evidence run/job: `30079882723` / `89438955332`
+- Evidence artifact: `8591396759`
+- Artifact digest: `sha256:0eb217c27c01a60a4b3b68aad691eb7be9a4c2f32fa76ab40671d5fa89c55e01`
+- Permanent record: `docs/evidence/external-reconciliation-commissioning.md`
+- One-shot evidence workflow removed at `024ed4078bb1b74c9d10aa0af3cc1b0b19810b33`.
 
 ---
 
@@ -83,16 +95,12 @@
 
 ### Task 7: Runtime landing and commissioning evidence
 
-- [ ] Merge runtime with no external action family activated.
-- [ ] Sync only `dev:outgoing-ram-798` and run the full self-cleaning smoke.
-- [ ] Retain run, job, artifact and digest evidence.
-- [ ] Remove the one-shot commissioning workflow.
-- [ ] Close issue #154 only after final CI and immutable evidence pass.
+- [x] Merge runtime with no external action family activated.
+- [x] Sync only `dev:outgoing-ram-798` and run the full self-cleaning smoke.
+- [x] Retain run, job, artifact and digest evidence.
+- [x] Remove the one-shot commissioning workflow.
+- [x] Close issue #154 only after final CI and immutable evidence pass.
 
-## Final runtime checkpoint
+## Final checkpoint
 
-The runtime tranche is complete when the exact PR head passes the permanent TypeScript workflow and review-thread inspection. Commissioning begins only after that exact head is merged; no external action family becomes active during this runtime merge.
-
-The final review scope excludes temporary workflow helpers and includes only the permanent reconciliation runtime, tests and implementation ledger.
-
-This document is frozen for final runtime review; further changes belong to the commissioning evidence stage.
+The reconciliation tranche is complete. The runtime is merged, development commissioning passed, immutable evidence is retained, the one-shot workflow is removed, and no external action family has been activated.
