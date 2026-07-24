@@ -196,7 +196,7 @@ async function upsertReceipt(
   }
   const document = receiptDocument(ownerId, receiptKey, receipt, existing?.createdAt ?? Date.now());
   if (existing) {
-    await ctx.db.replace(existing._id, document);
+    await ctx.db.replace("toolExecutionReceipts", existing._id, document);
     const replaced = await ctx.db.get("toolExecutionReceipts", existing._id);
     if (!replaced) throw new Error("Execution receipt replacement failed.");
     return replaced;
@@ -400,8 +400,7 @@ export const markIndeterminate = mutation({
       providerCorrelationId: reconciliation.providerCorrelationId,
       reconciliationId: reconciliation.reconciliationId,
       status: "indeterminate",
-      errorCode:
-        state === "pending" ? "indeterminate" : "provider-reference-missing",
+      errorCode: state === "pending" ? "indeterminate" : "provider-reference-missing",
     });
 
     await ctx.db.patch("externalReconciliations", reconciliation._id, {
@@ -412,8 +411,7 @@ export const markIndeterminate = mutation({
       updatedAt: now,
       ...(state === "escalated"
         ? {
-            escalationReason:
-              args.missingReferenceReason ?? "provider-reference-missing",
+            escalationReason: args.missingReferenceReason ?? "provider-reference-missing",
             escalatedAt: now,
           }
         : {}),
@@ -451,8 +449,7 @@ export const completeAttempt = mutation({
         ...args.receipt,
         effectFingerprint: scope.effectFingerprint,
         provider: expectedProvider,
-        providerCorrelationId:
-          args.receipt.providerCorrelationId ?? args.receipt.correlationId,
+        providerCorrelationId: args.receipt.providerCorrelationId ?? args.receipt.correlationId,
         reconciliationId: args.reconciliationId,
         status: "indeterminate" as const,
         errorCode: "provider-reference-missing" as const,
@@ -504,10 +501,10 @@ export const completeAttempt = mutation({
 
     assertEffect(reconciliation, scope.effectFingerprint);
     assertProvider(reconciliation, expectedProvider);
-    if (!(["succeeded", "failed"] as const).includes(args.receipt.status as "succeeded" | "failed")) {
+    if (!(args.receipt.status === "succeeded" || args.receipt.status === "failed")) {
       throw new Error("completeAttempt requires a terminal receipt.");
     }
-    const terminalStatus = args.receipt.status as "succeeded" | "failed";
+    const terminalStatus = args.receipt.status;
     const boundReceipt = await upsertReceipt(ctx, ownerId, receiptKey, {
       ...args.receipt,
       effectFingerprint: scope.effectFingerprint,
@@ -664,7 +661,7 @@ export const resolveClaim = mutation({
       },
       receipt.createdAt,
     );
-    await ctx.db.replace(receipt._id, replacement);
+    await ctx.db.replace("toolExecutionReceipts", receipt._id, replacement);
     await ctx.db.patch("externalReconciliations", reconciliation._id, {
       state: "resolved",
       terminalStatus: args.result.status,
@@ -743,7 +740,9 @@ export const cleanup = mutation({
   handler: async (ctx, args) => {
     const ownerId = requireOwner(args.serviceToken);
     if (args.deployment !== "dev:outgoing-ram-798") {
-      throw new Error("External reconciliation cleanup is restricted to the authorised development deployment.");
+      throw new Error(
+        "External reconciliation cleanup is restricted to the authorised development deployment.",
+      );
     }
     const reconciliationId = cleanRequiredText(args.reconciliationId, "Reconciliation ID");
     const reconciliation = await findByReconciliationId(ctx, ownerId, reconciliationId);
