@@ -5,11 +5,13 @@ import { ConvexBuildLogStore } from "../buildLog/convexBuildLogStore.js";
 import { ConvexBuildStore } from "../builds/convexBuildStore.js";
 import { ConvexControlledReminderStore } from "../persistence/convexControlledReminders.js";
 import { ConvexControlledTaskStore } from "../persistence/convexControlledTasks.js";
+import { ConvexExternalReconciliationStore } from "../persistence/convexExternalReconciliations.js";
 import { ConvexNoteStore } from "../persistence/convexNotes.js";
 import { ConvexPersistence } from "../persistence/persistence.js";
 import { ConvexPreferenceStore } from "../preferences/convexPreferenceStore.js";
 import { ConvexUpgradeStore } from "../upgrades/convexUpgradeStore.js";
 import { redactSecret, runConvexSmoke } from "./convexSmoke.js";
+import { runExternalReconciliationSmoke } from "./externalReconciliationSmoke.js";
 import { runMemoryStoresSmoke } from "./memoryStoresSmoke.js";
 import { runNotesSmoke } from "./notesSmoke.js";
 import { runTaskReminderActionsSmoke } from "./taskReminderActionsSmoke.js";
@@ -40,6 +42,10 @@ async function main(): Promise<void> {
   await runTaskReminderActionsSmoke(
     () => new ConvexControlledTaskStore(),
     () => new ConvexControlledReminderStore(),
+    deployment,
+  );
+  await runExternalReconciliationSmoke(
+    () => new ConvexExternalReconciliationStore(),
     deployment,
   );
 }
