@@ -1,6 +1,8 @@
 import { Body, Controller, HttpCode, Inject, Post, Req } from "@nestjs/common";
 import type { FastifyRequest } from "fastify";
 
+import { categorizeGeminiRequestError } from "../integrations/gemini/errorCategory.js";
+import { GeminiRequestError } from "../integrations/gemini/totalityReasoner.js";
 import { categorizeOpenAIRequestError } from "../integrations/openai/errorCategory.js";
 import { OpenAIRequestError } from "../integrations/openai/totalityReasoner.js";
 import type { TotalityResponse } from "../runtime/totalityContracts.js";
@@ -46,7 +48,7 @@ export class TotalityController {
         503,
         "totality-unavailable",
         "Totality Unavailable",
-        "Totality reasoning requires configured OpenAI and Convex dependencies.",
+        "Totality reasoning requires a configured reasoning provider and Convex dependencies.",
       );
     }
 
@@ -65,9 +67,14 @@ export class TotalityController {
     try {
       return await this.pipeline.run(input);
     } catch (error: unknown) {
-      if (error instanceof OpenAIRequestError) {
-        const category = categorizeOpenAIRequestError(error);
-        if (category === "quota_exhausted") {
+      const reasonerErrorCategory =
+        error instanceof OpenAIRequestError
+          ? categorizeOpenAIRequestError(error)
+          : error instanceof GeminiRequestError
+            ? categorizeGeminiRequestError(error)
+            : null;
+      if (reasonerErrorCategory !== null) {
+        if (reasonerErrorCategory === "quota_exhausted") {
           throw new JarvisProblem(
             503,
             "reasoning-quota-exhausted",
@@ -75,7 +82,7 @@ export class TotalityController {
             "The configured reasoning provider account has no available API quota.",
           );
         }
-        if (category === "rate_limited") {
+        if (reasonerErrorCategory === "rate_limited") {
           throw new JarvisProblem(
             429,
             "reasoning-rate-limited",
