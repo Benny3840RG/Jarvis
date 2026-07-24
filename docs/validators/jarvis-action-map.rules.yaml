@@ -1,0 +1,81 @@
+required_checks:
+  - overlay_reference_exists
+  - tool_binding_exists
+  - state_target_exists
+  - requirement_ids_exist
+  - test_ids_exist
+  - evidence_ids_exist
+  - policy_overlay_required
+  - approval_required_implies_fingerprint_or_idempotency
+  - external_side_effect_implies_reconciliation
+  - generated_view_is_not_source_of_truth
+
+reference_registries:
+  overlays: docs/registries/policy-overlays.yaml
+  tools: docs/registries/tool-registry.yaml
+  state_targets: docs/registries/state-target-registry.yaml
+  requirements: docs/requirements/requirements.yaml
+  tests: docs/registries/test-id-registry.yaml
+  evidence: docs/registries/evidence-id-registry.yaml
+
+rules:
+  - id: RULE-001
+    when: action_family.policy_overlay is missing
+    fail: true
+    message: Every action family must bind a policy overlay.
+
+  - id: RULE-002
+    when: action_family.execution.external_side_effects.mode == true
+    require:
+      - action_family.policy_overlay == send_with_approval or action_family.policy_overrides.reconciliation.required == true
+      - action_family.bindings.executor_id exists in tools registry
+      - action_family.bindings.state_target_id exists in state target registry
+    fail: true
+    message: External side effects require reconciliation and valid bindings.
+
+  - id: RULE-003
+    when: action_family.approval.mode == always or action_family.approval.mode == conditional
+    require:
+      - action_family.idempotency.enabled == true
+      - action_family.idempotency.key_strategy is set
+    fail: true
+    message: Approved actions must define idempotency or fingerprint behavior.
+
+  - id: RULE-004
+    when: action_family.traceability.requirements.primary is present
+    require:
+      - all primary ids exist in requirements registry
+      - all supporting ids exist in requirements registry
+      - max primary requirements per family <= 5
+    fail: true
+    message: Requirement references must exist and remain bounded.
+
+  - id: RULE-005
+    when: workflow.lifecycle_status == active
+    require:
+      - every workflow.step.action_family has lifecycle_status == active
+    fail: true
+    message: An active workflow must not depend on a non-active action family.
+    # Note: this intentionally does NOT require every workflow-referenced
+    # action family to be active regardless of the workflow's own status.
+    # WF-QUOTE-001 and its steps (AM-012, AM-013) are all lifecycle_status
+    # planned today — a planned workflow composing planned families is
+    # consistent, not a violation. Existence of the referenced family is
+    # still enforced separately by the Ruby generator
+    # (scripts/generate-action-map.rb), which fails on any workflow step
+    # naming an unknown action_family id.
+
+  - id: RULE-006
+    when: action_family.bindings.executor_id is present
+    require:
+      - action_family.bindings.executor_id exists in tools registry
+      - action_family.bindings.state_target_id exists in state target registry
+      - action_family.lifecycle_status == active implies the bound tool and state target are implemented == true
+    fail: true
+    message: A family cannot be marked active while bound to a tool or state target that isn't implemented.
+
+execution_order:
+  - json_schema_validation
+  - registry_reference_validation
+  - semantic_rule_validation
+  - generation_only_if_all_pass

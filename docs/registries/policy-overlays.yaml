@@ -1,0 +1,25 @@
+# Standalone catalog of policy overlay names defined in
+# docs/traceability/action-family-registry.yaml, kept in sync manually.
+# This file exists so the semantic validator (docs/validators/jarvis-action-map.rules.yaml)
+# has a structured registry to check action_family.policy_overlay references against,
+# independent of parsing the full action-family registry.
+schema_version: "1.0"
+source_of_truth: docs/traceability/action-family-registry.yaml#policy_overlays
+
+overlays:
+  - name: read_only
+    effect_class: read
+  - name: draft_only
+    effect_class: draft
+  - name: internal_mutation
+    effect_class: mutate
+  - name: send_with_approval
+    effect_class: send
+  - name: external_execute_with_reconciliation
+    effect_class: execute
+  - name: recovery_mutation
+    effect_class: mutate
+  - name: governance_read
+    effect_class: read
+  - name: governance_mutation
+    effect_class: mutate
