@@ -31,5 +31,13 @@ jobs:
           node --import tsx --test
           tests/convexQuotesAdapter.test.ts
           tests/quoteRestartPersistence.test.ts
-      - name: Run repository quality gate
-        run: npm run check
+      - name: Type-check
+        run: npm run type-check
+      - name: Lint TypeScript and Convex
+        run: npm run lint
+      - name: Check formatting
+        run: npm run format:check
+      - name: Validate OpenAPI contract
+        run: npm run openapi:lint
+      - name: Run all tests
+        run: npm test
