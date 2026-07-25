@@ -8,6 +8,7 @@ export const HTTP_TOOL_EXECUTION = Symbol("HTTP_TOOL_EXECUTION");
 export const HTTP_CLIENT_STORE = Symbol("HTTP_CLIENT_STORE");
 export const HTTP_PROJECT_STORE = Symbol("HTTP_PROJECT_STORE");
 export const HTTP_QUOTE_STORE = Symbol("HTTP_QUOTE_STORE");
+export const HTTP_QUOTE_REPOSITORY = Symbol("HTTP_QUOTE_REPOSITORY");
 export const HTTP_ERRAND_STORE = Symbol("HTTP_ERRAND_STORE");
 export const HTTP_BUILD_STORE = Symbol("HTTP_BUILD_STORE");
 export const HTTP_BUILD_LOG_STORE = Symbol("HTTP_BUILD_LOG_STORE");
