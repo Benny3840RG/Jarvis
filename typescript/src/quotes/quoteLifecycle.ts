@@ -126,6 +126,22 @@ export class QuoteFingerprintMismatchError extends Error {
   }
 }
 
+export class QuoteDeliveryStateConflictError extends Error {
+  constructor(message = "The quote delivery attempt is not in the expected state.") {
+    super(message);
+    this.name = "QuoteDeliveryStateConflictError";
+  }
+}
+
+export class QuoteDeliverySendConflictError extends Error {
+  constructor(
+    message = "A delivery attempt already exists for this quote, revision, recipient, and channel with different send details.",
+  ) {
+    super(message);
+    this.name = "QuoteDeliverySendConflictError";
+  }
+}
+
 const ALLOWED_REVISION_TRANSITIONS = new Set<string>([
   "draft:reviewed",
   "reviewed:draft",
