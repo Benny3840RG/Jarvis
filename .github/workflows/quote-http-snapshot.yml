@@ -1,0 +1,33 @@
+name: Quote HTTP workspace snapshot
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/quote-http-snapshot.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Upload Task 4 workspace
+        uses: actions/upload-artifact@v4
+        with:
+          name: quote-http-workspace
+          path: |
+            typescript/openapi/jarvis.openapi.json
+            typescript/src/http/app.ts
+            typescript/src/http/jarvisHttpModule.ts
+            typescript/src/http/quoteController.ts
+            typescript/src/http/quoteRequest.ts
+            typescript/src/http/quoteRevisionController.ts
+            typescript/src/http/quoteRevisionRequest.ts
+            typescript/src/http/tokens.ts
+            typescript/tests/quoteHttp.test.ts
+            typescript/tests/quoteRevisionHttp.test.ts
+            typescript/tests/quoteHttpLifecycle.test.ts
+          if-no-files-found: error
