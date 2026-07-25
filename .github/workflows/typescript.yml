@@ -69,6 +69,6 @@ jobs:
       - name: Install dependencies
         run: npm ci
       - name: Audit dependencies
-        run: npm audit --audit-level=moderate
+        run: npm run audit:ci
       - name: Build and type-check the MCP app
         run: npm run build
