@@ -252,12 +252,7 @@ describe("controlled quote HTTP lifecycle", () => {
       termsIncluded: true,
     };
 
-    for (const forbidden of [
-      { status: "reviewed" },
-      { subtotal: 1 },
-      { tax: 1 },
-      { total: 1 },
-    ]) {
+    for (const forbidden of [{ status: "reviewed" }, { subtotal: 1 }, { tax: 1 }, { total: 1 }]) {
       const response = await inject(app, "POST", "/api/v1/quotes", {
         payload: { ...base, ...forbidden },
       });
