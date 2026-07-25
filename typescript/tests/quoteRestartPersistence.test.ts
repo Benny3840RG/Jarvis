@@ -108,9 +108,7 @@ function clientFor(store: PersistedStore): ConvexClientLike {
           tax: Number(revision.tax),
           total: Number(revision.total),
           currency: "AUD",
-          ...(revision.validUntil === undefined
-            ? {}
-            : { validUntil: String(revision.validUntil) }),
+          ...(revision.validUntil === undefined ? {} : { validUntil: String(revision.validUntil) }),
           ...(revision.notes === undefined ? {} : { notes: String(revision.notes) }),
           termsIncluded: Boolean(revision.termsIncluded),
         });
