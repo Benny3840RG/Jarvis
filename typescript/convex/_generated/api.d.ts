@@ -25,6 +25,8 @@ import type * as notes from "../notes.js";
 import type * as preferences from "../preferences.js";
 import type * as projectRecords from "../projectRecords.js";
 import type * as projects from "../projects.js";
+import type * as quoteDeliveryValidators from "../quoteDeliveryValidators.js";
+import type * as quoteDelivery from "../quoteDelivery.js";
 import type * as quoteValidators from "../quoteValidators.js";
 import type * as quotes from "../quotes.js";
 import type * as reasoningJournal from "../reasoningJournal.js";
@@ -63,6 +65,8 @@ declare const fullApi: ApiFromModules<{
   preferences: typeof preferences;
   projectRecords: typeof projectRecords;
   projects: typeof projects;
+  quoteDeliveryValidators: typeof quoteDeliveryValidators;
+  quoteDelivery: typeof quoteDelivery;
   quoteValidators: typeof quoteValidators;
   quotes: typeof quotes;
   reasoningJournal: typeof reasoningJournal;
