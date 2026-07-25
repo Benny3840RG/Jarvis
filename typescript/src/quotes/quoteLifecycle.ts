@@ -1,8 +1,6 @@
 export type QuoteRevisionStatus = "draft" | "reviewed" | "finalized";
 export type QuoteCommercialStatus = "open" | "accepted" | "declined" | "expired";
 export type QuoteHistoricalOutcome = Exclude<QuoteCommercialStatus, "open">;
-export type QuoteDeliveryStatus =
-  "pending" | "executing" | "succeeded" | "failed" | "indeterminate" | "reconciled";
 
 export type QuoteRevisionLineItem = {
   description: string;
@@ -52,33 +50,6 @@ export type QuoteRevision = {
   updatedAt: number;
 };
 
-export type QuoteDeliveryAttempt = {
-  deliveryAttemptId: string;
-  ownerId: string;
-  quoteId: string;
-  revision: number;
-  revisionId: string;
-  revisionFingerprint: string;
-  recipient: string;
-  channel: "email";
-  sendFingerprint: string;
-  idempotencyKey: string;
-  approvalId: string;
-  actionFingerprint: string;
-  status: QuoteDeliveryStatus;
-  reconciledOutcome?: "succeeded" | "failed";
-  provider: string;
-  providerRequestId?: string;
-  providerCorrelationId?: string;
-  reconciliationId?: string;
-  providerErrorCode?: string;
-  createdAt: number;
-  executionStartedAt?: number;
-  completedAt?: number;
-  reconciledAt?: number;
-  updatedAt: number;
-};
-
 export type QuoteSnapshot = {
   aggregate: QuoteAggregate;
   revision: QuoteRevision;
@@ -123,22 +94,6 @@ export class QuoteFingerprintMismatchError extends Error {
   constructor(message = "The quote fingerprint does not match the authoritative revision.") {
     super(message);
     this.name = "QuoteFingerprintMismatchError";
-  }
-}
-
-export class QuoteDeliveryStateConflictError extends Error {
-  constructor(message = "The quote delivery attempt is not in the expected state.") {
-    super(message);
-    this.name = "QuoteDeliveryStateConflictError";
-  }
-}
-
-export class QuoteDeliverySendConflictError extends Error {
-  constructor(
-    message = "A delivery attempt already exists for this quote, revision, recipient, and channel with different send details.",
-  ) {
-    super(message);
-    this.name = "QuoteDeliverySendConflictError";
   }
 }
 

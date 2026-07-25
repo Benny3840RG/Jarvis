@@ -20,11 +20,6 @@ import {
   noteSensitivityValidator,
 } from "./noteValidators.js";
 import {
-  quoteDeliveryChannelValidator,
-  quoteDeliveryOutcomeValidator,
-  quoteDeliveryStatusValidator,
-} from "./quoteDeliveryValidators.js";
-import {
   quoteCommercialStatusValidator,
   quoteHistoricalOutcomeValidator,
   quoteLineItemValidator,
@@ -316,42 +311,6 @@ export default defineSchema({
     .index("by_owner_and_revision_id", ["ownerId", "revisionId"])
     .index("by_owner_quote_and_status", ["ownerId", "quoteId", "status"])
     .index("by_owner_and_fingerprint", ["ownerId", "fingerprint"]),
-  quoteDeliveries: defineTable({
-    ownerId: v.string(),
-    deliveryAttemptId: v.string(),
-    quoteId: v.string(),
-    revision: v.number(),
-    revisionId: v.string(),
-    revisionFingerprint: v.string(),
-    recipient: v.string(),
-    channel: quoteDeliveryChannelValidator,
-    sendFingerprint: v.string(),
-    idempotencyKey: v.string(),
-    approvalId: v.string(),
-    actionFingerprint: v.string(),
-    status: quoteDeliveryStatusValidator,
-    reconciledOutcome: v.optional(quoteDeliveryOutcomeValidator),
-    provider: v.string(),
-    providerRequestId: v.optional(v.string()),
-    providerCorrelationId: v.optional(v.string()),
-    reconciliationId: v.optional(v.string()),
-    providerErrorCode: v.optional(v.string()),
-    createdAt: v.number(),
-    executionStartedAt: v.optional(v.number()),
-    completedAt: v.optional(v.number()),
-    reconciledAt: v.optional(v.number()),
-    updatedAt: v.number(),
-  })
-    .index("by_owner_and_delivery_attempt_id", ["ownerId", "deliveryAttemptId"])
-    .index("by_owner_quote_revision_recipient_channel", [
-      "ownerId",
-      "quoteId",
-      "revision",
-      "recipient",
-      "channel",
-    ])
-    .index("by_owner_and_status", ["ownerId", "status"])
-    .index("by_owner_and_reconciliation_id", ["ownerId", "reconciliationId"]),
   validationReports: defineTable({
     ownerId: v.string(),
     requestId: v.string(),
