@@ -12,10 +12,12 @@ import {
 
 const serviceToken = "owner-service-token";
 
-function snapshotRow(overrides: {
-  aggregate?: Partial<Record<string, unknown>>;
-  revision?: Partial<Record<string, unknown>>;
-} = {}) {
+function snapshotRow(
+  overrides: {
+    aggregate?: Partial<Record<string, unknown>>;
+    revision?: Partial<Record<string, unknown>>;
+  } = {},
+) {
   return {
     aggregate: {
       _id: "aggregate-row-1",
@@ -201,9 +203,7 @@ describe("ConvexQuoteRepository", () => {
             expectedAggregateVersion: 4,
             expectedRevisionVersion: 3,
             patch: {
-              lineItems: [
-                { description: "Repair and brace gate", quantity: 2, unitPrice: 150 },
-              ],
+              lineItems: [{ description: "Repair and brace gate", quantity: 2, unitPrice: 150 }],
               taxRate: null,
               validUntil: null,
               notes: "Client supplies paint",
@@ -272,7 +272,9 @@ describe("ConvexQuoteRepository", () => {
         return null;
       },
       async mutation() {
-        throw new Error("Uncaught QuoteVersionConflictError: Quote aggregate version does not match.");
+        throw new Error(
+          "Uncaught QuoteVersionConflictError: Quote aggregate version does not match.",
+        );
       },
     } as unknown as ConvexClientLike;
     const repository = new ConvexQuoteRepository({ client, serviceToken });
