@@ -2899,6 +2899,404 @@
         }
       }
     },
+    "/api/v1/quote-revisions": {
+      "get": {
+        "operationId": "listQuoteRevisions",
+        "summary": "List quote revision lifecycle snapshots",
+        "description": "Returns the authoritative list of quote aggregate/revision snapshots. Requires the Convex persistence provider.",
+        "tags": ["Quote Revisions"],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "query",
+            "schema": { "type": "string", "minLength": 1, "maxLength": 200 }
+          },
+          {
+            "name": "projectId",
+            "in": "query",
+            "schema": { "type": "string", "minLength": 1, "maxLength": 200 }
+          },
+          {
+            "name": "commercialStatus",
+            "in": "query",
+            "schema": { "$ref": "#/components/schemas/QuoteCommercialStatus" }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": { "type": "integer", "minimum": 1, "maximum": 100 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current quote revision snapshots.",
+            "headers": { "X-Request-Id": { "$ref": "#/components/headers/RequestId" } },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/QuoteRevisionListResponse" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "422": { "$ref": "#/components/responses/UnprocessableEntity" },
+          "500": { "$ref": "#/components/responses/InternalServerError" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      },
+      "post": {
+        "operationId": "createQuoteRevision",
+        "summary": "Create a quote and its first revision",
+        "description": "Creates one quote aggregate and its draft revision 1; totals are derived server-side from the line items. Requires the Convex persistence provider.",
+        "tags": ["Quote Revisions"],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": false
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CreateQuoteRevisionRequest" }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Quote created.",
+            "headers": { "X-Request-Id": { "$ref": "#/components/headers/RequestId" } },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/QuoteRevisionSnapshotResponse" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "422": { "$ref": "#/components/responses/UnprocessableEntity" },
+          "500": { "$ref": "#/components/responses/InternalServerError" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/api/v1/quote-revisions/{quoteId}": {
+      "parameters": [{ "$ref": "#/components/parameters/QuoteId" }],
+      "get": {
+        "operationId": "getQuoteRevision",
+        "summary": "Get one quote revision lifecycle snapshot",
+        "description": "Returns the current aggregate and current revision for one quote. Requires the Convex persistence provider.",
+        "tags": ["Quote Revisions"],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Current quote revision snapshot.",
+            "headers": { "X-Request-Id": { "$ref": "#/components/headers/RequestId" } },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/QuoteRevisionSnapshotResponse" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "500": { "$ref": "#/components/responses/InternalServerError" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/api/v1/quote-revisions/{quoteId}/revisions/{revision}/draft": {
+      "parameters": [
+        { "$ref": "#/components/parameters/QuoteId" },
+        { "$ref": "#/components/parameters/QuoteRevisionNumber" }
+      ],
+      "post": {
+        "operationId": "updateQuoteRevisionDraft",
+        "summary": "Patch a draft revision",
+        "description": "Applies a partial patch to a draft revision after checking the expected aggregate and revision versions. Requires the Convex persistence provider.",
+        "tags": ["Quote Revisions"],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": false
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/UpdateQuoteDraftRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Draft revision updated.",
+            "headers": { "X-Request-Id": { "$ref": "#/components/headers/RequestId" } },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/QuoteRevisionSnapshotResponse" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "422": { "$ref": "#/components/responses/UnprocessableEntity" },
+          "500": { "$ref": "#/components/responses/InternalServerError" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/api/v1/quote-revisions/{quoteId}/revisions/{revision}/submit": {
+      "parameters": [
+        { "$ref": "#/components/parameters/QuoteId" },
+        { "$ref": "#/components/parameters/QuoteRevisionNumber" }
+      ],
+      "post": {
+        "operationId": "submitQuoteRevisionForReview",
+        "summary": "Submit a draft revision for review",
+        "description": "Transitions a draft revision to reviewed after checking the expected aggregate and revision versions. Requires the Convex persistence provider.",
+        "tags": ["Quote Revisions"],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": false
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/QuoteRevisionCommandRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Revision submitted for review.",
+            "headers": { "X-Request-Id": { "$ref": "#/components/headers/RequestId" } },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/QuoteRevisionSnapshotResponse" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "422": { "$ref": "#/components/responses/UnprocessableEntity" },
+          "500": { "$ref": "#/components/responses/InternalServerError" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/api/v1/quote-revisions/{quoteId}/revisions/{revision}/reopen": {
+      "parameters": [
+        { "$ref": "#/components/parameters/QuoteId" },
+        { "$ref": "#/components/parameters/QuoteRevisionNumber" }
+      ],
+      "post": {
+        "operationId": "reopenQuoteRevisionForEditing",
+        "summary": "Reopen a reviewed revision for editing",
+        "description": "Transitions a reviewed revision back to draft after checking the expected aggregate and revision versions. Requires the Convex persistence provider.",
+        "tags": ["Quote Revisions"],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": false
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/QuoteRevisionCommandRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Revision reopened for editing.",
+            "headers": { "X-Request-Id": { "$ref": "#/components/headers/RequestId" } },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/QuoteRevisionSnapshotResponse" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "422": { "$ref": "#/components/responses/UnprocessableEntity" },
+          "500": { "$ref": "#/components/responses/InternalServerError" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/api/v1/quote-revisions/{quoteId}/revisions/{revision}/finalize": {
+      "parameters": [
+        { "$ref": "#/components/parameters/QuoteId" },
+        { "$ref": "#/components/parameters/QuoteRevisionNumber" }
+      ],
+      "post": {
+        "operationId": "finalizeQuoteRevision",
+        "summary": "Finalize a reviewed revision",
+        "description": "Transitions a reviewed revision to finalized and computes its immutable fingerprint, after checking the expected aggregate and revision versions. Finalized revisions cannot be edited further. Requires the Convex persistence provider.",
+        "tags": ["Quote Revisions"],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": false
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/QuoteRevisionCommandRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Revision finalized.",
+            "headers": { "X-Request-Id": { "$ref": "#/components/headers/RequestId" } },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/QuoteRevisionSnapshotResponse" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "422": { "$ref": "#/components/responses/UnprocessableEntity" },
+          "500": { "$ref": "#/components/responses/InternalServerError" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/api/v1/quote-revisions/{quoteId}/revisions/{revision}/fork": {
+      "parameters": [
+        { "$ref": "#/components/parameters/QuoteId" },
+        { "$ref": "#/components/parameters/QuoteRevisionNumber" }
+      ],
+      "post": {
+        "operationId": "forkQuoteRevision",
+        "summary": "Fork a new draft revision from a finalized revision",
+        "description": "Creates the next numbered draft revision from an exact-fingerprint-matched finalized revision, after checking the expected aggregate and revision versions. Requires the Convex persistence provider.",
+        "tags": ["Quote Revisions"],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": false
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/ForkQuoteRevisionRequest" }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "New draft revision created from the finalized revision.",
+            "headers": { "X-Request-Id": { "$ref": "#/components/headers/RequestId" } },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/QuoteRevisionSnapshotResponse" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "422": { "$ref": "#/components/responses/UnprocessableEntity" },
+          "500": { "$ref": "#/components/responses/InternalServerError" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/api/v1/quote-revisions/{quoteId}/commercial-outcome": {
+      "parameters": [{ "$ref": "#/components/parameters/QuoteId" }],
+      "post": {
+        "operationId": "recordQuoteCommercialOutcome",
+        "summary": "Record a quote's commercial outcome",
+        "description": "Records the accepted, declined, or expired outcome against the exact finalized revision, after checking the expected aggregate version. Requires the Convex persistence provider.",
+        "tags": ["Quote Revisions"],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": false
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/RecordQuoteCommercialOutcomeRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Commercial outcome recorded.",
+            "headers": { "X-Request-Id": { "$ref": "#/components/headers/RequestId" } },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/QuoteRevisionSnapshotResponse" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "422": { "$ref": "#/components/responses/UnprocessableEntity" },
+          "500": { "$ref": "#/components/responses/InternalServerError" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
     "/api/v1/brief": {
       "get": {
         "operationId": "getDailyBrief",
@@ -4512,6 +4910,16 @@
         "description": "Opaque quote identifier returned by Jarvis.",
         "schema": {
           "$ref": "#/components/schemas/RecordId"
+        }
+      },
+      "QuoteRevisionNumber": {
+        "name": "revision",
+        "in": "path",
+        "required": true,
+        "description": "1-based quote revision number.",
+        "schema": {
+          "type": "integer",
+          "minimum": 1
         }
       },
       "ErrandId": {
@@ -6836,6 +7244,229 @@
             "type": ["string", "null"],
             "maxLength": 2000
           }
+        }
+      },
+      "QuoteCommercialStatus": {
+        "type": "string",
+        "enum": ["open", "accepted", "declined", "expired"]
+      },
+      "QuoteHistoricalOutcome": {
+        "type": "string",
+        "enum": ["accepted", "declined", "expired"]
+      },
+      "QuoteAggregate": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "quoteId",
+          "ownerId",
+          "clientId",
+          "number",
+          "currentRevision",
+          "currentRevisionId",
+          "aggregateVersion",
+          "commercialStatus",
+          "createdAt",
+          "updatedAt"
+        ],
+        "properties": {
+          "quoteId": { "$ref": "#/components/schemas/RecordId" },
+          "ownerId": { "$ref": "#/components/schemas/RecordId" },
+          "clientId": { "$ref": "#/components/schemas/RecordId" },
+          "projectId": { "$ref": "#/components/schemas/RecordId" },
+          "number": { "type": "string", "minLength": 1, "maxLength": 100 },
+          "currentRevision": { "type": "integer", "minimum": 1 },
+          "currentRevisionId": { "$ref": "#/components/schemas/RecordId" },
+          "aggregateVersion": { "type": "integer", "minimum": 0 },
+          "commercialStatus": { "$ref": "#/components/schemas/QuoteCommercialStatus" },
+          "commercialRevision": { "type": "integer", "minimum": 1 },
+          "commercialRecordedAt": { "$ref": "#/components/schemas/TimestampMs" },
+          "createdAt": { "$ref": "#/components/schemas/TimestampMs" },
+          "updatedAt": { "$ref": "#/components/schemas/TimestampMs" }
+        }
+      },
+      "QuoteRevisionRecord": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "revisionId",
+          "ownerId",
+          "quoteId",
+          "revision",
+          "revisionVersion",
+          "status",
+          "lineItems",
+          "subtotal",
+          "tax",
+          "total",
+          "currency",
+          "termsIncluded",
+          "createdAt",
+          "updatedAt"
+        ],
+        "properties": {
+          "revisionId": { "$ref": "#/components/schemas/RecordId" },
+          "ownerId": { "$ref": "#/components/schemas/RecordId" },
+          "quoteId": { "$ref": "#/components/schemas/RecordId" },
+          "revision": { "type": "integer", "minimum": 1 },
+          "revisionVersion": { "type": "integer", "minimum": 0 },
+          "status": { "type": "string", "enum": ["draft", "reviewed", "finalized"] },
+          "lineItems": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 200,
+            "items": { "$ref": "#/components/schemas/QuoteLineItem" }
+          },
+          "subtotal": { "type": "number", "minimum": 0 },
+          "taxRate": { "type": "number", "minimum": 0, "maximum": 1 },
+          "tax": { "type": "number", "minimum": 0 },
+          "total": { "type": "number", "minimum": 0 },
+          "currency": { "type": "string", "enum": ["AUD"] },
+          "validUntil": { "type": "string", "minLength": 1, "maxLength": 100 },
+          "notes": { "type": "string", "minLength": 1, "maxLength": 2000 },
+          "termsIncluded": { "type": "boolean" },
+          "fingerprint": { "type": "string", "minLength": 1, "maxLength": 200 },
+          "predecessorRevisionId": { "$ref": "#/components/schemas/RecordId" },
+          "historicalOutcome": { "$ref": "#/components/schemas/QuoteHistoricalOutcome" },
+          "historicalOutcomeRecordedAt": { "$ref": "#/components/schemas/TimestampMs" },
+          "reviewedAt": { "$ref": "#/components/schemas/TimestampMs" },
+          "finalizedAt": { "$ref": "#/components/schemas/TimestampMs" },
+          "createdAt": { "$ref": "#/components/schemas/TimestampMs" },
+          "updatedAt": { "$ref": "#/components/schemas/TimestampMs" }
+        }
+      },
+      "QuoteRevisionSnapshot": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["aggregate", "revision"],
+        "properties": {
+          "aggregate": { "$ref": "#/components/schemas/QuoteAggregate" },
+          "revision": { "$ref": "#/components/schemas/QuoteRevisionRecord" }
+        }
+      },
+      "QuoteRevisionSnapshotResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["data"],
+        "properties": {
+          "data": { "$ref": "#/components/schemas/QuoteRevisionSnapshot" }
+        }
+      },
+      "QuoteRevisionSummary": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "quoteId",
+          "clientId",
+          "number",
+          "currentRevision",
+          "aggregateVersion",
+          "revisionStatus",
+          "commercialStatus",
+          "total",
+          "currency",
+          "updatedAt"
+        ],
+        "properties": {
+          "quoteId": { "$ref": "#/components/schemas/RecordId" },
+          "clientId": { "$ref": "#/components/schemas/RecordId" },
+          "projectId": { "$ref": "#/components/schemas/RecordId" },
+          "number": { "type": "string", "minLength": 1, "maxLength": 100 },
+          "currentRevision": { "type": "integer", "minimum": 1 },
+          "aggregateVersion": { "type": "integer", "minimum": 0 },
+          "revisionStatus": { "type": "string", "enum": ["draft", "reviewed", "finalized"] },
+          "commercialStatus": { "$ref": "#/components/schemas/QuoteCommercialStatus" },
+          "total": { "type": "number", "minimum": 0 },
+          "currency": { "type": "string", "enum": ["AUD"] },
+          "updatedAt": { "$ref": "#/components/schemas/TimestampMs" }
+        }
+      },
+      "QuoteRevisionListResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["data", "count"],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/QuoteRevisionSummary" }
+          },
+          "count": { "type": "integer", "minimum": 0 }
+        }
+      },
+      "CreateQuoteRevisionRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["clientId", "number", "lineItems", "termsIncluded"],
+        "properties": {
+          "clientId": { "type": "string", "minLength": 1, "maxLength": 200 },
+          "projectId": { "type": "string", "minLength": 1, "maxLength": 200 },
+          "number": { "type": "string", "minLength": 1, "maxLength": 100 },
+          "lineItems": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 200,
+            "items": { "$ref": "#/components/schemas/QuoteLineItem" }
+          },
+          "taxRate": { "type": "number", "minimum": 0, "maximum": 1 },
+          "validUntil": { "type": "string", "minLength": 1, "maxLength": 100 },
+          "notes": { "type": "string", "minLength": 1, "maxLength": 2000 },
+          "termsIncluded": { "type": "boolean" }
+        }
+      },
+      "QuoteDraftPatch": {
+        "type": "object",
+        "additionalProperties": false,
+        "minProperties": 1,
+        "properties": {
+          "lineItems": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 200,
+            "items": { "$ref": "#/components/schemas/QuoteLineItem" }
+          },
+          "taxRate": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+          "validUntil": { "type": ["string", "null"], "minLength": 1, "maxLength": 100 },
+          "notes": { "type": ["string", "null"], "minLength": 1, "maxLength": 2000 },
+          "termsIncluded": { "type": "boolean" }
+        }
+      },
+      "UpdateQuoteDraftRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["expectedAggregateVersion", "expectedRevisionVersion", "patch"],
+        "properties": {
+          "expectedAggregateVersion": { "type": "integer", "minimum": 0 },
+          "expectedRevisionVersion": { "type": "integer", "minimum": 0 },
+          "patch": { "$ref": "#/components/schemas/QuoteDraftPatch" }
+        }
+      },
+      "QuoteRevisionCommandRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["expectedAggregateVersion", "expectedRevisionVersion"],
+        "properties": {
+          "expectedAggregateVersion": { "type": "integer", "minimum": 0 },
+          "expectedRevisionVersion": { "type": "integer", "minimum": 0 }
+        }
+      },
+      "ForkQuoteRevisionRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["expectedAggregateVersion", "expectedRevisionVersion", "expectedFingerprint"],
+        "properties": {
+          "expectedAggregateVersion": { "type": "integer", "minimum": 0 },
+          "expectedRevisionVersion": { "type": "integer", "minimum": 0 },
+          "expectedFingerprint": { "type": "string", "minLength": 1, "maxLength": 200 }
+        }
+      },
+      "RecordQuoteCommercialOutcomeRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["revision", "expectedAggregateVersion", "outcome"],
+        "properties": {
+          "revision": { "type": "integer", "minimum": 1 },
+          "expectedAggregateVersion": { "type": "integer", "minimum": 0 },
+          "outcome": { "$ref": "#/components/schemas/QuoteHistoricalOutcome" }
         }
       },
       "DailyBrief": {

@@ -19,6 +19,8 @@ import { JsonProjectStore } from "../projects/jsonProjectStore.js";
 import type { QuoteStore } from "../quotes/quote.js";
 import { InMemoryQuoteStore } from "../quotes/inMemoryQuoteStore.js";
 import { JsonQuoteStore } from "../quotes/jsonQuoteStore.js";
+import { createQuoteRepositoryFromEnv } from "../quotes/quoteRepositoryFactory.js";
+import type { QuoteRepository } from "../quotes/quoteRepository.js";
 import type { ErrandStore } from "../errands/errand.js";
 import { InMemoryErrandStore } from "../errands/inMemoryErrandStore.js";
 import { JsonErrandStore } from "../errands/jsonErrandStore.js";
@@ -80,6 +82,7 @@ export type CreateJarvisHttpAppOptions = (
   clientStore?: ClientStore;
   projectStore?: ProjectStore;
   quoteStore?: QuoteStore;
+  quoteRepository?: QuoteRepository | null;
   errandStore?: ErrandStore;
   buildStore?: BuildStore;
   buildLogStore?: BuildLogStore;
@@ -151,6 +154,12 @@ export async function createJarvisHttpApp(
     options.projectStore ?? (usesEnvironment ? new JsonProjectStore() : new InMemoryProjectStore());
   const quoteStore =
     options.quoteStore ?? (usesEnvironment ? new JsonQuoteStore() : new InMemoryQuoteStore());
+  const quoteRepository =
+    options.quoteRepository !== undefined
+      ? options.quoteRepository
+      : usesEnvironment
+        ? createQuoteRepositoryFromEnv()
+        : null;
   const errandStore =
     options.errandStore ?? (usesEnvironment ? new JsonErrandStore() : new InMemoryErrandStore());
   const buildStore = selectMemoryStore(options.buildStore, usesEnvironment, providerName, {
@@ -211,6 +220,7 @@ export async function createJarvisHttpApp(
       clientStore,
       projectStore,
       quoteStore,
+      quoteRepository,
       errandStore,
       buildStore,
       buildLogStore,
