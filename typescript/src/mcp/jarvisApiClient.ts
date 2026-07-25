@@ -10,7 +10,6 @@ import type { AssetInput, AssetUpdate } from "../assets/asset.js";
 import type { AssetView } from "../assets/assetView.js";
 import type { Preference, PreferenceInput, PreferenceUpdate } from "../preferences/preference.js";
 import type { Project, ProjectInput, ProjectUpdate } from "../projects/project.js";
-import type { Quote, QuoteInput, QuoteUpdate } from "../quotes/quote.js";
 import type { SystemStatus } from "../http/contracts.js";
 import type { Reminder, Task } from "../persistence/persistence.js";
 import type { TaskUpdate } from "../persistence/updates.js";
@@ -302,43 +301,6 @@ export class JarvisApiClient {
       await this.request<DataResponse<Project>>(
         "DELETE",
         `/api/v1/projects/${encodeURIComponent(projectId)}`,
-      )
-    ).data;
-  }
-
-  async listQuotes(): Promise<Quote[]> {
-    return (await this.request<ListResponse<Quote>>("GET", "/api/v1/quotes")).data;
-  }
-
-  async getQuote(quoteId: string): Promise<Quote> {
-    return (
-      await this.request<DataResponse<Quote>>(
-        "GET",
-        `/api/v1/quotes/${encodeURIComponent(quoteId)}`,
-      )
-    ).data;
-  }
-
-  async createQuote(input: QuoteInput): Promise<Quote> {
-    return (await this.request<DataResponse<Quote>>("POST", "/api/v1/quotes", { body: input }))
-      .data;
-  }
-
-  async updateQuote(quoteId: string, update: QuoteUpdate): Promise<Quote> {
-    return (
-      await this.request<DataResponse<Quote>>(
-        "PATCH",
-        `/api/v1/quotes/${encodeURIComponent(quoteId)}`,
-        { body: update },
-      )
-    ).data;
-  }
-
-  async deleteQuote(quoteId: string): Promise<Quote> {
-    return (
-      await this.request<DataResponse<Quote>>(
-        "DELETE",
-        `/api/v1/quotes/${encodeURIComponent(quoteId)}`,
       )
     ).data;
   }

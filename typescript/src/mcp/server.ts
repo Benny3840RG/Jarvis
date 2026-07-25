@@ -16,7 +16,6 @@ import type { AssetView } from "../assets/assetView.js";
 import type { Preference } from "../preferences/preference.js";
 import type { Errand } from "../errands/errand.js";
 import type { Project } from "../projects/project.js";
-import type { Quote } from "../quotes/quote.js";
 import type { Reminder, Task } from "../persistence/persistence.js";
 import {
   JarvisApiClient,
@@ -92,14 +91,6 @@ const quoteSchema = z.object({
   notes: z.string().optional(),
   createdAt: z.number(),
   updatedAt: z.number(),
-});
-
-// Line items accepted from the model; totals are always derived server-side and
-// are never part of the input surface.
-const quoteLineItemInputSchema = z.object({
-  description: z.string().trim().min(1).max(500),
-  quantity: z.number().min(0),
-  unitPrice: z.number().min(0),
 });
 
 const errandLocationSchema = z.object({
@@ -350,13 +341,6 @@ function projectResult(project: Project, message: string) {
   return {
     content: [{ type: "text" as const, text: message }],
     structuredContent: { project },
-  };
-}
-
-function quoteResult(quote: Quote, message: string) {
-  return {
-    content: [{ type: "text" as const, text: message }],
-    structuredContent: { quote },
   };
 }
 
@@ -1097,183 +1081,6 @@ export function createJarvisMcpServer(client: JarvisApiClient): McpServer {
       try {
         const removed = await client.deleteProject(projectId);
         return projectResult(removed, `Deleted project "${removed.title}".`);
-      } catch (error: unknown) {
-        return safeError(error);
-      }
-    },
-  );
-
-  registerAppTool(
-    server,
-    "list_quotes",
-    {
-      title: "List quotes",
-      description: "Use this when Benny wants to see or review his quotes.",
-      inputSchema: {},
-      outputSchema: { quotes: z.array(quoteSchema), count: z.number().int().nonnegative() },
-      annotations: readAnnotations,
-      _meta: { ui: { visibility: ["model"] } },
-    },
-    async () => {
-      try {
-        const quotes = await client.listQuotes();
-        return {
-          content: [{ type: "text" as const, text: `Found ${quotes.length} quotes.` }],
-          structuredContent: { quotes, count: quotes.length },
-        };
-      } catch (error: unknown) {
-        return safeError(error);
-      }
-    },
-  );
-
-  registerAppTool(
-    server,
-    "get_quote",
-    {
-      title: "Get a quote",
-      description: "Use this when the user refers to one known quote by its identifier.",
-      inputSchema: { quoteId: z.string().min(1) },
-      outputSchema: { quote: quoteSchema },
-      annotations: readAnnotations,
-      _meta: { ui: { visibility: ["model"] } },
-    },
-    async ({ quoteId }) => {
-      try {
-        return quoteResult(await client.getQuote(quoteId), "Quote details.");
-      } catch (error: unknown) {
-        return safeError(error);
-      }
-    },
-  );
-
-  registerAppTool(
-    server,
-    "create_quote",
-    {
-      title: "Create a quote",
-      description:
-        "Use this when the user explicitly asks to draft a quote. Totals are calculated from the line items; never pass subtotal, tax, or total.",
-      inputSchema: {
-        clientId: z.string().trim().min(1).max(200),
-        number: z.string().trim().min(1).max(100),
-        projectId: z.string().trim().min(1).max(200).optional(),
-        status: z.enum(["draft", "sent", "accepted", "declined"]).optional(),
-        lineItems: z.array(quoteLineItemInputSchema).max(200).optional(),
-        taxRate: z.number().min(0).max(1).optional(),
-        validUntil: z.string().trim().min(1).max(100).optional(),
-        notes: z.string().trim().min(1).max(2000).optional(),
-      },
-      outputSchema: { quote: quoteSchema },
-      annotations: createAnnotations,
-      _meta: { ui: { visibility: ["model"] } },
-    },
-    async ({ clientId, number, projectId, status, lineItems, taxRate, validUntil, notes }) => {
-      try {
-        const created = await client.createQuote({
-          clientId,
-          number,
-          ...(projectId === undefined ? {} : { projectId }),
-          ...(status === undefined ? {} : { status }),
-          ...(lineItems === undefined ? {} : { lineItems }),
-          ...(taxRate === undefined ? {} : { taxRate }),
-          ...(validUntil === undefined ? {} : { validUntil }),
-          ...(notes === undefined ? {} : { notes }),
-        });
-        return quoteResult(created, `Created quote "${created.number}".`);
-      } catch (error: unknown) {
-        return safeError(error);
-      }
-    },
-  );
-
-  registerAppTool(
-    server,
-    "update_quote",
-    {
-      title: "Update a quote",
-      description:
-        "Use this when the user explicitly asks to change a quote. Totals are recalculated from the line items; never pass subtotal, tax, or total.",
-      inputSchema: {
-        quoteId: z.string().min(1),
-        clientId: z.string().trim().min(1).max(200).optional(),
-        projectId: z.string().trim().min(1).max(200).nullable().optional(),
-        number: z.string().trim().min(1).max(100).optional(),
-        status: z.enum(["draft", "sent", "accepted", "declined"]).optional(),
-        lineItems: z.array(quoteLineItemInputSchema).max(200).optional(),
-        taxRate: z.number().min(0).max(1).nullable().optional(),
-        validUntil: z.string().trim().min(1).max(100).nullable().optional(),
-        notes: z.string().trim().min(1).max(2000).nullable().optional(),
-      },
-      outputSchema: { quote: quoteSchema },
-      annotations: writeAnnotations,
-      _meta: { ui: { visibility: ["model"] } },
-    },
-    async ({
-      quoteId,
-      clientId,
-      projectId,
-      number,
-      status,
-      lineItems,
-      taxRate,
-      validUntil,
-      notes,
-    }) => {
-      try {
-        if (
-          clientId === undefined &&
-          projectId === undefined &&
-          number === undefined &&
-          status === undefined &&
-          lineItems === undefined &&
-          taxRate === undefined &&
-          validUntil === undefined &&
-          notes === undefined
-        ) {
-          return {
-            isError: true,
-            content: [
-              {
-                type: "text" as const,
-                text: "Quote update requires at least one changed field.",
-              },
-            ],
-          };
-        }
-        const updated = await client.updateQuote(quoteId, {
-          ...(clientId === undefined ? {} : { clientId }),
-          ...(projectId === undefined ? {} : { projectId }),
-          ...(number === undefined ? {} : { number }),
-          ...(status === undefined ? {} : { status }),
-          ...(lineItems === undefined ? {} : { lineItems }),
-          ...(taxRate === undefined ? {} : { taxRate }),
-          ...(validUntil === undefined ? {} : { validUntil }),
-          ...(notes === undefined ? {} : { notes }),
-        });
-        return quoteResult(updated, `Updated quote "${updated.number}".`);
-      } catch (error: unknown) {
-        return safeError(error);
-      }
-    },
-  );
-
-  registerAppTool(
-    server,
-    "delete_quote",
-    {
-      title: "Delete a quote",
-      description:
-        "Use this only when the user explicitly asks to permanently remove a quote by identifier.",
-      inputSchema: { quoteId: z.string().min(1) },
-      outputSchema: { quote: quoteSchema },
-      annotations: destructiveAnnotations,
-      _meta: { ui: { visibility: ["model"] } },
-    },
-    async ({ quoteId }) => {
-      try {
-        const removed = await client.deleteQuote(quoteId);
-        return quoteResult(removed, `Deleted quote "${removed.number}".`);
       } catch (error: unknown) {
         return safeError(error);
       }
