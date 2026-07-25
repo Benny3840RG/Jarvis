@@ -54,9 +54,7 @@ function aggregateFromConvex(row: ConvexQuoteAggregateRow): QuoteAggregate {
     currentRevisionId: row.currentRevisionId,
     aggregateVersion: row.aggregateVersion,
     commercialStatus: row.commercialStatus,
-    ...(row.commercialRevision === undefined
-      ? {}
-      : { commercialRevision: row.commercialRevision }),
+    ...(row.commercialRevision === undefined ? {} : { commercialRevision: row.commercialRevision }),
     ...(row.commercialRecordedAt === undefined
       ? {}
       : { commercialRecordedAt: row.commercialRecordedAt }),
@@ -86,9 +84,7 @@ function revisionFromConvex(row: ConvexQuoteRevisionRow): QuoteRevision {
     ...(row.predecessorRevisionId === undefined
       ? {}
       : { predecessorRevisionId: row.predecessorRevisionId }),
-    ...(row.historicalOutcome === undefined
-      ? {}
-      : { historicalOutcome: row.historicalOutcome }),
+    ...(row.historicalOutcome === undefined ? {} : { historicalOutcome: row.historicalOutcome }),
     ...(row.historicalOutcomeRecordedAt === undefined
       ? {}
       : { historicalOutcomeRecordedAt: row.historicalOutcomeRecordedAt }),
@@ -244,9 +240,7 @@ export class ConvexQuoteRepository implements QuoteRepository {
     return this.runRevisionMutation(quoteFunctions.forkRevision, input);
   }
 
-  async recordCommercialOutcome(
-    input: RecordQuoteCommercialOutcomeInput,
-  ): Promise<QuoteSnapshot> {
+  async recordCommercialOutcome(input: RecordQuoteCommercialOutcomeInput): Promise<QuoteSnapshot> {
     try {
       const row = await this.client.mutation(quoteFunctions.recordCommercialOutcome, {
         serviceToken: this.serviceToken,
@@ -263,7 +257,8 @@ export class ConvexQuoteRepository implements QuoteRepository {
 
   private async runRevisionMutation(
     functionReference: Parameters<ConvexClientLike["mutation"]>[0],
-    input: QuoteRevisionCommand | CreateQuoteRevisionInput | (QuoteRevisionCommand & { patch: unknown }),
+    input:
+      QuoteRevisionCommand | CreateQuoteRevisionInput | (QuoteRevisionCommand & { patch: unknown }),
   ): Promise<QuoteSnapshot> {
     try {
       const row = await this.client.mutation(functionReference, {
