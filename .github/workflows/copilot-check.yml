@@ -27,6 +27,16 @@ jobs:
               "Documentation",
             ];
 
+            const MIN_CONTENT_LENGTH = 12;
+            const fillerPatterns = [
+              /^n\/?a$/i,
+              /^(none|nope|ok|okay|done|yes|no)\.?$/i,
+              /^(lgtm|looks good( to me)?|ship it)\.?$/i,
+              /^no (issues|regressions|changes)\.?$/i,
+              /^tested\.?$/i,
+            ];
+            const naWithReason = /^n\/a\s*[—-]\s*(.+)/i;
+
             if (!body.includes("Copilot Review")) {
               failures.push(
                 "PR description must include a '# Copilot Review' section (see .github/PULL_REQUEST_TEMPLATE.md).",
@@ -44,6 +54,30 @@ jobs:
                 if (content.length === 0 || content === "[...]") {
                   failures.push(
                     `Copilot Review's "${heading}" line is still a placeholder — fill it in with an actual finding (or "N/A — <reason>").`,
+                  );
+                  continue;
+                }
+
+                const naMatch = content.match(naWithReason);
+                if (naMatch) {
+                  if (naMatch[1].trim().length < MIN_CONTENT_LENGTH) {
+                    failures.push(
+                      `Copilot Review's "${heading}" line gives "N/A" without a real reason — say why it doesn't apply.`,
+                    );
+                  }
+                  continue;
+                }
+
+                if (fillerPatterns.some((rx) => rx.test(content))) {
+                  failures.push(
+                    `Copilot Review's "${heading}" line looks like filler ("${content}") — give a concrete finding tied to the code change, or "N/A — <reason>".`,
+                  );
+                  continue;
+                }
+
+                if (content.length < MIN_CONTENT_LENGTH) {
+                  failures.push(
+                    `Copilot Review's "${heading}" line is too short ("${content}") — give a concrete finding, or "N/A — <reason>".`,
                   );
                 }
               }
