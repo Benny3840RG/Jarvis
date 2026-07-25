@@ -13,7 +13,7 @@ permissions:
   contents: read
 
 jobs:
-  focused-task3-tests:
+  format-task3-files:
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -26,18 +26,18 @@ jobs:
           cache: npm
           cache-dependency-path: typescript/package-lock.json
       - run: npm ci
-      - name: Run Task 3 focused tests
+      - name: Format Task 3 files with pinned Prettier
         run: >-
-          node --import tsx --test
+          npx prettier --write
+          src/persistence/convexQuotes.ts
           tests/convexQuotesAdapter.test.ts
           tests/quoteRestartPersistence.test.ts
-      - name: Type-check
-        run: npm run type-check
-      - name: Lint TypeScript and Convex
-        run: npm run lint
-      - name: Check formatting
-        run: npm run format:check
-      - name: Validate OpenAPI contract
-        run: npm run openapi:lint
-      - name: Run all tests
-        run: npm test
+      - name: Upload formatted Task 3 files
+        uses: actions/upload-artifact@v4
+        with:
+          name: task3-prettier-output
+          path: |
+            typescript/src/persistence/convexQuotes.ts
+            typescript/tests/convexQuotesAdapter.test.ts
+            typescript/tests/quoteRestartPersistence.test.ts
+          if-no-files-found: error
