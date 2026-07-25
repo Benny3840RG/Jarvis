@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
+import { getFunctionName, type FunctionReference } from "convex/server";
+
 import { ConvexQuoteRepository } from "../src/persistence/convexQuotes.js";
 import type { ConvexClientLike } from "../src/persistence/convexPersistence.js";
 import {
@@ -62,6 +64,7 @@ function snapshotRow(
 
 type RecordedCall = {
   kind: "query" | "mutation";
+  functionName: string;
   args: unknown;
 };
 
@@ -69,14 +72,14 @@ describe("ConvexQuoteRepository", () => {
   it("preserves exact authenticated Convex arguments for the quote lifecycle", async () => {
     const calls: RecordedCall[] = [];
     const client = {
-      async query(_ref: unknown, args: unknown) {
-        calls.push({ kind: "query", args });
+      async query(ref: FunctionReference<"query">, args: unknown) {
+        calls.push({ kind: "query", functionName: getFunctionName(ref), args });
         const values = args as Record<string, unknown>;
         if ("quoteId" in values) return snapshotRow();
         return [snapshotRow()];
       },
-      async mutation(_ref: unknown, args: unknown) {
-        calls.push({ kind: "mutation", args });
+      async mutation(ref: FunctionReference<"mutation">, args: unknown) {
+        calls.push({ kind: "mutation", functionName: getFunctionName(ref), args });
         return snapshotRow();
       },
     } as unknown as ConvexClientLike;
@@ -165,6 +168,21 @@ describe("ConvexQuoteRepository", () => {
         updatedAt: 1_700_000_000_202,
       },
     ]);
+
+    assert.deepEqual(
+      calls.map(({ functionName }) => functionName),
+      [
+        "quotes:create",
+        "quotes:get",
+        "quotes:list",
+        "quotes:updateDraft",
+        "quotes:submitForReview",
+        "quotes:reopenForEditing",
+        "quotes:finalizeRevision",
+        "quotes:forkRevision",
+        "quotes:recordCommercialOutcome",
+      ],
+    );
 
     assert.deepEqual(
       calls.map(({ kind, args }) => ({ kind, args })),
