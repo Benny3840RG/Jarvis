@@ -1,204 +1,77 @@
-// src/orchestration/orchestration.ts
-// Benny-safe orchestration layer: typed, deterministic, zero regressions.
+name: Copilot Review Check
 
-// ------------------------------------------------------------
-// Result Contract
-// ------------------------------------------------------------
+on:
+  pull_request:
 
-export type FailureCode =
-  | "not_found"
-  | "invalid_transition"
-  | "unauthorised"
-  | "conflict"
-  | "validation_error"
-  | "transport_error";
+permissions:
+  contents: read
+  pull-requests: read
 
-export type Result<T> =
-  | { ok: true; value: T }
-  | {
-      ok: false;
-      code: FailureCode;
-      message: string;
-      retryable: boolean;
-    };
+jobs:
+  copilot-review-section:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify the Copilot Review section is filled in and tests accompany source changes
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const body = context.payload.pull_request.body || "";
+            const failures = [];
 
-// ------------------------------------------------------------
-// Typed Commands
-// ------------------------------------------------------------
+            const requiredHeadings = [
+              "CLI Contract",
+              "Persistence Providers",
+              "Backup / Restore",
+              "HTTP / MCP",
+              "Tests & Checks",
+              "Documentation",
+            ];
 
-export interface CreateTaskInput {
-  title: string;
-  owner: string;
-}
+            if (!body.includes("Copilot Review")) {
+              failures.push(
+                "PR description must include a '# Copilot Review' section (see .github/PULL_REQUEST_TEMPLATE.md).",
+              );
+            } else {
+              for (const heading of requiredHeadings) {
+                const escaped = heading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+                const pattern = new RegExp(`-\\s*${escaped}\\s*:\\s*(.+)`);
+                const match = body.match(pattern);
+                if (!match) {
+                  failures.push(`Copilot Review is missing the "${heading}" line.`);
+                  continue;
+                }
+                const content = match[1].trim();
+                if (content.length === 0 || content === "[...]") {
+                  failures.push(
+                    `Copilot Review's "${heading}" line is still a placeholder — fill it in with an actual finding (or "N/A — <reason>").`,
+                  );
+                }
+              }
+            }
 
-export interface CompleteTaskInput {
-  taskId: string;
-  owner: string;
-}
+            const { data: files } = await github.rest.pulls.listFiles({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.payload.pull_request.number,
+              per_page: 100,
+            });
+            const paths = files.map((file) => file.filename);
+            const sourceChanged = paths.some(
+              (path) =>
+                (path.startsWith("typescript/src/") || path.startsWith("typescript/convex/")) &&
+                !path.endsWith(".test.ts"),
+            );
+            const testsChanged = paths.some(
+              (path) =>
+                path.startsWith("typescript/tests/") ||
+                (path.startsWith("typescript/convex/") && path.endsWith(".test.ts")),
+            );
+            if (sourceChanged && !testsChanged) {
+              failures.push(
+                "This PR changes files under typescript/src/ or typescript/convex/ but touches no test file. Add coverage, or explain in Copilot Review's \"Tests & Checks\" line why none is needed.",
+              );
+            }
 
-export type TaskCreateCommand = {
-  domain: "task";
-  action: "create";
-  authority: "operator";
-  correlationId: string;
-  idempotencyKey: string;
-  input: CreateTaskInput;
-  expected: { status: "pending" | "active" };
-};
-
-export type TaskCompleteCommand = {
-  domain: "task";
-  action: "complete";
-  authority: "operator";
-  correlationId: string;
-  idempotencyKey: string;
-  input: CompleteTaskInput;
-  expected: { status: "completed" };
-};
-
-export type DomainCommand =
-  | TaskCreateCommand
-  | TaskCompleteCommand;
-
-// ------------------------------------------------------------
-// Execution Plan + Graph
-// ------------------------------------------------------------
-
-export type Intent =
-  | "task.create"
-  | "task.complete";
-
-export interface ExecutionPlan {
-  intent: Intent;
-  commands: DomainCommand[];
-}
-
-export interface GraphContext {
-  correlationId: string;
-  idempotencyKey: string;
-  owner: string;
-}
-
-export type OrchestrationGraph = {
-  [I in Intent]: (ctx: GraphContext) => DomainCommand[];
-};
-
-// ------------------------------------------------------------
-// Minimal Graph: task.create → task.complete
-// ------------------------------------------------------------
-
-export const TaskGraph: OrchestrationGraph = {
-  "task.create": (ctx) => [
-    {
-      domain: "task",
-      action: "create",
-      authority: "operator",
-      correlationId: ctx.correlationId,
-      idempotencyKey: ctx.idempotencyKey,
-      input: { title: "New Task", owner: ctx.owner },
-      expected: { status: "pending" }
-    }
-  ],
-
-  "task.complete": (ctx) => [
-    {
-      domain: "task",
-      action: "complete",
-      authority: "operator",
-      correlationId: ctx.correlationId,
-      idempotencyKey: ctx.idempotencyKey,
-      input: { taskId: ctx.idempotencyKey, owner: ctx.owner },
-      expected: { status: "completed" }
-    }
-  ]
-};
-
-// ------------------------------------------------------------
-// Planner (pure)
-// ------------------------------------------------------------
-
-export class Planner {
-  constructor(private graph: OrchestrationGraph) {}
-
-  plan(intent: Intent, ctx: GraphContext): ExecutionPlan {
-    const commands = this.graph[intent]?.(ctx) ?? [];
-    return { intent, commands };
-  }
-}
-
-// ------------------------------------------------------------
-// Repository Interfaces (Convex-backed in real system)
-// ------------------------------------------------------------
-
-export interface TaskRepository {
-  create(input: CreateTaskInput): Promise<Result<{ id: string; status: string }>>;
-  complete(input: CompleteTaskInput): Promise<Result<{ id: string; status: string }>>;
-}
-
-// ------------------------------------------------------------
-// Safety Interfaces
-// ------------------------------------------------------------
-
-export interface PreflightPolicy {
-  check(command: DomainCommand): Result<null>;
-}
-
-export interface PostflightVerifier {
-  verify(command: DomainCommand, result: Result<any>): Result<null>;
-}
-
-// ------------------------------------------------------------
-// Runner (safe, deterministic)
-// ------------------------------------------------------------
-
-export interface RunnerDeps {
-  preflight: PreflightPolicy;
-  postflight: PostflightVerifier;
-  tasks: TaskRepository;
-  recordOutcome: (command: DomainCommand, result: Result<any>) => Promise<void>;
-}
-
-export class Runner {
-  constructor(private deps: RunnerDeps) {}
-
-  async run(plan: ExecutionPlan): Promise<Result<ExecutionPlan>> {
-    for (const command of plan.commands) {
-      // 1. Preflight safety
-      const pre = this.deps.preflight.check(command);
-      if (!pre.ok) {
-        await this.deps.recordOutcome(command, pre);
-        return pre as Result<ExecutionPlan>;
-      }
-
-      // 2. Execute
-      const result = await this.executeCommand(command);
-
-      // 3. Postflight verification
-      const post = this.deps.postflight.verify(command, result);
-
-      // 4. Record outcome
-      await this.deps.recordOutcome(command, result);
-
-      // 5. Stop on failure
-      if (!result.ok || !post.ok) {
-        return {
-          ok: false,
-          code: result.ok ? "validation_error" : result.code,
-          message: result.ok ? post.message : result.message,
-          retryable: false
-        };
-      }
-    }
-
-    return { ok: true, value: plan };
-  }
-
-  private async executeCommand(command: DomainCommand): Promise<Result<any>> {
-    switch (command.domain) {
-      case "task":
-        return command.action === "create"
-          ? this.deps.tasks.create(command.input)
-          : this.deps.tasks.complete(command.input);
-    }
-  }
-}
+            if (failures.length > 0) {
+              core.setFailed(failures.join("\n"));
+            }
