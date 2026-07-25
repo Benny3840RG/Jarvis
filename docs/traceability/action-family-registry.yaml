@@ -495,7 +495,7 @@ action_families:
       tool_contract_version: "1"
     state_impact:
       entity: quote
-      from: [draft, reviewed]
+      from: [reviewed]
       to: finalized
     reconciliation:
       required: false
