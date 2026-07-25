@@ -2653,258 +2653,9 @@
     "/api/v1/quotes": {
       "get": {
         "operationId": "listQuotes",
-        "summary": "List quotes",
-        "description": "Returns the authoritative quote list.",
-        "tags": ["Quotes"],
-        "x-mcp-tool": {
-          "exposed": true,
-          "annotations": {
-            "readOnlyHint": true,
-            "destructiveHint": false,
-            "openWorldHint": false,
-            "idempotentHint": true
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Current quotes.",
-            "headers": {
-              "X-Request-Id": {
-                "$ref": "#/components/headers/RequestId"
-              }
-            },
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/QuoteListResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalServerError"
-          },
-          "503": {
-            "$ref": "#/components/responses/ServiceUnavailable"
-          }
-        }
-      },
-      "post": {
-        "operationId": "createQuote",
-        "summary": "Create a quote",
-        "description": "Creates one quote; totals are derived server-side from its line items.",
-        "tags": ["Quotes"],
-        "x-mcp-tool": {
-          "exposed": true,
-          "annotations": {
-            "readOnlyHint": false,
-            "destructiveHint": false,
-            "openWorldHint": false,
-            "idempotentHint": false
-          }
-        },
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateQuoteRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "Quote created.",
-            "headers": {
-              "X-Request-Id": {
-                "$ref": "#/components/headers/RequestId"
-              }
-            },
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/QuoteResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "422": {
-            "$ref": "#/components/responses/UnprocessableEntity"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalServerError"
-          },
-          "503": {
-            "$ref": "#/components/responses/ServiceUnavailable"
-          }
-        }
-      }
-    },
-    "/api/v1/quotes/{quoteId}": {
-      "parameters": [
-        {
-          "$ref": "#/components/parameters/QuoteId"
-        }
-      ],
-      "get": {
-        "operationId": "getQuote",
-        "summary": "Get one quote",
-        "description": "Returns one quote by identifier.",
-        "tags": ["Quotes"],
-        "x-mcp-tool": {
-          "exposed": true,
-          "annotations": {
-            "readOnlyHint": true,
-            "destructiveHint": false,
-            "openWorldHint": false,
-            "idempotentHint": true
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Quote found.",
-            "headers": {
-              "X-Request-Id": {
-                "$ref": "#/components/headers/RequestId"
-              }
-            },
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/QuoteResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalServerError"
-          },
-          "503": {
-            "$ref": "#/components/responses/ServiceUnavailable"
-          }
-        }
-      },
-      "patch": {
-        "operationId": "updateQuote",
-        "summary": "Update a quote",
-        "description": "Updates fields and re-derives totals from the resulting line items.",
-        "tags": ["Quotes"],
-        "x-mcp-tool": {
-          "exposed": true,
-          "annotations": {
-            "readOnlyHint": false,
-            "destructiveHint": false,
-            "openWorldHint": false,
-            "idempotentHint": true
-          }
-        },
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UpdateQuoteRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Quote updated.",
-            "headers": {
-              "X-Request-Id": {
-                "$ref": "#/components/headers/RequestId"
-              }
-            },
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/QuoteResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          },
-          "422": {
-            "$ref": "#/components/responses/UnprocessableEntity"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalServerError"
-          },
-          "503": {
-            "$ref": "#/components/responses/ServiceUnavailable"
-          }
-        }
-      },
-      "delete": {
-        "operationId": "deleteQuote",
-        "summary": "Delete a quote",
-        "description": "Permanently removes one quote.",
-        "tags": ["Quotes"],
-        "x-mcp-tool": {
-          "exposed": true,
-          "annotations": {
-            "readOnlyHint": false,
-            "destructiveHint": true,
-            "openWorldHint": false,
-            "idempotentHint": true
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Quote deleted.",
-            "headers": {
-              "X-Request-Id": {
-                "$ref": "#/components/headers/RequestId"
-              }
-            },
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/QuoteResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalServerError"
-          },
-          "503": {
-            "$ref": "#/components/responses/ServiceUnavailable"
-          }
-        }
-      }
-    },
-    "/api/v1/quote-revisions": {
-      "get": {
-        "operationId": "listQuoteRevisions",
-        "summary": "List quote revision lifecycle snapshots",
+        "summary": "List quote lifecycle snapshots",
         "description": "Returns the authoritative list of quote aggregate/revision snapshots. Requires the Convex persistence provider.",
-        "tags": ["Quote Revisions"],
+        "tags": ["Quotes"],
         "x-mcp-tool": {
           "exposed": false,
           "annotations": {
@@ -2938,7 +2689,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Current quote revision snapshots.",
+            "description": "Current quote snapshots.",
             "headers": { "X-Request-Id": { "$ref": "#/components/headers/RequestId" } },
             "content": {
               "application/json": {
@@ -2953,10 +2704,10 @@
         }
       },
       "post": {
-        "operationId": "createQuoteRevision",
+        "operationId": "createQuote",
         "summary": "Create a quote and its first revision",
         "description": "Creates one quote aggregate and its draft revision 1; totals are derived server-side from the line items. Requires the Convex persistence provider.",
-        "tags": ["Quote Revisions"],
+        "tags": ["Quotes"],
         "x-mcp-tool": {
           "exposed": false,
           "annotations": {
@@ -2991,13 +2742,13 @@
         }
       }
     },
-    "/api/v1/quote-revisions/{quoteId}": {
+    "/api/v1/quotes/{quoteId}": {
       "parameters": [{ "$ref": "#/components/parameters/QuoteId" }],
       "get": {
-        "operationId": "getQuoteRevision",
-        "summary": "Get one quote revision lifecycle snapshot",
+        "operationId": "getQuote",
+        "summary": "Get one quote lifecycle snapshot",
         "description": "Returns the current aggregate and current revision for one quote. Requires the Convex persistence provider.",
-        "tags": ["Quote Revisions"],
+        "tags": ["Quotes"],
         "x-mcp-tool": {
           "exposed": false,
           "annotations": {
@@ -3009,7 +2760,7 @@
         },
         "responses": {
           "200": {
-            "description": "Current quote revision snapshot.",
+            "description": "Current quote snapshot.",
             "headers": { "X-Request-Id": { "$ref": "#/components/headers/RequestId" } },
             "content": {
               "application/json": {
@@ -3024,16 +2775,16 @@
         }
       }
     },
-    "/api/v1/quote-revisions/{quoteId}/revisions/{revision}/draft": {
+    "/api/v1/quotes/{quoteId}/revisions/{revision}": {
       "parameters": [
         { "$ref": "#/components/parameters/QuoteId" },
         { "$ref": "#/components/parameters/QuoteRevisionNumber" }
       ],
-      "post": {
-        "operationId": "updateQuoteRevisionDraft",
+      "patch": {
+        "operationId": "updateQuoteDraft",
         "summary": "Patch a draft revision",
         "description": "Applies a partial patch to a draft revision after checking the expected aggregate and revision versions. Requires the Convex persistence provider.",
-        "tags": ["Quote Revisions"],
+        "tags": ["Quotes"],
         "x-mcp-tool": {
           "exposed": false,
           "annotations": {
@@ -3070,16 +2821,16 @@
         }
       }
     },
-    "/api/v1/quote-revisions/{quoteId}/revisions/{revision}/submit": {
+    "/api/v1/quotes/{quoteId}/revisions/{revision}/review": {
       "parameters": [
         { "$ref": "#/components/parameters/QuoteId" },
         { "$ref": "#/components/parameters/QuoteRevisionNumber" }
       ],
       "post": {
-        "operationId": "submitQuoteRevisionForReview",
+        "operationId": "submitQuoteForReview",
         "summary": "Submit a draft revision for review",
         "description": "Transitions a draft revision to reviewed after checking the expected aggregate and revision versions. Requires the Convex persistence provider.",
-        "tags": ["Quote Revisions"],
+        "tags": ["Quotes"],
         "x-mcp-tool": {
           "exposed": false,
           "annotations": {
@@ -3116,16 +2867,16 @@
         }
       }
     },
-    "/api/v1/quote-revisions/{quoteId}/revisions/{revision}/reopen": {
+    "/api/v1/quotes/{quoteId}/revisions/{revision}/reopen": {
       "parameters": [
         { "$ref": "#/components/parameters/QuoteId" },
         { "$ref": "#/components/parameters/QuoteRevisionNumber" }
       ],
       "post": {
-        "operationId": "reopenQuoteRevisionForEditing",
+        "operationId": "reopenQuoteForEditing",
         "summary": "Reopen a reviewed revision for editing",
         "description": "Transitions a reviewed revision back to draft after checking the expected aggregate and revision versions. Requires the Convex persistence provider.",
-        "tags": ["Quote Revisions"],
+        "tags": ["Quotes"],
         "x-mcp-tool": {
           "exposed": false,
           "annotations": {
@@ -3162,16 +2913,16 @@
         }
       }
     },
-    "/api/v1/quote-revisions/{quoteId}/revisions/{revision}/finalize": {
+    "/api/v1/quotes/{quoteId}/revisions/{revision}/finalize": {
       "parameters": [
         { "$ref": "#/components/parameters/QuoteId" },
         { "$ref": "#/components/parameters/QuoteRevisionNumber" }
       ],
       "post": {
-        "operationId": "finalizeQuoteRevision",
+        "operationId": "finalizeQuote",
         "summary": "Finalize a reviewed revision",
         "description": "Transitions a reviewed revision to finalized and computes its immutable fingerprint, after checking the expected aggregate and revision versions. Finalized revisions cannot be edited further. Requires the Convex persistence provider.",
-        "tags": ["Quote Revisions"],
+        "tags": ["Quotes"],
         "x-mcp-tool": {
           "exposed": false,
           "annotations": {
@@ -3208,16 +2959,16 @@
         }
       }
     },
-    "/api/v1/quote-revisions/{quoteId}/revisions/{revision}/fork": {
+    "/api/v1/quotes/{quoteId}/revisions/{revision}/fork": {
       "parameters": [
         { "$ref": "#/components/parameters/QuoteId" },
         { "$ref": "#/components/parameters/QuoteRevisionNumber" }
       ],
       "post": {
-        "operationId": "forkQuoteRevision",
+        "operationId": "forkQuote",
         "summary": "Fork a new draft revision from a finalized revision",
         "description": "Creates the next numbered draft revision from an exact-fingerprint-matched finalized revision, after checking the expected aggregate and revision versions. Requires the Convex persistence provider.",
-        "tags": ["Quote Revisions"],
+        "tags": ["Quotes"],
         "x-mcp-tool": {
           "exposed": false,
           "annotations": {
@@ -3254,13 +3005,13 @@
         }
       }
     },
-    "/api/v1/quote-revisions/{quoteId}/commercial-outcome": {
+    "/api/v1/quotes/{quoteId}/commercial-outcome": {
       "parameters": [{ "$ref": "#/components/parameters/QuoteId" }],
       "post": {
         "operationId": "recordQuoteCommercialOutcome",
         "summary": "Record a quote's commercial outcome",
         "description": "Records the accepted, declined, or expired outcome against the exact finalized revision, after checking the expected aggregate version. Requires the Convex persistence provider.",
-        "tags": ["Quote Revisions"],
+        "tags": ["Quotes"],
         "x-mcp-tool": {
           "exposed": false,
           "annotations": {
@@ -3293,6 +3044,37 @@
           "409": { "$ref": "#/components/responses/Conflict" },
           "422": { "$ref": "#/components/responses/UnprocessableEntity" },
           "500": { "$ref": "#/components/responses/InternalServerError" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/api/v1/quotes/{quoteId}/deliveries": {
+      "parameters": [{ "$ref": "#/components/parameters/QuoteId" }],
+      "get": {
+        "operationId": "listQuoteDeliveries",
+        "summary": "List a quote's delivery attempts",
+        "description": "Returns delivery attempts for one quote's revisions. Not yet commissioned: this route is registered but always returns 503 until the delivery ledger exists.",
+        "tags": ["Quotes"],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Delivery attempts for this quote.",
+            "headers": { "X-Request-Id": { "$ref": "#/components/headers/RequestId" } },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/QuoteDeliveryListResponse" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
           "503": { "$ref": "#/components/responses/ServiceUnavailable" }
         }
       }
@@ -7124,128 +6906,6 @@
           }
         }
       },
-      "QuoteResponse": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": ["data"],
-        "properties": {
-          "data": {
-            "$ref": "#/components/schemas/Quote"
-          }
-        }
-      },
-      "QuoteListResponse": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": ["data", "count"],
-        "properties": {
-          "data": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/Quote"
-            }
-          },
-          "count": {
-            "type": "integer",
-            "minimum": 0
-          }
-        }
-      },
-      "CreateQuoteRequest": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": ["clientId", "number"],
-        "properties": {
-          "clientId": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 200
-          },
-          "projectId": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 200
-          },
-          "number": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 100
-          },
-          "status": {
-            "type": "string",
-            "enum": ["draft", "sent", "accepted", "declined"]
-          },
-          "lineItems": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/QuoteLineItem"
-            },
-            "maxItems": 200
-          },
-          "taxRate": {
-            "type": "number",
-            "minimum": 0,
-            "maximum": 1
-          },
-          "validUntil": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 100
-          },
-          "notes": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 2000
-          }
-        }
-      },
-      "UpdateQuoteRequest": {
-        "type": "object",
-        "additionalProperties": false,
-        "minProperties": 1,
-        "properties": {
-          "clientId": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 200
-          },
-          "projectId": {
-            "type": ["string", "null"],
-            "minLength": 1,
-            "maxLength": 200
-          },
-          "number": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 100
-          },
-          "status": {
-            "type": "string",
-            "enum": ["draft", "sent", "accepted", "declined"]
-          },
-          "lineItems": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/QuoteLineItem"
-            },
-            "maxItems": 200
-          },
-          "taxRate": {
-            "type": ["number", "null"],
-            "minimum": 0,
-            "maximum": 1
-          },
-          "validUntil": {
-            "type": ["string", "null"],
-            "minLength": 1,
-            "maxLength": 100
-          },
-          "notes": {
-            "type": ["string", "null"],
-            "maxLength": 2000
-          }
-        }
-      },
       "QuoteCommercialStatus": {
         "type": "string",
         "enum": ["open", "accepted", "declined", "expired"]
@@ -7467,6 +7127,60 @@
           "revision": { "type": "integer", "minimum": 1 },
           "expectedAggregateVersion": { "type": "integer", "minimum": 0 },
           "outcome": { "$ref": "#/components/schemas/QuoteHistoricalOutcome" }
+        }
+      },
+      "QuoteDeliveryStatus": {
+        "type": "string",
+        "enum": ["pending", "executing", "succeeded", "failed", "indeterminate", "reconciled"]
+      },
+      "QuoteDeliveryAttempt": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "deliveryAttemptId",
+          "quoteId",
+          "revision",
+          "revisionId",
+          "revisionFingerprint",
+          "recipient",
+          "channel",
+          "status",
+          "provider",
+          "createdAt",
+          "updatedAt"
+        ],
+        "properties": {
+          "deliveryAttemptId": { "$ref": "#/components/schemas/RecordId" },
+          "quoteId": { "$ref": "#/components/schemas/RecordId" },
+          "revision": { "type": "integer", "minimum": 1 },
+          "revisionId": { "$ref": "#/components/schemas/RecordId" },
+          "revisionFingerprint": { "type": "string", "minLength": 1, "maxLength": 200 },
+          "recipient": { "type": "string", "minLength": 3, "maxLength": 320 },
+          "channel": { "type": "string", "enum": ["email"] },
+          "status": { "$ref": "#/components/schemas/QuoteDeliveryStatus" },
+          "reconciledOutcome": { "type": "string", "enum": ["succeeded", "failed"] },
+          "provider": { "type": "string", "minLength": 1, "maxLength": 100 },
+          "providerRequestId": { "type": "string", "minLength": 1, "maxLength": 200 },
+          "providerCorrelationId": { "type": "string", "minLength": 1, "maxLength": 200 },
+          "reconciliationId": { "type": "string", "minLength": 1, "maxLength": 200 },
+          "providerErrorCode": { "type": "string", "minLength": 1, "maxLength": 200 },
+          "createdAt": { "$ref": "#/components/schemas/TimestampMs" },
+          "executionStartedAt": { "$ref": "#/components/schemas/TimestampMs" },
+          "completedAt": { "$ref": "#/components/schemas/TimestampMs" },
+          "reconciledAt": { "$ref": "#/components/schemas/TimestampMs" },
+          "updatedAt": { "$ref": "#/components/schemas/TimestampMs" }
+        }
+      },
+      "QuoteDeliveryListResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["data", "count"],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/QuoteDeliveryAttempt" }
+          },
+          "count": { "type": "integer", "minimum": 0 }
         }
       },
       "DailyBrief": {

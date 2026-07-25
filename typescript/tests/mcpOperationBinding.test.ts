@@ -193,12 +193,6 @@ function mockResponse(method: string, path: string): Response {
       : Response.json({ data: [sampleProject()], count: 1 });
   }
   if (/^\/api\/v1\/projects\/[^/]+$/.test(path)) return Response.json({ data: sampleProject() });
-  if (path === "/api/v1/quotes") {
-    return method === "POST"
-      ? Response.json({ data: sampleQuote() })
-      : Response.json({ data: [sampleQuote()], count: 1 });
-  }
-  if (/^\/api\/v1\/quotes\/[^/]+$/.test(path)) return Response.json({ data: sampleQuote() });
   if (path === "/api/v1/brief") return Response.json({ data: sampleBrief() });
   if (path === "/api/v1/errands") {
     return method === "POST"
@@ -321,11 +315,6 @@ const TOOL_INVOCATIONS: Record<string, Record<string, unknown>> = {
   create_project: { clientId: "client-1", title: "Recorded project" },
   update_project: { projectId: "project-1", status: "done" },
   delete_project: { projectId: "project-1" },
-  list_quotes: {},
-  get_quote: { quoteId: "quote-1" },
-  create_quote: { clientId: "client-1", number: "Q-1001" },
-  update_quote: { quoteId: "quote-1", status: "sent" },
-  delete_quote: { quoteId: "quote-1" },
   get_daily_brief: {},
   list_errands: {},
   get_errand: { errandId: "errand-1" },

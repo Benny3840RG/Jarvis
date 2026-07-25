@@ -20,6 +20,7 @@ import type { QuoteStore } from "../quotes/quote.js";
 import { InMemoryQuoteStore } from "../quotes/inMemoryQuoteStore.js";
 import { JsonQuoteStore } from "../quotes/jsonQuoteStore.js";
 import { createQuoteRepositoryFromEnv } from "../quotes/quoteRepositoryFactory.js";
+import type { QuoteDeliveryRepository } from "../quotes/quoteDeliveryRepository.js";
 import type { QuoteRepository } from "../quotes/quoteRepository.js";
 import type { ErrandStore } from "../errands/errand.js";
 import { InMemoryErrandStore } from "../errands/inMemoryErrandStore.js";
@@ -83,6 +84,7 @@ export type CreateJarvisHttpAppOptions = (
   projectStore?: ProjectStore;
   quoteStore?: QuoteStore;
   quoteRepository?: QuoteRepository | null;
+  quoteDeliveryRepository?: QuoteDeliveryRepository | null;
   errandStore?: ErrandStore;
   buildStore?: BuildStore;
   buildLogStore?: BuildLogStore;
@@ -160,6 +162,10 @@ export async function createJarvisHttpApp(
       : usesEnvironment
         ? createQuoteRepositoryFromEnv()
         : null;
+  // No QuoteDeliveryRepository implementation is commissioned yet (Task 6 of
+  // docs/superpowers/plans/2026-07-24-quote-lifecycle.md); there is no
+  // from-env factory to fall back to, so this stays null outside tests.
+  const quoteDeliveryRepository = options.quoteDeliveryRepository ?? null;
   const errandStore =
     options.errandStore ?? (usesEnvironment ? new JsonErrandStore() : new InMemoryErrandStore());
   const buildStore = selectMemoryStore(options.buildStore, usesEnvironment, providerName, {
@@ -221,6 +227,7 @@ export async function createJarvisHttpApp(
       projectStore,
       quoteStore,
       quoteRepository,
+      quoteDeliveryRepository,
       errandStore,
       buildStore,
       buildLogStore,

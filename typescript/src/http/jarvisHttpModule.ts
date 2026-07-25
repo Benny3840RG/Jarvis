@@ -7,6 +7,7 @@ import type { ToolExecutionService } from "../actions/toolExecution.js";
 import type { ClientStore } from "../clients/client.js";
 import type { ProjectStore } from "../projects/project.js";
 import type { QuoteStore } from "../quotes/quote.js";
+import type { QuoteDeliveryRepository } from "../quotes/quoteDeliveryRepository.js";
 import type { QuoteRepository } from "../quotes/quoteRepository.js";
 import type { ErrandStore } from "../errands/errand.js";
 import type { BuildStore } from "../builds/build.js";
@@ -31,7 +32,6 @@ import { ProblemDetailsFilter } from "./problemDetails.js";
 import { ClientController } from "./clientController.js";
 import { ProjectController } from "./projectController.js";
 import { QuoteController } from "./quoteController.js";
-import { QuoteRevisionController } from "./quoteRevisionController.js";
 import { ReminderController } from "./reminderController.js";
 import { RequestIdInterceptor } from "./requestId.js";
 import { ServiceTokenGuard } from "./serviceTokenGuard.js";
@@ -46,6 +46,7 @@ import {
   HTTP_PROJECT_STORE,
   HTTP_QUOTE_STORE,
   HTTP_QUOTE_REPOSITORY,
+  HTTP_QUOTE_DELIVERY_REPOSITORY,
   HTTP_ERRAND_STORE,
   HTTP_BUILD_STORE,
   HTTP_BUILD_LOG_STORE,
@@ -72,6 +73,7 @@ export type JarvisHttpModuleOptions = {
   projectStore: ProjectStore;
   quoteStore: QuoteStore;
   quoteRepository: QuoteRepository | null;
+  quoteDeliveryRepository: QuoteDeliveryRepository | null;
   errandStore: ErrandStore;
   buildStore: BuildStore;
   buildLogStore: BuildLogStore;
@@ -96,7 +98,6 @@ export class JarvisHttpModule {
         ClientController,
         ProjectController,
         QuoteController,
-        QuoteRevisionController,
         ErrandController,
         BuildController,
         BuildLogController,
@@ -112,6 +113,7 @@ export class JarvisHttpModule {
         { provide: HTTP_PROJECT_STORE, useValue: options.projectStore },
         { provide: HTTP_QUOTE_STORE, useValue: options.quoteStore },
         { provide: HTTP_QUOTE_REPOSITORY, useValue: options.quoteRepository },
+        { provide: HTTP_QUOTE_DELIVERY_REPOSITORY, useValue: options.quoteDeliveryRepository },
         { provide: HTTP_ERRAND_STORE, useValue: options.errandStore },
         { provide: HTTP_BUILD_STORE, useValue: options.buildStore },
         { provide: HTTP_BUILD_LOG_STORE, useValue: options.buildLogStore },
