@@ -2,7 +2,15 @@ import { ConvexHttpClient } from "convex/browser";
 
 import { api } from "../../convex/_generated/api.js";
 import type { ConvexClientLike } from "../persistence/convexPersistence.js";
-import type { QuoteAggregate, QuoteRevision, QuoteSnapshot } from "./quoteLifecycle.js";
+import {
+  QuoteFinalizedImmutableError,
+  QuoteFingerprintMismatchError,
+  QuoteInvalidTransitionError,
+  type QuoteAggregate,
+  type QuoteRevision,
+  type QuoteSnapshot,
+  QuoteVersionConflictError,
+} from "./quoteLifecycle.js";
 import type {
   CreateQuoteInput,
   CreateQuoteRevisionInput,
@@ -20,6 +28,11 @@ export const quoteFunctions = api.quotes;
 type AggregateDoc = QuoteAggregate & { _id: string; _creationTime: number };
 type RevisionDoc = QuoteRevision & { _id: string; _creationTime: number };
 type SnapshotDoc = { aggregate: AggregateDoc; revision: RevisionDoc };
+
+export type ConvexQuoteRepositoryOptions = {
+  client: ConvexClientLike;
+  serviceToken: string;
+};
 
 function aggregateFromDoc(doc: AggregateDoc): QuoteAggregate {
   return {
@@ -98,6 +111,44 @@ function summaryFromDoc(doc: SnapshotDoc): QuoteSummary {
   };
 }
 
+function isConvexClient(
+  value: ConvexQuoteRepositoryOptions | ConvexClientLike | undefined,
+): value is ConvexClientLike {
+  return (
+    value !== undefined && typeof value === "object" && "query" in value && "mutation" in value
+  );
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function restoreQuoteDomainError(error: unknown): never {
+  if (
+    error instanceof QuoteVersionConflictError ||
+    error instanceof QuoteInvalidTransitionError ||
+    error instanceof QuoteFinalizedImmutableError ||
+    error instanceof QuoteFingerprintMismatchError
+  ) {
+    throw error;
+  }
+
+  const message = errorMessage(error);
+  if (message.includes("QuoteVersionConflictError")) {
+    throw new QuoteVersionConflictError(message);
+  }
+  if (message.includes("QuoteInvalidTransitionError")) {
+    throw new QuoteInvalidTransitionError(message);
+  }
+  if (message.includes("QuoteFinalizedImmutableError")) {
+    throw new QuoteFinalizedImmutableError(message);
+  }
+  if (message.includes("QuoteFingerprintMismatchError")) {
+    throw new QuoteFingerprintMismatchError(message);
+  }
+  throw error;
+}
+
 /**
  * Convex-backed {@link QuoteRepository}. Selected when PERSISTENCE_PROVIDER=convex
  * so the quote revision/delivery lifecycle lives in the same durable deployment
@@ -111,7 +162,23 @@ export class ConvexQuoteRepository implements QuoteRepository {
   private readonly client: ConvexClientLike;
   private readonly serviceToken: string;
 
-  constructor(client?: ConvexClientLike, serviceToken = process.env.JARVIS_SERVICE_TOKEN) {
+  constructor(options: ConvexQuoteRepositoryOptions);
+  constructor(client?: ConvexClientLike, serviceToken?: string);
+  constructor(
+    optionsOrClient?: ConvexQuoteRepositoryOptions | ConvexClientLike,
+    legacyServiceToken?: string,
+  ) {
+    let client: ConvexClientLike | undefined;
+    let serviceToken: string | undefined;
+
+    if (isConvexClient(optionsOrClient) || optionsOrClient === undefined) {
+      client = optionsOrClient;
+      serviceToken = legacyServiceToken ?? process.env.JARVIS_SERVICE_TOKEN;
+    } else {
+      client = optionsOrClient.client;
+      serviceToken = optionsOrClient.serviceToken;
+    }
+
     if (!serviceToken) {
       throw new Error(
         "PERSISTENCE_PROVIDER=convex requires JARVIS_SERVICE_TOKEN. The deployment URL is not authentication.",
@@ -134,7 +201,7 @@ export class ConvexQuoteRepository implements QuoteRepository {
   }
 
   async createQuote(input: CreateQuoteInput): Promise<QuoteSnapshot> {
-    const doc = (await this.client.mutation(quoteFunctions.create, {
+    const doc = await this.mutation<SnapshotDoc>(quoteFunctions.create, {
       serviceToken: this.serviceToken,
       clientId: input.clientId,
       ...(input.projectId === undefined ? {} : { projectId: input.projectId }),
@@ -144,85 +211,104 @@ export class ConvexQuoteRepository implements QuoteRepository {
       ...(input.validUntil === undefined ? {} : { validUntil: input.validUntil }),
       ...(input.notes === undefined ? {} : { notes: input.notes }),
       termsIncluded: input.termsIncluded,
-    })) as SnapshotDoc;
+    });
     return snapshotFromDoc(doc);
   }
 
   async getQuote(quoteId: string): Promise<QuoteSnapshot | null> {
-    const doc = (await this.client.query(quoteFunctions.get, {
+    const doc = await this.query<SnapshotDoc | null>(quoteFunctions.get, {
       serviceToken: this.serviceToken,
       quoteId,
-    })) as SnapshotDoc | null;
+    });
     return doc === null ? null : snapshotFromDoc(doc);
   }
 
   async listQuotes(input: ListQuotesInput): Promise<QuoteSummary[]> {
-    const docs = (await this.client.query(quoteFunctions.list, {
+    const docs = await this.query<SnapshotDoc[]>(quoteFunctions.list, {
       serviceToken: this.serviceToken,
       ...(input.clientId === undefined ? {} : { clientId: input.clientId }),
       ...(input.projectId === undefined ? {} : { projectId: input.projectId }),
       ...(input.commercialStatus === undefined ? {} : { commercialStatus: input.commercialStatus }),
       ...(input.limit === undefined ? {} : { limit: input.limit }),
-    })) as SnapshotDoc[];
+    });
     return docs.map(summaryFromDoc);
   }
 
   async updateDraft(input: UpdateQuoteDraftInput): Promise<QuoteSnapshot> {
-    const doc = (await this.client.mutation(quoteFunctions.updateDraft, {
+    const doc = await this.mutation<SnapshotDoc>(quoteFunctions.updateDraft, {
       serviceToken: this.serviceToken,
       quoteId: input.quoteId,
       revision: input.revision,
       expectedAggregateVersion: input.expectedAggregateVersion,
       expectedRevisionVersion: input.expectedRevisionVersion,
       patch: input.patch,
-    })) as SnapshotDoc;
+    });
     return snapshotFromDoc(doc);
   }
 
   async submitForReview(input: QuoteRevisionCommand): Promise<QuoteSnapshot> {
     return snapshotFromDoc(
-      (await this.client.mutation(
-        quoteFunctions.submitForReview,
-        this.revisionCommand(input),
-      )) as SnapshotDoc,
+      await this.mutation<SnapshotDoc>(quoteFunctions.submitForReview, this.revisionCommand(input)),
     );
   }
 
   async reopenForEditing(input: QuoteRevisionCommand): Promise<QuoteSnapshot> {
     return snapshotFromDoc(
-      (await this.client.mutation(
+      await this.mutation<SnapshotDoc>(
         quoteFunctions.reopenForEditing,
         this.revisionCommand(input),
-      )) as SnapshotDoc,
+      ),
     );
   }
 
   async finalizeRevision(input: FinalizeQuoteRevisionInput): Promise<QuoteSnapshot> {
     return snapshotFromDoc(
-      (await this.client.mutation(
+      await this.mutation<SnapshotDoc>(
         quoteFunctions.finalizeRevision,
         this.revisionCommand(input),
-      )) as SnapshotDoc,
+      ),
     );
   }
 
   async createRevisionFromFinalized(input: CreateQuoteRevisionInput): Promise<QuoteSnapshot> {
-    const doc = (await this.client.mutation(quoteFunctions.forkRevision, {
+    const doc = await this.mutation<SnapshotDoc>(quoteFunctions.forkRevision, {
       ...this.revisionCommand(input),
       expectedFingerprint: input.expectedFingerprint,
-    })) as SnapshotDoc;
+    });
     return snapshotFromDoc(doc);
   }
 
   async recordCommercialOutcome(input: RecordQuoteCommercialOutcomeInput): Promise<QuoteSnapshot> {
-    const doc = (await this.client.mutation(quoteFunctions.recordCommercialOutcome, {
+    const doc = await this.mutation<SnapshotDoc>(quoteFunctions.recordCommercialOutcome, {
       serviceToken: this.serviceToken,
       quoteId: input.quoteId,
       revision: input.revision,
       expectedAggregateVersion: input.expectedAggregateVersion,
       outcome: input.outcome,
-    })) as SnapshotDoc;
+    });
     return snapshotFromDoc(doc);
+  }
+
+  private async query<T>(
+    functionReference: Parameters<ConvexClientLike["query"]>[0],
+    args: Record<string, unknown>,
+  ): Promise<T> {
+    try {
+      return (await this.client.query(functionReference, args)) as T;
+    } catch (error: unknown) {
+      restoreQuoteDomainError(error);
+    }
+  }
+
+  private async mutation<T>(
+    functionReference: Parameters<ConvexClientLike["mutation"]>[0],
+    args: Record<string, unknown>,
+  ): Promise<T> {
+    try {
+      return (await this.client.mutation(functionReference, args)) as T;
+    } catch (error: unknown) {
+      restoreQuoteDomainError(error);
+    }
   }
 
   private revisionCommand(input: QuoteRevisionCommand): {
