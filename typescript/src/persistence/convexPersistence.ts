@@ -4,6 +4,7 @@ import { api } from "../../convex/_generated/api.js";
 import { validateReminderDue, type ReminderDue } from "../reminders/due.js";
 import type {
   AssistantState,
+  CreateRequestIdentity,
   PersistenceProvider,
   PersistenceRestoreResult,
   PersistenceSnapshot,
@@ -117,11 +118,21 @@ export class ConvexPersistence implements PersistenceProvider {
     return rows.map(taskFromConvex);
   }
 
-  async addTask(title: string, category: string): Promise<Task> {
+  async addTask(
+    title: string,
+    category: string,
+    identity?: CreateRequestIdentity,
+  ): Promise<Task> {
     const row = await this.client.mutation(taskFunctions.create, {
       serviceToken: this.serviceToken,
       title,
       category,
+      ...(identity === undefined
+        ? {}
+        : {
+            idempotencyKey: identity.idempotencyKey,
+            requestFingerprint: identity.requestFingerprint,
+          }),
     });
     return taskFromConvex(row);
   }
@@ -174,7 +185,11 @@ export class ConvexPersistence implements PersistenceProvider {
     return rows.map(reminderFromConvex);
   }
 
-  async addReminder(title: string, due?: ReminderDue): Promise<Reminder> {
+  async addReminder(
+    title: string,
+    due?: ReminderDue,
+    identity?: CreateRequestIdentity,
+  ): Promise<Reminder> {
     const normalized = due === undefined ? undefined : validateReminderDue(due);
     const row = await this.client.mutation(reminderFunctions.create, {
       serviceToken: this.serviceToken,
@@ -189,6 +204,12 @@ export class ConvexPersistence implements PersistenceProvider {
                   dueAt: normalized.at,
                   dueTimezone: normalized.timezone as string,
                 }),
+          }),
+      ...(identity === undefined
+        ? {}
+        : {
+            idempotencyKey: identity.idempotencyKey,
+            requestFingerprint: identity.requestFingerprint,
           }),
     });
     return reminderFromConvex(row);
