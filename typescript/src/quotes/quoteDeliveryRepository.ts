@@ -86,6 +86,11 @@ export type ReconcileQuoteDeliveryInput = {
   reconciledAt?: number;
 };
 
+export type ListQuoteDeliveriesInput = {
+  quoteId: string;
+  revision?: number;
+};
+
 export interface QuoteDeliveryRepository {
   getBySendScope(input: QuoteSendScope): Promise<QuoteDeliveryAttempt | null>;
   createPending(input: CreateQuoteDeliveryInput): Promise<QuoteDeliveryAttempt>;
@@ -94,4 +99,5 @@ export interface QuoteDeliveryRepository {
   complete(input: CompleteQuoteDeliveryInput): Promise<QuoteDeliveryAttempt>;
   markIndeterminate(input: MarkQuoteDeliveryIndeterminateInput): Promise<QuoteDeliveryAttempt>;
   reconcile(input: ReconcileQuoteDeliveryInput): Promise<QuoteDeliveryAttempt>;
+  listForQuote(input: ListQuoteDeliveriesInput): Promise<QuoteDeliveryAttempt[]>;
 }

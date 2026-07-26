@@ -5,6 +5,8 @@ import { ConvexExternalReconciliationStore } from "../persistence/convexExternal
 import { ConvexNoteStore } from "../persistence/convexNotes.js";
 import { ConvexToolExecutionReceiptStore } from "../persistence/convexToolExecutionReceipts.js";
 import { resolvePersistenceProviderName } from "../persistence/providerSelection.js";
+import type { QuoteDeliveryRepository } from "../quotes/quoteDeliveryRepository.js";
+import { createQuoteDeliveryRepositoryFromEnv } from "../quotes/quoteDeliveryRepositoryFactory.js";
 import {
   createQuoteEmailProviderFromEnv,
   type QuoteEmailProvider,
@@ -24,6 +26,7 @@ export function createToolExecutionDefinitions(
   reminderStore?: ControlledReminderStore,
   quoteRepository?: QuoteRepository,
   quoteEmailProvider?: QuoteEmailProvider,
+  quoteDeliveryRepository?: QuoteDeliveryRepository,
 ): ToolExecutionDefinition[] {
   if ((taskStore === undefined) !== (reminderStore === undefined)) {
     throw new Error("Task and reminder tool stores must be registered together.");
@@ -34,9 +37,17 @@ export function createToolExecutionDefinitions(
     ...(taskStore === undefined || reminderStore === undefined
       ? []
       : createTaskReminderToolDefinitions(taskStore, reminderStore)),
-    ...(quoteRepository === undefined || quoteEmailProvider === undefined
+    ...(quoteRepository === undefined ||
+    quoteEmailProvider === undefined ||
+    quoteDeliveryRepository === undefined
       ? []
-      : [createQuoteSendToolDefinition(quoteRepository, quoteEmailProvider)]),
+      : [
+          createQuoteSendToolDefinition(
+            quoteRepository,
+            quoteEmailProvider,
+            quoteDeliveryRepository,
+          ),
+        ]),
   ];
 }
 
@@ -58,6 +69,7 @@ export function createToolExecutionServiceFromEnv(): ToolExecutionService | null
       new ConvexControlledReminderStore(),
       createQuoteRepositoryFromEnv() ?? undefined,
       createQuoteEmailProviderFromEnv() ?? undefined,
+      createQuoteDeliveryRepositoryFromEnv() ?? undefined,
     ),
     new ConvexToolExecutionReceiptStore(),
     new ConvexExternalReconciliationStore(),

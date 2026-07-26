@@ -7,7 +7,10 @@ import {
   QuoteVersionConflictError,
   type QuoteSnapshot,
 } from "../quotes/quoteLifecycle.js";
-import type { QuoteDeliveryRepository } from "../quotes/quoteDeliveryRepository.js";
+import type {
+  QuoteDeliveryAttempt,
+  QuoteDeliveryRepository,
+} from "../quotes/quoteDeliveryRepository.js";
 import type { QuoteRepository } from "../quotes/quoteRepository.js";
 import { JarvisProblem } from "./problemDetails.js";
 import {
@@ -73,6 +76,70 @@ function operationProblem(error: unknown): JarvisProblem {
 
 function snapshotResponse(snapshot: QuoteSnapshot): { data: QuoteSnapshot } {
   return { data: snapshot };
+}
+
+type QuoteDeliveryAttemptResponse = {
+  deliveryAttemptId: string;
+  quoteId: string;
+  revision: number;
+  revisionId: string;
+  revisionFingerprint: string;
+  recipient: string;
+  channel: "email";
+  status: QuoteDeliveryAttempt["status"];
+  reconciledOutcome?: "succeeded" | "failed";
+  provider: string;
+  providerRequestId?: string;
+  providerCorrelationId?: string;
+  reconciliationId?: string;
+  providerErrorCode?: string;
+  createdAt: number;
+  executionStartedAt?: number;
+  completedAt?: number;
+  reconciledAt?: number;
+  updatedAt: number;
+};
+
+/**
+ * Strips internal correlation fields (ownerId, sendFingerprint, idempotencyKey,
+ * approvalId, actionFingerprint) that exist for exactly-once enforcement but
+ * have no reason to leave the server — matches the OpenAPI QuoteDeliveryAttempt
+ * schema, which does not list them.
+ */
+function deliveryResponse(attempt: QuoteDeliveryAttempt): QuoteDeliveryAttemptResponse {
+  return {
+    deliveryAttemptId: attempt.deliveryAttemptId,
+    quoteId: attempt.quoteId,
+    revision: attempt.revision,
+    revisionId: attempt.revisionId,
+    revisionFingerprint: attempt.revisionFingerprint,
+    recipient: attempt.recipient,
+    channel: attempt.channel,
+    status: attempt.status,
+    ...(attempt.reconciledOutcome === undefined
+      ? {}
+      : { reconciledOutcome: attempt.reconciledOutcome }),
+    provider: attempt.provider,
+    ...(attempt.providerRequestId === undefined
+      ? {}
+      : { providerRequestId: attempt.providerRequestId }),
+    ...(attempt.providerCorrelationId === undefined
+      ? {}
+      : { providerCorrelationId: attempt.providerCorrelationId }),
+    ...(attempt.reconciliationId === undefined
+      ? {}
+      : { reconciliationId: attempt.reconciliationId }),
+    ...(attempt.providerErrorCode === undefined
+      ? {}
+      : { providerErrorCode: attempt.providerErrorCode }),
+    createdAt: attempt.createdAt,
+    ...(attempt.executionStartedAt === undefined
+      ? {}
+      : { executionStartedAt: attempt.executionStartedAt }),
+    ...(attempt.completedAt === undefined ? {} : { completedAt: attempt.completedAt }),
+    ...(attempt.reconciledAt === undefined ? {} : { reconciledAt: attempt.reconciledAt }),
+    updatedAt: attempt.updatedAt,
+  };
 }
 
 @Controller("api/v1/quotes")
@@ -265,11 +332,12 @@ export class QuoteController {
   }
 
   @Get(":quoteId/deliveries")
-  async listDeliveries(@Param("quoteId") _quoteId: string): Promise<never> {
-    // No QuoteDeliveryRepository implementation is commissioned yet (Task 6);
-    // the route exists so callers can rely on it, but it stays unavailable
-    // rather than inventing a delivery ledger ahead of that work.
-    void this.deliveries;
-    throw deliveriesUnavailable();
+  async listDeliveries(
+    @Param("quoteId") quoteId: string,
+  ): Promise<{ data: QuoteDeliveryAttemptResponse[]; count: number }> {
+    if (!this.deliveries) throw deliveriesUnavailable();
+    const attempts = await this.deliveries.listForQuote({ quoteId });
+    const data = attempts.map(deliveryResponse);
+    return { data, count: data.length };
   }
 }
