@@ -6991,6 +6991,7 @@
           "historicalOutcomeRecordedAt": { "$ref": "#/components/schemas/TimestampMs" },
           "reviewedAt": { "$ref": "#/components/schemas/TimestampMs" },
           "finalizedAt": { "$ref": "#/components/schemas/TimestampMs" },
+          "source": { "type": "string", "enum": ["legacy-migration"] },
           "createdAt": { "$ref": "#/components/schemas/TimestampMs" },
           "updatedAt": { "$ref": "#/components/schemas/TimestampMs" }
         }

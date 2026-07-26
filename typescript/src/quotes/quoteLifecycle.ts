@@ -46,6 +46,7 @@ export type QuoteRevision = {
   historicalOutcomeRecordedAt?: number;
   reviewedAt?: number;
   finalizedAt?: number;
+  source?: "legacy-migration";
   createdAt: number;
   updatedAt: number;
 };

@@ -85,6 +85,7 @@ function revisionFromDoc(doc: RevisionDoc): QuoteRevision {
       : { historicalOutcomeRecordedAt: doc.historicalOutcomeRecordedAt }),
     ...(doc.reviewedAt === undefined ? {} : { reviewedAt: doc.reviewedAt }),
     ...(doc.finalizedAt === undefined ? {} : { finalizedAt: doc.finalizedAt }),
+    ...(doc.source === undefined ? {} : { source: doc.source }),
     createdAt: doc.createdAt,
     updatedAt: doc.updatedAt,
   };
