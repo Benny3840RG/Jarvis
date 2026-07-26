@@ -118,11 +118,7 @@ export class ConvexPersistence implements PersistenceProvider {
     return rows.map(taskFromConvex);
   }
 
-  async addTask(
-    title: string,
-    category: string,
-    identity?: CreateRequestIdentity,
-  ): Promise<Task> {
+  async addTask(title: string, category: string, identity?: CreateRequestIdentity): Promise<Task> {
     const row = await this.client.mutation(taskFunctions.create, {
       serviceToken: this.serviceToken,
       title,

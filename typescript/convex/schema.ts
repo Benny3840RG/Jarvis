@@ -62,10 +62,7 @@ export default defineSchema({
   })
     .index("by_owner", ["ownerId"])
     .index("by_owner_and_project", ["ownerId", "projectId"])
-    .index("by_owner_and_direct_create_idempotency_key", [
-      "ownerId",
-      "directCreateIdempotencyKey",
-    ]),
+    .index("by_owner_and_direct_create_idempotency_key", ["ownerId", "directCreateIdempotencyKey"]),
   reminders: defineTable({
     ownerId: v.string(),
     title: v.string(),
@@ -82,10 +79,7 @@ export default defineSchema({
   })
     .index("by_owner", ["ownerId"])
     .index("by_owner_and_project", ["ownerId", "projectId"])
-    .index("by_owner_and_direct_create_idempotency_key", [
-      "ownerId",
-      "directCreateIdempotencyKey",
-    ]),
+    .index("by_owner_and_direct_create_idempotency_key", ["ownerId", "directCreateIdempotencyKey"]),
   internalActionResults: defineTable({
     ownerId: v.string(),
     projectId: v.string(),

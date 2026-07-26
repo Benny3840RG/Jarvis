@@ -162,9 +162,7 @@ export const create = mutation({
       const existing = await ctx.db
         .query("reminders")
         .withIndex("by_owner_and_direct_create_idempotency_key", (q) =>
-          q
-            .eq("ownerId", ownerId)
-            .eq("directCreateIdempotencyKey", identity.idempotencyKey),
+          q.eq("ownerId", ownerId).eq("directCreateIdempotencyKey", identity.idempotencyKey),
         )
         .unique();
       if (existing) {

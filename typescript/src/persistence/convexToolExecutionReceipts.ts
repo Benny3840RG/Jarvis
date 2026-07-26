@@ -43,9 +43,7 @@ function receiptFromConvex(row: ToolExecutionReceiptRow): ToolExecutionReceipt {
     projectId: row.projectId,
     idempotencyKey: row.idempotencyKey,
     actionFingerprint: row.actionFingerprint,
-    ...(row.effectFingerprint === undefined
-      ? {}
-      : { effectFingerprint: row.effectFingerprint }),
+    ...(row.effectFingerprint === undefined ? {} : { effectFingerprint: row.effectFingerprint }),
     tool: row.tool,
     operation: row.operation,
     actor: row.actor ?? "tool",
@@ -54,21 +52,15 @@ function receiptFromConvex(row: ToolExecutionReceiptRow): ToolExecutionReceipt {
     correlationId: row.correlationId ?? requestId,
     source: row.source ?? "legacy-tool-execution-receipt",
     ...(row.provider === undefined ? {} : { provider: row.provider }),
-    ...(row.providerRequestId === undefined
-      ? {}
-      : { providerRequestId: row.providerRequestId }),
+    ...(row.providerRequestId === undefined ? {} : { providerRequestId: row.providerRequestId }),
     ...(row.providerCorrelationId === undefined
       ? {}
       : { providerCorrelationId: row.providerCorrelationId }),
-    ...(row.reconciliationId === undefined
-      ? {}
-      : { reconciliationId: row.reconciliationId }),
+    ...(row.reconciliationId === undefined ? {} : { reconciliationId: row.reconciliationId }),
     status: row.status,
     ...(row.outputDigest === undefined ? {} : { outputDigest: row.outputDigest }),
     ...(row.errorCode === undefined ? {} : { errorCode: row.errorCode }),
-    ...(row.providerErrorCode === undefined
-      ? {}
-      : { providerErrorCode: row.providerErrorCode }),
+    ...(row.providerErrorCode === undefined ? {} : { providerErrorCode: row.providerErrorCode }),
     startedAt: new Date(row.startedAt).toISOString(),
     completedAt: new Date(row.completedAt).toISOString(),
   };

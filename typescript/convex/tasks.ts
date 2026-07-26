@@ -31,7 +31,9 @@ function directCreateIdentity(
   requestFingerprint: string | undefined,
 ): { idempotencyKey?: string; requestFingerprint?: string } {
   if ((idempotencyKey === undefined) !== (requestFingerprint === undefined)) {
-    throw new Error("Task create idempotency key and request fingerprint must be supplied together.");
+    throw new Error(
+      "Task create idempotency key and request fingerprint must be supplied together.",
+    );
   }
   if (idempotencyKey === undefined || requestFingerprint === undefined) return {};
   return {
@@ -114,9 +116,7 @@ export const create = mutation({
       const existing = await ctx.db
         .query("tasks")
         .withIndex("by_owner_and_direct_create_idempotency_key", (q) =>
-          q
-            .eq("ownerId", ownerId)
-            .eq("directCreateIdempotencyKey", identity.idempotencyKey),
+          q.eq("ownerId", ownerId).eq("directCreateIdempotencyKey", identity.idempotencyKey),
         )
         .unique();
       if (existing) {

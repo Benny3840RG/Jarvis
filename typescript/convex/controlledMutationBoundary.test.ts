@@ -76,9 +76,9 @@ describe("controlled record mutation boundary", () => {
   it("rejects direct removal of project-scoped tasks", async () => {
     const { t, id } = await seedControlledTask();
 
-    await expect(
-      t.mutation(api.tasks.remove, { serviceToken: SERVICE_TOKEN, id }),
-    ).rejects.toThrow(/controlled task execution/i);
+    await expect(t.mutation(api.tasks.remove, { serviceToken: SERVICE_TOKEN, id })).rejects.toThrow(
+      /controlled task execution/i,
+    );
   });
 
   it("rejects direct updates to project-scoped reminders", async () => {

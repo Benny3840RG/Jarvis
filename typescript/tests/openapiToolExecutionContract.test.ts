@@ -12,9 +12,8 @@ describe("tool execution OpenAPI contract", () => {
       paths: Record<string, Record<string, { operationId?: string; description?: string }>>;
     };
 
-    const execute = contract.paths[
-      "/api/v1/projects/{projectId}/tool-actions/{actionId}/execute"
-    ]?.post;
+    const execute =
+      contract.paths["/api/v1/projects/{projectId}/tool-actions/{actionId}/execute"]?.post;
 
     assert.equal(execute?.operationId, "executeToolAction");
     assert.ok(contract["x-chatgpt-app"].restOnlyOperationIds.includes("executeToolAction"));
