@@ -10,7 +10,9 @@
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,
-    "resolveJsonModule": true
+    "resolveJsonModule": true,
+    "incremental": true,
+    "tsBuildInfoFile": ".cache/tsbuildinfo.json"
   },
   "include": ["src/**/*", "tests/**/*", "convex/**/*"],
   "exclude": ["node_modules", "dist"]

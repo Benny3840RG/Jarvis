@@ -1,2 +1,5 @@
 
 .env.local
+
+# Build/lint caches — safe to delete anytime, regenerated automatically.
+/.cache/
