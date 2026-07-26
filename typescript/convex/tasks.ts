@@ -14,6 +14,8 @@ const taskValidator = v.object({
   completed: v.boolean(),
   category: v.string(),
   projectId: v.optional(v.string()),
+  directCreateIdempotencyKey: v.optional(v.string()),
+  directCreateFingerprint: v.optional(v.string()),
   updatedAt: v.optional(v.number()),
   revision: v.optional(v.number()),
   createdAt: v.number(),
@@ -22,6 +24,26 @@ const taskValidator = v.object({
 function cleanOptionalText(value: string | undefined, field: string): string | undefined {
   if (value === undefined) return undefined;
   return cleanRequiredText(value, field);
+}
+
+function directCreateIdentity(
+  idempotencyKey: string | undefined,
+  requestFingerprint: string | undefined,
+): { idempotencyKey?: string; requestFingerprint?: string } {
+  if ((idempotencyKey === undefined) !== (requestFingerprint === undefined)) {
+    throw new Error("Task create idempotency key and request fingerprint must be supplied together.");
+  }
+  if (idempotencyKey === undefined || requestFingerprint === undefined) return {};
+  return {
+    idempotencyKey: cleanRequiredText(idempotencyKey, "Task create idempotency key"),
+    requestFingerprint: cleanRequiredText(requestFingerprint, "Task create request fingerprint"),
+  };
+}
+
+function requireDirectlyMutableTask(task: { projectId?: string }): void {
+  if (task.projectId !== undefined) {
+    throw new Error("Project-scoped tasks must be changed through controlled task execution.");
+  }
 }
 
 function controlledTaskResult(
@@ -74,15 +96,48 @@ async function findControlledResult(
 }
 
 export const create = mutation({
-  args: { serviceToken: v.string(), title: v.string(), category: v.string() },
+  args: {
+    serviceToken: v.string(),
+    title: v.string(),
+    category: v.string(),
+    idempotencyKey: v.optional(v.string()),
+    requestFingerprint: v.optional(v.string()),
+  },
   returns: taskValidator,
   handler: async (ctx, args) => {
     const ownerId = requireOwner(args.serviceToken);
+    const title = cleanRequiredText(args.title, "Task title");
+    const category = cleanRequiredText(args.category, "Task category");
+    const identity = directCreateIdentity(args.idempotencyKey, args.requestFingerprint);
+
+    if (identity.idempotencyKey !== undefined && identity.requestFingerprint !== undefined) {
+      const existing = await ctx.db
+        .query("tasks")
+        .withIndex("by_owner_and_direct_create_idempotency_key", (q) =>
+          q
+            .eq("ownerId", ownerId)
+            .eq("directCreateIdempotencyKey", identity.idempotencyKey),
+        )
+        .unique();
+      if (existing) {
+        if (existing.directCreateFingerprint !== identity.requestFingerprint) {
+          throw new Error("Task create idempotency key conflict.");
+        }
+        return existing;
+      }
+    }
+
     const id = await ctx.db.insert("tasks", {
       ownerId,
-      title: args.title,
+      title,
       completed: false,
-      category: args.category,
+      category,
+      ...(identity.idempotencyKey === undefined
+        ? {}
+        : {
+            directCreateIdempotencyKey: identity.idempotencyKey,
+            directCreateFingerprint: identity.requestFingerprint as string,
+          }),
       createdAt: Date.now(),
     });
     const task = await ctx.db.get("tasks", id);
@@ -222,6 +277,7 @@ export const update = mutation({
     if (!id) return null;
     const task = await ctx.db.get("tasks", id);
     if (!task || task.ownerId !== ownerId) return null;
+    requireDirectlyMutableTask(task);
     await ctx.db.patch("tasks", id, {
       ...(title === undefined ? {} : { title }),
       ...(category === undefined ? {} : { category }),
@@ -239,6 +295,7 @@ export const complete = mutation({
     if (!id) return null;
     const task = await ctx.db.get("tasks", id);
     if (!task || task.ownerId !== ownerId) return null;
+    requireDirectlyMutableTask(task);
     await ctx.db.patch("tasks", id, { completed: true });
     return ctx.db.get("tasks", id);
   },
@@ -318,6 +375,7 @@ export const remove = mutation({
     if (!id) return null;
     const task = await ctx.db.get("tasks", id);
     if (!task || task.ownerId !== ownerId) return null;
+    requireDirectlyMutableTask(task);
     await ctx.db.delete("tasks", id);
     return task;
   },
