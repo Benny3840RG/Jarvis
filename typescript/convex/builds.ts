@@ -161,6 +161,25 @@ export const remove = mutation({
     if (!id) return null;
     const build = await ctx.db.get("builds", id);
     if (!build || build.ownerId !== ownerId) return null;
+
+    const [buildLog, upgrade] = await Promise.all([
+      ctx.db
+        .query("buildLogs")
+        .withIndex("by_owner_and_build_id", (q) =>
+          q.eq("ownerId", ownerId).eq("buildId", id),
+        )
+        .first(),
+      ctx.db
+        .query("upgrades")
+        .withIndex("by_owner_and_build_id", (q) =>
+          q.eq("ownerId", ownerId).eq("buildId", id),
+        )
+        .first(),
+    ]);
+    if (buildLog || upgrade) {
+      throw new Error("Build cannot be deleted while build logs or upgrades still reference it.");
+    }
+
     await ctx.db.delete("builds", id);
     return build;
   },
