@@ -103,4 +103,20 @@ describe("build child ownership", () => {
     expect(log.buildId).toBe(ownedId);
     expect(upgrade.buildId).toBe(ownedId);
   });
+
+  it("prevents deleting a build while child records reference it", async () => {
+    const { t, ownedId } = await seedBuilds();
+    await t.mutation(api.buildLogs.create, {
+      serviceToken: SERVICE_TOKEN,
+      buildId: ownedId,
+      title: "Dependent log",
+    });
+
+    await expect(
+      t.mutation(api.builds.remove, {
+        serviceToken: SERVICE_TOKEN,
+        id: ownedId,
+      }),
+    ).rejects.toThrow(/cannot be deleted/i);
+  });
 });
