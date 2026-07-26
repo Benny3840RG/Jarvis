@@ -1,5 +1,6 @@
 .prettierignore
 node_modules/
+.cache/
 convex/_generated/
 .agents/
 .claude/
