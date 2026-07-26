@@ -294,6 +294,36 @@ export const reconcile = mutation({
   },
 });
 
+/**
+ * Development-only teardown of every delivery attempt recorded for a quote.
+ * Restricted to the same single authorised development deployment as
+ * `externalReconciliations.cleanup` and `quotes.cleanup`.
+ */
+export const cleanup = mutation({
+  args: { serviceToken: v.string(), quoteId: v.string(), deployment: v.string() },
+  returns: v.boolean(),
+  handler: async (ctx, args) => {
+    const ownerId = requireOwner(args.serviceToken);
+    if (args.deployment !== "dev:outgoing-ram-798") {
+      throw new Error(
+        "Quote delivery cleanup is restricted to the authorised development deployment.",
+      );
+    }
+    const quoteId = cleanRequiredText(args.quoteId, "Quote ID");
+    const attempts = await ctx.db
+      .query("quoteDeliveryAttempts")
+      .withIndex("by_owner_quote_and_revision", (q) =>
+        q.eq("ownerId", ownerId).eq("quoteId", quoteId),
+      )
+      .collect();
+    if (attempts.length === 0) return false;
+    for (const attempt of attempts) {
+      await ctx.db.delete("quoteDeliveryAttempts", attempt._id);
+    }
+    return true;
+  },
+});
+
 export const listForQuote = query({
   args: {
     serviceToken: v.string(),

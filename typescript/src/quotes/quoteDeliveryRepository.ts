@@ -100,4 +100,6 @@ export interface QuoteDeliveryRepository {
   markIndeterminate(input: MarkQuoteDeliveryIndeterminateInput): Promise<QuoteDeliveryAttempt>;
   reconcile(input: ReconcileQuoteDeliveryInput): Promise<QuoteDeliveryAttempt>;
   listForQuote(input: ListQuoteDeliveriesInput): Promise<QuoteDeliveryAttempt[]>;
+  /** Development-only teardown of every delivery attempt for a quote. See `convex/quoteDeliveries.ts#cleanup`. */
+  cleanup(quoteId: string): Promise<boolean>;
 }

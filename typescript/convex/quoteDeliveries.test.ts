@@ -232,3 +232,41 @@ describe("quote delivery ledger", () => {
     expect(scoped).toBeNull();
   });
 });
+
+describe("quoteDeliveries.cleanup (development-only)", () => {
+  it("removes every delivery attempt for a quote only in the authorised development deployment", async () => {
+    const t = harness();
+    await t.mutation(api.quoteDeliveries.createPending, createInput());
+    await t.mutation(
+      api.quoteDeliveries.createPending,
+      createInput({ recipient: "second@example.com" }),
+    );
+
+    await expect(
+      t.mutation(api.quoteDeliveries.cleanup, {
+        serviceToken: SERVICE_TOKEN,
+        quoteId: "quote-1",
+        deployment: "prod:jarvis",
+      }),
+    ).rejects.toThrow(/authorised development deployment/);
+
+    const removed = await t.mutation(api.quoteDeliveries.cleanup, {
+      serviceToken: SERVICE_TOKEN,
+      quoteId: "quote-1",
+      deployment: "dev:outgoing-ram-798",
+    });
+    expect(removed).toBe(true);
+
+    const rowCount = await t.run(
+      async (ctx) => (await ctx.db.query("quoteDeliveryAttempts").collect()).length,
+    );
+    expect(rowCount).toBe(0);
+
+    const again = await t.mutation(api.quoteDeliveries.cleanup, {
+      serviceToken: SERVICE_TOKEN,
+      quoteId: "quote-1",
+      deployment: "dev:outgoing-ram-798",
+    });
+    expect(again).toBe(false);
+  });
+});

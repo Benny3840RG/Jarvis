@@ -187,4 +187,25 @@ describe("ConvexQuoteRepository against persisted Convex functions", () => {
     expect(accepted.aggregate.commercialRevision).toBe(1);
     expect(accepted.revision.historicalOutcome).toBe("accepted");
   });
+
+  it("threads the constructor's deployment through to cleanup, restricted to the authorised development deployment", async () => {
+    const t = convexTest(schema, modules);
+    const client = clientFor(t);
+    const created = await new ConvexQuoteRepository(client, SERVICE_TOKEN).createQuote(
+      createInput(),
+    );
+    const { quoteId } = created.aggregate;
+
+    await expect(
+      new ConvexQuoteRepository(client, SERVICE_TOKEN, "prod:jarvis").cleanup(quoteId),
+    ).rejects.toThrow(/authorised development deployment/);
+
+    const removed = await new ConvexQuoteRepository(
+      client,
+      SERVICE_TOKEN,
+      "dev:outgoing-ram-798",
+    ).cleanup(quoteId);
+    expect(removed).toBe(true);
+    expect(await new ConvexQuoteRepository(client, SERVICE_TOKEN).getQuote(quoteId)).toBe(null);
+  });
 });

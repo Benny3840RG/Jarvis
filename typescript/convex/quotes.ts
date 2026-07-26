@@ -374,6 +374,37 @@ export const forkRevision = mutation({
   },
 });
 
+/**
+ * Development-only teardown of a quote aggregate and every revision under
+ * it. Restricted to the same single authorised development deployment as
+ * `externalReconciliations.cleanup` — never reachable from any deployment
+ * a real quote could exist in.
+ */
+export const cleanup = mutation({
+  args: { serviceToken: v.string(), quoteId: v.string(), deployment: v.string() },
+  returns: v.boolean(),
+  handler: async (ctx, args) => {
+    const ownerId = requireOwner(args.serviceToken);
+    if (args.deployment !== "dev:outgoing-ram-798") {
+      throw new Error("Quote cleanup is restricted to the authorised development deployment.");
+    }
+    const quoteId = cleanRequiredText(args.quoteId, "Quote ID");
+    const aggregate = await findAggregate(ctx, ownerId, quoteId);
+    if (!aggregate) return false;
+    const revisions = await ctx.db
+      .query("quoteRevisions")
+      .withIndex("by_owner_quote_and_revision", (q) =>
+        q.eq("ownerId", ownerId).eq("quoteId", quoteId),
+      )
+      .collect();
+    for (const revision of revisions) {
+      await ctx.db.delete("quoteRevisions", revision._id);
+    }
+    await ctx.db.delete("quotes", aggregate._id);
+    return true;
+  },
+});
+
 export const recordCommercialOutcome = mutation({
   args: {
     serviceToken: v.string(),

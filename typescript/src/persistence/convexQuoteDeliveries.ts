@@ -22,6 +22,7 @@ type AttemptDoc = QuoteDeliveryAttempt & { _id: string; _creationTime: number };
 export type ConvexQuoteDeliveryRepositoryOptions = {
   client: ConvexClientLike;
   serviceToken: string;
+  deployment?: string;
 };
 
 function attemptFromDoc(doc: AttemptDoc): QuoteDeliveryAttempt {
@@ -74,22 +75,27 @@ function isConvexClient(
 export class ConvexQuoteDeliveryRepository implements QuoteDeliveryRepository {
   private readonly client: ConvexClientLike;
   private readonly serviceToken: string;
+  private readonly deployment: string;
 
   constructor(options: ConvexQuoteDeliveryRepositoryOptions);
-  constructor(client?: ConvexClientLike, serviceToken?: string);
+  constructor(client?: ConvexClientLike, serviceToken?: string, deployment?: string);
   constructor(
     optionsOrClient?: ConvexQuoteDeliveryRepositoryOptions | ConvexClientLike,
     legacyServiceToken?: string,
+    legacyDeployment?: string,
   ) {
     let client: ConvexClientLike | undefined;
     let serviceToken: string | undefined;
+    let deployment: string | undefined;
 
     if (isConvexClient(optionsOrClient) || optionsOrClient === undefined) {
       client = optionsOrClient;
       serviceToken = legacyServiceToken ?? process.env.JARVIS_SERVICE_TOKEN;
+      deployment = legacyDeployment ?? process.env.CONVEX_DEPLOYMENT;
     } else {
       client = optionsOrClient.client;
       serviceToken = optionsOrClient.serviceToken;
+      deployment = optionsOrClient.deployment ?? process.env.CONVEX_DEPLOYMENT;
     }
 
     if (!serviceToken) {
@@ -98,6 +104,7 @@ export class ConvexQuoteDeliveryRepository implements QuoteDeliveryRepository {
       );
     }
     this.serviceToken = serviceToken;
+    this.deployment = deployment ?? "";
 
     if (client) {
       this.client = client;
@@ -216,6 +223,14 @@ export class ConvexQuoteDeliveryRepository implements QuoteDeliveryRepository {
       ...(input.revision === undefined ? {} : { revision: input.revision }),
     });
     return docs.map(attemptFromDoc);
+  }
+
+  async cleanup(quoteId: string): Promise<boolean> {
+    return this.mutation<boolean>(quoteDeliveryFunctions.cleanup, {
+      serviceToken: this.serviceToken,
+      quoteId,
+      deployment: this.deployment,
+    });
   }
 
   private async query<T>(
