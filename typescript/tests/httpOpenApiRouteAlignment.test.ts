@@ -74,10 +74,7 @@ describe("HTTP and OpenAPI route alignment", () => {
       const contract = JSON.parse(
         await fs.readFile(new URL("../openapi/jarvis.openapi.json", import.meta.url), "utf8"),
       ) as {
-        paths: Record<
-          string,
-          Record<string, { operationId?: string; "x-mcp-tool"?: unknown }>
-        >;
+        paths: Record<string, Record<string, { operationId?: string; "x-mcp-tool"?: unknown }>>;
       };
       const methods = new Set(["get", "post", "put", "patch", "delete"]);
       const documentedRoutes = new Set<string>();
