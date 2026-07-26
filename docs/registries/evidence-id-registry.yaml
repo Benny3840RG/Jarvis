@@ -28,8 +28,8 @@ evidence:
 
   - id: EVD-AM-012-001
     path: docs/evidence/quote-lifecycle-commissioning.md
-    description: Planned evidence path; not yet commissioned. Will record runtime CI, development sync, and self-cleaning quote-finalize lifecycle smoke evidence for AM-012 once commissioning is approved.
+    description: Infrastructure commissioning evidence only (development commissioning run 30196857042); does not activate AM-012. Records runtime CI, development sync, and self-cleaning quote-finalize lifecycle smoke evidence — AM-012 stays lifecycle_status planned pending a separate activation tranche.
 
   - id: EVD-AM-013-001
     path: docs/evidence/quote-lifecycle-commissioning.md
-    description: Planned evidence path; not yet commissioned. Will record runtime CI, development sync, and provider-neutral delivery/reconciliation smoke evidence for AM-013 once commissioning is approved.
+    description: Infrastructure commissioning evidence only (development commissioning run 30196857042); does not activate AM-013. Records runtime CI, development sync, and provider-neutral delivery/reconciliation smoke evidence — AM-013 stays lifecycle_status planned pending a separate provider-activation tranche.
