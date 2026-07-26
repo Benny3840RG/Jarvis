@@ -25,3 +25,11 @@ evidence:
   - id: EVD-RECONCILIATION-001
     path: docs/evidence/external-reconciliation-commissioning.md
     description: Runtime CI, development commissioning, and self-cleaning regression evidence for the external-action reconciliation subsystem (issue #154). Infrastructure evidence only; does not activate any action family.
+
+  - id: EVD-AM-012-001
+    path: docs/evidence/quote-lifecycle-commissioning.md
+    description: Planned evidence path; not yet commissioned. Will record runtime CI, development sync, and self-cleaning quote-finalize lifecycle smoke evidence for AM-012 once commissioning is approved.
+
+  - id: EVD-AM-013-001
+    path: docs/evidence/quote-lifecycle-commissioning.md
+    description: Planned evidence path; not yet commissioned. Will record runtime CI, development sync, and provider-neutral delivery/reconciliation smoke evidence for AM-013 once commissioning is approved.

@@ -503,8 +503,13 @@ action_families:
       requirements:
         primary: [R-034, R-073]
         supporting: [R-035, R-036, R-037, R-038, R-074, R-075, R-076]
-      test_ids: []
-      evidence_ids: []
+      test_ids:
+        - TEST-AM-012-DOMAIN-001
+        - TEST-AM-012-PERSIST-001
+        - TEST-AM-012-TOOL-001
+        - TEST-AM-012-SMOKE-001
+      evidence_ids:
+        - EVD-AM-012-001
     parameters:
       - name: quote_id
         type: string
@@ -512,20 +517,12 @@ action_families:
       - name: quote_revision
         type: integer
         required: true
-      - name: total
-        type: number
-        required: true
-      - name: currency
-        type: string
-        required: true
-        default: AUD
-      - name: validity_days
+      - name: expected_aggregate_version
         type: integer
-        required: false
-      - name: include_terms
-        type: boolean
-        required: false
-        default: true
+        required: true
+      - name: expected_revision_version
+        type: integer
+        required: true
 
   - id: AM-013
     name: Send quote
@@ -583,8 +580,13 @@ action_families:
       requirements:
         primary: [R-044, R-055, R-095, R-141]
         supporting: [R-045, R-046, R-047, R-048, R-049, R-050, R-051, R-052, R-053, R-054, R-082, R-083, R-084, R-085, R-086, R-087, R-088, R-089, R-090, R-096, R-097, R-098, R-142, R-143]
-      test_ids: []
-      evidence_ids: []
+      test_ids:
+        - TEST-AM-013-DELIVERY-001
+        - TEST-AM-013-RECONCILIATION-001
+        - TEST-AM-013-APPROVAL-001
+        - TEST-AM-013-SMOKE-001
+      evidence_ids:
+        - EVD-AM-013-001
     parameters:
       - name: quote_id
         type: string
@@ -599,6 +601,9 @@ action_families:
         type: enum
         required: true
         values: [email]
+      - name: expected_revision_fingerprint
+        type: string
+        required: true
 
 workflows:
   - id: WF-QUOTE-001
