@@ -16,6 +16,8 @@ const reminderValidator = v.object({
   dueAt: v.optional(v.number()),
   dueTimezone: v.optional(v.string()),
   projectId: v.optional(v.string()),
+  directCreateIdempotencyKey: v.optional(v.string()),
+  directCreateFingerprint: v.optional(v.string()),
   updatedAt: v.optional(v.number()),
   revision: v.optional(v.number()),
   createdAt: v.number(),
@@ -26,6 +28,33 @@ type DueFields = { dueRaw?: string; dueAt?: number; dueTimezone?: string };
 function cleanOptionalText(value: string | undefined, field: string): string | undefined {
   if (value === undefined) return undefined;
   return cleanRequiredText(value, field);
+}
+
+function directCreateIdentity(
+  idempotencyKey: string | undefined,
+  requestFingerprint: string | undefined,
+): { idempotencyKey?: string; requestFingerprint?: string } {
+  if ((idempotencyKey === undefined) !== (requestFingerprint === undefined)) {
+    throw new Error(
+      "Reminder create idempotency key and request fingerprint must be supplied together.",
+    );
+  }
+  if (idempotencyKey === undefined || requestFingerprint === undefined) return {};
+  return {
+    idempotencyKey: cleanRequiredText(idempotencyKey, "Reminder create idempotency key"),
+    requestFingerprint: cleanRequiredText(
+      requestFingerprint,
+      "Reminder create request fingerprint",
+    ),
+  };
+}
+
+function requireDirectlyMutableReminder(reminder: { projectId?: string }): void {
+  if (reminder.projectId !== undefined) {
+    throw new Error(
+      "Project-scoped reminders must be changed through controlled reminder execution.",
+    );
+  }
 }
 
 function validatedDue(args: DueFields): DueFields {
@@ -119,15 +148,43 @@ export const create = mutation({
     dueRaw: v.optional(v.string()),
     dueAt: v.optional(v.number()),
     dueTimezone: v.optional(v.string()),
+    idempotencyKey: v.optional(v.string()),
+    requestFingerprint: v.optional(v.string()),
   },
   returns: reminderValidator,
   handler: async (ctx, args) => {
     const ownerId = requireOwner(args.serviceToken);
+    const title = cleanRequiredText(args.title, "Reminder title");
     const due = validatedDue(args);
+    const identity = directCreateIdentity(args.idempotencyKey, args.requestFingerprint);
+
+    if (identity.idempotencyKey !== undefined && identity.requestFingerprint !== undefined) {
+      const existing = await ctx.db
+        .query("reminders")
+        .withIndex("by_owner_and_direct_create_idempotency_key", (q) =>
+          q
+            .eq("ownerId", ownerId)
+            .eq("directCreateIdempotencyKey", identity.idempotencyKey),
+        )
+        .unique();
+      if (existing) {
+        if (existing.directCreateFingerprint !== identity.requestFingerprint) {
+          throw new Error("Reminder create idempotency key conflict.");
+        }
+        return existing;
+      }
+    }
+
     const id = await ctx.db.insert("reminders", {
       ownerId,
-      title: args.title,
+      title,
       ...due,
+      ...(identity.idempotencyKey === undefined
+        ? {}
+        : {
+            directCreateIdempotencyKey: identity.idempotencyKey,
+            directCreateFingerprint: identity.requestFingerprint as string,
+          }),
       createdAt: Date.now(),
     });
     const reminder = await ctx.db.get("reminders", id);
@@ -282,15 +339,19 @@ export const update = mutation({
     if (!id) return null;
     const reminder = await ctx.db.get("reminders", id);
     if (!reminder || reminder.ownerId !== ownerId) return null;
+    requireDirectlyMutableReminder(reminder);
 
     const due = clearDue ? {} : (suppliedDue ?? existingDue(reminder));
     await ctx.db.replace("reminders", id, {
       ownerId,
       title: title ?? reminder.title,
       ...due,
-      ...(reminder.projectId === undefined ? {} : { projectId: reminder.projectId }),
-      ...(reminder.updatedAt === undefined ? {} : { updatedAt: reminder.updatedAt }),
-      ...(reminder.revision === undefined ? {} : { revision: reminder.revision }),
+      ...(reminder.directCreateIdempotencyKey === undefined
+        ? {}
+        : { directCreateIdempotencyKey: reminder.directCreateIdempotencyKey }),
+      ...(reminder.directCreateFingerprint === undefined
+        ? {}
+        : { directCreateFingerprint: reminder.directCreateFingerprint }),
       createdAt: reminder.createdAt,
     });
     return ctx.db.get("reminders", id);
@@ -371,6 +432,7 @@ export const remove = mutation({
     if (!id) return null;
     const reminder = await ctx.db.get("reminders", id);
     if (!reminder || reminder.ownerId !== ownerId) return null;
+    requireDirectlyMutableReminder(reminder);
     await ctx.db.delete("reminders", id);
     return reminder;
   },
