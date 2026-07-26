@@ -54,12 +54,18 @@ export default defineSchema({
     completed: v.boolean(),
     category: v.string(),
     projectId: v.optional(v.string()),
+    directCreateIdempotencyKey: v.optional(v.string()),
+    directCreateFingerprint: v.optional(v.string()),
     updatedAt: v.optional(v.number()),
     revision: v.optional(v.number()),
     createdAt: v.number(),
   })
     .index("by_owner", ["ownerId"])
-    .index("by_owner_and_project", ["ownerId", "projectId"]),
+    .index("by_owner_and_project", ["ownerId", "projectId"])
+    .index("by_owner_and_direct_create_idempotency_key", [
+      "ownerId",
+      "directCreateIdempotencyKey",
+    ]),
   reminders: defineTable({
     ownerId: v.string(),
     title: v.string(),
@@ -68,12 +74,18 @@ export default defineSchema({
     dueAt: v.optional(v.number()),
     dueTimezone: v.optional(v.string()),
     projectId: v.optional(v.string()),
+    directCreateIdempotencyKey: v.optional(v.string()),
+    directCreateFingerprint: v.optional(v.string()),
     updatedAt: v.optional(v.number()),
     revision: v.optional(v.number()),
     createdAt: v.number(),
   })
     .index("by_owner", ["ownerId"])
-    .index("by_owner_and_project", ["ownerId", "projectId"]),
+    .index("by_owner_and_project", ["ownerId", "projectId"])
+    .index("by_owner_and_direct_create_idempotency_key", [
+      "ownerId",
+      "directCreateIdempotencyKey",
+    ]),
   internalActionResults: defineTable({
     ownerId: v.string(),
     projectId: v.string(),
@@ -411,7 +423,9 @@ export default defineSchema({
     body: v.optional(v.string()),
     occurredAt: v.optional(v.number()),
     createdAt: v.number(),
-  }).index("by_owner", ["ownerId"]),
+  })
+    .index("by_owner", ["ownerId"])
+    .index("by_owner_and_build_id", ["ownerId", "buildId"]),
   upgrades: defineTable({
     ownerId: v.string(),
     buildId: v.string(),
@@ -424,7 +438,9 @@ export default defineSchema({
     version: v.optional(v.string()),
     occurredAt: v.optional(v.number()),
     createdAt: v.number(),
-  }).index("by_owner", ["ownerId"]),
+  })
+    .index("by_owner", ["ownerId"])
+    .index("by_owner_and_build_id", ["ownerId", "buildId"]),
   assets: defineTable({
     ownerId: v.string(),
     name: v.string(),
