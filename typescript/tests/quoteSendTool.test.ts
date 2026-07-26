@@ -137,6 +137,9 @@ function quoteRepositoryStub(current: QuoteSnapshot | null): QuoteRepository {
     async recordCommercialOutcome(): Promise<QuoteSnapshot> {
       throw new Error("recordCommercialOutcome is not used in this test.");
     },
+    async cleanup(): Promise<void> {
+      throw new Error("cleanup is not used in this test.");
+    },
   };
 }
 
@@ -307,6 +310,25 @@ class InMemoryQuoteDeliveryRepository implements QuoteDeliveryRepository {
         attempt.quoteId === input.quoteId &&
         (input.revision === undefined || attempt.revision === input.revision),
     );
+  }
+
+  async cleanup(quoteId: string, revision?: number): Promise<void> {
+    for (const [key, attempt] of this.bySendScope.entries()) {
+      if (
+        attempt.quoteId === quoteId &&
+        (revision === undefined || attempt.revision === revision)
+      ) {
+        this.bySendScope.delete(key);
+      }
+    }
+    for (const [id, attempt] of this.byId.entries()) {
+      if (
+        attempt.quoteId === quoteId &&
+        (revision === undefined || attempt.revision === revision)
+      ) {
+        this.byId.delete(id);
+      }
+    }
   }
 }
 

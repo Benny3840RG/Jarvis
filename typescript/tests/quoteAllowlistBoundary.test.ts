@@ -71,6 +71,9 @@ function unusedQuoteRepository(): QuoteRepository {
     async recordCommercialOutcome(): Promise<QuoteSnapshot> {
       throw new Error("not used in this test");
     },
+    async cleanup(): Promise<void> {
+      throw new Error("not used in this test");
+    },
   };
 }
 
@@ -111,6 +114,9 @@ function unusedDeliveryRepository(): QuoteDeliveryRepository {
       throw new Error("not used in this test");
     },
     async listForQuote(_input: ListQuoteDeliveriesInput): Promise<QuoteDeliveryAttempt[]> {
+      throw new Error("not used in this test");
+    },
+    async cleanup(): Promise<void> {
       throw new Error("not used in this test");
     },
   };

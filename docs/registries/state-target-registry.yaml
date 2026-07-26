@@ -41,5 +41,5 @@ state_targets:
   - id: STORE-QUOTES
     lifecycle_status: planned
     implemented: true
-    note: Real QuoteStore (src/quotes/quote.ts) exists but only supports draft|sent|accepted|declined — no finalized/reviewed states yet, so the finalize/send transitions AM-012/AM-013 need remain unimplemented.
+    note: Convex-backed QuoteRepository (src/quotes/convexQuoteRepository.ts) with aggregate, numbered revisions, controlled finalisation, and provider-neutral delivery ledger. AM-012 and AM-013 remain planned; TOOL-QUOTE-FINALIZE and TOOL-QUOTE-SEND are not in the live allowlist until a deliberate commissioning PR.
     bound_by: [AM-012, AM-013]

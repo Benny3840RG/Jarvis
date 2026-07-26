@@ -100,4 +100,6 @@ export interface QuoteDeliveryRepository {
   markIndeterminate(input: MarkQuoteDeliveryIndeterminateInput): Promise<QuoteDeliveryAttempt>;
   reconcile(input: ReconcileQuoteDeliveryInput): Promise<QuoteDeliveryAttempt>;
   listForQuote(input: ListQuoteDeliveriesInput): Promise<QuoteDeliveryAttempt[]>;
+  /** Development-only cleanup: removes delivery attempts for a quote (optionally filtered by revision). */
+  cleanup(quoteId: string, revision?: number): Promise<void>;
 }

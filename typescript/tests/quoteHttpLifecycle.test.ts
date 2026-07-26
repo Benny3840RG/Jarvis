@@ -143,6 +143,9 @@ function successfulRepository(overrides: Partial<QuoteRepository> = {}): QuoteRe
     async recordCommercialOutcome() {
       return snapshot({ commercialStatus: "accepted" });
     },
+    async cleanup() {
+      // no-op for test stub
+    },
     ...overrides,
   };
 }
@@ -442,6 +445,9 @@ describe("controlled quote HTTP lifecycle", () => {
       },
       async listForQuote() {
         return [attempt];
+      },
+      async cleanup() {
+        // no-op for test stub
       },
     };
     const app = await makeApp(successfulRepository(), deliveries);

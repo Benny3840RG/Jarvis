@@ -27,6 +27,7 @@ import type * as projectRecords from "../projectRecords.js";
 import type * as projects from "../projects.js";
 import type * as quoteDeliveryValidators from "../quoteDeliveryValidators.js";
 import type * as quoteDeliveries from "../quoteDeliveries.js";
+import type * as quoteMigration from "../quoteMigration.js";
 import type * as quoteValidators from "../quoteValidators.js";
 import type * as quotes from "../quotes.js";
 import type * as reasoningJournal from "../reasoningJournal.js";
@@ -67,6 +68,7 @@ declare const fullApi: ApiFromModules<{
   projects: typeof projects;
   quoteDeliveryValidators: typeof quoteDeliveryValidators;
   quoteDeliveries: typeof quoteDeliveries;
+  quoteMigration: typeof quoteMigration;
   quoteValidators: typeof quoteValidators;
   quotes: typeof quotes;
   reasoningJournal: typeof reasoningJournal;

@@ -289,6 +289,13 @@ export class ConvexQuoteRepository implements QuoteRepository {
     return snapshotFromDoc(doc);
   }
 
+  async cleanup(quoteId: string): Promise<void> {
+    await this.mutation<null>(api.quoteMigration.cleanupImportedQuote, {
+      serviceToken: this.serviceToken,
+      quoteId,
+    });
+  }
+
   private async query<T>(
     functionReference: Parameters<ConvexClientLike["query"]>[0],
     args: Record<string, unknown>,

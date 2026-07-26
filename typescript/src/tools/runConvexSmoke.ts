@@ -7,13 +7,16 @@ import { ConvexControlledReminderStore } from "../persistence/convexControlledRe
 import { ConvexControlledTaskStore } from "../persistence/convexControlledTasks.js";
 import { ConvexExternalReconciliationStore } from "../persistence/convexExternalReconciliations.js";
 import { ConvexNoteStore } from "../persistence/convexNotes.js";
+import { ConvexQuoteDeliveryRepository } from "../persistence/convexQuoteDeliveries.js";
 import { ConvexPersistence } from "../persistence/persistence.js";
 import { ConvexPreferenceStore } from "../preferences/convexPreferenceStore.js";
 import { ConvexUpgradeStore } from "../upgrades/convexUpgradeStore.js";
+import { ConvexQuoteRepository } from "../quotes/convexQuoteRepository.js";
 import { redactSecret, runConvexSmoke } from "./convexSmoke.js";
 import { runExternalReconciliationSmoke } from "./externalReconciliationSmoke.js";
 import { runMemoryStoresSmoke } from "./memoryStoresSmoke.js";
 import { runNotesSmoke } from "./notesSmoke.js";
+import { runQuoteLifecycleSmoke } from "./quoteLifecycleSmoke.js";
 import { runTaskReminderActionsSmoke } from "./taskReminderActionsSmoke.js";
 
 function loadLocalEnvironment(): void {
@@ -45,6 +48,11 @@ async function main(): Promise<void> {
     deployment,
   );
   await runExternalReconciliationSmoke(() => new ConvexExternalReconciliationStore(), deployment);
+  await runQuoteLifecycleSmoke(
+    () => new ConvexQuoteRepository(),
+    () => new ConvexQuoteDeliveryRepository(),
+    deployment,
+  );
 }
 
 main().catch((error: unknown) => {

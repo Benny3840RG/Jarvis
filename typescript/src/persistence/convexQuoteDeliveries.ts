@@ -218,6 +218,14 @@ export class ConvexQuoteDeliveryRepository implements QuoteDeliveryRepository {
     return docs.map(attemptFromDoc);
   }
 
+  async cleanup(quoteId: string, revision?: number): Promise<void> {
+    await this.mutation<null>(quoteDeliveryFunctions.cleanupByQuoteId, {
+      serviceToken: this.serviceToken,
+      quoteId,
+      ...(revision === undefined ? {} : { revision }),
+    });
+  }
+
   private async query<T>(
     functionReference: Parameters<ConvexClientLike["query"]>[0],
     args: Record<string, unknown>,

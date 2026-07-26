@@ -83,4 +83,6 @@ export interface QuoteRepository {
   finalizeRevision(input: FinalizeQuoteRevisionInput): Promise<QuoteSnapshot>;
   createRevisionFromFinalized(input: CreateQuoteRevisionInput): Promise<QuoteSnapshot>;
   recordCommercialOutcome(input: RecordQuoteCommercialOutcomeInput): Promise<QuoteSnapshot>;
+  /** Development-only cleanup: removes the aggregate and all its revisions. */
+  cleanup(quoteId: string): Promise<void>;
 }
