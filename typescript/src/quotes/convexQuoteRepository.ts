@@ -32,6 +32,7 @@ type SnapshotDoc = { aggregate: AggregateDoc; revision: RevisionDoc };
 export type ConvexQuoteRepositoryOptions = {
   client: ConvexClientLike;
   serviceToken: string;
+  deployment?: string;
 };
 
 function aggregateFromDoc(doc: AggregateDoc): QuoteAggregate {
@@ -162,22 +163,27 @@ function restoreQuoteDomainError(error: unknown): never {
 export class ConvexQuoteRepository implements QuoteRepository {
   private readonly client: ConvexClientLike;
   private readonly serviceToken: string;
+  private readonly deployment: string;
 
   constructor(options: ConvexQuoteRepositoryOptions);
-  constructor(client?: ConvexClientLike, serviceToken?: string);
+  constructor(client?: ConvexClientLike, serviceToken?: string, deployment?: string);
   constructor(
     optionsOrClient?: ConvexQuoteRepositoryOptions | ConvexClientLike,
     legacyServiceToken?: string,
+    legacyDeployment?: string,
   ) {
     let client: ConvexClientLike | undefined;
     let serviceToken: string | undefined;
+    let deployment: string | undefined;
 
     if (isConvexClient(optionsOrClient) || optionsOrClient === undefined) {
       client = optionsOrClient;
       serviceToken = legacyServiceToken ?? process.env.JARVIS_SERVICE_TOKEN;
+      deployment = legacyDeployment ?? process.env.CONVEX_DEPLOYMENT;
     } else {
       client = optionsOrClient.client;
       serviceToken = optionsOrClient.serviceToken;
+      deployment = optionsOrClient.deployment ?? process.env.CONVEX_DEPLOYMENT;
     }
 
     if (!serviceToken) {
@@ -186,6 +192,7 @@ export class ConvexQuoteRepository implements QuoteRepository {
       );
     }
     this.serviceToken = serviceToken;
+    this.deployment = deployment ?? "";
 
     if (client) {
       this.client = client;
@@ -288,6 +295,14 @@ export class ConvexQuoteRepository implements QuoteRepository {
       outcome: input.outcome,
     });
     return snapshotFromDoc(doc);
+  }
+
+  async cleanup(quoteId: string): Promise<boolean> {
+    return this.mutation<boolean>(quoteFunctions.cleanup, {
+      serviceToken: this.serviceToken,
+      quoteId,
+      deployment: this.deployment,
+    });
   }
 
   private async query<T>(

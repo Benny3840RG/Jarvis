@@ -102,6 +102,9 @@ function quoteRepositoryStub(finalize: FinalizeBehavior): QuoteRepository {
     async recordCommercialOutcome(): Promise<QuoteSnapshot> {
       throw new Error("recordCommercialOutcome is not used in this test.");
     },
+    async cleanup(): Promise<boolean> {
+      throw new Error("cleanup is not used in this test.");
+    },
   };
 }
 

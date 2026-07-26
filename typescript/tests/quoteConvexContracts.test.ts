@@ -21,14 +21,24 @@ describe("quote Convex contracts", () => {
     }
   });
 
-  it("uses bounded indexed reads without table scans", () => {
-    assert.equal(quotesSource.includes(".collect("), false);
+  it("uses bounded indexed reads without table scans on every caller-facing mutation", () => {
+    const cleanupStart = quotesSource.indexOf("export const cleanup = mutation");
+    assert.notEqual(cleanupStart, -1, "expected an exported cleanup mutation");
+    const callerFacingSource = quotesSource.slice(0, cleanupStart);
+    const cleanupSource = quotesSource.slice(cleanupStart);
+
+    assert.equal(callerFacingSource.includes(".collect("), false);
     assert.equal(quotesSource.includes(".filter("), false);
-    assert.ok(quotesSource.includes('withIndex("by_owner_and_quote_id"'));
-    assert.ok(quotesSource.includes('withIndex("by_owner_and_number"'));
-    assert.ok(quotesSource.includes('withIndex("by_owner_quote_and_revision"'));
-    assert.ok(quotesSource.includes(".unique()"));
-    assert.ok(quotesSource.includes(".take("));
+    assert.ok(callerFacingSource.includes('withIndex("by_owner_and_quote_id"'));
+    assert.ok(callerFacingSource.includes('withIndex("by_owner_and_number"'));
+    assert.ok(callerFacingSource.includes('withIndex("by_owner_quote_and_revision"'));
+    assert.ok(callerFacingSource.includes(".unique()"));
+    assert.ok(callerFacingSource.includes(".take("));
+
+    // `cleanup` is dev-only (see below) and its `.collect()` stays fully
+    // bounded by the owner+quote index — never an unscoped table scan.
+    assert.ok(cleanupSource.includes(".collect("));
+    assert.ok(cleanupSource.includes('withIndex("by_owner_quote_and_revision"'));
   });
 
   it("exposes controlled authenticated functions only", () => {
@@ -42,6 +52,7 @@ describe("quote Convex contracts", () => {
       "finalizeRevision",
       "forkRevision",
       "recordCommercialOutcome",
+      "cleanup",
     ];
     for (const functionName of functionNames) {
       assert.ok(quotesSource.includes(`export const ${functionName} =`), `missing ${functionName}`);
@@ -68,10 +79,20 @@ describe("quote Convex contracts", () => {
     assert.ok(quotesSource.includes('ctx.db.replace("quotes"'));
   });
 
-  it("does not expose caller-authorised destructive cleanup", () => {
+  it("gates destructive cleanup behind the authorised development deployment, never caller-supplied text alone", () => {
+    // The old design this guarded against (`cleanupDevelopmentQuote`) trusted
+    // a bare caller-supplied deployment string as its only authority check.
+    // The current `cleanup` mutation must never regress to that: it re-checks
+    // the exact authorised literal server-side, matching
+    // `externalReconciliations.cleanup`'s established convention.
     assert.equal(quotesSource.includes("cleanupDevelopmentQuote"), false);
-    assert.equal(quotesSource.includes("args.deployment"), false);
-    assert.equal(quotesSource.includes('ctx.db.delete("quoteRevisions"'), false);
-    assert.equal(quotesSource.includes('ctx.db.delete("quotes"'), false);
+
+    const cleanupStart = quotesSource.indexOf("export const cleanup = mutation");
+    assert.notEqual(cleanupStart, -1, "expected an exported cleanup mutation");
+    const cleanupSource = quotesSource.slice(cleanupStart);
+    assert.ok(cleanupSource.includes('args.deployment !== "dev:outgoing-ram-798"'));
+    assert.ok(cleanupSource.includes("throw new Error("));
+    assert.ok(cleanupSource.includes('ctx.db.delete("quoteRevisions"'));
+    assert.ok(cleanupSource.includes('ctx.db.delete("quotes"'));
   });
 });

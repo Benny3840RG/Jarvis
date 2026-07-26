@@ -128,4 +128,38 @@ describe("ConvexQuoteDeliveryRepository against persisted Convex functions", () 
     expect(reconciled.reconciledOutcome).toBe("failed");
     expect(reconciled.providerErrorCode).toBe("provider-timeout");
   });
+
+  it("threads the constructor's deployment through to cleanup, restricted to the authorised development deployment", async () => {
+    const t = convexTest(schema, modules);
+    const client = clientFor(t);
+    await new ConvexQuoteDeliveryRepository(client, SERVICE_TOKEN).createPending({
+      quoteId: "quote-3",
+      revision: 1,
+      recipient: "client@example.com",
+      channel: "email",
+      revisionId: "revision-3",
+      revisionFingerprint: "quote-revision:v1:sha256:gggg",
+      sendFingerprint: "quote-send-fingerprint:v1:sha256:hhhh",
+      idempotencyKey: "execute-send-3",
+      approvalId: "execute-send-3",
+      actionFingerprint: "jarvis-action-fingerprint:v1:iiii",
+      provider: "test-email-provider",
+    });
+
+    await expect(
+      new ConvexQuoteDeliveryRepository(client, SERVICE_TOKEN, "prod:jarvis").cleanup("quote-3"),
+    ).rejects.toThrow(/authorised development deployment/);
+
+    const removed = await new ConvexQuoteDeliveryRepository(
+      client,
+      SERVICE_TOKEN,
+      "dev:outgoing-ram-798",
+    ).cleanup("quote-3");
+    expect(removed).toBe(true);
+    expect(
+      await new ConvexQuoteDeliveryRepository(client, SERVICE_TOKEN).listForQuote({
+        quoteId: "quote-3",
+      }),
+    ).toHaveLength(0);
+  });
 });

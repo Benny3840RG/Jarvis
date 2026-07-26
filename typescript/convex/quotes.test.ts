@@ -226,3 +226,38 @@ describe("persisted quote Convex lifecycle", () => {
     expect(rowCounts).toEqual({ quotes: 1, revisions: 1 });
   });
 });
+
+describe("quotes.cleanup (development-only)", () => {
+  it("removes the aggregate and every revision only in the authorised development deployment", async () => {
+    const t = harness();
+    const created = await t.mutation(api.quotes.create, createInput());
+
+    await expect(
+      t.mutation(api.quotes.cleanup, {
+        serviceToken: SERVICE_TOKEN,
+        quoteId: created.aggregate.quoteId,
+        deployment: "prod:jarvis",
+      }),
+    ).rejects.toThrow(/authorised development deployment/);
+
+    const removed = await t.mutation(api.quotes.cleanup, {
+      serviceToken: SERVICE_TOKEN,
+      quoteId: created.aggregate.quoteId,
+      deployment: "dev:outgoing-ram-798",
+    });
+    expect(removed).toBe(true);
+
+    const rowCounts = await t.run(async (ctx) => ({
+      quotes: (await ctx.db.query("quotes").collect()).length,
+      revisions: (await ctx.db.query("quoteRevisions").collect()).length,
+    }));
+    expect(rowCounts).toEqual({ quotes: 0, revisions: 0 });
+
+    const again = await t.mutation(api.quotes.cleanup, {
+      serviceToken: SERVICE_TOKEN,
+      quoteId: created.aggregate.quoteId,
+      deployment: "dev:outgoing-ram-798",
+    });
+    expect(again).toBe(false);
+  });
+});

@@ -83,4 +83,6 @@ export interface QuoteRepository {
   finalizeRevision(input: FinalizeQuoteRevisionInput): Promise<QuoteSnapshot>;
   createRevisionFromFinalized(input: CreateQuoteRevisionInput): Promise<QuoteSnapshot>;
   recordCommercialOutcome(input: RecordQuoteCommercialOutcomeInput): Promise<QuoteSnapshot>;
+  /** Development-only teardown of a quote and all its revisions. See `convex/quotes.ts#cleanup`. */
+  cleanup(quoteId: string): Promise<boolean>;
 }
