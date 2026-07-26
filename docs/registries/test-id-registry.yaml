@@ -71,3 +71,29 @@ tests:
   - id: TEST-AM-007-SMOKE-001
     path: typescript/tests/taskReminderActionsSmoke.test.ts
     verifies: live cancellation tombstone replay after deletion and authenticated post-run cleanup
+
+  - id: TEST-AM-012-DOMAIN-001
+    path: typescript/tests/quoteConvexLifecycle.test.ts
+    verifies: reviewed→finalized transition, draft→finalized rejection, immutability enforcement, optimistic concurrency and fingerprint computation
+  - id: TEST-AM-012-PERSIST-001
+    path: typescript/convex/quotes.test.ts
+    verifies: finalizeRevision Convex mutation, owner-scoped lookup, stale-version rejection and fingerprint persistence
+  - id: TEST-AM-012-TOOL-001
+    path: typescript/tests/quoteFinalizeTool.test.ts
+    verifies: TOOL-QUOTE-FINALIZE boundary definition, authority enforcement and allowlist exclusion (planned evidence path; not yet commissioned)
+  - id: TEST-AM-012-SMOKE-001
+    path: typescript/tests/quoteLifecycleSmoke.test.ts
+    verifies: full quote create→review→finalize→fork→delivery lifecycle against in-memory adapters and the development deployment (planned evidence path; not yet commissioned)
+
+  - id: TEST-AM-013-DELIVERY-001
+    path: typescript/convex/quoteDeliveries.test.ts
+    verifies: createPending idempotency, send-scope fingerprint collision rejection, status transitions and no-blind-retry enforcement
+  - id: TEST-AM-013-RECONCILIATION-001
+    path: typescript/tests/quoteSendTool.test.ts
+    verifies: provider external-execution integration, indeterminate handling, reconciliation binding and approved-fingerprint gate
+  - id: TEST-AM-013-APPROVAL-001
+    path: typescript/tests/quoteSendTool.test.ts
+    verifies: approval-fingerprint binding, changed-content rejection under same idempotency key and duplicate-send dedup
+  - id: TEST-AM-013-SMOKE-001
+    path: typescript/tests/quoteLifecycleSmoke.test.ts
+    verifies: delivery pending→executing→indeterminate→reconciled lifecycle and commercial-status preservation against in-memory adapters (planned evidence path; not yet commissioned)
