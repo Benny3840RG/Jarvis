@@ -52,6 +52,13 @@ export function requirePositiveRevision(value: number, field: string): number {
   return value;
 }
 
+export function requirePageSize(numItems: number, domain: string): number {
+  if (!Number.isInteger(numItems) || numItems < 1 || numItems > 100) {
+    throw new Error(`${domain} page size must be an integer from 1 to 100.`);
+  }
+  return numItems;
+}
+
 function sensitiveKeyFingerprint(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]/g, "");
 }

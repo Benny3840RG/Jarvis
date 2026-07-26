@@ -8,7 +8,7 @@ import {
   noteRetentionValidator,
   noteSensitivityValidator,
 } from "./noteValidators.js";
-import { cleanRequiredText } from "./toolActionLogic.js";
+import { cleanRequiredText, requirePageSize } from "./toolActionLogic.js";
 import { mutation, query } from "./_generated/server.js";
 
 const MAX_LIST_LIMIT = 100;
@@ -151,10 +151,7 @@ export const listPage = query({
   handler: async (ctx, args) => {
     const ownerId = requireOwner(args.serviceToken);
     const projectId = cleanRequiredText(args.projectId, "Project ID");
-    const { numItems } = args.paginationOpts;
-    if (!Number.isInteger(numItems) || numItems < 1 || numItems > 100) {
-      throw new Error("Note page size must be an integer from 1 to 100.");
-    }
+    requirePageSize(args.paginationOpts.numItems, "Note");
     return ctx.db
       .query("notes")
       .withIndex("by_owner_and_project_and_updated_at", (q) =>

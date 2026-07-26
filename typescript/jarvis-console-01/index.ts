@@ -98,6 +98,13 @@ const noteSchema = z.object({
  */
 const NOTES_PROJECT_ID = "jarvis-console-01";
 
+const paginationMetaSchema = z.object({
+  isDone: z.boolean(),
+  continueCursor: z.string(),
+  returnedCount: z.number().int().nonnegative(),
+  requestedPageSize: z.number().int().min(1).max(100),
+});
+
 const consoleStateSchema = z.object({
   title: z.string(),
   phase: z.string(),
@@ -128,24 +135,9 @@ const consoleStateSchema = z.object({
     notesPartial: z.boolean(),
   }),
   pagination: z.object({
-    tasks: z.object({
-      isDone: z.boolean(),
-      continueCursor: z.string(),
-      returnedCount: z.number().int().nonnegative(),
-      requestedPageSize: z.number().int().min(1).max(100),
-    }),
-    reminders: z.object({
-      isDone: z.boolean(),
-      continueCursor: z.string(),
-      returnedCount: z.number().int().nonnegative(),
-      requestedPageSize: z.number().int().min(1).max(100),
-    }),
-    notes: z.object({
-      isDone: z.boolean(),
-      continueCursor: z.string(),
-      returnedCount: z.number().int().nonnegative(),
-      requestedPageSize: z.number().int().min(1).max(100),
-    }),
+    tasks: paginationMetaSchema,
+    reminders: paginationMetaSchema,
+    notes: paginationMetaSchema,
   }),
 }).superRefine((value, ctx) => {
   for (const issue of consolePaginationInvariantIssues(value)) {
@@ -224,6 +216,10 @@ function mapNote(row: NoteRow) {
     sensitivity: row.sensitivity,
     createdAt: row.createdAt,
   };
+}
+
+function emptyPageMetadata(requestedPageSize: number) {
+  return { isDone: true, continueCursor: "", returnedCount: 0, requestedPageSize };
 }
 
 async function loadConsoleState(
@@ -331,24 +327,9 @@ async function loadConsoleState(
         notesPartial: false,
       },
       pagination: {
-        tasks: {
-          isDone: true,
-          continueCursor: "",
-          returnedCount: 0,
-          requestedPageSize,
-        },
-        reminders: {
-          isDone: true,
-          continueCursor: "",
-          returnedCount: 0,
-          requestedPageSize,
-        },
-        notes: {
-          isDone: true,
-          continueCursor: "",
-          returnedCount: 0,
-          requestedPageSize,
-        },
+        tasks: emptyPageMetadata(requestedPageSize),
+        reminders: emptyPageMetadata(requestedPageSize),
+        notes: emptyPageMetadata(requestedPageSize),
       },
     };
   }
