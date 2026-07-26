@@ -55,11 +55,13 @@ tools:
   - id: TOOL-QUOTE-FINALIZE
     lifecycle_status: planned
     implemented: false
-    description: Would transition a quote from draft/reviewed to finalized. The real Quote domain (src/quotes/quote.ts) has no finalize/reviewed states today.
+    description: Transitions a reviewed quote revision to finalized via QuoteRepository.finalizeRevision, stamping an immutable fingerprint. The implementation exists and is tested, but is deliberately not wired into the live tool-execution allowlist — AM-012 stays planned until a deliberate commissioning/activation PR.
+    implementation: typescript/src/actions/quoteFinalizeTool.ts
     bound_by: [AM-012]
 
   - id: TOOL-QUOTE-SEND
     lifecycle_status: planned
     implemented: false
-    description: Would send a finalized quote to a recipient and reconcile provider status. No send/delivery tool exists in the codebase today.
+    description: Sends a finalized quote revision to a recipient and drives the delivery-ledger lifecycle through reconciliation. The implementation exists and is tested, but is deliberately not wired into the live tool-execution allowlist because no email provider is configured (createQuoteEmailProviderFromEnv always returns null) — AM-013 stays planned until a deliberate commissioning/activation PR.
+    implementation: typescript/src/actions/quoteSendTool.ts
     bound_by: [AM-013]
