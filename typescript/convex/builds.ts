@@ -165,15 +165,11 @@ export const remove = mutation({
     const [buildLog, upgrade] = await Promise.all([
       ctx.db
         .query("buildLogs")
-        .withIndex("by_owner_and_build_id", (q) =>
-          q.eq("ownerId", ownerId).eq("buildId", id),
-        )
+        .withIndex("by_owner_and_build_id", (q) => q.eq("ownerId", ownerId).eq("buildId", id))
         .first(),
       ctx.db
         .query("upgrades")
-        .withIndex("by_owner_and_build_id", (q) =>
-          q.eq("ownerId", ownerId).eq("buildId", id),
-        )
+        .withIndex("by_owner_and_build_id", (q) => q.eq("ownerId", ownerId).eq("buildId", id))
         .first(),
     ]);
     if (buildLog || upgrade) {

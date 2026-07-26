@@ -128,7 +128,10 @@ export class BuildController {
     try {
       build = await this.builds.remove(buildId);
     } catch (error: unknown) {
-      if (error instanceof Error && /cannot be deleted while build logs or upgrades/i.test(error.message)) {
+      if (
+        error instanceof Error &&
+        /cannot be deleted while build logs or upgrades/i.test(error.message)
+      ) {
         throw dependencyConflict();
       }
       throw operationFailed();
