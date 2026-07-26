@@ -34,6 +34,15 @@ function notFound(): JarvisProblem {
   );
 }
 
+function dependencyConflict(): JarvisProblem {
+  return new JarvisProblem(
+    HttpStatus.CONFLICT,
+    "build-has-dependencies",
+    "Build Has Dependent Records",
+    "Remove the build logs and upgrades that reference this build before deleting it.",
+  );
+}
+
 function operationFailed(): JarvisProblem {
   return new JarvisProblem(
     HttpStatus.SERVICE_UNAVAILABLE,
@@ -118,7 +127,10 @@ export class BuildController {
     let build: Build | null;
     try {
       build = await this.builds.remove(buildId);
-    } catch {
+    } catch (error: unknown) {
+      if (error instanceof Error && /cannot be deleted while build logs or upgrades/i.test(error.message)) {
+        throw dependencyConflict();
+      }
       throw operationFailed();
     }
     if (!build) throw notFound();
