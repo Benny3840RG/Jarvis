@@ -309,6 +309,7 @@ export default defineSchema({
     historicalOutcomeRecordedAt: v.optional(v.number()),
     reviewedAt: v.optional(v.number()),
     finalizedAt: v.optional(v.number()),
+    source: v.optional(v.literal("legacy-migration")),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -347,6 +348,16 @@ export default defineSchema({
     .index("by_owner_quote_and_revision", ["ownerId", "quoteId", "revision"])
     .index("by_owner_and_reconciliation_id", ["ownerId", "reconciliationId"])
     .index("by_owner_and_status", ["ownerId", "status"]),
+  quoteMigrationRecords: defineTable({
+    ownerId: v.string(),
+    sourceKey: v.string(),
+    status: v.union(v.literal("imported"), v.literal("rejected")),
+    quoteId: v.optional(v.string()),
+    revisionId: v.optional(v.string()),
+    mappedState: v.optional(v.string()),
+    rejectionReason: v.optional(v.string()),
+    createdAt: v.number(),
+  }).index("by_owner_and_source_key", ["ownerId", "sourceKey"]),
   validationReports: defineTable({
     ownerId: v.string(),
     requestId: v.string(),

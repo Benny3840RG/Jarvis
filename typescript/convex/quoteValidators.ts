@@ -84,6 +84,7 @@ export const quoteRevisionDocumentValidator = v.object({
   historicalOutcomeRecordedAt: v.optional(v.number()),
   reviewedAt: v.optional(v.number()),
   finalizedAt: v.optional(v.number()),
+  source: v.optional(v.literal("legacy-migration")),
   createdAt: v.number(),
   updatedAt: v.number(),
 });
