@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import {
   normaliseAuditPayload,
   normaliseToolArguments,
+  requirePageSize,
   sameToolActionProposal,
   validateToolAuthority,
   type ToolActionProposalValues,
@@ -94,6 +95,35 @@ describe("tool action proposal validation", () => {
       false,
     );
     assert.equal(sameToolActionProposal(first, proposal({ destructive: true })), false);
+  });
+});
+
+describe("page size bounds shared by tasks, reminders, and notes listPage queries", () => {
+  it("accepts integers from 1 to 100 and returns them unchanged", () => {
+    assert.equal(requirePageSize(1, "Task"), 1);
+    assert.equal(requirePageSize(50, "Reminder"), 50);
+    assert.equal(requirePageSize(100, "Note"), 100);
+  });
+
+  it("rejects out-of-range, non-integer, and non-finite values with a domain-labelled message", () => {
+    for (const value of [
+      0,
+      101,
+      1.5,
+      Number.NaN,
+      Number.POSITIVE_INFINITY,
+      Number.NEGATIVE_INFINITY,
+    ]) {
+      assert.throws(
+        () => requirePageSize(value, "Task"),
+        /Task page size must be an integer from 1 to 100\./,
+      );
+    }
+  });
+
+  it("labels the error with the caller's domain name", () => {
+    assert.throws(() => requirePageSize(0, "Reminder"), /Reminder page size/);
+    assert.throws(() => requirePageSize(0, "Note"), /Note page size/);
   });
 });
 
