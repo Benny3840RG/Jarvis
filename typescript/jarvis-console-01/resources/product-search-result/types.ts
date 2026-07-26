@@ -19,6 +19,16 @@ export const reminderSchema = z.object({
   createdAt: z.number(),
 });
 
+export const noteSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  body: z.string(),
+  tags: z.array(z.string()),
+  domain: z.enum(["business", "home", "workshop", "shared"]),
+  sensitivity: z.enum(["internal", "private", "secret"]),
+  createdAt: z.number(),
+});
+
 export const systemSchema = z.object({
   label: z.string(),
   value: z.string(),
@@ -36,14 +46,17 @@ export const propSchema = z.object({
   lastUpdated: z.number(),
   tasks: z.array(taskSchema).max(100),
   reminders: z.array(reminderSchema).max(100),
+  notes: z.array(noteSchema).max(100),
   systems: z.array(systemSchema),
   activity: z.array(z.string()),
   counts: z.object({
     active: z.number().int().nonnegative(),
     completed: z.number().int().nonnegative(),
     reminders: z.number().int().nonnegative(),
+    notes: z.number().int().nonnegative(),
     tasksPartial: z.boolean(),
     remindersPartial: z.boolean(),
+    notesPartial: z.boolean(),
   }),
   pagination: z.object({
     tasks: z.object({
@@ -58,6 +71,12 @@ export const propSchema = z.object({
       returnedCount: z.number().int().nonnegative(),
       requestedPageSize: z.number().int().min(1).max(100),
     }),
+    notes: z.object({
+      isDone: z.boolean(),
+      continueCursor: z.string(),
+      returnedCount: z.number().int().nonnegative(),
+      requestedPageSize: z.number().int().min(1).max(100),
+    }),
   }),
 }).superRefine((value, ctx) => {
   for (const issue of consolePaginationInvariantIssues(value)) {
@@ -67,4 +86,5 @@ export const propSchema = z.object({
 
 export type JarvisTask = z.infer<typeof taskSchema>;
 export type JarvisReminder = z.infer<typeof reminderSchema>;
+export type JarvisNote = z.infer<typeof noteSchema>;
 export type JarvisConsoleProps = z.infer<typeof propSchema>;

@@ -1,4 +1,4 @@
-import { createHash, timingSafeEqual } from "node:crypto";
+import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 
 import { ConvexHttpClient } from "convex/browser";
 import { anyApi } from "convex/server";
@@ -80,6 +80,24 @@ const reminderSchema = z.object({
   createdAt: z.number(),
 });
 
+const noteSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  body: z.string(),
+  tags: z.array(z.string()),
+  domain: z.enum(["business", "home", "workshop", "shared"]),
+  sensitivity: z.enum(["internal", "private", "secret"]),
+  createdAt: z.number(),
+});
+
+/**
+ * Console 01 has no project-selection UI, unlike the rest of Jarvis where
+ * notes are project-scoped. Every note created or listed through the
+ * console lives in this single fixed project namespace, kept separate from
+ * whatever projects the rest of Jarvis manages.
+ */
+const NOTES_PROJECT_ID = "jarvis-console-01";
+
 const consoleStateSchema = z.object({
   title: z.string(),
   phase: z.string(),
@@ -91,6 +109,7 @@ const consoleStateSchema = z.object({
   lastUpdated: z.number(),
   tasks: z.array(taskSchema).max(100),
   reminders: z.array(reminderSchema).max(100),
+  notes: z.array(noteSchema).max(100),
   systems: z.array(
     z.object({
       label: z.string(),
@@ -103,8 +122,10 @@ const consoleStateSchema = z.object({
     active: z.number().int().nonnegative(),
     completed: z.number().int().nonnegative(),
     reminders: z.number().int().nonnegative(),
+    notes: z.number().int().nonnegative(),
     tasksPartial: z.boolean(),
     remindersPartial: z.boolean(),
+    notesPartial: z.boolean(),
   }),
   pagination: z.object({
     tasks: z.object({
@@ -114,6 +135,12 @@ const consoleStateSchema = z.object({
       requestedPageSize: z.number().int().min(1).max(100),
     }),
     reminders: z.object({
+      isDone: z.boolean(),
+      continueCursor: z.string(),
+      returnedCount: z.number().int().nonnegative(),
+      requestedPageSize: z.number().int().min(1).max(100),
+    }),
+    notes: z.object({
       isDone: z.boolean(),
       continueCursor: z.string(),
       returnedCount: z.number().int().nonnegative(),
@@ -141,6 +168,16 @@ type ReminderRow = {
   dueRaw?: string;
   dueAt?: number;
   dueTimezone?: string;
+  createdAt: number;
+};
+
+type NoteRow = {
+  _id: string;
+  title: string;
+  body: string;
+  tags: string[];
+  domain: "business" | "home" | "workshop" | "shared";
+  sensitivity: "internal" | "private" | "secret";
   createdAt: number;
 };
 
@@ -177,6 +214,18 @@ function mapReminder(row: ReminderRow) {
   };
 }
 
+function mapNote(row: NoteRow) {
+  return {
+    id: row._id,
+    title: row.title,
+    body: row.body,
+    tags: row.tags,
+    domain: row.domain,
+    sensitivity: row.sensitivity,
+    createdAt: row.createdAt,
+  };
+}
+
 async function loadConsoleState(
   activity: string[] = [],
   pageRequest: ConsolePageRequest = {},
@@ -188,7 +237,7 @@ async function loadConsoleState(
     const request = normaliseConsolePageRequest(pageRequest);
     requestedPageSize = request.pageSize;
     const { client, serviceToken } = requireBridge();
-    const [taskPage, reminderPage] = await Promise.all([
+    const [taskPage, reminderPage, notePage] = await Promise.all([
       client.query(anyApi.tasks.listPage, {
         serviceToken,
         paginationOpts: { numItems: request.pageSize, cursor: request.taskCursor },
@@ -197,12 +246,19 @@ async function loadConsoleState(
         serviceToken,
         paginationOpts: { numItems: request.pageSize, cursor: request.reminderCursor },
       }) as Promise<ConsolePage<ReminderRow>>,
+      client.query(anyApi.notes.listPage, {
+        serviceToken,
+        projectId: NOTES_PROJECT_ID,
+        paginationOpts: { numItems: request.pageSize, cursor: request.noteCursor },
+      }) as Promise<ConsolePage<NoteRow>>,
     ]);
     const tasks = taskPage.page.map(mapTask);
     const reminders = reminderPage.page.map(mapReminder);
-    const summary = buildConsolePageSummary(taskPage, reminderPage, request.pageSize, {
+    const notes = notePage.page.map(mapNote);
+    const summary = buildConsolePageSummary(taskPage, reminderPage, notePage, request.pageSize, {
       taskCursor: request.taskCursor,
       reminderCursor: request.reminderCursor,
+      noteCursor: request.noteCursor,
     });
     const { active } = summary.counts;
 
@@ -222,6 +278,7 @@ async function loadConsoleState(
       lastUpdated: now,
       tasks,
       reminders,
+      notes,
       systems: [
         { label: "MCP endpoint", value: "ONLINE", state: "good" },
         { label: "Manufact", value: "DEPLOYED", state: "good" },
@@ -235,6 +292,7 @@ async function loadConsoleState(
         ...activity,
         `${active} visible active task${active === 1 ? "" : "s"} loaded`,
         `${reminders.length} visible reminder${reminders.length === 1 ? "" : "s"} tracked`,
+        `${notes.length} visible note${notes.length === 1 ? "" : "s"} logged`,
         "Convex bridge authenticated server-side",
         "No fabricated telemetry enabled",
       ].slice(0, 8),
@@ -253,6 +311,7 @@ async function loadConsoleState(
       lastUpdated: now,
       tasks: [],
       reminders: [],
+      notes: [],
       systems: [
         { label: "MCP endpoint", value: "ONLINE", state: "good" },
         { label: "Manufact", value: "DEPLOYED", state: "good" },
@@ -266,8 +325,10 @@ async function loadConsoleState(
         active: 0,
         completed: 0,
         reminders: 0,
+        notes: 0,
         tasksPartial: false,
         remindersPartial: false,
+        notesPartial: false,
       },
       pagination: {
         tasks: {
@@ -277,6 +338,12 @@ async function loadConsoleState(
           requestedPageSize,
         },
         reminders: {
+          isDone: true,
+          continueCursor: "",
+          returnedCount: 0,
+          requestedPageSize,
+        },
+        notes: {
           isDone: true,
           continueCursor: "",
           returnedCount: 0,
@@ -300,6 +367,7 @@ server.tool(
       pageSize: z.number().int().min(1).max(100).optional(),
       taskCursor: z.string().optional(),
       reminderCursor: z.string().optional(),
+      noteCursor: z.string().optional(),
     }),
     annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
     outputSchema: consoleStateSchema,
@@ -384,6 +452,64 @@ server.tool(
     const { client, serviceToken } = requireBridge();
     await client.mutation(anyApi.reminders.remove, { serviceToken, id: reminderId });
     return consoleWidget(await loadConsoleState(["Reminder removed through Console 01"]), "Jarvis reminder removed.");
+  },
+);
+
+server.tool(
+  {
+    name: "create-jarvis-note",
+    title: "Create Jarvis note",
+    description: "Create an owner-scoped durable Jarvis note in the Console 01 project namespace",
+    schema: z.object({
+      title: z.string().min(1).max(200),
+      body: z.string().min(1),
+      tags: z.array(z.string().min(1).max(50)).max(20).optional(),
+      domain: z.enum(["business", "home", "workshop", "shared"]).default("home"),
+      sensitivity: z.enum(["internal", "private", "secret"]).default("internal"),
+    }),
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+    outputSchema: consoleStateSchema,
+    widget: { name: "product-search-result", invoking: "Creating note...", invoked: "Note created" },
+  },
+  async ({ title, body, tags, domain, sensitivity }) => {
+    const { client, serviceToken } = requireBridge();
+    await client.mutation(anyApi.notes.create, {
+      serviceToken,
+      projectId: NOTES_PROJECT_ID,
+      title,
+      body,
+      tags: tags ?? [],
+      domain,
+      sensitivity,
+      retention: "standard",
+      idempotencyKey: randomUUID(),
+      actionFingerprint: randomUUID(),
+      sourceRequestId: randomUUID(),
+      correlationId: randomUUID(),
+      source: "jarvis-console-01",
+    });
+    return consoleWidget(await loadConsoleState([`Note created: ${title}`]), `Created Jarvis note: ${title}`);
+  },
+);
+
+server.tool(
+  {
+    name: "remove-jarvis-note",
+    title: "Remove Jarvis note",
+    description: "Remove one owner-scoped durable Jarvis note from the Console 01 project namespace",
+    schema: z.object({ noteId: z.string().min(1) }),
+    annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
+    outputSchema: consoleStateSchema,
+    widget: { name: "product-search-result", invoking: "Removing note...", invoked: "Note removed" },
+  },
+  async ({ noteId }) => {
+    const { client, serviceToken } = requireBridge();
+    await client.mutation(anyApi.notes.remove, {
+      serviceToken,
+      projectId: NOTES_PROJECT_ID,
+      id: noteId,
+    });
+    return consoleWidget(await loadConsoleState(["Note removed through Console 01"]), "Jarvis note removed.");
   },
 );
 

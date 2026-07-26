@@ -1,3 +1,4 @@
+import { paginationOptsValidator, paginationResultValidator } from "convex/server";
 import { v } from "convex/values";
 
 import { requireOwner } from "./authHelpers.js";
@@ -137,6 +138,30 @@ export const list = query({
       )
       .order("desc")
       .take(validatedLimit(args.limit));
+  },
+});
+
+export const listPage = query({
+  args: {
+    serviceToken: v.string(),
+    projectId: v.string(),
+    paginationOpts: paginationOptsValidator,
+  },
+  returns: paginationResultValidator(noteDocumentValidator),
+  handler: async (ctx, args) => {
+    const ownerId = requireOwner(args.serviceToken);
+    const projectId = cleanRequiredText(args.projectId, "Project ID");
+    const { numItems } = args.paginationOpts;
+    if (!Number.isInteger(numItems) || numItems < 1 || numItems > 100) {
+      throw new Error("Note page size must be an integer from 1 to 100.");
+    }
+    return ctx.db
+      .query("notes")
+      .withIndex("by_owner_and_project_and_updated_at", (q) =>
+        q.eq("ownerId", ownerId).eq("projectId", projectId),
+      )
+      .order("desc")
+      .paginate(args.paginationOpts);
   },
 });
 

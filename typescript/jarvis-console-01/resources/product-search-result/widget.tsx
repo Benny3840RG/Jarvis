@@ -13,6 +13,7 @@ import "../styles.css";
 import "../phase23.css";
 import type {
   JarvisConsoleProps,
+  JarvisNote,
   JarvisReminder,
   JarvisTask,
 } from "./types";
@@ -61,6 +62,12 @@ const JarvisConsole: React.FC = () => {
   const { callTool: removeReminder, isPending: removingReminder } = useCallTool(
     "remove-jarvis-reminder",
   );
+  const { callTool: createNote, isPending: creatingNote } = useCallTool(
+    "create-jarvis-note",
+  );
+  const { callTool: removeNote, isPending: removingNote } = useCallTool(
+    "remove-jarvis-note",
+  );
 
   const [snapshot, setSnapshot] = useState<JarvisConsoleProps | null>(null);
   const [taskTitle, setTaskTitle] = useState("");
@@ -68,6 +75,8 @@ const JarvisConsole: React.FC = () => {
     useState<"personal" | "work" | "builds" | "money" | "life">("work");
   const [reminderTitle, setReminderTitle] = useState("");
   const [reminderDue, setReminderDue] = useState("");
+  const [noteTitle, setNoteTitle] = useState("");
+  const [noteBody, setNoteBody] = useState("");
   const [command, setCommand] = useState("");
   const [feedback, setFeedback] = useState("Console controls ready.");
 
@@ -110,7 +119,13 @@ const JarvisConsole: React.FC = () => {
   const isExpanded = displayMode === "fullscreen" || displayMode === "pip";
   const currentTask = activeTasks[0];
   const busy =
-    refreshing || creatingTask || completingTask || creatingReminder || removingReminder;
+    refreshing ||
+    creatingTask ||
+    completingTask ||
+    creatingReminder ||
+    removingReminder ||
+    creatingNote ||
+    removingNote;
 
   const runRefresh = async () => {
     const result = await refreshConsole({});
@@ -149,6 +164,22 @@ const JarvisConsole: React.FC = () => {
     applyToolResult(result, `Reminder removed: ${reminder.title}`);
   };
 
+  const submitNote = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const title = noteTitle.trim();
+    const body = noteBody.trim();
+    if (!title || !body) return;
+    const result = await createNote({ title, body, domain: "home", sensitivity: "internal" });
+    applyToolResult(result, `Note created: ${title}`);
+    setNoteTitle("");
+    setNoteBody("");
+  };
+
+  const dismissNote = async (note: JarvisNote) => {
+    const result = await removeNote({ noteId: note.id });
+    applyToolResult(result, `Note removed: ${note.title}`);
+  };
+
   const submitCommand = (event: React.FormEvent) => {
     event.preventDefault();
     const prompt = command.trim();
@@ -156,7 +187,8 @@ const JarvisConsole: React.FC = () => {
     sendFollowUpMessage(
       `Jarvis Console 01 operator note: "${prompt}". Analyse this against the current console ` +
         "snapshot and propose next steps. Console 01 itself exposes no tool beyond show-jarvis-console, " +
-        "create-jarvis-task, complete-jarvis-task, create-jarvis-reminder, and remove-jarvis-reminder " +
+        "create-jarvis-task, complete-jarvis-task, create-jarvis-reminder, remove-jarvis-reminder, " +
+        "create-jarvis-note, and remove-jarvis-note " +
         "— it has no deploy, infrastructure, or Convex-schema tool of any kind, so treat this as a " +
         "request for analysis and a proposed plan, not an instruction to execute anything outside that set.",
     );
@@ -208,6 +240,7 @@ const JarvisConsole: React.FC = () => {
             <div><span>DEPLOYMENT</span><strong>{snapshot.deployment}</strong></div>
             <div><span>ACTIVE TASKS</span><strong>{formatPartialCount(snapshot.counts.active, snapshot.counts.tasksPartial)}</strong></div>
             <div><span>REMINDERS</span><strong>{formatPartialCount(snapshot.counts.reminders, snapshot.counts.remindersPartial)}</strong></div>
+            <div><span>NOTES</span><strong>{formatPartialCount(snapshot.counts.notes, snapshot.counts.notesPartial)}</strong></div>
             <div><span>LAST SYNC</span><strong>{new Date(snapshot.lastUpdated).toLocaleTimeString("en-AU")}</strong></div>
           </section>
 
@@ -306,6 +339,20 @@ const JarvisConsole: React.FC = () => {
                 )}
               </div>
 
+              <div className="hud-panel note-panel">
+                <div className="panel-title">NOTES LOG</div>
+                {snapshot.notes.length === 0 ? (
+                  <div className="console-empty">No notes logged.</div>
+                ) : (
+                  snapshot.notes.slice(0, 5).map((note) => (
+                    <div className="note-row interactive-row" key={note.id}>
+                      <div className="row-copy"><strong>{note.title}</strong><small>{note.domain.toUpperCase()}</small></div>
+                      <button type="button" disabled={busy} onClick={() => dismissNote(note)}>REMOVE</button>
+                    </div>
+                  ))
+                )}
+              </div>
+
               <div className="hud-panel activity-panel">
                 <div className="panel-title">LIVE ACTIVITY</div>
                 {snapshot.activity.slice(0, 6).map((item, index) => (
@@ -340,6 +387,13 @@ const JarvisConsole: React.FC = () => {
               <input value={reminderTitle} onChange={(event) => setReminderTitle(event.target.value)} placeholder="Reminder title" />
               <input value={reminderDue} onChange={(event) => setReminderDue(event.target.value)} placeholder="When — exact text preserved" />
               <button type="submit" disabled={busy || !reminderTitle.trim()}>{creatingReminder ? "SETTING" : "SET REMINDER"}</button>
+            </form>
+
+            <form className="capture-card" onSubmit={submitNote}>
+              <div><span>NOTE CAPTURE</span><strong>Durable Convex note</strong></div>
+              <input value={noteTitle} onChange={(event) => setNoteTitle(event.target.value)} placeholder="Note title" />
+              <input value={noteBody} onChange={(event) => setNoteBody(event.target.value)} placeholder="Note body" />
+              <button type="submit" disabled={busy || !noteTitle.trim() || !noteBody.trim()}>{creatingNote ? "LOGGING" : "LOG NOTE"}</button>
             </form>
 
             <div className="capture-card completion-card">
