@@ -5,6 +5,7 @@ export type ConsolePageRequest = {
   pageSize?: number;
   taskCursor?: string;
   reminderCursor?: string;
+  noteCursor?: string;
 };
 
 export type ConsolePage<Row> = {
@@ -16,17 +17,23 @@ export type ConsolePage<Row> = {
 type ConsoleCursorState = {
   taskCursor?: string | null;
   reminderCursor?: string | null;
+  noteCursor?: string | null;
 };
 
 type ConsolePaginationState = {
   tasks: unknown[];
   reminders: unknown[];
+  notes: unknown[];
   pagination: {
     tasks: {
       returnedCount: number;
       requestedPageSize: number;
     };
     reminders: {
+      returnedCount: number;
+      requestedPageSize: number;
+    };
+    notes: {
       returnedCount: number;
       requestedPageSize: number;
     };
@@ -42,6 +49,7 @@ export function normaliseConsolePageRequest(request: ConsolePageRequest) {
     pageSize,
     taskCursor: request.taskCursor ?? null,
     reminderCursor: request.reminderCursor ?? null,
+    noteCursor: request.noteCursor ?? null,
   };
 }
 
@@ -55,7 +63,7 @@ function pageMetadata<Row>(result: ConsolePage<Row>, requestedPageSize: number) 
 }
 
 function requireBoundedPage<Row>(
-  domain: "Task" | "Reminder",
+  domain: "Task" | "Reminder" | "Note",
   result: ConsolePage<Row>,
   requestedPageSize: number,
 ) {
@@ -73,7 +81,7 @@ function requireBoundedPage<Row>(
 
 export function consolePaginationInvariantIssues(value: ConsolePaginationState) {
   const issues: { path: (string | number)[]; message: string }[] = [];
-  for (const domain of ["tasks", "reminders"] as const) {
+  for (const domain of ["tasks", "reminders", "notes"] as const) {
     const rows = value[domain];
     const metadata = value.pagination[domain];
     if (metadata.returnedCount !== rows.length) {
@@ -103,14 +111,17 @@ export function bridgeFailureActivity(activity: string[]) {
 export function buildConsolePageSummary<
   Task extends { completed: boolean },
   Reminder,
+  Note,
 >(
   taskPage: ConsolePage<Task>,
   reminderPage: ConsolePage<Reminder>,
+  notePage: ConsolePage<Note>,
   requestedPageSize: number,
   cursorState: ConsoleCursorState = {},
 ) {
   requireBoundedPage("Task", taskPage, requestedPageSize);
   requireBoundedPage("Reminder", reminderPage, requestedPageSize);
+  requireBoundedPage("Note", notePage, requestedPageSize);
   const active = taskPage.page.filter((task) => !task.completed).length;
   const completed = taskPage.page.length - active;
   const progress =
@@ -121,13 +132,16 @@ export function buildConsolePageSummary<
       active,
       completed,
       reminders: reminderPage.page.length,
+      notes: notePage.page.length,
       tasksPartial: cursorState.taskCursor != null || !taskPage.isDone,
       remindersPartial: cursorState.reminderCursor != null || !reminderPage.isDone,
+      notesPartial: cursorState.noteCursor != null || !notePage.isDone,
     },
     progress,
     pagination: {
       tasks: pageMetadata(taskPage, requestedPageSize),
       reminders: pageMetadata(reminderPage, requestedPageSize),
+      notes: pageMetadata(notePage, requestedPageSize),
     },
   };
 }

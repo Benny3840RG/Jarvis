@@ -11,7 +11,7 @@ import {
 } from "../pagination.js";
 import { propSchema } from "../resources/product-search-result/types.js";
 
-function consoleProps(tasks: unknown[] = [], reminders: unknown[] = []) {
+function consoleProps(tasks: unknown[] = [], reminders: unknown[] = [], notes: unknown[] = []) {
   return {
     title: "JARVIS SYSTEM // CONSOLE 01",
     phase: "TEST",
@@ -23,14 +23,17 @@ function consoleProps(tasks: unknown[] = [], reminders: unknown[] = []) {
     lastUpdated: 1,
     tasks,
     reminders,
+    notes,
     systems: [],
     activity: [],
     counts: {
       active: tasks.length,
       completed: 0,
       reminders: reminders.length,
+      notes: notes.length,
       tasksPartial: false,
       remindersPartial: false,
+      notesPartial: false,
     },
     pagination: {
       tasks: {
@@ -45,6 +48,12 @@ function consoleProps(tasks: unknown[] = [], reminders: unknown[] = []) {
         returnedCount: reminders.length,
         requestedPageSize: 100,
       },
+      notes: {
+        isDone: true,
+        continueCursor: "",
+        returnedCount: notes.length,
+        requestedPageSize: 100,
+      },
     },
   };
 }
@@ -54,6 +63,7 @@ test("normalises the default and maximum bounded page sizes", () => {
     pageSize: 50,
     taskCursor: null,
     reminderCursor: null,
+    noteCursor: null,
   });
   assert.equal(normaliseConsolePageRequest({ pageSize: 100 }).pageSize, 100);
 
@@ -77,6 +87,11 @@ test("summarises visible rows without presenting partial pages as dataset totals
       isDone: false,
       continueCursor: "next-reminder-page",
     },
+    {
+      page: [{ title: "Vendor contract" }],
+      isDone: false,
+      continueCursor: "next-note-page",
+    },
     50,
   );
 
@@ -84,8 +99,10 @@ test("summarises visible rows without presenting partial pages as dataset totals
     active: 1,
     completed: 1,
     reminders: 1,
+    notes: 1,
     tasksPartial: true,
     remindersPartial: true,
+    notesPartial: true,
   });
   assert.equal(summary.progress, 50);
   assert.deepEqual(summary.pagination.tasks, {
@@ -97,6 +114,12 @@ test("summarises visible rows without presenting partial pages as dataset totals
   assert.deepEqual(summary.pagination.reminders, {
     isDone: false,
     continueCursor: "next-reminder-page",
+    returnedCount: 1,
+    requestedPageSize: 50,
+  });
+  assert.deepEqual(summary.pagination.notes, {
+    isDone: false,
+    continueCursor: "next-note-page",
     returnedCount: 1,
     requestedPageSize: 50,
   });
@@ -118,17 +141,24 @@ test("terminal continuation pages remain partial for tasks and reminders", () =>
       isDone: true,
       continueCursor: "terminal-reminder-cursor",
     },
+    {
+      page: [{ title: "Last note" }],
+      isDone: true,
+      continueCursor: "terminal-note-cursor",
+    },
     50,
     {
       taskCursor: "input-task-cursor",
       reminderCursor: "input-reminder-cursor",
+      noteCursor: "input-note-cursor",
     },
   ]) as {
-    counts: { tasksPartial: boolean; remindersPartial: boolean };
+    counts: { tasksPartial: boolean; remindersPartial: boolean; notesPartial: boolean };
   };
 
   assert.equal(summary.counts.tasksPartial, true);
   assert.equal(summary.counts.remindersPartial, true);
+  assert.equal(summary.counts.notesPartial, true);
   assert.equal(taskProgressLabel(summary.counts.tasksPartial), "VISIBLE-PAGE PROGRESS");
 });
 
@@ -174,7 +204,7 @@ test("System Core repeats the same visible partial markers as telemetry", async 
   assert.ok((reminderMarkers?.length ?? 0) >= 2);
 });
 
-test("Console output schemas reject more than 100 task or reminder rows", async () => {
+test("Console output schemas reject more than 100 task, reminder, or note rows", async () => {
   const tasks = Array.from({ length: 101 }, (_, index) => ({
     id: `task-${index}`,
     title: `Task ${index}`,
@@ -187,13 +217,24 @@ test("Console output schemas reject more than 100 task or reminder rows", async 
     title: `Reminder ${index}`,
     createdAt: index,
   }));
+  const notes = Array.from({ length: 101 }, (_, index) => ({
+    id: `note-${index}`,
+    title: `Note ${index}`,
+    body: `Body ${index}`,
+    tags: [],
+    domain: "home" as const,
+    sensitivity: "internal" as const,
+    createdAt: index,
+  }));
 
-  assert.equal(propSchema.safeParse(consoleProps(tasks, [])).success, false);
-  assert.equal(propSchema.safeParse(consoleProps([], reminders)).success, false);
+  assert.equal(propSchema.safeParse(consoleProps(tasks, [], [])).success, false);
+  assert.equal(propSchema.safeParse(consoleProps([], reminders, [])).success, false);
+  assert.equal(propSchema.safeParse(consoleProps([], [], notes)).success, false);
 
   const serverSource = await readFile(new URL("../index.ts", import.meta.url), "utf8");
   assert.match(serverSource, /tasks: z\.array\(taskSchema\)\.max\(100\)/);
   assert.match(serverSource, /reminders: z\.array\(reminderSchema\)\.max\(100\)/);
+  assert.match(serverSource, /notes: z\.array\(noteSchema\)\.max\(100\)/);
 });
 
 test("Console page summaries reject rows beyond the requested size", () => {
@@ -214,6 +255,11 @@ test("Console page summaries reject rows beyond the requested size", () => {
           isDone: true,
           continueCursor: "",
         },
+        {
+          page: [],
+          isDone: true,
+          continueCursor: "",
+        },
         2,
       ),
     /page.*requested|returned.*rows/i,
@@ -224,15 +270,18 @@ test("Console output schema enforces returned-count metadata invariants", () => 
   const props = consoleProps(
     [{ id: "task-1", title: "Task", completed: false, category: "work", createdAt: 1 }],
     [],
+    [],
   );
   props.pagination.tasks.returnedCount = 0;
   assert.equal(propSchema.safeParse(props).success, false);
 });
 
-test("Console 01 source calls only bounded task and reminder page queries", async () => {
+test("Console 01 source calls only bounded task, reminder, and note page queries", async () => {
   const source = await readFile(new URL("../index.ts", import.meta.url), "utf8");
   assert.match(source, /anyApi\.tasks\.listPage/);
   assert.match(source, /anyApi\.reminders\.listPage/);
+  assert.match(source, /anyApi\.notes\.listPage/);
   assert.doesNotMatch(source, /anyApi\.tasks\.list[,)]/);
   assert.doesNotMatch(source, /anyApi\.reminders\.list[,)]/);
+  assert.doesNotMatch(source, /anyApi\.notes\.list[,)]/);
 });

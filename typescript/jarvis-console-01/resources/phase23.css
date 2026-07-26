@@ -82,12 +82,14 @@
   text-align: center;
 }
 
-.reminder-panel {
+.reminder-panel,
+.note-panel {
   max-height: 260px;
   overflow: hidden;
 }
 
-.reminder-row {
+.reminder-row,
+.note-row {
   position: relative;
   z-index: 2;
   gap: 9px;
@@ -95,7 +97,8 @@
   border-bottom: 1px solid #2c3341;
 }
 
-.reminder-row:last-child {
+.reminder-row:last-child,
+.note-row:last-child {
   border-bottom: 0;
 }
 
