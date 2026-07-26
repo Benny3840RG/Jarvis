@@ -16,6 +16,10 @@ import {
   type QuoteSnapshot,
 } from "../src/quotes/quoteLifecycle.js";
 import type { QuoteRepository, QuoteSummary } from "../src/quotes/quoteRepository.js";
+import type {
+  QuoteDeliveryAttempt,
+  QuoteDeliveryRepository,
+} from "../src/quotes/quoteDeliveryRepository.js";
 
 const CONFIG: HttpAppConfig = {
   version: "0.1.0",
@@ -145,7 +149,10 @@ function successfulRepository(overrides: Partial<QuoteRepository> = {}): QuoteRe
 
 const openApps: NestFastifyApplication[] = [];
 
-async function makeApp(quoteRepository: QuoteRepository | null): Promise<NestFastifyApplication> {
+async function makeApp(
+  quoteRepository: QuoteRepository | null,
+  quoteDeliveryRepository: QuoteDeliveryRepository | null = null,
+): Promise<NestFastifyApplication> {
   const app = await createJarvisHttpApp({
     persistence: unusedPersistence(),
     providerName: "json",
@@ -156,6 +163,7 @@ async function makeApp(quoteRepository: QuoteRepository | null): Promise<NestFas
     toolActionService: null,
     toolExecutionService: null,
     quoteRepository,
+    quoteDeliveryRepository,
   });
   openApps.push(app);
   return app;
@@ -380,11 +388,75 @@ describe("controlled quote HTTP lifecycle", () => {
     );
   });
 
-  it("registers the deliveries route without inventing a delivery ledger", async () => {
+  it("stays unavailable when no delivery ledger is commissioned", async () => {
     const app = await makeApp(successfulRepository());
     const response = await inject(app, "GET", "/api/v1/quotes/quote-1/deliveries");
 
     assert.equal(response.statusCode, 503);
     assert.match(JSON.stringify(response.json()), /delivery/i);
+  });
+
+  it("lists a quote's delivery attempts without leaking internal correlation fields", async () => {
+    const attempt: QuoteDeliveryAttempt = {
+      deliveryAttemptId: "delivery-1",
+      ownerId: "owner-1",
+      quoteId: "quote-1",
+      revision: 1,
+      revisionId: "revision-1",
+      revisionFingerprint: "quote-revision:v1:sha256:aaaa",
+      recipient: "client@example.com",
+      channel: "email",
+      sendFingerprint: "quote-send-fingerprint:v1:sha256:bbbb",
+      idempotencyKey: "execute-send-1",
+      approvalId: "execute-send-1",
+      actionFingerprint: "jarvis-action-fingerprint:v1:cccc",
+      status: "succeeded",
+      provider: "test-email-provider",
+      providerRequestId: "provider-request-1",
+      providerCorrelationId: "provider-correlation-1",
+      createdAt: 1,
+      updatedAt: 1,
+      completedAt: 1,
+    };
+    const deliveries: QuoteDeliveryRepository = {
+      async getBySendScope() {
+        return null;
+      },
+      async createPending() {
+        throw new Error("not used in this test");
+      },
+      async markExecuting() {
+        throw new Error("not used in this test");
+      },
+      async bindProviderReference() {
+        throw new Error("not used in this test");
+      },
+      async complete() {
+        throw new Error("not used in this test");
+      },
+      async markIndeterminate() {
+        throw new Error("not used in this test");
+      },
+      async reconcile() {
+        throw new Error("not used in this test");
+      },
+      async listForQuote() {
+        return [attempt];
+      },
+    };
+    const app = await makeApp(successfulRepository(), deliveries);
+    const response = await inject(app, "GET", "/api/v1/quotes/quote-1/deliveries");
+
+    assert.equal(response.statusCode, 200);
+    const body = response.json() as { data: Record<string, unknown>[]; count: number };
+    assert.equal(body.count, 1);
+    assert.equal(body.data.length, 1);
+    assert.equal(body.data[0].deliveryAttemptId, "delivery-1");
+    assert.equal(body.data[0].status, "succeeded");
+    assert.equal("ownerId" in body.data[0], false);
+    assert.equal("sendFingerprint" in body.data[0], false);
+    assert.equal("idempotencyKey" in body.data[0], false);
+    assert.equal("approvalId" in body.data[0], false);
+    assert.equal("actionFingerprint" in body.data[0], false);
   });
 });

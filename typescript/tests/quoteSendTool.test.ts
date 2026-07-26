@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { setTimeout as delay } from "node:timers/promises";
 import { describe, it } from "node:test";
 
 import type { ToolAction } from "../src/actions/toolActions.js";
@@ -12,6 +13,18 @@ import type {
 } from "../src/quotes/quoteEmailProvider.js";
 import type { QuoteAggregate, QuoteRevision, QuoteSnapshot } from "../src/quotes/quoteLifecycle.js";
 import type { QuoteRepository, QuoteSummary } from "../src/quotes/quoteRepository.js";
+import type {
+  BindQuoteProviderReferenceInput,
+  CompleteQuoteDeliveryInput,
+  CreateQuoteDeliveryInput,
+  ListQuoteDeliveriesInput,
+  MarkQuoteDeliveryIndeterminateInput,
+  QuoteDeliveryAttempt,
+  QuoteDeliveryRepository,
+  QuoteSendScope,
+  ReconcileQuoteDeliveryInput,
+  StartQuoteDeliveryInput,
+} from "../src/quotes/quoteDeliveryRepository.js";
 import type { NoteStore } from "../src/notes/note.js";
 import type {
   CompleteExternalAttemptInput,
@@ -24,6 +37,8 @@ import type {
   ProviderReconciliationResult,
   RegisterExternalAttemptInput,
 } from "../src/reconciliation/externalReconciliation.js";
+
+const REVISION_FINGERPRINT = "quote-revision:v1:sha256:aaaa";
 
 function action(overrides: Partial<ToolAction> = {}): ToolAction {
   return {
@@ -39,6 +54,7 @@ function action(overrides: Partial<ToolAction> = {}): ToolAction {
       quoteRevision: 1,
       recipient: "client@example.com",
       deliveryChannel: "email",
+      expectedRevisionFingerprint: REVISION_FINGERPRINT,
     },
     rationale: "Send the finalized quote to the client.",
     requiredAuthority: "T2",
@@ -84,7 +100,7 @@ function snapshot(
       total: 300,
       currency: "AUD",
       termsIncluded: true,
-      fingerprint: "quote-revision:v1:sha256:aaaa",
+      fingerprint: REVISION_FINGERPRINT,
       createdAt: 1,
       updatedAt: 1,
       ...revisionOverrides,
@@ -135,6 +151,162 @@ class RecordingEmailProvider implements QuoteEmailProvider {
   async send(input: QuoteEmailSendInput): Promise<QuoteEmailSendResult> {
     this.calls.push(input);
     return this.result;
+  }
+}
+
+/** Never settles on its own; only the AbortSignal firing ends the attempt. */
+class HangingEmailProvider implements QuoteEmailProvider {
+  readonly name = "test-email-provider";
+  readonly calls: QuoteEmailSendInput[] = [];
+
+  async send(input: QuoteEmailSendInput): Promise<QuoteEmailSendResult> {
+    this.calls.push(input);
+    return new Promise<QuoteEmailSendResult>(() => {});
+  }
+}
+
+function sendScopeKey(scope: QuoteSendScope): string {
+  return `${scope.quoteId}:${scope.revision}:${scope.recipient}:${scope.channel}`;
+}
+
+/** In-memory QuoteDeliveryRepository double, mirroring the Convex adapter's CAS semantics. */
+class InMemoryQuoteDeliveryRepository implements QuoteDeliveryRepository {
+  private readonly bySendScope = new Map<string, QuoteDeliveryAttempt>();
+  private readonly byId = new Map<string, QuoteDeliveryAttempt>();
+  private nextId = 1;
+
+  async getBySendScope(input: QuoteSendScope): Promise<QuoteDeliveryAttempt | null> {
+    return this.bySendScope.get(sendScopeKey(input)) ?? null;
+  }
+
+  async createPending(input: CreateQuoteDeliveryInput): Promise<QuoteDeliveryAttempt> {
+    const existing = this.bySendScope.get(sendScopeKey(input));
+    if (existing) return existing;
+    const now = Date.now();
+    const attempt: QuoteDeliveryAttempt = {
+      deliveryAttemptId: `delivery-${this.nextId++}`,
+      ownerId: "owner-1",
+      quoteId: input.quoteId,
+      revision: input.revision,
+      revisionId: input.revisionId,
+      revisionFingerprint: input.revisionFingerprint,
+      recipient: input.recipient,
+      channel: input.channel,
+      sendFingerprint: input.sendFingerprint,
+      idempotencyKey: input.idempotencyKey,
+      approvalId: input.approvalId,
+      actionFingerprint: input.actionFingerprint,
+      status: "pending",
+      provider: input.provider,
+      createdAt: now,
+      updatedAt: now,
+    };
+    this.bySendScope.set(sendScopeKey(input), attempt);
+    this.byId.set(attempt.deliveryAttemptId, attempt);
+    return attempt;
+  }
+
+  private required(deliveryAttemptId: string): QuoteDeliveryAttempt {
+    const attempt = this.byId.get(deliveryAttemptId);
+    if (!attempt) throw new Error(`Quote delivery attempt ${deliveryAttemptId} not found.`);
+    return attempt;
+  }
+
+  private requireStatus(
+    attempt: QuoteDeliveryAttempt,
+    expected: QuoteDeliveryAttempt["status"],
+  ): void {
+    if (attempt.status !== expected) {
+      throw new Error(
+        `Quote delivery attempt ${attempt.deliveryAttemptId} is ${attempt.status}, expected ${expected}.`,
+      );
+    }
+  }
+
+  private replace(attempt: QuoteDeliveryAttempt): QuoteDeliveryAttempt {
+    this.byId.set(attempt.deliveryAttemptId, attempt);
+    this.bySendScope.set(sendScopeKey(attempt), attempt);
+    return attempt;
+  }
+
+  async markExecuting(input: StartQuoteDeliveryInput): Promise<QuoteDeliveryAttempt> {
+    const attempt = this.required(input.deliveryAttemptId);
+    this.requireStatus(attempt, input.expectedStatus);
+    return this.replace({
+      ...attempt,
+      status: "executing",
+      executionStartedAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+  }
+
+  async bindProviderReference(
+    input: BindQuoteProviderReferenceInput,
+  ): Promise<QuoteDeliveryAttempt> {
+    const attempt = this.required(input.deliveryAttemptId);
+    this.requireStatus(attempt, input.expectedStatus);
+    return this.replace({
+      ...attempt,
+      providerRequestId: input.providerRequestId,
+      ...(input.providerCorrelationId === undefined
+        ? {}
+        : { providerCorrelationId: input.providerCorrelationId }),
+      ...(input.reconciliationId === undefined ? {} : { reconciliationId: input.reconciliationId }),
+      updatedAt: Date.now(),
+    });
+  }
+
+  async complete(input: CompleteQuoteDeliveryInput): Promise<QuoteDeliveryAttempt> {
+    const attempt = this.required(input.deliveryAttemptId);
+    this.requireStatus(attempt, input.expectedStatus);
+    return this.replace({
+      ...attempt,
+      status: input.outcome,
+      ...(input.providerErrorCode === undefined
+        ? {}
+        : { providerErrorCode: input.providerErrorCode }),
+      completedAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+  }
+
+  async markIndeterminate(
+    input: MarkQuoteDeliveryIndeterminateInput,
+  ): Promise<QuoteDeliveryAttempt> {
+    const attempt = this.required(input.deliveryAttemptId);
+    this.requireStatus(attempt, input.expectedStatus);
+    return this.replace({
+      ...attempt,
+      status: "indeterminate",
+      reconciliationId: input.reconciliationId,
+      ...(input.providerErrorCode === undefined
+        ? {}
+        : { providerErrorCode: input.providerErrorCode }),
+      updatedAt: Date.now(),
+    });
+  }
+
+  async reconcile(input: ReconcileQuoteDeliveryInput): Promise<QuoteDeliveryAttempt> {
+    const attempt = this.required(input.deliveryAttemptId);
+    this.requireStatus(attempt, input.expectedStatus);
+    return this.replace({
+      ...attempt,
+      status: "reconciled",
+      reconciledOutcome: input.outcome,
+      ...(input.providerErrorCode === undefined
+        ? {}
+        : { providerErrorCode: input.providerErrorCode }),
+      reconciledAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+  }
+
+  async listForQuote(input: ListQuoteDeliveriesInput): Promise<QuoteDeliveryAttempt[]> {
+    return [...this.byId.values()].filter(
+      (attempt) =>
+        attempt.quoteId === input.quoteId &&
+        (input.revision === undefined || attempt.revision === input.revision),
+    );
   }
 }
 
@@ -298,12 +470,13 @@ class FakeReconciliationStore implements ExternalReconciliationStore {
 }
 
 describe("AM-013 send quote tool", () => {
-  it("sends a finalized quote and registers the provider attempt", async () => {
+  it("sends a finalized quote, registers the provider attempt, and records the delivery ledger", async () => {
     const provider = new RecordingEmailProvider();
     const quotes = quoteRepositoryStub(snapshot());
+    const deliveries = new InMemoryQuoteDeliveryRepository();
     const reconciliations = new FakeReconciliationStore();
     const service = new ToolExecutionService(
-      [createQuoteSendToolDefinition(quotes, provider)],
+      [createQuoteSendToolDefinition(quotes, provider, deliveries)],
       undefined,
       reconciliations,
     );
@@ -320,6 +493,13 @@ describe("AM-013 send quote tool", () => {
     assert.equal(provider.calls.length, 1);
     assert.equal(provider.calls[0].recipient, "client@example.com");
     assert.equal(provider.calls[0].revision.revisionId, "revision-1");
+
+    const ledger = await deliveries.listForQuote({ quoteId: "quote-1" });
+    assert.equal(ledger.length, 1);
+    assert.equal(ledger[0].status, "succeeded");
+    assert.equal(ledger[0].providerRequestId, "provider-request-1");
+    assert.equal(ledger[0].providerCorrelationId, "provider-correlation-1");
+    assert.ok(ledger[0].reconciliationId);
   });
 
   it("fails without contacting the provider when the revision is stale", async () => {
@@ -327,9 +507,10 @@ describe("AM-013 send quote tool", () => {
     const quotes = quoteRepositoryStub(
       snapshot({ currentRevision: 2, currentRevisionId: "revision-2" }),
     );
+    const deliveries = new InMemoryQuoteDeliveryRepository();
     const reconciliations = new FakeReconciliationStore();
     const service = new ToolExecutionService(
-      [createQuoteSendToolDefinition(quotes, provider)],
+      [createQuoteSendToolDefinition(quotes, provider, deliveries)],
       undefined,
       reconciliations,
     );
@@ -349,9 +530,10 @@ describe("AM-013 send quote tool", () => {
     const quotes = quoteRepositoryStub(
       snapshot({}, { status: "reviewed", fingerprint: undefined }),
     );
+    const deliveries = new InMemoryQuoteDeliveryRepository();
     const reconciliations = new FakeReconciliationStore();
     const service = new ToolExecutionService(
-      [createQuoteSendToolDefinition(quotes, provider)],
+      [createQuoteSendToolDefinition(quotes, provider, deliveries)],
       undefined,
       reconciliations,
     );
@@ -366,12 +548,36 @@ describe("AM-013 send quote tool", () => {
     assert.equal(provider.calls.length, 0);
   });
 
+  it("fails without contacting the provider when the approved fingerprint no longer matches", async () => {
+    const provider = new RecordingEmailProvider();
+    const quotes = quoteRepositoryStub(
+      snapshot({}, { fingerprint: "quote-revision:v1:sha256:changed" }),
+    );
+    const deliveries = new InMemoryQuoteDeliveryRepository();
+    const reconciliations = new FakeReconciliationStore();
+    const service = new ToolExecutionService(
+      [createQuoteSendToolDefinition(quotes, provider, deliveries)],
+      undefined,
+      reconciliations,
+    );
+
+    const result = await service.execute({
+      action: action(),
+      authority: "T2",
+      idempotencyKey: "execute-send-fingerprint-mismatch",
+    });
+
+    assert.equal(result.status, "failed");
+    assert.equal(provider.calls.length, 0);
+  });
+
   it("fails without contacting the provider when the quote does not exist", async () => {
     const provider = new RecordingEmailProvider();
     const quotes = quoteRepositoryStub(null);
+    const deliveries = new InMemoryQuoteDeliveryRepository();
     const reconciliations = new FakeReconciliationStore();
     const service = new ToolExecutionService(
-      [createQuoteSendToolDefinition(quotes, provider)],
+      [createQuoteSendToolDefinition(quotes, provider, deliveries)],
       undefined,
       reconciliations,
     );
@@ -389,9 +595,10 @@ describe("AM-013 send quote tool", () => {
   it("blocks malformed arguments before the repository or provider are ever called", async () => {
     const provider = new RecordingEmailProvider();
     const quotes = quoteRepositoryStub(snapshot());
+    const deliveries = new InMemoryQuoteDeliveryRepository();
     const reconciliations = new FakeReconciliationStore();
     const service = new ToolExecutionService(
-      [createQuoteSendToolDefinition(quotes, provider)],
+      [createQuoteSendToolDefinition(quotes, provider, deliveries)],
       undefined,
       reconciliations,
     );
@@ -407,7 +614,68 @@ describe("AM-013 send quote tool", () => {
     assert.equal(provider.calls.length, 0);
   });
 
-  it("is allowlisted only when both a quote repository and an email provider are supplied", async () => {
+  it("blocks a second approved send once the same quote/revision/recipient has any delivery attempt", async () => {
+    const provider = new RecordingEmailProvider();
+    const quotes = quoteRepositoryStub(snapshot());
+    const deliveries = new InMemoryQuoteDeliveryRepository();
+    const reconciliations = new FakeReconciliationStore();
+    const service = new ToolExecutionService(
+      [createQuoteSendToolDefinition(quotes, provider, deliveries)],
+      undefined,
+      reconciliations,
+    );
+
+    const first = await service.execute({
+      action: action(),
+      authority: "T2",
+      idempotencyKey: "execute-send-first",
+    });
+    assert.equal(first.status, "succeeded");
+    assert.equal(provider.calls.length, 1);
+
+    // A different approved action (different idempotency key) targeting the
+    // exact same quote/revision/recipient/channel must not send a second time.
+    const second = await service.execute({
+      action: action({ idempotencyKey: "proposal-send-2" }),
+      authority: "T2",
+      idempotencyKey: "execute-send-second",
+    });
+
+    assert.equal(second.status, "failed");
+    assert.equal(provider.calls.length, 1);
+  });
+
+  it("marks the delivery ledger indeterminate on provider timeout without completing it", async () => {
+    const provider = new HangingEmailProvider();
+    const quotes = quoteRepositoryStub(snapshot());
+    const deliveries = new InMemoryQuoteDeliveryRepository();
+    const reconciliations = new FakeReconciliationStore();
+    const service = new ToolExecutionService(
+      [createQuoteSendToolDefinition(quotes, provider, deliveries)],
+      undefined,
+      reconciliations,
+    );
+
+    const result = await service.execute({
+      action: action(),
+      authority: "T2",
+      idempotencyKey: "execute-send-timeout",
+      timeoutMs: 10,
+    });
+
+    assert.equal(result.status, "indeterminate");
+    // The tool's own onAbort projection runs asynchronously alongside (not
+    // awaited by) the outer race; give it a turn to settle.
+    await delay(20);
+
+    const ledger = await deliveries.listForQuote({ quoteId: "quote-1" });
+    assert.equal(ledger.length, 1);
+    assert.equal(ledger[0].status, "indeterminate");
+    assert.ok(ledger[0].reconciliationId);
+    assert.equal(ledger[0].reconciliationId, result.reconciliationId);
+  });
+
+  it("is allowlisted only when a quote repository, delivery ledger, and email provider are all supplied", async () => {
     const noteStore: NoteStore = {
       async create() {
         throw new Error("not used in this test");
@@ -423,27 +691,43 @@ describe("AM-013 send quote tool", () => {
       },
     };
     const store = quoteRepositoryStub(snapshot());
+    const deliveries = new InMemoryQuoteDeliveryRepository();
     const withoutProvider = createToolExecutionDefinitions(
       noteStore,
       undefined,
       undefined,
       store,
       undefined,
+      deliveries,
     );
     assert.equal(
       withoutProvider.some(({ tool, operation }) => `${tool}:${operation}` === "quotes:send"),
       false,
     );
 
-    const withProvider = createToolExecutionDefinitions(
+    const withoutDeliveries = createToolExecutionDefinitions(
       noteStore,
       undefined,
       undefined,
       store,
       new RecordingEmailProvider(),
+      undefined,
     );
     assert.equal(
-      withProvider.some(({ tool, operation }) => `${tool}:${operation}` === "quotes:send"),
+      withoutDeliveries.some(({ tool, operation }) => `${tool}:${operation}` === "quotes:send"),
+      false,
+    );
+
+    const withBoth = createToolExecutionDefinitions(
+      noteStore,
+      undefined,
+      undefined,
+      store,
+      new RecordingEmailProvider(),
+      deliveries,
+    );
+    assert.equal(
+      withBoth.some(({ tool, operation }) => `${tool}:${operation}` === "quotes:send"),
       true,
     );
   });

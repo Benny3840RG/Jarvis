@@ -3053,7 +3053,7 @@
       "get": {
         "operationId": "listQuoteDeliveries",
         "summary": "List a quote's delivery attempts",
-        "description": "Returns delivery attempts for one quote's revisions. Not yet commissioned: this route is registered but always returns 503 until the delivery ledger exists.",
+        "description": "Returns delivery attempts for one quote's revisions, newest first. 503 outside the configured Convex persistence provider.",
         "tags": ["Quotes"],
         "x-mcp-tool": {
           "exposed": false,

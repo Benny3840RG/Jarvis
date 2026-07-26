@@ -165,6 +165,24 @@ function reconciliationId(scope: ExternalExecutionScope): string {
   return `reconciliation-${digest(scope).slice(0, 32)}`;
 }
 
+/**
+ * Computes the same reconciliation ID `ToolExecutionService` derives
+ * internally for a given external execution scope. External tool
+ * definitions that keep their own domain-specific projection (e.g. the quote
+ * delivery ledger) can call this from inside `execute()` — using the
+ * `action`/`idempotencyKey`/`effectFingerprint` already exposed on
+ * `ToolExecutionContext` — to record a reconciliation ID that is guaranteed
+ * to match the one `ExternalReconciliationStore` will actually use, without
+ * duplicating the hashing scheme.
+ */
+export function computeExternalReconciliationId(
+  action: ToolAction,
+  idempotencyKey: string,
+  effectFingerprint: string,
+): string {
+  return reconciliationId(externalScope(action, idempotencyKey, effectFingerprint));
+}
+
 function receiptId(
   action: ToolAction,
   idempotencyKey: string,
