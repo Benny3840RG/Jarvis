@@ -80,6 +80,14 @@ export default defineSchema({
     .index("by_owner", ["ownerId"])
     .index("by_owner_and_project", ["ownerId", "projectId"])
     .index("by_owner_and_direct_create_idempotency_key", ["ownerId", "directCreateIdempotencyKey"]),
+  directCreateReceipts: defineTable({
+    ownerId: v.string(),
+    entityType: v.union(v.literal("task"), v.literal("reminder")),
+    entityId: v.string(),
+    idempotencyKey: v.string(),
+    requestFingerprint: v.string(),
+    createdAt: v.number(),
+  }).index("by_owner_type_and_key", ["ownerId", "entityType", "idempotencyKey"]),
   internalActionResults: defineTable({
     ownerId: v.string(),
     projectId: v.string(),
