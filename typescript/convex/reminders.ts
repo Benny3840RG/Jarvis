@@ -159,6 +159,29 @@ export const create = mutation({
     const identity = directCreateIdentity(args.idempotencyKey, args.requestFingerprint);
 
     if (identity.idempotencyKey !== undefined && identity.requestFingerprint !== undefined) {
+      const receipt = await ctx.db
+        .query("directCreateReceipts")
+        .withIndex("by_owner_type_and_key", (q) =>
+          q
+            .eq("ownerId", ownerId)
+            .eq("entityType", "reminder")
+            .eq("idempotencyKey", identity.idempotencyKey),
+        )
+        .unique();
+      if (receipt) {
+        if (receipt.requestFingerprint !== identity.requestFingerprint) {
+          throw new Error("Reminder create idempotency key conflict.");
+        }
+        const receiptReminderId = ctx.db.normalizeId("reminders", receipt.entityId);
+        const receiptReminder = receiptReminderId
+          ? await ctx.db.get("reminders", receiptReminderId)
+          : null;
+        if (!receiptReminder || receiptReminder.ownerId !== ownerId) {
+          throw new Error("Reminder from this create request is no longer available.");
+        }
+        return receiptReminder;
+      }
+
       const existing = await ctx.db
         .query("reminders")
         .withIndex("by_owner_and_direct_create_idempotency_key", (q) =>
@@ -169,6 +192,14 @@ export const create = mutation({
         if (existing.directCreateFingerprint !== identity.requestFingerprint) {
           throw new Error("Reminder create idempotency key conflict.");
         }
+        await ctx.db.insert("directCreateReceipts", {
+          ownerId,
+          entityType: "reminder",
+          entityId: existing._id,
+          idempotencyKey: identity.idempotencyKey,
+          requestFingerprint: identity.requestFingerprint,
+          createdAt: Date.now(),
+        });
         return existing;
       }
     }
@@ -187,6 +218,16 @@ export const create = mutation({
     });
     const reminder = await ctx.db.get("reminders", id);
     if (!reminder) throw new Error("Reminder creation failed.");
+    if (identity.idempotencyKey !== undefined && identity.requestFingerprint !== undefined) {
+      await ctx.db.insert("directCreateReceipts", {
+        ownerId,
+        entityType: "reminder",
+        entityId: id,
+        idempotencyKey: identity.idempotencyKey,
+        requestFingerprint: identity.requestFingerprint,
+        createdAt: Date.now(),
+      });
+    }
     return reminder;
   },
 });
