@@ -165,7 +165,7 @@ export const create = mutation({
           q
             .eq("ownerId", ownerId)
             .eq("entityType", "reminder")
-            .eq("idempotencyKey", identity.idempotencyKey),
+            .eq("idempotencyKey", identity.idempotencyKey as string),
         )
         .unique();
       if (receipt) {
