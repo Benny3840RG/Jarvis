@@ -216,7 +216,7 @@ class EnabledReconciliationHost implements RuntimeReconciliationHost {
     this.state = "stopping";
     this.controller?.abort();
     await loopPromise;
-    if (this.state !== "degraded") this.state = "stopped";
+    this.finishStop();
   }
 
   health(): RuntimeReconciliationHealth {
@@ -227,6 +227,10 @@ class EnabledReconciliationHost implements RuntimeReconciliationHost {
       ...(this.startedAt === undefined ? {} : { startedAt: this.startedAt }),
       ...(this.lastErrorCode === undefined ? {} : { lastErrorCode: this.lastErrorCode }),
     };
+  }
+
+  private finishStop(): void {
+    if (this.state !== "degraded") this.state = "stopped";
   }
 }
 
