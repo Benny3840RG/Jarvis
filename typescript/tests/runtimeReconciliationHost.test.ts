@@ -5,6 +5,7 @@ import {
   createRuntimeReconciliationHost,
   resolveRuntimeReconciliationConfig,
   type EnabledReconciliationRuntime,
+  type RuntimeReconciliationFactories,
 } from "../src/reconciliation/runtimeReconciliationHost.js";
 
 const enabledEnvironment = {
@@ -127,6 +128,34 @@ describe("runtime reconciliation configuration", () => {
 });
 
 describe("runtime reconciliation lifecycle", () => {
+  it("records cycle timing and processed count from scheduler observations", async () => {
+    let observeCycle:
+      Parameters<RuntimeReconciliationFactories["createEnabledRuntime"]>[1] | undefined;
+    const host = createRuntimeReconciliationHost(enabledEnvironment, {
+      createEnabledRuntime(_config, observer) {
+        observeCycle = observer;
+        return {
+          async run(signal) {
+            await new Promise<void>((resolve) => signal.addEventListener("abort", () => resolve()));
+          },
+        };
+      },
+    });
+
+    await host.start();
+    assert.ok(observeCycle);
+    observeCycle({ type: "started" });
+    const afterStart = host.health();
+    assert.match(afterStart.lastCycleStartedAt ?? "", /^\d{4}-\d{2}-\d{2}T/);
+    assert.equal(afterStart.lastCycleCompletedAt, undefined);
+
+    observeCycle({ type: "completed", processed: 3 });
+    const afterCompletion = host.health();
+    assert.match(afterCompletion.lastCycleCompletedAt ?? "", /^\d{4}-\d{2}-\d{2}T/);
+    assert.equal(afterCompletion.lastCycleProcessed, 3);
+    await host.stop();
+  });
+
   it("starts exactly one loop when start is repeated", async () => {
     const release = deferred();
     let runs = 0;
