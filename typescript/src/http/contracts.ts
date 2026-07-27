@@ -1,3 +1,5 @@
+import type { RuntimeReconciliationHealth } from "../reconciliation/runtimeReconciliationHost.js";
+
 export type Capability = {
   operationId: string;
   summary: string;
@@ -47,6 +49,7 @@ export type SystemStatus = {
   version: string;
   sourceVersion: string;
   provider: ProviderStatus;
+  reconciliation: RuntimeReconciliationHealth;
   timezone: string;
   layers: LayersStatus;
   zState: "disabled" | "stabilising" | "active" | "suspended";
