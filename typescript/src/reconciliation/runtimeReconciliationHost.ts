@@ -1,7 +1,12 @@
 import { randomUUID } from "node:crypto";
 
 export type RuntimeReconciliationState =
-  "disabled" | "starting" | "running" | "stopping" | "stopped" | "degraded";
+  | "disabled"
+  | "starting"
+  | "running"
+  | "stopping"
+  | "stopped"
+  | "degraded";
 
 export type RuntimeReconciliationHealth = {
   state: RuntimeReconciliationState;
@@ -34,14 +39,13 @@ export type EnabledRuntimeReconciliationConfig = {
 };
 
 export type RuntimeReconciliationConfig =
-  DisabledRuntimeReconciliationConfig | EnabledRuntimeReconciliationConfig;
+  | DisabledRuntimeReconciliationConfig
+  | EnabledRuntimeReconciliationConfig;
 
 type Environment = Readonly<Record<string, string | undefined>>;
 
 export type EnabledReconciliationRuntime = {
-  start(): void | Promise<void>;
-  stop(): void | Promise<void>;
-  health(): RuntimeReconciliationHealth;
+  run(signal: AbortSignal): Promise<void>;
 };
 
 export type RuntimeReconciliationFactories = {
@@ -169,18 +173,60 @@ class DisabledReconciliationHost implements RuntimeReconciliationHost {
 }
 
 class EnabledReconciliationHost implements RuntimeReconciliationHost {
-  constructor(private readonly runtime: EnabledReconciliationRuntime) {}
+  private state: RuntimeReconciliationState = "stopped";
+  private startedAt: string | undefined;
+  private lastErrorCode: string | undefined;
+  private controller: AbortController | undefined;
+  private loopPromise: Promise<void> | undefined;
+
+  constructor(
+    private readonly config: EnabledRuntimeReconciliationConfig,
+    private readonly runtime: EnabledReconciliationRuntime,
+  ) {}
 
   async start(): Promise<void> {
-    await this.runtime.start();
+    if (this.loopPromise || this.state === "running" || this.state === "starting") return;
+    this.state = "starting";
+    this.startedAt = new Date().toISOString();
+    this.lastErrorCode = undefined;
+    this.controller = new AbortController();
+    this.state = "running";
+    const signal = this.controller.signal;
+    this.loopPromise = Promise.resolve()
+      .then(() => this.runtime.run(signal))
+      .then(() => {
+        if (this.state !== "stopping") this.state = "stopped";
+      })
+      .catch(() => {
+        this.lastErrorCode = "reconciliation-loop-failed";
+        this.state = "degraded";
+      })
+      .finally(() => {
+        this.loopPromise = undefined;
+        this.controller = undefined;
+      });
   }
 
   async stop(): Promise<void> {
-    await this.runtime.stop();
+    const loopPromise = this.loopPromise;
+    if (!loopPromise) {
+      if (this.state !== "degraded") this.state = "stopped";
+      return;
+    }
+    this.state = "stopping";
+    this.controller?.abort();
+    await loopPromise;
+    if (this.state !== "degraded") this.state = "stopped";
   }
 
   health(): RuntimeReconciliationHealth {
-    return this.runtime.health();
+    return {
+      state: this.state,
+      enabled: true,
+      workerId: this.config.workerId,
+      ...(this.startedAt === undefined ? {} : { startedAt: this.startedAt }),
+      ...(this.lastErrorCode === undefined ? {} : { lastErrorCode: this.lastErrorCode }),
+    };
   }
 }
 
@@ -193,5 +239,5 @@ export function createRuntimeReconciliationHost(
   if (!factories) {
     throw new Error("Enabled reconciliation runtime factories are required.");
   }
-  return new EnabledReconciliationHost(factories.createEnabledRuntime(config));
+  return new EnabledReconciliationHost(config, factories.createEnabledRuntime(config));
 }
