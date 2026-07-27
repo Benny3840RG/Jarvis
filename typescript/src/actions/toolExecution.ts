@@ -652,7 +652,9 @@ export class ToolExecutionService {
               ? { missingReferenceReason: "external-timeout-before-provider-reference" }
               : {}),
           });
-          if (!envelope.receipt) throw new Error("External uncertainty did not persist a receipt.");
+          if (!envelope.receipt) {
+            throw new Error("External uncertainty did not persist a receipt.", { cause: error });
+          }
           return envelope.receipt;
         }
       }
