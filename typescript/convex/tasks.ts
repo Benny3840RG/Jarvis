@@ -113,6 +113,24 @@ export const create = mutation({
     const identity = directCreateIdentity(args.idempotencyKey, args.requestFingerprint);
 
     if (identity.idempotencyKey !== undefined && identity.requestFingerprint !== undefined) {
+      const receipt = await ctx.db
+        .query("directCreateReceipts")
+        .withIndex("by_owner_type_and_key", (q) =>
+          q.eq("ownerId", ownerId).eq("entityType", "task").eq("idempotencyKey", identity.idempotencyKey),
+        )
+        .unique();
+      if (receipt) {
+        if (receipt.requestFingerprint !== identity.requestFingerprint) {
+          throw new Error("Task create idempotency key conflict.");
+        }
+        const receiptTaskId = ctx.db.normalizeId("tasks", receipt.entityId);
+        const receiptTask = receiptTaskId ? await ctx.db.get("tasks", receiptTaskId) : null;
+        if (!receiptTask || receiptTask.ownerId !== ownerId) {
+          throw new Error("Task from this create request is no longer available.");
+        }
+        return receiptTask;
+      }
+
       const existing = await ctx.db
         .query("tasks")
         .withIndex("by_owner_and_direct_create_idempotency_key", (q) =>
@@ -123,6 +141,14 @@ export const create = mutation({
         if (existing.directCreateFingerprint !== identity.requestFingerprint) {
           throw new Error("Task create idempotency key conflict.");
         }
+        await ctx.db.insert("directCreateReceipts", {
+          ownerId,
+          entityType: "task",
+          entityId: existing._id,
+          idempotencyKey: identity.idempotencyKey,
+          requestFingerprint: identity.requestFingerprint,
+          createdAt: Date.now(),
+        });
         return existing;
       }
     }
@@ -142,6 +168,16 @@ export const create = mutation({
     });
     const task = await ctx.db.get("tasks", id);
     if (!task) throw new Error("Task creation failed.");
+    if (identity.idempotencyKey !== undefined && identity.requestFingerprint !== undefined) {
+      await ctx.db.insert("directCreateReceipts", {
+        ownerId,
+        entityType: "task",
+        entityId: id,
+        idempotencyKey: identity.idempotencyKey,
+        requestFingerprint: identity.requestFingerprint,
+        createdAt: Date.now(),
+      });
+    }
     return task;
   },
 });
