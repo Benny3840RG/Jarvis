@@ -51,7 +51,9 @@ export type EnabledReconciliationRuntime = {
 };
 
 export type RuntimeReconciliationFactories = {
-  createEnabledRuntime(\n    config: EnabledRuntimeReconciliationConfig,\n  ): EnabledReconciliationRuntime;
+  createEnabledRuntime(
+    config: EnabledRuntimeReconciliationConfig,
+  ): EnabledReconciliationRuntime;
 };
 
 export type RuntimeReconciliationHost = {
@@ -100,7 +102,8 @@ function parseBoundedInteger(
 }
 
 function resolveWorkerId(environment: Environment): string {
-  const value =\n    environment.JARVIS_RECONCILIATION_WORKER_ID?.trim() ?? `runtime-${randomUUID()}`;
+  const value =
+    environment.JARVIS_RECONCILIATION_WORKER_ID?.trim() ?? `runtime-${randomUUID()}`;
   if (!/^[A-Za-z0-9._:-]{1,128}$/.test(value)) {
     throw new Error(
       "JARVIS_RECONCILIATION_WORKER_ID must be a safe identifier of 1 to 128 characters.",
