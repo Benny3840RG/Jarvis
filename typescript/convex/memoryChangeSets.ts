@@ -18,6 +18,7 @@ import {
   memoryChangeSetStateValidator,
   memoryRecordValidator,
 } from "./memoryChangeSetValidators.js";
+import { normaliseAuditPayload } from "./toolActionLogic.js";
 import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server.js";
 import type { Doc } from "./_generated/dataModel.js";
 
@@ -85,7 +86,7 @@ async function appendAudit(
     scopeKey: input.projectKey,
     eventType: input.eventType,
     actor: input.actor,
-    payload: input.payload,
+    payload: normaliseAuditPayload(input.payload),
     createdAt: input.createdAt,
   });
 }

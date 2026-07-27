@@ -118,14 +118,15 @@ const JarvisConsole: React.FC = () => {
 
   const isExpanded = displayMode === "fullscreen" || displayMode === "pip";
   const currentTask = activeTasks[0];
-  const busy =
-    refreshing ||
-    creatingTask ||
-    completingTask ||
-    creatingReminder ||
-    removingReminder ||
-    creatingNote ||
-    removingNote;
+  const busy = [
+    refreshing,
+    creatingTask,
+    completingTask,
+    creatingReminder,
+    removingReminder,
+    creatingNote,
+    removingNote,
+  ].some(Boolean);
 
   const runRefresh = async () => {
     const result = await refreshConsole({});

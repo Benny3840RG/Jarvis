@@ -3,7 +3,7 @@ import { v } from "convex/values";
 
 import { taskActionResultValidator } from "./internalActionValidators.js";
 import { collectBounded, requireOwner } from "./authHelpers.js";
-import { cleanRequiredText } from "./toolActionLogic.js";
+import { cleanRequiredText, requirePageSize } from "./toolActionLogic.js";
 import { mutation, query, type MutationCtx } from "./_generated/server.js";
 
 const taskValidator = v.object({
@@ -176,10 +176,7 @@ export const listPage = query({
   returns: paginationResultValidator(taskValidator),
   handler: async (ctx, args) => {
     const ownerId = requireOwner(args.serviceToken);
-    const { numItems } = args.paginationOpts;
-    if (!Number.isInteger(numItems) || numItems < 1 || numItems > 100) {
-      throw new Error("Task page size must be an integer from 1 to 100.");
-    }
+    requirePageSize(args.paginationOpts.numItems, "Task");
     return ctx.db
       .query("tasks")
       .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))

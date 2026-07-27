@@ -35,6 +35,13 @@ export const systemSchema = z.object({
   state: z.enum(["good", "guarded", "pending"]),
 });
 
+const paginationMetaSchema = z.object({
+  isDone: z.boolean(),
+  continueCursor: z.string(),
+  returnedCount: z.number().int().nonnegative(),
+  requestedPageSize: z.number().int().min(1).max(100),
+});
+
 export const propSchema = z.object({
   title: z.string(),
   phase: z.string(),
@@ -59,24 +66,9 @@ export const propSchema = z.object({
     notesPartial: z.boolean(),
   }),
   pagination: z.object({
-    tasks: z.object({
-      isDone: z.boolean(),
-      continueCursor: z.string(),
-      returnedCount: z.number().int().nonnegative(),
-      requestedPageSize: z.number().int().min(1).max(100),
-    }),
-    reminders: z.object({
-      isDone: z.boolean(),
-      continueCursor: z.string(),
-      returnedCount: z.number().int().nonnegative(),
-      requestedPageSize: z.number().int().min(1).max(100),
-    }),
-    notes: z.object({
-      isDone: z.boolean(),
-      continueCursor: z.string(),
-      returnedCount: z.number().int().nonnegative(),
-      requestedPageSize: z.number().int().min(1).max(100),
-    }),
+    tasks: paginationMetaSchema,
+    reminders: paginationMetaSchema,
+    notes: paginationMetaSchema,
   }),
 }).superRefine((value, ctx) => {
   for (const issue of consolePaginationInvariantIssues(value)) {

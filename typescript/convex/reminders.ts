@@ -3,7 +3,7 @@ import { v } from "convex/values";
 
 import { collectBounded, requireOwner } from "./authHelpers.js";
 import { reminderActionResultValidator } from "./internalActionValidators.js";
-import { cleanRequiredText } from "./toolActionLogic.js";
+import { cleanRequiredText, requirePageSize } from "./toolActionLogic.js";
 import { mutation, query, type MutationCtx } from "./_generated/server.js";
 
 const reminderValidator = v.object({
@@ -224,10 +224,7 @@ export const listPage = query({
   returns: paginationResultValidator(reminderValidator),
   handler: async (ctx, args) => {
     const ownerId = requireOwner(args.serviceToken);
-    const { numItems } = args.paginationOpts;
-    if (!Number.isInteger(numItems) || numItems < 1 || numItems > 100) {
-      throw new Error("Reminder page size must be an integer from 1 to 100.");
-    }
+    requirePageSize(args.paginationOpts.numItems, "Reminder");
     return ctx.db
       .query("reminders")
       .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))

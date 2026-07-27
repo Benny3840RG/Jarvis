@@ -15,6 +15,7 @@ import type { BuildLogStore } from "../buildLog/buildLogEntry.js";
 import type { UpgradeStore } from "../upgrades/upgrade.js";
 import type { AssetStore } from "../assets/asset.js";
 import type { PreferenceStore } from "../preferences/preference.js";
+import type { NoteStore } from "../notes/note.js";
 import type { MemoryChangeSetService } from "../memory/memoryChangeSets.js";
 import type { PersistenceProvider } from "../persistence/persistence.js";
 import type { PersistenceProviderName } from "../persistence/providerSelection.js";
@@ -26,6 +27,7 @@ import { BuildLogController } from "./buildLogController.js";
 import { UpgradeController } from "./upgradeController.js";
 import { AssetController } from "./assetController.js";
 import { PreferenceController } from "./preferenceController.js";
+import { NoteController } from "./noteController.js";
 import { ErrandController } from "./errandController.js";
 import { MemoryChangeSetController } from "./memoryChangeSetController.js";
 import { ProblemDetailsFilter } from "./problemDetails.js";
@@ -53,6 +55,7 @@ import {
   HTTP_UPGRADE_STORE,
   HTTP_ASSET_STORE,
   HTTP_PREFERENCE_STORE,
+  HTTP_NOTE_STORE,
   HTTP_MEMORY_CHANGE_SETS,
   HTTP_PERSISTENCE,
   HTTP_PROVIDER_NAME,
@@ -80,6 +83,7 @@ export type JarvisHttpModuleOptions = {
   upgradeStore: UpgradeStore;
   assetStore: AssetStore;
   preferenceStore: PreferenceStore;
+  noteStore: NoteStore;
 };
 
 @Module({})
@@ -104,6 +108,7 @@ export class JarvisHttpModule {
         UpgradeController,
         AssetController,
         PreferenceController,
+        NoteController,
         BriefController,
       ],
       providers: [
@@ -120,6 +125,7 @@ export class JarvisHttpModule {
         { provide: HTTP_UPGRADE_STORE, useValue: options.upgradeStore },
         { provide: HTTP_ASSET_STORE, useValue: options.assetStore },
         { provide: HTTP_PREFERENCE_STORE, useValue: options.preferenceStore },
+        { provide: HTTP_NOTE_STORE, useValue: options.noteStore },
         { provide: HTTP_PROVIDER_NAME, useValue: options.providerName },
         { provide: HTTP_TOTALITY_PIPELINE, useValue: options.totalityPipeline },
         { provide: HTTP_MEMORY_CHANGE_SETS, useValue: options.memoryChangeSetService },

@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import { requireOwner } from "./authHelpers.js";
 import {
   cleanRequiredText,
+  normaliseAuditPayload,
   normaliseToolArguments,
   requirePositiveRevision,
   sameToolActionProposal,
@@ -79,7 +80,7 @@ async function appendAudit(
     scopeKey: input.projectKey,
     eventType: input.eventType,
     actor: input.actor,
-    payload: input.payload,
+    payload: normaliseAuditPayload(input.payload),
     createdAt: input.createdAt,
   });
 }
