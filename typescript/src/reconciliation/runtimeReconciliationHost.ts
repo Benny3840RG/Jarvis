@@ -1,5 +1,7 @@
 import { randomUUID } from "node:crypto";
 
+import type { ReconciliationCycleObservation } from "./reconciliationScheduler.js";
+
 export type RuntimeReconciliationState =
   "disabled" | "starting" | "running" | "stopping" | "stopped" | "degraded";
 
@@ -43,7 +45,10 @@ export type EnabledReconciliationRuntime = {
 };
 
 export type RuntimeReconciliationFactories = {
-  createEnabledRuntime(config: EnabledRuntimeReconciliationConfig): EnabledReconciliationRuntime;
+  createEnabledRuntime(
+    config: EnabledRuntimeReconciliationConfig,
+    observeCycle: (observation: ReconciliationCycleObservation) => void,
+  ): EnabledReconciliationRuntime;
 };
 
 export type RuntimeReconciliationHost = {
@@ -169,14 +174,22 @@ class DisabledReconciliationHost implements RuntimeReconciliationHost {
 class EnabledReconciliationHost implements RuntimeReconciliationHost {
   private state: RuntimeReconciliationState = "stopped";
   private startedAt: string | undefined;
+  private lastCycleStartedAt: string | undefined;
+  private lastCycleCompletedAt: string | undefined;
+  private lastCycleProcessed: number | undefined;
   private lastErrorCode: string | undefined;
   private controller: AbortController | undefined;
   private loopPromise: Promise<void> | undefined;
+  private readonly runtime: EnabledReconciliationRuntime;
 
   constructor(
     private readonly config: EnabledRuntimeReconciliationConfig,
-    private readonly runtime: EnabledReconciliationRuntime,
-  ) {}
+    factories: RuntimeReconciliationFactories,
+  ) {
+    this.runtime = factories.createEnabledRuntime(config, (observation) =>
+      this.observeCycle(observation),
+    );
+  }
 
   async start(): Promise<void> {
     if (this.loopPromise || this.state === "running" || this.state === "starting") return;
@@ -219,8 +232,29 @@ class EnabledReconciliationHost implements RuntimeReconciliationHost {
       enabled: true,
       workerId: this.config.workerId,
       ...(this.startedAt === undefined ? {} : { startedAt: this.startedAt }),
+      ...(this.lastCycleStartedAt === undefined
+        ? {}
+        : { lastCycleStartedAt: this.lastCycleStartedAt }),
+      ...(this.lastCycleCompletedAt === undefined
+        ? {}
+        : { lastCycleCompletedAt: this.lastCycleCompletedAt }),
+      ...(this.lastCycleProcessed === undefined
+        ? {}
+        : { lastCycleProcessed: this.lastCycleProcessed }),
       ...(this.lastErrorCode === undefined ? {} : { lastErrorCode: this.lastErrorCode }),
     };
+  }
+
+  private observeCycle(observation: ReconciliationCycleObservation): void {
+    const observedAt = new Date().toISOString();
+    if (observation.type === "started") {
+      this.lastCycleStartedAt = observedAt;
+      return;
+    }
+    if (observation.type === "completed") {
+      this.lastCycleCompletedAt = observedAt;
+      this.lastCycleProcessed = observation.processed;
+    }
   }
 
   private finishStop(): void {
@@ -237,5 +271,5 @@ export function createRuntimeReconciliationHost(
   if (!factories) {
     throw new Error("Enabled reconciliation runtime factories are required.");
   }
-  return new EnabledReconciliationHost(config, factories.createEnabledRuntime(config));
+  return new EnabledReconciliationHost(config, factories);
 }
