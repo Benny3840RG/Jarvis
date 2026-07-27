@@ -583,6 +583,7 @@ describe("Jarvis HTTP system boundary", () => {
       version: string;
       sourceVersion: string;
       provider: Record<string, unknown>;
+      reconciliation: { state: string; enabled: boolean };
       timezone: string;
       layers: Record<string, { status: string; reason?: string }>;
       zState: string;
@@ -601,6 +602,7 @@ describe("Jarvis HTTP system boundary", () => {
       schemaCompatibility: "compatible",
       deploymentVersion: "dev/outgoing-ram-798",
     });
+    assert.deepEqual(body.reconciliation, { state: "disabled", enabled: false });
     assert.equal(body.timezone, "Australia/Melbourne");
     assert.equal(body.layers.runtime.status, "partial");
     assert.equal(body.layers.integration.status, "inactive");
