@@ -8529,6 +8529,9 @@
           },
           "createdAt": {
             "$ref": "#/components/schemas/TimestampMs"
+          },
+          "updatedAt": {
+            "$ref": "#/components/schemas/TimestampMs"
           }
         }
       },
@@ -8673,6 +8676,9 @@
             "$ref": "#/components/schemas/TimestampMs"
           },
           "createdAt": {
+            "$ref": "#/components/schemas/TimestampMs"
+          },
+          "updatedAt": {
             "$ref": "#/components/schemas/TimestampMs"
           }
         }

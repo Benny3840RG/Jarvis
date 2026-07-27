@@ -27,6 +27,12 @@ export interface Upgrade {
   /** When the change was made, if known (ms epoch); distinct from createdAt. */
   occurredAt?: number;
   createdAt: number;
+  /**
+   * Optional because existing rows predate this field (Convex requires
+   * widening a schema with an optional field before any backfill migration).
+   * Always present on entries created or updated after this field's addition.
+   */
+  updatedAt?: number;
 }
 
 export interface UpgradeInput {

@@ -1,6 +1,8 @@
+import { paginationOptsValidator, paginationResultValidator } from "convex/server";
 import { v } from "convex/values";
 
 import { collectBounded, requireOwner } from "./authHelpers.js";
+import { requirePageSize } from "./toolActionLogic.js";
 import { requireOwnedBuildId } from "./buildOwnership.js";
 import { mutation, query } from "./_generated/server.js";
 
@@ -22,6 +24,7 @@ const buildLogValidator = v.object({
   body: v.optional(v.string()),
   occurredAt: v.optional(v.number()),
   createdAt: v.number(),
+  updatedAt: v.optional(v.number()),
 });
 
 function requireText(value: string, field: string): string {
@@ -46,6 +49,23 @@ export const list = query({
       ctx.db.query("buildLogs").withIndex("by_owner", (q) => q.eq("ownerId", ownerId)),
       "Build log",
     );
+  },
+});
+
+export const listPage = query({
+  args: {
+    serviceToken: v.string(),
+    paginationOpts: paginationOptsValidator,
+  },
+  returns: paginationResultValidator(buildLogValidator),
+  handler: async (ctx, args) => {
+    const ownerId = requireOwner(args.serviceToken);
+    requirePageSize(args.paginationOpts.numItems, "Build log");
+    return ctx.db
+      .query("buildLogs")
+      .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+      .order("desc")
+      .paginate(args.paginationOpts);
   },
 });
 
@@ -83,6 +103,7 @@ export const create = mutation({
       ...(body === undefined ? {} : { body }),
       ...(args.occurredAt === undefined ? {} : { occurredAt: args.occurredAt }),
       createdAt: Date.now(),
+      updatedAt: Date.now(),
     });
     const entry = await ctx.db.get("buildLogs", id);
     if (!entry) throw new Error("Build log creation failed.");
@@ -123,6 +144,7 @@ export const update = mutation({
       title?: string;
       body?: string | undefined;
       occurredAt?: number | undefined;
+      updatedAt?: number;
     } = {};
     if (buildId !== undefined) patch.buildId = buildId;
     if (args.kind !== undefined) patch.kind = args.kind;
@@ -135,6 +157,7 @@ export const update = mutation({
     if (Object.keys(patch).length === 0) {
       throw new Error("Build log update requires at least one changed field.");
     }
+    patch.updatedAt = Date.now();
 
     await ctx.db.patch("buildLogs", id, patch);
     return ctx.db.get("buildLogs", id);

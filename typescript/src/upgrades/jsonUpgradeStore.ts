@@ -66,6 +66,7 @@ function normalizeEntry(value: unknown): Upgrade | null {
       ? { occurredAt: value.occurredAt }
       : {}),
     createdAt: typeof value.createdAt === "number" ? value.createdAt : Date.now(),
+    ...(typeof value.updatedAt === "number" ? { updatedAt: value.updatedAt } : {}),
   };
 }
 

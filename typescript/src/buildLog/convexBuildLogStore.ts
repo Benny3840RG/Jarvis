@@ -20,6 +20,7 @@ type BuildLogRow = {
   body?: string;
   occurredAt?: number;
   createdAt: number;
+  updatedAt?: number;
 };
 
 function entryFromConvex(row: BuildLogRow): BuildLogEntry {
@@ -31,6 +32,7 @@ function entryFromConvex(row: BuildLogRow): BuildLogEntry {
     ...(row.body === undefined ? {} : { body: row.body }),
     ...(row.occurredAt === undefined ? {} : { occurredAt: row.occurredAt }),
     createdAt: row.createdAt,
+    ...(row.updatedAt === undefined ? {} : { updatedAt: row.updatedAt }),
   };
 }
 

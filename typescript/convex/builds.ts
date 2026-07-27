@@ -1,6 +1,8 @@
+import { paginationOptsValidator, paginationResultValidator } from "convex/server";
 import { v } from "convex/values";
 
 import { collectBounded, requireOwner } from "./authHelpers.js";
+import { requirePageSize } from "./toolActionLogic.js";
 import { mutation, query } from "./_generated/server.js";
 
 const statusValidator = v.union(
@@ -46,6 +48,23 @@ export const list = query({
       ctx.db.query("builds").withIndex("by_owner", (q) => q.eq("ownerId", ownerId)),
       "Build",
     );
+  },
+});
+
+export const listPage = query({
+  args: {
+    serviceToken: v.string(),
+    paginationOpts: paginationOptsValidator,
+  },
+  returns: paginationResultValidator(buildValidator),
+  handler: async (ctx, args) => {
+    const ownerId = requireOwner(args.serviceToken);
+    requirePageSize(args.paginationOpts.numItems, "Build");
+    return ctx.db
+      .query("builds")
+      .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+      .order("desc")
+      .paginate(args.paginationOpts);
   },
 });
 

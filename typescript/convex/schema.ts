@@ -425,6 +425,9 @@ export default defineSchema({
     body: v.optional(v.string()),
     occurredAt: v.optional(v.number()),
     createdAt: v.number(),
+    // Optional: existing rows predate this field. Convex requires widening
+    // with an optional field before any backfill migration narrows it.
+    updatedAt: v.optional(v.number()),
   })
     .index("by_owner", ["ownerId"])
     .index("by_owner_and_build_id", ["ownerId", "buildId"]),
@@ -440,6 +443,9 @@ export default defineSchema({
     version: v.optional(v.string()),
     occurredAt: v.optional(v.number()),
     createdAt: v.number(),
+    // Optional: existing rows predate this field. Convex requires widening
+    // with an optional field before any backfill migration narrows it.
+    updatedAt: v.optional(v.number()),
   })
     .index("by_owner", ["ownerId"])
     .index("by_owner_and_build_id", ["ownerId", "buildId"]),
