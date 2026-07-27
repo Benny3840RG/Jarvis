@@ -116,7 +116,7 @@ export const create = mutation({
       const receipt = await ctx.db
         .query("directCreateReceipts")
         .withIndex("by_owner_type_and_key", (q) =>
-          q.eq("ownerId", ownerId).eq("entityType", "task").eq("idempotencyKey", identity.idempotencyKey),
+          q.eq("ownerId", ownerId).eq("entityType", "task").eq("idempotencyKey", identity.idempotencyKey as string),
         )
         .unique();
       if (receipt) {
