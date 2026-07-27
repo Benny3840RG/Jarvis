@@ -45,9 +45,7 @@ export type EnabledReconciliationRuntime = {
 };
 
 export type RuntimeReconciliationFactories = {
-  createEnabledRuntime(
-    config: EnabledRuntimeReconciliationConfig,
-  ): EnabledReconciliationRuntime;
+  createEnabledRuntime(config: EnabledRuntimeReconciliationConfig): EnabledReconciliationRuntime;
 };
 
 export type RuntimeReconciliationHost = {
@@ -81,30 +79,20 @@ function parsePositiveSafeInteger(
   const raw = environment[name];
   if (raw === undefined) return fallback;
   const value = Number(raw);
-  if (
-    !Number.isSafeInteger(value) ||
-    value < 1 ||
-    String(value) !== raw.trim()
-  ) {
+  if (!Number.isSafeInteger(value) || value < 1 || String(value) !== raw.trim()) {
     throw new Error(`${name} must be a positive safe integer.`);
   }
   return value;
 }
 
-function parseBoundedInteger(
-  environment: Environment,
-  name: string,
-  fallback: number,
-): number {
+function parseBoundedInteger(environment: Environment, name: string, fallback: number): number {
   const value = parsePositiveSafeInteger(environment, name, fallback);
   if (value > 100) throw new Error(`${name} must be between 1 and 100.`);
   return value;
 }
 
 function resolveWorkerId(environment: Environment): string {
-  const value =
-    environment.JARVIS_RECONCILIATION_WORKER_ID?.trim() ??
-    `runtime-${randomUUID()}`;
+  const value = environment.JARVIS_RECONCILIATION_WORKER_ID?.trim() ?? `runtime-${randomUUID()}`;
   if (!/^[A-Za-z0-9._:-]{1,128}$/.test(value)) {
     throw new Error(
       "JARVIS_RECONCILIATION_WORKER_ID must be a safe identifier of 1 to 128 characters.",
