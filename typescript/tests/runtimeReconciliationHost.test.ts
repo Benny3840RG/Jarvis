@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import {
   createRuntimeReconciliationHost,
   resolveRuntimeReconciliationConfig,
+  type EnabledReconciliationRuntime,
 } from "../src/reconciliation/runtimeReconciliationHost.js";
 
 const enabledEnvironment = {
@@ -11,7 +12,24 @@ const enabledEnvironment = {
   CONVEX_URL: "https://example.convex.cloud",
   CONVEX_DEPLOYMENT: "dev:example",
   JARVIS_SERVICE_TOKEN: "service-token",
+  JARVIS_RECONCILIATION_WORKER_ID: "test-worker",
 } as const;
+
+function deferred(): { promise: Promise<void>; resolve: () => void } {
+  let resolve!: () => void;
+  const promise = new Promise<void>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
+function hostWith(runtime: EnabledReconciliationRuntime) {
+  return createRuntimeReconciliationHost(enabledEnvironment, {
+    createEnabledRuntime() {
+      return runtime;
+    },
+  });
+}
 
 describe("runtime reconciliation configuration", () => {
   it("is disabled by default and for an explicit false value", () => {
@@ -38,11 +56,6 @@ describe("runtime reconciliation configuration", () => {
   });
 
   it("requires Convex and service credentials only when enabled", () => {
-    assert.deepEqual(resolveRuntimeReconciliationConfig({}), {
-      enabled: false,
-      state: "disabled",
-    });
-
     for (const missing of ["CONVEX_URL", "CONVEX_DEPLOYMENT", "JARVIS_SERVICE_TOKEN"] as const) {
       const environment: Record<string, string | undefined> = { ...enabledEnvironment };
       delete environment[missing];
@@ -63,7 +76,7 @@ describe("runtime reconciliation configuration", () => {
     assert.equal(config.maxAttempts, 5);
     assert.equal(config.baseRetryMs, 1_000);
     assert.equal(config.maxRetryMs, 60_000);
-    assert.match(config.workerId, /^[A-Za-z0-9._:-]+$/);
+    assert.equal(config.workerId, "test-worker");
   });
 
   it("rejects unsafe integers, out-of-range bounds, and reversed retry delays", () => {
@@ -71,7 +84,7 @@ describe("runtime reconciliation configuration", () => {
       ["JARVIS_RECONCILIATION_LEASE_MS", "0", /positive safe integer/],
       ["JARVIS_RECONCILIATION_INTERVAL_MS", "1.5", /positive safe integer/],
       ["JARVIS_RECONCILIATION_BATCH_SIZE", "101", /between 1 and 100/],
-      ["JARVIS_RECONCILIATION_MAX_ATTEMPTS", "0", /between 1 and 100/],
+      ["JARVIS_RECONCILIATION_MAX_ATTEMPTS", "0", /positive safe integer/],
       ["JARVIS_RECONCILIATION_BASE_RETRY_MS", "9007199254740992", /positive safe integer/],
     ];
 
@@ -110,5 +123,106 @@ describe("runtime reconciliation configuration", () => {
       state: "disabled",
       enabled: false,
     });
+  });
+});
+
+describe("runtime reconciliation lifecycle", () => {
+  it("starts exactly one loop when start is repeated", async () => {
+    const release = deferred();
+    let runs = 0;
+    const host = hostWith({
+      async run(signal) {
+        runs += 1;
+        await release.promise;
+        assert.equal(signal.aborted, true);
+      },
+    });
+
+    await Promise.all([host.start(), host.start(), host.start()]);
+    await new Promise<void>((resolve) => queueMicrotask(resolve));
+    assert.equal(runs, 1);
+    assert.equal(host.health().state, "running");
+
+    const stopping = host.stop();
+    release.resolve();
+    await stopping;
+    assert.equal(host.health().state, "stopped");
+  });
+
+  it("aborts sleeping work and waits for the loop to finish", async () => {
+    const entered = deferred();
+    const exited = deferred();
+    const host = hostWith({
+      async run(signal) {
+        entered.resolve();
+        await new Promise<void>((resolve) => signal.addEventListener("abort", () => resolve()));
+        exited.resolve();
+      },
+    });
+
+    await host.start();
+    await entered.promise;
+    const stopping = host.stop();
+    assert.equal(host.health().state, "stopping");
+    await exited.promise;
+    await stopping;
+    assert.equal(host.health().state, "stopped");
+  });
+
+  it("waits for active reconciliation after cancellation", async () => {
+    const active = deferred();
+    const complete = deferred();
+    let stopSettled = false;
+    const host = hostWith({
+      async run(signal) {
+        active.resolve();
+        await complete.promise;
+        assert.equal(signal.aborted, true);
+      },
+    });
+
+    await host.start();
+    await active.promise;
+    const stopping = host.stop().then(() => {
+      stopSettled = true;
+    });
+    await new Promise<void>((resolve) => queueMicrotask(resolve));
+    assert.equal(stopSettled, false);
+    complete.resolve();
+    await stopping;
+    assert.equal(stopSettled, true);
+  });
+
+  it("reports loop failure using only a stable redacted error code", async () => {
+    const host = hostWith({
+      async run() {
+        throw new Error("service-token secret provider/reference");
+      },
+    });
+
+    await host.start();
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.deepEqual(host.health(), {
+      state: "degraded",
+      enabled: true,
+      workerId: "test-worker",
+      startedAt: host.health().startedAt,
+      lastErrorCode: "reconciliation-loop-failed",
+    });
+    assert.doesNotMatch(JSON.stringify(host.health()), /service-token|provider\/reference|secret/);
+    await host.stop();
+    assert.equal(host.health().state, "degraded");
+  });
+
+  it("allows stop to be repeated without changing the result", async () => {
+    const host = hostWith({
+      async run(signal) {
+        await new Promise<void>((resolve) => signal.addEventListener("abort", () => resolve()));
+      },
+    });
+
+    await host.start();
+    await Promise.all([host.stop(), host.stop(), host.stop()]);
+    assert.equal(host.health().state, "stopped");
   });
 });
