@@ -73,7 +73,9 @@ const DEFAULTS = {
 
 function requireNonEmpty(environment: Environment, name: string): string {
   const value = environment[name]?.trim();
-  if (!value) {\n    throw new Error(`${name} is required when reconciliation is enabled.`);\n  }
+  if (!value) {
+    throw new Error(`${name} is required when reconciliation is enabled.`);
+  }
   return value;
 }
 
