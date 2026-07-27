@@ -2,11 +2,17 @@ import { HttpStatus, Inject, Injectable } from "@nestjs/common";
 
 import type { PersistenceProvider } from "../persistence/persistence.js";
 import type { PersistenceProviderName } from "../persistence/providerSelection.js";
+import type { RuntimeReconciliationHealth } from "../reconciliation/runtimeReconciliationHost.js";
 import { resolveReminderTimezone } from "../reminders/due.js";
 import type { HttpAppConfig } from "./config.js";
 import type { LayersStatus, SystemStatus } from "./contracts.js";
 import { JarvisProblem } from "./problemDetails.js";
-import { HTTP_APP_CONFIG, HTTP_PERSISTENCE, HTTP_PROVIDER_NAME } from "./tokens.js";
+import {
+  HTTP_APP_CONFIG,
+  HTTP_PERSISTENCE,
+  HTTP_PROVIDER_NAME,
+  HTTP_RECONCILIATION_HEALTH,
+} from "./tokens.js";
 
 const LAYERS: LayersStatus = {
   runtime: {
@@ -55,6 +61,8 @@ export class SystemStatusService {
     @Inject(HTTP_PERSISTENCE) private readonly persistence: PersistenceProvider,
     @Inject(HTTP_PROVIDER_NAME) private readonly providerName: PersistenceProviderName,
     @Inject(HTTP_APP_CONFIG) private readonly config: HttpAppConfig,
+    @Inject(HTTP_RECONCILIATION_HEALTH)
+    private readonly reconciliationHealth: () => RuntimeReconciliationHealth,
   ) {}
 
   async inspect(): Promise<SystemStatus> {
@@ -96,6 +104,7 @@ export class SystemStatusService {
         schemaCompatibility: "compatible",
         deploymentVersion: this.config.deploymentVersion,
       },
+      reconciliation: { ...this.reconciliationHealth() },
       timezone,
       layers: LAYERS,
       zState: "disabled",
