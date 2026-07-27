@@ -1,12 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 export type RuntimeReconciliationState =
-  | "disabled"
-  | "starting"
-  | "running"
-  | "stopping"
-  | "stopped"
-  | "degraded";
+  "disabled" | "starting" | "running" | "stopping" | "stopped" | "degraded";
 
 export type RuntimeReconciliationHealth = {
   state: RuntimeReconciliationState;
@@ -39,8 +34,7 @@ export type EnabledRuntimeReconciliationConfig = {
 };
 
 export type RuntimeReconciliationConfig =
-  | DisabledRuntimeReconciliationConfig
-  | EnabledRuntimeReconciliationConfig;
+  DisabledRuntimeReconciliationConfig | EnabledRuntimeReconciliationConfig;
 
 type Environment = Readonly<Record<string, string | undefined>>;
 
@@ -49,7 +43,9 @@ export type EnabledReconciliationRuntime = {
 };
 
 export type RuntimeReconciliationFactories = {
-  createEnabledRuntime(config: EnabledRuntimeReconciliationConfig): EnabledReconciliationRuntime;
+  createEnabledRuntime(
+    config: EnabledRuntimeReconciliationConfig,
+  ): EnabledReconciliationRuntime;
 };
 
 export type RuntimeReconciliationHost = {
@@ -83,20 +79,30 @@ function parsePositiveSafeInteger(
   const raw = environment[name];
   if (raw === undefined) return fallback;
   const value = Number(raw);
-  if (!Number.isSafeInteger(value) || value < 1 || String(value) !== raw.trim()) {
+  if (
+    !Number.isSafeInteger(value) ||
+    value < 1 ||
+    String(value) !== raw.trim()
+  ) {
     throw new Error(`${name} must be a positive safe integer.`);
   }
   return value;
 }
 
-function parseBoundedInteger(environment: Environment, name: string, fallback: number): number {
+function parseBoundedInteger(
+  environment: Environment,
+  name: string,
+  fallback: number,
+): number {
   const value = parsePositiveSafeInteger(environment, name, fallback);
   if (value > 100) throw new Error(`${name} must be between 1 and 100.`);
   return value;
 }
 
 function resolveWorkerId(environment: Environment): string {
-  const value = environment.JARVIS_RECONCILIATION_WORKER_ID?.trim() ?? `runtime-${randomUUID()}`;
+  const value =
+    environment.JARVIS_RECONCILIATION_WORKER_ID?.trim() ??
+    `runtime-${randomUUID()}`;
   if (!/^[A-Za-z0-9._:-]{1,128}$/.test(value)) {
     throw new Error(
       "JARVIS_RECONCILIATION_WORKER_ID must be a safe identifier of 1 to 128 characters.",
@@ -185,7 +191,12 @@ class EnabledReconciliationHost implements RuntimeReconciliationHost {
   ) {}
 
   async start(): Promise<void> {
-    if (this.loopPromise || this.state === "running" || this.state === "starting") return;
+    if (
+      this.loopPromise ||
+      this.state === "running" ||
+      this.state === "starting"
+    )
+      return;
     this.state = "starting";
     this.startedAt = new Date().toISOString();
     this.lastErrorCode = undefined;
@@ -225,7 +236,9 @@ class EnabledReconciliationHost implements RuntimeReconciliationHost {
       enabled: true,
       workerId: this.config.workerId,
       ...(this.startedAt === undefined ? {} : { startedAt: this.startedAt }),
-      ...(this.lastErrorCode === undefined ? {} : { lastErrorCode: this.lastErrorCode }),
+      ...(this.lastErrorCode === undefined
+        ? {}
+        : { lastErrorCode: this.lastErrorCode }),
     };
   }
 
@@ -243,5 +256,8 @@ export function createRuntimeReconciliationHost(
   if (!factories) {
     throw new Error("Enabled reconciliation runtime factories are required.");
   }
-  return new EnabledReconciliationHost(config, factories.createEnabledRuntime(config));
+  return new EnabledReconciliationHost(
+    config,
+    factories.createEnabledRuntime(config),
+  );
 }
