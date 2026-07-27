@@ -23,9 +23,14 @@ afterEach(() => {
 describe("build log updatedAt", () => {
   it("stamps updatedAt on create and bumps it on update", async () => {
     const t = harness();
+    const build = await t.mutation(api.builds.create, {
+      serviceToken: SERVICE_TOKEN,
+      name: "Timestamp test build",
+      kind: "test",
+    });
     const created = await t.mutation(api.buildLogs.create, {
       serviceToken: SERVICE_TOKEN,
-      buildId: "build-1",
+      buildId: build._id,
       title: "First entry",
     });
     expect(created.updatedAt).toBe(created.createdAt);
