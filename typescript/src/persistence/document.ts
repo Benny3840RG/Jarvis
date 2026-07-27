@@ -114,7 +114,7 @@ function normalizeReminder(
     throw new StateDocumentError(`Reminder ${index} has an invalid createdAt value.`);
   }
 
-  let due: Partial<Reminder> = {};
+  let due: Partial<Reminder>;
   if (format === "version2") {
     if (value.due !== undefined) {
       throw new StateDocumentError(`Reminder ${index} contains the retired due field.`);
