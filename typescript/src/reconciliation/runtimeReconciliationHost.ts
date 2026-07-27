@@ -1,12 +1,8 @@
+npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm.
 import { randomUUID } from "node:crypto";
 
 export type RuntimeReconciliationState =
-  | "disabled"
-  | "starting"
-  | "running"
-  | "stopping"
-  | "stopped"
-  | "degraded";
+  "disabled" | "starting" | "running" | "stopping" | "stopped" | "degraded";
 
 export type RuntimeReconciliationHealth = {
   state: RuntimeReconciliationState;
@@ -39,8 +35,7 @@ export type EnabledRuntimeReconciliationConfig = {
 };
 
 export type RuntimeReconciliationConfig =
-  | DisabledRuntimeReconciliationConfig
-  | EnabledRuntimeReconciliationConfig;
+  DisabledRuntimeReconciliationConfig | EnabledRuntimeReconciliationConfig;
 
 type Environment = Readonly<Record<string, string | undefined>>;
 
@@ -87,7 +82,11 @@ function parsePositiveSafeInteger(
   const raw = environment[name];
   if (raw === undefined) return fallback;
   const value = Number(raw);
-  if (!Number.isSafeInteger(value) || value < 1 || String(value) !== raw.trim()) {
+  if (
+    !Number.isSafeInteger(value) ||
+    value < 1 ||
+    String(value) !== raw.trim()
+  ) {
     throw new Error(`${name} must be a positive safe integer.`);
   }
   return value;
@@ -105,7 +104,8 @@ function parseBoundedInteger(
 
 function resolveWorkerId(environment: Environment): string {
   const value =
-    environment.JARVIS_RECONCILIATION_WORKER_ID?.trim() ?? `runtime-${randomUUID()}`;
+    environment.JARVIS_RECONCILIATION_WORKER_ID?.trim() ??
+    `runtime-${randomUUID()}`;
   if (!/^[A-Za-z0-9._:-]{1,128}$/.test(value)) {
     throw new Error(
       "JARVIS_RECONCILIATION_WORKER_ID must be a safe identifier of 1 to 128 characters.",
