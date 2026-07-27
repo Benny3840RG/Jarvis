@@ -14,6 +14,7 @@ type ToolExecutionReceiptRow = {
   projectId: string;
   idempotencyKey: string;
   actionFingerprint: string;
+  effectFingerprint?: string;
   tool: string;
   operation: string;
   actor?: ToolExecutionReceipt["actor"];
@@ -21,9 +22,14 @@ type ToolExecutionReceiptRow = {
   policyVersion?: string;
   correlationId?: string;
   source?: string;
+  provider?: string;
+  providerRequestId?: string;
+  providerCorrelationId?: string;
+  reconciliationId?: string;
   status: ToolExecutionReceipt["status"];
   outputDigest?: string;
   errorCode?: ToolExecutionReceipt["errorCode"];
+  providerErrorCode?: string;
   startedAt: number;
   completedAt: number;
 };
@@ -37,6 +43,7 @@ function receiptFromConvex(row: ToolExecutionReceiptRow): ToolExecutionReceipt {
     projectId: row.projectId,
     idempotencyKey: row.idempotencyKey,
     actionFingerprint: row.actionFingerprint,
+    ...(row.effectFingerprint === undefined ? {} : { effectFingerprint: row.effectFingerprint }),
     tool: row.tool,
     operation: row.operation,
     actor: row.actor ?? "tool",
@@ -44,9 +51,16 @@ function receiptFromConvex(row: ToolExecutionReceiptRow): ToolExecutionReceipt {
     policyVersion: row.policyVersion ?? "legacy-unversioned",
     correlationId: row.correlationId ?? requestId,
     source: row.source ?? "legacy-tool-execution-receipt",
+    ...(row.provider === undefined ? {} : { provider: row.provider }),
+    ...(row.providerRequestId === undefined ? {} : { providerRequestId: row.providerRequestId }),
+    ...(row.providerCorrelationId === undefined
+      ? {}
+      : { providerCorrelationId: row.providerCorrelationId }),
+    ...(row.reconciliationId === undefined ? {} : { reconciliationId: row.reconciliationId }),
     status: row.status,
     ...(row.outputDigest === undefined ? {} : { outputDigest: row.outputDigest }),
     ...(row.errorCode === undefined ? {} : { errorCode: row.errorCode }),
+    ...(row.providerErrorCode === undefined ? {} : { providerErrorCode: row.providerErrorCode }),
     startedAt: new Date(row.startedAt).toISOString(),
     completedAt: new Date(row.completedAt).toISOString(),
   };
@@ -88,6 +102,9 @@ export class ConvexToolExecutionReceiptStore implements ToolExecutionReceiptStor
       projectId: receipt.projectId,
       idempotencyKey: receipt.idempotencyKey,
       actionFingerprint: receipt.actionFingerprint,
+      ...(receipt.effectFingerprint === undefined
+        ? {}
+        : { effectFingerprint: receipt.effectFingerprint }),
       tool: receipt.tool,
       operation: receipt.operation,
       actor: receipt.actor,
@@ -95,9 +112,22 @@ export class ConvexToolExecutionReceiptStore implements ToolExecutionReceiptStor
       policyVersion: receipt.policyVersion,
       correlationId: receipt.correlationId,
       source: receipt.source,
+      ...(receipt.provider === undefined ? {} : { provider: receipt.provider }),
+      ...(receipt.providerRequestId === undefined
+        ? {}
+        : { providerRequestId: receipt.providerRequestId }),
+      ...(receipt.providerCorrelationId === undefined
+        ? {}
+        : { providerCorrelationId: receipt.providerCorrelationId }),
+      ...(receipt.reconciliationId === undefined
+        ? {}
+        : { reconciliationId: receipt.reconciliationId }),
       status: receipt.status,
       ...(receipt.outputDigest === undefined ? {} : { outputDigest: receipt.outputDigest }),
       ...(receipt.errorCode === undefined ? {} : { errorCode: receipt.errorCode }),
+      ...(receipt.providerErrorCode === undefined
+        ? {}
+        : { providerErrorCode: receipt.providerErrorCode }),
       startedAt: new Date(receipt.startedAt).getTime(),
       completedAt: new Date(receipt.completedAt).getTime(),
     });

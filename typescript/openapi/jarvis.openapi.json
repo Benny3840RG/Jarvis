@@ -4,7 +4,7 @@
   "info": {
     "title": "Jarvis Operator API",
     "summary": "A safety-gated API for the Jarvis Z-State runtime and durable operator data.",
-    "description": "Jarvis accepts structured operator requests, routes work through its runtime and safety envelope, persists tasks and reminders through the configured JSON or Convex provider, runs proposal-only Totality reasoning, stages revision-checked project-memory changes, and stores revision-bound tool-action proposals for explicit approval or rejection without execution. The private development ChatGPT App preview now provides a stateless Streamable HTTP MCP adapter and versioned dashboard widget for the operations marked with x-mcp-tool.exposed=true. Jarvis and OpenAI credentials remain server-side. This contract is intentionally single-user and private.",
+    "description": "Jarvis accepts structured operator requests, routes work through its runtime and safety envelope, persists tasks and reminders through the configured JSON or Convex provider, runs proposal-only Totality reasoning, stages revision-checked project-memory changes, and stores revision-bound tool-action proposals for explicit approval or rejection. Approved tool actions may be executed through the small reviewed server-side allowlist, with durable receipts and external reconciliation where required. The private development ChatGPT App preview provides a stateless Streamable HTTP MCP adapter and versioned dashboard widget for the operations marked with x-mcp-tool.exposed=true. Jarvis and OpenAI credentials remain server-side. This contract is intentionally single-user and private.",
     "version": "0.7.0",
     "license": {
       "name": "Proprietary",
@@ -53,7 +53,7 @@
     },
     {
       "name": "Tool Actions",
-      "description": "Revision-bound tool-action proposal, inspection, approval, and rejection. Approval does not execute the operation."
+      "description": "Revision-bound tool-action proposal, inspection, approval, rejection, and execution through the reviewed server-side allowlist. Approval alone does not execute the operation."
     }
   ],
   "x-jarvis-architecture": {
@@ -119,7 +119,8 @@
       "listToolActions",
       "getToolAction",
       "approveToolAction",
-      "rejectToolAction"
+      "rejectToolAction",
+      "executeToolAction"
     ],
     "implementationStatus": "private-development-preview",
     "transport": "streamable-http-stateless",
@@ -2075,7 +2076,7 @@
       "post": {
         "operationId": "executeToolAction",
         "summary": "Execute an approved tool-action proposal",
-        "description": "Runs an approved proposal against the tool/operation allowlist and returns a durable receipt. Blocked, timed-out, and failed outcomes are returned as a receipt with a 200 status, not as an error, since the attempt itself always completes. Currently no tool/operation is allowlisted, so every call returns a receipt with status \"blocked\" and errorCode \"not-allowlisted\" until a specific definition is registered server-side.",
+        "description": "Runs an approved proposal against the reviewed tool/operation allowlist and returns a durable receipt. The active internal allowlist contains notes:create, tasks:create, tasks:complete, reminders:create, and reminders:cancel. Blocked, timed-out, indeterminate, and failed outcomes are returned as receipts with a 200 status because the execution attempt itself completed. Quote finalisation and sending remain unavailable until separately commissioned.",
         "tags": ["Tool Actions"],
         "parameters": [
           {
@@ -2669,38 +2670,66 @@
           {
             "name": "clientId",
             "in": "query",
-            "schema": { "type": "string", "minLength": 1, "maxLength": 200 }
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
           },
           {
             "name": "projectId",
             "in": "query",
-            "schema": { "type": "string", "minLength": 1, "maxLength": 200 }
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
           },
           {
             "name": "commercialStatus",
             "in": "query",
-            "schema": { "$ref": "#/components/schemas/QuoteCommercialStatus" }
+            "schema": {
+              "$ref": "#/components/schemas/QuoteCommercialStatus"
+            }
           },
           {
             "name": "limit",
             "in": "query",
-            "schema": { "type": "integer", "minimum": 1, "maximum": 100 }
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
           }
         ],
         "responses": {
           "200": {
             "description": "Current quote snapshots.",
-            "headers": { "X-Request-Id": { "$ref": "#/components/headers/RequestId" } },
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/QuoteRevisionListResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/QuoteRevisionListResponse"
+                }
               }
             }
           },
-          "401": { "$ref": "#/components/responses/Unauthorized" },
-          "422": { "$ref": "#/components/responses/UnprocessableEntity" },
-          "500": { "$ref": "#/components/responses/InternalServerError" },
-          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
         }
       },
       "post": {
@@ -2721,29 +2750,49 @@
           "required": true,
           "content": {
             "application/json": {
-              "schema": { "$ref": "#/components/schemas/CreateQuoteRevisionRequest" }
+              "schema": {
+                "$ref": "#/components/schemas/CreateQuoteRevisionRequest"
+              }
             }
           }
         },
         "responses": {
           "201": {
             "description": "Quote created.",
-            "headers": { "X-Request-Id": { "$ref": "#/components/headers/RequestId" } },
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/QuoteRevisionSnapshotResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/QuoteRevisionSnapshotResponse"
+                }
               }
             }
           },
-          "401": { "$ref": "#/components/responses/Unauthorized" },
-          "422": { "$ref": "#/components/responses/UnprocessableEntity" },
-          "500": { "$ref": "#/components/responses/InternalServerError" },
-          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
         }
       }
     },
     "/api/v1/quotes/{quoteId}": {
-      "parameters": [{ "$ref": "#/components/parameters/QuoteId" }],
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/QuoteId"
+        }
+      ],
       "get": {
         "operationId": "getQuote",
         "summary": "Get one quote lifecycle snapshot",
@@ -2761,24 +2810,42 @@
         "responses": {
           "200": {
             "description": "Current quote snapshot.",
-            "headers": { "X-Request-Id": { "$ref": "#/components/headers/RequestId" } },
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/QuoteRevisionSnapshotResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/QuoteRevisionSnapshotResponse"
+                }
               }
             }
           },
-          "401": { "$ref": "#/components/responses/Unauthorized" },
-          "404": { "$ref": "#/components/responses/NotFound" },
-          "500": { "$ref": "#/components/responses/InternalServerError" },
-          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
         }
       }
     },
     "/api/v1/quotes/{quoteId}/revisions/{revision}": {
       "parameters": [
-        { "$ref": "#/components/parameters/QuoteId" },
-        { "$ref": "#/components/parameters/QuoteRevisionNumber" }
+        {
+          "$ref": "#/components/parameters/QuoteId"
+        },
+        {
+          "$ref": "#/components/parameters/QuoteRevisionNumber"
+        }
       ],
       "patch": {
         "operationId": "updateQuoteDraft",
@@ -2798,33 +2865,57 @@
           "required": true,
           "content": {
             "application/json": {
-              "schema": { "$ref": "#/components/schemas/UpdateQuoteDraftRequest" }
+              "schema": {
+                "$ref": "#/components/schemas/UpdateQuoteDraftRequest"
+              }
             }
           }
         },
         "responses": {
           "200": {
             "description": "Draft revision updated.",
-            "headers": { "X-Request-Id": { "$ref": "#/components/headers/RequestId" } },
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/QuoteRevisionSnapshotResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/QuoteRevisionSnapshotResponse"
+                }
               }
             }
           },
-          "401": { "$ref": "#/components/responses/Unauthorized" },
-          "404": { "$ref": "#/components/responses/NotFound" },
-          "409": { "$ref": "#/components/responses/Conflict" },
-          "422": { "$ref": "#/components/responses/UnprocessableEntity" },
-          "500": { "$ref": "#/components/responses/InternalServerError" },
-          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
         }
       }
     },
     "/api/v1/quotes/{quoteId}/revisions/{revision}/review": {
       "parameters": [
-        { "$ref": "#/components/parameters/QuoteId" },
-        { "$ref": "#/components/parameters/QuoteRevisionNumber" }
+        {
+          "$ref": "#/components/parameters/QuoteId"
+        },
+        {
+          "$ref": "#/components/parameters/QuoteRevisionNumber"
+        }
       ],
       "post": {
         "operationId": "submitQuoteForReview",
@@ -2844,33 +2935,57 @@
           "required": true,
           "content": {
             "application/json": {
-              "schema": { "$ref": "#/components/schemas/QuoteRevisionCommandRequest" }
+              "schema": {
+                "$ref": "#/components/schemas/QuoteRevisionCommandRequest"
+              }
             }
           }
         },
         "responses": {
           "200": {
             "description": "Revision submitted for review.",
-            "headers": { "X-Request-Id": { "$ref": "#/components/headers/RequestId" } },
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/QuoteRevisionSnapshotResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/QuoteRevisionSnapshotResponse"
+                }
               }
             }
           },
-          "401": { "$ref": "#/components/responses/Unauthorized" },
-          "404": { "$ref": "#/components/responses/NotFound" },
-          "409": { "$ref": "#/components/responses/Conflict" },
-          "422": { "$ref": "#/components/responses/UnprocessableEntity" },
-          "500": { "$ref": "#/components/responses/InternalServerError" },
-          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
         }
       }
     },
     "/api/v1/quotes/{quoteId}/revisions/{revision}/reopen": {
       "parameters": [
-        { "$ref": "#/components/parameters/QuoteId" },
-        { "$ref": "#/components/parameters/QuoteRevisionNumber" }
+        {
+          "$ref": "#/components/parameters/QuoteId"
+        },
+        {
+          "$ref": "#/components/parameters/QuoteRevisionNumber"
+        }
       ],
       "post": {
         "operationId": "reopenQuoteForEditing",
@@ -2890,33 +3005,57 @@
           "required": true,
           "content": {
             "application/json": {
-              "schema": { "$ref": "#/components/schemas/QuoteRevisionCommandRequest" }
+              "schema": {
+                "$ref": "#/components/schemas/QuoteRevisionCommandRequest"
+              }
             }
           }
         },
         "responses": {
           "200": {
             "description": "Revision reopened for editing.",
-            "headers": { "X-Request-Id": { "$ref": "#/components/headers/RequestId" } },
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/QuoteRevisionSnapshotResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/QuoteRevisionSnapshotResponse"
+                }
               }
             }
           },
-          "401": { "$ref": "#/components/responses/Unauthorized" },
-          "404": { "$ref": "#/components/responses/NotFound" },
-          "409": { "$ref": "#/components/responses/Conflict" },
-          "422": { "$ref": "#/components/responses/UnprocessableEntity" },
-          "500": { "$ref": "#/components/responses/InternalServerError" },
-          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
         }
       }
     },
     "/api/v1/quotes/{quoteId}/revisions/{revision}/finalize": {
       "parameters": [
-        { "$ref": "#/components/parameters/QuoteId" },
-        { "$ref": "#/components/parameters/QuoteRevisionNumber" }
+        {
+          "$ref": "#/components/parameters/QuoteId"
+        },
+        {
+          "$ref": "#/components/parameters/QuoteRevisionNumber"
+        }
       ],
       "post": {
         "operationId": "finalizeQuote",
@@ -2936,33 +3075,57 @@
           "required": true,
           "content": {
             "application/json": {
-              "schema": { "$ref": "#/components/schemas/QuoteRevisionCommandRequest" }
+              "schema": {
+                "$ref": "#/components/schemas/QuoteRevisionCommandRequest"
+              }
             }
           }
         },
         "responses": {
           "200": {
             "description": "Revision finalized.",
-            "headers": { "X-Request-Id": { "$ref": "#/components/headers/RequestId" } },
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/QuoteRevisionSnapshotResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/QuoteRevisionSnapshotResponse"
+                }
               }
             }
           },
-          "401": { "$ref": "#/components/responses/Unauthorized" },
-          "404": { "$ref": "#/components/responses/NotFound" },
-          "409": { "$ref": "#/components/responses/Conflict" },
-          "422": { "$ref": "#/components/responses/UnprocessableEntity" },
-          "500": { "$ref": "#/components/responses/InternalServerError" },
-          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
         }
       }
     },
     "/api/v1/quotes/{quoteId}/revisions/{revision}/fork": {
       "parameters": [
-        { "$ref": "#/components/parameters/QuoteId" },
-        { "$ref": "#/components/parameters/QuoteRevisionNumber" }
+        {
+          "$ref": "#/components/parameters/QuoteId"
+        },
+        {
+          "$ref": "#/components/parameters/QuoteRevisionNumber"
+        }
       ],
       "post": {
         "operationId": "forkQuote",
@@ -2982,31 +3145,55 @@
           "required": true,
           "content": {
             "application/json": {
-              "schema": { "$ref": "#/components/schemas/ForkQuoteRevisionRequest" }
+              "schema": {
+                "$ref": "#/components/schemas/ForkQuoteRevisionRequest"
+              }
             }
           }
         },
         "responses": {
           "201": {
             "description": "New draft revision created from the finalized revision.",
-            "headers": { "X-Request-Id": { "$ref": "#/components/headers/RequestId" } },
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/QuoteRevisionSnapshotResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/QuoteRevisionSnapshotResponse"
+                }
               }
             }
           },
-          "401": { "$ref": "#/components/responses/Unauthorized" },
-          "404": { "$ref": "#/components/responses/NotFound" },
-          "409": { "$ref": "#/components/responses/Conflict" },
-          "422": { "$ref": "#/components/responses/UnprocessableEntity" },
-          "500": { "$ref": "#/components/responses/InternalServerError" },
-          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
         }
       }
     },
     "/api/v1/quotes/{quoteId}/commercial-outcome": {
-      "parameters": [{ "$ref": "#/components/parameters/QuoteId" }],
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/QuoteId"
+        }
+      ],
       "post": {
         "operationId": "recordQuoteCommercialOutcome",
         "summary": "Record a quote's commercial outcome",
@@ -3025,31 +3212,55 @@
           "required": true,
           "content": {
             "application/json": {
-              "schema": { "$ref": "#/components/schemas/RecordQuoteCommercialOutcomeRequest" }
+              "schema": {
+                "$ref": "#/components/schemas/RecordQuoteCommercialOutcomeRequest"
+              }
             }
           }
         },
         "responses": {
           "200": {
             "description": "Commercial outcome recorded.",
-            "headers": { "X-Request-Id": { "$ref": "#/components/headers/RequestId" } },
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/QuoteRevisionSnapshotResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/QuoteRevisionSnapshotResponse"
+                }
               }
             }
           },
-          "401": { "$ref": "#/components/responses/Unauthorized" },
-          "404": { "$ref": "#/components/responses/NotFound" },
-          "409": { "$ref": "#/components/responses/Conflict" },
-          "422": { "$ref": "#/components/responses/UnprocessableEntity" },
-          "500": { "$ref": "#/components/responses/InternalServerError" },
-          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
         }
       }
     },
     "/api/v1/quotes/{quoteId}/deliveries": {
-      "parameters": [{ "$ref": "#/components/parameters/QuoteId" }],
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/QuoteId"
+        }
+      ],
       "get": {
         "operationId": "listQuoteDeliveries",
         "summary": "List a quote's delivery attempts",
@@ -3067,15 +3278,25 @@
         "responses": {
           "200": {
             "description": "Delivery attempts for this quote.",
-            "headers": { "X-Request-Id": { "$ref": "#/components/headers/RequestId" } },
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/QuoteDeliveryListResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/QuoteDeliveryListResponse"
+                }
               }
             }
           },
-          "401": { "$ref": "#/components/responses/Unauthorized" },
-          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
         }
       }
     },
@@ -7095,19 +7316,50 @@
           "updatedAt"
         ],
         "properties": {
-          "quoteId": { "$ref": "#/components/schemas/RecordId" },
-          "ownerId": { "$ref": "#/components/schemas/RecordId" },
-          "clientId": { "$ref": "#/components/schemas/RecordId" },
-          "projectId": { "$ref": "#/components/schemas/RecordId" },
-          "number": { "type": "string", "minLength": 1, "maxLength": 100 },
-          "currentRevision": { "type": "integer", "minimum": 1 },
-          "currentRevisionId": { "$ref": "#/components/schemas/RecordId" },
-          "aggregateVersion": { "type": "integer", "minimum": 0 },
-          "commercialStatus": { "$ref": "#/components/schemas/QuoteCommercialStatus" },
-          "commercialRevision": { "type": "integer", "minimum": 1 },
-          "commercialRecordedAt": { "$ref": "#/components/schemas/TimestampMs" },
-          "createdAt": { "$ref": "#/components/schemas/TimestampMs" },
-          "updatedAt": { "$ref": "#/components/schemas/TimestampMs" }
+          "quoteId": {
+            "$ref": "#/components/schemas/RecordId"
+          },
+          "ownerId": {
+            "$ref": "#/components/schemas/RecordId"
+          },
+          "clientId": {
+            "$ref": "#/components/schemas/RecordId"
+          },
+          "projectId": {
+            "$ref": "#/components/schemas/RecordId"
+          },
+          "number": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "currentRevision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "currentRevisionId": {
+            "$ref": "#/components/schemas/RecordId"
+          },
+          "aggregateVersion": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "commercialStatus": {
+            "$ref": "#/components/schemas/QuoteCommercialStatus"
+          },
+          "commercialRevision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "commercialRecordedAt": {
+            "$ref": "#/components/schemas/TimestampMs"
+          },
+          "createdAt": {
+            "$ref": "#/components/schemas/TimestampMs"
+          },
+          "updatedAt": {
+            "$ref": "#/components/schemas/TimestampMs"
+          }
         }
       },
       "QuoteRevisionRecord": {
@@ -7130,35 +7382,99 @@
           "updatedAt"
         ],
         "properties": {
-          "revisionId": { "$ref": "#/components/schemas/RecordId" },
-          "ownerId": { "$ref": "#/components/schemas/RecordId" },
-          "quoteId": { "$ref": "#/components/schemas/RecordId" },
-          "revision": { "type": "integer", "minimum": 1 },
-          "revisionVersion": { "type": "integer", "minimum": 0 },
-          "status": { "type": "string", "enum": ["draft", "reviewed", "finalized"] },
+          "revisionId": {
+            "$ref": "#/components/schemas/RecordId"
+          },
+          "ownerId": {
+            "$ref": "#/components/schemas/RecordId"
+          },
+          "quoteId": {
+            "$ref": "#/components/schemas/RecordId"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "revisionVersion": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "status": {
+            "type": "string",
+            "enum": ["draft", "reviewed", "finalized"]
+          },
           "lineItems": {
             "type": "array",
             "minItems": 1,
             "maxItems": 200,
-            "items": { "$ref": "#/components/schemas/QuoteLineItem" }
+            "items": {
+              "$ref": "#/components/schemas/QuoteLineItem"
+            }
           },
-          "subtotal": { "type": "number", "minimum": 0 },
-          "taxRate": { "type": "number", "minimum": 0, "maximum": 1 },
-          "tax": { "type": "number", "minimum": 0 },
-          "total": { "type": "number", "minimum": 0 },
-          "currency": { "type": "string", "enum": ["AUD"] },
-          "validUntil": { "type": "string", "minLength": 1, "maxLength": 100 },
-          "notes": { "type": "string", "minLength": 1, "maxLength": 2000 },
-          "termsIncluded": { "type": "boolean" },
-          "fingerprint": { "type": "string", "minLength": 1, "maxLength": 200 },
-          "predecessorRevisionId": { "$ref": "#/components/schemas/RecordId" },
-          "historicalOutcome": { "$ref": "#/components/schemas/QuoteHistoricalOutcome" },
-          "historicalOutcomeRecordedAt": { "$ref": "#/components/schemas/TimestampMs" },
-          "reviewedAt": { "$ref": "#/components/schemas/TimestampMs" },
-          "finalizedAt": { "$ref": "#/components/schemas/TimestampMs" },
-          "source": { "type": "string", "enum": ["legacy-migration"] },
-          "createdAt": { "$ref": "#/components/schemas/TimestampMs" },
-          "updatedAt": { "$ref": "#/components/schemas/TimestampMs" }
+          "subtotal": {
+            "type": "number",
+            "minimum": 0
+          },
+          "taxRate": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "tax": {
+            "type": "number",
+            "minimum": 0
+          },
+          "total": {
+            "type": "number",
+            "minimum": 0
+          },
+          "currency": {
+            "type": "string",
+            "enum": ["AUD"]
+          },
+          "validUntil": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "notes": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          },
+          "termsIncluded": {
+            "type": "boolean"
+          },
+          "fingerprint": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "predecessorRevisionId": {
+            "$ref": "#/components/schemas/RecordId"
+          },
+          "historicalOutcome": {
+            "$ref": "#/components/schemas/QuoteHistoricalOutcome"
+          },
+          "historicalOutcomeRecordedAt": {
+            "$ref": "#/components/schemas/TimestampMs"
+          },
+          "reviewedAt": {
+            "$ref": "#/components/schemas/TimestampMs"
+          },
+          "finalizedAt": {
+            "$ref": "#/components/schemas/TimestampMs"
+          },
+          "source": {
+            "type": "string",
+            "enum": ["legacy-migration"]
+          },
+          "createdAt": {
+            "$ref": "#/components/schemas/TimestampMs"
+          },
+          "updatedAt": {
+            "$ref": "#/components/schemas/TimestampMs"
+          }
         }
       },
       "QuoteRevisionSnapshot": {
@@ -7166,8 +7482,12 @@
         "additionalProperties": false,
         "required": ["aggregate", "revision"],
         "properties": {
-          "aggregate": { "$ref": "#/components/schemas/QuoteAggregate" },
-          "revision": { "$ref": "#/components/schemas/QuoteRevisionRecord" }
+          "aggregate": {
+            "$ref": "#/components/schemas/QuoteAggregate"
+          },
+          "revision": {
+            "$ref": "#/components/schemas/QuoteRevisionRecord"
+          }
         }
       },
       "QuoteRevisionSnapshotResponse": {
@@ -7175,7 +7495,9 @@
         "additionalProperties": false,
         "required": ["data"],
         "properties": {
-          "data": { "$ref": "#/components/schemas/QuoteRevisionSnapshot" }
+          "data": {
+            "$ref": "#/components/schemas/QuoteRevisionSnapshot"
+          }
         }
       },
       "QuoteRevisionSummary": {
@@ -7194,17 +7516,46 @@
           "updatedAt"
         ],
         "properties": {
-          "quoteId": { "$ref": "#/components/schemas/RecordId" },
-          "clientId": { "$ref": "#/components/schemas/RecordId" },
-          "projectId": { "$ref": "#/components/schemas/RecordId" },
-          "number": { "type": "string", "minLength": 1, "maxLength": 100 },
-          "currentRevision": { "type": "integer", "minimum": 1 },
-          "aggregateVersion": { "type": "integer", "minimum": 0 },
-          "revisionStatus": { "type": "string", "enum": ["draft", "reviewed", "finalized"] },
-          "commercialStatus": { "$ref": "#/components/schemas/QuoteCommercialStatus" },
-          "total": { "type": "number", "minimum": 0 },
-          "currency": { "type": "string", "enum": ["AUD"] },
-          "updatedAt": { "$ref": "#/components/schemas/TimestampMs" }
+          "quoteId": {
+            "$ref": "#/components/schemas/RecordId"
+          },
+          "clientId": {
+            "$ref": "#/components/schemas/RecordId"
+          },
+          "projectId": {
+            "$ref": "#/components/schemas/RecordId"
+          },
+          "number": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "currentRevision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "aggregateVersion": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "revisionStatus": {
+            "type": "string",
+            "enum": ["draft", "reviewed", "finalized"]
+          },
+          "commercialStatus": {
+            "$ref": "#/components/schemas/QuoteCommercialStatus"
+          },
+          "total": {
+            "type": "number",
+            "minimum": 0
+          },
+          "currency": {
+            "type": "string",
+            "enum": ["AUD"]
+          },
+          "updatedAt": {
+            "$ref": "#/components/schemas/TimestampMs"
+          }
         }
       },
       "QuoteRevisionListResponse": {
@@ -7214,9 +7565,14 @@
         "properties": {
           "data": {
             "type": "array",
-            "items": { "$ref": "#/components/schemas/QuoteRevisionSummary" }
+            "items": {
+              "$ref": "#/components/schemas/QuoteRevisionSummary"
+            }
           },
-          "count": { "type": "integer", "minimum": 0 }
+          "count": {
+            "type": "integer",
+            "minimum": 0
+          }
         }
       },
       "CreateQuoteRevisionRequest": {
@@ -7224,19 +7580,47 @@
         "additionalProperties": false,
         "required": ["clientId", "number", "lineItems", "termsIncluded"],
         "properties": {
-          "clientId": { "type": "string", "minLength": 1, "maxLength": 200 },
-          "projectId": { "type": "string", "minLength": 1, "maxLength": 200 },
-          "number": { "type": "string", "minLength": 1, "maxLength": 100 },
+          "clientId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "projectId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "number": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
           "lineItems": {
             "type": "array",
             "minItems": 1,
             "maxItems": 200,
-            "items": { "$ref": "#/components/schemas/QuoteLineItem" }
+            "items": {
+              "$ref": "#/components/schemas/QuoteLineItem"
+            }
           },
-          "taxRate": { "type": "number", "minimum": 0, "maximum": 1 },
-          "validUntil": { "type": "string", "minLength": 1, "maxLength": 100 },
-          "notes": { "type": "string", "minLength": 1, "maxLength": 2000 },
-          "termsIncluded": { "type": "boolean" }
+          "taxRate": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "validUntil": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "notes": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          },
+          "termsIncluded": {
+            "type": "boolean"
+          }
         }
       },
       "QuoteDraftPatch": {
@@ -7248,12 +7632,28 @@
             "type": "array",
             "minItems": 1,
             "maxItems": 200,
-            "items": { "$ref": "#/components/schemas/QuoteLineItem" }
+            "items": {
+              "$ref": "#/components/schemas/QuoteLineItem"
+            }
           },
-          "taxRate": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
-          "validUntil": { "type": ["string", "null"], "minLength": 1, "maxLength": 100 },
-          "notes": { "type": ["string", "null"], "minLength": 1, "maxLength": 2000 },
-          "termsIncluded": { "type": "boolean" }
+          "taxRate": {
+            "type": ["number", "null"],
+            "minimum": 0,
+            "maximum": 1
+          },
+          "validUntil": {
+            "type": ["string", "null"],
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "notes": {
+            "type": ["string", "null"],
+            "minLength": 1,
+            "maxLength": 2000
+          },
+          "termsIncluded": {
+            "type": "boolean"
+          }
         }
       },
       "UpdateQuoteDraftRequest": {
@@ -7261,9 +7661,17 @@
         "additionalProperties": false,
         "required": ["expectedAggregateVersion", "expectedRevisionVersion", "patch"],
         "properties": {
-          "expectedAggregateVersion": { "type": "integer", "minimum": 0 },
-          "expectedRevisionVersion": { "type": "integer", "minimum": 0 },
-          "patch": { "$ref": "#/components/schemas/QuoteDraftPatch" }
+          "expectedAggregateVersion": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "expectedRevisionVersion": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "patch": {
+            "$ref": "#/components/schemas/QuoteDraftPatch"
+          }
         }
       },
       "QuoteRevisionCommandRequest": {
@@ -7271,8 +7679,14 @@
         "additionalProperties": false,
         "required": ["expectedAggregateVersion", "expectedRevisionVersion"],
         "properties": {
-          "expectedAggregateVersion": { "type": "integer", "minimum": 0 },
-          "expectedRevisionVersion": { "type": "integer", "minimum": 0 }
+          "expectedAggregateVersion": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "expectedRevisionVersion": {
+            "type": "integer",
+            "minimum": 0
+          }
         }
       },
       "ForkQuoteRevisionRequest": {
@@ -7280,9 +7694,19 @@
         "additionalProperties": false,
         "required": ["expectedAggregateVersion", "expectedRevisionVersion", "expectedFingerprint"],
         "properties": {
-          "expectedAggregateVersion": { "type": "integer", "minimum": 0 },
-          "expectedRevisionVersion": { "type": "integer", "minimum": 0 },
-          "expectedFingerprint": { "type": "string", "minLength": 1, "maxLength": 200 }
+          "expectedAggregateVersion": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "expectedRevisionVersion": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "expectedFingerprint": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
         }
       },
       "RecordQuoteCommercialOutcomeRequest": {
@@ -7290,9 +7714,17 @@
         "additionalProperties": false,
         "required": ["revision", "expectedAggregateVersion", "outcome"],
         "properties": {
-          "revision": { "type": "integer", "minimum": 1 },
-          "expectedAggregateVersion": { "type": "integer", "minimum": 0 },
-          "outcome": { "$ref": "#/components/schemas/QuoteHistoricalOutcome" }
+          "revision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "expectedAggregateVersion": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/QuoteHistoricalOutcome"
+          }
         }
       },
       "QuoteDeliveryStatus": {
@@ -7316,25 +7748,80 @@
           "updatedAt"
         ],
         "properties": {
-          "deliveryAttemptId": { "$ref": "#/components/schemas/RecordId" },
-          "quoteId": { "$ref": "#/components/schemas/RecordId" },
-          "revision": { "type": "integer", "minimum": 1 },
-          "revisionId": { "$ref": "#/components/schemas/RecordId" },
-          "revisionFingerprint": { "type": "string", "minLength": 1, "maxLength": 200 },
-          "recipient": { "type": "string", "minLength": 3, "maxLength": 320 },
-          "channel": { "type": "string", "enum": ["email"] },
-          "status": { "$ref": "#/components/schemas/QuoteDeliveryStatus" },
-          "reconciledOutcome": { "type": "string", "enum": ["succeeded", "failed"] },
-          "provider": { "type": "string", "minLength": 1, "maxLength": 100 },
-          "providerRequestId": { "type": "string", "minLength": 1, "maxLength": 200 },
-          "providerCorrelationId": { "type": "string", "minLength": 1, "maxLength": 200 },
-          "reconciliationId": { "type": "string", "minLength": 1, "maxLength": 200 },
-          "providerErrorCode": { "type": "string", "minLength": 1, "maxLength": 200 },
-          "createdAt": { "$ref": "#/components/schemas/TimestampMs" },
-          "executionStartedAt": { "$ref": "#/components/schemas/TimestampMs" },
-          "completedAt": { "$ref": "#/components/schemas/TimestampMs" },
-          "reconciledAt": { "$ref": "#/components/schemas/TimestampMs" },
-          "updatedAt": { "$ref": "#/components/schemas/TimestampMs" }
+          "deliveryAttemptId": {
+            "$ref": "#/components/schemas/RecordId"
+          },
+          "quoteId": {
+            "$ref": "#/components/schemas/RecordId"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "revisionId": {
+            "$ref": "#/components/schemas/RecordId"
+          },
+          "revisionFingerprint": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "recipient": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 320
+          },
+          "channel": {
+            "type": "string",
+            "enum": ["email"]
+          },
+          "status": {
+            "$ref": "#/components/schemas/QuoteDeliveryStatus"
+          },
+          "reconciledOutcome": {
+            "type": "string",
+            "enum": ["succeeded", "failed"]
+          },
+          "provider": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "providerRequestId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "providerCorrelationId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "reconciliationId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "providerErrorCode": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "createdAt": {
+            "$ref": "#/components/schemas/TimestampMs"
+          },
+          "executionStartedAt": {
+            "$ref": "#/components/schemas/TimestampMs"
+          },
+          "completedAt": {
+            "$ref": "#/components/schemas/TimestampMs"
+          },
+          "reconciledAt": {
+            "$ref": "#/components/schemas/TimestampMs"
+          },
+          "updatedAt": {
+            "$ref": "#/components/schemas/TimestampMs"
+          }
         }
       },
       "QuoteDeliveryListResponse": {
@@ -7344,9 +7831,14 @@
         "properties": {
           "data": {
             "type": "array",
-            "items": { "$ref": "#/components/schemas/QuoteDeliveryAttempt" }
+            "items": {
+              "$ref": "#/components/schemas/QuoteDeliveryAttempt"
+            }
           },
-          "count": { "type": "integer", "minimum": 0 }
+          "count": {
+            "type": "integer",
+            "minimum": 0
+          }
         }
       },
       "DailyBrief": {

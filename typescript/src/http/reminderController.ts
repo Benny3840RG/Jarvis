@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import {
   Body,
   Controller,
@@ -36,6 +38,22 @@ function invalid(detail: string): JarvisProblem {
 
 function operationProblem(error: unknown): JarvisProblem {
   const message = error instanceof Error ? error.message : String(error);
+  if (/controlled reminder execution/i.test(message)) {
+    return problem(
+      "controlled-reminder-boundary",
+      "Controlled Reminder Conflict",
+      HttpStatus.CONFLICT,
+      "This project-scoped reminder must be changed through its approved controlled action.",
+    );
+  }
+  if (/reminder create idempotency key conflict/i.test(message)) {
+    return problem(
+      "idempotency-conflict",
+      "Idempotency Key Conflict",
+      HttpStatus.CONFLICT,
+      "Idempotency-Key was already used for a different reminder request.",
+    );
+  }
   if (/does not exist|not found/i.test(message)) {
     return problem(
       "reminder-not-found",
@@ -54,6 +72,10 @@ function operationProblem(error: unknown): JarvisProblem {
 
 function reminderResponse(reminder: Reminder): { data: Reminder } {
   return { data: reminder };
+}
+
+function requestFingerprint(input: unknown): string {
+  return createHash("sha256").update(JSON.stringify(input), "utf8").digest("hex");
 }
 
 @Controller("api/v1/reminders")
@@ -92,7 +114,7 @@ export class ReminderController {
     } catch (error: unknown) {
       throw invalid(error instanceof Error ? error.message : "Idempotency-Key is invalid.");
     }
-    const fingerprint = JSON.stringify(input);
+    const fingerprint = requestFingerprint(input);
     const cached = this.cachedCreates.get(key);
     if (cached) {
       if (cached.fingerprint !== fingerprint) {
@@ -120,7 +142,10 @@ export class ReminderController {
       reply.header("Location", `/api/v1/reminders/${reminder.id}`);
       return reminderResponse(reminder);
     }
-    const create = this.persistence.addReminder(input.title, input.due);
+    const create = this.persistence.addReminder(input.title, input.due, {
+      idempotencyKey: key,
+      requestFingerprint: fingerprint,
+    });
     this.pendingCreates.set(key, { fingerprint, reminder: create });
     try {
       const reminder = await create;

@@ -10,6 +10,10 @@ import {
 } from "./toolExecutionValidators.js";
 import { mutation, query } from "./_generated/server.js";
 
+function cleanOptionalText(value: string | undefined, field: string): string | undefined {
+  return value === undefined ? undefined : cleanRequiredText(value, field);
+}
+
 export const get = query({
   args: { serviceToken: v.string(), receiptKey: v.string() },
   returns: v.union(toolExecutionReceiptDocumentValidator, v.null()),
@@ -35,6 +39,7 @@ export const save = mutation({
     projectId: v.string(),
     idempotencyKey: v.string(),
     actionFingerprint: v.string(),
+    effectFingerprint: v.optional(v.string()),
     tool: v.string(),
     operation: v.string(),
     actor: toolExecutionActorValidator,
@@ -42,9 +47,14 @@ export const save = mutation({
     policyVersion: v.string(),
     correlationId: v.string(),
     source: v.string(),
+    provider: v.optional(v.string()),
+    providerRequestId: v.optional(v.string()),
+    providerCorrelationId: v.optional(v.string()),
+    reconciliationId: v.optional(v.string()),
     status: toolExecutionStatusValidator,
     outputDigest: v.optional(v.string()),
     errorCode: v.optional(toolExecutionErrorCodeValidator),
+    providerErrorCode: v.optional(v.string()),
     startedAt: v.number(),
     completedAt: v.number(),
   },
@@ -58,13 +68,21 @@ export const save = mutation({
     const projectId = cleanRequiredText(args.projectId, "Project ID");
     const idempotencyKey = cleanRequiredText(args.idempotencyKey, "Execution idempotency key");
     const actionFingerprint = cleanRequiredText(args.actionFingerprint, "Action fingerprint");
+    const effectFingerprint = cleanOptionalText(args.effectFingerprint, "Effect fingerprint");
     const tool = cleanRequiredText(args.tool, "Tool name");
     const operation = cleanRequiredText(args.operation, "Tool operation");
-    const approvalId =
-      args.approvalId === undefined ? undefined : cleanRequiredText(args.approvalId, "Approval ID");
+    const approvalId = cleanOptionalText(args.approvalId, "Approval ID");
     const policyVersion = cleanRequiredText(args.policyVersion, "Policy version");
     const correlationId = cleanRequiredText(args.correlationId, "Correlation ID");
     const source = cleanRequiredText(args.source, "Execution source");
+    const provider = cleanOptionalText(args.provider, "Provider");
+    const providerRequestId = cleanOptionalText(args.providerRequestId, "Provider request ID");
+    const providerCorrelationId = cleanOptionalText(
+      args.providerCorrelationId,
+      "Provider correlation ID",
+    );
+    const reconciliationId = cleanOptionalText(args.reconciliationId, "Reconciliation ID");
+    const providerErrorCode = cleanOptionalText(args.providerErrorCode, "Provider error code");
 
     const existing = await ctx.db
       .query("toolExecutionReceipts")
@@ -88,6 +106,7 @@ export const save = mutation({
       projectId,
       idempotencyKey,
       actionFingerprint,
+      ...(effectFingerprint === undefined ? {} : { effectFingerprint }),
       tool,
       operation,
       actor: args.actor,
@@ -95,9 +114,14 @@ export const save = mutation({
       policyVersion,
       correlationId,
       source,
+      ...(provider === undefined ? {} : { provider }),
+      ...(providerRequestId === undefined ? {} : { providerRequestId }),
+      ...(providerCorrelationId === undefined ? {} : { providerCorrelationId }),
+      ...(reconciliationId === undefined ? {} : { reconciliationId }),
       status: args.status,
       ...(args.outputDigest === undefined ? {} : { outputDigest: args.outputDigest }),
       ...(args.errorCode === undefined ? {} : { errorCode: args.errorCode }),
+      ...(providerErrorCode === undefined ? {} : { providerErrorCode }),
       startedAt: args.startedAt,
       completedAt: args.completedAt,
       createdAt: Date.now(),

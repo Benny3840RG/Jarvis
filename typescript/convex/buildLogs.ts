@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 
 import { collectBounded, requireOwner } from "./authHelpers.js";
+import { requireOwnedBuildId } from "./buildOwnership.js";
 import { mutation, query } from "./_generated/server.js";
 
 const kindValidator = v.union(
@@ -72,10 +73,11 @@ export const create = mutation({
   returns: buildLogValidator,
   handler: async (ctx, args) => {
     const ownerId = requireOwner(args.serviceToken);
+    const buildId = await requireOwnedBuildId(ctx, ownerId, args.buildId);
     const body = cleanOptionalText(args.body, "Build log body");
     const id = await ctx.db.insert("buildLogs", {
       ownerId,
-      buildId: requireText(args.buildId, "Build log buildId"),
+      buildId,
       kind: args.kind ?? "note",
       title: requireText(args.title, "Build log title"),
       ...(body === undefined ? {} : { body }),
@@ -103,11 +105,18 @@ export const update = mutation({
   returns: v.union(buildLogValidator, v.null()),
   handler: async (ctx, args) => {
     const ownerId = requireOwner(args.serviceToken);
-
-    const buildId = cleanOptionalText(args.buildId, "Build log buildId");
     const title = cleanOptionalText(args.title, "Build log title");
     const body = cleanOptionalText(args.body, "Build log body");
 
+    const id = ctx.db.normalizeId("buildLogs", args.id);
+    if (!id) return null;
+    const entry = await ctx.db.get("buildLogs", id);
+    if (!entry || entry.ownerId !== ownerId) return null;
+
+    const buildId =
+      args.buildId === undefined
+        ? undefined
+        : await requireOwnedBuildId(ctx, ownerId, args.buildId);
     const patch: {
       buildId?: string;
       kind?: "origin" | "milestone" | "failure" | "anecdote" | "note";
@@ -127,10 +136,6 @@ export const update = mutation({
       throw new Error("Build log update requires at least one changed field.");
     }
 
-    const id = ctx.db.normalizeId("buildLogs", args.id);
-    if (!id) return null;
-    const entry = await ctx.db.get("buildLogs", id);
-    if (!entry || entry.ownerId !== ownerId) return null;
     await ctx.db.patch("buildLogs", id, patch);
     return ctx.db.get("buildLogs", id);
   },
