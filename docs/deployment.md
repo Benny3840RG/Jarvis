@@ -280,3 +280,20 @@ Production remains blocked until Benny gives an explicit deployment checkpoint a
 identity, backup, migration, rollback, secret-rotation, health-check, and smoke-test strategy are
 reviewed first. Do not create or use a production Convex deployment, production deploy key, or
 public HTTP/MCP endpoint before that approval.
+
+## Immutable quote PDF renderer
+
+Jarvis includes a deterministic in-memory renderer for client-ready A4 PDFs from authoritative
+finalized quote revisions. The renderer requires the finalized revision fingerprint plus explicit
+issuer and client presentation details. It returns exact bytes, media type, safe filename, byte
+length, and a `quote-pdf:v1:sha256` digest.
+
+This renderer is a library component only. It is not yet connected to quote finalisation, Convex
+file storage, the quote delivery tool, Outlook, HTTP, preview, or MCP runtimes. A quote is not
+sendable merely because the renderer exists. The next reviewed slice must durably store the exact
+bytes and digest before the revision is considered finalized; a later Outlook slice may attach
+only that stored immutable artefact.
+
+No PDF generation setting, Outlook credential, send permission, activation procedure, or
+production deployment is introduced by the renderer slice.
+
