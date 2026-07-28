@@ -51,7 +51,7 @@ Files:
 - Modify `typescript/src/quotes/convexQuoteRepository.ts`
 - Modify callers and tests
 
-Extend the injectable client boundary with `action`. Change finalisation input to require issuer/client presentation snapshots and a canonical ISO `generatedAt`. Route the repository adapter through the new action and map domain errors without exposing content.
+Extend the injectable client boundary with `action`. Change finalisation input to require issuer/client presentation snapshots. Stamp the time inside the server action, route the repository adapter through it and map domain errors without exposing content.
 
 ## Task 6 — Documentation and full verification
 
