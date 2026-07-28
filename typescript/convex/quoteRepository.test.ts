@@ -1,3 +1,4 @@
+import type { ConvexHttpClient } from "convex/browser";
 import { convexTest } from "convex-test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -10,14 +11,21 @@ const SERVICE_TOKEN = "quote-repo-test-service-token-00000000000";
 
 type Harness = ReturnType<typeof convexTest>;
 
-function clientFor(t: Harness): ConvexClientLike {
+function clientFor(t: Harness): ConvexClientLike & Pick<ConvexHttpClient, "action"> {
   return {
     query: (reference: unknown, args?: Record<string, unknown>) =>
       (t as { query: (r: unknown, a?: unknown) => Promise<unknown> }).query(reference, args),
     mutation: (reference: unknown, args?: Record<string, unknown>) =>
       (t as { mutation: (r: unknown, a?: unknown) => Promise<unknown> }).mutation(reference, args),
-  } as unknown as ConvexClientLike;
+    action: (reference: unknown, args?: Record<string, unknown>) =>
+      (t as { action: (r: unknown, a?: unknown) => Promise<unknown> }).action(reference, args),
+  } as unknown as ConvexClientLike & Pick<ConvexHttpClient, "action">;
 }
+
+const finalizationPresentation = {
+  issuer: { name: "Benny's Trade Services", email: "quotes@example.com" },
+  client: { name: "Example Client", email: "client@example.com" },
+};
 
 function createInput(number = "BT-2026-001") {
   return {
@@ -116,6 +124,7 @@ describe("ConvexQuoteRepository against persisted Convex functions", () => {
       revision: 1,
       expectedAggregateVersion: reviewed.aggregate.aggregateVersion,
       expectedRevisionVersion: reviewed.revision.revisionVersion,
+      ...finalizationPresentation,
     });
     expect(finalized.revision.status).toBe("finalized");
     expect(finalized.revision.fingerprint).toMatch(/^quote-revision:v1:sha256:[a-f0-9]{64}$/);
@@ -175,6 +184,7 @@ describe("ConvexQuoteRepository against persisted Convex functions", () => {
       revision: 1,
       expectedAggregateVersion: rereviewed.aggregate.aggregateVersion,
       expectedRevisionVersion: rereviewed.revision.revisionVersion,
+      ...finalizationPresentation,
     });
 
     const accepted = await repo.recordCommercialOutcome({

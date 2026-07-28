@@ -24,6 +24,7 @@ import {
   quoteDeliveryReconciledOutcomeValidator,
   quoteDeliveryStatusValidator,
 } from "./quoteDeliveryValidators.js";
+import { quotePdfPartyValidator } from "./quotePdfArtifactValidators.js";
 import {
   quoteCommercialStatusValidator,
   quoteHistoricalOutcomeValidator,
@@ -331,6 +332,25 @@ export default defineSchema({
     .index("by_owner_and_revision_id", ["ownerId", "revisionId"])
     .index("by_owner_quote_and_status", ["ownerId", "quoteId", "status"])
     .index("by_owner_and_fingerprint", ["ownerId", "fingerprint"]),
+  quotePdfArtifacts: defineTable({
+    ownerId: v.string(),
+    quoteId: v.string(),
+    revisionId: v.string(),
+    revision: v.number(),
+    revisionFingerprint: v.string(),
+    storageId: v.id("_storage"),
+    digest: v.string(),
+    byteLength: v.number(),
+    mediaType: v.literal("application/pdf"),
+    filename: v.string(),
+    rendererVersion: v.literal("quote-pdf:v1"),
+    generatedAt: v.string(),
+    issuer: quotePdfPartyValidator,
+    client: quotePdfPartyValidator,
+    createdAt: v.number(),
+  })
+    .index("by_owner_quote_and_revision", ["ownerId", "quoteId", "revision"])
+    .index("by_owner_and_revision_id", ["ownerId", "revisionId"]),
   quoteDeliveryAttempts: defineTable({
     ownerId: v.string(),
     deliveryAttemptId: v.string(),

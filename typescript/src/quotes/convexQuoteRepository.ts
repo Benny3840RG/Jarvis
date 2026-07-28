@@ -24,13 +24,17 @@ import type {
 } from "./quoteRepository.js";
 
 export const quoteFunctions = api.quotes;
+export const quoteFinalizationFunctions = api.quoteFinalization;
 
 type AggregateDoc = QuoteAggregate & { _id: string; _creationTime: number };
 type RevisionDoc = QuoteRevision & { _id: string; _creationTime: number };
 type SnapshotDoc = { aggregate: AggregateDoc; revision: RevisionDoc };
+type FinalizationDoc = { snapshot: SnapshotDoc };
+type ConvexQuoteClientLike = ConvexClientLike & Partial<Pick<ConvexHttpClient, "action">>;
+type ConvexQuoteAction = NonNullable<ConvexQuoteClientLike["action"]>;
 
 export type ConvexQuoteRepositoryOptions = {
-  client: ConvexClientLike;
+  client: ConvexQuoteClientLike;
   serviceToken: string;
   deployment?: string;
 };
@@ -114,8 +118,8 @@ function summaryFromDoc(doc: SnapshotDoc): QuoteSummary {
 }
 
 function isConvexClient(
-  value: ConvexQuoteRepositoryOptions | ConvexClientLike | undefined,
-): value is ConvexClientLike {
+  value: ConvexQuoteRepositoryOptions | ConvexQuoteClientLike | undefined,
+): value is ConvexQuoteClientLike {
   return (
     value !== undefined && typeof value === "object" && "query" in value && "mutation" in value
   );
@@ -161,18 +165,18 @@ function restoreQuoteDomainError(error: unknown): never {
  * signatures, and never re-implements a rule the server owns.
  */
 export class ConvexQuoteRepository implements QuoteRepository {
-  private readonly client: ConvexClientLike;
+  private readonly client: ConvexQuoteClientLike;
   private readonly serviceToken: string;
   private readonly deployment: string;
 
   constructor(options: ConvexQuoteRepositoryOptions);
-  constructor(client?: ConvexClientLike, serviceToken?: string, deployment?: string);
+  constructor(client?: ConvexQuoteClientLike, serviceToken?: string, deployment?: string);
   constructor(
-    optionsOrClient?: ConvexQuoteRepositoryOptions | ConvexClientLike,
+    optionsOrClient?: ConvexQuoteRepositoryOptions | ConvexQuoteClientLike,
     legacyServiceToken?: string,
     legacyDeployment?: string,
   ) {
-    let client: ConvexClientLike | undefined;
+    let client: ConvexQuoteClientLike | undefined;
     let serviceToken: string | undefined;
     let deployment: string | undefined;
 
@@ -270,12 +274,12 @@ export class ConvexQuoteRepository implements QuoteRepository {
   }
 
   async finalizeRevision(input: FinalizeQuoteRevisionInput): Promise<QuoteSnapshot> {
-    return snapshotFromDoc(
-      await this.mutation<SnapshotDoc>(
-        quoteFunctions.finalizeRevision,
-        this.revisionCommand(input),
-      ),
-    );
+    const result = await this.action<FinalizationDoc>(quoteFinalizationFunctions.finalizeRevision, {
+      ...this.revisionCommand(input),
+      issuer: input.issuer,
+      client: input.client,
+    });
+    return snapshotFromDoc(result.snapshot);
   }
 
   async createRevisionFromFinalized(input: CreateQuoteRevisionInput): Promise<QuoteSnapshot> {
@@ -322,6 +326,18 @@ export class ConvexQuoteRepository implements QuoteRepository {
   ): Promise<T> {
     try {
       return (await this.client.mutation(functionReference, args)) as T;
+    } catch (error: unknown) {
+      restoreQuoteDomainError(error);
+    }
+  }
+
+  private async action<T>(
+    functionReference: Parameters<ConvexQuoteAction>[0],
+    args: Record<string, unknown>,
+  ): Promise<T> {
+    try {
+      if (!this.client.action) throw new Error("quote-finalization-action-unavailable");
+      return (await this.client.action(functionReference, args)) as T;
     } catch (error: unknown) {
       restoreQuoteDomainError(error);
     }

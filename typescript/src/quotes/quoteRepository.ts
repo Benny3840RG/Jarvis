@@ -6,6 +6,7 @@ import type {
   QuoteRevisionStatus,
   QuoteSnapshot,
 } from "./quoteLifecycle.js";
+import type { QuotePdfParty } from "./quotePdfRenderer.js";
 
 export type CreateQuoteInput = {
   clientId: string;
@@ -55,7 +56,10 @@ export type QuoteRevisionCommand = {
   expectedRevisionVersion: number;
 };
 
-export type FinalizeQuoteRevisionInput = QuoteRevisionCommand;
+export type FinalizeQuoteRevisionInput = QuoteRevisionCommand & {
+  issuer: QuotePdfParty;
+  client: QuotePdfParty;
+};
 
 export type CreateQuoteRevisionInput = {
   quoteId: string;

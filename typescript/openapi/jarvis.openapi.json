@@ -3060,7 +3060,7 @@
       "post": {
         "operationId": "finalizeQuote",
         "summary": "Finalize a reviewed revision",
-        "description": "Transitions a reviewed revision to finalized and computes its immutable fingerprint, after checking the expected aggregate and revision versions. Finalized revisions cannot be edited further. Requires the Convex persistence provider.",
+        "description": "Generates and stores the exact client-ready PDF, then atomically transitions the reviewed revision to finalized and locks the artefact to its immutable fingerprint. Requires explicit issuer and client presentation snapshots; the server stamps the finalisation time. Requires the Convex persistence provider.",
         "tags": ["Quotes"],
         "x-mcp-tool": {
           "exposed": false,
@@ -3076,7 +3076,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/QuoteRevisionCommandRequest"
+                "$ref": "#/components/schemas/FinalizeQuoteRevisionRequest"
               }
             }
           }
@@ -7715,6 +7715,63 @@
           },
           "patch": {
             "$ref": "#/components/schemas/QuoteDraftPatch"
+          }
+        }
+      },
+      "QuotePdfParty": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "abn": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "maxLength": 320
+          },
+          "phone": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 60
+          },
+          "addressLines": {
+            "type": "array",
+            "maxItems": 8,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 160
+            }
+          }
+        }
+      },
+      "FinalizeQuoteRevisionRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["expectedAggregateVersion", "expectedRevisionVersion", "issuer", "client"],
+        "properties": {
+          "expectedAggregateVersion": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "expectedRevisionVersion": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "issuer": {
+            "$ref": "#/components/schemas/QuotePdfParty"
+          },
+          "client": {
+            "$ref": "#/components/schemas/QuotePdfParty"
           }
         }
       },

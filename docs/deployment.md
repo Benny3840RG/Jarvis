@@ -101,27 +101,27 @@ The file, its lock file, temporary writes, backups, and corrupt-file quarantine 
 
 All environment variables are loaded from `typescript/.env.local` at startup. Variables marked **required** cause a hard startup failure if absent or malformed. Variables marked **optional** have safe defaults.
 
-| Variable | Required / Optional | Default | Purpose |
-| --- | --- | --- | --- |
-| `JARVIS_SERVICE_TOKEN` | **Required** | — | Current bearer token required by all authenticated HTTP and Convex operations. Must be a strong random secret; whitespace is rejected. |
-| `JARVIS_SERVICE_TOKEN_PREVIOUS` | Optional | — | Previous token accepted during a controlled rotation window only. Remove after rotation is complete. |
-| `JARVIS_TIMEZONE` | **Required** for Totality | — | IANA timezone string (e.g. `Australia/Melbourne`). Invalid values cause the status and Totality endpoints to return `503`. |
-| `PERSISTENCE_PROVIDER` | Optional | `json` | `json` or `convex`. With `json`, data is stored in `typescript/data/jarvis-state.json`. With `convex`, `CONVEX_URL` is required. |
-| `CONVEX_URL` | **Required** when `PERSISTENCE_PROVIDER=convex` | — | Full URL of the authorised Convex deployment (e.g. `https://outgoing-ram-798.convex.cloud`). |
-| `OPENAI_API_KEY` | **Required** for Totality reasoning | — | Server-side OpenAI API key. Never expose this in browser code, logs, issues, or chat. |
-| `JARVIS_HTTP_HOST` | Optional | `127.0.0.1` | Listener address for the HTTP service. Change only to expose the service on a non-loopback interface. |
-| `JARVIS_HTTP_PORT` | Optional | `3000` | Listener TCP port for the HTTP service. Must be in the valid port range. |
-| `JARVIS_SOURCE_VERSION` | Optional | `development` | Git SHA or version string embedded in health and status responses for diagnostics. |
-| `JARVIS_DEPLOYMENT_VERSION` | Optional | — | Deployment identifier (e.g. `dev:outgoing-ram-798`) embedded in status responses. |
-| `CONVEX_DEPLOYMENT` | Set by Convex | — | Set automatically by `npx convex dev` when the project is linked. Required by the Convex SDK and the smoke test (`npm run smoke:convex`). Do not set manually. |
-| `JARVIS_RECONCILIATION_ENABLED` | Optional | `false` | Requests the external reconciliation scheduler only when exactly `true`. The maintained runtimes reject enabled startup until at least one provider adapter is explicitly composed. All other values fail closed. |
-| `JARVIS_RECONCILIATION_WORKER_ID` | Optional | Generated per process | Safe operator-visible worker identity; 1–128 letters, digits, dots, underscores, colons, or hyphens. |
-| `JARVIS_RECONCILIATION_LEASE_MS` | Optional | `30000` | Positive claim lease duration in milliseconds. |
-| `JARVIS_RECONCILIATION_INTERVAL_MS` | Optional | `5000` | Positive delay between bounded reconciliation cycles. |
-| `JARVIS_RECONCILIATION_BATCH_SIZE` | Optional | `10` | Maximum records processed per cycle; 1–100. |
-| `JARVIS_RECONCILIATION_MAX_ATTEMPTS` | Optional | `5` | Maximum reconciliation attempts before escalation; 1–100. |
-| `JARVIS_RECONCILIATION_BASE_RETRY_MS` | Optional | `1000` | Positive base retry delay. |
-| `JARVIS_RECONCILIATION_MAX_RETRY_MS` | Optional | `60000` | Positive maximum retry delay, not below the base delay. |
+| Variable                              | Required / Optional                             | Default               | Purpose                                                                                                                                                                                                           |
+| ------------------------------------- | ----------------------------------------------- | --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `JARVIS_SERVICE_TOKEN`                | **Required**                                    | —                     | Current bearer token required by all authenticated HTTP and Convex operations. Must be a strong random secret; whitespace is rejected.                                                                            |
+| `JARVIS_SERVICE_TOKEN_PREVIOUS`       | Optional                                        | —                     | Previous token accepted during a controlled rotation window only. Remove after rotation is complete.                                                                                                              |
+| `JARVIS_TIMEZONE`                     | **Required** for Totality                       | —                     | IANA timezone string (e.g. `Australia/Melbourne`). Invalid values cause the status and Totality endpoints to return `503`.                                                                                        |
+| `PERSISTENCE_PROVIDER`                | Optional                                        | `json`                | `json` or `convex`. With `json`, data is stored in `typescript/data/jarvis-state.json`. With `convex`, `CONVEX_URL` is required.                                                                                  |
+| `CONVEX_URL`                          | **Required** when `PERSISTENCE_PROVIDER=convex` | —                     | Full URL of the authorised Convex deployment (e.g. `https://outgoing-ram-798.convex.cloud`).                                                                                                                      |
+| `OPENAI_API_KEY`                      | **Required** for Totality reasoning             | —                     | Server-side OpenAI API key. Never expose this in browser code, logs, issues, or chat.                                                                                                                             |
+| `JARVIS_HTTP_HOST`                    | Optional                                        | `127.0.0.1`           | Listener address for the HTTP service. Change only to expose the service on a non-loopback interface.                                                                                                             |
+| `JARVIS_HTTP_PORT`                    | Optional                                        | `3000`                | Listener TCP port for the HTTP service. Must be in the valid port range.                                                                                                                                          |
+| `JARVIS_SOURCE_VERSION`               | Optional                                        | `development`         | Git SHA or version string embedded in health and status responses for diagnostics.                                                                                                                                |
+| `JARVIS_DEPLOYMENT_VERSION`           | Optional                                        | —                     | Deployment identifier (e.g. `dev:outgoing-ram-798`) embedded in status responses.                                                                                                                                 |
+| `CONVEX_DEPLOYMENT`                   | Set by Convex                                   | —                     | Set automatically by `npx convex dev` when the project is linked. Required by the Convex SDK and the smoke test (`npm run smoke:convex`). Do not set manually.                                                    |
+| `JARVIS_RECONCILIATION_ENABLED`       | Optional                                        | `false`               | Requests the external reconciliation scheduler only when exactly `true`. The maintained runtimes reject enabled startup until at least one provider adapter is explicitly composed. All other values fail closed. |
+| `JARVIS_RECONCILIATION_WORKER_ID`     | Optional                                        | Generated per process | Safe operator-visible worker identity; 1–128 letters, digits, dots, underscores, colons, or hyphens.                                                                                                              |
+| `JARVIS_RECONCILIATION_LEASE_MS`      | Optional                                        | `30000`               | Positive claim lease duration in milliseconds.                                                                                                                                                                    |
+| `JARVIS_RECONCILIATION_INTERVAL_MS`   | Optional                                        | `5000`                | Positive delay between bounded reconciliation cycles.                                                                                                                                                             |
+| `JARVIS_RECONCILIATION_BATCH_SIZE`    | Optional                                        | `10`                  | Maximum records processed per cycle; 1–100.                                                                                                                                                                       |
+| `JARVIS_RECONCILIATION_MAX_ATTEMPTS`  | Optional                                        | `5`                   | Maximum reconciliation attempts before escalation; 1–100.                                                                                                                                                         |
+| `JARVIS_RECONCILIATION_BASE_RETRY_MS` | Optional                                        | `1000`                | Positive base retry delay.                                                                                                                                                                                        |
+| `JARVIS_RECONCILIATION_MAX_RETRY_MS`  | Optional                                        | `60000`               | Positive maximum retry delay, not below the base delay.                                                                                                                                                           |
 
 ## Reconciliation runtime
 
@@ -288,12 +288,12 @@ finalized quote revisions. The renderer requires the finalized revision fingerpr
 issuer and client presentation details. It returns exact bytes, media type, safe filename, byte
 length, and a `quote-pdf:v1:sha256` digest.
 
-This renderer is a library component only. It is not yet connected to quote finalisation, Convex
-file storage, the quote delivery tool, Outlook, HTTP, preview, or MCP runtimes. A quote is not
-sendable merely because the renderer exists. The next reviewed slice must durably store the exact
-bytes and digest before the revision is considered finalized; a later Outlook slice may attach
-only that stored immutable artefact.
+Quote finalisation now runs through a Convex Node action. The action stamps the server time, derives
+the final revision fingerprint, renders and stores the PDF Blob, then atomically commits the
+finalised revision and immutable `quotePdfArtifacts` metadata. The legacy mutation fails closed.
+Owner-scoped retrieval returns metadata plus a signed storage URL. Development cleanup removes the
+Blob and metadata with the quote.
 
-No PDF generation setting, Outlook credential, send permission, activation procedure, or
-production deployment is introduced by the renderer slice.
-
+This commissions the durable artefact boundary only. It does not configure Outlook, create a draft,
+send email, expose an MCP send tool, or deploy production. A later Outlook provider may attach only
+the stored immutable artefact after the separate credential, live-send and deployment approvals.

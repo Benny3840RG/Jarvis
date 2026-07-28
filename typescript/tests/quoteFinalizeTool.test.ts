@@ -25,6 +25,8 @@ function action(overrides: Partial<ToolAction> = {}): ToolAction {
       quoteRevision: 1,
       expectedAggregateVersion: 3,
       expectedRevisionVersion: 2,
+      issuer: { name: "Benny's Trade Services", email: "quotes@example.com" },
+      client: { name: "Example Client", email: "client@example.com" },
     },
     rationale: "Finalize the reviewed quote.",
     requiredAuthority: "T2",
@@ -117,6 +119,8 @@ describe("AM-012 finalize quote tool", () => {
       assert.equal(input.revision, 1);
       assert.equal(input.expectedAggregateVersion, 3);
       assert.equal(input.expectedRevisionVersion, 2);
+      assert.equal(input.issuer.name, "Benny's Trade Services");
+      assert.equal(input.client.name, "Example Client");
       return snapshotWith();
     });
     const service = new ToolExecutionService([createQuoteFinalizeToolDefinition(quotes)]);
