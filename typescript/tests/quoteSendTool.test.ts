@@ -7,11 +7,13 @@ import { ToolExecutionService, type ToolExecutionReceipt } from "../src/actions/
 import { createToolExecutionDefinitions } from "../src/actions/toolExecutionFactory.js";
 import { createQuoteSendToolDefinition } from "../src/actions/quoteSendTool.js";
 import type {
+  QuoteEmailPrepareInput,
+  QuoteEmailPreparedReference,
   QuoteEmailProvider,
-  QuoteEmailSendInput,
-  QuoteEmailSendResult,
+  QuoteEmailSendAcceptance,
 } from "../src/quotes/quoteEmailProvider.js";
 import type { QuoteAggregate, QuoteRevision, QuoteSnapshot } from "../src/quotes/quoteLifecycle.js";
+import type { QuotePdfArtifactRepository } from "../src/quotes/quotePdfArtifactRepository.js";
 import type { QuoteRepository, QuoteSummary } from "../src/quotes/quoteRepository.js";
 import type {
   BindQuoteProviderReferenceInput,
@@ -145,27 +147,58 @@ function quoteRepositoryStub(current: QuoteSnapshot | null): QuoteRepository {
 
 class RecordingEmailProvider implements QuoteEmailProvider {
   readonly name = "test-email-provider";
-  readonly calls: QuoteEmailSendInput[] = [];
-  result: QuoteEmailSendResult = {
+  readonly calls: QuoteEmailPrepareInput[] = [];
+  result: QuoteEmailPreparedReference = {
     providerRequestId: "provider-request-1",
     providerCorrelationId: "provider-correlation-1",
   };
 
-  async send(input: QuoteEmailSendInput): Promise<QuoteEmailSendResult> {
+  async prepare(input: QuoteEmailPrepareInput): Promise<QuoteEmailPreparedReference> {
     this.calls.push(input);
     return this.result;
+  }
+
+  async sendPrepared(): Promise<QuoteEmailSendAcceptance> {
+    return { status: "accepted" };
   }
 }
 
 /** Never settles on its own; only the AbortSignal firing ends the attempt. */
 class HangingEmailProvider implements QuoteEmailProvider {
   readonly name = "test-email-provider";
-  readonly calls: QuoteEmailSendInput[] = [];
+  readonly calls: QuoteEmailPrepareInput[] = [];
 
-  async send(input: QuoteEmailSendInput): Promise<QuoteEmailSendResult> {
+  async prepare(input: QuoteEmailPrepareInput): Promise<QuoteEmailPreparedReference> {
     this.calls.push(input);
-    return new Promise<QuoteEmailSendResult>(() => {});
+    return {
+      providerRequestId: "provider-request-1",
+      providerCorrelationId: "provider-correlation-1",
+    };
   }
+
+  async sendPrepared(): Promise<QuoteEmailSendAcceptance> {
+    return new Promise<QuoteEmailSendAcceptance>(() => {});
+  }
+}
+
+function quotePdfArtifactsStub(): QuotePdfArtifactRepository {
+  return {
+    async getForRevision() {
+      const bytes = Uint8Array.from([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x37]);
+      return {
+        quoteId: "quote-1",
+        revisionId: "revision-1",
+        revision: 1,
+        revisionFingerprint: REVISION_FINGERPRINT,
+        filename: "Quote-Q-1-R1.pdf",
+        mediaType: "application/pdf",
+        digest:
+          "quote-pdf:v1:sha256:86edbaa24831badfa0a8b04bb410141e2ee4182b6d0014493fe262a7a331c20b",
+        byteLength: bytes.byteLength,
+        bytes,
+      };
+    },
+  };
 }
 
 function sendScopeKey(scope: QuoteSendScope): string {
@@ -490,7 +523,7 @@ describe("AM-013 send quote tool", () => {
     const deliveries = new InMemoryQuoteDeliveryRepository();
     const reconciliations = new FakeReconciliationStore();
     const service = new ToolExecutionService(
-      [createQuoteSendToolDefinition(quotes, provider, deliveries)],
+      [createQuoteSendToolDefinition(quotes, provider, deliveries, quotePdfArtifactsStub())],
       undefined,
       reconciliations,
     );
@@ -501,7 +534,7 @@ describe("AM-013 send quote tool", () => {
       idempotencyKey: "execute-send-1",
     });
 
-    assert.equal(result.status, "succeeded");
+    assert.equal(result.status, "indeterminate");
     assert.equal(result.provider, "test-email-provider");
     assert.equal(result.providerRequestId, "provider-request-1");
     assert.equal(provider.calls.length, 1);
@@ -510,7 +543,7 @@ describe("AM-013 send quote tool", () => {
 
     const ledger = await deliveries.listForQuote({ quoteId: "quote-1" });
     assert.equal(ledger.length, 1);
-    assert.equal(ledger[0].status, "succeeded");
+    assert.equal(ledger[0].status, "indeterminate");
     assert.equal(ledger[0].providerRequestId, "provider-request-1");
     assert.equal(ledger[0].providerCorrelationId, "provider-correlation-1");
     assert.ok(ledger[0].reconciliationId);
@@ -524,7 +557,7 @@ describe("AM-013 send quote tool", () => {
     const deliveries = new InMemoryQuoteDeliveryRepository();
     const reconciliations = new FakeReconciliationStore();
     const service = new ToolExecutionService(
-      [createQuoteSendToolDefinition(quotes, provider, deliveries)],
+      [createQuoteSendToolDefinition(quotes, provider, deliveries, quotePdfArtifactsStub())],
       undefined,
       reconciliations,
     );
@@ -547,7 +580,7 @@ describe("AM-013 send quote tool", () => {
     const deliveries = new InMemoryQuoteDeliveryRepository();
     const reconciliations = new FakeReconciliationStore();
     const service = new ToolExecutionService(
-      [createQuoteSendToolDefinition(quotes, provider, deliveries)],
+      [createQuoteSendToolDefinition(quotes, provider, deliveries, quotePdfArtifactsStub())],
       undefined,
       reconciliations,
     );
@@ -570,7 +603,7 @@ describe("AM-013 send quote tool", () => {
     const deliveries = new InMemoryQuoteDeliveryRepository();
     const reconciliations = new FakeReconciliationStore();
     const service = new ToolExecutionService(
-      [createQuoteSendToolDefinition(quotes, provider, deliveries)],
+      [createQuoteSendToolDefinition(quotes, provider, deliveries, quotePdfArtifactsStub())],
       undefined,
       reconciliations,
     );
@@ -591,7 +624,7 @@ describe("AM-013 send quote tool", () => {
     const deliveries = new InMemoryQuoteDeliveryRepository();
     const reconciliations = new FakeReconciliationStore();
     const service = new ToolExecutionService(
-      [createQuoteSendToolDefinition(quotes, provider, deliveries)],
+      [createQuoteSendToolDefinition(quotes, provider, deliveries, quotePdfArtifactsStub())],
       undefined,
       reconciliations,
     );
@@ -612,7 +645,7 @@ describe("AM-013 send quote tool", () => {
     const deliveries = new InMemoryQuoteDeliveryRepository();
     const reconciliations = new FakeReconciliationStore();
     const service = new ToolExecutionService(
-      [createQuoteSendToolDefinition(quotes, provider, deliveries)],
+      [createQuoteSendToolDefinition(quotes, provider, deliveries, quotePdfArtifactsStub())],
       undefined,
       reconciliations,
     );
@@ -634,7 +667,7 @@ describe("AM-013 send quote tool", () => {
     const deliveries = new InMemoryQuoteDeliveryRepository();
     const reconciliations = new FakeReconciliationStore();
     const service = new ToolExecutionService(
-      [createQuoteSendToolDefinition(quotes, provider, deliveries)],
+      [createQuoteSendToolDefinition(quotes, provider, deliveries, quotePdfArtifactsStub())],
       undefined,
       reconciliations,
     );
@@ -644,7 +677,7 @@ describe("AM-013 send quote tool", () => {
       authority: "T2",
       idempotencyKey: "execute-send-first",
     });
-    assert.equal(first.status, "succeeded");
+    assert.equal(first.status, "indeterminate");
     assert.equal(provider.calls.length, 1);
 
     // A different approved action (different idempotency key) targeting the
@@ -665,7 +698,7 @@ describe("AM-013 send quote tool", () => {
     const deliveries = new InMemoryQuoteDeliveryRepository();
     const reconciliations = new FakeReconciliationStore();
     const service = new ToolExecutionService(
-      [createQuoteSendToolDefinition(quotes, provider, deliveries)],
+      [createQuoteSendToolDefinition(quotes, provider, deliveries, quotePdfArtifactsStub())],
       undefined,
       reconciliations,
     );
@@ -689,7 +722,7 @@ describe("AM-013 send quote tool", () => {
     assert.equal(ledger[0].reconciliationId, result.reconciliationId);
   });
 
-  it("is allowlisted only when a quote repository, delivery ledger, and email provider are all supplied", async () => {
+  it("is allowlisted only when quote, delivery, PDF artifact, and email dependencies are supplied", async () => {
     const noteStore: NoteStore = {
       async create() {
         throw new Error("not used in this test");
@@ -713,6 +746,7 @@ describe("AM-013 send quote tool", () => {
       store,
       undefined,
       deliveries,
+      quotePdfArtifactsStub(),
     );
     assert.equal(
       withoutProvider.some(({ tool, operation }) => `${tool}:${operation}` === "quotes:send"),
@@ -726,6 +760,7 @@ describe("AM-013 send quote tool", () => {
       store,
       new RecordingEmailProvider(),
       undefined,
+      quotePdfArtifactsStub(),
     );
     assert.equal(
       withoutDeliveries.some(({ tool, operation }) => `${tool}:${operation}` === "quotes:send"),
@@ -739,6 +774,7 @@ describe("AM-013 send quote tool", () => {
       store,
       new RecordingEmailProvider(),
       deliveries,
+      quotePdfArtifactsStub(),
     );
     assert.equal(
       withBoth.some(({ tool, operation }) => `${tool}:${operation}` === "quotes:send"),
