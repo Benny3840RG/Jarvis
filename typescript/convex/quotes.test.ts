@@ -87,7 +87,6 @@ describe("persisted quote Convex lifecycle", () => {
       expectedRevisionVersion: reviewed.revision.revisionVersion,
       issuer,
       client,
-      generatedAt: "2026-07-28T02:00:00.000Z",
     });
     const finalized = finalization.snapshot;
     expect(finalized.revision.status).toBe("finalized");
@@ -131,7 +130,6 @@ describe("persisted quote Convex lifecycle", () => {
       expectedRevisionVersion: reviewed.revision.revisionVersion,
       issuer,
       client,
-      generatedAt: "2026-07-28T02:00:00.000Z",
     });
     const finalized = secondFinalization.snapshot;
 
