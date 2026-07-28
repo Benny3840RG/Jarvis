@@ -25,6 +25,10 @@ function createInput(number = "BT-2026-001") {
   };
 }
 
+const issuer = { name: "Benny's Trade Services", email: "quotes@example.com" };
+const client = { name: "Example Client", email: "client@example.com" };
+
+
 beforeEach(() => {
   vi.stubEnv("JARVIS_SERVICE_TOKEN", SERVICE_TOKEN);
 });
@@ -75,13 +79,17 @@ describe("persisted quote Convex lifecycle", () => {
     });
     expect(reviewed.revision.status).toBe("reviewed");
 
-    const finalized = await t.mutation(api.quotes.finalizeRevision, {
+    const finalization = await t.action(api.quoteFinalization.finalizeRevision, {
       serviceToken: SERVICE_TOKEN,
       quoteId: created.aggregate.quoteId,
       revision: 1,
       expectedAggregateVersion: reviewed.aggregate.aggregateVersion,
       expectedRevisionVersion: reviewed.revision.revisionVersion,
+      issuer,
+      client,
+      generatedAt: "2026-07-28T02:00:00.000Z",
     });
+    const finalized = finalization.snapshot;
     expect(finalized.revision.status).toBe("finalized");
     expect(finalized.revision.fingerprint).toMatch(/^quote-revision:v1:sha256:[a-f0-9]{64}$/);
 
@@ -115,13 +123,17 @@ describe("persisted quote Convex lifecycle", () => {
       expectedAggregateVersion: 1,
       expectedRevisionVersion: 1,
     });
-    const finalized = await t.mutation(api.quotes.finalizeRevision, {
+    const secondFinalization = await t.action(api.quoteFinalization.finalizeRevision, {
       serviceToken: SERVICE_TOKEN,
       quoteId: created.aggregate.quoteId,
       revision: 1,
       expectedAggregateVersion: reviewed.aggregate.aggregateVersion,
       expectedRevisionVersion: reviewed.revision.revisionVersion,
+      issuer,
+      client,
+      generatedAt: "2026-07-28T02:00:00.000Z",
     });
+    const finalized = secondFinalization.snapshot;
 
     const forkArgs = {
       serviceToken: SERVICE_TOKEN,
