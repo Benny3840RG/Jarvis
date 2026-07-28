@@ -28,7 +28,6 @@ function createInput(number = "BT-2026-001") {
 const issuer = { name: "Benny's Trade Services", email: "quotes@example.com" };
 const client = { name: "Example Client", email: "client@example.com" };
 
-
 beforeEach(() => {
   vi.stubEnv("JARVIS_SERVICE_TOKEN", SERVICE_TOKEN);
 });
