@@ -34,16 +34,17 @@ Only one autonomous build runs in the repository at a time.
 4. Codex edits the isolated checkout under the repository policy.
 5. A trusted guard rejects forbidden or excessive changes.
 6. The workflow pushes an attempt-specific `automation/issue-<number>/run-<run-id>` branch and opens one draft PR.
-7. Ordinary PR CI runs independently on a fresh runner for every pull request.
-8. The builder waits for those independent checks and blocks the issue if they fail.
-9. The owner reviews the diff, Copilot Review, checks, and remaining risk.
-10. Only the owner may change draft state or merge.
+7. A separate secret-free job checks out the exact guarded commit on a fresh runner and repeats the automation, TypeScript, coverage, audit and Console gates.
+8. The workflow publishes those machine results as commit statuses on the draft PR and blocks the issue if verification fails.
+9. Ordinary PR CI remains the merge gate for later human-authored PR events.
+10. The owner reviews the diff, Copilot Review, checks, and remaining risk.
+11. Only the owner may change draft state or merge.
 
 ## Manual retry
 
 Use **Actions → Jarvis autonomous build → Run workflow** and enter the issue number only after correcting the recorded blocker. Remove a stale `automation-in-progress` label only after confirming no run is active.
 
-The workflow does not retry automatically. This prevents repeated API spend and repeated unsafe edits. Agent-reported checks are advisory; clean-runner pull-request CI is machine-enforced before the build is reported successful.
+The workflow does not retry automatically. This prevents repeated API spend and repeated unsafe edits. Agent-reported checks are advisory; a separate clean-runner verification job is machine-enforced before the build is reported successful.
 
 ## Hard stops
 
@@ -82,3 +83,7 @@ Cancel the active Actions run, then confirm it has reached a terminal state. The
 ## Production boundary
 
 Autonomous builds never commission or deploy. Jarvis development commissioning remains a separate guarded workflow, and production deployment always requires explicit owner approval.
+
+## Repository setting
+
+GitHub Actions must be allowed to create pull requests: **Settings → Actions → General → Workflow permissions → Allow GitHub Actions to create and approve pull requests**. This permits draft PR creation only; the workflow contains no approval or merge operation.
