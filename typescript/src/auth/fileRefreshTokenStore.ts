@@ -13,7 +13,11 @@ function storeError(code: string): Error {
 
 function validateToken(value: string): string {
   const token = value.trim();
-  if (!token || Buffer.byteLength(token, "utf8") > MAX_REFRESH_TOKEN_BYTES || /[\r\n]/u.test(token)) {
+  if (
+    !token ||
+    Buffer.byteLength(token, "utf8") > MAX_REFRESH_TOKEN_BYTES ||
+    /[\r\n]/u.test(token)
+  ) {
     throw storeError("microsoft-oauth-refresh-token-invalid");
   }
   return token;
@@ -65,7 +69,11 @@ export class FileRefreshTokenStore {
       if (!targetMetadata.isFile()) throw storeError("microsoft-oauth-refresh-token-not-regular");
       assertSecureMode(targetMetadata.mode);
 
-      handle = await open(temporary, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL, 0o600);
+      handle = await open(
+        temporary,
+        constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL,
+        0o600,
+      );
       await handle.writeFile(`${token}\n`, "utf8");
       await handle.sync();
       await handle.close();
