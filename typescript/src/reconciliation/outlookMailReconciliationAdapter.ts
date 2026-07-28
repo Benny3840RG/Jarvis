@@ -103,7 +103,8 @@ export class OutlookMailReconciliationAdapter implements ProviderReconciliationA
         immutableMessageId: reference.providerRequestId,
         signal,
       });
-    } catch {
+    } catch (error: unknown) {
+      if (error instanceof OutlookReconciliationError) throw error;
       throw new OutlookReconciliationError("outlook-message-status-unavailable");
     }
 
