@@ -17,11 +17,12 @@ Navigate to **Settings → Branches → Branch protection rules → Add rule** f
 
 ## Required status checks
 
-Once the TypeScript checks workflow is consistently green, add the following check as required:
+Once the TypeScript checks workflow is consistently green on `main`, add the following checks as required:
 
 | Check name | Workflow |
 | --- | --- |
 | `typecheck-lint-format-test` | `.github/workflows/typescript.yml` |
+| `automation-policy` | `.github/workflows/typescript.yml` |
 
 The Python checks workflow (`python-tests`) should also be added if Python changes are expected to continue.
 
