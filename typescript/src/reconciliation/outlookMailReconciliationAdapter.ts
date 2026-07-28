@@ -66,7 +66,12 @@ function statusDigest(
 }
 
 function validReferencePart(value: string): boolean {
-  return value.trim().length > 0 && value.length <= 1_024 && !/[\u0000-\u001f\u007f]/.test(value);
+  if (value.trim().length === 0 || value.length > 1_024) return false;
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index);
+    if (code <= 31 || code === 127) return false;
+  }
+  return true;
 }
 
 export class OutlookMailReconciliationAdapter implements ProviderReconciliationAdapter {
