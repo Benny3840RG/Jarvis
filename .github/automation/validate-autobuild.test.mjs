@@ -273,6 +273,21 @@ test("workflow contract requires safe triggers, isolation, draft output, and cle
   );
 
   assert.deepEqual(validateWorkflowContract(workflow), { ok: true, reasons: [] });
+  assert.equal(
+    validateWorkflowContract(
+      workflow.replace(
+        'context: "jarvis-autobuild/verify-candidate"',
+        'context: "copilot-review-section"',
+      ),
+    ).ok,
+    false,
+  );
+  assert.equal(validateWorkflowContract(workflow.replaceAll("LOCK_ACQUIRED", "LOCK_UNKNOWN")).ok, false);
+  const unrelatedFinalize = workflow.replace(
+    /(\n  finalize:[\s\S]*?\n    if: >-\n)([\s\S]*?)(\n    runs-on:)/,
+    "$1      always()$3",
+  );
+  assert.equal(validateWorkflowContract(unrelatedFinalize).ok, false);
 });
 
 test("TypeScript CI independently enforces the automation policy", () => {
