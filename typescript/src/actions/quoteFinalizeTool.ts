@@ -24,7 +24,6 @@ export const quoteFinalizeArgumentsSchema = z
     expectedRevisionVersion: z.number().int().min(0),
     issuer: quotePdfPartySchema,
     client: quotePdfPartySchema,
-    generatedAt: z.string().datetime({ offset: false, precision: 3 }),
   })
   .strict();
 
@@ -61,7 +60,6 @@ export function createQuoteFinalizeToolDefinition(
         expectedRevisionVersion: parsed.expectedRevisionVersion,
         issuer: parsed.issuer,
         client: parsed.client,
-        generatedAt: parsed.generatedAt,
       });
       if (!snapshot.revision.fingerprint) {
         throw new Error(
