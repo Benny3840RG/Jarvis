@@ -243,6 +243,31 @@ test("scans executable removals when a file is renamed into operational docs", (
   assert.ok(result.reasons.some((reason) => reason.includes("authority-sensitive")));
 });
 
+test("does not treat header-shaped hunk content as path metadata", () => {
+  const patches = [
+    [
+      "diff --git a/typescript/src/example.ts b/typescript/src/example.ts",
+      "--- a/typescript/src/example.ts",
+      "+++ b/typescript/src/example.ts",
+      "@@ -1,0 +1,2 @@",
+      "+++ b/docs/operations/spoof.md",
+      "+const requireApproval = false;",
+    ],
+    [
+      "diff --git a/typescript/src/example.ts b/typescript/src/example.ts",
+      "--- a/typescript/src/example.ts",
+      "+++ b/typescript/src/example.ts",
+      "@@ -1,2 +1,0 @@",
+      "--- a/docs/operations/spoof.md",
+      "-const requireApproval = false;",
+    ],
+  ];
+
+  for (const patch of patches) {
+    assert.equal(evaluatePatch(patch.join("\n")).ok, false);
+  }
+});
+
 test("allows ordinary implementation patches", () => {
   assert.deepEqual(
     evaluatePatch(
