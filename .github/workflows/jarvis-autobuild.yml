@@ -155,7 +155,25 @@ jobs:
             .github/workflows/jarvis-autobuild.yml \
             >"$control_manifest"
 
+          trusted_node="$(command -v node)"
+          trusted_node="$(readlink -f "$trusted_node")"
+          case "$trusted_node" in
+            /opt/hostedtoolcache/node/*/x64/bin/node) ;;
+            *)
+              echo "::error::setup-node resolved an unexpected Node binary: $trusted_node"
+              exit 1
+              ;;
+          esac
+          if [[ ! -x "$trusted_node" ]]; then
+            echo "::error::The trusted Node binary is not executable."
+            exit 1
+          fi
+
           sudo mkdir -p /opt/jarvis-autobuild
+          printf '%s\n' "$trusted_node" |
+            sudo tee /opt/jarvis-autobuild/node-path >/dev/null
+          /usr/bin/sha256sum "$trusted_node" |
+            sudo tee /opt/jarvis-autobuild/node.sha256 >/dev/null
           sudo install -o root -g root -m 0444 \
             .github/automation/validate-autobuild.mjs \
             /opt/jarvis-autobuild/validate-autobuild.mjs
@@ -238,6 +256,8 @@ jobs:
             exit 1
           fi
           /usr/bin/sha256sum --check --strict /opt/jarvis-autobuild/control.sha256
+          trusted_node="$(</opt/jarvis-autobuild/node-path)"
+          /usr/bin/sha256sum --check --strict /opt/jarvis-autobuild/node.sha256
 
           if ! /usr/bin/git -c core.hooksPath=/dev/null diff --quiet HEAD -- \
             .github/automation \
@@ -247,7 +267,7 @@ jobs:
             exit 1
           fi
 
-          /usr/bin/node --input-type=module <<'NODE'
+          "$trusted_node" --input-type=module <<'NODE'
           import fs from "node:fs";
           import { execFileSync } from "node:child_process";
           import {
@@ -452,6 +472,22 @@ jobs:
           echo "candidate_sha=$candidate_sha" >>"$GITHUB_OUTPUT"
           echo "issue_number=$ISSUE_NUMBER" >>"$GITHUB_OUTPUT"
           echo "pr_url=$pr_url" >>"$GITHUB_OUTPUT"
+
+      - name: Release issue lock after build
+        if: always() && steps.eligibility.outputs.lock_acquired == 'true'
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        with:
+          script: |
+            try {
+              await github.rest.issues.removeLabel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: Number(process.env.ISSUE_NUMBER),
+                name: "automation-in-progress",
+              });
+            } catch (error) {
+              if (error.status !== 404) throw error;
+            }
 
   verify-candidate:
     needs: build
