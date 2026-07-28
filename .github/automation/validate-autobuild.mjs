@@ -236,6 +236,18 @@ export function validateWorkflowContract(workflow) {
     ["guard must reject hidden index entries", /evaluateIndexFlags/i],
     ["workflow must run clean candidate verification", /^\s{2}verify-candidate:\s*$/m],
     ["workflow must publish candidate commit statuses", /createCommitStatus/i],
+    [
+      "verification status must use its own namespace",
+      /jarvis-autobuild\/verify-candidate/i,
+    ],
+    [
+      "cleanup must track lock ownership",
+      /LOCK_ACQUIRED:\s*\$\{\{\s*needs\.build\.outputs\.lock-acquired\s*\}\}/i,
+    ],
+    [
+      "finalize must require the approved trigger",
+      /finalize:[\s\S]*if:[\s\S]{0,160}always\(\)[\s\S]{0,240}automation-approved/i,
+    ],
     ["automation branches must be attempt-specific", /run-\$\{\{\s*github\.run_id\s*\}\}/i],
   ];
 
@@ -245,6 +257,20 @@ export function validateWorkflowContract(workflow) {
     reasons.push("workflow contains a prohibited merge, deploy, or commission command");
   }
   if (/^\s*environment:\s*/m.test(text)) reasons.push("workflow must not target an environment");
+  for (const reserved of [
+    "automation-policy",
+    "typecheck-lint-format-test",
+    "jarvis-console-01-build",
+    "copilot-review-section",
+  ]) {
+    const statusContext = new RegExp(
+      `createCommitStatus[\\s\\S]{0,1200}[\"']${reserved}[\"']`,
+      "i",
+    );
+    if (statusContext.test(text)) {
+      reasons.push(`workflow must not impersonate the ${reserved} check`);
+    }
+  }
 
   return result([...new Set(reasons)]);
 }
