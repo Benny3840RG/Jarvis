@@ -138,3 +138,5 @@ The design is complete when:
 Pull requests created with GitHub's workflow token do not reliably start a second pull-request workflow. The implemented builder therefore does not depend on recursive events. After the guarded candidate is pushed and the draft PR is opened, a separate secret-free job checks out the exact candidate SHA on a fresh runner, repeats the automation, TypeScript, audit, coverage, OpenAPI and Console gates, and publishes their commit statuses. Ordinary pull-request CI remains the merge gate for later human-authored events.
 
 The post-agent policy executes from a root-owned immutable copy outside the Codex workspace and verifies raw control hashes, base commit, git configuration and index flags before introducing repository write credentials.
+
+The autonomous verifier publishes only the namespaced `jarvis-autobuild/verify-candidate` status. It does not publish statuses using ordinary TypeScript, Console, automation-policy, or Copilot check names. Final cleanup runs only for an approved trigger and removes an issue lock only when that run acquired it.
