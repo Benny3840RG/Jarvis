@@ -2,6 +2,10 @@
 
 Jarvis can implement one bounded GitHub issue at a time. The system creates a draft pull request; it cannot mark the PR ready, merge, commission, or deploy.
 
+## Smoke-test verification
+
+Approved automation opens autonomous output as a draft pull request. Owner review and merge remain mandatory, and commissioning and deployment are never automatic.
+
 ## Preparing an eligible issue
 
 The issue must be open and carry `automation-approved`. It must include testable acceptance criteria:
