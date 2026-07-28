@@ -107,15 +107,11 @@ describe("runtime reconciliation configuration", () => {
     );
   });
 
-  it("constructs the maintained scheduler runtime when enabled", async () => {
-    const host = createRuntimeReconciliationHost(enabledEnvironment);
-
-    assert.deepEqual(host.health(), {
-      state: "stopped",
-      enabled: true,
-      workerId: "test-worker",
-    });
-    await host.stop();
+  it("fails closed when enabled without a provider adapter", () => {
+    assert.throws(
+      () => createRuntimeReconciliationHost(enabledEnvironment),
+      /at least one provider reconciliation adapter is required/i,
+    );
   });
 
   it("does not construct reconciliation dependencies while disabled", () => {
