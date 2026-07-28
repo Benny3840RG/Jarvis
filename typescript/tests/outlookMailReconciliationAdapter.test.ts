@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 
 import {
   OutlookMailReconciliationAdapter,
+  OutlookReconciliationError,
   type OutlookMessageStatusClient,
   type OutlookMessageStatusResult,
 } from "../src/reconciliation/outlookMailReconciliationAdapter.js";
@@ -204,6 +205,22 @@ describe("OutlookMailReconciliationAdapter", () => {
         assert.ok(error instanceof Error);
         assert.equal(error.message, "outlook-message-status-unavailable");
         for (const value of leakedValues) assert.doesNotMatch(String(error), new RegExp(value));
+        return true;
+      },
+    );
+  });
+
+  it("preserves an already-redacted Outlook reconciliation code", async () => {
+    const { adapter } = adapterFor(
+      new OutlookReconciliationError("outlook-graph-authorization-failed"),
+    );
+
+    await assert.rejects(
+      adapter.reconcile(REFERENCE, new AbortController().signal),
+      (error: unknown) => {
+        assert.ok(error instanceof OutlookReconciliationError);
+        assert.equal(error.code, "outlook-graph-authorization-failed");
+        assert.equal(error.message, "outlook-graph-authorization-failed");
         return true;
       },
     );
