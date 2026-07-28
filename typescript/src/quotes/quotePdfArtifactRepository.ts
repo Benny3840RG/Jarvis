@@ -1,6 +1,9 @@
 import { createHash } from "node:crypto";
 
+import { ConvexHttpClient } from "convex/browser";
+
 import { api } from "../../convex/_generated/api.js";
+import { resolvePersistenceProviderName } from "../persistence/providerSelection.js";
 import type { QuoteEmailAttachment } from "./quoteEmailProvider.js";
 
 const MAX_PDF_BYTES = 2 * 1024 * 1024;
@@ -217,4 +220,24 @@ export class ConvexQuotePdfArtifactRepository implements QuotePdfArtifactReposit
       bytes,
     };
   }
+}
+
+/**
+ * The artifact reader is available only with the maintained Convex
+ * persistence provider. Missing Convex credentials fail closed during
+ * construction, matching the other quote repository factories.
+ */
+export function createQuotePdfArtifactRepositoryFromEnv(): QuotePdfArtifactRepository | null {
+  if (resolvePersistenceProviderName() !== "convex") return null;
+  const convexUrl = process.env.CONVEX_URL;
+  const serviceToken = process.env.JARVIS_SERVICE_TOKEN;
+  if (!convexUrl || !serviceToken) {
+    throw new Error(
+      "PERSISTENCE_PROVIDER=convex requires CONVEX_URL and JARVIS_SERVICE_TOKEN for quote PDF artifacts.",
+    );
+  }
+  return new ConvexQuotePdfArtifactRepository({
+    client: new ConvexHttpClient(convexUrl) as unknown as QuotePdfArtifactQueryClient,
+    serviceToken,
+  });
 }
