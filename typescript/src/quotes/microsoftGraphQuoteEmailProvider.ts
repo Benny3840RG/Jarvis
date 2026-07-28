@@ -32,7 +32,11 @@ function fail(code: string): never {
 
 function requiredText(value: string, max: number, code: string): string {
   const cleaned = value.trim();
-  if (!cleaned || cleaned.length > max || /[\u0000-\u001f\u007f]/u.test(cleaned)) fail(code);
+  const containsControl = Array.from(cleaned).some((character) => {
+    const point = character.codePointAt(0);
+    return point !== undefined && (point < 32 || point === 127);
+  });
+  if (!cleaned || cleaned.length > max || containsControl) fail(code);
   return cleaned;
 }
 
