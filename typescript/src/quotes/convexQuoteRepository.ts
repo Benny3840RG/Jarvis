@@ -26,14 +26,12 @@ import type {
 export const quoteFunctions = api.quotes;
 export const quoteFinalizationFunctions = api.quoteFinalization;
 
-
 type AggregateDoc = QuoteAggregate & { _id: string; _creationTime: number };
 type RevisionDoc = QuoteRevision & { _id: string; _creationTime: number };
 type SnapshotDoc = { aggregate: AggregateDoc; revision: RevisionDoc };
 type FinalizationDoc = { snapshot: SnapshotDoc };
 type ConvexQuoteClientLike = ConvexClientLike & Partial<Pick<ConvexHttpClient, "action">>;
 type ConvexQuoteAction = NonNullable<ConvexQuoteClientLike["action"]>;
-
 
 export type ConvexQuoteRepositoryOptions = {
   client: ConvexQuoteClientLike;
