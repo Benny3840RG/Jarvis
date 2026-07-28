@@ -273,6 +273,20 @@ test("workflow contract requires safe triggers, isolation, draft output, and cle
   );
 
   assert.deepEqual(validateWorkflowContract(workflow), { ok: true, reasons: [] });
+  assert.match(workflow, /command -v node/);
+  assert.match(
+    workflow,
+    /install -o root -g root -m 0555[\s\\]*"\$trusted_node"[\s\\]*\/opt\/jarvis-autobuild\/node/,
+  );
+  assert.match(workflow, /root:root:555/);
+  assert.match(workflow, /\/opt\/jarvis-autobuild\/node --input-type=module/);
+  assert.match(workflow, /jarvis-autobuild-lock:/);
+  assert.match(workflow, /github\.paginate/);
+  assert.match(workflow, /comment\.user\?\.login === "github-actions\[bot\]"/);
+  assert.match(
+    workflow,
+    /name: Release issue lock after build[\s\S]*if: always\(\) && steps\.eligibility\.outputs\.lock_acquired == 'true'/,
+  );
   assert.equal(
     validateWorkflowContract(
       workflow.replace(
@@ -282,7 +296,12 @@ test("workflow contract requires safe triggers, isolation, draft output, and cle
     ).ok,
     false,
   );
-  assert.equal(validateWorkflowContract(workflow.replaceAll("LOCK_ACQUIRED", "LOCK_UNKNOWN")).ok, false);
+  assert.equal(
+    validateWorkflowContract(
+      workflow.replaceAll("jarvis-autobuild-lock:", "jarvis-lock-missing:"),
+    ).ok,
+    false,
+  );
   const unrelatedFinalize = workflow.replace(
     /(\n  finalize:[\s\S]*?\n    if: >-\n)([\s\S]*?)(\n    runs-on:)/,
     "$1      always()$3",
