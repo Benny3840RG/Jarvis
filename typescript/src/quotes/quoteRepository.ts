@@ -59,7 +59,6 @@ export type QuoteRevisionCommand = {
 export type FinalizeQuoteRevisionInput = QuoteRevisionCommand & {
   issuer: QuotePdfParty;
   client: QuotePdfParty;
-  generatedAt: string;
 };
 
 export type CreateQuoteRevisionInput = {
