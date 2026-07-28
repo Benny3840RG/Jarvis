@@ -107,6 +107,17 @@ describe("runtime reconciliation configuration", () => {
     );
   });
 
+  it("constructs the maintained scheduler runtime when enabled", async () => {
+    const host = createRuntimeReconciliationHost(enabledEnvironment);
+
+    assert.deepEqual(host.health(), {
+      state: "stopped",
+      enabled: true,
+      workerId: "test-worker",
+    });
+    await host.stop();
+  });
+
   it("does not construct reconciliation dependencies while disabled", () => {
     let constructions = 0;
     const host = createRuntimeReconciliationHost(
