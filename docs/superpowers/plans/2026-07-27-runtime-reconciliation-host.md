@@ -12,6 +12,7 @@ Wire the existing external reconciliation scheduler into the maintained HTTP and
 
 - Extend the existing store, worker and scheduler; create no second queue or state machine.
 - Do not activate provider adapters or external effects.
+- Reject enabled startup before listeners or Convex work when no provider adapter is explicitly composed.
 - Do not deploy Convex, Manufact or any production runtime.
 - Keep `GET /healthz` liveness-only.
 - Expose reconciliation state only through authenticated `GET /api/v1/status`.
