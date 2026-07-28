@@ -193,7 +193,9 @@ describe("durable quote PDF finalisation", () => {
     const t = harness();
     await t.run(async (ctx) => {
       const storageId = await ctx.storage.store(
-        new Blob([new Uint8Array([37, 80, 68, 70])], { type: "application/pdf" }),
+        new Blob([new Uint8Array([37, 80, 68, 70]).buffer as ArrayBuffer], {
+          type: "application/pdf",
+        }),
       );
       await ctx.db.insert("quotePdfArtifacts", {
         ownerId: "other-owner",
