@@ -114,7 +114,7 @@ All environment variables are loaded from `typescript/.env.local` at startup. Va
 | `JARVIS_SOURCE_VERSION` | Optional | `development` | Git SHA or version string embedded in health and status responses for diagnostics. |
 | `JARVIS_DEPLOYMENT_VERSION` | Optional | — | Deployment identifier (e.g. `dev:outgoing-ram-798`) embedded in status responses. |
 | `CONVEX_DEPLOYMENT` | Set by Convex | — | Set automatically by `npx convex dev` when the project is linked. Required by the Convex SDK and the smoke test (`npm run smoke:convex`). Do not set manually. |
-| `JARVIS_RECONCILIATION_ENABLED` | Optional | `false` | Starts the external reconciliation scheduler only when exactly `true`. All other values fail closed. |
+| `JARVIS_RECONCILIATION_ENABLED` | Optional | `false` | Requests the external reconciliation scheduler only when exactly `true`. The maintained runtimes reject enabled startup until at least one provider adapter is explicitly composed. All other values fail closed. |
 | `JARVIS_RECONCILIATION_WORKER_ID` | Optional | Generated per process | Safe operator-visible worker identity; 1–128 letters, digits, dots, underscores, colons, or hyphens. |
 | `JARVIS_RECONCILIATION_LEASE_MS` | Optional | `30000` | Positive claim lease duration in milliseconds. |
 | `JARVIS_RECONCILIATION_INTERVAL_MS` | Optional | `5000` | Positive delay between bounded reconciliation cycles. |
@@ -126,18 +126,18 @@ All environment variables are loaded from `typescript/.env.local` at startup. Va
 ## Reconciliation runtime
 
 Reconciliation is disabled by default and performs no Convex construction, claim, or polling work.
-To enable it in the maintained HTTP or controlled preview process, set
-`JARVIS_RECONCILIATION_ENABLED=true` with the authorised `CONVEX_URL`,
-`CONVEX_DEPLOYMENT`, and `JARVIS_SERVICE_TOKEN`.
 
-The runtime uses the existing Convex reconciliation store, lease rules, worker, and bounded
-scheduler. No provider adapter or external action family is activated by this configuration.
-Unknown providers remain indeterminate and follow the existing retry and escalation path; Jarvis
-does not repeat the original external effect.
+The maintained HTTP and controlled preview compositions currently contain no provider
+reconciliation adapters. Setting `JARVIS_RECONCILIATION_ENABLED=true` therefore fails startup
+before a listener opens or Convex work begins. Do not enable reconciliation until a separately
+reviewed change explicitly composes at least one real provider adapter and proves its authority
+boundary.
 
-Authenticated `GET /api/v1/status` reports the process-local reconciliation state and redacted
-cycle timing. Public `GET /healthz` remains liveness-only. Shutdown stops new claims, waits for
-active reconciliation, then closes MCP and HTTP resources.
+When an adapter-bearing runtime is supplied, the host uses the existing Convex reconciliation
+store, lease rules, worker, and bounded scheduler. Authenticated `GET /api/v1/status` reports
+process-local reconciliation state and redacted cycle timing. Public `GET /healthz` remains
+liveness-only. Shutdown stops new claims, waits for active reconciliation, then closes MCP and
+HTTP resources.
 
 ## Startup validation
 
