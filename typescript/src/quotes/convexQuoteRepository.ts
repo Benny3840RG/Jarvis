@@ -30,8 +30,7 @@ type AggregateDoc = QuoteAggregate & { _id: string; _creationTime: number };
 type RevisionDoc = QuoteRevision & { _id: string; _creationTime: number };
 type SnapshotDoc = { aggregate: AggregateDoc; revision: RevisionDoc };
 type FinalizationDoc = { snapshot: SnapshotDoc };
-type ConvexQuoteClientLike = ConvexClientLike &
-  Partial<Pick<ConvexHttpClient, "action">>;
+type ConvexQuoteClientLike = ConvexClientLike & Partial<Pick<ConvexHttpClient, "action">>;
 type ConvexQuoteAction = NonNullable<ConvexQuoteClientLike["action"]>;
 
 export type ConvexQuoteRepositoryOptions = {
@@ -122,10 +121,7 @@ function isConvexClient(
   value: ConvexQuoteRepositoryOptions | ConvexQuoteClientLike | undefined,
 ): value is ConvexQuoteClientLike {
   return (
-    value !== undefined &&
-    typeof value === "object" &&
-    "query" in value &&
-    "mutation" in value
+    value !== undefined && typeof value === "object" && "query" in value && "mutation" in value
   );
 }
 
@@ -278,14 +274,11 @@ export class ConvexQuoteRepository implements QuoteRepository {
   }
 
   async finalizeRevision(input: FinalizeQuoteRevisionInput): Promise<QuoteSnapshot> {
-    const result = await this.action<FinalizationDoc>(
-      quoteFinalizationFunctions.finalizeRevision,
-      {
-        ...this.revisionCommand(input),
-        issuer: input.issuer,
-        client: input.client,
-      },
-    );
+    const result = await this.action<FinalizationDoc>(quoteFinalizationFunctions.finalizeRevision, {
+      ...this.revisionCommand(input),
+      issuer: input.issuer,
+      client: input.client,
+    });
     return snapshotFromDoc(result.snapshot);
   }
 
