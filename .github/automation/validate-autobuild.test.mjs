@@ -6,6 +6,7 @@ import {
   evaluateDiff,
   evaluateIssue,
   redactReceipt,
+  validateCiContract,
   validatePromptContract,
   validateWorkflowContract,
 } from "./validate-autobuild.mjs";
@@ -134,4 +135,13 @@ test("workflow contract requires safe triggers, isolation, draft output, and cle
   );
 
   assert.deepEqual(validateWorkflowContract(workflow), { ok: true, reasons: [] });
+});
+
+test("TypeScript CI independently enforces the automation policy", () => {
+  const workflow = fs.readFileSync(
+    new URL("../workflows/typescript.yml", import.meta.url),
+    "utf8",
+  );
+
+  assert.deepEqual(validateCiContract(workflow), { ok: true, reasons: [] });
 });
