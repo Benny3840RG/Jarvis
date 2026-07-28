@@ -16,6 +16,24 @@ const FORBIDDEN_PATHS = [
   /^typescript\/(?:src|convex)\/.*(?:auth|security|permission|approval|authority|policy|credential|secret|token)/i,
   /^typescript\/(?:src|convex)\/.*(?:integration|adapter|provider|reconciliation|external)/i,
   /^typescript\/(?:src|convex)\/.*(?:deploy|commission|billing|payment)/i,
+  /^typescript\/src\/actions\//,
+  /^typescript\/src\/integrations\//,
+  /^typescript\/src\/tools\//,
+  /^typescript\/src\/orchestration\//,
+  /^typescript\/src\/reconciliation\//,
+  /^typescript\/src\/totality\//,
+  /^typescript\/src\/http\/(?:app|jarvisHttpModule)\.ts$/,
+  /^typescript\/src\/http\/(?:config|serviceTokenGuard|toolAction|totalityRequest)/,
+  /^typescript\/src\/mcp\/config\.ts$/,
+  /^typescript\/src\/runtime\/(?:totalityContracts|totalityPolicy|validation)\.ts$/,
+  /^typescript\/src\/persistence\/convexTool(?:Actions|ExecutionReceipts)\.ts$/,
+  /^typescript\/src\/persistence\/convex(?:ExternalReconciliations|QuoteDeliveries)\.ts$/,
+  /^typescript\/convex\/(?:authHelpers|toolActionLogic)\.ts$/,
+  /^docs\/governance\//,
+  /^docs\/registries\//,
+  /^docs\/validators\//,
+  /^docs\/traceability\/action-family-registry\.yaml$/,
+  /^docs\/deployment\.md$/,
 ];
 
 const SOURCE_PATH =
@@ -216,7 +234,8 @@ export function validateWorkflowContract(workflow) {
     ["publication must disable git hooks", /core\.hooksPath=\/dev\/null/i],
     ["guard must use an immutable validator", /\/opt\/jarvis-autobuild\/validate-autobuild\.mjs/i],
     ["guard must reject hidden index entries", /evaluateIndexFlags/i],
-    ["workflow must wait for independent checks", /gh pr checks[\s\S]*--watch/i],
+    ["workflow must run clean candidate verification", /^\s{2}verify-candidate:\s*$/m],
+    ["workflow must publish candidate commit statuses", /createCommitStatus/i],
     ["automation branches must be attempt-specific", /run-\$\{\{\s*github\.run_id\s*\}\}/i],
   ];
 
