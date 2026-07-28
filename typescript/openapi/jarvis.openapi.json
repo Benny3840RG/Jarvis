@@ -3060,7 +3060,7 @@
       "post": {
         "operationId": "finalizeQuote",
         "summary": "Finalize a reviewed revision",
-        "description": "Generates and stores the exact client-ready PDF, then atomically transitions the reviewed revision to finalized and locks the artefact to its immutable fingerprint. Requires explicit issuer and client presentation snapshots plus the Convex persistence provider.",
+        "description": "Generates and stores the exact client-ready PDF, then atomically transitions the reviewed revision to finalized and locks the artefact to its immutable fingerprint. Requires explicit issuer and client presentation snapshots; the server stamps the finalisation time. Requires the Convex persistence provider.",
         "tags": ["Quotes"],
         "x-mcp-tool": {
           "exposed": false,
@@ -7761,8 +7761,7 @@
           "expectedAggregateVersion",
           "expectedRevisionVersion",
           "issuer",
-          "client",
-          "generatedAt"
+          "client"
         ],
         "properties": {
           "expectedAggregateVersion": {
@@ -7778,10 +7777,6 @@
           },
           "client": {
             "$ref": "#/components/schemas/QuotePdfParty"
-          },
-          "generatedAt": {
-            "type": "string",
-            "format": "date-time"
           }
         }
       },
