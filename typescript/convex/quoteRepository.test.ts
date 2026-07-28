@@ -11,9 +11,7 @@ const SERVICE_TOKEN = "quote-repo-test-service-token-00000000000";
 
 type Harness = ReturnType<typeof convexTest>;
 
-function clientFor(
-  t: Harness,
-): ConvexClientLike & Pick<ConvexHttpClient, "action"> {
+function clientFor(t: Harness): ConvexClientLike & Pick<ConvexHttpClient, "action"> {
   return {
     query: (reference: unknown, args?: Record<string, unknown>) =>
       (t as { query: (r: unknown, a?: unknown) => Promise<unknown> }).query(reference, args),
