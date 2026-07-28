@@ -36,7 +36,7 @@ function input(): QuoteEmailPrepareInput {
     attachment: {
       filename: "Quote-Q-1-R1.pdf",
       mediaType: "application/pdf",
-      digest: `quote-pdf:v1:sha256:${"b".repeat(64)}`,
+      digest: "quote-pdf:v1:sha256:86edbaa24831badfa0a8b04bb410141e2ee4182b6d0014493fe262a7a331c20b",
       bytes: PDF_BYTES,
     },
   };
