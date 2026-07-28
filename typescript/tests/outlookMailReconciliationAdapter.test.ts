@@ -49,6 +49,24 @@ function adapterFor(result: OutlookMessageStatusResult | Error): {
 }
 
 describe("OutlookMailReconciliationAdapter", () => {
+  it("rejects an empty mailbox before accepting reconciliation work", () => {
+    for (const mailbox of ["", "   "]) {
+      assert.throws(
+        () =>
+          new OutlookMailReconciliationAdapter({
+            mailbox,
+            client: new RecordingStatusClient({ status: "not-observable" }),
+          }),
+        (error: unknown) => {
+          assert.ok(error instanceof OutlookReconciliationError);
+          assert.equal(error.code, "outlook-mailbox-invalid");
+          assert.doesNotMatch(String(error), /mailbox\s*=|thebeeztreez|outlook\.com/i);
+          return true;
+        },
+      );
+    }
+  });
+
   it("resolves a matching non-draft immutable message as succeeded", async () => {
     const { adapter, client } = adapterFor({
       status: "found",
