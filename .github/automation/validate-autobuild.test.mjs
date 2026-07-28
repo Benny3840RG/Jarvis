@@ -395,7 +395,7 @@ test("workflow contract requires safe triggers, isolation, draft output, and cle
   assert.equal(validateWorkflowContract(unrelatedFinalize).ok, false);
 
   const fatalMetadataLabel = workflow.replace(
-    /if ! gh pr edit "\\$pr_url" --add-label automation-generated; then[\\s\\S]*?^          fi$/m,
+    /if ! gh pr edit "\$pr_url" --add-label automation-generated; then[\s\S]*?^          fi$/m,
     'gh pr edit "$pr_url" --add-label automation-generated',
   );
   assert.equal(
@@ -405,8 +405,8 @@ test("workflow contract requires safe triggers, isolation, draft output, and cle
   );
 
   const outputsAfterMetadata = workflow.replace(
-    /(candidate_sha="[\\s\\S]*?echo "pr_url=\\$pr_url" >>"\\$GITHUB_OUTPUT"\\n)([\\s\\S]*?if ! gh pr edit "\\$pr_url" --add-label automation-generated; then[\\s\\S]*?^          fi$)/m,
-    "$2\\n$1",
+    /(candidate_sha="[\s\S]*?echo "pr_url=\$pr_url" >>"\$GITHUB_OUTPUT"\n)([\s\S]*?if ! gh pr edit "\$pr_url" --add-label automation-generated; then[\s\S]*?^          fi$)/m,
+    "$2\n$1",
   );
   assert.equal(
     validateWorkflowContract(outputsAfterMetadata).ok,
