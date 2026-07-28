@@ -6,12 +6,25 @@ import type { ToolExecutionDefinition } from "./toolExecution.js";
 export const QUOTE_FINALIZE_TOOL = "quotes";
 export const QUOTE_FINALIZE_OPERATION = "finalize";
 
+const quotePdfPartySchema = z
+  .object({
+    name: z.string().trim().min(1).max(120),
+    abn: z.string().trim().min(1).max(40).optional(),
+    email: z.string().trim().email().max(320).optional(),
+    phone: z.string().trim().min(1).max(60).optional(),
+    addressLines: z.array(z.string().trim().min(1).max(160)).max(8).optional(),
+  })
+  .strict();
+
 export const quoteFinalizeArgumentsSchema = z
   .object({
     quoteId: z.string().trim().min(1).max(256),
     quoteRevision: z.number().int().min(1),
     expectedAggregateVersion: z.number().int().min(0),
     expectedRevisionVersion: z.number().int().min(0),
+    issuer: quotePdfPartySchema,
+    client: quotePdfPartySchema,
+    generatedAt: z.string().datetime({ offset: false, precision: 3 }),
   })
   .strict();
 
@@ -46,6 +59,9 @@ export function createQuoteFinalizeToolDefinition(
         revision: parsed.quoteRevision,
         expectedAggregateVersion: parsed.expectedAggregateVersion,
         expectedRevisionVersion: parsed.expectedRevisionVersion,
+        issuer: parsed.issuer,
+        client: parsed.client,
+        generatedAt: parsed.generatedAt,
       });
       if (!snapshot.revision.fingerprint) {
         throw new Error(
