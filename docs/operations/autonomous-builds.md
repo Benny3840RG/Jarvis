@@ -33,16 +33,17 @@ Only one autonomous build runs in the repository at a time.
 3. The workflow validates eligibility and applies `automation-in-progress`.
 4. Codex edits the isolated checkout under the repository policy.
 5. A trusted guard rejects forbidden or excessive changes.
-6. The workflow pushes `automation/issue-<number>` and opens one draft PR.
-7. Ordinary PR CI runs independently on a fresh runner.
-8. The owner reviews the diff, Copilot Review, checks, and remaining risk.
-9. Only the owner may change draft state or merge.
+6. The workflow pushes an attempt-specific `automation/issue-<number>/run-<run-id>` branch and opens one draft PR.
+7. Ordinary PR CI runs independently on a fresh runner for every pull request.
+8. The builder waits for those independent checks and blocks the issue if they fail.
+9. The owner reviews the diff, Copilot Review, checks, and remaining risk.
+10. Only the owner may change draft state or merge.
 
 ## Manual retry
 
 Use **Actions → Jarvis autonomous build → Run workflow** and enter the issue number only after correcting the recorded blocker. Remove a stale `automation-in-progress` label only after confirming no run is active.
 
-The workflow does not retry automatically. This prevents repeated API spend and repeated unsafe edits.
+The workflow does not retry automatically. This prevents repeated API spend and repeated unsafe edits. Agent-reported checks are advisory; clean-runner pull-request CI is machine-enforced before the build is reported successful.
 
 ## Hard stops
 
@@ -63,8 +64,9 @@ Split such work into a reviewed design and owner-approved implementation instead
 
 A failed run removes `automation-in-progress`, applies `automation-blocked`, and comments with the run URL. Review the failed step and redacted logs.
 
-- If no branch exists, correct the issue and retry manually.
-- If a useful branch exists, inspect it before deciding whether to continue manually or close it.
+- If no branch exists, correct the issue and retry manually; each attempt receives a unique branch.
+- If a draft PR exists, inspect or close it before retrying. Open automation PRs prevent duplicate attempts.
+- If a branch exists but PR creation failed, a manual retry can safely create a new attempt-specific branch; stale branch cleanup remains an operator decision.
 - If any credential exposure is suspected, cancel the run, revoke the key, and investigate before retrying.
 
 ## API key and cost control
