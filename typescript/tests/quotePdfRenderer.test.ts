@@ -157,4 +157,23 @@ describe("renderFinalizedQuotePdf", () => {
       assert.match(pdf, new RegExp(`Page ${page} of ${pageCount}`));
     }
   });
+
+  it("keeps row separators clear of following text ascenders", () => {
+    const artifact = renderFinalizedQuotePdf(input());
+    const pdf = Buffer.from(artifact.bytes).toString("latin1");
+    const textBaselines = [...pdf.matchAll(/\/F1 9\.00 Tf 1 0 0 1 48\.00 (\d+\.\d+) Tm/g)].map(
+      (match) => Number(match[1]),
+    );
+    const separatorHeights = [...pdf.matchAll(/0\.12 w 48\.00 (\d+\.\d+) m 547\.00 \1 l S/g)].map(
+      (match) => Number(match[1]),
+    );
+
+    for (const baseline of textBaselines) {
+      assert.equal(
+        separatorHeights.some((height) => height > baseline && height - baseline < 8),
+        false,
+        `A row separator intersects text at baseline ${baseline}.`,
+      );
+    }
+  });
 });
