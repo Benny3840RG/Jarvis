@@ -31,7 +31,7 @@ type AggregateDoc = QuoteAggregate & { _id: string; _creationTime: number };
 type RevisionDoc = QuoteRevision & { _id: string; _creationTime: number };
 type SnapshotDoc = { aggregate: AggregateDoc; revision: RevisionDoc };
 type FinalizationDoc = { snapshot: SnapshotDoc };
-type ConvexQuoteClientLike = ConvexClientLike & Pick<ConvexHttpClient, "action">;
+type ConvexQuoteClientLike = ConvexClientLike & Partial<Pick<ConvexHttpClient, "action">>;
 
 
 export type ConvexQuoteRepositoryOptions = {
@@ -125,8 +125,7 @@ function isConvexClient(
     value !== undefined &&
     typeof value === "object" &&
     "query" in value &&
-    "mutation" in value &&
-    "action" in value
+    "mutation" in value
   );
 }
 
@@ -345,6 +344,7 @@ export class ConvexQuoteRepository implements QuoteRepository {
     args: Record<string, unknown>,
   ): Promise<T> {
     try {
+      if (!this.client.action) throw new Error("quote-finalization-action-unavailable");
       return (await this.client.action(functionReference, args)) as T;
     } catch (error: unknown) {
       restoreQuoteDomainError(error);
