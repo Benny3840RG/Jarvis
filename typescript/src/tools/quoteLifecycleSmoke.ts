@@ -94,7 +94,6 @@ export async function runQuoteLifecycleSmoke(
         name: "Jarvis Smoke Client",
         email: recipient,
       },
-      generatedAt: new Date().toISOString(),
     });
     requireCondition(
       finalized.revision.status === "finalized" && finalized.revision.fingerprint !== undefined,
