@@ -69,9 +69,7 @@ describe("durable quote PDF finalisation", () => {
     });
 
     expect(result.snapshot.revision.status).toBe("finalized");
-    expect(result.snapshot.revision.fingerprint).toMatch(
-      /^quote-revision:v1:sha256:[a-f0-9]{64}$/,
-    );
+    expect(result.snapshot.revision.fingerprint).toMatch(/^quote-revision:v1:sha256:[a-f0-9]{64}$/);
     expect(result.artifact).toMatchObject({
       quoteId: created.aggregate.quoteId,
       revision: 1,
@@ -83,9 +81,7 @@ describe("durable quote PDF finalisation", () => {
       client,
     });
     expect(result.artifact.digest).toMatch(/^quote-pdf:v1:sha256:[a-f0-9]{64}$/);
-    expect(new Date(result.artifact.generatedAt).toISOString()).toBe(
-      result.artifact.generatedAt,
-    );
+    expect(new Date(result.artifact.generatedAt).toISOString()).toBe(result.artifact.generatedAt);
     expect(result.artifact.byteLength).toBeGreaterThan(500);
 
     const stored = await t.run(async (ctx) => {
@@ -184,9 +180,7 @@ describe("durable quote PDF finalisation", () => {
       /reviewed|version/i,
     );
 
-    const artifacts = await t.run(async (ctx) =>
-      ctx.db.query("quotePdfArtifacts").collect(),
-    );
+    const artifacts = await t.run(async (ctx) => ctx.db.query("quotePdfArtifacts").collect());
     expect(artifacts).toHaveLength(1);
     expect(artifacts[0]?.digest).toBe(first.artifact.digest);
   });
