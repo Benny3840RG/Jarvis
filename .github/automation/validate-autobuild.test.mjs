@@ -82,6 +82,21 @@ test("rejects forbidden control, dependency, schema, deployment, binary, and sym
     "typescript/src/integrations/outlookAdapter.ts",
     "typescript/convex/externalReconciliation.ts",
     "typescript/src/deployment/production.ts",
+    "typescript/src/actions/createNoteTool.ts",
+    "typescript/src/http/serviceTokenGuard.ts",
+    "typescript/src/http/toolActionController.ts",
+    "typescript/src/runtime/totalityPolicy.ts",
+    "typescript/src/runtime/validation.ts",
+    "typescript/src/persistence/convexToolActions.ts",
+    "typescript/src/http/jarvisHttpModule.ts",
+    "typescript/src/orchestration/contracts.ts",
+    "typescript/src/reconciliation/externalReconciliation.ts",
+    "typescript/src/totality/totalityPipeline.ts",
+    "typescript/src/persistence/convexQuoteDeliveries.ts",
+    "typescript/convex/toolActionLogic.ts",
+    "docs/governance/README.md",
+    "docs/traceability/action-family-registry.yaml",
+    "docs/deployment.md",
   ];
 
   for (const path of forbidden) {
@@ -179,6 +194,23 @@ test("allows ordinary implementation patches", () => {
     ),
     { ok: true, reasons: [] },
   );
+});
+
+test("rejects authority-sensitive content in a newly added file", () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "jarvis-untracked-guard-"));
+  try {
+    const newPath = path.join(directory, "harmless-name.ts");
+    fs.writeFileSync(newPath, "export const allowed = requireApprovalBeforeExecution;\n");
+    const added = fs
+      .readFileSync(newPath, "utf8")
+      .split("\n")
+      .map((line) => `+${line}`)
+      .join("\n");
+    const patch = `diff --git a/harmless-name.ts b/harmless-name.ts\n+++ b/harmless-name.ts\n${added}`;
+    assert.equal(evaluatePatch(patch).ok, false);
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
 });
 
 test("rejects empty and excessive diffs", () => {
