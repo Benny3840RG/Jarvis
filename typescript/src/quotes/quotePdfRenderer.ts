@@ -329,7 +329,7 @@ function buildPages(input: QuotePdfRenderInput): Page[] {
     drawText(page!, money(item.unitPrice), 405, y, 9);
     drawText(page!, money(roundMoney(item.quantity * item.unitPrice)), 485, y, 9);
     y -= rowHeight;
-    drawLine(page!, 48, y + 5, 547, y + 5);
+    drawLine(page!, 48, y + 10, 547, y + 10);
   }
 
   ensure(90);
