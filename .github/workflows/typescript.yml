@@ -17,13 +17,6 @@ on:
       - ".github/automation/**"
   pull_request:
     branches: [main]
-    paths:
-      - "typescript/**"
-      - ".github/workflows/typescript.yml"
-      - ".github/workflows/development-commissioning.yml"
-      - ".github/workflows/queue-development-commissioning.yml"
-      - ".github/workflows/jarvis-autobuild.yml"
-      - ".github/automation/**"
 
 permissions:
   contents: read
