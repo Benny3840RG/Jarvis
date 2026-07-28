@@ -489,11 +489,22 @@ jobs:
               --body-file "$pr_body" \
               --draft
           )"
-          gh pr edit "$pr_url" --add-label automation-generated
           candidate_sha="$(/usr/bin/git rev-parse HEAD)"
           echo "candidate_sha=$candidate_sha" >>"$GITHUB_OUTPUT"
           echo "issue_number=$ISSUE_NUMBER" >>"$GITHUB_OUTPUT"
           echo "pr_url=$pr_url" >>"$GITHUB_OUTPUT"
+
+          if ! gh label view automation-generated --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            if ! gh label create automation-generated \
+              --repo "$GITHUB_REPOSITORY" \
+              --color "1D76DB" \
+              --description "Created by the guarded autonomous build workflow"; then
+              echo "::warning::Could not create the automation-generated metadata label."
+            fi
+          fi
+          if ! gh pr edit "$pr_url" --add-label automation-generated; then
+            echo "::warning::Draft PR was created, but its metadata label could not be applied."
+          fi
 
       - name: Release issue lock after build
         if: always() && steps.eligibility.outputs.lock_acquired == 'true'
