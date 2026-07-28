@@ -133,6 +133,16 @@ before a listener opens or Convex work begins. Do not enable reconciliation unti
 reviewed change explicitly composes at least one real provider adapter and proves its authority
 boundary.
 
+The `microsoft-graph-mail-v1` adapter is implemented only as an uncomposed, read-only library
+component. It can inspect one previously registered Outlook immutable message ID using a narrow
+Microsoft Graph `GET`; neither maintained entrypoint imports it. No token environment variable,
+OAuth setup, `Mail.Send` permission, send provider or activation procedure exists.
+
+Any future Outlook send implementation must create a draft while requesting immutable Outlook
+IDs, durably persist that immutable message ID before attempting the send, and then send the
+existing draft. A Graph `202 Accepted` response is not terminal evidence that message processing
+completed. That future OAuth/send-provider activation requires a separate reviewed design.
+
 When an adapter-bearing runtime is supplied, the host uses the existing Convex reconciliation
 store, lease rules, worker, and bounded scheduler. Authenticated `GET /api/v1/status` reports
 process-local reconciliation state and redacted cycle timing. Public `GET /healthz` remains
