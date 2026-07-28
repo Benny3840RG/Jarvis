@@ -50,8 +50,9 @@ export const finalizeRevision = action({
       client: args.client,
       generatedAt: generated.iso,
     });
+    const exactBytes = rendered.bytes.slice();
     const storageId = await ctx.storage.store(
-      new Blob([rendered.bytes], { type: rendered.mediaType }),
+      new Blob([exactBytes.buffer as ArrayBuffer], { type: rendered.mediaType }),
     );
 
     try {
