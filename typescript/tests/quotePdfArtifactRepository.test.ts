@@ -157,7 +157,7 @@ describe("ConvexQuotePdfArtifactRepository", () => {
         },
       },
       fetch: async () =>
-        new Response(Uint8Array.from([0x25, 0x50, 0x44, 0x46, 0x00, 0x00, 0x00, 0x00]), {
+        new Response(Uint8Array.from([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x38]), {
           status: 200,
           headers: { "content-type": "application/pdf" },
         }),
