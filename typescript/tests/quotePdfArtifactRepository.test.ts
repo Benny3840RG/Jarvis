@@ -76,7 +76,11 @@ describe("ConvexQuotePdfArtifactRepository", () => {
     let fetchCalls = 0;
     const repository = new ConvexQuotePdfArtifactRepository({
       serviceToken: "owner-token",
-      client: { async query() { return null; } },
+      client: {
+        async query() {
+          return null;
+        },
+      },
       fetch: async () => {
         fetchCalls += 1;
         throw new Error("fetch-must-not-run");
@@ -96,7 +100,11 @@ describe("ConvexQuotePdfArtifactRepository", () => {
     let fetchCalls = 0;
     const repository = new ConvexQuotePdfArtifactRepository({
       serviceToken: "owner-token",
-      client: { async query() { return artifact({ revisionFingerprint: "changed" }); } },
+      client: {
+        async query() {
+          return artifact({ revisionFingerprint: "changed" });
+        },
+      },
       fetch: async () => {
         fetchCalls += 1;
         throw new Error("fetch-must-not-run");
@@ -119,7 +127,11 @@ describe("ConvexQuotePdfArtifactRepository", () => {
     let fetchCalls = 0;
     const repository = new ConvexQuotePdfArtifactRepository({
       serviceToken: "owner-token",
-      client: { async query() { return artifact({ url: "http://storage.example/file.pdf" }); } },
+      client: {
+        async query() {
+          return artifact({ url: "http://storage.example/file.pdf" });
+        },
+      },
       fetch: async () => {
         fetchCalls += 1;
         throw new Error("fetch-must-not-run");
@@ -139,7 +151,11 @@ describe("ConvexQuotePdfArtifactRepository", () => {
   it("rejects downloaded bytes that do not match the durable digest", async () => {
     const repository = new ConvexQuotePdfArtifactRepository({
       serviceToken: "owner-token",
-      client: { async query() { return artifact(); } },
+      client: {
+        async query() {
+          return artifact();
+        },
+      },
       fetch: async () =>
         new Response(Uint8Array.from([0x25, 0x50, 0x44, 0x46, 0x00, 0x00, 0x00, 0x00]), {
           status: 200,
