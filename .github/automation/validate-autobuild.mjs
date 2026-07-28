@@ -5,6 +5,8 @@ const FORBIDDEN_PATHS = [
   /^\.github\/workflows\//,
   /^\.github\/actions\//,
   /^\.github\/automation\//,
+  /^\.gitattributes$/,
+  /^\.gitmodules$/,
   /(^|\/)\.env(?:\.|$)/,
   /(^|\/)package(?:-lock)?\.json$/,
   /^typescript\/convex\/schema\.ts$/,
@@ -148,6 +150,10 @@ export function validateWorkflowContract(workflow) {
     ["Codex must drop sudo", /safety-strategy:\s*drop-sudo/i],
     ["workflow must create a draft PR", /(?:draft:\s*true|--draft\b)/i],
     ["workflow must always clean up", /if:\s*always\(\)/i],
+    ["guard must verify the original HEAD", /EXPECTED_BASE_SHA/i],
+    ["guard must include staged changes", /diff[\s\S]*HEAD/i],
+    ["guard must parse hostile filenames safely", /--porcelain=v1[\s\S]*-z/i],
+    ["publication must disable git hooks", /core\.hooksPath=\/dev\/null/i],
   ];
 
   const checked = requirePatterns(text, requirements);
