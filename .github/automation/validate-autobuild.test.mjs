@@ -182,6 +182,20 @@ test("rejects authority, credential, commissioning, and payment changes by conte
   assert.ok(result.reasons.some((reason) => reason.includes("authority-sensitive")));
 });
 
+test("allows authority-boundary prose in operational Markdown", () => {
+  const result = evaluatePatch(
+    [
+      "diff --git a/docs/operations/autonomous-builds.md b/docs/operations/autonomous-builds.md",
+      "--- a/docs/operations/autonomous-builds.md",
+      "+++ b/docs/operations/autonomous-builds.md",
+      "@@ -2,0 +3,1 @@",
+      "+Owner review and merge remain mandatory; commissioning and deployment are never automatic.",
+    ].join("\n"),
+  );
+
+  assert.deepEqual(result, { ok: true, reasons: [] });
+});
+
 test("allows ordinary implementation patches", () => {
   assert.deepEqual(
     evaluatePatch(
