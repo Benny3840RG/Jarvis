@@ -128,25 +128,10 @@ test("prompt contract captures the hard authority boundary", () => {
 });
 
 test("workflow contract requires safe triggers, isolation, draft output, and cleanup", () => {
-  const workflow = [
-    "issues:",
-    "types: [labeled]",
-    "workflow_dispatch:",
-    "automation-approved",
-    "concurrency:",
-    "cancel-in-progress: false",
-    "timeout-minutes: 45",
-    "permissions:",
-    "contents: write",
-    "issues: write",
-    "pull-requests: write",
-    "openai/codex-action@0123456789abcdef0123456789abcdef01234567",
-    "openai-api-key: ${{ secrets.OPENAI_API_KEY }}",
-    'permission-profile: ":workspace"',
-    "safety-strategy: drop-sudo",
-    "draft: true",
-    "if: always()",
-  ].join("\n");
+  const workflow = fs.readFileSync(
+    new URL("../workflows/jarvis-autobuild.yml", import.meta.url),
+    "utf8",
+  );
 
   assert.deepEqual(validateWorkflowContract(workflow), { ok: true, reasons: [] });
 });
