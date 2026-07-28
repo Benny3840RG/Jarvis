@@ -1,9 +1,12 @@
 import { loadEnvFile } from "node:process";
 
+import { createToolExecutionServiceFromEnv } from "../actions/toolExecutionFactory.js";
+import { createMicrosoftOutlookRuntimeFromEnv } from "../auth/microsoftOutlookRuntime.js";
 import { createJarvisHttpApp } from "../http/app.js";
 import { resolveHttpListenConfig } from "../http/config.js";
 import { resolveJarvisMcpConfig } from "../mcp/config.js";
 import { startJarvisMcpHttpServer } from "../mcp/httpServer.js";
+import { createOutlookRuntimeReconciliationFactories } from "../reconciliation/outlookRuntimeReconciliation.js";
 import { createRuntimeReconciliationHost } from "../reconciliation/runtimeReconciliationHost.js";
 import { applyPreviewEnvironment } from "./environment.js";
 
@@ -19,9 +22,17 @@ async function main(): Promise<void> {
   loadLocalEnvironment();
   applyPreviewEnvironment();
   const httpListen = resolveHttpListenConfig();
-  const reconciliation = createRuntimeReconciliationHost();
+  const outlookRuntime = createMicrosoftOutlookRuntimeFromEnv();
+  const reconciliation = createRuntimeReconciliationHost(
+    process.env,
+    createOutlookRuntimeReconciliationFactories(outlookRuntime),
+  );
+  const toolExecutionService = createToolExecutionServiceFromEnv(
+    outlookRuntime?.quoteEmailProvider,
+  );
   const httpApp = await createJarvisHttpApp({
     reconciliationHealth: () => reconciliation.health(),
+    toolExecutionService,
   });
   await httpApp.listen(httpListen);
 

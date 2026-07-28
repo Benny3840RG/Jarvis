@@ -59,15 +59,14 @@ export function createToolExecutionDefinitions(
 }
 
 /**
- * Tool execution remains fail-closed. The live definitions are limited to the
- * reviewed internal mutations: notes:create, tasks:create, tasks:complete,
- * reminders:create and reminders:cancel, plus quotes:send once a real email
- * provider is configured. `createQuoteEmailProviderFromEnv` currently always
- * returns `null` — no vendor has been chosen yet — so quotes:send is not
- * allowlisted in any live deployment today; every other tool:operation pair
- * is blocked as not-allowlisted by ToolExecutionService.
+ * Tool execution remains fail-closed. `quotes:send` is registered only when
+ * Convex persistence and all four quote-delivery dependencies are available.
+ * Maintained process entrypoints inject the provider from the same Outlook
+ * runtime bundle used by reconciliation so token state is not duplicated.
  */
-export function createToolExecutionServiceFromEnv(): ToolExecutionService | null {
+export function createToolExecutionServiceFromEnv(
+  quoteEmailProvider: QuoteEmailProvider | null = createQuoteEmailProviderFromEnv(),
+): ToolExecutionService | null {
   if (resolvePersistenceProviderName() !== "convex") return null;
   return new ToolExecutionService(
     createToolExecutionDefinitions(
@@ -75,7 +74,7 @@ export function createToolExecutionServiceFromEnv(): ToolExecutionService | null
       new ConvexControlledTaskStore(),
       new ConvexControlledReminderStore(),
       createQuoteRepositoryFromEnv() ?? undefined,
-      createQuoteEmailProviderFromEnv() ?? undefined,
+      quoteEmailProvider ?? undefined,
       createQuoteDeliveryRepositoryFromEnv() ?? undefined,
       createQuotePdfArtifactRepositoryFromEnv() ?? undefined,
     ),
