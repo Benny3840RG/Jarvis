@@ -32,6 +32,7 @@ type RevisionDoc = QuoteRevision & { _id: string; _creationTime: number };
 type SnapshotDoc = { aggregate: AggregateDoc; revision: RevisionDoc };
 type FinalizationDoc = { snapshot: SnapshotDoc };
 type ConvexQuoteClientLike = ConvexClientLike & Partial<Pick<ConvexHttpClient, "action">>;
+type ConvexQuoteAction = NonNullable<ConvexQuoteClientLike["action"]>;
 
 
 export type ConvexQuoteRepositoryOptions = {
@@ -284,7 +285,6 @@ export class ConvexQuoteRepository implements QuoteRepository {
         ...this.revisionCommand(input),
         issuer: input.issuer,
         client: input.client,
-        generatedAt: input.generatedAt,
       },
     );
     return snapshotFromDoc(result.snapshot);
@@ -340,7 +340,7 @@ export class ConvexQuoteRepository implements QuoteRepository {
   }
 
   private async action<T>(
-    functionReference: Parameters<ConvexQuoteClientLike["action"]>[0],
+    functionReference: Parameters<ConvexQuoteAction>[0],
     args: Record<string, unknown>,
   ): Promise<T> {
     try {
