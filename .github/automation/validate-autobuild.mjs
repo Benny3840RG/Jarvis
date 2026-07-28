@@ -257,6 +257,18 @@ export function validateWorkflowContract(workflow) {
     ["guard must include staged changes", /diff[\s\S]*HEAD/i],
     ["guard must parse hostile filenames safely", /--porcelain=v1[\s\S]*-z/i],
     ["publication must disable git hooks", /core\.hooksPath=\/dev\/null/i],
+    [
+      "publication must create missing metadata labels safely",
+      /gh label view automation-generated[\s\S]{0,500}gh label create automation-generated/i,
+    ],
+    [
+      "publication metadata labelling must be non-fatal",
+      /if ! gh pr edit "\$pr_url" --add-label automation-generated; then[\s\S]{0,300}::warning::[\s\S]{0,120}fi/i,
+    ],
+    [
+      "candidate outputs must precede optional metadata operations",
+      /candidate_sha="[\s\S]{0,500}echo "pr_url=\$pr_url" >>"\$GITHUB_OUTPUT"[\s\S]{0,800}if ! gh pr edit "\$pr_url" --add-label automation-generated/i,
+    ],
     ["guard must use an immutable validator", /\/opt\/jarvis-autobuild\/validate-autobuild\.mjs/i],
     ["guard must reject hidden index entries", /evaluateIndexFlags/i],
     ["workflow must run clean candidate verification", /^\s{2}verify-candidate:\s*$/m],

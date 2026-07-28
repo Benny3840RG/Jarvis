@@ -393,6 +393,26 @@ test("workflow contract requires safe triggers, isolation, draft output, and cle
     "$1      always()$3",
   );
   assert.equal(validateWorkflowContract(unrelatedFinalize).ok, false);
+
+  const fatalMetadataLabel = workflow.replace(
+    /if ! gh pr edit "\$pr_url" --add-label automation-generated; then[\s\S]*?^          fi$/m,
+    'gh pr edit "$pr_url" --add-label automation-generated',
+  );
+  assert.equal(
+    validateWorkflowContract(fatalMetadataLabel).ok,
+    false,
+    "metadata labelling must never fail an otherwise valid publication",
+  );
+
+  const outputsAfterMetadata = workflow.replace(
+    /(candidate_sha="[\s\S]*?echo "pr_url=\$pr_url" >>"\$GITHUB_OUTPUT"\n)([\s\S]*?if ! gh pr edit "\$pr_url" --add-label automation-generated; then[\s\S]*?^          fi$)/m,
+    "$2\n$1",
+  );
+  assert.equal(
+    validateWorkflowContract(outputsAfterMetadata).ok,
+    false,
+    "candidate outputs must be durable before optional metadata operations",
+  );
 });
 
 test("TypeScript CI independently enforces the automation policy", () => {
