@@ -241,8 +241,16 @@ export function validateWorkflowContract(workflow) {
       /jarvis-autobuild\/verify-candidate/i,
     ],
     [
-      "cleanup must track lock ownership",
-      /LOCK_ACQUIRED:\s*\$\{\{\s*needs\.build\.outputs\.lock-acquired\s*\}\}/i,
+      "guard must install a root-owned Node runtime",
+      /install -o root -g root -m 0555[\s\\]*"\$trusted_node"[\s\\]*\/opt\/jarvis-autobuild\/node/i,
+    ],
+    [
+      "guard must verify the immutable Node runtime metadata",
+      /root:root:555/i,
+    ],
+    [
+      "cleanup must persist authenticated lock ownership",
+      /jarvis-autobuild-lock:[\s\S]*github\.paginate[\s\S]*github-actions\[bot\]/i,
     ],
     [
       "finalize must require the approved trigger",
