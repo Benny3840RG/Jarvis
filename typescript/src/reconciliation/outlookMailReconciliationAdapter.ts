@@ -35,10 +35,7 @@ export type OutlookMailReconciliationAdapterOptions = {
   client: OutlookMessageStatusClient;
 };
 
-function unresolved(
-  errorCode: string,
-  retryAfterMs?: number,
-): ProviderReconciliationResult {
+function unresolved(errorCode: string, retryAfterMs?: number): ProviderReconciliationResult {
   return {
     status: "unresolved",
     errorCode,
