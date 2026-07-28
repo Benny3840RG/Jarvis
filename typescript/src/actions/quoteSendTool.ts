@@ -235,8 +235,6 @@ export function createQuoteSendToolDefinition(
       } finally {
         signal.removeEventListener("abort", onAbort);
       }
-
-
     },
   };
 }
