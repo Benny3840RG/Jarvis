@@ -108,6 +108,26 @@ jobs:
               issue_number: issueNumber,
               labels: ["automation-in-progress"],
             });
+            const lockMarker = `<!-- jarvis-autobuild-lock:${context.runId} -->`;
+            try {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issueNumber,
+                body:
+                  `${lockMarker}\nAutonomous build lock acquired by ` +
+                  `[run ${context.runId}](${context.serverUrl}/${context.repo.owner}/` +
+                  `${context.repo.repo}/actions/runs/${context.runId}).`,
+              });
+            } catch (error) {
+              await github.rest.issues.removeLabel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issueNumber,
+                name: "automation-in-progress",
+              });
+              throw error;
+            }
             core.setOutput("lock_acquired", "true");
             if (labels.has("automation-blocked")) {
               await github.rest.issues.removeLabel({
@@ -170,10 +190,9 @@ jobs:
           fi
 
           sudo mkdir -p /opt/jarvis-autobuild
-          printf '%s\n' "$trusted_node" |
-            sudo tee /opt/jarvis-autobuild/node-path >/dev/null
-          /usr/bin/sha256sum "$trusted_node" |
-            sudo tee /opt/jarvis-autobuild/node.sha256 >/dev/null
+          sudo install -o root -g root -m 0555 \
+            "$trusted_node" \
+            /opt/jarvis-autobuild/node
           sudo install -o root -g root -m 0444 \
             .github/automation/validate-autobuild.mjs \
             /opt/jarvis-autobuild/validate-autobuild.mjs
@@ -256,8 +275,11 @@ jobs:
             exit 1
           fi
           /usr/bin/sha256sum --check --strict /opt/jarvis-autobuild/control.sha256
-          trusted_node="$(</opt/jarvis-autobuild/node-path)"
-          /usr/bin/sha256sum --check --strict /opt/jarvis-autobuild/node.sha256
+          node_metadata="$(/usr/bin/stat -c '%U:%G:%a' /opt/jarvis-autobuild/node)"
+          if [[ "$node_metadata" != "root:root:555" ]]; then
+            echo "::error::The trusted Node copy lost its immutable ownership or mode."
+            exit 1
+          fi
 
           if ! /usr/bin/git -c core.hooksPath=/dev/null diff --quiet HEAD -- \
             .github/automation \
@@ -267,7 +289,7 @@ jobs:
             exit 1
           fi
 
-          "$trusted_node" --input-type=module <<'NODE'
+          /opt/jarvis-autobuild/node --input-type=module <<'NODE'
           import fs from "node:fs";
           import { execFileSync } from "node:child_process";
           import {
