@@ -6,10 +6,29 @@ export type QuoteEmailSendInput = {
   recipient: string;
 };
 
-export type QuoteEmailSendResult = {
+export type QuoteEmailAttachment = {
+  filename: string;
+  mediaType: "application/pdf";
+  digest: string;
+  bytes: Uint8Array;
+};
+
+export type QuoteEmailPrepareInput = QuoteEmailSendInput & {
+  subject: string;
+  body: string;
+  attachment: QuoteEmailAttachment;
+};
+
+export type QuoteEmailPreparedReference = {
   providerRequestId: string;
   providerCorrelationId: string;
 };
+
+export type QuoteEmailSendAcceptance = {
+  status: "accepted";
+};
+
+export type QuoteEmailSendResult = QuoteEmailPreparedReference;
 
 /**
  * Sends a finalized quote by email through a concrete provider (Postmark,
