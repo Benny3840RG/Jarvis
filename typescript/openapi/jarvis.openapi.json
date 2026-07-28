@@ -7757,12 +7757,7 @@
       "FinalizeQuoteRevisionRequest": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "expectedAggregateVersion",
-          "expectedRevisionVersion",
-          "issuer",
-          "client"
-        ],
+        "required": ["expectedAggregateVersion", "expectedRevisionVersion", "issuer", "client"],
         "properties": {
           "expectedAggregateVersion": {
             "type": "integer",
