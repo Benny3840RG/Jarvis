@@ -156,19 +156,25 @@ export function evaluatePatch(patch) {
   const lines = String(patch ?? "").split("\n");
   let oldPath = "";
   let newPath = "";
+  let inHunk = false;
   for (let index = 0; index < lines.length; index += 1) {
     const line = lines[index];
     if (line.startsWith("diff --git ")) {
       oldPath = "";
       newPath = "";
+      inHunk = false;
       continue;
     }
-    if (line.startsWith("--- ")) {
+    if (line.startsWith("@@")) {
+      inHunk = true;
+      continue;
+    }
+    if (!inHunk && line.startsWith("--- ")) {
       const candidate = line.slice(4);
       oldPath = candidate.startsWith("a/") ? candidate.slice(2) : "";
       continue;
     }
-    if (line.startsWith("+++ ")) {
+    if (!inHunk && line.startsWith("+++ ")) {
       const candidate = line.slice(4);
       newPath = candidate.startsWith("b/") ? candidate.slice(2) : "";
       continue;
