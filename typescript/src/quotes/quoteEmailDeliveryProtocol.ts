@@ -6,10 +6,7 @@ import type {
 
 export type PreparedQuoteEmailProvider = {
   readonly name: string;
-  prepare(
-    input: QuoteEmailPrepareInput,
-    signal: AbortSignal,
-  ): Promise<QuoteEmailPreparedReference>;
+  prepare(input: QuoteEmailPrepareInput, signal: AbortSignal): Promise<QuoteEmailPreparedReference>;
   sendPrepared(
     reference: QuoteEmailPreparedReference,
     signal: AbortSignal,
