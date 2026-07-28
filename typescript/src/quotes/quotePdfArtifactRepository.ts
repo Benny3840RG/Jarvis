@@ -58,10 +58,7 @@ function fail(code: string): never {
   throw new QuotePdfArtifactReadError(code);
 }
 
-function validateMetadata(
-  value: unknown,
-  input: QuotePdfArtifactReadInput,
-): ArtifactMetadata {
+function validateMetadata(value: unknown, input: QuotePdfArtifactReadInput): ArtifactMetadata {
   if (typeof value !== "object" || value === null) fail("quote-pdf-artifact-response-invalid");
   const record = value as Record<string, unknown>;
   if (
@@ -99,13 +96,7 @@ function storageUrl(value: string): URL {
   } catch {
     fail("quote-pdf-artifact-url-invalid");
   }
-  if (
-    url.protocol !== "https:" ||
-    url.username ||
-    url.password ||
-    !url.hostname ||
-    url.hash
-  ) {
+  if (url.protocol !== "https:" || url.username || url.password || !url.hostname || url.hash) {
     fail("quote-pdf-artifact-url-invalid");
   }
   return url;
@@ -183,7 +174,11 @@ export class ConvexQuotePdfArtifactRepository implements QuotePdfArtifactReposit
       fail("quote-pdf-artifact-download-failed");
     }
     if (response.status !== 200) fail(`quote-pdf-artifact-download-rejected-${response.status}`);
-    const contentType = response.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase();
+    const contentType = response.headers
+      .get("content-type")
+      ?.split(";", 1)[0]
+      ?.trim()
+      .toLowerCase();
     if (contentType !== PDF_MEDIA_TYPE) fail("quote-pdf-artifact-media-type-mismatch");
     const declaredLength = response.headers.get("content-length");
     if (
