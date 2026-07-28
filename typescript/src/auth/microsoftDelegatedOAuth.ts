@@ -1,3 +1,5 @@
+export { FileRefreshTokenStore } from "./fileRefreshTokenStore.js";
+
 const PERSONAL_ACCOUNT_TOKEN_ENDPOINT =
   "https://login.microsoftonline.com/consumers/oauth2/v2.0/token";
 const APPROVED_SCOPES = ["offline_access", "Mail.ReadWrite", "Mail.Send"] as const;
