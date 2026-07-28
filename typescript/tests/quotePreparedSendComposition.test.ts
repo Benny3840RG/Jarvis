@@ -194,8 +194,8 @@ describe("prepared quote send tool composition", () => {
       "pending",
       "executing",
       "prepare:Quote-Q-1-R1.pdf",
-      "bind:immutable-message-1",
       "register:immutable-message-1",
+      "bind:immutable-message-1",
       "send",
       "indeterminate",
     ]);
