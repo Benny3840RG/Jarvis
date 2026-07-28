@@ -345,3 +345,15 @@ Create or use an issue whose only requested change is a small documentation/test
 **Step 5: Leave merge to the owner**
 
 Do not mark ready, merge, commission, or deploy.
+
+## Security review amendments
+
+Implementation review required the following stronger controls:
+
+- post-agent validation executes from a root-owned immutable copy rather than agent-writable repository code;
+- raw control hashes, base SHA, git configuration, assume-unchanged and skip-worktree state are checked;
+- untracked files are included in semantic patch scanning;
+- an explicit inventory blocks Jarvis authority, authentication, tool-execution, external-effect and governance modules;
+- each attempt uses a unique branch;
+- verification runs in a separate secret-free job against the exact candidate SHA and publishes commit statuses without relying on recursive pull-request events;
+- file and total byte caps apply in addition to line limits.
