@@ -1,10 +1,15 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import test from "node:test";
 
 import {
   evaluateDiff,
+  evaluateIndexFlags,
   evaluateIssue,
+  evaluatePatch,
   redactReceipt,
   validateCiContract,
   validatePromptContract,
@@ -58,7 +63,7 @@ test("requires a test change when source changes", () => {
   });
 
   assert.equal(result.ok, false);
-  assert.ok(result.reasons.includes("source changes require a matching test change"));
+  assert.ok(result.reasons.includes("source changes require a matching node test change"));
 });
 
 test("rejects forbidden control, dependency, schema, deployment, binary, and symlink changes", () => {
@@ -72,6 +77,11 @@ test("rejects forbidden control, dependency, schema, deployment, binary, and sym
     "typescript/package-lock.json",
     "typescript/convex/schema.ts",
     "convex.json",
+    "typescript/src/http/authentication.ts",
+    "typescript/src/agent/actionPolicy.ts",
+    "typescript/src/integrations/outlookAdapter.ts",
+    "typescript/convex/externalReconciliation.ts",
+    "typescript/src/deployment/production.ts",
   ];
 
   for (const path of forbidden) {
@@ -90,6 +100,87 @@ test("rejects forbidden control, dependency, schema, deployment, binary, and sym
   }
 });
 
+test("requires tests in each affected source area", () => {
+  const result = evaluateDiff({
+    files: [
+      { path: "typescript/convex/example.ts", status: "M", additions: 5, deletions: 1 },
+      { path: "typescript/tests/example.test.ts", status: "M", additions: 5, deletions: 1 },
+    ],
+  });
+
+  assert.equal(result.ok, false);
+  assert.ok(result.reasons.includes("source changes require a matching convex test change"));
+});
+
+test("rejects assume-unchanged and skip-worktree index flags", () => {
+  const result = evaluateIndexFlags([
+    { tag: "h", path: ".github/automation/validate-autobuild.mjs" },
+    { tag: "S", path: "typescript/package.json" },
+  ]);
+
+  assert.equal(result.ok, false);
+  assert.equal(result.reasons.length, 2);
+});
+
+test("detects the reproduced assume-unchanged validator bypass", () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "jarvis-index-guard-"));
+  const git = (...args) =>
+    execFileSync("git", args, { cwd: directory, encoding: "utf8" }).trimEnd();
+  try {
+    git("init", "--quiet");
+    git("config", "user.name", "Jarvis Test");
+    git("config", "user.email", "jarvis@example.invalid");
+    fs.mkdirSync(path.join(directory, ".github", "automation"), { recursive: true });
+    const validatorPath = ".github/automation/validate-autobuild.mjs";
+    fs.writeFileSync(path.join(directory, validatorPath), "export const safe = true;\n");
+    git("add", validatorPath);
+    git("commit", "--quiet", "-m", "fixture");
+    git("update-index", "--assume-unchanged", validatorPath);
+    fs.writeFileSync(path.join(directory, validatorPath), "export const safe = false;\n");
+
+    assert.equal(git("diff", "--quiet", "HEAD", "--", validatorPath), "");
+    const entries = git("ls-files", "-v", "-z")
+      .split("\0")
+      .filter(Boolean)
+      .map((line) => ({ tag: line.slice(0, 1), path: line.slice(2) }));
+    const result = evaluateIndexFlags(entries);
+    assert.equal(result.ok, false);
+    assert.ok(result.reasons.some((reason) => reason.includes(validatorPath)));
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("rejects authority, credential, commissioning, and payment changes by content", () => {
+  const result = evaluatePatch(
+    [
+      "diff --git a/typescript/src/http/main.ts b/typescript/src/http/main.ts",
+      "@@ -1,0 +2,4 @@",
+      "+const authorization = request.headers.authorization;",
+      "+const requireApproval = false;",
+      "+await commissionProduction();",
+      "+await chargePayment();",
+    ].join("\n"),
+  );
+
+  assert.equal(result.ok, false);
+  assert.ok(result.reasons.some((reason) => reason.includes("authority-sensitive")));
+});
+
+test("allows ordinary implementation patches", () => {
+  assert.deepEqual(
+    evaluatePatch(
+      [
+        "diff --git a/typescript/src/tasks.ts b/typescript/src/tasks.ts",
+        "@@ -1,0 +2,2 @@",
+        "+const taskTitle = input.title.trim();",
+        "+return { ...task, title: taskTitle };",
+      ].join("\n"),
+    ),
+    { ok: true, reasons: [] },
+  );
+});
+
 test("rejects empty and excessive diffs", () => {
   assert.equal(evaluateDiff({ files: [] }).ok, false);
 
@@ -105,6 +196,19 @@ test("rejects empty and excessive diffs", () => {
     evaluateDiff({
       files: [{ path: "docs/large.md", status: "M", additions: 2_001, deletions: 0 }],
     }).reasons.includes("diff line limit exceeded"),
+  );
+  assert.ok(
+    evaluateDiff({
+      files: [{ path: "docs/large.md", status: "M", additions: 1, deletions: 0, bytes: 524_289 }],
+    }).reasons.includes("changed file byte limit exceeded: docs/large.md"),
+  );
+  assert.ok(
+    evaluateDiff({
+      files: [
+        { path: "docs/a.md", status: "M", additions: 1, deletions: 0, bytes: 1_100_000 },
+        { path: "docs/b.md", status: "M", additions: 1, deletions: 0, bytes: 1_100_000 },
+      ],
+    }).reasons.includes("total changed byte limit exceeded"),
   );
 });
 
@@ -146,4 +250,13 @@ test("TypeScript CI independently enforces the automation policy", () => {
   );
 
   assert.deepEqual(validateCiContract(workflow), { ok: true, reasons: [] });
+  assert.equal(
+    validateCiContract(
+      workflow.replace(
+        "  pull_request:\n    branches: [main]",
+        '  pull_request:\n    branches: [main]\n    paths:\n      - "typescript/**"',
+      ),
+    ).ok,
+    false,
+  );
 });
