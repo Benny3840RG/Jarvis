@@ -27,7 +27,7 @@ describe("Outlook process composition", () => {
       assert.match(source, /createOutlookRuntimeReconciliationFactories\(outlookRuntime\)/u);
       assert.match(
         source,
-        /createToolExecutionServiceFromEnv\(outlookRuntime\?\.quoteEmailProvider\)/u,
+        /createToolExecutionServiceFromEnv\(\s*outlookRuntime\?\.quoteEmailProvider,\s*\)/u,
       );
       assert.match(source, /toolExecutionService,/u);
     }
