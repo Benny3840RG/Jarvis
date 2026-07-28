@@ -20,7 +20,7 @@ class RecordingStatusClient implements OutlookMessageStatusClient {
     signal: AbortSignal;
   }> = [];
 
-  constructor(private readonly result: OutlookMessageStatusResult) {}
+  constructor(private readonly result: OutlookMessageStatusResult | Error) {}
 
   async getMessageStatus(input: {
     mailbox: string;
@@ -28,11 +28,12 @@ class RecordingStatusClient implements OutlookMessageStatusClient {
     signal: AbortSignal;
   }): Promise<OutlookMessageStatusResult> {
     this.calls.push(input);
+    if (this.result instanceof Error) throw this.result;
     return this.result;
   }
 }
 
-function adapterFor(result: OutlookMessageStatusResult): {
+function adapterFor(result: OutlookMessageStatusResult | Error): {
   adapter: OutlookMailReconciliationAdapter;
   client: RecordingStatusClient;
 } {
@@ -133,5 +134,110 @@ describe("OutlookMailReconciliationAdapter", () => {
       const { adapter } = adapterFor(observation);
       assert.deepEqual(await adapter.reconcile(REFERENCE, new AbortController().signal), expected);
     }
+  });
+
+  it("rejects unsafe provider references before consulting Outlook", async () => {
+    const invalidReferences = [
+      { ...REFERENCE, provider: "other-provider" },
+      { ...REFERENCE, providerRequestId: "" },
+      { ...REFERENCE, providerRequestId: "immutable\u0000message" },
+      { ...REFERENCE, providerRequestId: "x".repeat(1_025) },
+      { ...REFERENCE, providerCorrelationId: "" },
+    ];
+
+    for (const reference of invalidReferences) {
+      const { adapter, client } = adapterFor({ status: "not-observable" });
+      assert.deepEqual(await adapter.reconcile(reference, new AbortController().signal), {
+        status: "unresolved",
+        errorCode: "outlook-provider-reference-invalid",
+      });
+      assert.equal(client.calls.length, 0);
+    }
+  });
+
+  it("never resolves malformed or mismatched found observations", async () => {
+    const invalidObservations: OutlookMessageStatusResult[] = [
+      {
+        status: "found",
+        immutableMessageId: "different-message",
+        isDraft: false,
+        sentDateTime: "2026-07-28T00:00:00.000Z",
+      },
+      {
+        status: "found",
+        immutableMessageId: "immutable-message-1",
+        isDraft: false,
+      },
+      {
+        status: "found",
+        immutableMessageId: "immutable-message-1",
+        isDraft: false,
+        sentDateTime: "not-a-date",
+      },
+    ];
+
+    for (const observation of invalidObservations) {
+      const { adapter } = adapterFor(observation);
+      assert.deepEqual(await adapter.reconcile(REFERENCE, new AbortController().signal), {
+        status: "unresolved",
+        errorCode: "outlook-message-status-invalid",
+      });
+    }
+  });
+
+  it("rethrows client failures using only a stable redacted code", async () => {
+    const leakedValues = [
+      "secret-token",
+      "thebeeztreez@outlook.com",
+      "immutable-message-1",
+      "graph-request-123",
+    ];
+    const { adapter } = adapterFor(
+      new Error(
+        `Bearer ${leakedValues[0]} mailbox ${leakedValues[1]} message ${leakedValues[2]} request ${leakedValues[3]}`,
+      ),
+    );
+
+    await assert.rejects(
+      adapter.reconcile(REFERENCE, new AbortController().signal),
+      (error: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.equal(error.message, "outlook-message-status-unavailable");
+        for (const value of leakedValues) assert.doesNotMatch(String(error), new RegExp(value));
+        return true;
+      },
+    );
+  });
+
+  it("produces deterministic digests that change with terminal status", async () => {
+    const sent = {
+      status: "found" as const,
+      immutableMessageId: "immutable-message-1",
+      isDraft: false,
+      sentDateTime: "2026-07-28T00:00:00.000Z",
+      internetMessageId: "<quote-1@example.invalid>",
+    };
+    const first = await adapterFor(sent).adapter.reconcile(REFERENCE, new AbortController().signal);
+    const second = await adapterFor(sent).adapter.reconcile(
+      REFERENCE,
+      new AbortController().signal,
+    );
+    const changed = await adapterFor({
+      ...sent,
+      sentDateTime: "2026-07-28T00:00:01.000Z",
+    }).adapter.reconcile(REFERENCE, new AbortController().signal);
+
+    assert.equal(first.status, "succeeded");
+    assert.equal(second.status, "succeeded");
+    assert.equal(changed.status, "succeeded");
+    if (
+      first.status !== "succeeded" ||
+      second.status !== "succeeded" ||
+      changed.status !== "succeeded"
+    ) {
+      assert.fail("Expected terminal Outlook statuses.");
+    }
+    assert.equal(first.outputDigest, second.outputDigest);
+    assert.notEqual(first.outputDigest, changed.outputDigest);
   });
 });
