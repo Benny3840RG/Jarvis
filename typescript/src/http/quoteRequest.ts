@@ -236,19 +236,12 @@ export function parseQuoteFinalization(
     "expectedRevisionVersion",
     "issuer",
     "client",
-    "generatedAt",
   ]);
   const envelope = parseRevisionEnvelope(quoteId, revisionParam, body);
-  const generatedAt = requiredString(body.generatedAt, "generatedAt", 40);
-  const timestamp = Date.parse(generatedAt);
-  if (!Number.isFinite(timestamp) || new Date(timestamp).toISOString() !== generatedAt) {
-    throw new Error("generatedAt must be a canonical ISO-8601 UTC timestamp.");
-  }
   return {
     ...envelope,
     issuer: parsePdfParty(body.issuer, "issuer"),
     client: parsePdfParty(body.client, "client"),
-    generatedAt,
   };
 }
 
