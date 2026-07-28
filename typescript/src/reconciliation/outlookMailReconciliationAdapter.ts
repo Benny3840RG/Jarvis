@@ -35,6 +35,13 @@ export type OutlookMailReconciliationAdapterOptions = {
   client: OutlookMessageStatusClient;
 };
 
+export class OutlookReconciliationError extends Error {
+  constructor(readonly code: string) {
+    super(code);
+    this.name = "OutlookReconciliationError";
+  }
+}
+
 function unresolved(errorCode: string, retryAfterMs?: number): ProviderReconciliationResult {
   return {
     status: "unresolved",
@@ -58,6 +65,10 @@ function statusDigest(
   return `outlook-mail-status:v1:sha256:${createHash("sha256").update(canonical).digest("hex")}`;
 }
 
+function validReferencePart(value: string): boolean {
+  return value.trim().length > 0 && value.length <= 1_024 && !/[\u0000-\u001f\u007f]/.test(value);
+}
+
 export class OutlookMailReconciliationAdapter implements ProviderReconciliationAdapter {
   readonly provider = OUTLOOK_MAIL_RECONCILIATION_PROVIDER;
   private readonly mailbox: string;
@@ -72,11 +83,24 @@ export class OutlookMailReconciliationAdapter implements ProviderReconciliationA
     reference: ProviderAttemptReference,
     signal: AbortSignal,
   ): Promise<ProviderReconciliationResult> {
-    const status = await this.client.getMessageStatus({
-      mailbox: this.mailbox,
-      immutableMessageId: reference.providerRequestId,
-      signal,
-    });
+    if (
+      reference.provider !== OUTLOOK_MAIL_RECONCILIATION_PROVIDER ||
+      !validReferencePart(reference.providerRequestId) ||
+      !validReferencePart(reference.providerCorrelationId)
+    ) {
+      return unresolved("outlook-provider-reference-invalid");
+    }
+
+    let status: OutlookMessageStatusResult;
+    try {
+      status = await this.client.getMessageStatus({
+        mailbox: this.mailbox,
+        immutableMessageId: reference.providerRequestId,
+        signal,
+      });
+    } catch {
+      throw new OutlookReconciliationError("outlook-message-status-unavailable");
+    }
 
     switch (status.status) {
       case "found":
