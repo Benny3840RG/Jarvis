@@ -1,5 +1,6 @@
 import type {
   CreateQuoteInput,
+  FinalizeQuoteRevisionInput,
   ListQuotesInput,
   QuoteRevisionCommand,
   UpdateQuoteDraftInput,
@@ -195,6 +196,59 @@ function parseRevisionEnvelope(
       body.expectedRevisionVersion,
       "expectedRevisionVersion",
     ),
+  };
+}
+
+function parsePdfParty(value: unknown, field: string): FinalizeQuoteRevisionInput["issuer"] {
+  if (!isRecord(value)) throw new Error(`${field} must be a JSON object.`);
+  rejectUnknownKeys(value, ["name", "abn", "email", "phone", "addressLines"]);
+  const addressLines =
+    value.addressLines === undefined
+      ? undefined
+      : Array.isArray(value.addressLines) && value.addressLines.length <= 8
+        ? value.addressLines.map((line, index) =>
+            requiredString(line, `${field} address line ${index + 1}`, 160),
+          )
+        : (() => {
+            throw new Error(`${field} addressLines must be an array of at most 8 strings.`);
+          })();
+  return {
+    name: requiredString(value.name, `${field} name`, 120),
+    ...(value.abn === undefined ? {} : { abn: requiredString(value.abn, `${field} ABN`, 40) }),
+    ...(value.email === undefined
+      ? {}
+      : { email: requiredString(value.email, `${field} email`, 320) }),
+    ...(value.phone === undefined
+      ? {}
+      : { phone: requiredString(value.phone, `${field} phone`, 60) }),
+    ...(addressLines === undefined ? {} : { addressLines }),
+  };
+}
+
+export function parseQuoteFinalization(
+  quoteId: string,
+  revisionParam: string,
+  body: unknown,
+): FinalizeQuoteRevisionInput {
+  if (!isRecord(body)) throw new Error("Request body must be a JSON object.");
+  rejectUnknownKeys(body, [
+    "expectedAggregateVersion",
+    "expectedRevisionVersion",
+    "issuer",
+    "client",
+    "generatedAt",
+  ]);
+  const envelope = parseRevisionEnvelope(quoteId, revisionParam, body);
+  const generatedAt = requiredString(body.generatedAt, "generatedAt", 40);
+  const timestamp = Date.parse(generatedAt);
+  if (!Number.isFinite(timestamp) || new Date(timestamp).toISOString() !== generatedAt) {
+    throw new Error("generatedAt must be a canonical ISO-8601 UTC timestamp.");
+  }
+  return {
+    ...envelope,
+    issuer: parsePdfParty(body.issuer, "issuer"),
+    client: parsePdfParty(body.client, "client"),
+    generatedAt,
   };
 }
 
