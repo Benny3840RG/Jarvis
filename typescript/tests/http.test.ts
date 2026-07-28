@@ -637,16 +637,19 @@ describe("Jarvis HTTP system boundary", () => {
       });
 
     assert.equal(response.statusCode, 200);
-    assert.deepEqual(response.json<{ reconciliation: RuntimeReconciliationHealth }>().reconciliation, {
-      state: "degraded",
-      enabled: true,
-      workerId: "runtime-worker-1",
-      startedAt: "2026-07-27T23:00:00.000Z",
-      lastCycleStartedAt: "2026-07-27T23:00:05.000Z",
-      lastCycleCompletedAt: "2026-07-27T23:00:06.000Z",
-      lastCycleProcessed: 2,
-      lastErrorCode: "reconciliation-loop-failed",
-    });
+    assert.deepEqual(
+      response.json<{ reconciliation: RuntimeReconciliationHealth }>().reconciliation,
+      {
+        state: "degraded",
+        enabled: true,
+        workerId: "runtime-worker-1",
+        startedAt: "2026-07-27T23:00:00.000Z",
+        lastCycleStartedAt: "2026-07-27T23:00:05.000Z",
+        lastCycleCompletedAt: "2026-07-27T23:00:06.000Z",
+        lastCycleProcessed: 2,
+        lastErrorCode: "reconciliation-loop-failed",
+      },
+    );
     assert.doesNotMatch(response.body, /secret|stack|provider-reference/);
   });
 
