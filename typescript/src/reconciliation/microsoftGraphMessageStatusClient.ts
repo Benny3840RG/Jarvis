@@ -2,6 +2,7 @@ import type {
   OutlookMessageStatusClient,
   OutlookMessageStatusResult,
 } from "./outlookMailReconciliationAdapter.js";
+import { OutlookReconciliationError } from "./outlookMailReconciliationAdapter.js";
 
 export type AccessTokenSupplier = (signal: AbortSignal) => Promise<string>;
 
@@ -35,6 +36,12 @@ function messageStatus(body: unknown): OutlookMessageStatusResult {
   };
 }
 
+function retryAfterMilliseconds(value: string | null): number | undefined {
+  if (value === null || !/^[1-9]\d*$/.test(value)) return undefined;
+  const seconds = Number(value);
+  return Number.isSafeInteger(seconds) && seconds <= 300 ? seconds * 1_000 : undefined;
+}
+
 export class MicrosoftGraphMessageStatusClient implements OutlookMessageStatusClient {
   private readonly getAccessToken: AccessTokenSupplier;
   private readonly fetch: typeof globalThis.fetch;
@@ -47,24 +54,64 @@ export class MicrosoftGraphMessageStatusClient implements OutlookMessageStatusCl
   }
 
   async getMessageStatus(input: MessageStatusInput): Promise<OutlookMessageStatusResult> {
-    const token = await this.getAccessToken(input.signal);
+    let token: string;
+    try {
+      token = await this.getAccessToken(input.signal);
+    } catch {
+      throw new OutlookReconciliationError("outlook-graph-token-unavailable");
+    }
+    if (!token.trim()) {
+      throw new OutlookReconciliationError("outlook-graph-authorization-failed");
+    }
+
     const url = new URL(
       `${this.graphOrigin}/users/${encodeURIComponent(input.mailbox)}/messages/${encodeURIComponent(
         input.immutableMessageId,
       )}`,
     );
     url.searchParams.set("$select", "id,isDraft,sentDateTime,internetMessageId");
-    const response = await this.fetch(url, {
-      method: "GET",
-      headers: {
-        Accept: "application/json",
-        Authorization: `Bearer ${token}`,
-        Prefer: 'IdType="ImmutableId"',
-      },
-      redirect: "error",
-      signal: input.signal,
-    });
-    if (response.status !== 200) return { status: "rejected" };
-    return messageStatus(await response.json());
+    let response: Response;
+    try {
+      response = await this.fetch(url, {
+        method: "GET",
+        headers: {
+          Accept: "application/json",
+          Authorization: `Bearer ${token}`,
+          Prefer: 'IdType="ImmutableId"',
+        },
+        redirect: "error",
+        signal: input.signal,
+      });
+    } catch {
+      throw new OutlookReconciliationError("outlook-graph-request-failed");
+    }
+
+    switch (response.status) {
+      case 200:
+        try {
+          return messageStatus(await response.json());
+        } catch {
+          return { status: "invalid" };
+        }
+      case 401:
+      case 403:
+        throw new OutlookReconciliationError("outlook-graph-authorization-failed");
+      case 404:
+      case 410:
+        return { status: "not-observable" };
+      case 429: {
+        const retryAfterMs = retryAfterMilliseconds(response.headers.get("retry-after"));
+        return {
+          status: "throttled",
+          ...(retryAfterMs === undefined ? {} : { retryAfterMs }),
+        };
+      }
+      case 500:
+      case 503:
+      case 504:
+        return { status: "unavailable" };
+      default:
+        return { status: "rejected" };
+    }
   }
 }
