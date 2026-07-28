@@ -94,7 +94,10 @@ describe("renderFinalizedQuotePdf", () => {
   });
 
   it("fails closed for mutable or corrupt quote snapshots", () => {
-    expectCode(() => renderFinalizedQuotePdf(input({ status: "reviewed" })), "quote-pdf-not-finalized");
+    expectCode(
+      () => renderFinalizedQuotePdf(input({ status: "reviewed" })),
+      "quote-pdf-not-finalized",
+    );
     expectCode(
       () => renderFinalizedQuotePdf(input({ fingerprint: undefined })),
       "quote-pdf-fingerprint-invalid",
@@ -110,10 +113,7 @@ describe("renderFinalizedQuotePdf", () => {
         }),
       "quote-pdf-identity-mismatch",
     );
-    expectCode(
-      () => renderFinalizedQuotePdf(input({ total: 1_398 })),
-      "quote-pdf-totals-invalid",
-    );
+    expectCode(() => renderFinalizedQuotePdf(input({ total: 1_398 })), "quote-pdf-totals-invalid");
   });
 
   it("encodes hostile PDF syntax as data and sanitises the filename", () => {
