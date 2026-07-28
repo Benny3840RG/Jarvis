@@ -28,7 +28,7 @@ jobs:
     timeout-minutes: 45
     env:
       ISSUE_NUMBER: ${{ github.event_name == 'workflow_dispatch' && inputs.issue_number || github.event.issue.number }}
-      BRANCH_NAME: automation/issue-${{ github.event_name == 'workflow_dispatch' && inputs.issue_number || github.event.issue.number }}
+      BRANCH_NAME: automation/issue-${{ github.event_name == 'workflow_dispatch' && inputs.issue_number || github.event.issue.number }}/run-${{ github.run_id }}
 
     steps:
       - name: Validate approved issue and acquire lock
@@ -64,13 +64,18 @@ jobs:
             ));
             const hasAcceptanceHeading = /^#{1,6}\s+acceptance criteria\s*$/im.test(issue.body || "");
             const hasChecklistItem = /^\s*-\s*\[[ xX]\]\s+\S+/m.test(issue.body || "");
-            const existing = await github.rest.pulls.list({
+            const pulls = await github.rest.pulls.list({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              state: "all",
-              head: `${context.repo.owner}:automation/issue-${issueNumber}`,
-              per_page: 10,
+              state: "open",
+              per_page: 100,
             });
+            const branchPrefix = `automation/issue-${issueNumber}/`;
+            const existing = pulls.data.filter(
+              (pull) =>
+                pull.head.repo?.full_name === context.payload.repository.full_name &&
+                pull.head.ref.startsWith(branchPrefix),
+            );
 
             const failures = [];
             if (issue.state !== "open") failures.push("issue is not open");
@@ -83,7 +88,7 @@ jobs:
             if (!hasAcceptanceHeading || !hasChecklistItem) {
               failures.push("testable acceptance criteria are missing");
             }
-            if (existing.data.length > 0) {
+            if (existing.length > 0) {
               failures.push("an automation pull request already exists");
             }
             if (failures.length > 0) {
@@ -132,12 +137,32 @@ jobs:
             typescript/package-lock.json
             typescript/jarvis-console-01/package-lock.json
 
-      - name: Record trusted checkout state
+      - name: Install immutable post-agent controls
         shell: bash
         run: |
           set -euo pipefail
-          echo "EXPECTED_BASE_SHA=$(/usr/bin/git rev-parse HEAD)" >>"$GITHUB_ENV"
-          echo "EXPECTED_GIT_CONFIG_SHA=$(sha256sum .git/config | cut -d' ' -f1)" >>"$GITHUB_ENV"
+          control_manifest="$RUNNER_TEMP/jarvis-control.sha256"
+          sha256sum \
+            .github/automation/validate-autobuild.mjs \
+            .github/automation/codex-autobuild-prompt.md \
+            .github/workflows/jarvis-autobuild.yml \
+            >"$control_manifest"
+
+          sudo mkdir -p /opt/jarvis-autobuild
+          sudo install -o root -g root -m 0444 \
+            .github/automation/validate-autobuild.mjs \
+            /opt/jarvis-autobuild/validate-autobuild.mjs
+          /usr/bin/git rev-parse HEAD | sudo tee /opt/jarvis-autobuild/base.sha >/dev/null
+          printf '%s\n' "$ISSUE_NUMBER" |
+            sudo tee /opt/jarvis-autobuild/issue-number >/dev/null
+          printf '%s\n' "$BRANCH_NAME" |
+            sudo tee /opt/jarvis-autobuild/branch-name >/dev/null
+          sha256sum .git/config | cut -d' ' -f1 |
+            sudo tee /opt/jarvis-autobuild/git-config.sha >/dev/null
+          sudo install -o root -g root -m 0444 \
+            "$control_manifest" \
+            /opt/jarvis-autobuild/control.sha256
+          sudo chmod 0555 /opt/jarvis-autobuild
 
       - name: Install locked dependencies before sandboxing
         run: |
@@ -191,16 +216,21 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          export PATH=/usr/local/bin:/usr/bin:/bin
+          unset NODE_OPTIONS LD_PRELOAD GIT_CONFIG_COUNT
           /usr/bin/rm -f .jarvis-autobuild-prompt.md
 
-          if [[ "$(/usr/bin/git rev-parse HEAD)" != "$EXPECTED_BASE_SHA" ]]; then
+          expected_base="$(</opt/jarvis-autobuild/base.sha)"
+          expected_git_config="$(</opt/jarvis-autobuild/git-config.sha)"
+          if [[ "$(/usr/bin/git rev-parse HEAD)" != "$expected_base" ]]; then
             echo "::error::The agent altered git history."
             exit 1
           fi
-          if [[ "$(sha256sum .git/config | cut -d' ' -f1)" != "$EXPECTED_GIT_CONFIG_SHA" ]]; then
+          if [[ "$(/usr/bin/sha256sum .git/config | /usr/bin/cut -d' ' -f1)" != "$expected_git_config" ]]; then
             echo "::error::The agent altered repository git configuration."
             exit 1
           fi
+          /usr/bin/sha256sum --check --strict /opt/jarvis-autobuild/control.sha256
 
           if ! /usr/bin/git -c core.hooksPath=/dev/null diff --quiet HEAD -- \
             .github/automation \
@@ -213,7 +243,12 @@ jobs:
           /usr/bin/node --input-type=module <<'NODE'
           import fs from "node:fs";
           import { execFileSync } from "node:child_process";
-          import { evaluateDiff, redactReceipt } from "./.github/automation/validate-autobuild.mjs";
+          import {
+            evaluateDiff,
+            evaluateIndexFlags,
+            evaluatePatch,
+            redactReceipt,
+          } from "/opt/jarvis-autobuild/validate-autobuild.mjs";
 
           const git = (...args) =>
             execFileSync(
@@ -221,6 +256,18 @@ jobs:
               ["-c", "core.hooksPath=/dev/null", ...args],
               { encoding: "utf8" },
             ).trimEnd();
+          const indexEntries = git("ls-files", "-v", "-z")
+            .split("\0")
+            .filter(Boolean)
+            .map((line) => ({ tag: line.slice(0, 1), path: line.slice(2) }));
+          const indexEvaluation = evaluateIndexFlags(indexEntries);
+          if (!indexEvaluation.ok) {
+            for (const reason of indexEvaluation.reasons) {
+              console.error(`::error::${redactReceipt(reason)}`);
+            }
+            process.exit(1);
+          }
+
           const statusLines = git(
             "status",
             "--porcelain=v1",
@@ -244,9 +291,15 @@ jobs:
             let deletions = deleted === "-" ? 0 : Number(deleted);
             let binary = added === "-" || deleted === "-";
             if (status === "??" && stat?.isFile()) {
-              const data = fs.readFileSync(path);
-              binary = data.subarray(0, 8_000).includes(0);
-              additions = binary ? 0 : data.toString("utf8").split("\n").length;
+              const descriptor = fs.openSync(path, "r");
+              const sample = Buffer.alloc(Math.min(stat.size, 8_000));
+              fs.readSync(descriptor, sample, 0, sample.length, 0);
+              fs.closeSync(descriptor);
+              binary = sample.includes(0);
+              additions =
+                binary || stat.size > 512 * 1024
+                  ? 0
+                  : fs.readFileSync(path, "utf8").split("\n").length;
               deletions = 0;
             }
             return {
@@ -254,6 +307,7 @@ jobs:
               status,
               additions,
               deletions,
+              bytes: stat?.isFile() ? stat.size : 0,
               binary,
               symlink: stat?.isSymbolicLink() ?? false,
             };
@@ -262,6 +316,16 @@ jobs:
           const evaluation = evaluateDiff({ files });
           if (!evaluation.ok) {
             for (const reason of evaluation.reasons) {
+              console.error(`::error::${redactReceipt(reason)}`);
+            }
+            process.exit(1);
+          }
+
+          const patchEvaluation = evaluatePatch(
+            git("diff", "--no-ext-diff", "--unified=0", "HEAD", "--"),
+          );
+          if (!patchEvaluation.ok) {
+            for (const reason of patchEvaluation.reasons) {
               console.error(`::error::${redactReceipt(reason)}`);
             }
             process.exit(1);
@@ -293,6 +357,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          export PATH=/usr/local/bin:/usr/bin:/bin
+          ISSUE_NUMBER="$(</opt/jarvis-autobuild/issue-number)"
+          BRANCH_NAME="$(</opt/jarvis-autobuild/branch-name)"
+          export GIT_AUTHOR_NAME="jarvis-autobuild[bot]"
+          export GIT_AUTHOR_EMAIL="jarvis-autobuild[bot]@users.noreply.github.com"
+          export GIT_COMMITTER_NAME="$GIT_AUTHOR_NAME"
+          export GIT_COMMITTER_EMAIL="$GIT_AUTHOR_EMAIL"
           export GIT_CONFIG_COUNT=1
           export GIT_CONFIG_KEY_0=core.hooksPath
           export GIT_CONFIG_VALUE_0=/dev/null
@@ -329,7 +400,7 @@ jobs:
           - Persistence Providers: Requires review for JSON and Convex behavioural parity before leaving draft.
           - Backup / Restore: Requires review for persistence or recovery impact before leaving draft.
           - HTTP / MCP: Requires review for contract and operator-interface impact before leaving draft.
-          - Tests & Checks: Autonomous checks ran; independent pull-request CI remains authoritative.
+          - Tests & Checks: Independent pull-request CI is machine-enforced; the agent's own check report is advisory.
           - Documentation: Requires review for operator and runbook accuracy before leaving draft.
 
           # Operator Verification
@@ -348,8 +419,33 @@ jobs:
               --draft
           )"
           gh pr edit "$pr_url" --add-label automation-generated
+          echo "pr_url=$pr_url" >>"$GITHUB_OUTPUT"
+
+      - name: Wait for independent pull-request checks
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_URL: ${{ steps.publish.outputs.pr_url }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH=/usr/local/bin:/usr/bin:/bin
+          ISSUE_NUMBER="$(</opt/jarvis-autobuild/issue-number)"
+          checks_seen=false
+          for _ in {1..30}; do
+            checks_json="$(gh pr checks "$PR_URL" --json name,state 2>/dev/null || true)"
+            if [[ -n "$checks_json" && "$checks_json" != "[]" ]]; then
+              checks_seen=true
+              break
+            fi
+            sleep 5
+          done
+          if [[ "$checks_seen" != true ]]; then
+            echo "::error::Independent pull-request checks did not start."
+            exit 1
+          fi
+          gh pr checks "$PR_URL" --watch --fail-fast --interval 10
           gh issue comment "$ISSUE_NUMBER" --body \
-            "Autonomous build completed and opened draft PR: ${pr_url}. Independent CI and owner review are required."
+            "Autonomous build opened draft PR ${PR_URL} and its independent checks passed. Owner review is still required."
 
       - name: Release issue lock and publish failure receipt
         if: always()
@@ -359,6 +455,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          export PATH=/usr/local/bin:/usr/bin:/bin
+          ISSUE_NUMBER="$(</opt/jarvis-autobuild/issue-number)"
           gh issue edit "$ISSUE_NUMBER" --remove-label automation-in-progress || true
           if [[ "$BUILD_STATUS" != "success" ]]; then
             gh issue edit "$ISSUE_NUMBER" --add-label automation-blocked || true
