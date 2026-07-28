@@ -90,7 +90,10 @@ describe("quote Convex contracts", () => {
     );
     const storePosition = quoteFinalizationSource.indexOf("ctx.storage.store");
     const commitPosition = quoteFinalizationSource.indexOf("commitFinalization");
-    assert.ok(storePosition >= 0 && commitPosition > storePosition, "PDF must be stored before commit");
+    assert.ok(
+      storePosition >= 0 && commitPosition > storePosition,
+      "PDF must be stored before commit",
+    );
 
     assert.ok(quotesSource.includes("forkFinalizedQuote"));
     assert.ok(quotesSource.includes('ctx.db.insert("quoteRevisions"'));
