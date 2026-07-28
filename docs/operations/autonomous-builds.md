@@ -35,8 +35,8 @@ Only one autonomous build runs in the repository at a time.
 5. A trusted guard rejects forbidden or excessive changes.
 6. The workflow pushes an attempt-specific `automation/issue-<number>/run-<run-id>` branch and opens one draft PR.
 7. A separate secret-free job checks out the exact guarded commit on a fresh runner and repeats the automation, TypeScript, coverage, audit and Console gates.
-8. The workflow publishes those machine results as commit statuses on the draft PR and blocks the issue if verification fails.
-9. Ordinary PR CI remains the merge gate for later human-authored PR events.
+8. The workflow publishes one namespaced `jarvis-autobuild/verify-candidate` status on the draft PR and blocks the issue if verification fails.
+9. Ordinary TypeScript and Copilot checks keep their own names and remain authoritative. The autonomous verifier never impersonates or satisfies them.
 10. The owner reviews the diff, Copilot Review, checks, and remaining risk.
 11. Only the owner may change draft state or merge.
 
