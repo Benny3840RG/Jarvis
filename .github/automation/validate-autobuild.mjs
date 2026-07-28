@@ -1,5 +1,7 @@
 const MAX_CHANGED_FILES = 30;
 const MAX_DIFF_LINES = 2_000;
+const MAX_TOTAL_BYTES = 2 * 1024 * 1024;
+const MAX_FILE_BYTES = 512 * 1024;
 
 const FORBIDDEN_PATHS = [
   /^\.github\/workflows\//,
@@ -11,9 +13,13 @@ const FORBIDDEN_PATHS = [
   /(^|\/)package(?:-lock)?\.json$/,
   /^typescript\/convex\/schema\.ts$/,
   /(^|\/)convex\.json$/,
+  /^typescript\/(?:src|convex)\/.*(?:auth|security|permission|approval|authority|policy|credential|secret|token)/i,
+  /^typescript\/(?:src|convex)\/.*(?:integration|adapter|provider|reconciliation|external)/i,
+  /^typescript\/(?:src|convex)\/.*(?:deploy|commission|billing|payment)/i,
 ];
 
-const SOURCE_PATH = /^(?:typescript\/src\/|typescript\/convex\/).+\.ts$/;
+const SOURCE_PATH =
+  /^(?:typescript\/src\/|typescript\/convex\/|typescript\/jarvis-console-01\/src\/).+\.ts$/;
 const TEST_PATH =
   /^(?:typescript\/tests\/.*\.test\.ts|typescript\/convex\/.*\.test\.ts|typescript\/jarvis-console-01\/tests\/.*\.test\.ts)$/;
 
@@ -66,6 +72,8 @@ export function evaluateDiff({ files = [] } = {}) {
     0,
   );
   if (changedLines > MAX_DIFF_LINES) reasons.push("diff line limit exceeded");
+  const totalBytes = files.reduce((total, file) => total + Number(file.bytes ?? 0), 0);
+  if (totalBytes > MAX_TOTAL_BYTES) reasons.push("total changed byte limit exceeded");
 
   for (const file of files) {
     const path = String(file.path ?? "");
@@ -73,17 +81,69 @@ export function evaluateDiff({ files = [] } = {}) {
     if (pathReason) reasons.push(pathReason);
     if (file.binary) reasons.push(`binary change is forbidden: ${path}`);
     if (file.symlink) reasons.push(`symlink change is forbidden: ${path}`);
+    if (Number(file.bytes ?? 0) > MAX_FILE_BYTES) {
+      reasons.push(`changed file byte limit exceeded: ${path}`);
+    }
   }
 
-  const sourceChanged = files.some(
-    (file) => SOURCE_PATH.test(String(file.path ?? "")) && !TEST_PATH.test(String(file.path ?? "")),
+  const sourceAreas = new Set(
+    files
+      .map((file) => String(file.path ?? ""))
+      .filter((path) => SOURCE_PATH.test(path) && !TEST_PATH.test(path))
+      .map((path) =>
+        path.startsWith("typescript/convex/")
+          ? "convex"
+          : path.startsWith("typescript/jarvis-console-01/")
+            ? "console"
+            : "node",
+      ),
   );
-  const testChanged = files.some((file) => TEST_PATH.test(String(file.path ?? "")));
-  if (sourceChanged && !testChanged) {
-    reasons.push("source changes require a matching test change");
+  const testAreas = new Set(
+    files
+      .map((file) => String(file.path ?? ""))
+      .filter((path) => TEST_PATH.test(path))
+      .map((path) =>
+        path.startsWith("typescript/convex/")
+          ? "convex"
+          : path.startsWith("typescript/jarvis-console-01/")
+            ? "console"
+            : "node",
+      ),
+  );
+  for (const area of sourceAreas) {
+    if (!testAreas.has(area)) {
+      reasons.push(`source changes require a matching ${area} test change`);
+    }
   }
 
   return result([...new Set(reasons)]);
+}
+
+export function evaluateIndexFlags(entries = []) {
+  const reasons = [];
+  for (const entry of entries) {
+    const tag = String(entry?.tag ?? "");
+    const path = String(entry?.path ?? "");
+    if (tag === "S" || /^[a-z]$/.test(tag)) {
+      reasons.push(`forbidden git index flag on ${path || "(unknown path)"}`);
+    }
+  }
+  return result(reasons);
+}
+
+export function evaluatePatch(patch) {
+  const sensitive =
+    /\b(?:authorization|authentication|credential|secret|permission|approval|authority|deploy(?:ment)?|commission(?:ing)?|billing|payment)\b|(?:api|service)[_-]?token|requireApproval|maximumToolAuthority/i;
+  const reasons = [];
+  const lines = String(patch ?? "").split("\n");
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    if (!/^[+-]/.test(line) || /^(?:\+\+\+|---)/.test(line)) continue;
+    if (sensitive.test(line.slice(1))) {
+      reasons.push(`authority-sensitive patch content at diff line ${index + 1}`);
+    }
+  }
+  return result(reasons);
 }
 
 export function redactReceipt(value) {
@@ -150,10 +210,14 @@ export function validateWorkflowContract(workflow) {
     ["Codex must drop sudo", /safety-strategy:\s*drop-sudo/i],
     ["workflow must create a draft PR", /(?:draft:\s*true|--draft\b)/i],
     ["workflow must always clean up", /if:\s*always\(\)/i],
-    ["guard must verify the original HEAD", /EXPECTED_BASE_SHA/i],
+    ["guard must verify the original HEAD", /\/opt\/jarvis-autobuild\/base\.sha/i],
     ["guard must include staged changes", /diff[\s\S]*HEAD/i],
     ["guard must parse hostile filenames safely", /--porcelain=v1[\s\S]*-z/i],
     ["publication must disable git hooks", /core\.hooksPath=\/dev\/null/i],
+    ["guard must use an immutable validator", /\/opt\/jarvis-autobuild\/validate-autobuild\.mjs/i],
+    ["guard must reject hidden index entries", /evaluateIndexFlags/i],
+    ["workflow must wait for independent checks", /gh pr checks[\s\S]*--watch/i],
+    ["automation branches must be attempt-specific", /run-\$\{\{\s*github\.run_id\s*\}\}/i],
   ];
 
   const checked = requirePatterns(text, requirements);
@@ -167,7 +231,8 @@ export function validateWorkflowContract(workflow) {
 }
 
 export function validateCiContract(workflow) {
-  return requirePatterns(String(workflow ?? ""), [
+  const text = String(workflow ?? "");
+  const checked = requirePatterns(text, [
     [
       "CI must trigger for the autonomous builder workflow",
       /\.github\/workflows\/jarvis-autobuild\.yml/i,
@@ -183,4 +248,12 @@ export function validateCiContract(workflow) {
     ],
     ["automation-policy must use Node.js 24", /node-version:\s*[\"']?24[\"']?/i],
   ]);
+  const reasons = [...checked.reasons];
+  const pullRequestSection = text.match(
+    /^\s{2}pull_request:\s*$([\s\S]*?)(?=^\S|^\s{2}[a-zA-Z_-]+:\s*$)/m,
+  )?.[1];
+  if (pullRequestSection && /^\s{4}paths:/m.test(pullRequestSection)) {
+    reasons.push("pull-request CI must not use path filters");
+  }
+  return result(reasons);
 }
