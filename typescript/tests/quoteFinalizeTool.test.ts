@@ -27,7 +27,6 @@ function action(overrides: Partial<ToolAction> = {}): ToolAction {
       expectedRevisionVersion: 2,
       issuer: { name: "Benny's Trade Services", email: "quotes@example.com" },
       client: { name: "Example Client", email: "client@example.com" },
-      generatedAt: "2026-07-28T02:00:00.000Z",
     },
     rationale: "Finalize the reviewed quote.",
     requiredAuthority: "T2",
@@ -122,7 +121,6 @@ describe("AM-012 finalize quote tool", () => {
       assert.equal(input.expectedRevisionVersion, 2);
       assert.equal(input.issuer.name, "Benny's Trade Services");
       assert.equal(input.client.name, "Example Client");
-      assert.equal(input.generatedAt, "2026-07-28T02:00:00.000Z");
       return snapshotWith();
     });
     const service = new ToolExecutionService([createQuoteFinalizeToolDefinition(quotes)]);
