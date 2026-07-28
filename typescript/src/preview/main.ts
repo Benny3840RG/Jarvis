@@ -4,6 +4,7 @@ import { createJarvisHttpApp } from "../http/app.js";
 import { resolveHttpListenConfig } from "../http/config.js";
 import { resolveJarvisMcpConfig } from "../mcp/config.js";
 import { startJarvisMcpHttpServer } from "../mcp/httpServer.js";
+import { createRuntimeReconciliationHost } from "../reconciliation/runtimeReconciliationHost.js";
 import { applyPreviewEnvironment } from "./environment.js";
 
 function loadLocalEnvironment(): void {
@@ -18,7 +19,10 @@ async function main(): Promise<void> {
   loadLocalEnvironment();
   applyPreviewEnvironment();
   const httpListen = resolveHttpListenConfig();
-  const httpApp = await createJarvisHttpApp();
+  const reconciliation = createRuntimeReconciliationHost();
+  const httpApp = await createJarvisHttpApp({
+    reconciliationHealth: () => reconciliation.health(),
+  });
   await httpApp.listen(httpListen);
 
   const mcpConfig = resolveJarvisMcpConfig({
@@ -29,7 +33,9 @@ async function main(): Promise<void> {
   let mcpServer;
   try {
     mcpServer = await startJarvisMcpHttpServer(mcpConfig);
+    await reconciliation.start();
   } catch (error: unknown) {
+    await reconciliation.stop();
     await httpApp.close();
     throw error;
   }
@@ -41,6 +47,7 @@ async function main(): Promise<void> {
   const shutdown = async () => {
     if (closing) return;
     closing = true;
+    await reconciliation.stop();
     await mcpServer.close();
     await httpApp.close();
     process.exit(0);

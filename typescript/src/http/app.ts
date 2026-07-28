@@ -59,6 +59,7 @@ import {
 } from "../persistence/persistence.js";
 import { createTotalityPipelineFromEnv } from "../totality/totalityFactory.js";
 import type { TotalityPipeline } from "../totality/totalityPipeline.js";
+import type { RuntimeReconciliationHealth } from "../reconciliation/runtimeReconciliationHost.js";
 import { resolveHttpAppConfig, type HttpAppConfig } from "./config.js";
 import { JarvisHttpModule } from "./jarvisHttpModule.js";
 import { REQUEST_ID_HEADER, resolveRequestId } from "./requestId.js";
@@ -79,6 +80,7 @@ export type CreateJarvisHttpAppOptions = (
   DefaultPersistenceOptions | InjectedPersistenceOptions
 ) & {
   config?: HttpAppConfig;
+  reconciliationHealth?: () => RuntimeReconciliationHealth;
   logger?: NestApplicationOptions["logger"];
   totalityPipeline?: TotalityPipeline | null;
   memoryChangeSetService?: MemoryChangeSetService | null;
@@ -131,6 +133,8 @@ export async function createJarvisHttpApp(
   const persistence = options.persistence ?? createPersistenceFromEnv();
   const config = options.config ?? resolveHttpAppConfig();
   const usesEnvironment = options.persistence === undefined;
+  const reconciliationHealth =
+    options.reconciliationHealth ?? (() => ({ state: "disabled", enabled: false }));
   const totalityPipeline =
     options.totalityPipeline !== undefined
       ? options.totalityPipeline
@@ -232,6 +236,7 @@ export async function createJarvisHttpApp(
       persistence,
       providerName,
       config,
+      reconciliationHealth,
       totalityPipeline,
       memoryChangeSetService,
       toolActionService,

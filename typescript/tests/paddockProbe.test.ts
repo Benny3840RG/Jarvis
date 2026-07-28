@@ -31,6 +31,7 @@ const STATUS: SystemStatus = {
     schemaCompatibility: "compatible",
     deploymentVersion: AUTHORISED_DEVELOPMENT_DEPLOYMENT,
   },
+  reconciliation: { state: "disabled", enabled: false },
   timezone: "Australia/Melbourne",
   layers: {
     runtime: { status: "ready" },

@@ -243,6 +243,16 @@ const statusSchema = z.object({
     schemaCompatibility: z.enum(["compatible", "incompatible", "unknown"]),
     deploymentVersion: z.string().nullable(),
   }),
+  reconciliation: z.object({
+    state: z.enum(["disabled", "starting", "running", "stopping", "stopped", "degraded"]),
+    enabled: z.boolean(),
+    workerId: z.string().optional(),
+    startedAt: z.string().optional(),
+    lastCycleStartedAt: z.string().optional(),
+    lastCycleCompletedAt: z.string().optional(),
+    lastCycleProcessed: z.number().int().nonnegative().optional(),
+    lastErrorCode: z.string().optional(),
+  }),
   timezone: z.string(),
   layers: z.object({
     runtime: layerSchema,

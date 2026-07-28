@@ -20,6 +20,7 @@ import type { MemoryChangeSetService } from "../memory/memoryChangeSets.js";
 import type { PersistenceProvider } from "../persistence/persistence.js";
 import type { PersistenceProviderName } from "../persistence/providerSelection.js";
 import type { TotalityPipeline } from "../totality/totalityPipeline.js";
+import type { RuntimeReconciliationHealth } from "../reconciliation/runtimeReconciliationHost.js";
 import type { HttpAppConfig } from "./config.js";
 import { BriefController } from "./briefController.js";
 import { BuildController } from "./buildController.js";
@@ -59,6 +60,7 @@ import {
   HTTP_MEMORY_CHANGE_SETS,
   HTTP_PERSISTENCE,
   HTTP_PROVIDER_NAME,
+  HTTP_RECONCILIATION_HEALTH,
   HTTP_TOOL_ACTIONS,
   HTTP_TOOL_EXECUTION,
   HTTP_TOTALITY_PIPELINE,
@@ -67,6 +69,7 @@ import {
 export type JarvisHttpModuleOptions = {
   persistence: PersistenceProvider;
   providerName: PersistenceProviderName;
+  reconciliationHealth: () => RuntimeReconciliationHealth;
   config: HttpAppConfig;
   totalityPipeline: TotalityPipeline | null;
   memoryChangeSetService: MemoryChangeSetService | null;
@@ -127,6 +130,7 @@ export class JarvisHttpModule {
         { provide: HTTP_PREFERENCE_STORE, useValue: options.preferenceStore },
         { provide: HTTP_NOTE_STORE, useValue: options.noteStore },
         { provide: HTTP_PROVIDER_NAME, useValue: options.providerName },
+        { provide: HTTP_RECONCILIATION_HEALTH, useValue: options.reconciliationHealth },
         { provide: HTTP_TOTALITY_PIPELINE, useValue: options.totalityPipeline },
         { provide: HTTP_MEMORY_CHANGE_SETS, useValue: options.memoryChangeSetService },
         { provide: HTTP_TOOL_ACTIONS, useValue: options.toolActionService },

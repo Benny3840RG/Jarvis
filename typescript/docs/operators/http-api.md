@@ -94,7 +94,11 @@ internal stack details are never included.
 ## Status semantics
 
 A successful status read checks state, tasks, and reminders through the selected persistence
-provider before returning `reachability: ok` and `schemaCompatibility: compatible`. JSON reports
+provider before returning `reachability: ok` and `schemaCompatibility: compatible`. It also returns
+a process-local `reconciliation` snapshot. The snapshot is `disabled` unless reconciliation is
+explicitly enabled; enabled snapshots may include the safe worker ID, cycle timestamps, bounded
+processed count, and the stable `reconciliation-loop-failed` code. Tokens, record IDs, provider
+references, raw exceptions, and stacks are never returned. JSON reports
 `authentication: not-required`; Convex reports `authentication: ok` only after its authenticated
 reads succeed.
 
