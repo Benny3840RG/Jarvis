@@ -12,6 +12,10 @@ import {
   type QuoteEmailProvider,
 } from "../quotes/quoteEmailProvider.js";
 import { createQuoteRepositoryFromEnv } from "../quotes/quoteRepositoryFactory.js";
+import {
+  createQuotePdfArtifactRepositoryFromEnv,
+  type QuotePdfArtifactRepository,
+} from "../quotes/quotePdfArtifactRepository.js";
 import type { QuoteRepository } from "../quotes/quoteRepository.js";
 import type { ControlledReminderStore } from "../reminders/controlledReminder.js";
 import type { ControlledTaskStore } from "../tasks/controlledTask.js";
@@ -27,6 +31,7 @@ export function createToolExecutionDefinitions(
   quoteRepository?: QuoteRepository,
   quoteEmailProvider?: QuoteEmailProvider,
   quoteDeliveryRepository?: QuoteDeliveryRepository,
+  quotePdfArtifactRepository?: QuotePdfArtifactRepository,
 ): ToolExecutionDefinition[] {
   if ((taskStore === undefined) !== (reminderStore === undefined)) {
     throw new Error("Task and reminder tool stores must be registered together.");
@@ -39,13 +44,15 @@ export function createToolExecutionDefinitions(
       : createTaskReminderToolDefinitions(taskStore, reminderStore)),
     ...(quoteRepository === undefined ||
     quoteEmailProvider === undefined ||
-    quoteDeliveryRepository === undefined
+    quoteDeliveryRepository === undefined ||
+    quotePdfArtifactRepository === undefined
       ? []
       : [
           createQuoteSendToolDefinition(
             quoteRepository,
             quoteEmailProvider,
             quoteDeliveryRepository,
+            quotePdfArtifactRepository,
           ),
         ]),
   ];
@@ -70,6 +77,7 @@ export function createToolExecutionServiceFromEnv(): ToolExecutionService | null
       createQuoteRepositoryFromEnv() ?? undefined,
       createQuoteEmailProviderFromEnv() ?? undefined,
       createQuoteDeliveryRepositoryFromEnv() ?? undefined,
+      createQuotePdfArtifactRepositoryFromEnv() ?? undefined,
     ),
     new ConvexToolExecutionReceiptStore(),
     new ConvexExternalReconciliationStore(),
