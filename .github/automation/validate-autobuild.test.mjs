@@ -65,6 +65,8 @@ test("rejects forbidden control, dependency, schema, deployment, binary, and sym
   const forbidden = [
     ".github/workflows/evil.yml",
     ".github/automation/validate-autobuild.mjs",
+    ".gitattributes",
+    ".gitmodules",
     ".env.local",
     "typescript/package.json",
     "typescript/package-lock.json",
