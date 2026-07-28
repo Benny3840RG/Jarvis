@@ -146,7 +146,7 @@ export function validateWorkflowContract(workflow) {
     ],
     ["Codex must use workspace permissions", /permission-profile:\s*[\"']?:workspace[\"']?/i],
     ["Codex must drop sudo", /safety-strategy:\s*drop-sudo/i],
-    ["workflow must create a draft PR", /draft:\s*true/i],
+    ["workflow must create a draft PR", /(?:draft:\s*true|--draft\b)/i],
     ["workflow must always clean up", /if:\s*always\(\)/i],
   ];
 
