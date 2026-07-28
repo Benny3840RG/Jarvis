@@ -85,3 +85,14 @@ Every lifecycle change.
 Every operator-facing behaviour.
 
 Copilot is always present.
+
+
+---
+
+## Autonomous Builder
+
+The Jarvis autonomous builder is an implementation participant, not a governance authority. It may act only on an open issue carrying `automation-approved`, and it may produce only an isolated branch and draft pull request.
+
+It cannot approve its own work, satisfy the Copilot gate by assertion, mark a pull request ready, merge, commission, deploy, change secrets, or broaden the approved issue. Independent CI, Copilot review, and the operator remain required.
+
+See [Autonomous builds](/docs/operations/autonomous-builds.md) for issue format, labels, recovery, and credential controls.
