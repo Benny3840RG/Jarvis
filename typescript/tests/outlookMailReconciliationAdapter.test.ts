@@ -131,10 +131,7 @@ describe("OutlookMailReconciliationAdapter", () => {
 
     for (const { observation, expected } of cases) {
       const { adapter } = adapterFor(observation);
-      assert.deepEqual(
-        await adapter.reconcile(REFERENCE, new AbortController().signal),
-        expected,
-      );
+      assert.deepEqual(await adapter.reconcile(REFERENCE, new AbortController().signal), expected);
     }
   });
 });
