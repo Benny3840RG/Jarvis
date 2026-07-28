@@ -288,12 +288,13 @@ finalized quote revisions. The renderer requires the finalized revision fingerpr
 issuer and client presentation details. It returns exact bytes, media type, safe filename, byte
 length, and a `quote-pdf:v1:sha256` digest.
 
-This renderer is a library component only. It is not yet connected to quote finalisation, Convex
-file storage, the quote delivery tool, Outlook, HTTP, preview, or MCP runtimes. A quote is not
-sendable merely because the renderer exists. The next reviewed slice must durably store the exact
-bytes and digest before the revision is considered finalized; a later Outlook slice may attach
-only that stored immutable artefact.
+Quote finalisation now runs through a Convex Node action. The action stamps the server time, derives
+the final revision fingerprint, renders and stores the PDF Blob, then atomically commits the
+finalised revision and immutable `quotePdfArtifacts` metadata. The legacy mutation fails closed.
+Owner-scoped retrieval returns metadata plus a signed storage URL. Development cleanup removes the
+Blob and metadata with the quote.
 
-No PDF generation setting, Outlook credential, send permission, activation procedure, or
-production deployment is introduced by the renderer slice.
+This commissions the durable artefact boundary only. It does not configure Outlook, create a draft,
+send email, expose an MCP send tool, or deploy production. A later Outlook provider may attach only
+the stored immutable artefact after the separate credential, live-send and deployment approvals.
 
