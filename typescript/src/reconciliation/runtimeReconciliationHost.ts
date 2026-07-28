@@ -1,13 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { ConvexHttpClient } from "convex/browser";
-
-import { ConvexExternalReconciliationStore } from "../persistence/convexExternalReconciliations.js";
-import {
-  ReconciliationScheduler,
-  type ReconciliationCycleObservation,
-} from "./reconciliationScheduler.js";
-import { ReconciliationWorker } from "./reconciliationWorker.js";
+import type { ReconciliationCycleObservation } from "./reconciliationScheduler.js";
 
 export type RuntimeReconciliationState =
   "disabled" | "starting" | "running" | "stopping" | "stopped" | "degraded";
@@ -62,35 +55,6 @@ export type RuntimeReconciliationHost = {
   start(): Promise<void>;
   stop(): Promise<void>;
   health(): RuntimeReconciliationHealth;
-};
-
-const DEFAULT_RUNTIME_FACTORIES: RuntimeReconciliationFactories = {
-  createEnabledRuntime(config, observeCycle) {
-    const store = new ConvexExternalReconciliationStore(
-      new ConvexHttpClient(config.convexUrl),
-      config.serviceToken,
-      config.convexDeployment,
-    );
-    const worker = new ReconciliationWorker({
-      store,
-      adapters: [],
-      maxAttempts: config.maxAttempts,
-      baseRetryMs: config.baseRetryMs,
-      maxRetryMs: config.maxRetryMs,
-    });
-    const scheduler = new ReconciliationScheduler(worker, {
-      workerId: config.workerId,
-      leaseMs: config.leaseMs,
-      intervalMs: config.intervalMs,
-      maxBatchSize: config.maxBatchSize,
-      observeCycle,
-    });
-    return {
-      run(signal) {
-        return scheduler.run(signal);
-      },
-    };
-  },
 };
 
 const DEFAULTS = {
@@ -304,5 +268,10 @@ export function createRuntimeReconciliationHost(
 ): RuntimeReconciliationHost {
   const config = resolveRuntimeReconciliationConfig(environment);
   if (!config.enabled) return new DisabledReconciliationHost();
-  return new EnabledReconciliationHost(config, factories ?? DEFAULT_RUNTIME_FACTORIES);
+  if (!factories) {
+    throw new Error(
+      "At least one provider reconciliation adapter is required when reconciliation is enabled.",
+    );
+  }
+  return new EnabledReconciliationHost(config, factories);
 }
