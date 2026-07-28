@@ -30,6 +30,7 @@ jobs:
     outputs:
       candidate-sha: ${{ steps.publish.outputs.candidate_sha }}
       issue-number: ${{ steps.publish.outputs.issue_number }}
+      lock-acquired: ${{ steps.eligibility.outputs.lock_acquired }}
       pr-url: ${{ steps.publish.outputs.pr_url }}
     env:
       ISSUE_NUMBER: ${{ github.event_name == 'workflow_dispatch' && inputs.issue_number || github.event.issue.number }}
@@ -107,6 +108,7 @@ jobs:
               issue_number: issueNumber,
               labels: ["automation-in-progress"],
             });
+            core.setOutput("lock_acquired", "true");
             if (labels.has("automation-blocked")) {
               await github.rest.issues.removeLabel({
                 owner: context.repo.owner,
@@ -504,7 +506,12 @@ jobs:
 
   finalize:
     needs: [build, verify-candidate]
-    if: always()
+    if: >-
+      always() &&
+      (
+        github.event_name == 'workflow_dispatch' ||
+        github.event.label.name == 'automation-approved'
+      )
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -519,6 +526,7 @@ jobs:
           CANDIDATE_SHA: ${{ needs.build.outputs.candidate-sha }}
           PR_URL: ${{ needs.build.outputs.pr-url }}
           BUILD_RESULT: ${{ needs.build.result }}
+          LOCK_ACQUIRED: ${{ needs.build.outputs.lock-acquired }}
           VERIFY_RESULT: ${{ needs.verify-candidate.result }}
         with:
           script: |
@@ -540,33 +548,28 @@ jobs:
               const description = succeeded
                 ? "Guarded candidate passed clean-runner verification"
                 : "Guarded candidate failed clean-runner verification";
-              for (const checkContext of [
-                "automation-policy",
-                "typecheck-lint-format-test",
-                "jarvis-console-01-build",
-                "copilot-review-section",
-              ]) {
-                await github.rest.repos.createCommitStatus({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  sha: candidateSha,
-                  state,
-                  context: checkContext,
-                  description,
-                  target_url: runUrl,
-                });
-              }
-            }
-
-            try {
-              await github.rest.issues.removeLabel({
+              await github.rest.repos.createCommitStatus({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                issue_number: issueNumber,
-                name: "automation-in-progress",
+                sha: candidateSha,
+                state,
+                context: "jarvis-autobuild/verify-candidate",
+                description,
+                target_url: runUrl,
               });
-            } catch (error) {
-              if (error.status !== 404) throw error;
+            }
+
+            if (process.env.LOCK_ACQUIRED === "true") {
+              try {
+                await github.rest.issues.removeLabel({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issueNumber,
+                  name: "automation-in-progress",
+                });
+              } catch (error) {
+                if (error.status !== 404) throw error;
+              }
             }
 
             if (succeeded) {
