@@ -80,6 +80,9 @@ export class OutlookMailReconciliationAdapter implements ProviderReconciliationA
   private readonly client: OutlookMessageStatusClient;
 
   constructor(options: OutlookMailReconciliationAdapterOptions) {
+    if (!validReferencePart(options.mailbox)) {
+      throw new OutlookReconciliationError("outlook-mailbox-invalid");
+    }
     this.mailbox = options.mailbox;
     this.client = options.client;
   }
