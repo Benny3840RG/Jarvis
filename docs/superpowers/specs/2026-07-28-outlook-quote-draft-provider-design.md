@@ -53,7 +53,7 @@ sequenceDiagram
 - Add a Microsoft Graph provider with injected token supplier and fetch implementation.
 - Use `Prefer: IdType="ImmutableId"` for both draft creation and sending.
 - Create a plain-text message with one `#microsoft.graph.fileAttachment`.
-- Require `Mail.Send` only at the later activation boundary.
+- Require delegated `Mail.ReadWrite` for draft creation and delegated `Mail.Send` for sending, only at the later activation boundary.
 - Keep the provider factory returning `null` until activation is separately authorised.
 
 ## Failure semantics
