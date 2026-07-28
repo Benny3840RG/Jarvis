@@ -4,7 +4,6 @@ import { requireOwner } from "./authHelpers.js";
 import {
   applyQuoteDraftPatch,
   buildInitialQuoteRecords,
-  finalizeQuoteRevision,
   forkFinalizedQuote,
   quoteHistoricalOutcomeValidator,
   quoteLineItemValidator,
@@ -320,24 +319,10 @@ export const reopenForEditing = mutation({
 export const finalizeRevision = mutation({
   args: revisionCommandArgs,
   returns: quoteSnapshotDocumentValidator,
-  handler: async (ctx, args) => {
-    const ownerId = requireOwner(args.serviceToken);
-    const current = await requiredSnapshot(
-      ctx,
-      ownerId,
-      cleanRequiredText(args.quoteId, "Quote ID"),
-      validatedRevision(args.revision),
-    );
-    return replaceSnapshot(
-      ctx,
-      current,
-      await finalizeQuoteRevision({
-        aggregate: current.aggregate,
-        revision: current.revision,
-        expectedAggregateVersion: args.expectedAggregateVersion,
-        expectedRevisionVersion: args.expectedRevisionVersion,
-        now: Date.now(),
-      }),
+  handler: async (_ctx, args) => {
+    requireOwner(args.serviceToken);
+    throw new Error(
+      "Quote finalization requires a durable PDF artifact through quoteFinalization.finalizeRevision.",
     );
   },
 });
@@ -391,6 +376,16 @@ export const cleanup = mutation({
     const quoteId = cleanRequiredText(args.quoteId, "Quote ID");
     const aggregate = await findAggregate(ctx, ownerId, quoteId);
     if (!aggregate) return false;
+    const artifacts = await ctx.db
+      .query("quotePdfArtifacts")
+      .withIndex("by_owner_quote_and_revision", (q) =>
+        q.eq("ownerId", ownerId).eq("quoteId", quoteId),
+      )
+      .collect();
+    for (const artifact of artifacts) {
+      await ctx.storage.delete(artifact.storageId);
+      await ctx.db.delete("quotePdfArtifacts", artifact._id);
+    }
     const revisions = await ctx.db
       .query("quoteRevisions")
       .withIndex("by_owner_quote_and_revision", (q) =>
