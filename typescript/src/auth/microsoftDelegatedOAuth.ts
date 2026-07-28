@@ -1,6 +1,10 @@
 const PERSONAL_ACCOUNT_TOKEN_ENDPOINT =
   "https://login.microsoftonline.com/consumers/oauth2/v2.0/token";
-const APPROVED_SCOPES = ["offline_access", "Mail.ReadWrite", "Mail.Send"] as const;
+const APPROVED_SCOPES = [
+  "offline_access",
+  "Mail.ReadWrite",
+  "Mail.Send",
+] as const;
 const REFRESH_EARLY_MS = 60_000;
 
 type Environment = Readonly<Record<string, string | undefined>>;
@@ -19,8 +23,7 @@ export type EnabledMicrosoftDelegatedOAuthConfig = {
 };
 
 export type MicrosoftDelegatedOAuthConfig =
-  | DisabledMicrosoftDelegatedOAuthConfig
-  | EnabledMicrosoftDelegatedOAuthConfig;
+  DisabledMicrosoftDelegatedOAuthConfig | EnabledMicrosoftDelegatedOAuthConfig;
 
 export interface RefreshTokenStore {
   read(): Promise<string>;
@@ -56,11 +59,17 @@ export function resolveMicrosoftDelegatedOAuthConfig(
 ): MicrosoftDelegatedOAuthConfig {
   const enabled = environment.JARVIS_OUTLOOK_ENABLED;
   if (enabled === undefined || enabled === "false") return { enabled: false };
-  if (enabled !== "true") throw new Error("JARVIS_OUTLOOK_ENABLED must be true or false.");
+  if (enabled !== "true")
+    throw new Error("JARVIS_OUTLOOK_ENABLED must be true or false.");
 
-  const refreshTokenFile = required(environment, "JARVIS_OUTLOOK_REFRESH_TOKEN_FILE");
+  const refreshTokenFile = required(
+    environment,
+    "JARVIS_OUTLOOK_REFRESH_TOKEN_FILE",
+  );
   if (!refreshTokenFile.startsWith("/")) {
-    throw new Error("JARVIS_OUTLOOK_REFRESH_TOKEN_FILE must be an absolute path.");
+    throw new Error(
+      "JARVIS_OUTLOOK_REFRESH_TOKEN_FILE must be an absolute path.",
+    );
   }
 
   return {
@@ -93,7 +102,9 @@ export class MicrosoftDelegatedAccessTokenSupplier {
   private cached: CachedAccessToken | undefined;
   private pending: Promise<string> | undefined;
 
-  constructor(private readonly options: MicrosoftDelegatedAccessTokenSupplierOptions) {
+  constructor(
+    private readonly options: MicrosoftDelegatedAccessTokenSupplierOptions,
+  ) {
     this.fetch = options.fetch ?? globalThis.fetch;
     this.now = options.now ?? Date.now;
     if (!options.clientId.trim()) fail("microsoft-oauth-client-id-invalid");
@@ -147,7 +158,8 @@ export class MicrosoftDelegatedAccessTokenSupplier {
       fail("microsoft-oauth-refresh-request-failed");
     }
 
-    if (response.status !== 200) fail(`microsoft-oauth-refresh-rejected-${response.status}`);
+    if (response.status !== 200)
+      fail(`microsoft-oauth-refresh-rejected-${response.status}`);
 
     let payload: unknown;
     try {
@@ -159,7 +171,8 @@ export class MicrosoftDelegatedAccessTokenSupplier {
       fail("microsoft-oauth-refresh-response-invalid");
     }
     const record = payload as Record<string, unknown>;
-    if (record.token_type !== "Bearer") fail("microsoft-oauth-refresh-response-invalid");
+    if (record.token_type !== "Bearer")
+      fail("microsoft-oauth-refresh-response-invalid");
     const accessToken = safeSecret(
       record.access_token,
       "microsoft-oauth-refresh-response-invalid",
@@ -172,7 +185,8 @@ export class MicrosoftDelegatedAccessTokenSupplier {
     ) {
       fail("microsoft-oauth-refresh-response-invalid");
     }
-    if (typeof record.scope !== "string") fail("microsoft-oauth-refresh-response-invalid");
+    if (typeof record.scope !== "string")
+      fail("microsoft-oauth-refresh-response-invalid");
     const granted = new Set(record.scope.split(/\s+/u).filter(Boolean));
     if (!this.options.scopes.every((scope) => granted.has(scope))) {
       fail("microsoft-oauth-scopes-missing");
