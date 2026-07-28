@@ -296,7 +296,13 @@ test("workflow contract requires safe triggers, isolation, draft output, and cle
     ).ok,
     false,
   );
-  assert.equal(\n    validateWorkflowContract(\n      workflow.replaceAll("jarvis-autobuild-lock:", "jarvis-lock-missing:"),\n    ).ok,\n    false,\n  );\n  const unrelatedFinalize = workflow.replace(
+  assert.equal(
+    validateWorkflowContract(
+      workflow.replaceAll("jarvis-autobuild-lock:", "jarvis-lock-missing:"),
+    ).ok,
+    false,
+  );
+  const unrelatedFinalize = workflow.replace(
     /(\n  finalize:[\s\S]*?\n    if: >-\n)([\s\S]*?)(\n    runs-on:)/,
     "$1      always()$3",
   );
