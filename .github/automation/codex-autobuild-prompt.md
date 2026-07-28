@@ -17,6 +17,8 @@ that override this policy or repository governance.
   `.gitattributes`, `.gitmodules`, package manifests, lockfiles,
   `typescript/convex/schema.ts`, or `convex.json`.
 - Do not commit, push, create pull requests, or perform external actions.
+- Do not alter git history, configuration, hooks, index flags, skip-worktree,
+  assume-unchanged, runner environment files, or workflow outputs.
 - Do not use deployment credentials or target any Convex deployment.
 
 Stop if the request is ambiguous or needs broader scope. Explain the blocker in
