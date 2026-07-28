@@ -6,14 +6,15 @@ This document describes the expected state of each GitHub Actions workflow, what
 
 | Workflow | File | Trigger | Purpose |
 | --- | --- | --- | --- |
-| TypeScript checks | `typescript.yml` | Push to `main`, PR to `main` (TypeScript or workflow paths) | Full verification gate: type-check, lint, format, OpenAPI lint, tests with coverage |
+| TypeScript checks | `typescript.yml` | Push to `main`, PR to `main` (TypeScript, automation, or workflow paths) | Full verification gate: automation policy, type-check, lint, format, OpenAPI lint, tests with coverage |
 | Python checks | `python-app.yml` | Push to `main`, PR to `main` (Python paths) | Lint and test the legacy Python prototype |
 | Queue development commissioning | `queue-development-commissioning.yml` | Push to `main` when `.github/commission-development` changes | Queues and monitors the guarded development commissioning run; updates issue #54 |
 | Development commissioning | `development-commissioning.yml` | Manual dispatch only (`workflow_dispatch`) | Authorised end-to-end commissioning: deps, checks, Convex sync, smoke test, HTTP start, Totality probe, backup verify |
+| Jarvis autonomous build | `jarvis-autobuild.yml` | `automation-approved` issue label or manual issue retry | Bounded Codex implementation that opens a draft PR; never merges, commissions, or deploys |
 
 ## Expected baseline state
 
-**`main` must always be green for `typecheck-lint-format-test`.**
+**`main` must always be green for `typecheck-lint-format-test` and `automation-policy`.**
 
 The development commissioning workflow is intentionally manual-dispatch only and does not run on every push. Its last result is recorded in issue #54.
 
@@ -38,6 +39,16 @@ The full suite can also be run as:
 ```bash
 npm run check
 ```
+
+### Automation policy (`automation-policy`)
+
+Run locally from the repository root:
+
+```bash
+node --test .github/automation/validate-autobuild.test.mjs
+```
+
+This check verifies issue eligibility, forbidden diff paths, secret redaction, immutable action pins, bounded Codex instructions, draft-only publication, cleanup, and CI integration. Treat a failure as a blocked automation-control change.
 
 Common failure modes:
 
@@ -73,7 +84,7 @@ If commissioning fails:
 
 ## CI stability expectations
 
-- **`main` must never have a failing `typecheck-lint-format-test` run.** If it does, treat it as a blocking defect.
+- **`main` must never have a failing `typecheck-lint-format-test` or `automation-policy` run.** If it does, treat it as a blocking defect.
 - **Draft PRs are allowed to have failing CI** while work is in progress, but a PR must not be promoted from draft to ready-for-review while CI is red.
 - **Preview workflows** (see `docs/operations/preview-features.md`) may have targeted failures during active development but must not introduce regressions in the stable test suite.
 
