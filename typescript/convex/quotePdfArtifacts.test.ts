@@ -66,7 +66,6 @@ describe("durable quote PDF finalisation", () => {
       expectedRevisionVersion: reviewed.revision.revisionVersion,
       issuer,
       client,
-      generatedAt: "2026-07-28T02:00:00.000Z",
     });
 
     expect(result.snapshot.revision.status).toBe("finalized");
@@ -80,11 +79,11 @@ describe("durable quote PDF finalisation", () => {
       mediaType: "application/pdf",
       filename: "Quote-BT-2026-ARTIFACT-001-R1.pdf",
       rendererVersion: "quote-pdf:v1",
-      generatedAt: "2026-07-28T02:00:00.000Z",
       issuer,
       client,
     });
     expect(result.artifact.digest).toMatch(/^quote-pdf:v1:sha256:[a-f0-9]{64}$/);
+    expect(new Date(result.artifact.generatedAt).toISOString()).toBe(result.artifact.generatedAt);
     expect(result.artifact.byteLength).toBeGreaterThan(500);
 
     const stored = await t.run(async (ctx) => {
