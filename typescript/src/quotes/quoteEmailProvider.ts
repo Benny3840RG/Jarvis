@@ -39,7 +39,14 @@ export type QuoteEmailSendResult = QuoteEmailPreparedReference;
  */
 export interface QuoteEmailProvider {
   readonly name: string;
-  send(input: QuoteEmailSendInput, signal: AbortSignal): Promise<QuoteEmailSendResult>;
+  prepare(
+    input: QuoteEmailPrepareInput,
+    signal: AbortSignal,
+  ): Promise<QuoteEmailPreparedReference>;
+  sendPrepared(
+    reference: QuoteEmailPreparedReference,
+    signal: AbortSignal,
+  ): Promise<QuoteEmailSendAcceptance>;
 }
 
 /**
