@@ -64,19 +64,20 @@ export const finalizeRevision = action({
     );
 
     try {
-      const committed: { snapshot: SnapshotDoc; artifact: Doc<"quotePdfArtifacts"> } = await ctx.runMutation(internal.quotePdfArtifacts.commitFinalization, {
-        ...finalizationArgs,
-        expectedRevisionFingerprint: snapshot.revision.fingerprint!,
-        storageId,
-        digest: rendered.digest,
-        byteLength: rendered.byteLength,
-        mediaType: rendered.mediaType,
-        filename: rendered.filename,
-        rendererVersion: "quote-pdf:v1",
-        generatedAt,
-        issuer: args.issuer,
-        client: args.client,
-      });
+      const committed: { snapshot: SnapshotDoc; artifact: Doc<"quotePdfArtifacts"> } =
+        await ctx.runMutation(internal.quotePdfArtifacts.commitFinalization, {
+          ...finalizationArgs,
+          expectedRevisionFingerprint: snapshot.revision.fingerprint!,
+          storageId,
+          digest: rendered.digest,
+          byteLength: rendered.byteLength,
+          mediaType: rendered.mediaType,
+          filename: rendered.filename,
+          rendererVersion: "quote-pdf:v1",
+          generatedAt,
+          issuer: args.issuer,
+          client: args.client,
+        });
       const artifact = committed.artifact;
       return {
         snapshot: committed.snapshot,
