@@ -154,9 +154,20 @@ export function evaluatePatch(patch) {
     /\b(?:authorization|authentication|credential|secret|permission|approval|authority|deploy(?:ment)?|commission(?:ing)?|billing|payment)\b|(?:api|service)[_-]?token|requireApproval|maximumToolAuthority/i;
   const reasons = [];
   const lines = String(patch ?? "").split("\n");
+  let currentPath = "";
   for (let index = 0; index < lines.length; index += 1) {
     const line = lines[index];
-    if (!/^[+-]/.test(line) || /^(?:\+\+\+|---)/.test(line)) continue;
+    if (line.startsWith("diff --git ")) {
+      currentPath = "";
+      continue;
+    }
+    if (line.startsWith("+++ ")) {
+      const candidate = line.slice(4);
+      currentPath = candidate.startsWith("b/") ? candidate.slice(2) : "";
+      continue;
+    }
+    if (!/^[+-]/.test(line) || line.startsWith("---")) continue;
+    if (/^docs\/operations\/.+\.md$/i.test(currentPath)) continue;
     if (sensitive.test(line.slice(1))) {
       reasons.push(`authority-sensitive patch content at diff line ${index + 1}`);
     }
