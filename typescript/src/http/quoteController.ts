@@ -17,6 +17,7 @@ import {
   parseCreateQuoteRevision,
   parseForkQuoteRevision,
   parseListQuoteRevisions,
+  parseQuoteFinalization,
   parseQuoteRevisionCommand,
   parseRecordCommercialOutcome,
   parseUpdateQuoteDraft,
@@ -279,7 +280,7 @@ export class QuoteController {
   ) {
     let input;
     try {
-      input = parseQuoteRevisionCommand(quoteId, revision, body);
+      input = parseQuoteFinalization(quoteId, revision, body);
     } catch (error: unknown) {
       throw invalid(error instanceof Error ? error.message : "The revision command is invalid.");
     }
