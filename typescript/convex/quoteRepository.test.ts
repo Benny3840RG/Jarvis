@@ -27,7 +27,6 @@ function clientFor(
 const finalizationPresentation = {
   issuer: { name: "Benny's Trade Services", email: "quotes@example.com" },
   client: { name: "Example Client", email: "client@example.com" },
-  generatedAt: "2026-07-28T02:00:00.000Z",
 };
 
 function createInput(number = "BT-2026-001") {
