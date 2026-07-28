@@ -159,3 +159,22 @@ export function validateWorkflowContract(workflow) {
 
   return result([...new Set(reasons)]);
 }
+
+export function validateCiContract(workflow) {
+  return requirePatterns(String(workflow ?? ""), [
+    [
+      "CI must trigger for the autonomous builder workflow",
+      /\.github\/workflows\/jarvis-autobuild\.yml/i,
+    ],
+    [
+      "CI must trigger for automation policy changes",
+      /\.github\/automation\/\*\*/i,
+    ],
+    ["CI must define the automation-policy job", /^\s{2}automation-policy:\s*$/m],
+    [
+      "CI must run the automation policy tests",
+      /node --test \.github\/automation\/validate-autobuild\.test\.mjs/i,
+    ],
+    ["automation-policy must use Node.js 24", /node-version:\s*[\"']?24[\"']?/i],
+  ]);
+}
