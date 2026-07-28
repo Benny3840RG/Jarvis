@@ -132,6 +132,13 @@ jobs:
             typescript/package-lock.json
             typescript/jarvis-console-01/package-lock.json
 
+      - name: Record trusted checkout state
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "EXPECTED_BASE_SHA=$(/usr/bin/git rev-parse HEAD)" >>"$GITHUB_ENV"
+          echo "EXPECTED_GIT_CONFIG_SHA=$(sha256sum .git/config | cut -d' ' -f1)" >>"$GITHUB_ENV"
+
       - name: Install locked dependencies before sandboxing
         run: |
           set -euo pipefail
@@ -186,7 +193,16 @@ jobs:
           set -euo pipefail
           /usr/bin/rm -f .jarvis-autobuild-prompt.md
 
-          if ! /usr/bin/git diff --quiet -- \
+          if [[ "$(/usr/bin/git rev-parse HEAD)" != "$EXPECTED_BASE_SHA" ]]; then
+            echo "::error::The agent altered git history."
+            exit 1
+          fi
+          if [[ "$(sha256sum .git/config | cut -d' ' -f1)" != "$EXPECTED_GIT_CONFIG_SHA" ]]; then
+            echo "::error::The agent altered repository git configuration."
+            exit 1
+          fi
+
+          if ! /usr/bin/git -c core.hooksPath=/dev/null diff --quiet HEAD -- \
             .github/automation \
             .github/workflows \
             .github/actions; then
@@ -200,40 +216,46 @@ jobs:
           import { evaluateDiff, redactReceipt } from "./.github/automation/validate-autobuild.mjs";
 
           const git = (...args) =>
-            execFileSync("/usr/bin/git", args, { encoding: "utf8" }).trimEnd();
-          const statusLines = git("status", "--porcelain=v1", "--untracked-files=all")
-            .split("\n")
+            execFileSync(
+              "/usr/bin/git",
+              ["-c", "core.hooksPath=/dev/null", ...args],
+              { encoding: "utf8" },
+            ).trimEnd();
+          const statusLines = git(
+            "status",
+            "--porcelain=v1",
+            "-z",
+            "--untracked-files=all",
+            "--no-renames",
+          )
+            .split("\0")
             .filter(Boolean);
-          const numstat = new Map();
-          for (const line of git("diff", "--numstat", "--no-renames").split("\n")) {
-            if (!line) continue;
-            const [added, deleted, path] = line.split("\t");
-            numstat.set(path, {
-              additions: added === "-" ? 0 : Number(added),
-              deletions: deleted === "-" ? 0 : Number(deleted),
-              binary: added === "-" || deleted === "-",
-            });
-          }
 
           const files = statusLines.map((line) => {
             const status = line.slice(0, 2).trim() || "M";
             const path = line.slice(3);
-            const tracked = numstat.get(path);
-            const stat = fs.lstatSync(path);
-            let additions = tracked?.additions ?? 0;
-            let binary = tracked?.binary ?? false;
-            if (!tracked && stat.isFile()) {
+            const exists = fs.existsSync(path);
+            const stat = exists ? fs.lstatSync(path) : null;
+            const numstatLine = status === "??"
+              ? ""
+              : git("diff", "--numstat", "--no-renames", "HEAD", "--", path);
+            const [added = "0", deleted = "0"] = numstatLine.split("\t");
+            let additions = added === "-" ? 0 : Number(added);
+            let deletions = deleted === "-" ? 0 : Number(deleted);
+            let binary = added === "-" || deleted === "-";
+            if (status === "??" && stat?.isFile()) {
               const data = fs.readFileSync(path);
               binary = data.subarray(0, 8_000).includes(0);
               additions = binary ? 0 : data.toString("utf8").split("\n").length;
+              deletions = 0;
             }
             return {
               path,
               status,
               additions,
-              deletions: tracked?.deletions ?? 0,
+              deletions,
               binary,
-              symlink: stat.isSymbolicLink(),
+              symlink: stat?.isSymbolicLink() ?? false,
             };
           });
 
@@ -246,7 +268,12 @@ jobs:
           }
 
           const candidateText = files
-            .filter((file) => !file.binary && fs.lstatSync(file.path).isFile())
+            .filter(
+              (file) =>
+                !file.binary &&
+                fs.existsSync(file.path) &&
+                fs.lstatSync(file.path).isFile(),
+            )
             .map((file) => fs.readFileSync(file.path, "utf8"))
             .join("\n");
           const secretPatterns = [
@@ -266,6 +293,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          export GIT_CONFIG_COUNT=1
+          export GIT_CONFIG_KEY_0=core.hooksPath
+          export GIT_CONFIG_VALUE_0=/dev/null
           /usr/bin/git config user.name "jarvis-autobuild[bot]"
           /usr/bin/git config user.email "jarvis-autobuild[bot]@users.noreply.github.com"
           /usr/bin/git checkout -b "$BRANCH_NAME"
