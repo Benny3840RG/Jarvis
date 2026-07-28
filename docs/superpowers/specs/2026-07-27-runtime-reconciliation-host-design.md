@@ -72,14 +72,14 @@ When enabled, configuration must fail closed before the HTTP listener is treated
 | `JARVIS_RECONCILIATION_BASE_RETRY_MS` | `1000` | Positive safe integer |
 | `JARVIS_RECONCILIATION_MAX_RETRY_MS` | `60000` | Positive safe integer and not below base retry |
 
-Enabled mode also requires the existing Convex URL/deployment and `JARVIS_SERVICE_TOKEN` prerequisites. Missing provider adapters do not make startup fail: unknown providers remain indeterminate and follow the existing escalation path.
+Enabled mode also requires the existing Convex URL/deployment and `JARVIS_SERVICE_TOKEN` prerequisites. Missing provider adapters fail startup before listeners open or Convex work begins; an adapterless host must never claim or escalate reconciliation records.
 
 ## Lifecycle and data flow
 
 1. The entrypoint loads its existing environment.
 2. The host factory validates reconciliation configuration.
 3. Disabled mode returns a non-running host.
-4. Enabled mode constructs the existing store, registry, worker, and scheduler.
+4. Enabled mode constructs the existing store, registry, worker, and scheduler only when an adapter-bearing runtime factory is explicitly composed.
 5. The entrypoint starts the HTTP application.
 6. The host starts exactly one background scheduler loop.
 7. Each cycle claims at most the configured batch size using existing leases.
@@ -111,7 +111,7 @@ Health contains no service token, provider reference, reconciliation identifier,
 - `stop()` is idempotent.
 - Cancellation prevents new claims and waits for the in-flight provider reconciliation to settle.
 - A process crash relies on the existing lease-expiry recovery path.
-- Unknown providers remain unresolved and auditable; the host never retries the original external effect.
+- No reconciliation record is claimed when the maintained runtime has no provider adapter; startup fails closed instead.
 - Runtime restart creates a new worker identity unless an explicit safe worker ID is configured.
 - Scheduler failure is operator-visible through authenticated status and process logging using redacted error classification.
 
@@ -147,7 +147,7 @@ Test-first coverage must include:
 
 ## Acceptance criteria
 
-- The maintained HTTP and preview processes can run the existing reconciliation scheduler when explicitly enabled.
+- The host lifecycle can run the existing reconciliation scheduler once a reviewed adapter-bearing runtime is composed; the maintained HTTP and preview compositions remain fail-closed until then.
 - Disabled mode preserves current startup behaviour and performs no reconciliation I/O.
 - One process host creates no more than one scheduler loop.
 - Polling and batch size are bounded.
