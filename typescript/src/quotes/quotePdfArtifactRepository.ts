@@ -1,7 +1,6 @@
 import { createHash } from "node:crypto";
 
 import { api } from "../../convex/_generated/api.js";
-import type { ConvexClientLike } from "../persistence/convexPersistence.js";
 import type { QuoteEmailAttachment } from "./quoteEmailProvider.js";
 
 const MAX_PDF_BYTES = 2 * 1024 * 1024;
@@ -41,8 +40,12 @@ type ArtifactMetadata = {
   url: string;
 };
 
+export type QuotePdfArtifactQueryClient = {
+  query(reference: unknown, args: Record<string, unknown>): Promise<unknown>;
+};
+
 export type ConvexQuotePdfArtifactRepositoryOptions = {
-  client: Pick<ConvexClientLike, "query">;
+  client: QuotePdfArtifactQueryClient;
   serviceToken: string;
   fetch?: typeof globalThis.fetch;
 };
@@ -133,7 +136,7 @@ async function readExactBody(response: Response, expectedByteLength: number): Pr
 }
 
 export class ConvexQuotePdfArtifactRepository implements QuotePdfArtifactRepository {
-  private readonly client: Pick<ConvexClientLike, "query">;
+  private readonly client: QuotePdfArtifactQueryClient;
   private readonly serviceToken: string;
   private readonly fetch: typeof globalThis.fetch;
 
