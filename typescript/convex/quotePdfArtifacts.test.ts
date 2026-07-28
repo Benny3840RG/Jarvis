@@ -154,9 +154,9 @@ describe("durable quote PDF finalisation", () => {
       quoteId: created.aggregate.quoteId,
     });
     expect(persisted?.revision.status).toBe("reviewed");
-    expect(await t.run(async (ctx) => (await ctx.db.query("quotePdfArtifacts").collect()).length)).toBe(
-      0,
-    );
+    expect(
+      await t.run(async (ctx) => (await ctx.db.query("quotePdfArtifacts").collect()).length),
+    ).toBe(0);
   });
 
   it("does not replace the locked artefact on a duplicate finalisation", async () => {
@@ -184,7 +184,9 @@ describe("durable quote PDF finalisation", () => {
       /reviewed|version/i,
     );
 
-    const artifacts = await t.run(async (ctx) => ctx.db.query("quotePdfArtifacts").collect());
+    const artifacts = await t.run(async (ctx) =>
+      ctx.db.query("quotePdfArtifacts").collect(),
+    );
     expect(artifacts).toHaveLength(1);
     expect(artifacts[0]?.digest).toBe(first.artifact.digest);
   });
