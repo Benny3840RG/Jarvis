@@ -38,7 +38,7 @@ A Node Convex action owns the orchestration because the deterministic PDF render
 6. Run one internal mutation that rechecks identity, state and versions, verifies storage metadata, replaces the quote/revision snapshot and inserts the immutable artefact row atomically.
 7. On commit failure, delete the newly stored Blob best-effort and preserve the original error.
 
-The external TypeScript repository adapter calls this action. Its finalisation input gains explicit `issuer`, `client` and `generatedAt` values. No process-global customer identity defaults are permitted.
+The external TypeScript repository adapter calls this action. Its finalisation input gains explicit `issuer` and `client` values. The action stamps `generatedAt` from the server clock; callers cannot choose the authoritative finalisation time. No process-global customer identity defaults are permitted.
 
 ## Data model
 
@@ -48,7 +48,7 @@ The external TypeScript repository adapter calls this action. Its finalisation i
 - storageId (`v.id("_storage")`)
 - digest (`quote-pdf:v1:sha256:...`), byteLength and mediaType
 - filename and rendererVersion
-- generatedAt and createdAt
+- server-generated `generatedAt` and `createdAt`
 - immutable issuer and client presentation snapshots
 
 Indexes:
