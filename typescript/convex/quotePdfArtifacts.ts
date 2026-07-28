@@ -155,8 +155,8 @@ export const commitFinalization = internalMutation({
     const storageMetadata = await ctx.db.system.get("_storage", args.storageId);
     if (
       !storageMetadata ||
-      storageMetadata.contentType !== args.mediaType ||
-      storageMetadata.size !== args.byteLength
+      storageMetadata.size !== args.byteLength ||
+      (storageMetadata.contentType !== undefined && storageMetadata.contentType !== args.mediaType)
     ) {
       throw new Error("quote-pdf-storage-invalid");
     }
