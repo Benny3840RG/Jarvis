@@ -57,6 +57,8 @@ export function resolveMicrosoftDelegatedOAuthConfig(
   if (enabled === undefined || enabled === "false") return { enabled: false };
   if (enabled !== "true") throw new Error("JARVIS_OUTLOOK_ENABLED must be true or false.");
 
+  const clientId = required(environment, "JARVIS_OUTLOOK_CLIENT_ID");
+  const mailbox = required(environment, "JARVIS_OUTLOOK_MAILBOX");
   const refreshTokenFile = required(environment, "JARVIS_OUTLOOK_REFRESH_TOKEN_FILE");
   if (!refreshTokenFile.startsWith("/")) {
     throw new Error("JARVIS_OUTLOOK_REFRESH_TOKEN_FILE must be an absolute path.");
@@ -64,8 +66,8 @@ export function resolveMicrosoftDelegatedOAuthConfig(
 
   return {
     enabled: true,
-    clientId: required(environment, "JARVIS_OUTLOOK_CLIENT_ID"),
-    mailbox: required(environment, "JARVIS_OUTLOOK_MAILBOX"),
+    clientId,
+    mailbox,
     refreshTokenFile,
     tokenEndpoint: PERSONAL_ACCOUNT_TOKEN_ENDPOINT,
     scopes: [...APPROVED_SCOPES],
