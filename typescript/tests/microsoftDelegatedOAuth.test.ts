@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
+import { chmod, mkdtemp, readdir, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, it } from "node:test";
 
 import {
+  FileRefreshTokenStore,
   MicrosoftDelegatedAccessTokenSupplier,
   MicrosoftDelegatedOAuthError,
   resolveMicrosoftDelegatedOAuthConfig,
@@ -53,6 +57,50 @@ describe("Microsoft delegated OAuth configuration", () => {
         scopes: ["offline_access", "Mail.ReadWrite", "Mail.Send"],
       },
     );
+  });
+});
+
+describe("FileRefreshTokenStore", () => {
+  it("reads an owner-only regular file and atomically replaces rotations", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "jarvis-outlook-token-"));
+    const tokenPath = join(directory, "refresh-token");
+    try {
+      await writeFile(tokenPath, "refresh-token-1\n", { mode: 0o600 });
+      const store = new FileRefreshTokenStore(tokenPath);
+
+      assert.equal(await store.read(), "refresh-token-1");
+      await store.replace("refresh-token-2");
+
+      assert.equal(await readFile(tokenPath, "utf8"), "refresh-token-2\n");
+      assert.equal((await stat(tokenPath)).mode & 0o777, 0o600);
+      assert.deepEqual(await readdir(directory), ["refresh-token"]);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects group-readable token files and symbolic links", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "jarvis-outlook-token-"));
+    const tokenPath = join(directory, "refresh-token");
+    const targetPath = join(directory, "target-token");
+    try {
+      await writeFile(tokenPath, "secret", { mode: 0o600 });
+      await chmod(tokenPath, 0o640);
+      await assert.rejects(
+        new FileRefreshTokenStore(tokenPath).read(),
+        /microsoft-oauth-refresh-token-permissions/u,
+      );
+
+      await writeFile(targetPath, "secret", { mode: 0o600 });
+      await rm(tokenPath);
+      await symlink(targetPath, tokenPath);
+      await assert.rejects(
+        new FileRefreshTokenStore(tokenPath).read(),
+        /microsoft-oauth-refresh-token-not-regular/u,
+      );
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
   });
 });
 
