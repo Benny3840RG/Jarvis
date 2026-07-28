@@ -196,6 +196,53 @@ test("allows authority-boundary prose in operational Markdown", () => {
   assert.deepEqual(result, { ok: true, reasons: [] });
 });
 
+test("allows removal of authority prose from operational Markdown", () => {
+  const result = evaluatePatch(
+    [
+      "diff --git a/docs/operations/runbook.md b/docs/operations/runbook.md",
+      "--- a/docs/operations/runbook.md",
+      "+++ /dev/null",
+      "@@ -1,1 +0,0 @@",
+      "-Deployment requires owner approval.",
+    ].join("\n"),
+  );
+
+  assert.deepEqual(result, { ok: true, reasons: [] });
+});
+
+test("does not exempt case-variant operational paths", () => {
+  const result = evaluatePatch(
+    [
+      "diff --git a/docs/Operations/runbook.MD b/docs/Operations/runbook.MD",
+      "--- a/docs/Operations/runbook.MD",
+      "+++ b/docs/Operations/runbook.MD",
+      "@@ -1,0 +2,1 @@",
+      "+Deployment requires owner approval.",
+    ].join("\n"),
+  );
+
+  assert.equal(result.ok, false);
+});
+
+test("scans executable removals when a file is renamed into operational docs", () => {
+  const result = evaluatePatch(
+    [
+      "diff --git a/typescript/tests/authority.test.ts b/docs/operations/authority.md",
+      "similarity index 60%",
+      "rename from typescript/tests/authority.test.ts",
+      "rename to docs/operations/authority.md",
+      "--- a/typescript/tests/authority.test.ts",
+      "+++ b/docs/operations/authority.md",
+      "@@ -1,1 +1,1 @@",
+      "-const requireApproval = false;",
+      "+Owner approval remains mandatory.",
+    ].join("\n"),
+  );
+
+  assert.equal(result.ok, false);
+  assert.ok(result.reasons.some((reason) => reason.includes("authority-sensitive")));
+});
+
 test("allows ordinary implementation patches", () => {
   assert.deepEqual(
     evaluatePatch(
