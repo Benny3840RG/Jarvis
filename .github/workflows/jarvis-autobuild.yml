@@ -10,10 +10,7 @@ on:
         required: true
         type: number
 
-permissions:
-  contents: write
-  issues: write
-  pull-requests: write
+permissions: {}
 
 concurrency:
   group: jarvis-autobuild-${{ github.repository }}
@@ -26,6 +23,14 @@ jobs:
       github.event.label.name == 'automation-approved'
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    outputs:
+      candidate-sha: ${{ steps.publish.outputs.candidate_sha }}
+      issue-number: ${{ steps.publish.outputs.issue_number }}
+      pr-url: ${{ steps.publish.outputs.pr_url }}
     env:
       ISSUE_NUMBER: ${{ github.event_name == 'workflow_dispatch' && inputs.issue_number || github.event.issue.number }}
       BRANCH_NAME: automation/issue-${{ github.event_name == 'workflow_dispatch' && inputs.issue_number || github.event.issue.number }}/run-${{ github.run_id }}
@@ -321,9 +326,31 @@ jobs:
             process.exit(1);
           }
 
-          const patchEvaluation = evaluatePatch(
-            git("diff", "--no-ext-diff", "--unified=0", "HEAD", "--"),
+          const trackedPatch = git(
+            "diff",
+            "--no-ext-diff",
+            "--unified=0",
+            "HEAD",
+            "--",
           );
+          const untrackedPatch = files
+            .filter(
+              (file) =>
+                file.status === "??" &&
+                !file.binary &&
+                fs.existsSync(file.path) &&
+                fs.lstatSync(file.path).isFile(),
+            )
+            .map((file) => {
+              const added = fs
+                .readFileSync(file.path, "utf8")
+                .split("\n")
+                .map((line) => `+${line}`)
+                .join("\n");
+              return `diff --git a/${file.path} b/${file.path}\n+++ b/${file.path}\n${added}`;
+            })
+            .join("\n");
+          const patchEvaluation = evaluatePatch(`${trackedPatch}\n${untrackedPatch}`);
           if (!patchEvaluation.ok) {
             for (const reason of patchEvaluation.reasons) {
               console.error(`::error::${redactReceipt(reason)}`);
@@ -419,47 +446,151 @@ jobs:
               --draft
           )"
           gh pr edit "$pr_url" --add-label automation-generated
+          candidate_sha="$(/usr/bin/git rev-parse HEAD)"
+          echo "candidate_sha=$candidate_sha" >>"$GITHUB_OUTPUT"
+          echo "issue_number=$ISSUE_NUMBER" >>"$GITHUB_OUTPUT"
           echo "pr_url=$pr_url" >>"$GITHUB_OUTPUT"
 
-      - name: Wait for independent pull-request checks
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PR_URL: ${{ steps.publish.outputs.pr_url }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          export PATH=/usr/local/bin:/usr/bin:/bin
-          ISSUE_NUMBER="$(</opt/jarvis-autobuild/issue-number)"
-          checks_seen=false
-          for _ in {1..30}; do
-            checks_json="$(gh pr checks "$PR_URL" --json name,state 2>/dev/null || true)"
-            if [[ -n "$checks_json" && "$checks_json" != "[]" ]]; then
-              checks_seen=true
-              break
-            fi
-            sleep 5
-          done
-          if [[ "$checks_seen" != true ]]; then
-            echo "::error::Independent pull-request checks did not start."
-            exit 1
-          fi
-          gh pr checks "$PR_URL" --watch --fail-fast --interval 10
-          gh issue comment "$ISSUE_NUMBER" --body \
-            "Autonomous build opened draft PR ${PR_URL} and its independent checks passed. Owner review is still required."
+  verify-candidate:
+    needs: build
+    if: needs.build.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - name: Check out the guarded candidate exactly
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ needs.build.outputs.candidate-sha }}
+          persist-credentials: false
 
-      - name: Release issue lock and publish failure receipt
-        if: always()
-        env:
-          GH_TOKEN: ${{ github.token }}
-          BUILD_STATUS: ${{ job.status }}
-        shell: bash
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version-file: typescript/.nvmrc
+          cache: npm
+          cache-dependency-path: |
+            typescript/package-lock.json
+            typescript/jarvis-console-01/package-lock.json
+
+      - name: Verify autonomous policy
+        run: node --test .github/automation/validate-autobuild.test.mjs
+
+      - name: Install locked TypeScript dependencies
+        run: npm ci --prefix typescript
+
+      - name: Audit TypeScript dependencies
+        working-directory: typescript
+        run: npm audit --audit-level=moderate
+
+      - name: Run TypeScript, lint, format, OpenAPI, and coverage gates
+        working-directory: typescript
         run: |
-          set -euo pipefail
-          export PATH=/usr/local/bin:/usr/bin:/bin
-          ISSUE_NUMBER="$(</opt/jarvis-autobuild/issue-number)"
-          gh issue edit "$ISSUE_NUMBER" --remove-label automation-in-progress || true
-          if [[ "$BUILD_STATUS" != "success" ]]; then
-            gh issue edit "$ISSUE_NUMBER" --add-label automation-blocked || true
-            gh issue comment "$ISSUE_NUMBER" --body \
-              "Autonomous build stopped safely. Status: ${BUILD_STATUS}. Review the redacted run diagnostics: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
-          fi
+          npm run type-check
+          npm run lint
+          npm run format:check
+          npm run openapi:lint
+          npm run test:coverage
+
+      - name: Install locked Jarvis Console dependencies
+        run: npm ci --prefix typescript/jarvis-console-01
+
+      - name: Audit and build Jarvis Console
+        working-directory: typescript/jarvis-console-01
+        run: |
+          npm run audit:ci
+          npm run build
+
+  finalize:
+    needs: [build, verify-candidate]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+      statuses: write
+    steps:
+      - name: Publish verification status and release issue lock
+        if: always()
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        env:
+          ISSUE_NUMBER: ${{ github.event_name == 'workflow_dispatch' && inputs.issue_number || github.event.issue.number }}
+          CANDIDATE_SHA: ${{ needs.build.outputs.candidate-sha }}
+          PR_URL: ${{ needs.build.outputs.pr-url }}
+          BUILD_RESULT: ${{ needs.build.result }}
+          VERIFY_RESULT: ${{ needs.verify-candidate.result }}
+        with:
+          script: |
+            const issueNumber = Number(process.env.ISSUE_NUMBER);
+            if (!Number.isSafeInteger(issueNumber) || issueNumber <= 0) {
+              core.setFailed("Cannot finalise an invalid issue number.");
+              return;
+            }
+            const candidateSha = process.env.CANDIDATE_SHA;
+            const succeeded =
+              process.env.BUILD_RESULT === "success" &&
+              process.env.VERIFY_RESULT === "success";
+            const runUrl =
+              `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}` +
+              `/actions/runs/${context.runId}`;
+
+            if (candidateSha) {
+              const state = succeeded ? "success" : "failure";
+              const description = succeeded
+                ? "Guarded candidate passed clean-runner verification"
+                : "Guarded candidate failed clean-runner verification";
+              for (const checkContext of [
+                "automation-policy",
+                "typecheck-lint-format-test",
+                "jarvis-console-01-build",
+                "copilot-review-section",
+              ]) {
+                await github.rest.repos.createCommitStatus({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  sha: candidateSha,
+                  state,
+                  context: checkContext,
+                  description,
+                  target_url: runUrl,
+                });
+              }
+            }
+
+            try {
+              await github.rest.issues.removeLabel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issueNumber,
+                name: "automation-in-progress",
+              });
+            } catch (error) {
+              if (error.status !== 404) throw error;
+            }
+
+            if (succeeded) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issueNumber,
+                body:
+                  `Autonomous build opened draft PR ${process.env.PR_URL} and ` +
+                  `passed clean-runner verification. Owner review is still required.`,
+              });
+            } else {
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issueNumber,
+                labels: ["automation-blocked"],
+              });
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issueNumber,
+                body:
+                  `Autonomous build stopped safely. Build: ${process.env.BUILD_RESULT}; ` +
+                  `verification: ${process.env.VERIFY_RESULT}. Review ${runUrl}.`,
+              });
+            }
