@@ -132,3 +132,9 @@ The design is complete when:
 4. Failed work leaves a useful, redacted receipt and releases its lock.
 5. Existing CI remains the merge gate.
 6. No path can merge, commission, or deploy without explicit owner action.
+
+## Verification execution note
+
+Pull requests created with GitHub's workflow token do not reliably start a second pull-request workflow. The implemented builder therefore does not depend on recursive events. After the guarded candidate is pushed and the draft PR is opened, a separate secret-free job checks out the exact candidate SHA on a fresh runner, repeats the automation, TypeScript, audit, coverage, OpenAPI and Console gates, and publishes their commit statuses. Ordinary pull-request CI remains the merge gate for later human-authored events.
+
+The post-agent policy executes from a root-owned immutable copy outside the Codex workspace and verifies raw control hashes, base commit, git configuration and index flags before introducing repository write credentials.
