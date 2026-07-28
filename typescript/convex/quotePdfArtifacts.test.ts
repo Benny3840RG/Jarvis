@@ -83,7 +83,9 @@ describe("durable quote PDF finalisation", () => {
       client,
     });
     expect(result.artifact.digest).toMatch(/^quote-pdf:v1:sha256:[a-f0-9]{64}$/);
-    expect(new Date(result.artifact.generatedAt).toISOString()).toBe(result.artifact.generatedAt);
+    expect(new Date(result.artifact.generatedAt).toISOString()).toBe(
+      result.artifact.generatedAt,
+    );
     expect(result.artifact.byteLength).toBeGreaterThan(500);
 
     const stored = await t.run(async (ctx) => {
