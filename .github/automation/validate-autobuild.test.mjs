@@ -273,6 +273,13 @@ test("workflow contract requires safe triggers, isolation, draft output, and cle
   );
 
   assert.deepEqual(validateWorkflowContract(workflow), { ok: true, reasons: [] });
+  assert.match(workflow, /command -v node/);
+  assert.match(workflow, /\/opt\/jarvis-autobuild\/node-path/);
+  assert.match(workflow, /"\$trusted_node" --input-type=module/);
+  assert.match(
+    workflow,
+    /name: Release issue lock after build[\s\S]*if: always\(\) && steps\.eligibility\.outputs\.lock_acquired == 'true'/,
+  );
   assert.equal(
     validateWorkflowContract(
       workflow.replace(
