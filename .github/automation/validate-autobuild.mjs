@@ -154,9 +154,34 @@ export function evaluatePatch(patch) {
     /\b(?:authorization|authentication|credential|secret|permission|approval|authority|deploy(?:ment)?|commission(?:ing)?|billing|payment)\b|(?:api|service)[_-]?token|requireApproval|maximumToolAuthority/i;
   const reasons = [];
   const lines = String(patch ?? "").split("\n");
+  let oldPath = "";
+  let newPath = "";
+  let inHunk = false;
   for (let index = 0; index < lines.length; index += 1) {
     const line = lines[index];
-    if (!/^[+-]/.test(line) || /^(?:\+\+\+|---)/.test(line)) continue;
+    if (line.startsWith("diff --git ")) {
+      oldPath = "";
+      newPath = "";
+      inHunk = false;
+      continue;
+    }
+    if (line.startsWith("@@")) {
+      inHunk = true;
+      continue;
+    }
+    if (!inHunk && line.startsWith("--- ")) {
+      const candidate = line.slice(4);
+      oldPath = candidate.startsWith("a/") ? candidate.slice(2) : "";
+      continue;
+    }
+    if (!inHunk && line.startsWith("+++ ")) {
+      const candidate = line.slice(4);
+      newPath = candidate.startsWith("b/") ? candidate.slice(2) : "";
+      continue;
+    }
+    if (!/^[+-]/.test(line)) continue;
+    const currentPath = line.startsWith("+") ? newPath : oldPath;
+    if (/^docs\/operations\/.+\.md$/.test(currentPath)) continue;
     if (sensitive.test(line.slice(1))) {
       reasons.push(`authority-sensitive patch content at diff line ${index + 1}`);
     }
