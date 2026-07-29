@@ -178,5 +178,4 @@ describe("dashboard snapshot", () => {
     assert.deepEqual(snapshot.tasks, [TASK]);
     assert.deepEqual(snapshot.brief, BRIEF);
   });
-
 });
