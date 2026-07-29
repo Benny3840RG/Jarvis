@@ -96,6 +96,7 @@ describe("Jarvis preview widget", () => {
     };
     const state = {
       quotes: [lifecycleQuote, lifecycleDraft, lifecycleAccepted],
+      quoteRegisterStatus: "ready",
       brief: {
         generatedAt: "2026-07-30T00:00:00.000Z",
         headline: "Quote truth fixture.",
