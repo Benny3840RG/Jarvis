@@ -24,6 +24,7 @@ export type DashboardSnapshot = {
   status: SystemStatus;
   tasks: Task[];
   reminders: Reminder[];
+  brief: DailyBrief;
   counts: {
     activeTasks: number;
     completedTasks: number;
@@ -534,15 +535,17 @@ export class JarvisApiClient {
   }
 
   async dashboard(): Promise<DashboardSnapshot> {
-    const [status, tasks, reminders] = await Promise.all([
+    const [status, tasks, reminders, brief] = await Promise.all([
       this.getStatus(),
       this.listTasks(),
       this.listReminders(),
+      this.getDailyBrief(),
     ]);
     return {
       status,
       tasks,
       reminders,
+      brief,
       counts: {
         activeTasks: tasks.filter((task) => !task.completed).length,
         completedTasks: tasks.filter((task) => task.completed).length,
