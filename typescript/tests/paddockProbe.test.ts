@@ -90,6 +90,7 @@ function mockFetch(status: SystemStatus = STATUS): typeof fetch {
     if (path === "/api/v1/tasks") return Response.json({ data: [], count: 0 });
     if (path === "/api/v1/reminders") return Response.json({ data: [], count: 0 });
     if (path === "/api/v1/brief") return Response.json({ data: BRIEF });
+    if (path === "/api/v1/quotes") return Response.json({ data: [], count: 0 });
     return Response.json({ title: "Not Found", status: 404 }, { status: 404 });
   }) as typeof fetch;
 }
