@@ -99,6 +99,91 @@ describe("Jarvis preview widget", () => {
     assert.equal(elements.get("brief-draft-count")?.textContent, "1");
   });
 
+  it("opens a pipeline quote in the read-only inspector", async () => {
+    const openSource = widget.match(
+      /(async function openQuote\(summary\) \{[\s\S]*?\})\n\s+function renderQuoteDetail/,
+    )?.[1];
+    const renderSource = widget.match(
+      /(function renderQuoteDetail\(\) \{[\s\S]*?\})\n\s+function renderOperations/,
+    )?.[1];
+    assert.ok(openSource, "quote selection handler was not found");
+    assert.ok(renderSource, "quote detail renderer was not found");
+    assert.match(widget, /LOADING QUOTE/);
+    assert.match(widget, /QUOTE NOT FOUND/);
+    assert.match(widget, /RETRY/);
+
+    const calls: Array<{ name: string; args: Record<string, unknown> }> = [];
+    const state: Record<string, unknown> = {
+      selectedQuoteSummary: null,
+      selectedQuote: null,
+      quoteDetailState: "empty",
+    };
+    let renders = 0;
+    const callTool = async (name: string, args: Record<string, unknown>) => {
+      calls.push({ name, args });
+      return { quote: SNAPSHOT };
+    };
+    const openQuote = new Function(
+      "state",
+      "callTool",
+      "renderQuoteDetail",
+      `"use strict"; ${openSource}; return openQuote;`,
+    )(state, callTool, () => {
+      renders += 1;
+    }) as (summary: { id: string; number: string }) => Promise<void>;
+
+    await openQuote({ id: "quote / 174", number: "174" });
+
+    assert.deepEqual(calls, [
+      { name: "get_quote", args: { quoteId: "quote / 174" } },
+    ]);
+    assert.equal(state.quoteDetailState, "ready");
+    assert.deepEqual(state.selectedQuote, SNAPSHOT);
+    assert.equal(renders, 2);
+
+    const elements = new Map<string, { id: string; textContent: string; hidden: boolean }>();
+    const lists = new Map<string, unknown[]>();
+    const byId = (id: string) => {
+      const existing = elements.get(id);
+      if (existing) return existing;
+      const element = { id, textContent: "", hidden: false };
+      elements.set(id, element);
+      return element;
+    };
+    const text = (element: { textContent: string }, value: unknown) => {
+      element.textContent = value == null ? "" : String(value);
+    };
+    const fillList = (
+      element: { id: string },
+      items: unknown[],
+      _renderer: (item: unknown) => unknown,
+      _message: string,
+    ) => lists.set(element.id, items);
+    const renderQuoteDetail = new Function(
+      "state",
+      "byId",
+      "text",
+      "fillList",
+      "operationsRow",
+      "empty",
+      "aud",
+      `"use strict"; ${renderSource}; renderQuoteDetail();`,
+    );
+    renderQuoteDetail(state, byId, text, fillList, () => ({}), () => ({}), {
+      format: (value: number) =>
+        new Intl.NumberFormat("en-AU", {
+          style: "currency",
+          currency: "AUD",
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        }).format(value),
+    });
+
+    assert.equal(elements.get("quote-detail-total")?.textContent, "$3,200.50");
+    assert.equal(elements.get("quote-detail-number")?.textContent, "#174");
+    assert.deepEqual(lists.get("quote-detail-items"), SNAPSHOT.revision.lineItems);
+  });
+
   it("ships syntactically valid embedded dashboard JavaScript", () => {
     const source = widget.match(/<script>([\s\S]*?)<\/script>/)?.[1];
     assert.ok(source, "dashboard script was not found");
