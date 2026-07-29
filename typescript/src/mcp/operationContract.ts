@@ -12,7 +12,7 @@
  *
  * Only the primary operation of each tool is listed. Mutating tools additionally
  * re-read the dashboard to build their response, but those read operations
- * (`GET /api/v1/status`, `/api/v1/tasks`, `/api/v1/reminders`) are already declared
+ * (`GET /api/v1/status`, `/api/v1/tasks`, `/api/v1/reminders`, `/api/v1/brief`) are already declared
  * by the read-only tools below.
  */
 export type OpenApiOperation = {
