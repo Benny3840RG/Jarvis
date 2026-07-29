@@ -246,14 +246,13 @@ describe("MCP quote inspection", () => {
 
       assert.equal(result.isError, undefined);
       assert.equal(createRequests, 1);
-      assert.deepEqual(
-        (result.structuredContent as { quoteRegister?: unknown })?.quoteRegister,
-        { status: "unavailable", quotes: [] },
-      );
+      assert.deepEqual((result.structuredContent as { quoteRegister?: unknown })?.quoteRegister, {
+        status: "unavailable",
+        quotes: [],
+      });
     } finally {
       await client.close();
       await server.close();
     }
   });
-
 });
