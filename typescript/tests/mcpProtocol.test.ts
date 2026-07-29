@@ -177,6 +177,8 @@ describe("Jarvis MCP preview protocol", () => {
       assert.ok(names.includes("create_task"));
       assert.ok(names.includes("create_reminder"));
       assert.ok(names.includes("delete_task"));
+      assert.ok(names.includes("list_quotes"));
+      assert.ok(names.includes("get_quote"));
 
       const result = await client.callTool({
         name: "show_jarvis_dashboard",
