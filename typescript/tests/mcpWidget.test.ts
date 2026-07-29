@@ -192,6 +192,7 @@ describe("Jarvis preview widget", () => {
       selectedQuoteSummary: null,
       selectedQuote: null,
       quoteDetailState: "empty",
+      quoteRequestGeneration: 0,
     };
     let renders = 0;
     const callTool = async (name: string, args: Record<string, unknown>) => {
