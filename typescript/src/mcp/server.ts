@@ -17,7 +17,6 @@ import type { Preference } from "../preferences/preference.js";
 import type { Errand } from "../errands/errand.js";
 import type { Project } from "../projects/project.js";
 import type { QuoteSnapshot } from "../quotes/quoteLifecycle.js";
-import type { QuoteSummary } from "../quotes/quoteRepository.js";
 import type { Reminder, Task } from "../persistence/persistence.js";
 import {
   JarvisApiClient,
