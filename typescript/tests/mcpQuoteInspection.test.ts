@@ -90,7 +90,6 @@ describe("MCP quote inspection", () => {
     assert.deepEqual(paths, ["/api/v1/quotes", "/api/v1/quotes/quote%20%2F%20174"]);
   });
 
-
   it("exposes quote inspection as read-only MCP tools", async () => {
     const fetchImpl = (async (input: string | URL | Request) => {
       const path = new URL(String(input)).pathname;
@@ -124,7 +123,10 @@ describe("MCP quote inspection", () => {
         assert.equal(tool.annotations?.readOnlyHint, true);
         assert.equal(tool.annotations?.destructiveHint, false);
       }
-      assert.equal(catalogue.tools.some((tool) => /^finalize_quote|^send_quote/.test(tool.name)), false);
+      assert.equal(
+        catalogue.tools.some((tool) => /^finalize_quote|^send_quote/.test(tool.name)),
+        false,
+      );
 
       const listed = await client.callTool({ name: "list_quotes", arguments: {} });
       assert.equal(listed.isError, undefined);
