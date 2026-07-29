@@ -16,6 +16,8 @@ import type { AssetView } from "../assets/assetView.js";
 import type { Preference } from "../preferences/preference.js";
 import type { Errand } from "../errands/errand.js";
 import type { Project } from "../projects/project.js";
+import type { QuoteSnapshot } from "../quotes/quoteLifecycle.js";
+import type { QuoteSummary } from "../quotes/quoteRepository.js";
 import type { Reminder, Task } from "../persistence/persistence.js";
 import {
   JarvisApiClient,
@@ -91,6 +93,68 @@ const quoteSchema = z.object({
   notes: z.string().optional(),
   createdAt: z.number(),
   updatedAt: z.number(),
+});
+
+const quoteSummarySchema = z.object({
+  quoteId: z.string(),
+  clientId: z.string(),
+  projectId: z.string().optional(),
+  number: z.string(),
+  currentRevision: z.number().int().positive(),
+  aggregateVersion: z.number().int().nonnegative(),
+  revisionStatus: z.enum(["draft", "reviewed", "finalized"]),
+  commercialStatus: z.enum(["open", "accepted", "declined", "expired"]),
+  total: z.number().nonnegative(),
+  currency: z.literal("AUD"),
+  updatedAt: z.number(),
+});
+
+const quoteAggregateSchema = z.object({
+  quoteId: z.string(),
+  ownerId: z.string(),
+  clientId: z.string(),
+  projectId: z.string().optional(),
+  number: z.string(),
+  currentRevision: z.number().int().positive(),
+  currentRevisionId: z.string(),
+  aggregateVersion: z.number().int().nonnegative(),
+  commercialStatus: z.enum(["open", "accepted", "declined", "expired"]),
+  commercialRevision: z.number().int().positive().optional(),
+  commercialRecordedAt: z.number().optional(),
+  createdAt: z.number(),
+  updatedAt: z.number(),
+});
+
+const quoteRevisionSchema = z.object({
+  revisionId: z.string(),
+  ownerId: z.string(),
+  quoteId: z.string(),
+  revision: z.number().int().positive(),
+  revisionVersion: z.number().int().nonnegative(),
+  status: z.enum(["draft", "reviewed", "finalized"]),
+  lineItems: z.array(quoteLineItemSchema),
+  subtotal: z.number().nonnegative(),
+  taxRate: z.number().nonnegative().max(1).optional(),
+  tax: z.number().nonnegative(),
+  total: z.number().nonnegative(),
+  currency: z.literal("AUD"),
+  validUntil: z.string().optional(),
+  notes: z.string().optional(),
+  termsIncluded: z.boolean(),
+  fingerprint: z.string().optional(),
+  predecessorRevisionId: z.string().optional(),
+  historicalOutcome: z.enum(["accepted", "declined", "expired"]).optional(),
+  historicalOutcomeRecordedAt: z.number().optional(),
+  reviewedAt: z.number().optional(),
+  finalizedAt: z.number().optional(),
+  source: z.literal("legacy-migration").optional(),
+  createdAt: z.number(),
+  updatedAt: z.number(),
+});
+
+const quoteSnapshotSchema = z.object({
+  aggregate: quoteAggregateSchema,
+  revision: quoteRevisionSchema,
 });
 
 const errandLocationSchema = z.object({
@@ -1092,6 +1156,67 @@ export function createJarvisMcpServer(client: JarvisApiClient): McpServer {
       try {
         const removed = await client.deleteProject(projectId);
         return projectResult(removed, `Deleted project "${removed.title}".`);
+      } catch (error: unknown) {
+        return safeError(error);
+      }
+    },
+  );
+
+  registerAppTool(
+    server,
+    "list_quotes",
+    {
+      title: "List quotes",
+      description:
+        "Use this when Benny wants to inspect the current quote register without changing lifecycle state.",
+      inputSchema: {},
+      outputSchema: {
+        quotes: z.array(quoteSummarySchema),
+        count: z.number().int().nonnegative(),
+      },
+      annotations: readAnnotations,
+      _meta: { ui: { visibility: ["model"] } },
+    },
+    async () => {
+      try {
+        const quotes = await client.listQuotes();
+        return {
+          content: [{ type: "text" as const, text: `Found ${quotes.length} quotes.` }],
+          structuredContent: { quotes, count: quotes.length },
+        };
+      } catch (error: unknown) {
+        return safeError(error);
+      }
+    },
+  );
+
+  registerAppTool(
+    server,
+    "get_quote",
+    {
+      title: "Inspect a quote",
+      description:
+        "Use this when the user or Jarvis dashboard asks to inspect one known quote by identifier. This tool is read-only and cannot finalise, send, edit or record an outcome.",
+      inputSchema: { quoteId: z.string().min(1) },
+      outputSchema: { quote: quoteSnapshotSchema },
+      annotations: readAnnotations,
+      _meta: {
+        ui: { resourceUri: JARVIS_DASHBOARD_URI, visibility: ["model", "app"] },
+        "openai/outputTemplate": JARVIS_DASHBOARD_URI,
+      },
+    },
+    async ({ quoteId }) => {
+      try {
+        const quote: QuoteSnapshot = await client.getQuote(quoteId);
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: `Quote #${quote.aggregate.number}, revision ${quote.revision.revision}.`,
+            },
+          ],
+          structuredContent: { quote },
+        };
       } catch (error: unknown) {
         return safeError(error);
       }
