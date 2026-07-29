@@ -34,7 +34,8 @@ describe("Jarvis preview widget", () => {
     assert.match(widget, /state\.brief/);
     assert.match(widget, /renderOperations/);
     assert.match(widget, /Active projects/);
-    assert.match(widget, /Quote pipeline/);
+    assert.match(widget, /Finalised open quote register/);
+    assert.doesNotMatch(widget, /Quote pipeline/);
     assert.match(widget, /Equipment maintenance/);
     assert.match(widget, /OPERATIONS SNAPSHOT/i);
   });
