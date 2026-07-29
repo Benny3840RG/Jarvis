@@ -278,6 +278,7 @@ const dashboardOutputSchema = {
   status: statusSchema,
   tasks: z.array(taskSchema),
   reminders: z.array(reminderSchema),
+  brief: briefSchema,
   counts: countsSchema,
 };
 
