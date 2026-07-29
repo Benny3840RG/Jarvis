@@ -112,6 +112,42 @@ describe("Jarvis preview widget", () => {
     assert.match(widget, /QUOTE NOT FOUND/);
     assert.match(widget, /RETRY/);
 
+    const SNAPSHOT = {
+      aggregate: {
+        quoteId: "quote / 174",
+        ownerId: "owner-1",
+        clientId: "client-1",
+        projectId: "project-1",
+        number: "174",
+        currentRevision: 2,
+        currentRevisionId: "revision-2",
+        aggregateVersion: 4,
+        commercialStatus: "open",
+        createdAt: 10,
+        updatedAt: 20,
+      },
+      revision: {
+        revisionId: "revision-2",
+        ownerId: "owner-1",
+        quoteId: "quote / 174",
+        revision: 2,
+        revisionVersion: 3,
+        status: "finalized",
+        lineItems: [
+          { description: "Garden preparation", quantity: 1, unitPrice: 1200.25 },
+          { description: "PebbleLock installation", quantity: 1, unitPrice: 2000.25 },
+        ],
+        subtotal: 3200.5,
+        tax: 0,
+        total: 3200.5,
+        currency: "AUD",
+        validUntil: "2026-08-30",
+        notes: "Read-only inspection fixture.",
+        termsIncluded: true,
+        createdAt: 10,
+        updatedAt: 20,
+      },
+    };
     const calls: Array<{ name: string; args: Record<string, unknown> }> = [];
     const state: Record<string, unknown> = {
       selectedQuoteSummary: null,
