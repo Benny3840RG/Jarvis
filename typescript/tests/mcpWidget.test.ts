@@ -35,7 +35,10 @@ describe("Jarvis preview widget", () => {
     assert.match(widget, /renderOperations/);
     assert.match(widget, /Active projects/);
     assert.match(widget, /Finalised open quote register/);
-    assert.doesNotMatch(widget, /Quote pipeline/);
+    assert.doesNotMatch(
+      widget,
+      /Quotes awaiting|SELECT A PIPELINE QUOTE|Choose a sent quote/i,
+    );
     assert.match(widget, /Equipment maintenance/);
     assert.match(widget, /OPERATIONS SNAPSHOT/i);
   });
@@ -138,9 +141,27 @@ describe("Jarvis preview widget", () => {
     assert.equal(elements.get("operations-quote-total")?.textContent, "$330.35");
     assert.equal(elements.get("brief-accepted-total")?.textContent, "$55.50");
     assert.equal(elements.get("brief-draft-count")?.textContent, "1");
+
+    state.quoteRegisterStatus = "unavailable";
+    state.quotes = [];
+    run(
+      state,
+      byId,
+      text,
+      fillList,
+      () => ({}),
+      () => ({}),
+      () => {},
+      () => ({}),
+    );
+
+    assert.equal(elements.get("brief-quote-count")?.textContent, "—");
+    assert.equal(elements.get("brief-draft-count")?.textContent, "—");
+    assert.equal(elements.get("brief-accepted-total")?.textContent, "—");
+    assert.equal(elements.get("operations-quote-total")?.textContent, "UNAVAILABLE");
   });
 
-  it("opens a pipeline quote in the read-only inspector", async () => {
+  it("opens a register quote in the read-only inspector", async () => {
     const openSource = widget.match(
       /(async function openQuote\(summary\) \{[\s\S]*?\})\n\s+function renderQuoteDetail/,
     )?.[1];
