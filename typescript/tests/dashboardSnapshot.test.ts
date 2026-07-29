@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import type { DailyBrief } from "../src/briefs/brief.js";
 import type { SystemStatus } from "../src/http/contracts.js";
 import { JarvisApiClient } from "../src/mcp/jarvisApiClient.js";
+import type { QuoteSummary } from "../src/quotes/quoteRepository.js";
 
 const STATUS: SystemStatus = {
   status: "ok",
@@ -45,6 +46,20 @@ const REMINDER = {
   title: "Chase supplier",
   dueRaw: "Friday 9am",
   createdAt: 1,
+};
+
+const LIFECYCLE_QUOTE: QuoteSummary = {
+  quoteId: "lifecycle-quote-174",
+  clientId: "client-1",
+  projectId: "project-1",
+  number: "174",
+  currentRevision: 2,
+  aggregateVersion: 4,
+  revisionStatus: "finalized",
+  commercialStatus: "open",
+  total: 3200.5,
+  currency: "AUD",
+  updatedAt: 3,
 };
 
 const BRIEF: DailyBrief = {
@@ -103,6 +118,8 @@ describe("dashboard snapshot", () => {
       if (url.pathname === "/api/v1/reminders")
         return Response.json({ data: [REMINDER], count: 1 });
       if (url.pathname === "/api/v1/brief") return Response.json({ data: BRIEF });
+      if (url.pathname === "/api/v1/quotes")
+        return Response.json({ data: [LIFECYCLE_QUOTE], count: 1 });
       return Response.json({ title: "Not Found" }, { status: 404 });
     }) as typeof fetch;
 
@@ -115,11 +132,14 @@ describe("dashboard snapshot", () => {
 
     assert.deepEqual(paths.sort(), [
       "/api/v1/brief",
+      "/api/v1/quotes",
       "/api/v1/reminders",
       "/api/v1/status",
       "/api/v1/tasks",
     ]);
     assert.deepEqual(snapshot.brief, BRIEF);
+    assert.deepEqual(snapshot.quotes, [LIFECYCLE_QUOTE]);
+    assert.notEqual(snapshot.quotes[0]?.quoteId, snapshot.brief.quotes.awaitingResponse[0]?.id);
     assert.deepEqual(snapshot.counts, { activeTasks: 1, completedTasks: 0, reminders: 1 });
   });
 });
