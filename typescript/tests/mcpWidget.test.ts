@@ -66,7 +66,21 @@ describe("Jarvis preview widget", () => {
       _message: string,
     ) => lists.set(element.id, items);
 
+    const lifecycleQuote = {
+      quoteId: "lifecycle-174",
+      clientId: "client-1",
+      projectId: "project-1",
+      number: "174",
+      currentRevision: 2,
+      aggregateVersion: 4,
+      revisionStatus: "finalized",
+      commercialStatus: "open",
+      total: 330.35,
+      currency: "AUD",
+      updatedAt: 3,
+    };
     const state = {
+      quotes: [lifecycleQuote],
       brief: {
         generatedAt: "2026-07-30T00:00:00.000Z",
         headline: "Quote truth fixture.",
@@ -104,7 +118,7 @@ describe("Jarvis preview widget", () => {
       () => ({}),
     );
 
-    assert.deepEqual(lists.get("operations-quote-list"), state.brief.quotes.awaitingResponse);
+    assert.deepEqual(lists.get("operations-quote-list"), [lifecycleQuote]);
     assert.equal(elements.get("operations-quote-total")?.textContent, "$330.35");
     assert.equal(elements.get("brief-accepted-total")?.textContent, "$55.50");
     assert.equal(elements.get("brief-draft-count")?.textContent, "1");
@@ -177,9 +191,13 @@ describe("Jarvis preview widget", () => {
       `"use strict"; ${openSource}; return openQuote;`,
     )(state, callTool, () => {
       renders += 1;
-    }) as (summary: { id: string; number: string }) => Promise<void>;
+    }) as (summary: { id?: string; quoteId: string; number: string }) => Promise<void>;
 
-    await openQuote({ id: "quote / 174", number: "174" });
+    await openQuote({
+      id: "legacy-quote-174",
+      quoteId: "quote / 174",
+      number: "174",
+    });
 
     assert.deepEqual(calls, [
       { name: "get_quote", args: { quoteId: "quote / 174" } },
@@ -229,6 +247,55 @@ describe("Jarvis preview widget", () => {
     assert.equal(elements.get("quote-detail-total")?.textContent, "$3,200.50");
     assert.equal(elements.get("quote-detail-number")?.textContent, "#174");
     assert.deepEqual(lists.get("quote-detail-items"), SNAPSHOT.revision.lineItems);
+  });
+
+  it("keeps the newest same-quote inspection result", async () => {
+    const openSource = widget.match(
+      /(async function openQuote\(summary\) \{[\s\S]*?\})\n\s+function renderQuoteDetail/,
+    )?.[1];
+    assert.ok(openSource, "quote selection handler was not found");
+
+    type Resolver = (value: unknown) => void;
+    const resolvers: Resolver[] = [];
+    const state: Record<string, unknown> = {
+      selectedQuoteSummary: null,
+      selectedQuote: null,
+      quoteDetailState: "empty",
+      quoteRequestGeneration: 0,
+    };
+    const callTool = () =>
+      new Promise((resolve) => {
+        resolvers.push(resolve);
+      });
+    const openQuote = new Function(
+      "state",
+      "callTool",
+      "renderQuoteDetail",
+      `"use strict"; ${openSource}; return openQuote;`,
+    )(state, callTool, () => {}) as (summary: {
+      quoteId: string;
+      number: string;
+    }) => Promise<void>;
+
+    const summary = { quoteId: "lifecycle-174", number: "174" };
+    const first = openQuote(summary);
+    const second = openQuote(summary);
+    const newest = {
+      aggregate: { quoteId: summary.quoteId, number: "174" },
+      revision: { revision: 2, lineItems: [], total: 200 },
+    };
+    const stale = {
+      aggregate: { quoteId: summary.quoteId, number: "174" },
+      revision: { revision: 1, lineItems: [], total: 100 },
+    };
+
+    resolvers[1]?.({ quote: newest });
+    await second;
+    resolvers[0]?.({ quote: stale });
+    await first;
+
+    assert.deepEqual(state.selectedQuote, newest);
+    assert.equal(state.quoteDetailState, "ready");
   });
 
   it("ships syntactically valid embedded dashboard JavaScript", () => {
