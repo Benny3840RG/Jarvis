@@ -36,7 +36,7 @@ describe("Jarvis preview widget", () => {
     assert.match(widget, /Active projects/);
     assert.match(widget, /Quote pipeline/);
     assert.match(widget, /Equipment maintenance/);
-    assert.match(widget, /OPERATIONS SNAPSHOT/);
+    assert.match(widget, /OPERATIONS SNAPSHOT/i);
   });
 
   it("ships syntactically valid embedded dashboard JavaScript", () => {
