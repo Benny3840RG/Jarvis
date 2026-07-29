@@ -88,6 +88,56 @@ function sampleQuote(id = "quote-1") {
   };
 }
 
+function sampleQuoteSummary(id = "quote-1") {
+  return {
+    quoteId: id,
+    clientId: "client-1",
+    projectId: "project-1",
+    number: "Q-1001",
+    currentRevision: 1,
+    aggregateVersion: 0,
+    revisionStatus: "draft",
+    commercialStatus: "open",
+    total: 100,
+    currency: "AUD",
+    updatedAt: 1,
+  };
+}
+
+function sampleQuoteSnapshot(id = "quote-1") {
+  return {
+    aggregate: {
+      quoteId: id,
+      ownerId: "owner-1",
+      clientId: "client-1",
+      projectId: "project-1",
+      number: "Q-1001",
+      currentRevision: 1,
+      currentRevisionId: "revision-1",
+      aggregateVersion: 0,
+      commercialStatus: "open",
+      createdAt: 1,
+      updatedAt: 1,
+    },
+    revision: {
+      revisionId: "revision-1",
+      ownerId: "owner-1",
+      quoteId: id,
+      revision: 1,
+      revisionVersion: 0,
+      status: "draft",
+      lineItems: [{ description: "Recorded item", quantity: 1, unitPrice: 100 }],
+      subtotal: 100,
+      tax: 0,
+      total: 100,
+      currency: "AUD",
+      termsIncluded: true,
+      createdAt: 1,
+      updatedAt: 1,
+    },
+  };
+}
+
 function sampleErrand(id = "errand-1") {
   return { id, title: "Recorded errand", status: "open", createdAt: 1, updatedAt: 1 };
 }
@@ -195,6 +245,12 @@ function mockResponse(method: string, path: string): Response {
       : Response.json({ data: [sampleProject()], count: 1 });
   }
   if (/^\/api\/v1\/projects\/[^/]+$/.test(path)) return Response.json({ data: sampleProject() });
+  if (path === "/api/v1/quotes") {
+    return Response.json({ data: [sampleQuoteSummary()], count: 1 });
+  }
+  if (/^\/api\/v1\/quotes\/[^/]+$/.test(path)) {
+    return Response.json({ data: sampleQuoteSnapshot() });
+  }
   if (path === "/api/v1/brief") return Response.json({ data: sampleBrief() });
   if (path === "/api/v1/errands") {
     return method === "POST"
@@ -317,6 +373,8 @@ const TOOL_INVOCATIONS: Record<string, Record<string, unknown>> = {
   create_project: { clientId: "client-1", title: "Recorded project" },
   update_project: { projectId: "project-1", status: "done" },
   delete_project: { projectId: "project-1" },
+  list_quotes: {},
+  get_quote: { quoteId: "quote-1" },
   get_daily_brief: {},
   list_errands: {},
   get_errand: { errandId: "errand-1" },
