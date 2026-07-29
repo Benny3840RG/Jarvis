@@ -4,6 +4,8 @@ import { describe, it } from "node:test";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 
+import type { DailyBrief } from "../src/briefs/brief.js";
+import type { SystemStatus } from "../src/http/contracts.js";
 import type { QuoteSnapshot } from "../src/quotes/quoteLifecycle.js";
 import type { QuoteSummary } from "../src/quotes/quoteRepository.js";
 import { JarvisApiClient } from "../src/mcp/jarvisApiClient.js";
@@ -21,6 +23,54 @@ const SUMMARY: QuoteSummary = {
   total: 3200.5,
   currency: "AUD",
   updatedAt: 20,
+};
+
+const STATUS: SystemStatus = {
+  status: "ok",
+  version: "0.1.0",
+  sourceVersion: "quote-degraded-test",
+  provider: {
+    name: "json",
+    reachability: "ok",
+    authentication: "not-required",
+    schemaCompatibility: "compatible",
+    deploymentVersion: null,
+  },
+  reconciliation: { state: "disabled", enabled: false },
+  timezone: "Australia/Melbourne",
+  layers: {
+    runtime: { status: "ready" },
+    domains: { status: "ready" },
+    integration: { status: "ready" },
+    orchestration: { status: "ready" },
+    safety: { status: "ready" },
+    adaptive: { status: "ready" },
+    autonomy: { status: "ready" },
+    reliability: { status: "ready" },
+  },
+  zState: "active",
+  checkedAt: "2026-07-30T00:00:00.000Z",
+};
+
+const BRIEF: DailyBrief = {
+  generatedAt: "2026-07-30T00:00:00.000Z",
+  timezone: "Australia/Melbourne",
+  headline: "1 open task, 0 reminders due, 0 active projects, 0 quotes awaiting response.",
+  tasks: { openCount: 1, completedCount: 0, open: [] },
+  reminders: { dueCount: 0, upcomingCount: 0, undatedCount: 0, due: [], upcoming: [] },
+  projects: {
+    activeCount: 0,
+    countsByStatus: { lead: 0, quoted: 0, active: 0, on_hold: 0, done: 0 },
+    active: [],
+  },
+  quotes: {
+    countsByStatus: { draft: 0, sent: 0, accepted: 0, declined: 0 },
+    pipelineTotal: 0,
+    acceptedTotal: 0,
+    awaitingResponse: [],
+    drafts: [],
+  },
+  maintenance: { dueCount: 0, dueSoonCount: 0, due: [], dueSoon: [] },
 };
 
 const SNAPSHOT: QuoteSnapshot = {
@@ -143,4 +193,67 @@ describe("MCP quote inspection", () => {
       await server.close();
     }
   });
+  it("acknowledges a task write when the optional quote register is unavailable", async () => {
+    const task = {
+      id: "task-1",
+      title: "Keep the core dashboard available",
+      completed: false,
+      category: "work",
+      createdAt: 1,
+    };
+    let createRequests = 0;
+    const fetchImpl = (async (input: string | URL | Request, init?: RequestInit) => {
+      const path = new URL(String(input)).pathname;
+      const method = init?.method || "GET";
+      if (path === "/api/v1/tasks" && method === "POST") {
+        createRequests += 1;
+        return Response.json({ data: task }, { status: 201 });
+      }
+      if (path === "/api/v1/status") return Response.json(STATUS);
+      if (path === "/api/v1/tasks") return Response.json({ data: [task], count: 1 });
+      if (path === "/api/v1/reminders") return Response.json({ data: [], count: 0 });
+      if (path === "/api/v1/brief") return Response.json({ data: BRIEF });
+      if (path === "/api/v1/quotes") {
+        return Response.json(
+          {
+            type: "urn:jarvis:problem:quote-lifecycle-unavailable",
+            title: "Quote Lifecycle Unavailable",
+            status: 503,
+          },
+          { status: 503 },
+        );
+      }
+      return Response.json({ title: "Not Found", status: 404 }, { status: 404 });
+    }) as typeof fetch;
+    const apiClient = new JarvisApiClient(
+      {
+        baseUrl: new URL("https://jarvis.example/"),
+        serviceToken: "quote-inspection-test-token",
+      },
+      fetchImpl,
+    );
+    const server = createJarvisMcpServer(apiClient);
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: "degraded-quote-register-test", version: "0.1.0" });
+
+    await server.connect(serverTransport);
+    await client.connect(clientTransport);
+    try {
+      const result = await client.callTool({
+        name: "create_task",
+        arguments: { title: task.title, category: task.category },
+      });
+
+      assert.equal(result.isError, undefined);
+      assert.equal(createRequests, 1);
+      assert.deepEqual(
+        (result.structuredContent as { quoteRegister?: unknown })?.quoteRegister,
+        { status: "unavailable", quotes: [] },
+      );
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
 });
