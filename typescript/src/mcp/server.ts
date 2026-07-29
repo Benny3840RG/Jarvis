@@ -342,7 +342,10 @@ const dashboardOutputSchema = {
   tasks: z.array(taskSchema),
   reminders: z.array(reminderSchema),
   brief: briefSchema,
-  quotes: z.array(quoteSummarySchema),
+  quoteRegister: z.object({
+    status: z.enum(["ready", "unavailable"]),
+    quotes: z.array(quoteSummarySchema),
+  }),
   counts: countsSchema,
 };
 
