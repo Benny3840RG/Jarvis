@@ -88,10 +88,21 @@ describe("Jarvis preview widget", () => {
       "text",
       "fillList",
       "operationsRow",
+      "quotePipelineRow",
+      "renderQuoteDetail",
       "empty",
       `"use strict"; ${audSource} ${renderSource}; renderOperations();`,
     );
-    run(state, byId, text, fillList, () => ({}), () => ({}));
+    run(
+      state,
+      byId,
+      text,
+      fillList,
+      () => ({}),
+      () => ({}),
+      () => {},
+      () => ({}),
+    );
 
     assert.deepEqual(lists.get("operations-quote-list"), state.brief.quotes.awaitingResponse);
     assert.equal(elements.get("operations-quote-total")?.textContent, "$330.35");
