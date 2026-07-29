@@ -5,6 +5,7 @@ import { describe, it } from "node:test";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 
+import type { DailyBrief } from "../src/briefs/brief.js";
 import type { SystemStatus } from "../src/http/contracts.js";
 import type { JarvisMcpConfig } from "../src/mcp/config.js";
 import { startJarvisMcpHttpServer } from "../src/mcp/httpServer.js";
@@ -47,6 +48,27 @@ const STATUS: SystemStatus = {
   checkedAt: "2026-07-18T12:00:00.000Z",
 };
 
+const BRIEF: DailyBrief = {
+  generatedAt: "2026-07-30T00:00:00.000Z",
+  timezone: "Australia/Melbourne",
+  headline: "0 open tasks, 0 reminders due, 0 active projects, 0 quotes awaiting response.",
+  tasks: { openCount: 0, completedCount: 0, open: [] },
+  reminders: { dueCount: 0, upcomingCount: 0, undatedCount: 0, due: [], upcoming: [] },
+  projects: {
+    activeCount: 0,
+    countsByStatus: { lead: 0, quoted: 0, active: 0, on_hold: 0, done: 0 },
+    active: [],
+  },
+  quotes: {
+    countsByStatus: { draft: 0, sent: 0, accepted: 0, declined: 0 },
+    pipelineTotal: 0,
+    acceptedTotal: 0,
+    awaitingResponse: [],
+    drafts: [],
+  },
+  maintenance: { dueCount: 0, dueSoonCount: 0, due: [], dueSoon: [] },
+};
+
 async function freePort(): Promise<number> {
   const server = createServer();
   await new Promise<void>((resolve, reject) => {
@@ -67,6 +89,7 @@ function mockFetch(status: SystemStatus = STATUS): typeof fetch {
     if (path === "/api/v1/status") return Response.json(status);
     if (path === "/api/v1/tasks") return Response.json({ data: [], count: 0 });
     if (path === "/api/v1/reminders") return Response.json({ data: [], count: 0 });
+    if (path === "/api/v1/brief") return Response.json({ data: BRIEF });
     return Response.json({ title: "Not Found", status: 404 }, { status: 404 });
   }) as typeof fetch;
 }
@@ -173,7 +196,7 @@ describe("Jarvis paddock readiness probe", () => {
   });
 
   it("rejects tool results that are errors or lack structured content", () => {
-    const snapshot = { status: STATUS, tasks: [], reminders: [], counts: {} };
+    const snapshot = { status: STATUS, tasks: [], reminders: [], brief: BRIEF, counts: {} };
     assert.deepEqual(
       extractPaddockDashboardSnapshot({ content: [], structuredContent: snapshot }),
       snapshot,

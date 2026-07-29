@@ -175,6 +175,10 @@
       .queue-panel { display: grid; grid-template-rows: auto minmax(0,1fr); }
       .scroll-list { min-height: 0; overflow: auto; scrollbar-color: var(--violet) transparent; }
       .two-column-view { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 9px; height: 100%; padding: 9px; }
+      .operations-view { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); grid-template-rows:repeat(2,minmax(0,1fr)); gap:9px; height:100%; padding:9px; }
+      .operations-summary { display:grid; align-content:start; gap:8px; padding:10px; }
+      .operations-headline { margin:0; color:var(--text); font-size:14px; line-height:1.45; }
+      .operations-stamp { color:var(--muted); font-size:9px; }
       .list-panel { display: grid; grid-template-rows: auto minmax(0,1fr); }
       .board-row, .reminder-row { display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: center; gap: 10px; min-height: 55px; padding: 9px 10px; border-bottom: 1px solid var(--line); }
       .board-row strong, .reminder-row strong { display: block; font-size: 11px; overflow-wrap: anywhere; }
@@ -239,7 +243,7 @@
         .left-core, .left-priorities, .right-rail, .bottom-band { display:none; }
         .nav-stack { grid-template-columns:repeat(4,minmax(84px,1fr)); overflow-x:auto; }
         .rail-button { grid-template-columns:24px minmax(64px,1fr); } .rail-button small, .rail-count { display:none; }
-        .workspace { min-height:650px; } .focus-layout, .two-column-view, .systems-view { grid-template-columns:1fr; }
+        .workspace { min-height:650px; } .focus-layout, .two-column-view, .systems-view, .operations-view { grid-template-columns:1fr; } .operations-view { grid-template-rows:none; }
         .mission-core { grid-template-columns:1fr; } .mission-ring { width:170px; }
       }
       @media (prefers-reduced-motion:reduce) { *,*::before,*::after { animation-duration:.01ms!important; animation-iteration-count:1!important; transition-duration:.01ms!important; } }
@@ -403,6 +407,7 @@
                 <button class="rail-button active" type="button" data-view="focus"><span class="rail-icon">◎</span><span><strong>Focus</strong><small>Current mission</small></span><span class="rail-count" id="nav-focus-count">0</span></button>
                 <button class="rail-button" type="button" data-view="board"><span class="rail-icon">▦</span><span><strong>Task Board</strong><small>Durable queue</small></span><span class="rail-count" id="nav-board-count">0</span></button>
                 <button class="rail-button" type="button" data-view="reminders"><span class="rail-icon">◷</span><span><strong>Reminders</strong><small>Time contacts</small></span><span class="rail-count" id="nav-reminder-count">0</span></button>
+                <button class="rail-button" type="button" data-view="operations"><span class="rail-icon">⌁</span><span><strong>Operations</strong><small>Daily brief</small></span><span class="rail-count" id="nav-operations-count">0</span></button>
                 <button class="rail-button" type="button" data-view="systems"><span class="rail-icon">◇</span><span><strong>Systems</strong><small>Runtime layers</small></span><span class="rail-count" id="nav-system-count">0</span></button>
               </div>
             </nav>
@@ -496,6 +501,27 @@
                   <article class="panel green"><div class="panel-header"><h2>Reminder timing distribution</h2><span>REAL DUE STATE</span></div><div class="chart-wrap"><svg viewBox="0 0 420 300" role="img" aria-label="Reminder timing distribution"><g stroke="var(--line)"><path d="M35 40H395 M35 100H395 M35 160H395 M35 220H395 M35 270H395" /></g><g id="reminder-chart-bars"></g><g fill="var(--muted)" font-size="11" text-anchor="middle"><text x="75" y="289">DUE</text><text x="165" y="289">24H</text><text x="255" y="289">LATER</text><text x="347" y="289">OPEN</text></g></svg></div></article>
                 </div>
               </section>
+              <section class="view" id="view-operations">
+                <div class="operations-view">
+                  <article class="panel green">
+                    <div class="panel-header"><h2>Operations snapshot</h2><span id="brief-generated">AWAITING BRIEF</span></div>
+                    <div class="operations-summary">
+                      <p class="operations-headline" id="brief-headline">Live daily operations will appear here.</p>
+                      <div class="matrix">
+                        <div class="matrix-item"><span>Reminders due</span><b id="brief-reminders-due">0</b></div>
+                        <div class="matrix-item"><span>Upcoming 24h</span><b id="brief-reminders-upcoming">0</b></div>
+                        <div class="matrix-item"><span>Active projects</span><b id="brief-project-count">0</b></div>
+                        <div class="matrix-item"><span>Quotes awaiting</span><b id="brief-quote-count">0</b></div>
+                        <div class="matrix-item"><span>Draft quotes</span><b id="brief-draft-count">0</b></div>
+                        <div class="matrix-item"><span>Accepted value</span><b id="brief-accepted-total">$0.00</b></div>
+                      </div>
+                    </div>
+                  </article>
+                  <article class="panel list-panel violet"><div class="panel-header"><h2>Active projects</h2><span id="operations-project-count">0 ACTIVE</span></div><ul class="compact-list scroll-list" id="operations-project-list"></ul></article>
+                  <article class="panel list-panel green"><div class="panel-header"><h2>Quote pipeline</h2><span id="operations-quote-total">$0</span></div><ul class="compact-list scroll-list" id="operations-quote-list"></ul></article>
+                  <article class="panel list-panel violet"><div class="panel-header"><h2>Equipment maintenance</h2><span id="operations-maintenance-count">0 DUE</span></div><ul class="compact-list scroll-list" id="operations-maintenance-list"></ul></article>
+                </div>
+              </section>
               <section class="view" id="view-systems">
                 <div class="systems-view">
                   <article class="panel violet">
@@ -544,14 +570,14 @@
             </article>
           </section>
         </section>
-        <footer class="footer"><div class="stream"><span class="live">● LIVE</span><span id="footer-status">Jarvis bridge initialising</span><span>Task and reminder state only</span><span class="guard">Production boundary secured</span></div><span>JARVIS PRIME OMNI · DEVELOPMENT</span></footer>
+        <footer class="footer"><div class="stream"><span class="live">● LIVE</span><span id="footer-status">Jarvis bridge initialising</span><span>Durable operations snapshot</span><span class="guard">Production boundary secured</span></div><span>JARVIS PRIME OMNI · DEVELOPMENT</span></footer>
       </section>
     </main>
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
     <script>
       (() => {
         "use strict";
-        const state = { status: null, tasks: [], reminders: [], counts: { activeTasks: 0, completedTasks: 0, reminders: 0 }, captureMode: "task", activities: [] };
+        const state = { status: null, tasks: [], reminders: [], brief: null, counts: { activeTasks: 0, completedTasks: 0, reminders: 0 }, captureMode: "task", activities: [] };
         let rpcId = 0;
         let toastTimer = null;
         const pending = new Map();
@@ -563,7 +589,7 @@
         function activity(title, detail) { state.activities.unshift({ title, detail, at: new Date() }); state.activities = state.activities.slice(0, 7); renderActivity(); }
         function structured(result) { return result && typeof result === "object" && result.structuredContent ? result.structuredContent : result; }
         function recalc() { state.counts = { activeTasks: state.tasks.filter((task) => !task.completed).length, completedTasks: state.tasks.filter((task) => task.completed).length, reminders: state.reminders.length }; }
-        function update(result) { const data = structured(result); if (!data || typeof data !== "object") return; if (data.status && typeof data.status === "object") state.status = data.status; if (Array.isArray(data.tasks)) state.tasks = data.tasks; if (Array.isArray(data.reminders)) state.reminders = data.reminders; if (data.counts && typeof data.counts === "object") state.counts = data.counts; else recalc(); render(); }
+        function update(result) { const data = structured(result); if (!data || typeof data !== "object") return; if (data.status && typeof data.status === "object") state.status = data.status; if (Array.isArray(data.tasks)) state.tasks = data.tasks; if (Array.isArray(data.reminders)) state.reminders = data.reminders; if (data.brief && typeof data.brief === "object") state.brief = data.brief; if (data.counts && typeof data.counts === "object") state.counts = data.counts; else recalc(); render(); }
         window.addEventListener("message", (event) => { if (event.source !== window.parent) return; const message = event.data; if (!message || message.jsonrpc !== "2.0") return; if (typeof message.id === "number") { const waiting = pending.get(message.id); if (!waiting) return; pending.delete(message.id); if (message.error) waiting.reject(message.error); else waiting.resolve(message.result); return; } if (message.method === "ui/notifications/tool-result") update(message.params); }, { passive: true });
         const bridgeReady = (async () => { await request("ui/initialize", { appInfo: { name: "jarvis-dashboard", version: "0.2.0" }, appCapabilities: {}, protocolVersion: "2026-01-26" }); notify("ui/notifications/initialized", {}); activity("HUD bridge online", "MCP Apps connection initialised"); })();
         async function callTool(name, args = {}) { await bridgeReady; const result = await request("tools/call", { name, arguments: args }); update(result); return result; }
@@ -591,9 +617,12 @@
         function renderCategories() { const counts = new Map(); state.tasks.forEach((task) => { const category = task.category || "personal"; counts.set(category,(counts.get(category) || 0) + 1); }); const entries = [...counts.entries()].sort((a,b) => b[1] - a[1]).slice(0,5); const max = Math.max(1,...entries.map(([,value]) => value)); const bars = byId("category-bars"); bars.replaceChildren(); if (!entries.length) bars.append(empty("No task-domain data yet.")); else entries.forEach(([category,value]) => { const row = document.createElement("div"); row.className = "category-row"; const name = document.createElement("span"); text(name,category); const track = document.createElement("div"); track.className = "bar-track"; const fill = document.createElement("div"); fill.className = "bar-fill"; fill.style.width = `${Math.round((value / max) * 100)}%`; track.append(fill); const count = document.createElement("b"); text(count,value); row.append(name,track,count); bars.append(row); }); const total = state.counts.activeTasks + state.counts.completedTasks; const percent = total ? Math.round((state.counts.completedTasks / total) * 100) : 0; text(byId("completion-percent"),`${percent}%`); byId("completion-ring").setAttribute("stroke-dasharray",`${percent} ${100 - percent}`); }
         function renderPriorities() { const tasks = activeTasks().slice(0,4); fillList(byId("left-priority-list"),tasks,(task) => taskRow(task,true,false),"No active priorities."); text(byId("priority-count"),`${tasks.length} QUEUED`); }
         function renderRightReminders() { const reminders = state.reminders.slice().sort((a,b) => (a.dueAt || Number.MAX_SAFE_INTEGER) - (b.dueAt || Number.MAX_SAFE_INTEGER)).slice(0,3); const list = byId("right-reminder-list"); list.replaceChildren(); if (!reminders.length) list.append(empty("No reminder contacts.","compact-row empty")); else reminders.forEach((reminder) => { const row = document.createElement("li"); row.className = "compact-row"; const title = document.createElement("strong"); const meta = document.createElement("small"); text(title,reminder.title); text(meta,reminderTime(reminder)); row.append(title,meta); list.append(row); }); text(byId("right-reminder-count"),`${state.reminders.length} TRACKED`); }
+        const aud = new Intl.NumberFormat("en-AU",{style:"currency",currency:"AUD",minimumFractionDigits:2,maximumFractionDigits:2});
+        function operationsRow(titleValue, metaValue) { const row = document.createElement("li"); row.className = "compact-row"; const title = document.createElement("strong"); const meta = document.createElement("small"); text(title,titleValue); text(meta,metaValue); row.append(title,meta); return row; }
+        function renderOperations() { const brief = state.brief; if (!brief) { text(byId("brief-headline"),"Live daily operations will appear here."); text(byId("brief-generated"),"AWAITING BRIEF"); text(byId("nav-operations-count"),0); fillList(byId("operations-project-list"),[],() => empty(""),"No daily brief loaded."); fillList(byId("operations-quote-list"),[],() => empty(""),"No daily brief loaded."); fillList(byId("operations-maintenance-list"),[],() => empty(""),"No daily brief loaded."); return; } const projects = Array.isArray(brief.projects?.active) ? brief.projects.active : []; const awaiting = Array.isArray(brief.quotes?.awaitingResponse) ? brief.quotes.awaitingResponse : []; const due = Array.isArray(brief.maintenance?.due) ? brief.maintenance.due : []; const dueSoon = Array.isArray(brief.maintenance?.dueSoon) ? brief.maintenance.dueSoon : []; text(byId("brief-headline"),brief.headline || "Daily brief loaded."); text(byId("brief-generated"),brief.generatedAt ? new Date(brief.generatedAt).toLocaleString("en-AU") : "TIME UNAVAILABLE"); text(byId("brief-reminders-due"),brief.reminders?.dueCount || 0); text(byId("brief-reminders-upcoming"),brief.reminders?.upcomingCount || 0); text(byId("brief-project-count"),brief.projects?.activeCount || 0); text(byId("brief-quote-count"),awaiting.length); text(byId("brief-draft-count"),brief.quotes?.countsByStatus?.draft || 0); text(byId("brief-accepted-total"),aud.format(brief.quotes?.acceptedTotal || 0)); text(byId("nav-operations-count"),projects.length + awaiting.length + due.length); text(byId("operations-project-count"),`${brief.projects?.activeCount || 0} ACTIVE`); fillList(byId("operations-project-list"),projects,(project) => operationsRow(project.title,(project.status || "active").toUpperCase()),"No active projects."); const quotes = awaiting; text(byId("operations-quote-total"),aud.format(brief.quotes?.pipelineTotal || 0)); fillList(byId("operations-quote-list"),quotes,(quote) => operationsRow(`#${quote.number}`,`${(quote.status || "sent").toUpperCase()} · ${aud.format(quote.total || 0)}`),"No sent quotes awaiting response."); const maintenance = [...due.map((asset) => ({...asset,dueLabel:"OVERDUE"})),...dueSoon.map((asset) => ({...asset,dueLabel:"DUE SOON"}))]; text(byId("operations-maintenance-count"),`${brief.maintenance?.dueCount || 0} DUE · ${brief.maintenance?.dueSoonCount || 0} SOON`); fillList(byId("operations-maintenance-list"),maintenance,(asset) => operationsRow(asset.name,`${asset.dueLabel} · ${asset.kind || "equipment"}`),"No scheduled maintenance due."); }
         function renderActivity() { const list = byId("activity-list"); list.replaceChildren(); if (!state.activities.length) { list.append(empty("No operator activity yet.","activity-row empty")); return; } state.activities.slice(0,6).forEach((item) => { const row = document.createElement("li"); row.className = "activity-row"; const title = document.createElement("strong"); const meta = document.createElement("small"); text(title,item.title); text(meta,`${item.detail} · ${item.at.toLocaleTimeString("en-AU",{hour:"2-digit",minute:"2-digit"})}`); row.append(title,meta); list.append(row); }); }
         function renderCounts() { recalc(); text(byId("active-count"),state.counts.activeTasks); text(byId("done-count"),state.counts.completedTasks); text(byId("reminder-count"),state.counts.reminders); text(byId("telemetry-queue"),`${state.counts.activeTasks} TASKS`); text(byId("nav-focus-count"),state.counts.activeTasks ? 1 : 0); text(byId("nav-board-count"),state.tasks.length); text(byId("nav-reminder-count"),state.counts.reminders); }
-        function render() { renderCounts(); renderFocus(); renderBoard(); renderReminders(); renderSystems(); renderCategories(); renderPriorities(); renderRightReminders(); renderActivity(); }
+        function render() { renderCounts(); renderFocus(); renderBoard(); renderReminders(); renderSystems(); renderCategories(); renderPriorities(); renderRightReminders(); renderOperations(); renderActivity(); }
         function setCaptureMode(mode) { state.captureMode = mode; document.querySelectorAll("[data-capture]").forEach((button) => button.classList.toggle("active",button.dataset.capture === mode)); const category = byId("capture-category"); const due = byId("capture-due"); if (mode === "task") { text(byId("capture-title-label"),"Task command"); text(byId("capture-detail-copy"),"Category"); category.hidden = false; due.hidden = true; text(byId("capture-submit"),"ADD TASK"); } else { text(byId("capture-title-label"),"Reminder command"); text(byId("capture-detail-copy"),"When"); category.hidden = true; due.hidden = false; text(byId("capture-submit"),"SET REMINDER"); } }
         document.querySelectorAll("[data-view]").forEach((button) => button.addEventListener("click",() => { document.querySelectorAll("[data-view]").forEach((candidate) => candidate.classList.toggle("active",candidate === button)); document.querySelectorAll(".view").forEach((view) => view.classList.toggle("active",view.id === `view-${button.dataset.view}`)); }));
         document.querySelectorAll("[data-capture]").forEach((button) => button.addEventListener("click",() => setCaptureMode(button.dataset.capture)));
