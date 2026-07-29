@@ -14,13 +14,14 @@ const HTTP_METHODS = new Set(["get", "post", "put", "patch", "delete"]);
 const SERVICE_TOKEN = "binding-test-token";
 
 // A mutating tool refreshes the operator console after its write, so its recorded
-// request set legitimately includes these three read operations in addition to
+// request set legitimately includes these dashboard read operations in addition to
 // its declared primary operation.
 const DASHBOARD_READS = new Set([
   "GET /api/v1/status",
   "GET /api/v1/tasks",
   "GET /api/v1/reminders",
   "GET /api/v1/brief",
+  "GET /api/v1/quotes",
 ]);
 
 const STATUS: SystemStatus = {
