@@ -28,6 +28,17 @@ describe("Jarvis preview widget", () => {
     assert.match(widget, /Reminder timing distribution/);
   });
 
+  it("wires the real daily operations projection into its own dashboard view", () => {
+    assert.match(widget, /data-view="operations"/);
+    assert.match(widget, /id="view-operations"/);
+    assert.match(widget, /state\.brief/);
+    assert.match(widget, /renderOperations/);
+    assert.match(widget, /Active projects/);
+    assert.match(widget, /Quote pipeline/);
+    assert.match(widget, /Equipment maintenance/);
+    assert.match(widget, /OPERATIONS SNAPSHOT/);
+  });
+
   it("ships syntactically valid embedded dashboard JavaScript", () => {
     const source = widget.match(/<script>([\s\S]*?)<\/script>/)?.[1];
     assert.ok(source, "dashboard script was not found");
