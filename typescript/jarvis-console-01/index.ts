@@ -1,10 +1,11 @@
-import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
+import { randomUUID } from "node:crypto";
 
 import { ConvexHttpClient } from "convex/browser";
 import { anyApi } from "convex/server";
 import { MCPServer, text, widget } from "mcp-use/server";
 import { z } from "zod";
 
+import { decideGatewayAccess } from "./gatewayAuth.js";
 import {
   bridgeFailureActivity,
   buildConsolePageSummary,
@@ -40,27 +41,42 @@ function parseBearerToken(header: string | null | undefined): string | undefined
   return match?.[1];
 }
 
-function digest(value: string): Buffer {
-  return createHash("sha256").update(value, "utf8").digest();
-}
+async function readJsonRpcMethod(request: Request): Promise<string | undefined> {
+  if (request.method !== "POST") return undefined;
+  const contentType = request.headers.get("content-type")?.toLowerCase();
+  if (!contentType?.includes("application/json")) return undefined;
 
-function matchesGatewayToken(candidate: string, configured: string): boolean {
-  return timingSafeEqual(digest(candidate), digest(configured));
+  try {
+    const body: unknown = await request.clone().json();
+    if (typeof body !== "object" || body === null || Array.isArray(body)) return undefined;
+    const method = (body as { method?: unknown }).method;
+    return typeof method === "string" ? method : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 server.use(async (c, next) => {
   const path = new URL(c.req.url).pathname;
-  const isGatedRoute = path === "/mcp" || path.startsWith("/mcp/") || path === "/sse" || path.startsWith("/sse/");
+  const isGatedRoute =
+    path === "/mcp" ||
+    path.startsWith("/mcp/") ||
+    path === "/sse" ||
+    path.startsWith("/sse/");
   if (!isGatedRoute) return next();
 
-  if (!gatewayToken) {
+  const rpcMethod = path === "/mcp" ? await readJsonRpcMethod(c.req.raw) : undefined;
+  const decision = decideGatewayAccess({
+    configuredToken: gatewayToken,
+    candidateToken: parseBearerToken(c.req.header("authorization")),
+    rpcMethod,
+  });
+
+  if (decision === "allow-initialize" || decision === "allow-token") return next();
+  if (decision === "missing-configuration") {
     return c.json({ error: "Console gateway authentication is not configured." }, 503);
   }
-  const candidate = parseBearerToken(c.req.header("authorization"));
-  if (candidate === undefined || !matchesGatewayToken(candidate, gatewayToken)) {
-    return c.json({ error: "A valid Bearer gateway token is required." }, 401);
-  }
-  return next();
+  return c.json({ error: "A valid Bearer gateway token is required." }, 401);
 });
 
 const taskSchema = z.object({
