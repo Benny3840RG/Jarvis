@@ -69,8 +69,8 @@ describe("Console gateway authentication", () => {
     const source = readFileSync(new URL("../index.ts", import.meta.url), "utf8");
 
     assert.match(source, /decideGatewayAccess/);
-    assert.match(source, /request\\.clone\\(\\)/);
-    assert.match(source, /readJsonRpcMethod\\(c\\.req\\.raw\\)/);
+    assert.ok(source.includes("request.clone()"));
+    assert.ok(source.includes("readJsonRpcMethod(c.req.raw)"));
     assert.match(source, /rpcMethod/);
     assert.match(source, /allow-initialize/);
     assert.match(source, /allow-token/);
