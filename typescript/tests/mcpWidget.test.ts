@@ -79,8 +79,22 @@ describe("Jarvis preview widget", () => {
       currency: "AUD",
       updatedAt: 3,
     };
+    const lifecycleDraft = {
+      ...lifecycleQuote,
+      quoteId: "lifecycle-175",
+      number: "175",
+      revisionStatus: "draft",
+      total: 120,
+    };
+    const lifecycleAccepted = {
+      ...lifecycleQuote,
+      quoteId: "lifecycle-176",
+      number: "176",
+      commercialStatus: "accepted",
+      total: 55.5,
+    };
     const state = {
-      quotes: [lifecycleQuote],
+      quotes: [lifecycleQuote, lifecycleDraft, lifecycleAccepted],
       brief: {
         generatedAt: "2026-07-30T00:00:00.000Z",
         headline: "Quote truth fixture.",
