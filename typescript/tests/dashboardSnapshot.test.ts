@@ -138,8 +138,45 @@ describe("dashboard snapshot", () => {
       "/api/v1/tasks",
     ]);
     assert.deepEqual(snapshot.brief, BRIEF);
-    assert.deepEqual(snapshot.quotes, [LIFECYCLE_QUOTE]);
-    assert.notEqual(snapshot.quotes[0]?.quoteId, snapshot.brief.quotes.awaitingResponse[0]?.id);
+    assert.deepEqual(snapshot.quoteRegister, {
+      status: "ready",
+      quotes: [LIFECYCLE_QUOTE],
+    });
+    assert.notEqual(
+      snapshot.quoteRegister.quotes[0]?.quoteId,
+      snapshot.brief.quotes.awaitingResponse[0]?.id,
+    );
     assert.deepEqual(snapshot.counts, { activeTasks: 1, completedTasks: 0, reminders: 1 });
   });
+  it("degrades only the quote register when lifecycle reads are unavailable", async () => {
+    const fetchImpl = (async (input: string | URL | Request) => {
+      const path = new URL(String(input)).pathname;
+      if (path === "/api/v1/status") return Response.json(STATUS);
+      if (path === "/api/v1/tasks") return Response.json({ data: [TASK], count: 1 });
+      if (path === "/api/v1/reminders") return Response.json({ data: [REMINDER], count: 1 });
+      if (path === "/api/v1/brief") return Response.json({ data: BRIEF });
+      if (path === "/api/v1/quotes") {
+        return Response.json(
+          {
+            type: "urn:jarvis:problem:quote-lifecycle-unavailable",
+            title: "Quote Lifecycle Unavailable",
+            status: 503,
+          },
+          { status: 503 },
+        );
+      }
+      return Response.json({ title: "Not Found" }, { status: 404 });
+    }) as typeof fetch;
+    const client = new JarvisApiClient(
+      { baseUrl: new URL("http://127.0.0.1:3000/"), serviceToken: "test-token" },
+      fetchImpl,
+    );
+
+    const snapshot = await client.dashboard();
+
+    assert.deepEqual(snapshot.quoteRegister, { status: "unavailable", quotes: [] });
+    assert.deepEqual(snapshot.tasks, [TASK]);
+    assert.deepEqual(snapshot.brief, BRIEF);
+  });
+
 });
