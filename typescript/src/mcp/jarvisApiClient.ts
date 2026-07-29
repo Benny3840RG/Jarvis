@@ -10,6 +10,8 @@ import type { AssetInput, AssetUpdate } from "../assets/asset.js";
 import type { AssetView } from "../assets/assetView.js";
 import type { Preference, PreferenceInput, PreferenceUpdate } from "../preferences/preference.js";
 import type { Project, ProjectInput, ProjectUpdate } from "../projects/project.js";
+import type { QuoteSnapshot } from "../quotes/quoteLifecycle.js";
+import type { QuoteSummary } from "../quotes/quoteRepository.js";
 import type { SystemStatus } from "../http/contracts.js";
 import type { Reminder, Task } from "../persistence/persistence.js";
 import type { TaskUpdate } from "../persistence/updates.js";
@@ -526,6 +528,19 @@ export class JarvisApiClient {
       await this.request<DataResponse<Preference>>(
         "DELETE",
         `/api/v1/preferences/${encodeURIComponent(preferenceId)}`,
+      )
+    ).data;
+  }
+
+  async listQuotes(): Promise<QuoteSummary[]> {
+    return (await this.request<ListResponse<QuoteSummary>>("GET", "/api/v1/quotes")).data;
+  }
+
+  async getQuote(quoteId: string): Promise<QuoteSnapshot> {
+    return (
+      await this.request<DataResponse<QuoteSnapshot>>(
+        "GET",
+        `/api/v1/quotes/${encodeURIComponent(quoteId)}`,
       )
     ).data;
   }
