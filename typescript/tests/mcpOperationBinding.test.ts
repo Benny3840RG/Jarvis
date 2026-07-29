@@ -20,6 +20,7 @@ const DASHBOARD_READS = new Set([
   "GET /api/v1/status",
   "GET /api/v1/tasks",
   "GET /api/v1/reminders",
+  "GET /api/v1/brief",
 ]);
 
 const STATUS: SystemStatus = {
