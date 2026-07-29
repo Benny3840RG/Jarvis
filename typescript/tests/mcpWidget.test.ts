@@ -42,7 +42,7 @@ describe("Jarvis preview widget", () => {
   it("keeps drafts outside the sent pipeline and preserves cent-precise totals", () => {
     const audSource = widget.match(/const aud = new Intl\.NumberFormat[^;]+;/)?.[0];
     const renderSource = widget.match(
-      /(function renderOperations\(\) \{[\s\S]*?\})\n        function renderActivity/,
+      /(function renderOperations\(\) \{[\s\S]*?\})\n\s+function renderActivity/,
     )?.[1];
     assert.ok(audSource, "AUD formatter was not found");
     assert.ok(renderSource, "operations renderer was not found");
