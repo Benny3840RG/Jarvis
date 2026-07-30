@@ -13,13 +13,13 @@ Answers: what genuinely needs the operator's attention right now, and why?
 
 ### Source-of-truth map
 
-| Inbox source   | Backing read                                             | Status today                                  |
-| --------------- | --------------------------------------------------------- | ---------------------------------------------- |
-| `reminders`     | `PersistenceProvider.listReminders()`                      | Available                                       |
-| `maintenance`   | `AssetStore.list()` + `deriveAssetView()`                  | Available                                       |
-| `toolActions`   | Governed `ToolAction` consent-lifecycle read               | Unsupported — pending PR #246 landing on `main` |
-| `reconciliation`| Reconciliation operator read model (`listForOperator`)     | Unsupported — pending PR #247 landing on `main` |
-| `quoteDelivery` | Owner-wide quote-delivery-attempt read                      | Unsupported — no bounded owner-wide read exists yet, only a per-quote read |
+| Inbox source     | Backing read                                           | Status today                                                               |
+| ---------------- | ------------------------------------------------------ | -------------------------------------------------------------------------- |
+| `reminders`      | `PersistenceProvider.listReminders()`                  | Available                                                                  |
+| `maintenance`    | `AssetStore.list()` + `deriveAssetView()`              | Available                                                                  |
+| `toolActions`    | Governed `ToolAction` consent-lifecycle read           | Unsupported — pending PR #246 landing on `main`                            |
+| `reconciliation` | Reconciliation operator read model (`listForOperator`) | Unsupported — pending PR #247 landing on `main`                            |
+| `quoteDelivery`  | Owner-wide quote-delivery-attempt read                 | Unsupported — no bounded owner-wide read exists yet, only a per-quote read |
 
 `reminders` and `maintenance` reuse the exact domain reads `src/briefs/brief.ts` already uses — there is no
 second query path for either.
@@ -64,16 +64,16 @@ Every event's `summary` is built from a fixed, per-`eventType` whitelist of know
 `SUMMARISERS` in `src/operations/activityTimeline.ts`) — never the event's raw payload. Today's whitelisted
 types:
 
-| `eventType`                       | Meaning                                                    |
-| ---------------------------------- | ----------------------------------------------------------- |
-| `tool.action.proposed`             | A governed tool action was staged for approval               |
-| `tool.action.approved`             | An operator approved a staged tool action                     |
-| `tool.action.rejected`             | An operator rejected a staged tool action (reason included)   |
-| `tool.action.execution-claimed`    | A single-use tool action's atomic execution claim was won     |
-| `memory.change_set.proposed`       | A memory change set was staged for approval                   |
-| `memory.change_set.approved`       | An operator approved a staged memory change set                |
-| `memory.change_set.rejected`       | An operator rejected a staged memory change set (reason included) |
-| `memory.change_set.applied`        | An approved memory change set was written to durable memory    |
+| `eventType`                     | Meaning                                                           |
+| ------------------------------- | ----------------------------------------------------------------- |
+| `tool.action.proposed`          | A governed tool action was staged for approval                    |
+| `tool.action.approved`          | An operator approved a staged tool action                         |
+| `tool.action.rejected`          | An operator rejected a staged tool action (reason included)       |
+| `tool.action.execution-claimed` | A single-use tool action's atomic execution claim was won         |
+| `memory.change_set.proposed`    | A memory change set was staged for approval                       |
+| `memory.change_set.approved`    | An operator approved a staged memory change set                   |
+| `memory.change_set.rejected`    | An operator rejected a staged memory change set (reason included) |
+| `memory.change_set.applied`     | An approved memory change set was written to durable memory       |
 
 An event type outside this table — including any future one an emitter adds without updating the
 whitelist — falls back to a type-only summary (`"<eventType> event."`) rather than exposing its payload.
@@ -110,9 +110,9 @@ is a follow-up once #247 merges and an owner-wide receipts read exists.
 percentage without a documented formula, never inferred from an environment variable simply being set.
 Today's only line item:
 
-| `name`            | `status`                          | Evidence                                                                 |
-| ------------------ | ----------------------------------- | --------------------------------------------------------------------------- |
-| `quote-delivery`   | `commissioned` / `not-commissioned` | `ToolExecutionService.isRegistered("quotes", "send")` — the same conditional registration `toolExecutionFactory.ts` already performs from the real quote-repository / email-provider / delivery-repository / PDF-artifact-repository bundle. |
+| `name`           | `status`                            | Evidence                                                                                                                                                                                                                                     |
+| ---------------- | ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `quote-delivery` | `commissioned` / `not-commissioned` | `ToolExecutionService.isRegistered("quotes", "send")` — the same conditional registration `toolExecutionFactory.ts` already performs from the real quote-repository / email-provider / delivery-repository / PDF-artifact-repository bundle. |
 
 `not-commissioned` always carries a concrete `reason` (either "tool execution is not configured in this
 deployment" or "the quotes:send tool is not registered"); `commissioned` carries no `reason` at all. This
