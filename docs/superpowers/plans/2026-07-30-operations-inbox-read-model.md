@@ -185,12 +185,24 @@ HTTP route `GET /api/v1/operations/activity`, `openapi/jarvis.openapi.json`, cor
 ### Task 6: MCP read tools
 
 **Files:** `src/mcp/server.ts`, `src/mcp/jarvisApiClient.ts`, `src/mcp/operationContract.ts`,
-`tests/mcpOperationsInbox.test.ts` (new, mirroring `tests/mcpToolActionInspection.test.ts`'s exact
-read-only-catalogue-assertion pattern).
+`tests/mcpOperationsInbox.test.ts` (already existed from the core slice), `tests/mcpActivityTimeline.test.ts`
+(new, mirroring the same read-only-catalogue-assertion pattern).
 
-- [ ] RED → implement `get_operations_inbox`, `list_activity`, `get_integration_health` (names subject to
-      not colliding with any existing tool).
-- [ ] Prove no consequential tool was accidentally exposed.
+- [x] `get_operations_inbox` — already implemented and tested in the core slice (Task 2/3).
+- [x] `list_activity` — implemented: `JarvisApiClient.getOperationsActivity()` forwards `cursor`/`limit` as
+      query params; registered as a read-only MCP tool with a `z.discriminatedUnion` output schema over
+      `available`/`unavailable`; added to `MCP_TOOL_OPERATIONS` (the drift-guarded tool→OpenAPI-operation
+      contract). RED → GREEN: `tests/mcpActivityTimeline.test.ts` (query forwarding, read-only-catalogue
+      assertion, out-of-range `limit` rejected at the tool boundary before any HTTP call, unavailability
+      surfaced truthfully rather than as an empty page).
+- [x] `get_integration_health` — deliberately **not** added as a separate tool: `get_jarvis_status` (already
+      MCP-exposed) now carries the new `integrations` field from Task 5, so a second tool would just be a
+      duplicate read of the same `SystemStatus` object. Per the mission's own "names not mandatory if better
+      ones already exist" — reusing `get_jarvis_status` avoids two tools answering the same question.
+- [x] Proved no consequential tool was accidentally exposed: `tests/mcpActivityTimeline.test.ts` and
+      `tests/mcpOperationsInbox.test.ts` both assert no `dismiss|acknowledge|resolve|approve|revoke|execute`
+      prefixed tool exists in the catalogue; `tests/mcpOperationBinding.test.ts`'s registered-tools-equal-
+      `MCP_TOOL_OPERATIONS`-keys drift guard still passes with `list_activity` added.
 
 ### Task 7: HUD wiring
 

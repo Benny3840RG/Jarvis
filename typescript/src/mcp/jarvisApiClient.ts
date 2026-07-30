@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import type { DailyBrief } from "../briefs/brief.js";
+import type { ActivityTimelineResult } from "../operations/activityTimeline.js";
 import type { OperationsInbox } from "../operations/operationsInbox.js";
 import type { Client, ClientInput, ClientUpdate } from "../clients/client.js";
 import type { Errand, ErrandInput, ErrandUpdate } from "../errands/errand.js";
@@ -557,6 +558,24 @@ export class JarvisApiClient {
   async getOperationsInbox(): Promise<OperationsInbox> {
     return (await this.request<DataResponse<OperationsInbox>>("GET", "/api/v1/operations/inbox"))
       .data;
+  }
+
+  async getOperationsActivity(
+    input: {
+      cursor?: string;
+      limit?: number;
+    } = {},
+  ): Promise<ActivityTimelineResult> {
+    const params = new URLSearchParams();
+    if (input.cursor !== undefined) params.set("cursor", input.cursor);
+    if (input.limit !== undefined) params.set("limit", String(input.limit));
+    const query = params.toString();
+    return (
+      await this.request<DataResponse<ActivityTimelineResult>>(
+        "GET",
+        `/api/v1/operations/activity${query ? `?${query}` : ""}`,
+      )
+    ).data;
   }
 
   async dashboard(): Promise<DashboardSnapshot> {

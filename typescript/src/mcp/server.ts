@@ -326,6 +326,31 @@ const operationsInboxSchema = z.object({
   sources: z.array(inboxSourceReportSchema),
 });
 
+// Read-only. Every summary is built server-side from a fixed per-event-type
+// whitelist of known-safe fields — never the raw event payload — so this
+// schema never needs (and must never gain) a raw `payload` passthrough field.
+const activityEventSchema = z.object({
+  activityId: z.string(),
+  occurredAt: z.string(),
+  eventType: z.string(),
+  actor: z.enum(["user", "agent", "tool"]),
+  summary: z.string(),
+  projectKey: z.string().optional(),
+});
+
+const activityTimelineResultSchema = z.discriminatedUnion("status", [
+  z.object({
+    status: z.literal("available"),
+    events: z.array(activityEventSchema),
+    cursor: z.string(),
+    isDone: z.boolean(),
+  }),
+  z.object({
+    status: z.literal("unavailable"),
+    reason: z.string(),
+  }),
+]);
+
 const layerSchema = z.object({
   status: z.enum(["ready", "partial", "inactive", "blocked"]),
   reason: z.string().optional(),
@@ -1317,6 +1342,44 @@ export function createJarvisMcpServer(client: JarvisApiClient): McpServer {
             },
           ],
           structuredContent: { inbox },
+        };
+      } catch (error: unknown) {
+        return safeError(error);
+      }
+    },
+  );
+
+  registerAppTool(
+    server,
+    "list_activity",
+    {
+      title: "List recent operations activity",
+      description:
+        "Use this when Benny asks what's happened recently, or wants a history of governed-action and memory-change-set decisions. Bounded, cursor-paginated, owner-wide feed of durable audit events, newest first. Each entry's summary is built only from a fixed, known-safe subset of its fields — never raw event data. Read-only: nothing is mutated, and a read failure or unconfigured deployment is reported as unavailable rather than an empty page.",
+      inputSchema: {
+        cursor: z.string().optional().describe("Opaque pagination cursor from a previous page."),
+        limit: z
+          .number()
+          .int()
+          .min(1)
+          .max(100)
+          .optional()
+          .describe("Maximum events to return (default 50)."),
+      },
+      outputSchema: { activity: activityTimelineResultSchema },
+      annotations: readAnnotations,
+      _meta: { ui: { visibility: ["model"] } },
+    },
+    async ({ cursor, limit }) => {
+      try {
+        const activity = await client.getOperationsActivity({ cursor, limit });
+        const summary =
+          activity.status === "available"
+            ? `${activity.events.length} activity event${activity.events.length === 1 ? "" : "s"}.`
+            : `Activity timeline unavailable: ${activity.reason}`;
+        return {
+          content: [{ type: "text" as const, text: summary }],
+          structuredContent: { activity },
         };
       } catch (error: unknown) {
         return safeError(error);
