@@ -134,10 +134,7 @@ describe("claimNext lease-expiry reclaim (worker-crash recovery)", () => {
   });
 });
 
-async function seedQuoteDelivery(
-  ctx: MutationCtx,
-  reconciliationId = "reconciliation-1",
-) {
+async function seedQuoteDelivery(ctx: MutationCtx, reconciliationId = "reconciliation-1") {
   return ctx.db.insert("quoteDeliveryAttempts", {
     ownerId: OWNER_ID,
     deliveryAttemptId: "delivery-attempt-1",
@@ -339,9 +336,7 @@ describe("observing-process crash recovery", () => {
         .unique(),
     );
     expect(record?.state).toBe("escalated");
-    expect(record?.escalationReason).toBe(
-      "abandoned-observing-process-interruption",
-    );
+    expect(record?.escalationReason).toBe("abandoned-observing-process-interruption");
     expect(record?.escalatedAt).toBe(now);
   });
 
@@ -368,9 +363,7 @@ describe("observing-process crash recovery", () => {
       ctx.db
         .query("externalReconciliations")
         .withIndex("by_owner_and_reconciliation_id", (q) =>
-          q
-            .eq("ownerId", OWNER_ID)
-            .eq("reconciliationId", "boundary-observing"),
+          q.eq("ownerId", OWNER_ID).eq("reconciliationId", "boundary-observing"),
         )
         .unique(),
     );
@@ -415,9 +408,7 @@ describe("operator reconciliation reads", () => {
     const t = harness();
     const now = Date.now();
     await t.run(async (ctx) => {
-      for (const [index, state] of (
-        ["escalated", "escalated", "resolved"] as const
-      ).entries()) {
+      for (const [index, state] of (["escalated", "escalated", "resolved"] as const).entries()) {
         await ctx.db.insert("externalReconciliations", {
           ownerId: OWNER_ID,
           reconciliationId: `operator-${index}`,
@@ -535,12 +526,8 @@ describe("operator reconciliation reads", () => {
       }),
     ]);
 
-    expect(filtered.map((row) => row.reconciliationId)).toEqual([
-      "recently-updated",
-    ]);
-    expect(unfiltered.map((row) => row.reconciliationId)).toEqual([
-      "recently-updated",
-    ]);
+    expect(filtered.map((row) => row.reconciliationId)).toEqual(["recently-updated"]);
+    expect(unfiltered.map((row) => row.reconciliationId)).toEqual(["recently-updated"]);
   });
 
   it("returns the same null detail for absent and cross-owner records", async () => {
