@@ -4,6 +4,7 @@ import {
   externalReconciliationClaimValidator,
   externalReconciliationDocumentValidator,
   externalReconciliationEnvelopeValidator,
+  externalReconciliationStateValidator,
 } from "./externalReconciliationValidators.js";
 import { requireOwner } from "./authHelpers.js";
 import { cleanRequiredText } from "./toolActionLogic.js";
@@ -236,6 +237,65 @@ export const getByScope = query({
     const reconciliation = await findByScope(ctx, ownerId, scope);
     if (!reconciliation) return null;
     assertEffect(reconciliation, scope.effectFingerprint);
+    return {
+      reconciliation,
+      receipt: await findReceipt(ctx, ownerId, reconciliation.receiptKey),
+    };
+  },
+});
+
+
+export const listForOperator = query({
+  args: {
+    serviceToken: v.string(),
+    state: v.optional(externalReconciliationStateValidator),
+    limit: v.optional(v.number()),
+  },
+  returns: v.array(externalReconciliationDocumentValidator),
+  handler: async (ctx, args) => {
+    const ownerId = requireOwner(args.serviceToken);
+    const limit = args.limit ?? 50;
+    if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
+      throw new Error("Reconciliation list limit must be an integer between 1 and 100.");
+    }
+
+    if (args.state !== undefined) {
+      const records = await ctx.db
+        .query("externalReconciliations")
+        .withIndex("by_owner_and_state_and_next_attempt_at", (q) =>
+          q.eq("ownerId", ownerId).eq("state", args.state!),
+        )
+        .order("desc")
+        .take(limit);
+      return records.sort((left, right) => right.updatedAt - left.updatedAt);
+    }
+
+    const states = ["observing", "pending", "claimed", "resolved", "escalated"] as const;
+    const records = (
+      await Promise.all(
+        states.map((state) =>
+          ctx.db
+            .query("externalReconciliations")
+            .withIndex("by_owner_and_state_and_next_attempt_at", (q) =>
+              q.eq("ownerId", ownerId).eq("state", state),
+            )
+            .order("desc")
+            .take(limit),
+        ),
+      )
+    ).flat();
+    return records.sort((left, right) => right.updatedAt - left.updatedAt).slice(0, limit);
+  },
+});
+
+export const getForOperator = query({
+  args: { serviceToken: v.string(), reconciliationId: v.string() },
+  returns: v.union(externalReconciliationEnvelopeValidator, v.null()),
+  handler: async (ctx, args) => {
+    const ownerId = requireOwner(args.serviceToken);
+    const reconciliationId = cleanRequiredText(args.reconciliationId, "Reconciliation ID");
+    const reconciliation = await findByReconciliationId(ctx, ownerId, reconciliationId);
+    if (!reconciliation) return null;
     return {
       reconciliation,
       receipt: await findReceipt(ctx, ownerId, reconciliation.receiptKey),
