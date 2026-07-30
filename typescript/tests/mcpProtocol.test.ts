@@ -127,6 +127,7 @@ function mockFetch(): typeof fetch {
       });
     }
     if (path === "/api/v1/brief") return Response.json({ data: BRIEF });
+    if (path === "/api/v1/quotes") return Response.json({ data: [], count: 0 });
     if (path === "/api/v1/reminders") {
       return Response.json({
         data: [
@@ -177,6 +178,8 @@ describe("Jarvis MCP preview protocol", () => {
       assert.ok(names.includes("create_task"));
       assert.ok(names.includes("create_reminder"));
       assert.ok(names.includes("delete_task"));
+      assert.ok(names.includes("list_quotes"));
+      assert.ok(names.includes("get_quote"));
 
       const result = await client.callTool({
         name: "show_jarvis_dashboard",
@@ -203,6 +206,7 @@ describe("Jarvis MCP preview protocol", () => {
           },
         ],
         brief: BRIEF,
+        quoteRegister: { status: "ready", quotes: [] },
         counts: {
           activeTasks: 1,
           completedTasks: 0,

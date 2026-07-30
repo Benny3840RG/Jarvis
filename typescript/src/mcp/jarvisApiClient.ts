@@ -10,6 +10,8 @@ import type { AssetInput, AssetUpdate } from "../assets/asset.js";
 import type { AssetView } from "../assets/assetView.js";
 import type { Preference, PreferenceInput, PreferenceUpdate } from "../preferences/preference.js";
 import type { Project, ProjectInput, ProjectUpdate } from "../projects/project.js";
+import type { QuoteSnapshot } from "../quotes/quoteLifecycle.js";
+import type { QuoteSummary } from "../quotes/quoteRepository.js";
 import type { SystemStatus } from "../http/contracts.js";
 import type { Reminder, Task } from "../persistence/persistence.js";
 import type { TaskUpdate } from "../persistence/updates.js";
@@ -25,6 +27,10 @@ export type DashboardSnapshot = {
   tasks: Task[];
   reminders: Reminder[];
   brief: DailyBrief;
+  quoteRegister: {
+    status: "ready" | "unavailable";
+    quotes: QuoteSummary[];
+  };
   counts: {
     activeTasks: number;
     completedTasks: number;
@@ -530,22 +536,41 @@ export class JarvisApiClient {
     ).data;
   }
 
+  async listQuotes(): Promise<QuoteSummary[]> {
+    return (await this.request<ListResponse<QuoteSummary>>("GET", "/api/v1/quotes")).data;
+  }
+
+  async getQuote(quoteId: string): Promise<QuoteSnapshot> {
+    return (
+      await this.request<DataResponse<QuoteSnapshot>>(
+        "GET",
+        `/api/v1/quotes/${encodeURIComponent(quoteId)}`,
+      )
+    ).data;
+  }
+
   async getDailyBrief(): Promise<DailyBrief> {
     return (await this.request<DataResponse<DailyBrief>>("GET", "/api/v1/brief")).data;
   }
 
   async dashboard(): Promise<DashboardSnapshot> {
-    const [status, tasks, reminders, brief] = await Promise.all([
+    const quoteRegister = this.listQuotes().then(
+      (quotes) => ({ status: "ready" as const, quotes }),
+      () => ({ status: "unavailable" as const, quotes: [] as QuoteSummary[] }),
+    );
+    const [status, tasks, reminders, brief, resolvedQuoteRegister] = await Promise.all([
       this.getStatus(),
       this.listTasks(),
       this.listReminders(),
       this.getDailyBrief(),
+      quoteRegister,
     ]);
     return {
       status,
       tasks,
       reminders,
       brief,
+      quoteRegister: resolvedQuoteRegister,
       counts: {
         activeTasks: tasks.filter((task) => !task.completed).length,
         completedTasks: tasks.filter((task) => task.completed).length,

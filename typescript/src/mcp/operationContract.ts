@@ -12,7 +12,7 @@
  *
  * Only the primary operation of each tool is listed. Mutating tools additionally
  * re-read the dashboard to build their response, but those read operations
- * (`GET /api/v1/status`, `/api/v1/tasks`, `/api/v1/reminders`, `/api/v1/brief`) are already declared
+ * (`GET /api/v1/status`, `/api/v1/tasks`, `/api/v1/reminders`, `/api/v1/brief`, `/api/v1/quotes`) are already declared
  * by the read-only tools below.
  */
 export type OpenApiOperation = {
@@ -26,6 +26,7 @@ export const MCP_TOOL_OPERATIONS: Readonly<Record<string, readonly OpenApiOperat
     { method: "GET", path: "/api/v1/tasks" },
     { method: "GET", path: "/api/v1/reminders" },
     { method: "GET", path: "/api/v1/brief" },
+    { method: "GET", path: "/api/v1/quotes" },
   ],
   get_jarvis_status: [{ method: "GET", path: "/api/v1/status" }],
   list_tasks: [{ method: "GET", path: "/api/v1/tasks" }],
@@ -49,6 +50,8 @@ export const MCP_TOOL_OPERATIONS: Readonly<Record<string, readonly OpenApiOperat
   create_project: [{ method: "POST", path: "/api/v1/projects" }],
   update_project: [{ method: "PATCH", path: "/api/v1/projects/{projectId}" }],
   delete_project: [{ method: "DELETE", path: "/api/v1/projects/{projectId}" }],
+  list_quotes: [{ method: "GET", path: "/api/v1/quotes" }],
+  get_quote: [{ method: "GET", path: "/api/v1/quotes/{quoteId}" }],
   get_daily_brief: [{ method: "GET", path: "/api/v1/brief" }],
   list_errands: [{ method: "GET", path: "/api/v1/errands" }],
   get_errand: [{ method: "GET", path: "/api/v1/errands/{errandId}" }],
