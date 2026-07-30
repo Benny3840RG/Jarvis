@@ -86,10 +86,7 @@ function receipt(): ToolExecutionReceipt {
   };
 }
 
-function clientWithReturns(
-  returns: unknown[],
-  calls: unknown[],
-): ConvexClientLike {
+function clientWithReturns(returns: unknown[], calls: unknown[]): ConvexClientLike {
   return {
     async query(_functionRef: unknown, args: unknown) {
       calls.push({ kind: "query", args });
@@ -106,12 +103,7 @@ describe("ConvexExternalReconciliationStore", () => {
   it("requires an authenticated service token", () => {
     const client = clientWithReturns([], []);
     assert.throws(
-      () =>
-        new ConvexExternalReconciliationStore(
-          client,
-          "",
-          "dev:outgoing-ram-798",
-        ),
+      () => new ConvexExternalReconciliationStore(client, "", "dev:outgoing-ram-798"),
       /requires JARVIS_SERVICE_TOKEN/,
     );
   });
@@ -171,10 +163,7 @@ describe("ConvexExternalReconciliationStore", () => {
     });
 
     assert.equal(registered.state, "observing");
-    assert.equal(
-      pending.receipt?.startedAt,
-      new Date(NOW - 1_000).toISOString(),
-    );
+    assert.equal(pending.receipt?.startedAt, new Date(NOW - 1_000).toISOString());
     assert.deepEqual(calls, [
       {
         kind: "mutation",
