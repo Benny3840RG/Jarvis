@@ -662,8 +662,7 @@ export const resolveClaim = mutation({
       .unique();
     if (quoteDelivery?.status === "reconciled") {
       const outcomeConflicts = quoteDelivery.reconciledOutcome !== args.result.status;
-      const providerErrorConflicts =
-        quoteDelivery.providerErrorCode !== providerErrorCode;
+      const providerErrorConflicts = quoteDelivery.providerErrorCode !== providerErrorCode;
       if (outcomeConflicts || providerErrorConflicts) {
         throw new Error(
           "Quote delivery reconciliation outcome conflicts with the provider result.",
