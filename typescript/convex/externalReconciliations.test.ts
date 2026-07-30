@@ -484,6 +484,65 @@ describe("operator reconciliation reads", () => {
     expect(rows[0].ownerId).toBe(OWNER_ID);
   });
 
+  it("orders bounded operator lists by updatedAt even when retry order differs", async () => {
+    const t = harness();
+    const now = Date.now();
+    await t.run(async (ctx) => {
+      for (const record of [
+        {
+          reconciliationId: "recently-updated",
+          nextAttemptAt: now,
+          updatedAt: now + 100,
+        },
+        {
+          reconciliationId: "later-retry-but-older-update",
+          nextAttemptAt: now + 1_000,
+          updatedAt: now,
+        },
+      ]) {
+        await ctx.db.insert("externalReconciliations", {
+          ownerId: OWNER_ID,
+          reconciliationId: record.reconciliationId,
+          executionKey: `execution-${record.reconciliationId}`,
+          actionId: `action-${record.reconciliationId}`,
+          requestId: `request-${record.reconciliationId}`,
+          projectId: "project-1",
+          idempotencyKey: `idempotency-${record.reconciliationId}`,
+          actionFingerprint: `action-fingerprint-${record.reconciliationId}`,
+          effectFingerprint: `effect-fingerprint-${record.reconciliationId}`,
+          tool: "quotes",
+          operation: "send",
+          provider: "test-provider",
+          providerCorrelationId: `correlation-${record.reconciliationId}`,
+          state: "pending",
+          attemptCount: 0,
+          nextAttemptAt: record.nextAttemptAt,
+          createdAt: now,
+          updatedAt: record.updatedAt,
+        });
+      }
+    });
+
+    const [filtered, unfiltered] = await Promise.all([
+      t.query(api.externalReconciliations.listForOperator, {
+        serviceToken: SERVICE_TOKEN,
+        state: "pending",
+        limit: 1,
+      }),
+      t.query(api.externalReconciliations.listForOperator, {
+        serviceToken: SERVICE_TOKEN,
+        limit: 1,
+      }),
+    ]);
+
+    expect(filtered.map((row) => row.reconciliationId)).toEqual([
+      "recently-updated",
+    ]);
+    expect(unfiltered.map((row) => row.reconciliationId)).toEqual([
+      "recently-updated",
+    ]);
+  });
+
   it("returns the same null detail for absent and cross-owner records", async () => {
     const t = harness();
     const now = Date.now();
