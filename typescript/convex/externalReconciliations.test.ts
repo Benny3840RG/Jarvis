@@ -256,6 +256,55 @@ describe("terminal quote delivery projection", () => {
     expect(delivery?.reconciledOutcome).toBe("failed");
     expect(delivery?.providerErrorCode).toBe("message-rejected");
   });
+
+  it("rejects a provider error that conflicts with an already reconciled delivery", async () => {
+    const t = harness();
+    const now = Date.now();
+    await t.run(async (ctx) => {
+      await seedClaimedReconciliation(ctx, {
+        leaseExpiresAt: now + 30_000,
+        leaseOwner: "worker-A",
+        leaseToken: "lease-token-A",
+      });
+      const deliveryId = await seedQuoteDelivery(ctx);
+      await ctx.db.patch("quoteDeliveryAttempts", deliveryId, {
+        status: "reconciled",
+        reconciledOutcome: "failed",
+        providerErrorCode: "message-rejected",
+        reconciledAt: now,
+        updatedAt: now,
+      });
+    });
+
+    await expect(
+      t.mutation(api.externalReconciliations.resolveClaim, {
+        serviceToken: SERVICE_TOKEN,
+        reconciliationId: "reconciliation-1",
+        workerId: "worker-A",
+        leaseToken: "lease-token-A",
+        now,
+        result: { status: "failed", errorCode: "mailbox-disabled" },
+      }),
+    ).rejects.toThrow("conflicts with the provider result");
+
+    const state = await t.run(async (ctx) => {
+      const reconciliation = await ctx.db
+        .query("externalReconciliations")
+        .withIndex("by_owner_and_reconciliation_id", (q) =>
+          q.eq("ownerId", OWNER_ID).eq("reconciliationId", "reconciliation-1"),
+        )
+        .unique();
+      const receipt = await ctx.db
+        .query("toolExecutionReceipts")
+        .withIndex("by_owner_and_receipt_key", (q) =>
+          q.eq("ownerId", OWNER_ID).eq("receiptKey", "receipt-key-1"),
+        )
+        .unique();
+      return { reconciliation, receipt };
+    });
+    expect(state.reconciliation?.state).toBe("claimed");
+    expect(state.receipt?.status).toBe("indeterminate");
+  });
 });
 
 describe("observing-process crash recovery", () => {
@@ -289,6 +338,37 @@ describe("observing-process crash recovery", () => {
     expect(record?.state).toBe("escalated");
     expect(record?.escalationReason).toBe("abandoned-observing-process-interruption");
     expect(record?.escalatedAt).toBe(now);
+  });
+
+  it("keeps an observation at the exact sixty-second boundary safe", async () => {
+    const t = harness();
+    const now = Date.now();
+    await t.run((ctx) =>
+      seedObservingReconciliation(ctx, {
+        reconciliationId: "boundary-observing",
+        nextAttemptAt: now - 60_000,
+      }),
+    );
+
+    const claim = await t.mutation(api.externalReconciliations.claimNext, {
+      serviceToken: SERVICE_TOKEN,
+      workerId: "worker-B",
+      leaseToken: "lease-token-B",
+      now,
+      leaseMs: 30_000,
+    });
+    expect(claim).toBeNull();
+
+    const record = await t.run((ctx) =>
+      ctx.db
+        .query("externalReconciliations")
+        .withIndex("by_owner_and_reconciliation_id", (q) =>
+          q.eq("ownerId", OWNER_ID).eq("reconciliationId", "boundary-observing"),
+        )
+        .unique(),
+    );
+    expect(record?.state).toBe("observing");
+    expect(record?.escalationReason).toBeUndefined();
   });
 
   it("leaves a fresh observing record alone while its sender may still be running", async () => {
