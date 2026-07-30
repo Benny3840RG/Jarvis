@@ -1,3 +1,4 @@
+npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm.
 import { convexTest } from "convex-test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -134,7 +135,10 @@ describe("claimNext lease-expiry reclaim (worker-crash recovery)", () => {
   });
 });
 
-async function seedQuoteDelivery(ctx: MutationCtx, reconciliationId = "reconciliation-1") {
+async function seedQuoteDelivery(
+  ctx: MutationCtx,
+  reconciliationId = "reconciliation-1",
+) {
   return ctx.db.insert("quoteDeliveryAttempts", {
     ownerId: OWNER_ID,
     deliveryAttemptId: "delivery-attempt-1",
@@ -158,10 +162,13 @@ async function seedQuoteDelivery(ctx: MutationCtx, reconciliationId = "reconcili
   });
 }
 
-async function seedObservingReconciliation(ctx: MutationCtx, input: {
-  reconciliationId: string;
-  nextAttemptAt: number;
-}) {
+async function seedObservingReconciliation(
+  ctx: MutationCtx,
+  input: {
+    reconciliationId: string;
+    nextAttemptAt: number;
+  },
+) {
   return ctx.db.insert("externalReconciliations", {
     ownerId: OWNER_ID,
     reconciliationId: input.reconciliationId,
@@ -284,7 +291,9 @@ describe("observing-process crash recovery", () => {
         .unique(),
     );
     expect(record?.state).toBe("escalated");
-    expect(record?.escalationReason).toBe("abandoned-observing-process-interruption");
+    expect(record?.escalationReason).toBe(
+      "abandoned-observing-process-interruption",
+    );
     expect(record?.escalatedAt).toBe(now);
   });
 
@@ -319,4 +328,8 @@ describe("observing-process crash recovery", () => {
     expect(record?.escalationReason).toBeUndefined();
   });
 });
-
+npm notice
+npm notice New minor version of npm available! 11.9.0 -> 11.19.0
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.19.0
+npm notice To update run: npm install -g npm@11.19.0
+npm notice
