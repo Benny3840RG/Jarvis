@@ -245,10 +245,12 @@ export class ConvexExternalReconciliationStore
         );
   }
 
-  async listForOperator(input: {
-    state?: ExternalReconciliationRecord["state"];
-    limit?: number;
-  } = {}): Promise<ExternalReconciliationRecord[]> {
+  async listForOperator(
+    input: {
+      state?: ExternalReconciliationRecord["state"];
+      limit?: number;
+    } = {},
+  ): Promise<ExternalReconciliationRecord[]> {
     const rows = await this.client.query(externalReconciliationFunctions.listForOperator, {
       serviceToken: this.serviceToken,
       ...(input.state === undefined ? {} : { state: input.state }),
