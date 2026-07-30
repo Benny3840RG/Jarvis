@@ -241,11 +241,32 @@ inbox + activity concurrently), `src/mcp/server.ts` (`dashboardOutputSchema` ext
 
 ### Task 8: Documentation + review + PR
 
-- [ ] Update all affected docs (source-of-truth map, severity rules, timeline event meanings,
-      health-state meanings, privacy boundary, unavailable-vs-empty, unsupported telemetry, operator
-      recovery).
-- [ ] Independent exact-head review; repair any Critical/Important finding with a regression test.
-- [ ] Draft PR with full RED/GREEN evidence, six-line Copilot section, exact head SHA.
+- [x] `docs/operators/operations-inbox.md` (new): source-of-truth map, severity rules, timeline
+      event-type-whitelist meanings, integration-health evidence, privacy boundary,
+      unavailable-vs-empty, unsupported-vs-unavailable, operator recovery. `docs/operators/http-api.md`
+      updated to point to it and describe the new `integrations` status field.
+- [x] Independent exact-head review (subagent, read-only, full diff `7d7303a..36f2fca` plus a doc
+      cross-check) at head `36f2fca`. Findings and repairs, each with a regression test:
+      1. **Important** — the Operations Inbox HUD widget's item-list empty-state always rendered
+         "Nothing needs attention right now." even when a source was `unavailable`/`degraded` and zero
+         items came through, contradicting the documented honesty invariant (which cited this exact code
+         path as proof). Fixed by deriving the empty-list message from the same degraded-source check the
+         summary header already used; strengthened the regression test to assert on the item-list's own
+         content, not just the header.
+      2. **Minor** — the existing regression test for that invariant only checked the summary header, not
+         the item list, so it couldn't have caught (1). Fixed alongside it.
+      3. **Minor** — the operator doc listed `tool.action.execution-claimed` as an active event type;
+         nothing on `main` emits it yet (it belongs to the unmerged consent-lifecycle branch). Corrected
+         to "reserved, not yet emitted."
+      4. **Minor** — 5 of 7 active event-summarisers had no direct summary-string test. Added one test
+         covering all five, including the singular/plural record-count branch.
+      5. **Nit** — an earlier `json.dump` call (missing `ensure_ascii=False`) had re-serialized the whole
+         OpenAPI document, turning ~11 unrelated pre-existing em-dashes into `\uXXXX` escapes and adding
+         diff noise. Re-serialized with `ensure_ascii=False` to remove it.
+      Repair commit: `55be227`. Full `npm run check` green after every fix.
+- [x] PR #248 description updated with full RED/GREEN evidence, Copilot section, and the exact reviewed
+      head SHA (`55be227`) — see the PR body itself for the complete writeup; stays in draft awaiting
+      Benny's explicit review/merge decision.
 
 ## Actions that remain unavailable (unchanged by this slice)
 
