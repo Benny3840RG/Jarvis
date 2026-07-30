@@ -28,7 +28,9 @@ export type ToolExecutionErrorCode =
   | "provider-reference-missing"
   | "retry-blocked-pending-reconciliation"
   | "reconciliation-escalated"
-  | "reconciliation-unavailable";
+  | "reconciliation-unavailable"
+  | "approval-expired"
+  | "approval-consumed";
 
 export type ToolExecutionReceipt = {
   receiptId: string;
@@ -84,6 +86,16 @@ export type ToolExecutionDefinition = {
 export interface ToolExecutionReceiptStore {
   get(key: string): Promise<ToolExecutionReceipt | null>;
   save(key: string, receipt: ToolExecutionReceipt): Promise<void>;
+  /**
+   * Optional: a bounded lookup of every receipt recorded for one action,
+   * independent of idempotency key. Used only to enforce single-use
+   * consumption (R-050) against a *different* key than the one already
+   * checked by the primary get()-by-key replay path above — an
+   * implementation that omits this simply skips that specific enforcement,
+   * matching the optional-method pattern used elsewhere in this consent
+   * lifecycle (see `ToolActionService.revoke`).
+   */
+  listReceiptsForAction?(actionId: string): Promise<ToolExecutionReceipt[]>;
 }
 
 export class InMemoryToolExecutionReceiptStore implements ToolExecutionReceiptStore {
@@ -96,7 +108,17 @@ export class InMemoryToolExecutionReceiptStore implements ToolExecutionReceiptSt
   async save(key: string, receipt: ToolExecutionReceipt): Promise<void> {
     this.receipts.set(key, receipt);
   }
+
+  async listReceiptsForAction(actionId: string): Promise<ToolExecutionReceipt[]> {
+    return [...this.receipts.values()].filter((candidate) => candidate.actionId === actionId);
+  }
 }
+
+const COMPLETED_EXECUTION_STATUSES = new Set<ToolExecutionStatus>([
+  "succeeded",
+  "failed",
+  "indeterminate",
+]);
 
 const AUTHORITY_LEVEL: Record<ToolAuthority, number> = { T0: 0, T1: 1, T2: 2, T3: 3 };
 const MAX_TIMEOUT_MS = 30_000;
@@ -472,6 +494,50 @@ export class ToolExecutionService {
         key,
         receipt(input.action, input.idempotencyKey, "blocked", "not-authorized", startedAt, input),
       );
+    }
+    // isApprovalExpired is computed server-side by the caller's fetch of the
+    // action (never client-supplied), so this is a truthful, server-derived
+    // check — not a caller-controlled clock. Legacy/pre-consent-lifecycle
+    // rows never set this field, so it stays undefined (falsy) and
+    // unenforced for them, matching the additive migration's own rule that
+    // rows without an explicit classification are legacy/unenforced.
+    if (input.action.isApprovalExpired) {
+      return this.persistDecision(
+        key,
+        receipt(
+          input.action,
+          input.idempotencyKey,
+          "blocked",
+          "approval-expired",
+          startedAt,
+          input,
+        ),
+      );
+    }
+    if (!input.dryRun && input.action.consumptionPolicy === "single-use") {
+      // Reaching here means `key` itself has no receipt yet (the primary
+      // get()-by-key replay above already returned early otherwise), so any
+      // completed receipt found for this actionId at all must be under a
+      // *different* key — i.e. a genuine second consumption attempt, not a
+      // replay of the same request. Dry-run is exempt: it never consumes.
+      const priorReceipts =
+        (await this.receipts.listReceiptsForAction?.(input.action.actionId)) ?? [];
+      const alreadyConsumed = priorReceipts.some((candidate) =>
+        COMPLETED_EXECUTION_STATUSES.has(candidate.status),
+      );
+      if (alreadyConsumed) {
+        return this.persistDecision(
+          key,
+          receipt(
+            input.action,
+            input.idempotencyKey,
+            "blocked",
+            "approval-consumed",
+            startedAt,
+            input,
+          ),
+        );
+      }
     }
     if (!definition) {
       return this.persistDecision(

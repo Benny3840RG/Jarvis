@@ -20,6 +20,8 @@ export const toolExecutionErrorCodeValidator = v.union(
   v.literal("retry-blocked-pending-reconciliation"),
   v.literal("reconciliation-escalated"),
   v.literal("reconciliation-unavailable"),
+  v.literal("approval-expired"),
+  v.literal("approval-consumed"),
 );
 
 export const toolExecutionActorValidator = v.union(

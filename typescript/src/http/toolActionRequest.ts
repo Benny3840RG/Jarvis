@@ -203,6 +203,17 @@ export function parseToolActionRejectionReason(body: unknown): string {
   return requiredString(body.reason, "reason");
 }
 
+export function parseToolActionRevocation(body: unknown): {
+  reason: string;
+  approvalToken: string;
+} {
+  if (!isRecord(body)) throw new Error("Request body must be a JSON object.");
+  return {
+    reason: requiredString(body.reason, "reason"),
+    approvalToken: requiredString(body.approvalToken, "approvalToken"),
+  };
+}
+
 export function parseToolActionState(value: unknown): ToolActionState | undefined {
   if (value === undefined) return undefined;
   if (typeof value !== "string" || !ACTION_STATES.includes(value as ToolActionState)) {

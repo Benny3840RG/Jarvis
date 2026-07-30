@@ -231,3 +231,119 @@ describe("tool execution stage", () => {
     assert.deepEqual(replay, result);
   });
 });
+
+describe("consent-lifecycle execution enforcement (R-048/R-049/R-050)", () => {
+  function definition(executions: { count: number }) {
+    return {
+      tool: "clock",
+      operation: "read",
+      schema: z.object({ zone: z.string() }),
+      async execute() {
+        executions.count += 1;
+        return { now: "2026-07-18T00:00:00.000Z" };
+      },
+    };
+  }
+
+  it("blocks execution when the fetched action's approval has already expired", async () => {
+    const executions = { count: 0 };
+    const executor = new ToolExecutionService([definition(executions)]);
+
+    const result = await executor.execute({
+      action: { ...action, isApprovalExpired: true },
+      authority: "T1",
+      idempotencyKey: "expired-attempt",
+    });
+
+    assert.equal(result.status, "blocked");
+    assert.equal(result.errorCode, "approval-expired");
+    assert.equal(executions.count, 0);
+  });
+
+  it("still blocks a revoked action as not-authorized, never reaching the definition", async () => {
+    const executions = { count: 0 };
+    const executor = new ToolExecutionService([definition(executions)]);
+
+    const result = await executor.execute({
+      action: { ...action, state: "revoked", revokedBy: "user", revokedReason: "no longer needed" },
+      authority: "T1",
+      idempotencyKey: "revoked-attempt",
+    });
+
+    assert.equal(result.status, "blocked");
+    assert.equal(result.errorCode, "not-authorized");
+    assert.equal(executions.count, 0);
+  });
+
+  it("blocks a live re-execution of an already-consumed single-use action under a different key", async () => {
+    const executions = { count: 0 };
+    const receipts = new InMemoryToolExecutionReceiptStore();
+    const executor = new ToolExecutionService([definition(executions)], receipts);
+    const singleUse = { ...action, consumptionPolicy: "single-use" as const };
+
+    const first = await executor.execute({
+      action: singleUse,
+      authority: "T1",
+      idempotencyKey: "first-key",
+    });
+    assert.equal(first.status, "succeeded");
+    assert.equal(executions.count, 1);
+
+    const second = await executor.execute({
+      action: singleUse,
+      authority: "T1",
+      idempotencyKey: "second-key",
+    });
+
+    assert.equal(second.status, "blocked");
+    assert.equal(second.errorCode, "approval-consumed");
+    assert.equal(executions.count, 1, "the already-consumed action must not be executed again");
+  });
+
+  it("does not block a dry-run against an already-consumed single-use action", async () => {
+    const executions = { count: 0 };
+    const receipts = new InMemoryToolExecutionReceiptStore();
+    const executor = new ToolExecutionService([definition(executions)], receipts);
+    const singleUse = { ...action, consumptionPolicy: "single-use" as const };
+
+    await executor.execute({
+      action: singleUse,
+      authority: "T1",
+      idempotencyKey: "first-key",
+    });
+    assert.equal(executions.count, 1);
+
+    const dryRun = await executor.execute({
+      action: singleUse,
+      authority: "T1",
+      idempotencyKey: "dry-run-key",
+      dryRun: true,
+    });
+
+    assert.equal(dryRun.status, "dry-run");
+    assert.equal(dryRun.errorCode, undefined);
+    assert.equal(executions.count, 1, "dry-run must never invoke the definition");
+  });
+
+  it("allows a second live execution of a reusable (non-single-use) action under a different key", async () => {
+    const executions = { count: 0 };
+    const receipts = new InMemoryToolExecutionReceiptStore();
+    const executor = new ToolExecutionService([definition(executions)], receipts);
+    const reusable = { ...action, consumptionPolicy: "reusable" as const };
+
+    const first = await executor.execute({
+      action: reusable,
+      authority: "T1",
+      idempotencyKey: "first-key",
+    });
+    const second = await executor.execute({
+      action: reusable,
+      authority: "T1",
+      idempotencyKey: "second-key",
+    });
+
+    assert.equal(first.status, "succeeded");
+    assert.equal(second.status, "succeeded");
+    assert.equal(executions.count, 2);
+  });
+});

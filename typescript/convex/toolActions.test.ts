@@ -403,6 +403,61 @@ describe("revoke()", () => {
     ).rejects.toThrow(/cannot be revoked|not approved/i);
   });
 
+  it("refuses to revoke a single-use action that already has a completed execution receipt", async () => {
+    // This is the authoritative-winner proof for a revocation racing an
+    // execution: whichever terminal fact commits first wins. If the
+    // execution already produced a completed receipt (succeeded, failed, or
+    // indeterminate), the action is already consumed — revoke() must not
+    // silently accept a request that can no longer have any effect on an
+    // external side effect that may already have happened.
+    const t = harness();
+    const action = await stageAndReturn(t, { destructive: true, requiredAuthority: "T3" });
+    expect(action.consumptionPolicy).toBeUndefined();
+    const now = Date.now();
+    await t.mutation(api.toolActions.approve, {
+      serviceToken: SERVICE_TOKEN,
+      projectKey: PROJECT_KEY,
+      actionId: "action-1",
+      expectedRevision: 1,
+      now,
+    });
+    await t.run((ctx) =>
+      ctx.db.insert("toolExecutionReceipts", {
+        ownerId: OWNER_ID,
+        receiptKey: `${PROJECT_KEY}:action-1:live`,
+        receiptId: "receipt-1",
+        actionId: "action-1",
+        requestId: "request-1",
+        projectId: PROJECT_KEY,
+        idempotencyKey: "tool-action-execution:v1:live:already-executed",
+        actionFingerprint: "jarvis-action-fingerprint:v1:test",
+        tool: "notes",
+        operation: "create",
+        status: "succeeded",
+        startedAt: now,
+        completedAt: now,
+        createdAt: now,
+      }),
+    );
+
+    await expect(
+      t.mutation(api.toolActions.revoke, {
+        serviceToken: SERVICE_TOKEN,
+        projectKey: PROJECT_KEY,
+        actionId: "action-1",
+        reason: "Too late — already executed.",
+        now,
+      }),
+    ).rejects.toThrow(/already consumed/i);
+
+    const stillApproved = await t.query(api.toolActions.get, {
+      serviceToken: SERVICE_TOKEN,
+      projectKey: PROJECT_KEY,
+      actionId: "action-1",
+    });
+    expect(stillApproved?.state).toBe("approved");
+  });
+
   it("never deletes the action or its audit evidence", async () => {
     const t = harness();
     await stageAndReturn(t);

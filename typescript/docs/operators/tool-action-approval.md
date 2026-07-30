@@ -14,14 +14,42 @@ Quote send remains uncommissioned and is not exposed through MCP or the HUD.
 ```text
 proposed -> approved
          -> rejected
+approved -> revoked    (owner-initiated, before consumption)
+approved -> expired    (server-observed, lazily, on next mutation touch)
 ```
 
-There is deliberately no `executed` state on the `ToolAction` record itself. Approval records operator
-intent; it does not call a tool or mutate an external system. Execution is tracked separately, as an
-immutable receipt keyed by the approved action and a server-derived execution scope. Caller retry keys
-remain part of the HTTP compatibility contract but cannot create a new commercial execution scope.
-Repeated live attempts for one approved action replay the same receipt; dry-run and live execution use
-separate derived scopes. The proposal's own state does not change during execution.
+`rejected`, `expired`, and `revoked` are terminal — no transition leaves them. There is deliberately no
+`executed` state on the `ToolAction` record itself. Approval records operator intent; it does not call a
+tool or mutate an external system. Execution is tracked separately, as an immutable receipt keyed by the
+approved action and a server-derived execution scope. Caller retry keys remain part of the HTTP
+compatibility contract but cannot create a new commercial execution scope. Repeated live attempts for one
+approved action replay the same receipt; dry-run and live execution use separate derived scopes. The
+proposal's own state does not change during execution — except for the two consent-lifecycle transitions
+above, which are lazy and server-observed rather than execution outcomes.
+
+An approval carries an explicit `approvalExpiryPolicy: "ttl" | "non-expiring"` and, when `"ttl"`, an
+`approvalExpiresAt` timestamp. `non-expiring` is not currently caller-selectable. `now >= approvalExpiresAt`
+(the exact boundary instant counts as expired, not one more valid instant) is checked and persisted the next
+time any mutation touches the row — there is no scheduled sweep. `get`/`listRecent` queries cannot write, so
+they instead expose a computed, non-persisted `isApprovalExpired` view field for the same check. A
+caller-supplied clock value (`now`) is accepted only for test determinism and is never read from an HTTP
+request in production, so it can never extend or fabricate approval authority.
+
+Every approval also carries a `consumptionPolicy: "single-use" | "reusable"`, derived from the proposal's
+own `destructive` flag (destructive → single-use). `POST /execute` refuses a live (non-dry-run) execution
+of an already-consumed single-use action — where "consumed" means any prior completed receipt
+(`succeeded`, `failed`, or `indeterminate`) exists for that action, independent of idempotency key — with
+`errorCode: "approval-consumed"`. A dry-run is exempt: it never consumes and is never blocked by this
+check. `POST /execute` also refuses an action whose approval has already expired
+(`isApprovalExpired: true` at fetch time) with `errorCode: "approval-expired"`, even if the stored `state`
+still shows `"approved"` because nothing has yet persisted the lazy expiry transition.
+
+Revocation (`POST .../revoke`, see below) is owner-scoped, idempotent for a repeated identical reason, and
+prospective-only: it stops a future execution attempt and never claims to undo one already in flight. It
+refuses to revoke an action that has already produced a completed execution receipt — whichever terminal
+fact (execution completing, or revocation) is recorded first is authoritative; the loser gets a clear,
+non-destructive rejection, never a silent no-op. Neither `expired` nor `revoked` deletes the action or any
+audit evidence; both are recorded exactly like `approved`/`rejected` today.
 
 ## Proposal requirements
 
@@ -81,14 +109,21 @@ the service token — which an AI agent staging proposals necessarily does — i
 that a human decided to approve a specific one. If `JARVIS_APPROVAL_TOKEN` is not configured,
 `/approve` fails closed with a 503 rather than accepting any token.
 
-| Method | Path                                                           | Result                                          |
-| ------ | -------------------------------------------------------------- | ----------------------------------------------- |
-| POST   | `/api/v1/projects/{projectId}/tool-actions`                    | Stage a proposal                                |
-| GET    | `/api/v1/projects/{projectId}/tool-actions`                    | List recent proposals                           |
-| GET    | `/api/v1/projects/{projectId}/tool-actions/{actionId}`         | Inspect one proposal                            |
-| POST   | `/api/v1/projects/{projectId}/tool-actions/{actionId}/approve` | Approve after review (requires `approvalToken`) |
-| POST   | `/api/v1/projects/{projectId}/tool-actions/{actionId}/reject`  | Reject with a reason                            |
-| POST   | `/api/v1/projects/{projectId}/tool-actions/{actionId}/execute` | Attempt execution (see below)                   |
+| Method | Path                                                           | Result                                               |
+| ------ | -------------------------------------------------------------- | ---------------------------------------------------- |
+| POST   | `/api/v1/projects/{projectId}/tool-actions`                    | Stage a proposal                                     |
+| GET    | `/api/v1/projects/{projectId}/tool-actions`                    | List recent proposals                                |
+| GET    | `/api/v1/projects/{projectId}/tool-actions/{actionId}`         | Inspect one proposal                                 |
+| POST   | `/api/v1/projects/{projectId}/tool-actions/{actionId}/approve` | Approve after review (requires `approvalToken`)      |
+| POST   | `/api/v1/projects/{projectId}/tool-actions/{actionId}/reject`  | Reject with a reason                                 |
+| POST   | `/api/v1/projects/{projectId}/tool-actions/{actionId}/revoke`  | Revoke before consumption (requires `approvalToken`) |
+| POST   | `/api/v1/projects/{projectId}/tool-actions/{actionId}/execute` | Attempt execution (see below)                        |
+
+`POST .../revoke` requires the same `approvalToken` as `/approve` — the same human-only credential, not
+just the shared Bearer token. It is valid only from `approved`; repeating it with the same `reason` is a
+no-op, repeating it with a different `reason` fails. It rejects an action that has already produced a
+completed execution receipt with a state-conflict response, since the external effect (if any) may already
+have happened and revocation cannot retract it.
 
 ## Execution
 
@@ -119,6 +154,14 @@ that were previously listed as required before this stage could be built:
    approved live action with any caller key returns the original receipt byte-for-byte rather than
    executing again. A `dryRun: true` request validates everything and writes a durable decision/audit
    receipt under its own derived dry-run scope, so it cannot consume or mutate the live execution scope.
+   4a. **Consent-lifecycle enforcement** — before any of the above, `ToolExecutionService.execute()` also
+   checks the fetched action's consent-lifecycle fields: a lapsed approval (`isApprovalExpired: true`,
+   even if `state` still shows `"approved"` because nobody has yet persisted the lazy transition) is
+   blocked with `errorCode: "approval-expired"`; a live (non-dry-run) attempt against a `single-use`
+   action that already has a completed receipt under any key is blocked with `errorCode:
+ "approval-consumed"`. Dry-run is exempt from the consumption check. A `"revoked"` action is already
+   blocked by the ordinary state check above (`errorCode: "not-authorized"`), since revocation is
+   terminal and never re-reaches `"approved"`.
 5. **Bounded timeouts and redacted failures** — `timeoutMs` is clamped to 1–30000ms (default 5000ms).
    Failure receipts carry a fixed `errorCode` enum, never a raw error message or the tool's output.
 6. **Durable execution receipts** — receipts are stored in the `toolExecutionReceipts` Convex table,
@@ -137,8 +180,19 @@ Convex appends project-scoped audit events for:
 
 - `tool.action.proposed`;
 - `tool.action.approved`;
-- `tool.action.rejected`.
+- `tool.action.rejected`;
+- `tool.action.approval-expired`;
+- `tool.action.revoked`.
 
 Audit payloads contain identifiers and decision metadata, not service credentials. The service-token
 boundary remains server-side. Execution attempts are recorded as receipts (see above), not as
 `auditEvents` rows.
+
+## Operator recovery
+
+An `indeterminate` execution receipt (see the reconciliation hardening work) means the external side
+effect's outcome is not yet known — neither a proven success nor a proven failure. Revoking the governing
+`ToolAction` in that state does not retract the in-flight external attempt; reconciliation, not
+revocation, is what eventually resolves an indeterminate receipt to its true terminal outcome. Revoke a
+proposal to stop _future_ executions of it; consult the receipt and its reconciliation state, not the
+`ToolAction`'s own `state` field, to find out whether an external write actually happened.

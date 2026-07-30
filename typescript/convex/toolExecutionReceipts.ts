@@ -29,6 +29,24 @@ export const get = query({
   },
 });
 
+export const listByActionId = query({
+  args: { serviceToken: v.string(), actionId: v.string(), limit: v.optional(v.number()) },
+  returns: v.array(toolExecutionReceiptDocumentValidator),
+  handler: async (ctx, args) => {
+    const ownerId = requireOwner(args.serviceToken);
+    const actionId = cleanRequiredText(args.actionId, "Tool action ID");
+    const limit = args.limit ?? 20;
+    if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
+      throw new Error("Receipt list limit must be an integer between 1 and 100.");
+    }
+    return ctx.db
+      .query("toolExecutionReceipts")
+      .withIndex("by_owner_and_action_id", (q) => q.eq("ownerId", ownerId).eq("actionId", actionId))
+      .order("desc")
+      .take(limit);
+  },
+});
+
 export const save = mutation({
   args: {
     serviceToken: v.string(),
