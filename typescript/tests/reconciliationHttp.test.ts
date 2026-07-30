@@ -167,11 +167,7 @@ describe("reconciliation operator HTTP reads", () => {
       "leaseToken",
       "leaseExpiresAt",
     ]) {
-      assert.equal(
-        forbidden in body.data[0]!,
-        false,
-        `${forbidden} must not leave the server`,
-      );
+      assert.equal(forbidden in body.data[0]!, false, `${forbidden} must not leave the server`);
     }
   });
 
