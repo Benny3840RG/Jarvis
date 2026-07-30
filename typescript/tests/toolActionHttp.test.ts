@@ -520,7 +520,7 @@ describe("Tool action approval HTTP boundary", () => {
     assert.equal(body.errorCode, "not-allowlisted");
   });
 
-  it("forwards idempotencyKey and dryRun from the request body to the execution service", async () => {
+  it("derives one live execution key from the approved action regardless of caller retry keys", async () => {
     let executions = 0;
     const executionService = new ToolExecutionService([
       {
@@ -542,28 +542,30 @@ describe("Tool action approval HTTP boundary", () => {
       method: "POST",
       url: "/api/v1/projects/project-1/tool-actions/action-1/execute",
       headers: authHeaders(),
-      payload: { idempotencyKey: "exec-1", dryRun: true },
+      payload: { idempotencyKey: "caller-dry-run", dryRun: true },
     });
     assert.equal(dryRunResponse.json().status, "dry-run");
     assert.equal(executions, 0);
 
-    const realResponse = await app.inject({
+    const firstResponse = await app.inject({
       method: "POST",
       url: "/api/v1/projects/project-1/tool-actions/action-1/execute",
       headers: authHeaders(),
-      payload: { idempotencyKey: "exec-1" },
+      payload: { idempotencyKey: "caller-attempt-1" },
     });
-    assert.equal(realResponse.json().status, "succeeded");
+    assert.equal(firstResponse.json().status, "succeeded");
     assert.equal(executions, 1);
 
-    const replayResponse = await app.inject({
+    const retryResponse = await app.inject({
       method: "POST",
       url: "/api/v1/projects/project-1/tool-actions/action-1/execute",
       headers: authHeaders(),
-      payload: { idempotencyKey: "exec-1" },
+      payload: { idempotencyKey: "caller-attempt-2" },
     });
-    assert.deepEqual(replayResponse.json(), realResponse.json());
+    assert.deepEqual(retryResponse.json(), firstResponse.json());
     assert.equal(executions, 1);
+    assert.notEqual(firstResponse.json().idempotencyKey, "caller-attempt-1");
+    assert.notEqual(dryRunResponse.json().idempotencyKey, firstResponse.json().idempotencyKey);
   });
 
   it("rejects an execute request without an idempotencyKey before touching the service", async () => {
