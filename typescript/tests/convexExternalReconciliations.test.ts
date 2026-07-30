@@ -86,7 +86,10 @@ function receipt(): ToolExecutionReceipt {
   };
 }
 
-function clientWithReturns(returns: unknown[], calls: unknown[]): ConvexClientLike {
+function clientWithReturns(
+  returns: unknown[],
+  calls: unknown[],
+): ConvexClientLike {
   return {
     async query(_functionRef: unknown, args: unknown) {
       calls.push({ kind: "query", args });
@@ -103,7 +106,12 @@ describe("ConvexExternalReconciliationStore", () => {
   it("requires an authenticated service token", () => {
     const client = clientWithReturns([], []);
     assert.throws(
-      () => new ConvexExternalReconciliationStore(client, "", "dev:outgoing-ram-798"),
+      () =>
+        new ConvexExternalReconciliationStore(
+          client,
+          "",
+          "dev:outgoing-ram-798",
+        ),
       /requires JARVIS_SERVICE_TOKEN/,
     );
   });
@@ -112,7 +120,11 @@ describe("ConvexExternalReconciliationStore", () => {
     const calls: unknown[] = [];
     const client = clientWithReturns(
       [
-        reconciliationRow({ state: "observing", receiptKey: undefined, receiptId: undefined }),
+        reconciliationRow({
+          state: "observing",
+          receiptKey: undefined,
+          receiptId: undefined,
+        }),
         {
           reconciliation: reconciliationRow(),
           receipt: receiptRow(),
@@ -159,7 +171,10 @@ describe("ConvexExternalReconciliationStore", () => {
     });
 
     assert.equal(registered.state, "observing");
-    assert.equal(pending.receipt?.startedAt, new Date(NOW - 1_000).toISOString());
+    assert.equal(
+      pending.receipt?.startedAt,
+      new Date(NOW - 1_000).toISOString(),
+    );
     assert.deepEqual(calls, [
       {
         kind: "mutation",
@@ -230,7 +245,11 @@ describe("ConvexExternalReconciliationStore", () => {
           }),
           receipt: receiptRow(),
         },
-        receiptRow({ status: "succeeded", errorCode: undefined, outputDigest: "digest-1" }),
+        receiptRow({
+          status: "succeeded",
+          errorCode: undefined,
+          outputDigest: "digest-1",
+        }),
         reconciliationRow({
           state: "pending",
           attemptCount: 1,
@@ -319,7 +338,12 @@ describe("ConvexExternalReconciliationStore operator reads", () => {
     const calls: unknown[] = [];
     const client = clientWithReturns(
       [
-        [reconciliationRow({ state: "escalated", escalationReason: "operator-review" })],
+        [
+          reconciliationRow({
+            state: "escalated",
+            escalationReason: "operator-review",
+          }),
+        ],
         {
           reconciliation: reconciliationRow({
             state: "resolved",
@@ -337,7 +361,10 @@ describe("ConvexExternalReconciliationStore operator reads", () => {
       "dev:outgoing-ram-798",
     );
 
-    const listed = await store.listForOperator({ state: "escalated", limit: 25 });
+    const listed = await store.listForOperator({
+      state: "escalated",
+      limit: 25,
+    });
     const detail = await store.getForOperator("reconciliation-1");
 
     assert.equal(listed[0]?.state, "escalated");
