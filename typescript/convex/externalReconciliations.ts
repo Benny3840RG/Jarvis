@@ -244,7 +244,6 @@ export const getByScope = query({
   },
 });
 
-
 export const listForOperator = query({
   args: {
     serviceToken: v.string(),
