@@ -402,3 +402,125 @@ describe("observing-process crash recovery", () => {
     expect(record?.escalationReason).toBeUndefined();
   });
 });
+
+describe("operator reconciliation reads", () => {
+  it("lists only the authenticated owner's requested state with a bounded limit", async () => {
+    const t = harness();
+    const now = Date.now();
+    await t.run(async (ctx) => {
+      for (const [index, state] of ["escalated", "escalated", "resolved"] as const.entries()) {
+        await ctx.db.insert("externalReconciliations", {
+          ownerId: OWNER_ID,
+          reconciliationId: `operator-${index}`,
+          executionKey: `execution-${index}`,
+          actionId: `action-${index}`,
+          requestId: `request-${index}`,
+          projectId: "project-1",
+          idempotencyKey: `idempotency-${index}`,
+          actionFingerprint: `action-fingerprint-${index}`,
+          effectFingerprint: `effect-fingerprint-${index}`,
+          tool: "quotes",
+          operation: "send",
+          provider: "test-provider",
+          providerCorrelationId: `provider-correlation-${index}`,
+          state,
+          attemptCount: index,
+          nextAttemptAt: now + index,
+          createdAt: now + index,
+          updatedAt: now + index,
+          ...(state === "escalated"
+            ? { escalationReason: "operator-review-required", escalatedAt: now + index }
+            : {
+                terminalStatus: "succeeded" as const,
+                resolutionDigest: "digest",
+                resolvedAt: now + index,
+              }),
+        });
+      }
+      await ctx.db.insert("externalReconciliations", {
+        ownerId: "another-owner",
+        reconciliationId: "cross-owner-escalated",
+        executionKey: "cross-owner-execution",
+        actionId: "cross-owner-action",
+        requestId: "cross-owner-request",
+        projectId: "project-2",
+        idempotencyKey: "cross-owner-idempotency",
+        actionFingerprint: "cross-owner-action-fingerprint",
+        effectFingerprint: "cross-owner-effect-fingerprint",
+        tool: "quotes",
+        operation: "send",
+        provider: "test-provider",
+        providerCorrelationId: "cross-owner-correlation",
+        state: "escalated",
+        attemptCount: 1,
+        nextAttemptAt: now + 100,
+        escalationReason: "must-not-leak",
+        createdAt: now + 100,
+        updatedAt: now + 100,
+        escalatedAt: now + 100,
+      });
+    });
+
+    const rows = await t.query(api.externalReconciliations.listForOperator, {
+      serviceToken: SERVICE_TOKEN,
+      state: "escalated",
+      limit: 1,
+    });
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0].reconciliationId).toBe("operator-1");
+    expect(rows[0].ownerId).toBe(OWNER_ID);
+  });
+
+  it("returns the same null detail for absent and cross-owner records", async () => {
+    const t = harness();
+    const now = Date.now();
+    await t.run((ctx) =>
+      ctx.db.insert("externalReconciliations", {
+        ownerId: "another-owner",
+        reconciliationId: "cross-owner-record",
+        executionKey: "cross-owner-execution",
+        actionId: "cross-owner-action",
+        requestId: "cross-owner-request",
+        projectId: "project-2",
+        idempotencyKey: "cross-owner-idempotency",
+        actionFingerprint: "cross-owner-action-fingerprint",
+        effectFingerprint: "cross-owner-effect-fingerprint",
+        tool: "quotes",
+        operation: "send",
+        provider: "test-provider",
+        providerCorrelationId: "cross-owner-correlation",
+        state: "pending",
+        attemptCount: 0,
+        nextAttemptAt: now,
+        createdAt: now,
+        updatedAt: now,
+      }),
+    );
+
+    const [absent, crossOwner] = await Promise.all([
+      t.query(api.externalReconciliations.getForOperator, {
+        serviceToken: SERVICE_TOKEN,
+        reconciliationId: "absent-record",
+      }),
+      t.query(api.externalReconciliations.getForOperator, {
+        serviceToken: SERVICE_TOKEN,
+        reconciliationId: "cross-owner-record",
+      }),
+    ]);
+
+    expect(absent).toBeNull();
+    expect(crossOwner).toBeNull();
+  });
+
+  it("rejects operator list limits outside 1 through 100", async () => {
+    const t = harness();
+
+    await expect(
+      t.query(api.externalReconciliations.listForOperator, {
+        serviceToken: SERVICE_TOKEN,
+        limit: 101,
+      }),
+    ).rejects.toThrow("between 1 and 100");
+  });
+});
