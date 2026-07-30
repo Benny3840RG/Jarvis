@@ -110,6 +110,60 @@ describe("readActivityTimelinePage", () => {
     assert.equal(result.events[0]?.summary, "Tool action action-2 rejected: duplicate request.");
   });
 
+  it("summarises every remaining known event type correctly", async () => {
+    async function summaryFor(overrides: Partial<RawActivityEvent>): Promise<string> {
+      const reader: ActivityEventReader = {
+        async listActivityPage() {
+          return { events: [rawEvent(overrides)], continueCursor: "", isDone: true };
+        },
+      };
+      const result = await readActivityTimelinePage({ reader, cursor: null, limit: 10 });
+      assert.equal(result.status, "available");
+      if (result.status !== "available") throw new Error("unreachable");
+      return result.events[0]!.summary;
+    }
+
+    assert.equal(
+      await summaryFor({ eventType: "tool.action.approved", payload: { actionId: "action-9" } }),
+      "Tool action action-9 approved.",
+    );
+    assert.equal(
+      await summaryFor({
+        eventType: "memory.change_set.proposed",
+        payload: { changeSetId: "cs-1", recordCount: 1 },
+      }),
+      "Memory change set cs-1 proposed (1 record).",
+    );
+    assert.equal(
+      await summaryFor({
+        eventType: "memory.change_set.proposed",
+        payload: { changeSetId: "cs-2", recordCount: 3 },
+      }),
+      "Memory change set cs-2 proposed (3 records).",
+    );
+    assert.equal(
+      await summaryFor({
+        eventType: "memory.change_set.proposed",
+        payload: { changeSetId: "cs-3" },
+      }),
+      "Memory change set cs-3 proposed.",
+    );
+    assert.equal(
+      await summaryFor({
+        eventType: "memory.change_set.approved",
+        payload: { changeSetId: "cs-4" },
+      }),
+      "Memory change set cs-4 approved.",
+    );
+    assert.equal(
+      await summaryFor({
+        eventType: "memory.change_set.applied",
+        payload: { changeSetId: "cs-5" },
+      }),
+      "Memory change set cs-5 applied.",
+    );
+  });
+
   it("reports a read failure as unavailable with a reason, rather than an empty page", async () => {
     const reader: ActivityEventReader = {
       async listActivityPage() {

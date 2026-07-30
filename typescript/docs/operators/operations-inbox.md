@@ -64,16 +64,19 @@ Every event's `summary` is built from a fixed, per-`eventType` whitelist of know
 `SUMMARISERS` in `src/operations/activityTimeline.ts`) — never the event's raw payload. Today's whitelisted
 types:
 
-| `eventType`                     | Meaning                                                           |
-| ------------------------------- | ----------------------------------------------------------------- |
-| `tool.action.proposed`          | A governed tool action was staged for approval                    |
-| `tool.action.approved`          | An operator approved a staged tool action                         |
-| `tool.action.rejected`          | An operator rejected a staged tool action (reason included)       |
-| `tool.action.execution-claimed` | A single-use tool action's atomic execution claim was won         |
-| `memory.change_set.proposed`    | A memory change set was staged for approval                       |
-| `memory.change_set.approved`    | An operator approved a staged memory change set                   |
-| `memory.change_set.rejected`    | An operator rejected a staged memory change set (reason included) |
-| `memory.change_set.applied`     | An approved memory change set was written to durable memory       |
+| `eventType`                  | Meaning                                                           |
+| ---------------------------- | ----------------------------------------------------------------- |
+| `tool.action.proposed`       | A governed tool action was staged for approval                    |
+| `tool.action.approved`       | An operator approved a staged tool action                         |
+| `tool.action.rejected`       | An operator rejected a staged tool action (reason included)       |
+| `memory.change_set.proposed` | A memory change set was staged for approval                       |
+| `memory.change_set.approved` | An operator approved a staged memory change set                   |
+| `memory.change_set.rejected` | An operator rejected a staged memory change set (reason included) |
+| `memory.change_set.applied`  | An approved memory change set was written to durable memory       |
+
+`tool.action.execution-claimed` has a summariser reserved for it too, but nothing on `main` emits that
+event type yet — it belongs to the still-unmerged consent-lifecycle branch (PR #246). Once that branch
+lands and this timeline is rebased onto it, the entry starts working with no further change needed here.
 
 An event type outside this table — including any future one an emitter adds without updating the
 whitelist — falls back to a type-only summary (`"<eventType> event."`) rather than exposing its payload.

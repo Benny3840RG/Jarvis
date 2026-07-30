@@ -94,7 +94,7 @@ function extractSource(pattern: RegExp): string {
 
 describe("Operations inbox / activity timeline / integration health HUD wiring", () => {
   const inboxSource = extractSource(
-    /(function inboxSummaryLabel\(inbox\)[\s\S]*?function renderActivityTimeline\(\) \{[\s\S]*?\})\n\s+function renderCounts/,
+    /(function inboxHasDegradedSource\(inbox\)[\s\S]*?function renderActivityTimeline\(\) \{[\s\S]*?\})\n\s+function renderCounts/,
   );
 
   function runInboxRenderers(state: unknown, h: ReturnType<typeof harness>) {
@@ -180,6 +180,11 @@ describe("Operations inbox / activity timeline / integration health HUD wiring",
 
     const summary = h.registry.get("inbox-summary")?.textContent ?? "";
     assert.doesNotMatch(summary, /nothing needs attention/i);
+    // The item-list's own empty-state placeholder is a separate render path
+    // from the summary header — both must honour the same invariant.
+    const itemListMessage = h.registry.get("inbox-item-list")!.children[0]!.textContent;
+    assert.doesNotMatch(itemListMessage, /nothing needs attention/i);
+    assert.match(itemListMessage, /available sources/i);
   });
 
   it("renders inbox item text via textContent, never as parsed markup (hostile-text safety)", () => {

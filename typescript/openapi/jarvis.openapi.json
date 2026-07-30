@@ -3347,7 +3347,7 @@
       "get": {
         "operationId": "getOperationsInbox",
         "summary": "Get the read-only Operations Inbox",
-        "description": "Composes what genuinely needs the operator's attention now from existing authoritative sources (overdue reminders, overdue/due-soon maintenance; governed tool actions, reconciliation escalations, and quote-delivery problems are reported as a separately-commissioned source rather than fabricated). Each source reports its own availability \u2014 one source failing never fails this response or hides another source's items. Read-only: no source is mutated or retried from this endpoint.",
+        "description": "Composes what genuinely needs the operator's attention now from existing authoritative sources (overdue reminders, overdue/due-soon maintenance; governed tool actions, reconciliation escalations, and quote-delivery problems are reported as a separately-commissioned source rather than fabricated). Each source reports its own availability — one source failing never fails this response or hides another source's items. Read-only: no source is mutated or retried from this endpoint.",
         "tags": ["Operations"],
         "x-mcp-tool": {
           "exposed": true,
@@ -3680,7 +3680,7 @@
       "post": {
         "operationId": "createBuild",
         "summary": "Create a build",
-        "description": "Records one machine or project \u2014 the RC crawler, the trailer, a tool.",
+        "description": "Records one machine or project — the RC crawler, the trailer, a tool.",
         "tags": ["Builds"],
         "x-mcp-tool": {
           "exposed": true,
@@ -4053,7 +4053,7 @@
       "get": {
         "operationId": "listBuildLogs",
         "summary": "List build log entries",
-        "description": "Returns the dated lore attached to Benny's builds \u2014 origins, milestones, failures, anecdotes, notes.",
+        "description": "Returns the dated lore attached to Benny's builds — origins, milestones, failures, anecdotes, notes.",
         "tags": ["Build Log"],
         "x-mcp-tool": {
           "exposed": true,
@@ -4094,7 +4094,7 @@
       "post": {
         "operationId": "createBuildLog",
         "summary": "Record a build log entry",
-        "description": "Adds one dated entry to a build's story \u2014 why it started, a milestone, a failure, an anecdote, or a loose note.",
+        "description": "Adds one dated entry to a build's story — why it started, a milestone, a failure, an anecdote, or a loose note.",
         "tags": ["Build Log"],
         "x-mcp-tool": {
           "exposed": true,
@@ -4302,7 +4302,7 @@
       "get": {
         "operationId": "listUpgrades",
         "summary": "List upgrades",
-        "description": "Returns the upgrade chronicle \u2014 the changes made to Benny's builds over time.",
+        "description": "Returns the upgrade chronicle — the changes made to Benny's builds over time.",
         "tags": ["Upgrades"],
         "x-mcp-tool": {
           "exposed": true,
@@ -4343,7 +4343,7 @@
       "post": {
         "operationId": "createUpgrade",
         "summary": "Record an upgrade",
-        "description": "Records one change to a build \u2014 what was swapped or modified, why, the before/after, the outcome, and the parts involved.",
+        "description": "Records one change to a build — what was swapped or modified, why, the before/after, the outcome, and the parts involved.",
         "tags": ["Upgrades"],
         "x-mcp-tool": {
           "exposed": true,
@@ -4800,7 +4800,7 @@
       "get": {
         "operationId": "listPreferences",
         "summary": "List preferences",
-        "description": "Returns Benny's settings and standing choices \u2014 brands, tools, naming, defaults.",
+        "description": "Returns Benny's settings and standing choices — brands, tools, naming, defaults.",
         "tags": ["Preferences"],
         "x-mcp-tool": {
           "exposed": true,
@@ -5049,7 +5049,7 @@
       "get": {
         "operationId": "getOperationsActivity",
         "summary": "Get one bounded page of the read-only Operations Activity Timeline",
-        "description": "A bounded, cursor-paginated, owner-wide feed of durable audit events across every project scope, newest first. Unlike the Operations Inbox, this endpoint has exactly one source (the audit event log), so a read failure or an unconfigured deployment is reported as {status: \"unavailable\", reason} rather than as an empty page or a thrown error \u2014 an empty page always means \"no activity\", never \"the read failed\". Each event's summary is built only from a fixed, known-safe subset of its fields; an unrecognized event type falls back to a type-only summary rather than exposing its raw payload. Read-only: nothing is mutated from this endpoint.",
+        "description": "A bounded, cursor-paginated, owner-wide feed of durable audit events across every project scope, newest first. Unlike the Operations Inbox, this endpoint has exactly one source (the audit event log), so a read failure or an unconfigured deployment is reported as {status: \"unavailable\", reason} rather than as an empty page or a thrown error — an empty page always means \"no activity\", never \"the read failed\". Each event's summary is built only from a fixed, known-safe subset of its fields; an unrecognized event type falls back to a type-only summary rather than exposing its raw payload. Read-only: nothing is mutated from this endpoint.",
         "tags": ["Operations"],
         "x-mcp-tool": {
           "exposed": true,
@@ -8301,7 +8301,7 @@
           },
           "reason": {
             "type": "string",
-            "description": "Present when status is not \"available\" \u2014 a concrete, non-generic reason."
+            "description": "Present when status is not \"available\" — a concrete, non-generic reason."
           },
           "checkedAt": {
             "type": "string",
@@ -9414,7 +9414,7 @@
           "summary": {
             "type": "string",
             "minLength": 1,
-            "description": "A safe, factual summary built only from a fixed, known-safe subset of the source event's fields \u2014 never the raw event payload."
+            "description": "A safe, factual summary built only from a fixed, known-safe subset of the source event's fields — never the raw event payload."
           },
           "projectKey": {
             "type": "string",
@@ -9497,7 +9497,7 @@
           },
           "reason": {
             "type": "string",
-            "description": "Present when status is \"not-commissioned\" \u2014 a concrete, non-generic reason."
+            "description": "Present when status is \"not-commissioned\" — a concrete, non-generic reason."
           }
         }
       }
