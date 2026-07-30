@@ -121,6 +121,16 @@ export type CompleteExternalAttemptInput = ExternalExecutionScope & {
   receipt: ToolExecutionReceipt;
 };
 
+export type ExternalReconciliationListInput = {
+  state?: ExternalReconciliationRecord["state"];
+  limit?: number;
+};
+
+export interface ExternalReconciliationReadStore {
+  listForOperator(input?: ExternalReconciliationListInput): Promise<ExternalReconciliationRecord[]>;
+  getForOperator(reconciliationId: string): Promise<ExternalReconciliationEnvelope | null>;
+}
+
 export interface ExternalReconciliationStore {
   getByScope(scope: ExternalExecutionScope): Promise<ExternalReconciliationEnvelope | null>;
   registerAttempt(input: RegisterExternalAttemptInput): Promise<ExternalReconciliationRecord>;
