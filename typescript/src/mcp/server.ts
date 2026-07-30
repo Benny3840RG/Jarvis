@@ -290,6 +290,67 @@ const briefSchema = z.object({
   }),
 });
 
+// Read-only. Mirrors OperationsInbox exactly; no schema here ever represents
+// dismissing, acknowledging, resolving, approving, revoking, or executing.
+const inboxSourceReportSchema = z.object({
+  source: z.enum(["reminders", "maintenance", "toolActions", "reconciliation", "quoteDelivery"]),
+  status: z.enum(["available", "unavailable", "degraded", "unsupported"]),
+  reason: z.string().optional(),
+  checkedAt: z.string(),
+});
+
+const inboxItemSchema = z.object({
+  itemId: z.string(),
+  kind: z.enum(["reminder-overdue", "maintenance-overdue", "maintenance-due-soon"]),
+  severity: z.enum(["critical", "high", "elevated", "normal", "informational"]),
+  title: z.string(),
+  explanation: z.string(),
+  sourceSubsystem: z.enum([
+    "reminders",
+    "maintenance",
+    "toolActions",
+    "reconciliation",
+    "quoteDelivery",
+  ]),
+  sourceRecordId: z.string(),
+  createdAt: z.string(),
+  dueAt: z.string().optional(),
+  updatedAt: z.string(),
+  status: z.string(),
+  actionRequired: z.boolean(),
+});
+
+const operationsInboxSchema = z.object({
+  generatedAt: z.string(),
+  items: z.array(inboxItemSchema),
+  sources: z.array(inboxSourceReportSchema),
+});
+
+// Read-only. Every summary is built server-side from a fixed per-event-type
+// whitelist of known-safe fields — never the raw event payload — so this
+// schema never needs (and must never gain) a raw `payload` passthrough field.
+const activityEventSchema = z.object({
+  activityId: z.string(),
+  occurredAt: z.string(),
+  eventType: z.string(),
+  actor: z.enum(["user", "agent", "tool"]),
+  summary: z.string(),
+  projectKey: z.string().optional(),
+});
+
+const activityTimelineResultSchema = z.discriminatedUnion("status", [
+  z.object({
+    status: z.literal("available"),
+    events: z.array(activityEventSchema),
+    cursor: z.string(),
+    isDone: z.boolean(),
+  }),
+  z.object({
+    status: z.literal("unavailable"),
+    reason: z.string(),
+  }),
+]);
+
 const layerSchema = z.object({
   status: z.enum(["ready", "partial", "inactive", "blocked"]),
   reason: z.string().optional(),
@@ -316,6 +377,13 @@ const statusSchema = z.object({
     lastCycleProcessed: z.number().int().nonnegative().optional(),
     lastErrorCode: z.string().optional(),
   }),
+  integrations: z.array(
+    z.object({
+      name: z.string(),
+      status: z.enum(["commissioned", "not-commissioned"]),
+      reason: z.string().optional(),
+    }),
+  ),
   timezone: z.string(),
   layers: z.object({
     runtime: layerSchema,
@@ -346,6 +414,11 @@ const dashboardOutputSchema = {
     status: z.enum(["ready", "unavailable"]),
     quotes: z.array(quoteSummarySchema),
   }),
+  // `null` means the inbox/activity endpoint itself could not be reached —
+  // distinct from an empty inbox, or from activity's own `{status:
+  // "unavailable"}` — and must never be rendered as "nothing needs attention".
+  inbox: operationsInboxSchema.nullable(),
+  activity: activityTimelineResultSchema.nullable(),
   counts: countsSchema,
 };
 
@@ -1244,6 +1317,74 @@ export function createJarvisMcpServer(client: JarvisApiClient): McpServer {
         return {
           content: [{ type: "text" as const, text: brief.headline }],
           structuredContent: { brief },
+        };
+      } catch (error: unknown) {
+        return safeError(error);
+      }
+    },
+  );
+
+  registerAppTool(
+    server,
+    "get_operations_inbox",
+    {
+      title: "Get the operations inbox",
+      description:
+        "Use this when Benny asks what needs his attention right now, or what's urgent. Read-only, owner-scoped digest of overdue reminders and overdue/due-soon maintenance, each backed by real records. Cannot dismiss, acknowledge, resolve, approve, revoke, or execute anything — inspection only. Sources not yet wired (governed tool-action approvals, reconciliation escalations, quote-delivery problems) are reported as unsupported, never silently empty.",
+      inputSchema: {},
+      outputSchema: { inbox: operationsInboxSchema },
+      annotations: readAnnotations,
+      _meta: { ui: { visibility: ["model"] } },
+    },
+    async () => {
+      try {
+        const inbox = await client.getOperationsInbox();
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: `${inbox.items.length} item${inbox.items.length === 1 ? "" : "s"} in the operations inbox.`,
+            },
+          ],
+          structuredContent: { inbox },
+        };
+      } catch (error: unknown) {
+        return safeError(error);
+      }
+    },
+  );
+
+  registerAppTool(
+    server,
+    "list_activity",
+    {
+      title: "List recent operations activity",
+      description:
+        "Use this when Benny asks what's happened recently, or wants a history of governed-action and memory-change-set decisions. Bounded, cursor-paginated, owner-wide feed of durable audit events, newest first. Each entry's summary is built only from a fixed, known-safe subset of its fields — never raw event data. Read-only: nothing is mutated, and a read failure or unconfigured deployment is reported as unavailable rather than an empty page.",
+      inputSchema: {
+        cursor: z.string().optional().describe("Opaque pagination cursor from a previous page."),
+        limit: z
+          .number()
+          .int()
+          .min(1)
+          .max(100)
+          .optional()
+          .describe("Maximum events to return (default 50)."),
+      },
+      outputSchema: { activity: activityTimelineResultSchema },
+      annotations: readAnnotations,
+      _meta: { ui: { visibility: ["model"] } },
+    },
+    async ({ cursor, limit }) => {
+      try {
+        const activity = await client.getOperationsActivity({ cursor, limit });
+        const summary =
+          activity.status === "available"
+            ? `${activity.events.length} activity event${activity.events.length === 1 ? "" : "s"}.`
+            : `Activity timeline unavailable: ${activity.reason}`;
+        return {
+          content: [{ type: "text" as const, text: summary }],
+          structuredContent: { activity },
         };
       } catch (error: unknown) {
         return safeError(error);

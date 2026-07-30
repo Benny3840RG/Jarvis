@@ -23,6 +23,7 @@ const STATUS: SystemStatus = {
     deploymentVersion: "dev:outgoing-ram-798",
   },
   reconciliation: { state: "disabled", enabled: false },
+  integrations: [],
   timezone: "Australia/Melbourne",
   layers: {
     runtime: { status: "ready" },
@@ -207,6 +208,8 @@ describe("Jarvis MCP preview protocol", () => {
         ],
         brief: BRIEF,
         quoteRegister: { status: "ready", quotes: [] },
+        inbox: null,
+        activity: null,
         counts: {
           activeTasks: 1,
           completedTasks: 0,

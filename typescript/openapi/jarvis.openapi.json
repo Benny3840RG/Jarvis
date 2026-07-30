@@ -3343,6 +3343,49 @@
         }
       }
     },
+    "/api/v1/operations/inbox": {
+      "get": {
+        "operationId": "getOperationsInbox",
+        "summary": "Get the read-only Operations Inbox",
+        "description": "Composes what genuinely needs the operator's attention now from existing authoritative sources (overdue reminders, overdue/due-soon maintenance; governed tool actions, reconciliation escalations, and quote-delivery problems are reported as a separately-commissioned source rather than fabricated). Each source reports its own availability — one source failing never fails this response or hides another source's items. Read-only: no source is mutated or retried from this endpoint.",
+        "tags": ["Operations"],
+        "x-mcp-tool": {
+          "exposed": true,
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Current Operations Inbox.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperationsInboxResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
     "/api/v1/errands": {
       "get": {
         "operationId": "listErrands",
@@ -5001,6 +5044,69 @@
           }
         }
       }
+    },
+    "/api/v1/operations/activity": {
+      "get": {
+        "operationId": "getOperationsActivity",
+        "summary": "Get one bounded page of the read-only Operations Activity Timeline",
+        "description": "A bounded, cursor-paginated, owner-wide feed of durable audit events across every project scope, newest first. Unlike the Operations Inbox, this endpoint has exactly one source (the audit event log), so a read failure or an unconfigured deployment is reported as {status: \"unavailable\", reason} rather than as an empty page or a thrown error — an empty page always means \"no activity\", never \"the read failed\". Each event's summary is built only from a fixed, known-safe subset of its fields; an unrecognized event type falls back to a type-only summary rather than exposing its raw payload. Read-only: nothing is mutated from this endpoint.",
+        "tags": ["Operations"],
+        "x-mcp-tool": {
+          "exposed": true,
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 50
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "One page of the Operations Activity Timeline.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActivityTimelineResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -5319,6 +5425,7 @@
           "sourceVersion",
           "provider",
           "reconciliation",
+          "integrations",
           "timezone",
           "layers",
           "zState",
@@ -5345,6 +5452,12 @@
           },
           "reconciliation": {
             "$ref": "#/components/schemas/ReconciliationStatus"
+          },
+          "integrations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/IntegrationStatus"
+            }
           },
           "timezone": {
             "type": "string",
@@ -8173,6 +8286,128 @@
           }
         }
       },
+      "InboxSourceReport": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["source", "status", "checkedAt"],
+        "properties": {
+          "source": {
+            "type": "string",
+            "enum": ["reminders", "maintenance", "toolActions", "reconciliation", "quoteDelivery"]
+          },
+          "status": {
+            "type": "string",
+            "enum": ["available", "unavailable", "degraded", "unsupported"]
+          },
+          "reason": {
+            "type": "string",
+            "description": "Present when status is not \"available\" — a concrete, non-generic reason."
+          },
+          "checkedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "InboxItem": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "itemId",
+          "kind",
+          "severity",
+          "title",
+          "explanation",
+          "sourceSubsystem",
+          "sourceRecordId",
+          "createdAt",
+          "updatedAt",
+          "status",
+          "actionRequired"
+        ],
+        "properties": {
+          "itemId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "kind": {
+            "type": "string",
+            "enum": ["reminder-overdue", "maintenance-overdue", "maintenance-due-soon"]
+          },
+          "severity": {
+            "type": "string",
+            "enum": ["critical", "high", "elevated", "normal", "informational"]
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "explanation": {
+            "type": "string",
+            "minLength": 1
+          },
+          "sourceSubsystem": {
+            "type": "string",
+            "enum": ["reminders", "maintenance", "toolActions", "reconciliation", "quoteDelivery"]
+          },
+          "sourceRecordId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "dueAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "status": {
+            "type": "string",
+            "minLength": 1
+          },
+          "actionRequired": {
+            "type": "boolean"
+          }
+        }
+      },
+      "OperationsInbox": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["generatedAt", "items", "sources"],
+        "properties": {
+          "generatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InboxItem"
+            }
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InboxSourceReport"
+            }
+          }
+        }
+      },
+      "OperationsInboxResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["data"],
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/OperationsInbox"
+          }
+        }
+      },
       "Errand": {
         "type": "object",
         "additionalProperties": false,
@@ -9152,6 +9387,117 @@
             "type": ["string", "null"],
             "minLength": 1,
             "maxLength": 100
+          }
+        }
+      },
+      "ActivityEvent": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["activityId", "occurredAt", "eventType", "actor", "summary"],
+        "properties": {
+          "activityId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "occurredAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "eventType": {
+            "type": "string",
+            "minLength": 1
+          },
+          "actor": {
+            "type": "string",
+            "enum": ["user", "agent", "tool"]
+          },
+          "summary": {
+            "type": "string",
+            "minLength": 1,
+            "description": "A safe, factual summary built only from a fixed, known-safe subset of the source event's fields — never the raw event payload."
+          },
+          "projectKey": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Omitted when the source event was recorded without a project scope."
+          }
+        }
+      },
+      "ActivityTimelineAvailable": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["status", "events", "cursor", "isDone"],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": ["available"]
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ActivityEvent"
+            }
+          },
+          "cursor": {
+            "type": "string",
+            "description": "Opaque cursor for the next page; pass back as the `cursor` query parameter."
+          },
+          "isDone": {
+            "type": "boolean"
+          }
+        }
+      },
+      "ActivityTimelineUnavailable": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["status", "reason"],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": ["unavailable"]
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "ActivityTimelineResult": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/ActivityTimelineAvailable"
+          },
+          {
+            "$ref": "#/components/schemas/ActivityTimelineUnavailable"
+          }
+        ]
+      },
+      "ActivityTimelineResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["data"],
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ActivityTimelineResult"
+          }
+        }
+      },
+      "IntegrationStatus": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "status"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "status": {
+            "type": "string",
+            "enum": ["commissioned", "not-commissioned"]
+          },
+          "reason": {
+            "type": "string",
+            "description": "Present when status is \"not-commissioned\" — a concrete, non-generic reason."
           }
         }
       }

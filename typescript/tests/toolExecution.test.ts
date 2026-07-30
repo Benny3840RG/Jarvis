@@ -57,6 +57,22 @@ describe("tool execution stage", () => {
     assert.equal(executions, 0);
   });
 
+  it("reports whether a tool:operation definition is registered", async () => {
+    const executor = new ToolExecutionService([
+      {
+        tool: "clock",
+        operation: "read",
+        schema: z.object({ zone: z.string() }),
+        async execute() {
+          return { now: "2026-07-18T00:00:00.000Z" };
+        },
+      },
+    ]);
+    assert.equal(executor.isRegistered("clock", "read"), true);
+    assert.equal(executor.isRegistered("clock", "write"), false);
+    assert.equal(executor.isRegistered("quotes", "send"), false);
+  });
+
   it("supports dry-run and replay-safe receipts", async () => {
     let executions = 0;
     const executor = new ToolExecutionService([

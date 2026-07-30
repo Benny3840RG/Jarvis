@@ -22,6 +22,8 @@ const DASHBOARD_READS = new Set([
   "GET /api/v1/reminders",
   "GET /api/v1/brief",
   "GET /api/v1/quotes",
+  "GET /api/v1/operations/inbox",
+  "GET /api/v1/operations/activity",
 ]);
 
 const STATUS: SystemStatus = {
@@ -36,6 +38,7 @@ const STATUS: SystemStatus = {
     deploymentVersion: "dev:outgoing-ram-798",
   },
   reconciliation: { state: "disabled", enabled: false },
+  integrations: [],
   timezone: "Australia/Melbourne",
   layers: {
     runtime: { status: "ready" },
