@@ -563,7 +563,7 @@ export const claimNext = mutation({
         q
           .eq("ownerId", ownerId)
           .eq("state", "observing")
-          .lte("nextAttemptAt", args.now - OBSERVING_RECOVERY_MS),
+          .lt("nextAttemptAt", args.now - OBSERVING_RECOVERY_MS),
       )
       .first();
     if (abandonedObservation) {
@@ -650,6 +650,10 @@ export const resolveClaim = mutation({
     const receipt = await findReceipt(ctx, ownerId, reconciliation.receiptKey);
     if (!receipt) throw new Error("Authoritative reconciliation receipt was not found.");
 
+    const providerErrorCode =
+      args.result.status === "failed"
+        ? cleanRequiredText(args.result.errorCode, "Provider reconciliation error code")
+        : undefined;
     const quoteDelivery = await ctx.db
       .query("quoteDeliveryAttempts")
       .withIndex("by_owner_and_reconciliation_id", (q) =>
@@ -657,7 +661,10 @@ export const resolveClaim = mutation({
       )
       .unique();
     if (quoteDelivery?.status === "reconciled") {
-      if (quoteDelivery.reconciledOutcome !== args.result.status) {
+      const outcomeConflicts = quoteDelivery.reconciledOutcome !== args.result.status;
+      const providerErrorConflicts =
+        quoteDelivery.providerErrorCode !== providerErrorCode;
+      if (outcomeConflicts || providerErrorConflicts) {
         throw new Error(
           "Quote delivery reconciliation outcome conflicts with the provider result.",
         );
@@ -722,10 +729,7 @@ export const resolveClaim = mutation({
         reconciledOutcome: args.result.status,
         ...(args.result.status === "failed"
           ? {
-              providerErrorCode: cleanRequiredText(
-                args.result.errorCode,
-                "Provider reconciliation error code",
-              ),
+              providerErrorCode: providerErrorCode!,
             }
           : {}),
         reconciledAt: args.now,
