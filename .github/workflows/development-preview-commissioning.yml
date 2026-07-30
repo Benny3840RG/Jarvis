@@ -5,6 +5,7 @@ on:
     branches:
       - main
     paths:
+      - typescript/convex/**
       - typescript/src/mcp/**
       - typescript/src/preview/**
       - typescript/src/tools/runMcpSmoke.ts
@@ -31,7 +32,7 @@ jobs:
   commission-preview:
     name: Commission controlled development preview
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
     env:
       CONVEX_DEPLOYMENT: dev:outgoing-ram-798
       CONVEX_URL: https://outgoing-ram-798.convex.cloud
@@ -46,6 +47,7 @@ jobs:
       JARVIS_DEPLOYMENT_VERSION: dev:outgoing-ram-798
       JARVIS_SERVICE_TOKEN: ${{ secrets.JARVIS_SERVICE_TOKEN }}
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
 
     defaults:
       run:
@@ -82,7 +84,7 @@ jobs:
             exit 1
           fi
 
-          for variable in JARVIS_SERVICE_TOKEN OPENAI_API_KEY; do
+          for variable in JARVIS_SERVICE_TOKEN OPENAI_API_KEY CONVEX_DEPLOY_KEY; do
             if [[ -z "${!variable:-}" ]]; then
               echo "::error::Required repository secret $variable is unavailable."
               exit 1
@@ -107,9 +109,26 @@ jobs:
             -u PERSISTENCE_PROVIDER \
             -u JARVIS_SOURCE_VERSION \
             -u JARVIS_DEPLOYMENT_VERSION \
+            -u CONVEX_DEPLOY_KEY \
             -u JARVIS_SERVICE_TOKEN \
             -u OPENAI_API_KEY \
             npm run check
+
+      - name: Sync Convex functions to authorised development deployment
+        run: |
+          set -euo pipefail
+
+          sync_log="$RUNNER_TEMP/convex-preview-sync.log"
+
+          set +e
+          npx convex dev --once --tail-logs disable 2>&1 | tee "$sync_log"
+          sync_status=${PIPESTATUS[0]}
+          set -e
+
+          if [[ "$sync_status" -ne 0 ]]; then
+            echo "::error::Convex function sync failed — see log above."
+            exit "$sync_status"
+          fi
 
       - name: Start preview and run self-cleaning MCP smoke
         run: |
