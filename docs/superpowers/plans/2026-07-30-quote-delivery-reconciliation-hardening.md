@@ -145,7 +145,7 @@ Commit message: `fix(reconciliation): project terminal quote delivery outcome`
 
 - [ ] **Step 1: Write the failing recovery regressions**
 
-Seed one `observing` record with `nextAttemptAt <= now - 60_000` and one fresh record. Call `claimNext`. Assert the stale row is escalated and returns no claim; assert the fresh row remains `observing`.
+Seed one `observing` record with `nextAttemptAt < now - 60_000` and one fresh record; equality at exactly 60 seconds remains safe. Call `claimNext`. Assert the stale row is escalated and returns no claim; assert the fresh row remains `observing`.
 
 Production change that must make this test fail: omitting the stale-observing query or using `args.now` without the 60-second bound.
 
