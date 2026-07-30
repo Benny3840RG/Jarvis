@@ -178,3 +178,110 @@ classification.
   "approval-expired"` / `"approval-consumed"` before attempting execution.
 - Consolidate this doc's content into `docs/operators/tool-action-approval.md` once
   PR #245's own doc edits have landed, to avoid a doc-merge conflict now.
+
+## Phase 2 (shipped in this slice): read-only inspection surfaces
+
+- **MCP:** two new read-only tools, `list_tool_actions` and `get_tool_action`, mirroring
+  the existing `list_quotes`/`get_quote` template exactly (`readAnnotations`,
+  `registerAppTool`, an `operationContract.ts` entry). Both are asserted, in
+  `tests/mcpToolActionInspection.test.ts`, to be `readOnlyHint: true`,
+  `destructiveHint: false`, and that no MCP tool matching
+  `/^(approve|revoke|reject|execute)_tool_action$|^execute$/` or
+  `/^finalize_quote|^send_quote/` exists anywhere in the catalogue. `x-mcp-tool.exposed`
+  flipped `false -> true` for these two OpenAPI operations only (not `approveToolAction`,
+  which stays `false`).
+- **HUD:** a new "GOVERNED ACTIONS" panel in Console 01 (`jarvis-console-01`), reusing
+  its existing fixed-namespace precedent (`NOTES_PROJECT_ID`, since Console 01 has no
+  project-selection UI) and existing panel styling. It is a bounded (`limit:
+  request.pageSize`), read-only, recent-first snapshot from `toolActions.listRecent` —
+  no cursor pagination exists for tool actions yet, so it is not presented as a complete
+  register. It shows tool/operation, state, required authority, and — for `approved` —
+  the exact expiry timestamp or a truthful `isApprovalExpired`/`revokedReason` string.
+  **No approve, revoke, reject, or execute control is rendered**, per the mission's
+  explicit instruction not to add approval controls until the execute()-time
+  expiry/consumption enforcement (still deferred above) is actually wired in. Degraded
+  state (`status: "degraded"`) shows an empty list, never a fabricated one.
+
+## Phase 3: documentation corrections
+
+Repo-wide search for stale ToolAction-lifecycle claims (state machine, expiry,
+revocation, audit trail, MCP/HTTP surface, "actions that remain unavailable") found
+exactly one file with content this slice makes inaccurate:
+`typescript/docs/operators/tool-action-approval.md`. It is untouched in this PR because
+PR #245's own Task 4 is concurrently editing it (per its plan and its PR description's
+"Documentation" line); editing it now would conflict with in-flight work on a shared
+file. `docs/registries/tool-registry.yaml` was also checked — it documents
+tool/operation-to-implementation bindings (authority tiers, execution definitions), not
+the `ToolAction` consent state machine, so nothing in it is made stale by this slice.
+No other `.md`/`.yaml` file in the repo asserts a specific `ToolAction` state count,
+expiry behavior, or revocation semantics.
+
+The exact corrections to apply to `tool-action-approval.md`, once PR #245 lands and this
+branch is rebased onto the resulting `main`, are:
+
+1. **State machine section** — replace:
+
+   ```text
+   proposed -> approved
+            -> rejected
+   ```
+
+   with:
+
+   ```text
+   proposed -> approved
+            -> rejected
+   approved -> revoked    (owner-initiated, before consumption)
+   approved -> expired    (server-observed, lazily, on next mutation touch)
+   ```
+
+   and add one paragraph: *"`rejected`, `expired`, and `revoked` are terminal — no
+   transition leaves them. An approval carries an explicit
+   `approvalExpiryPolicy: "ttl" | "non-expiring"` and, when `"ttl"`, an
+   `approvalExpiresAt` timestamp; `now >= approvalExpiresAt` (the boundary itself counts
+   as expired) is checked and persisted the next time any mutation touches the row —
+   there is no scheduled sweep. A caller-supplied clock value is accepted only for test
+   determinism and is never read from an HTTP request in production, so it can never
+   extend or fabricate approval authority. Revocation is owner-scoped, idempotent for a
+   repeated identical reason, and prospective-only: it stops a future execution attempt
+   and never claims to undo one already in flight — see Execution below for how a
+   revocation racing a live execution resolves. Neither transition deletes the action or
+   any audit evidence; both are recorded exactly like `approved`/`rejected` today."*
+
+2. **Audit evidence section** — the bullet list currently reads
+   `tool.action.proposed` / `.approved` / `.rejected`; add
+   `tool.action.approval-expired` and `tool.action.revoked` to it.
+
+3. **New "Consumption" note** (wherever the doc discusses `destructive`) — *"Every
+   approval also carries a `consumptionPolicy: "single-use" | "reusable"`, derived from
+   the proposal's own `destructive` flag (destructive -> single-use). Enforcement that
+   blocks a second execution of an already-consumed single-use action independent of
+   idempotency key lands with the execute()-time check described in the deferred
+   follow-up below; until then this field is recorded but not yet enforced at
+   execution time."*
+
+4. **HTTP operations table** — once the deferred `POST .../tool-actions/{actionId}/revoke`
+   route ships, add it as a row, gated by the same `approvalToken` as `/approve`, and
+   note that revoking an action whose execution has already produced a completed
+   receipt (`succeeded`/`failed`/`indeterminate`) is rejected rather than silently
+   accepted (see "already consumed" in `revoke()`'s Convex-side check).
+
+5. **Operator recovery note** (new, short paragraph) — *"An `indeterminate` execution
+   receipt (see PR #245's reconciliation hardening) means the external side effect's
+   outcome is not yet known — it is neither a proven success nor a proven failure.
+   Revoking the governing `ToolAction` in that state does not retract the in-flight
+   external attempt; reconciliation (not revocation) is the mechanism that eventually
+   resolves an indeterminate receipt to its true terminal outcome. An operator who wants
+   to stop *future* executions of the same proposal should revoke it; an operator asking
+   'did the external write actually happen' should consult the receipt and its
+   reconciliation state, not the `ToolAction`'s own `state` field."*
+
+## Actions that remain unavailable (unchanged by this slice)
+
+Customer quote email sending; quote finalisation through MCP or HUD; accepted/rejected
+commercial-outcome changes; unrestricted generic `ToolAction` execution; production
+deployment; live Outlook commissioning; credential creation/rotation; destructive record
+deletion; automatic merging without exact-head human approval; fabricated telemetry.
+This slice adds no new capability to any of these — it only makes existing `approved`
+authority expire and become revocable, and makes that state inspectable read-only
+through MCP and the Console 01 HUD.
