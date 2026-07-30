@@ -5,7 +5,12 @@ and what evidence supports it," plus a durable activity timeline and evidence-ba
 wired into the existing command-centre HUD. See the companion design doc:
 `docs/superpowers/specs/2026-07-30-operations-inbox-read-model-design.md`.
 
-**Status: Phase 1 (this document) only. Implementation is blocked — see below — and has not started.**
+**Status: Tasks 1–7 complete (this branch, `agent/operations-inbox-read-model`, PR #248). Read-only
+Operations Inbox, Activity Timeline, integration-health line item, MCP tools, and HUD wiring are all
+implemented and green. `toolActions`/`reconciliation`/`quoteDelivery` inbox sources remain `unsupported`
+pending PR #246/#247 landing on `main`, per the blocking-dependencies note below — that was never resolved
+mid-slice, so those sources were built to degrade gracefully instead of waiting. Task 8 (documentation +
+independent review + PR evidence) is the remaining work.**
 
 ## Blocking dependencies
 
