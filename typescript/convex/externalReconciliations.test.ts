@@ -134,7 +134,10 @@ describe("claimNext lease-expiry reclaim (worker-crash recovery)", () => {
   });
 });
 
-async function seedQuoteDelivery(ctx: MutationCtx, reconciliationId = "reconciliation-1") {
+async function seedQuoteDelivery(
+  ctx: MutationCtx,
+  reconciliationId = "reconciliation-1",
+) {
   return ctx.db.insert("quoteDeliveryAttempts", {
     ownerId: OWNER_ID,
     deliveryAttemptId: "delivery-attempt-1",
@@ -336,7 +339,9 @@ describe("observing-process crash recovery", () => {
         .unique(),
     );
     expect(record?.state).toBe("escalated");
-    expect(record?.escalationReason).toBe("abandoned-observing-process-interruption");
+    expect(record?.escalationReason).toBe(
+      "abandoned-observing-process-interruption",
+    );
     expect(record?.escalatedAt).toBe(now);
   });
 
@@ -363,7 +368,9 @@ describe("observing-process crash recovery", () => {
       ctx.db
         .query("externalReconciliations")
         .withIndex("by_owner_and_reconciliation_id", (q) =>
-          q.eq("ownerId", OWNER_ID).eq("reconciliationId", "boundary-observing"),
+          q
+            .eq("ownerId", OWNER_ID)
+            .eq("reconciliationId", "boundary-observing"),
         )
         .unique(),
     );
@@ -408,7 +415,9 @@ describe("operator reconciliation reads", () => {
     const t = harness();
     const now = Date.now();
     await t.run(async (ctx) => {
-      for (const [index, state] of (["escalated", "escalated", "resolved"] as const).entries()) {
+      for (const [index, state] of (
+        ["escalated", "escalated", "resolved"] as const
+      ).entries()) {
         await ctx.db.insert("externalReconciliations", {
           ownerId: OWNER_ID,
           reconciliationId: `operator-${index}`,
@@ -429,7 +438,10 @@ describe("operator reconciliation reads", () => {
           createdAt: now + index,
           updatedAt: now + index,
           ...(state === "escalated"
-            ? { escalationReason: "operator-review-required", escalatedAt: now + index }
+            ? {
+                escalationReason: "operator-review-required",
+                escalatedAt: now + index,
+              }
             : {
                 terminalStatus: "succeeded" as const,
                 resolutionDigest: "digest",
