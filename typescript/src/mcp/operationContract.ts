@@ -53,6 +53,7 @@ export const MCP_TOOL_OPERATIONS: Readonly<Record<string, readonly OpenApiOperat
   list_quotes: [{ method: "GET", path: "/api/v1/quotes" }],
   get_quote: [{ method: "GET", path: "/api/v1/quotes/{quoteId}" }],
   get_daily_brief: [{ method: "GET", path: "/api/v1/brief" }],
+  get_operations_inbox: [{ method: "GET", path: "/api/v1/operations/inbox" }],
   list_errands: [{ method: "GET", path: "/api/v1/errands" }],
   get_errand: [{ method: "GET", path: "/api/v1/errands/{errandId}" }],
   create_errand: [{ method: "POST", path: "/api/v1/errands" }],

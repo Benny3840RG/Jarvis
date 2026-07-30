@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import type { DailyBrief } from "../briefs/brief.js";
+import type { OperationsInbox } from "../operations/operationsInbox.js";
 import type { Client, ClientInput, ClientUpdate } from "../clients/client.js";
 import type { Errand, ErrandInput, ErrandUpdate } from "../errands/errand.js";
 import type { Build, BuildInput, BuildUpdate } from "../builds/build.js";
@@ -551,6 +552,11 @@ export class JarvisApiClient {
 
   async getDailyBrief(): Promise<DailyBrief> {
     return (await this.request<DataResponse<DailyBrief>>("GET", "/api/v1/brief")).data;
+  }
+
+  async getOperationsInbox(): Promise<OperationsInbox> {
+    return (await this.request<DataResponse<OperationsInbox>>("GET", "/api/v1/operations/inbox"))
+      .data;
   }
 
   async dashboard(): Promise<DashboardSnapshot> {

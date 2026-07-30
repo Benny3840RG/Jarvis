@@ -29,6 +29,7 @@ import { UpgradeController } from "./upgradeController.js";
 import { AssetController } from "./assetController.js";
 import { PreferenceController } from "./preferenceController.js";
 import { NoteController } from "./noteController.js";
+import { OperationsInboxController } from "./operationsInboxController.js";
 import { ErrandController } from "./errandController.js";
 import { MemoryChangeSetController } from "./memoryChangeSetController.js";
 import { ProblemDetailsFilter } from "./problemDetails.js";
@@ -113,6 +114,7 @@ export class JarvisHttpModule {
         PreferenceController,
         NoteController,
         BriefController,
+        OperationsInboxController,
       ],
       providers: [
         { provide: HTTP_APP_CONFIG, useValue: options.config },

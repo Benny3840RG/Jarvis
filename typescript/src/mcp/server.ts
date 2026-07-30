@@ -290,6 +290,42 @@ const briefSchema = z.object({
   }),
 });
 
+// Read-only. Mirrors OperationsInbox exactly; no schema here ever represents
+// dismissing, acknowledging, resolving, approving, revoking, or executing.
+const inboxSourceReportSchema = z.object({
+  source: z.enum(["reminders", "maintenance", "toolActions", "reconciliation", "quoteDelivery"]),
+  status: z.enum(["available", "unavailable", "degraded", "unsupported"]),
+  reason: z.string().optional(),
+  checkedAt: z.string(),
+});
+
+const inboxItemSchema = z.object({
+  itemId: z.string(),
+  kind: z.enum(["reminder-overdue", "maintenance-overdue", "maintenance-due-soon"]),
+  severity: z.enum(["critical", "high", "elevated", "normal", "informational"]),
+  title: z.string(),
+  explanation: z.string(),
+  sourceSubsystem: z.enum([
+    "reminders",
+    "maintenance",
+    "toolActions",
+    "reconciliation",
+    "quoteDelivery",
+  ]),
+  sourceRecordId: z.string(),
+  createdAt: z.string(),
+  dueAt: z.string().optional(),
+  updatedAt: z.string(),
+  status: z.string(),
+  actionRequired: z.boolean(),
+});
+
+const operationsInboxSchema = z.object({
+  generatedAt: z.string(),
+  items: z.array(inboxItemSchema),
+  sources: z.array(inboxSourceReportSchema),
+});
+
 const layerSchema = z.object({
   status: z.enum(["ready", "partial", "inactive", "blocked"]),
   reason: z.string().optional(),
@@ -1244,6 +1280,36 @@ export function createJarvisMcpServer(client: JarvisApiClient): McpServer {
         return {
           content: [{ type: "text" as const, text: brief.headline }],
           structuredContent: { brief },
+        };
+      } catch (error: unknown) {
+        return safeError(error);
+      }
+    },
+  );
+
+  registerAppTool(
+    server,
+    "get_operations_inbox",
+    {
+      title: "Get the operations inbox",
+      description:
+        "Use this when Benny asks what needs his attention right now, or what's urgent. Read-only, owner-scoped digest of overdue reminders and overdue/due-soon maintenance, each backed by real records. Cannot dismiss, acknowledge, resolve, approve, revoke, or execute anything — inspection only. Sources not yet wired (governed tool-action approvals, reconciliation escalations, quote-delivery problems) are reported as unsupported, never silently empty.",
+      inputSchema: {},
+      outputSchema: { inbox: operationsInboxSchema },
+      annotations: readAnnotations,
+      _meta: { ui: { visibility: ["model"] } },
+    },
+    async () => {
+      try {
+        const inbox = await client.getOperationsInbox();
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: `${inbox.items.length} item${inbox.items.length === 1 ? "" : "s"} in the operations inbox.`,
+            },
+          ],
+          structuredContent: { inbox },
         };
       } catch (error: unknown) {
         return safeError(error);
