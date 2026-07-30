@@ -4,7 +4,10 @@ import type { IncomingMessage } from "node:http";
 
 import type { NestApplicationOptions } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
-import { FastifyAdapter, type NestFastifyApplication } from "@nestjs/platform-fastify";
+import {
+  FastifyAdapter,
+  type NestFastifyApplication,
+} from "@nestjs/platform-fastify";
 
 import { createToolActionServiceFromEnv } from "../actions/toolActionFactory.js";
 import type { ToolActionService } from "../actions/toolActions.js";
@@ -79,7 +82,8 @@ type InjectedPersistenceOptions = {
 export type RegisteredRoute = { method: string; url: string };
 
 export type CreateJarvisHttpAppOptions = (
-  DefaultPersistenceOptions | InjectedPersistenceOptions
+  | DefaultPersistenceOptions
+  | InjectedPersistenceOptions
 ) & {
   config?: HttpAppConfig;
   reconciliationHealth?: () => RuntimeReconciliationHealth;
@@ -129,15 +133,21 @@ function selectMemoryStore<T>(
 export async function createJarvisHttpApp(
   options: CreateJarvisHttpAppOptions = {},
 ): Promise<NestFastifyApplication> {
-  if ((options.persistence === undefined) !== (options.providerName === undefined)) {
-    throw new Error("Injected HTTP persistence requires its explicit provider name.");
+  if (
+    (options.persistence === undefined) !==
+    (options.providerName === undefined)
+  ) {
+    throw new Error(
+      "Injected HTTP persistence requires its explicit provider name.",
+    );
   }
   const providerName = options.providerName ?? resolvePersistenceProviderName();
   const persistence = options.persistence ?? createPersistenceFromEnv();
   const config = options.config ?? resolveHttpAppConfig();
   const usesEnvironment = options.persistence === undefined;
   const reconciliationHealth =
-    options.reconciliationHealth ?? (() => ({ state: "disabled", enabled: false }));
+    options.reconciliationHealth ??
+    (() => ({ state: "disabled", enabled: false }));
   const externalReconciliationReadStore =
     options.externalReconciliationReadStore !== undefined
       ? options.externalReconciliationReadStore
@@ -169,11 +179,14 @@ export async function createJarvisHttpApp(
         ? createToolExecutionServiceFromEnv()
         : null;
   const clientStore =
-    options.clientStore ?? (usesEnvironment ? new JsonClientStore() : new InMemoryClientStore());
+    options.clientStore ??
+    (usesEnvironment ? new JsonClientStore() : new InMemoryClientStore());
   const projectStore =
-    options.projectStore ?? (usesEnvironment ? new JsonProjectStore() : new InMemoryProjectStore());
+    options.projectStore ??
+    (usesEnvironment ? new JsonProjectStore() : new InMemoryProjectStore());
   const quoteStore =
-    options.quoteStore ?? (usesEnvironment ? new JsonQuoteStore() : new InMemoryQuoteStore());
+    options.quoteStore ??
+    (usesEnvironment ? new JsonQuoteStore() : new InMemoryQuoteStore());
   const quoteRepository =
     options.quoteRepository !== undefined
       ? options.quoteRepository
@@ -187,27 +200,48 @@ export async function createJarvisHttpApp(
         ? createQuoteDeliveryRepositoryFromEnv()
         : null;
   const errandStore =
-    options.errandStore ?? (usesEnvironment ? new JsonErrandStore() : new InMemoryErrandStore());
-  const buildStore = selectMemoryStore(options.buildStore, usesEnvironment, providerName, {
-    json: () => new JsonBuildStore(),
-    convex: () => new ConvexBuildStore(),
-    inMemory: () => new InMemoryBuildStore(),
-  });
-  const buildLogStore = selectMemoryStore(options.buildLogStore, usesEnvironment, providerName, {
-    json: () => new JsonBuildLogStore(),
-    convex: () => new ConvexBuildLogStore(),
-    inMemory: () => new InMemoryBuildLogStore(),
-  });
-  const upgradeStore = selectMemoryStore(options.upgradeStore, usesEnvironment, providerName, {
-    json: () => new JsonUpgradeStore(),
-    convex: () => new ConvexUpgradeStore(),
-    inMemory: () => new InMemoryUpgradeStore(),
-  });
-  const assetStore = selectMemoryStore(options.assetStore, usesEnvironment, providerName, {
-    json: () => new JsonAssetStore(),
-    convex: () => new ConvexAssetStore(),
-    inMemory: () => new InMemoryAssetStore(),
-  });
+    options.errandStore ??
+    (usesEnvironment ? new JsonErrandStore() : new InMemoryErrandStore());
+  const buildStore = selectMemoryStore(
+    options.buildStore,
+    usesEnvironment,
+    providerName,
+    {
+      json: () => new JsonBuildStore(),
+      convex: () => new ConvexBuildStore(),
+      inMemory: () => new InMemoryBuildStore(),
+    },
+  );
+  const buildLogStore = selectMemoryStore(
+    options.buildLogStore,
+    usesEnvironment,
+    providerName,
+    {
+      json: () => new JsonBuildLogStore(),
+      convex: () => new ConvexBuildLogStore(),
+      inMemory: () => new InMemoryBuildLogStore(),
+    },
+  );
+  const upgradeStore = selectMemoryStore(
+    options.upgradeStore,
+    usesEnvironment,
+    providerName,
+    {
+      json: () => new JsonUpgradeStore(),
+      convex: () => new ConvexUpgradeStore(),
+      inMemory: () => new InMemoryUpgradeStore(),
+    },
+  );
+  const assetStore = selectMemoryStore(
+    options.assetStore,
+    usesEnvironment,
+    providerName,
+    {
+      json: () => new JsonAssetStore(),
+      convex: () => new ConvexAssetStore(),
+      inMemory: () => new InMemoryAssetStore(),
+    },
+  );
   const preferenceStore = selectMemoryStore(
     options.preferenceStore,
     usesEnvironment,
@@ -223,7 +257,8 @@ export async function createJarvisHttpApp(
   // deployment, so this always uses Convex when an environment is present
   // rather than following PERSISTENCE_PROVIDER like the other memory stores.
   const noteStore =
-    options.noteStore ?? (usesEnvironment ? new ConvexNoteStore() : new InMemoryNoteStore());
+    options.noteStore ??
+    (usesEnvironment ? new ConvexNoteStore() : new InMemoryNoteStore());
   const adapter = new FastifyAdapter({
     genReqId: (request: IncomingMessage) =>
       resolveRequestId(request.headers[REQUEST_ID_HEADER], [
