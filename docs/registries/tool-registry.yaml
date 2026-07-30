@@ -61,7 +61,8 @@ tools:
 
   - id: TOOL-QUOTE-SEND
     lifecycle_status: planned
-    implemented: false
-    description: Sends a finalized quote revision to a recipient and drives the delivery-ledger lifecycle through reconciliation. The implementation exists and is tested, but is deliberately not wired into the live tool-execution allowlist because no email provider is configured (createQuoteEmailProviderFromEnv always returns null) — AM-013 stays planned until a deliberate commissioning/activation PR.
+    implemented: true
+    description: Sends a finalized quote revision to a recipient and drives the delivery-ledger lifecycle through reconciliation. The reviewed definition is conditionally registered only when Convex persistence, quote and delivery repositories, a matching PDF artifact, and an explicitly enabled delegated Outlook runtime are all available. AM-013 remains planned and the action remains absent from MCP/HUD until a separate commissioning and activation decision.
     implementation: typescript/src/actions/quoteSendTool.ts
+    allowlist: typescript/src/actions/toolExecutionFactory.ts
     bound_by: [AM-013]
