@@ -29,11 +29,11 @@
 **Interfaces:**
 - Produces: `listForOperator({serviceToken,state?,limit?})` and `getForOperator({serviceToken,reconciliationId})`, returning reconciliation plus optional receipt.
 
-- [ ] Write failing tests proving owner isolation, state filtering, descending update order, a maximum limit of 100, and same null result for absent/cross-owner detail.
-- [ ] Run `cd typescript && npx vitest run convex/externalReconciliations.test.ts`; expect missing generated functions.
-- [ ] Implement the two queries with `by_owner_and_state_and_next_attempt_at` for filtered lists and bounded per-state reads for the unfiltered list, merging and sorting before `.slice(0, limit)`.
-- [ ] Run the focused Convex test; expect pass.
-- [ ] Commit the Convex read contract.
+- [x] Write failing tests proving owner isolation, state filtering, descending update order, a maximum limit of 100, and same null result for absent/cross-owner detail.
+- [x] Run `cd typescript && npx vitest run convex/externalReconciliations.test.ts`; expect missing generated functions.
+- [x] Implement the two queries with `by_owner_and_state_and_next_attempt_at` for filtered lists and bounded per-state reads for the unfiltered list, merging and sorting before `.slice(0, limit)`.
+- [x] Run the focused Convex test; expect pass.
+- [x] Commit the Convex read contract.
 
 ### Task 2: Read-store adapter
 
@@ -46,9 +46,9 @@
 - Produces: `ExternalReconciliationReadStore.list(input)` and `.get(reconciliationId)`.
 - Consumes: Task 1 Convex queries.
 
-- [ ] Write failing adapter tests for argument mapping and timestamp/receipt conversion.
-- [ ] Run `cd typescript && node --import tsx --test tests/convexExternalReconciliations.test.ts`; expect missing methods.
-- [ ] Add a read-only interface and implement it on `ConvexExternalReconciliationStore`.
+- [x] Write failing adapter tests for argument mapping and timestamp/receipt conversion.
+- [x] Run `cd typescript && node --import tsx --test tests/convexExternalReconciliations.test.ts`; expect missing methods.
+- [x] Add a read-only interface and implement it on `ConvexExternalReconciliationStore`.
 - [ ] Run focused tests; expect pass.
 - [ ] Commit the adapter.
 
