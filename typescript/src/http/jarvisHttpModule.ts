@@ -21,7 +21,9 @@ import type { PersistenceProvider } from "../persistence/persistence.js";
 import type { PersistenceProviderName } from "../persistence/providerSelection.js";
 import type { TotalityPipeline } from "../totality/totalityPipeline.js";
 import type { RuntimeReconciliationHealth } from "../reconciliation/runtimeReconciliationHost.js";
+import type { ActivityEventReader } from "../operations/activityTimeline.js";
 import type { HttpAppConfig } from "./config.js";
+import { ActivityTimelineController } from "./activityTimelineController.js";
 import { BriefController } from "./briefController.js";
 import { BuildController } from "./buildController.js";
 import { BuildLogController } from "./buildLogController.js";
@@ -58,6 +60,7 @@ import {
   HTTP_ASSET_STORE,
   HTTP_PREFERENCE_STORE,
   HTTP_NOTE_STORE,
+  HTTP_ACTIVITY_EVENTS,
   HTTP_MEMORY_CHANGE_SETS,
   HTTP_PERSISTENCE,
   HTTP_PROVIDER_NAME,
@@ -88,6 +91,7 @@ export type JarvisHttpModuleOptions = {
   assetStore: AssetStore;
   preferenceStore: PreferenceStore;
   noteStore: NoteStore;
+  activityEventReader: ActivityEventReader | null;
 };
 
 @Module({})
@@ -115,6 +119,7 @@ export class JarvisHttpModule {
         NoteController,
         BriefController,
         OperationsInboxController,
+        ActivityTimelineController,
       ],
       providers: [
         { provide: HTTP_APP_CONFIG, useValue: options.config },
@@ -131,6 +136,7 @@ export class JarvisHttpModule {
         { provide: HTTP_ASSET_STORE, useValue: options.assetStore },
         { provide: HTTP_PREFERENCE_STORE, useValue: options.preferenceStore },
         { provide: HTTP_NOTE_STORE, useValue: options.noteStore },
+        { provide: HTTP_ACTIVITY_EVENTS, useValue: options.activityEventReader },
         { provide: HTTP_PROVIDER_NAME, useValue: options.providerName },
         { provide: HTTP_RECONCILIATION_HEALTH, useValue: options.reconciliationHealth },
         { provide: HTTP_TOTALITY_PIPELINE, useValue: options.totalityPipeline },

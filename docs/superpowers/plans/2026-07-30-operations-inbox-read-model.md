@@ -96,38 +96,62 @@ judgment.
 `listRecent` or add a narrow `listAwaitingAttention` filtering by state/expiry window — decide from real
 field needs, not preemptively), `convex/toolActions.test.ts`, `convex/auditEvents.test.ts` (new).
 
-- [ ] Write failing owner-isolation + bounded-limit + ordering tests first.
-- [ ] Implement the minimal query surface.
-- [ ] Full Convex test suite green.
+- [x] ~~Write failing owner-isolation + bounded-limit + ordering tests first.~~ Superseded: Task 1's
+      `toolActions`/reconciliation reads were blocked on #246/#247 (still unmerged), so the core slice
+      (PR #248) reported those sources `"unsupported"` instead and added no new Convex query here. The
+      `auditEvents.ts` time-ordered read this task originally described was implemented in Task 4 instead
+      (see below), once it became clear the activity timeline — not the inbox — was what actually needed
+      it.
+- [x] Implement the minimal query surface. — N/A per above; nothing to implement for Task 1 itself.
+- [x] Full Convex test suite green. — Verified as part of every subsequent task's full check.
 
 ### Task 2: Operations Inbox aggregator (blocked on Task 1)
 
 **Files (new):** `src/operations/operationsInbox.ts`, `src/operations/inboxSeverity.ts` (pure, unit-tested
 severity/ordering function), `tests/operationsInbox.test.ts`, `tests/inboxSeverity.test.ts`.
 
-- [ ] RED: per-source-failure-isolation test, owner-isolation test, deterministic-ordering test
+- [x] RED: per-source-failure-isolation test, owner-isolation test, deterministic-ordering test
       (including equal timestamps/severities), unavailable-not-zero test.
-- [ ] Implement `buildOperationsInbox()` composing existing reads + Task 1's new reads concurrently.
-- [ ] GREEN, full check.
+- [x] Implement `buildOperationsInbox()` composing existing reads concurrently (reminders, maintenance);
+      `toolActions`/`reconciliation`/`quoteDelivery` reported `"unsupported"` with a concrete reason
+      pending their blocking PRs.
+- [x] GREEN, full check. (Landed as part of PR #248's core slice.)
 
 ### Task 3: HTTP + OpenAPI
 
-**Files:** `src/http/operationsInboxController.ts` (new), `src/http/operationsInboxRequest.ts` (new),
-`src/http/jarvisHttpModule.ts`, `src/http/tokens.ts`, `src/http/app.ts`, `openapi/jarvis.openapi.json`,
+**Files:** `src/http/operationsInboxController.ts` (new), `src/http/jarvisHttpModule.ts`,
+`src/http/tokens.ts`, `src/http/app.ts`, `openapi/jarvis.openapi.json`,
 `tests/operationsInboxHttp.test.ts` (new).
 
-- [ ] RED: auth, validation, per-source-degradation-in-response-shape, bounded-limit tests.
-- [ ] Implement `GET /api/v1/operations/inbox`, `GET /api/v1/operations/inbox/{itemId}`.
-- [ ] OpenAPI + route-alignment tests green.
+- [x] RED: auth, validation, per-source-degradation-in-response-shape, bounded-limit tests.
+- [x] Implement `GET /api/v1/operations/inbox`.
+- [x] OpenAPI + route-alignment tests green.
 
 ### Task 4: Activity timeline
 
-**Files:** `convex/auditEvents.ts` (extend), `src/operations/activityTimeline.ts` (new), HTTP route
-`GET /api/v1/operations/activity`, corresponding tests.
+**Files:** `convex/schema.ts` (additive `auditEvents.by_owner_and_created_at` index), `convex/auditEvents.ts`
+(extend: `listActivityPage`), `src/operations/activityTimeline.ts` (new), `src/persistence/convexActivityEvents.ts`
+(new), `src/operations/activityTimelineFactory.ts` (new), `src/http/activityTimelineController.ts` (new),
+HTTP route `GET /api/v1/operations/activity`, `openapi/jarvis.openapi.json`, corresponding tests.
 
-- [ ] RED: dedup-by-stable-key test, cursor pagination test, source-timestamp-not-render-time test.
-- [ ] Implement bounded, cursor-paginated, deduplicated timeline.
-- [ ] GREEN.
+- [x] RED → GREEN: owner-isolation, cross-scope (not just one `scopeKey`), cursor-pagination-without-duplicates,
+      deterministic-tie-break-for-equal-`createdAt`, and bounded-page-size tests
+      (`convex/auditEvents.test.ts`); source-timestamp-not-render-time, safe-summary-whitelist,
+      unknown-event-type-fallback-never-leaks-payload, and unavailable-not-thrown-not-empty tests
+      (`tests/activityTimeline.test.ts`); HTTP auth/validation/pass-through/unavailable-in-200-body tests
+      (`tests/activityTimelineHttp.test.ts`); Convex-adapter mapping tests (`tests/convexActivityEvents.test.ts`).
+- [x] Implemented a bounded, cursor-paginated, owner-wide timeline reading only `auditEvents` for this
+      slice — `toolExecutionReceipts` and `externalReconciliations` history (also named in the design doc)
+      are deferred: the former has no owner-wide time-ordered index or query yet either, and the latter is
+      PR #247's owned read surface, still unmerged. Adding either now would mean a second new index beyond
+      the one this plan committed to, and/or consuming a not-yet-landed capability from another agent's
+      branch — both against this slice's explicit constraints. Extending the timeline to those sources is
+      a documented follow-up once #247 merges and an owner-wide receipts read exists.
+- [x] Every event summary is built from a fixed per-`eventType` whitelist of known-safe fields only (never
+      the raw payload); an unrecognized `eventType` — including any future one — falls back to a type-only
+      summary, so a new emitter can never leak an unreviewed field into the timeline by accident.
+- [x] GREEN: `npm run check` (type-check, lint, format, OpenAPI lint, full node + Convex/vitest suites) —
+      all green.
 
 ### Task 5: Integration health
 

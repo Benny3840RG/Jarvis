@@ -414,7 +414,11 @@ export default defineSchema({
     createdAt: v.number(),
   })
     .index("by_owner_and_scope_key", ["ownerId", "scopeKey"])
-    .index("by_owner_and_request_id", ["ownerId", "requestId"]),
+    .index("by_owner_and_request_id", ["ownerId", "requestId"])
+    // Owner-wide, time-ordered read across all scopes — `by_owner_and_scope_key`
+    // can only page through one project/global scope at a time, which cannot
+    // serve a genuine cross-scope activity timeline.
+    .index("by_owner_and_created_at", ["ownerId", "createdAt"]),
   builds: defineTable({
     ownerId: v.string(),
     name: v.string(),

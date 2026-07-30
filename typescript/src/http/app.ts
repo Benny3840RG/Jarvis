@@ -51,6 +51,8 @@ import { InMemoryNoteStore } from "../notes/inMemoryNoteStore.js";
 import { ConvexNoteStore } from "../persistence/convexNotes.js";
 import { createMemoryChangeSetServiceFromEnv } from "../memory/memoryChangeSetFactory.js";
 import type { MemoryChangeSetService } from "../memory/memoryChangeSets.js";
+import { createActivityEventReaderFromEnv } from "../operations/activityTimelineFactory.js";
+import type { ActivityEventReader } from "../operations/activityTimeline.js";
 import {
   createPersistenceFromEnv,
   resolvePersistenceProviderName,
@@ -98,6 +100,7 @@ export type CreateJarvisHttpAppOptions = (
   assetStore?: AssetStore;
   preferenceStore?: PreferenceStore;
   noteStore?: NoteStore;
+  activityEventReader?: ActivityEventReader | null;
   /**
    * Invoked once per Fastify route as it is registered. Exposed so contract
    * tests can enumerate the routes the app actually serves without parsing the
@@ -158,6 +161,12 @@ export async function createJarvisHttpApp(
       ? options.toolExecutionService
       : usesEnvironment
         ? createToolExecutionServiceFromEnv()
+        : null;
+  const activityEventReader =
+    options.activityEventReader !== undefined
+      ? options.activityEventReader
+      : usesEnvironment
+        ? createActivityEventReaderFromEnv()
         : null;
   const clientStore =
     options.clientStore ?? (usesEnvironment ? new JsonClientStore() : new InMemoryClientStore());
@@ -253,6 +262,7 @@ export async function createJarvisHttpApp(
       assetStore,
       preferenceStore,
       noteStore,
+      activityEventReader,
     }),
     adapter,
     { logger: options.logger, abortOnError: false },
