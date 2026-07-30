@@ -49,6 +49,19 @@ atomic claim replaces it.) `POST /execute` also refuses an action whose approval
 (`isApprovalExpired: true` at fetch time) with `errorCode: "approval-expired"`, even if the stored `state`
 still shows `"approved"` because nothing has yet persisted the lazy expiry transition.
 
+`claimSingleUseExecution` is also the authoritative re-check for state and expiry, not just claim
+uniqueness. The execution path's earlier `state`/`isApprovalExpired` checks run against the caller's own,
+separately fetched snapshot of the action — a revoke or a TTL expiry can land on the authoritative document
+in the gap between that fetch and the claim call, since fetching the action and claiming it are two
+different Convex operations. (An earlier version of the claim mutation checked only prior-claim state,
+trusting that gap to be safe; an exact-head review found it wasn't — a revoked or just-expired action could
+still be claimed and its effect still run.) The claim mutation now re-validates `state === "approved"` and
+expiry inside the same transaction that writes the claim, using its own fresh read: a revoked action is
+refused with `errorCode: "not-authorized"`, and an approval found expired at claim time is refused with
+`errorCode: "approval-expired"` and its `expired` state is durably persisted right there — mirroring
+`approve()`'s existing lazy-expiry-observation convention rather than only reporting the expiry transiently.
+Neither block reason invokes the provider.
+
 Revocation (`POST .../revoke`, see below) is owner-scoped, idempotent for a repeated identical reason, and
 prospective-only: it stops a future execution attempt and never claims to undo one already in flight. It
 refuses to revoke an action that has already produced a completed execution receipt — whichever terminal

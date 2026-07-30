@@ -534,7 +534,22 @@ export const revoke = mutation({
  * once set, it stands regardless of the eventual execution outcome
  * (succeeded, failed, or indeterminate), matching this slice's existing
  * "any attempt consumes a single-use action" semantics.
+ *
+ * Also authoritative for state and expiry, not just claim uniqueness: the
+ * caller's decision to attempt execution is made against an earlier,
+ * separate, potentially stale read (the HTTP boundary's own `get()`).
+ * Revocation or TTL expiry landing on the document between that read and
+ * this call would otherwise let a now-revoked or now-expired action's
+ * effect still run. `claimed: false` therefore also covers `blockReason:
+ * "not-approved"` and `"expired"`, decided from this mutation's own fresh
+ * read — never from the caller's stale snapshot.
  */
+const singleUseClaimBlockReasonValidator = v.union(
+  v.literal("already-claimed"),
+  v.literal("not-approved"),
+  v.literal("expired"),
+);
+
 export const claimSingleUseExecution = mutation({
   args: {
     serviceToken: v.string(),
@@ -543,7 +558,11 @@ export const claimSingleUseExecution = mutation({
     claimId: v.string(),
     now: v.optional(v.number()),
   },
-  returns: v.object({ claimed: v.boolean(), claimId: v.string() }),
+  returns: v.object({
+    claimed: v.boolean(),
+    claimId: v.string(),
+    blockReason: v.optional(singleUseClaimBlockReasonValidator),
+  }),
   handler: async (ctx, args) => {
     const ownerId = requireOwner(args.serviceToken);
     const projectKey = cleanRequiredText(args.projectKey, "Project key");
@@ -555,10 +574,56 @@ export const claimSingleUseExecution = mutation({
       throw new Error("Only single-use actions require an execution claim.");
     }
     if (action.singleUseClaimId !== undefined) {
-      return { claimed: false, claimId: action.singleUseClaimId };
+      return {
+        claimed: false,
+        claimId: action.singleUseClaimId,
+        blockReason: "already-claimed" as const,
+      };
     }
 
     const now = args.now ?? Date.now();
+
+    // Authoritative, same-transaction re-check: `action` above is a fresh
+    // read, but the caller's own decision to attempt execution was made
+    // against a *separate*, potentially stale, earlier read (the HTTP
+    // boundary's own `get()`). Revocation or TTL expiry can land on the
+    // authoritative document in the gap between that earlier read and this
+    // claim. A read-before-effect check on stale data cannot catch that —
+    // only re-validating state and expiry here, atomically with the claim
+    // write, closes the gap. This mirrors the same "read-then-effect can't
+    // be trusted, only an atomic claim can" reasoning that motivated the
+    // claim mechanism itself.
+    if (action.state !== "approved") {
+      return { claimed: false, claimId: "", blockReason: "not-approved" as const };
+    }
+    if (
+      action.approvalExpiryPolicy !== undefined &&
+      isApprovalExpired(
+        { policy: action.approvalExpiryPolicy, expiresAt: action.approvalExpiresAt },
+        now,
+      )
+    ) {
+      // Lazily observed on next touch, matching approve()'s existing
+      // lazy-expiry-observation convention: persist the durable `expired`
+      // transition rather than merely reporting it, so it becomes true
+      // authoritative state, not just a transient read-time computation.
+      await ctx.db.patch("toolActions", action._id, {
+        state: "expired",
+        expiredObservedAt: now,
+        updatedAt: now,
+      });
+      await appendAudit(ctx, {
+        ownerId,
+        requestId: action.requestId,
+        projectKey,
+        eventType: "tool.action.approval-expired",
+        actor: "tool",
+        payload: { actionId, approvalExpiresAt: action.approvalExpiresAt ?? null, observedAt: now },
+        createdAt: now,
+      });
+      return { claimed: false, claimId: "", blockReason: "expired" as const };
+    }
+
     await ctx.db.patch("toolActions", action._id, {
       singleUseClaimedAt: now,
       singleUseClaimId: claimId,

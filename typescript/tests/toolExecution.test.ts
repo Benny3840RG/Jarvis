@@ -7,6 +7,8 @@ import type { ToolAction } from "../src/actions/toolActions.js";
 import {
   InMemoryToolExecutionReceiptStore,
   ToolExecutionService,
+  type SingleUseConsumptionClaimStore,
+  type SingleUseExecutionClaimResult,
 } from "../src/actions/toolExecution.js";
 
 const action: ToolAction = {
@@ -335,6 +337,65 @@ describe("consent-lifecycle execution enforcement (R-048/R-049/R-050)", () => {
     assert.deepEqual(outcomes, ["blocked", "succeeded"]);
     const loser = first.status === "blocked" ? first : second;
     assert.equal(loser.errorCode, "approval-consumed");
+  });
+
+  it("maps a claim store's not-approved block reason to not-authorized, never invoking the definition", async () => {
+    // Reproduces the exact-head review finding at the TS mapping layer: the
+    // claim store's own fresh, same-transaction check (not the caller's
+    // separately-fetched, potentially stale action snapshot) is what must
+    // decide this — a revoke landing between that earlier fetch and the
+    // claim call must still block, and must map to the same "not-authorized"
+    // code the earlier deterministic check would have produced had it seen
+    // current state.
+    const executions = { count: 0 };
+    const claims: SingleUseConsumptionClaimStore = {
+      async claim(): Promise<SingleUseExecutionClaimResult> {
+        return { claimed: false, claimId: "", blockReason: "not-approved" };
+      },
+    };
+    const executor = new ToolExecutionService(
+      [definition(executions)],
+      new InMemoryToolExecutionReceiptStore(),
+      undefined,
+      claims,
+    );
+    const singleUse = { ...action, consumptionPolicy: "single-use" as const };
+
+    const result = await executor.execute({
+      action: singleUse,
+      authority: "T1",
+      idempotencyKey: "revoked-between-get-and-claim",
+    });
+
+    assert.equal(result.status, "blocked");
+    assert.equal(result.errorCode, "not-authorized");
+    assert.equal(executions.count, 0, "the provider must never be invoked for a revoked claim");
+  });
+
+  it("maps a claim store's expired block reason to approval-expired, never invoking the definition", async () => {
+    const executions = { count: 0 };
+    const claims: SingleUseConsumptionClaimStore = {
+      async claim(): Promise<SingleUseExecutionClaimResult> {
+        return { claimed: false, claimId: "", blockReason: "expired" };
+      },
+    };
+    const executor = new ToolExecutionService(
+      [definition(executions)],
+      new InMemoryToolExecutionReceiptStore(),
+      undefined,
+      claims,
+    );
+    const singleUse = { ...action, consumptionPolicy: "single-use" as const };
+
+    const result = await executor.execute({
+      action: singleUse,
+      authority: "T1",
+      idempotencyKey: "expired-between-get-and-claim",
+    });
+
+    assert.equal(result.status, "blocked");
+    assert.equal(result.errorCode, "approval-expired");
+    assert.equal(executions.count, 0, "the provider must never be invoked for an expired claim");
   });
 
   it("does not block a dry-run against an already-consumed single-use action", async () => {

@@ -100,7 +100,18 @@ export class InMemoryToolExecutionReceiptStore implements ToolExecutionReceiptSt
   }
 }
 
-export type SingleUseExecutionClaimResult = { claimed: boolean; claimId: string };
+export type SingleUseExecutionClaimResult = {
+  claimed: boolean;
+  claimId: string;
+  /**
+   * Present when `claimed` is false. `"already-claimed"` means a winner
+   * already holds the claim (the existing replay-safe path). `"not-approved"`
+   * and `"expired"` mean the store's own authoritative, same-transaction
+   * check found the action no longer approved or its approval expired —
+   * decided fresh at claim time, never from the caller's earlier snapshot.
+   */
+  blockReason?: "already-claimed" | "not-approved" | "expired";
+};
 
 /**
  * Authoritative, atomic consumption gate for single-use governed actions.
@@ -563,19 +574,29 @@ export class ToolExecutionService {
     // caller receives `claimed: true`. The claim is never released, so it
     // also proves this is not merely a fingerprint replay of a claim someone
     // else already holds.
+    //
+    // The earlier `input.action.state`/`isApprovalExpired` checks above run
+    // against the caller's own, separately-fetched, potentially stale
+    // snapshot — revocation or TTL expiry can land on the authoritative
+    // document in the gap between that fetch and this call. `claim()` is
+    // therefore also the authoritative re-check for state and expiry, not
+    // just claim uniqueness: a `blockReason` of `"not-approved"` or
+    // `"expired"` means the store's own fresh, same-transaction read caught
+    // exactly that race, and must map to the same receipt codes the earlier
+    // checks would have produced had they seen current state — never to
+    // `"approval-consumed"`, which means something else already happened.
     if (input.action.consumptionPolicy === "single-use") {
       const claim = await this.claims.claim(input.action, input.idempotencyKey);
       if (!claim.claimed) {
+        const errorCode =
+          claim.blockReason === "not-approved"
+            ? "not-authorized"
+            : claim.blockReason === "expired"
+              ? "approval-expired"
+              : "approval-consumed";
         return this.persistDecision(
           key,
-          receipt(
-            input.action,
-            input.idempotencyKey,
-            "blocked",
-            "approval-consumed",
-            startedAt,
-            input,
-          ),
+          receipt(input.action, input.idempotencyKey, "blocked", errorCode, startedAt, input),
         );
       }
     }

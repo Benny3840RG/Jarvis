@@ -221,4 +221,21 @@ describe("ConvexSingleUseConsumptionClaimStore", () => {
 
     assert.deepEqual(result, { claimed: false, claimId: "claim-a" });
   });
+
+  it("passes through a not-approved or expired block reason unchanged", async () => {
+    const client = {
+      async query() {
+        throw new Error("query must not be called by claim()");
+      },
+      async mutation() {
+        return { claimed: false, claimId: "", blockReason: "expired" };
+      },
+    } as unknown as ConvexClientLike;
+    const store = new ConvexSingleUseConsumptionClaimStore(client, "service-token");
+    const action = { actionId: "action-1", projectId: "project-1" } as ToolAction;
+
+    const result = await store.claim(action, "claim-a");
+
+    assert.deepEqual(result, { claimed: false, claimId: "", blockReason: "expired" });
+  });
 });

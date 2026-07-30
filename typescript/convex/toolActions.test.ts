@@ -709,7 +709,91 @@ describe("concurrency: racing mutations against the same approved action", () =>
     });
 
     expect(first).toEqual({ claimed: true, claimId: "claim-a" });
-    expect(second).toEqual({ claimed: false, claimId: "claim-a" });
+    expect(second).toEqual({
+      claimed: false,
+      claimId: "claim-a",
+      blockReason: "already-claimed",
+    });
+  });
+
+  it("refuses to claim single-use execution once the action was revoked between the caller's read and the claim", async () => {
+    // Reproduces the exact-head review finding: the HTTP boundary's own
+    // `get()` can observe "approved" before an operator revokes the action,
+    // then a delayed claimSingleUseExecution call must not still succeed
+    // just because the *caller's* earlier snapshot said "approved". The
+    // claim mutation's own fresh read must be authoritative.
+    const t = harness();
+    await stageAndReturn(t, { destructive: true, requiredAuthority: "T3" });
+    const now = Date.now();
+    await t.mutation(api.toolActions.approve, {
+      serviceToken: SERVICE_TOKEN,
+      projectKey: PROJECT_KEY,
+      actionId: "action-1",
+      expectedRevision: 1,
+      now,
+    });
+    await t.mutation(api.toolActions.revoke, {
+      serviceToken: SERVICE_TOKEN,
+      projectKey: PROJECT_KEY,
+      actionId: "action-1",
+      reason: "Operator changed their mind before execution.",
+      now,
+    });
+
+    const claim = await t.mutation(api.toolActions.claimSingleUseExecution, {
+      serviceToken: SERVICE_TOKEN,
+      projectKey: PROJECT_KEY,
+      actionId: "action-1",
+      claimId: "claim-a",
+      now,
+    });
+
+    expect(claim).toEqual({ claimed: false, claimId: "", blockReason: "not-approved" });
+    const stored = await t.query(api.toolActions.get, {
+      serviceToken: SERVICE_TOKEN,
+      projectKey: PROJECT_KEY,
+      actionId: "action-1",
+    });
+    // The claim attempt must not disturb the revoked state or set a claim.
+    expect(stored?.state).toBe("revoked");
+    expect(stored?.singleUseClaimId).toBeUndefined();
+  });
+
+  it("refuses to claim single-use execution once the approval expired between the caller's read and the claim, and durably observes the expiry", async () => {
+    const t = harness();
+    await stageAndReturn(t, { destructive: true, requiredAuthority: "T3" });
+    const approvedAt = Date.now();
+    await t.mutation(api.toolActions.approve, {
+      serviceToken: SERVICE_TOKEN,
+      projectKey: PROJECT_KEY,
+      actionId: "action-1",
+      expectedRevision: 1,
+      now: approvedAt,
+      approvalTtlMs: 60_000, // clamped to the 1-minute floor
+    });
+
+    // The caller's own earlier read (not modelled here) would have seen
+    // "approved, not yet expired" at approvedAt. By the time the claim is
+    // attempted, the TTL has elapsed.
+    const claimAttemptAt = approvedAt + 60_001;
+    const claim = await t.mutation(api.toolActions.claimSingleUseExecution, {
+      serviceToken: SERVICE_TOKEN,
+      projectKey: PROJECT_KEY,
+      actionId: "action-1",
+      claimId: "claim-a",
+      now: claimAttemptAt,
+    });
+
+    expect(claim).toEqual({ claimed: false, claimId: "", blockReason: "expired" });
+    const stored = await t.query(api.toolActions.get, {
+      serviceToken: SERVICE_TOKEN,
+      projectKey: PROJECT_KEY,
+      actionId: "action-1",
+    });
+    // Expiry is durably observed, matching approve()'s own lazy-expiry
+    // convention, not just reported transiently for this one call.
+    expect(stored?.state).toBe("expired");
+    expect(stored?.singleUseClaimId).toBeUndefined();
   });
 
   it("refuses to claim single-use execution for a reusable action", async () => {

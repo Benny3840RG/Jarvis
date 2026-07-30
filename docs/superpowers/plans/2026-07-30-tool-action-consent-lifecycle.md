@@ -84,7 +84,7 @@ meaning (only valid from `proposed`); `revoke()` is the only path out of `approv
   boundary favors fail-closed.
 - Convex **queries** (`get`, `listRecent`) cannot write, so they instead expose a
   computed, read-only `isApprovalExpired: boolean` without mutating the stored
-  `state` — the actual persisted transition happens the next time a *mutation*
+  `state` — the actual persisted transition happens the next time a _mutation_
   touches the row.
 - A caller-supplied `now` is only ever used for **test determinism** — it is never
   read from an HTTP request body, so a caller can never extend or fabricate approval
@@ -93,7 +93,7 @@ meaning (only valid from `proposed`); `revoke()` is the only path out of `approv
 ## Revocation (R-049)
 
 - New Convex mutation `revoke` (`convex/toolActions.ts`): `{serviceToken, projectKey,
-  actionId, reason, now?}`. No `expectedRevision` — revocation doesn't interact with
+actionId, reason, now?}`. No `expectedRevision` — revocation doesn't interact with
   project-revision conflicts.
 - Valid only from `state === "approved"`. Idempotent: same `reason` on an
   already-`revoked` action is a no-op; a different `reason` throws.
@@ -125,7 +125,7 @@ meaning (only valid from `proposed`); `revoke()` is the only path out of `approv
 - **Correction found by independent review, after the execute()-time check landed:**
   the first implementation of that check (`listReceiptsForAction` on
   `ToolExecutionReceiptStore`, called at the top of `executeOnce()`) read past receipts
-  *before* invoking the tool, then relied on the *next* attempt observing a saved
+  _before_ invoking the tool, then relied on the _next_ attempt observing a saved
   receipt to detect consumption. Two different-key concurrent executions could both
   run this read before either had saved anything, so both would observe "not yet
   consumed" and both would cross the external-effect boundary — a genuine
@@ -141,6 +141,29 @@ meaning (only valid from `proposed`); `revoke()` is the only path out of `approv
   adjacent gap (a claimed-but-not-yet-completed execution should not be revocable
   either). The now-superseded `listReceiptsForAction` method/query was removed rather
   than left as unused dead code.
+- **Second correction found by independent review, after the atomic claim landed:**
+  the atomic claim closed the duplicate-effect race but introduced a subtler one —
+  `claimSingleUseExecution` checked only `consumptionPolicy` and prior-claim state, not
+  whether the action was _still_ `approved` or unexpired at claim time. The HTTP
+  boundary's `get()` and the later claim call are two separate Convex operations; a
+  revoke (or TTL elapsing) landing in that gap would still let the claim succeed and
+  the external effect still run, using the caller's now-stale "approved" snapshot.
+  Genuine execute-time authorisation race, not a hypothetical: revoke a not-yet-claimed
+  single-use action, then claim it — the pre-fix mutation claimed it anyway. Proven by
+  two focused regressions (`convex/toolActions.test.ts`: revoke-then-claim, and
+  expire-then-claim with an injected clock) plus two TS-layer regressions
+  (`tests/toolExecution.test.ts`, asserting the mapping via a test-double claim store).
+  The fix moves the state/expiry check _inside_ `claimSingleUseExecution`'s own
+  transaction, using its own fresh read rather than the caller's: not-approved and
+  expired are now distinct `blockReason`s on the mutation's result
+  (`SingleUseExecutionClaimResult.blockReason: "already-claimed" | "not-approved" |
+"expired"`), mapped in `executeOnce()` to `errorCode: "not-authorized"` and
+  `"approval-expired"` respectively — the same codes the earlier deterministic
+  pre-checks already use, so the operator-facing meaning is identical regardless of
+  whether staleness was caught early or at claim time. An expiry caught this way is
+  also durably persisted (state → `expired`) inside the same mutation, mirroring
+  `approve()`'s existing lazy-expiry-observation convention, rather than only being
+  reported transiently for that one call.
 
 ## Concurrency
 
@@ -194,7 +217,7 @@ classification.
 - Wire `revoke()` into a new `POST .../tool-actions/{actionId}/revoke` HTTP route in
   `toolActionController.ts`, gated by the same `approvalToken` as `/approve`.
 - Add the execute()-time check in `toolExecution.ts`: block with `errorCode:
-  "approval-expired"` / `"approval-consumed"` before attempting execution.
+"approval-expired"` / `"approval-consumed"` before attempting execution.
 - Consolidate this doc's content into `docs/operators/tool-action-approval.md` once
   PR #245's own doc edits have landed, to avoid a doc-merge conflict now.
 
@@ -212,7 +235,7 @@ classification.
 - **HUD:** a new "GOVERNED ACTIONS" panel in Console 01 (`jarvis-console-01`), reusing
   its existing fixed-namespace precedent (`NOTES_PROJECT_ID`, since Console 01 has no
   project-selection UI) and existing panel styling. It is a bounded (`limit:
-  request.pageSize`), read-only, recent-first snapshot from `toolActions.listRecent` —
+request.pageSize`), read-only, recent-first snapshot from `toolActions.listRecent` —
   no cursor pagination exists for tool actions yet, so it is not presented as a complete
   register. It shows tool/operation, state, required authority, and — for `approved` —
   the exact expiry timestamp or a truthful `isApprovalExpired`/`revokedReason` string.
@@ -254,7 +277,7 @@ branch is rebased onto the resulting `main`, are:
    approved -> expired    (server-observed, lazily, on next mutation touch)
    ```
 
-   and add one paragraph: *"`rejected`, `expired`, and `revoked` are terminal — no
+   and add one paragraph: _"`rejected`, `expired`, and `revoked` are terminal — no
    transition leaves them. An approval carries an explicit
    `approvalExpiryPolicy: "ttl" | "non-expiring"` and, when `"ttl"`, an
    `approvalExpiresAt` timestamp; `now >= approvalExpiresAt` (the boundary itself counts
@@ -265,19 +288,19 @@ branch is rebased onto the resulting `main`, are:
    repeated identical reason, and prospective-only: it stops a future execution attempt
    and never claims to undo one already in flight — see Execution below for how a
    revocation racing a live execution resolves. Neither transition deletes the action or
-   any audit evidence; both are recorded exactly like `approved`/`rejected` today."*
+   any audit evidence; both are recorded exactly like `approved`/`rejected` today."_
 
 2. **Audit evidence section** — the bullet list currently reads
    `tool.action.proposed` / `.approved` / `.rejected`; add
    `tool.action.approval-expired` and `tool.action.revoked` to it.
 
-3. **New "Consumption" note** (wherever the doc discusses `destructive`) — *"Every
+3. **New "Consumption" note** (wherever the doc discusses `destructive`) — _"Every
    approval also carries a `consumptionPolicy: "single-use" | "reusable"`, derived from
    the proposal's own `destructive` flag (destructive -> single-use). Enforcement that
    blocks a second execution of an already-consumed single-use action independent of
    idempotency key lands with the execute()-time check described in the deferred
    follow-up below; until then this field is recorded but not yet enforced at
-   execution time."*
+   execution time."_
 
 4. **HTTP operations table** — once the deferred `POST .../tool-actions/{actionId}/revoke`
    route ships, add it as a row, gated by the same `approvalToken` as `/approve`, and
@@ -285,7 +308,7 @@ branch is rebased onto the resulting `main`, are:
    receipt (`succeeded`/`failed`/`indeterminate`) is rejected rather than silently
    accepted (see "already consumed" in `revoke()`'s Convex-side check).
 
-5. **Operator recovery note** (new, short paragraph) — *"An `indeterminate` execution
+5. **Operator recovery note** (new, short paragraph) — _"An `indeterminate` execution
    receipt (see PR #245's reconciliation hardening) means the external side effect's
    outcome is not yet known — it is neither a proven success nor a proven failure.
    Revoking the governing `ToolAction` in that state does not retract the in-flight
@@ -293,7 +316,7 @@ branch is rebased onto the resulting `main`, are:
    resolves an indeterminate receipt to its true terminal outcome. An operator who wants
    to stop *future* executions of the same proposal should revoke it; an operator asking
    'did the external write actually happen' should consult the receipt and its
-   reconciliation state, not the `ToolAction`'s own `state` field."*
+   reconciliation state, not the `ToolAction`'s own `state` field."_
 
 ## Actions that remain unavailable (unchanged by this slice)
 
