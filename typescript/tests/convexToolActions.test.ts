@@ -110,4 +110,67 @@ describe("ConvexToolActionService", () => {
     assert.equal(listed.length, 1);
     assert.equal(listed[0]?.actionId, "action-1");
   });
+
+  it("revokes through one authenticated mutation and maps revocation metadata", async () => {
+    const calls: Array<{ args: unknown }> = [];
+    const client = {
+      async query() {
+        return null;
+      },
+      async mutation(_functionRef: unknown, args: unknown) {
+        calls.push({ args });
+        return {
+          ...actionRow("revoked"),
+          revokedBy: "user",
+          revokedReason: "Pricing changed after approval.",
+          revokedAt: 1_784_073_602_000,
+          updatedAt: 1_784_073_602_000,
+        };
+      },
+    } as unknown as ConvexClientLike;
+    const service = new ConvexToolActionService(client, "service-token");
+
+    const revoked = await service.revoke({
+      actionId: "action-1",
+      projectId: "project-1",
+      reason: "Pricing changed after approval.",
+    });
+
+    assert.equal(calls.length, 1);
+    assert.deepEqual(calls[0]?.args, {
+      serviceToken: "service-token",
+      projectKey: "project-1",
+      actionId: "action-1",
+      reason: "Pricing changed after approval.",
+    });
+    assert.equal(revoked.state, "revoked");
+    assert.equal(revoked.revokedBy, "user");
+    assert.equal(revoked.revokedReason, "Pricing changed after approval.");
+    assert.equal(revoked.revokedAt, "2026-07-15T00:00:02.000Z");
+  });
+
+  it("maps consent-lifecycle fields (expiry policy, consumption policy) when present", async () => {
+    const client = {
+      async query() {
+        return {
+          ...actionRow("approved"),
+          approvalExpiryPolicy: "ttl",
+          approvalExpiresAt: 1_784_073_601_000,
+          consumptionPolicy: "reusable",
+          isApprovalExpired: false,
+        };
+      },
+      async mutation() {
+        throw new Error("mutation must not be called by get()");
+      },
+    } as unknown as ConvexClientLike;
+    const service = new ConvexToolActionService(client, "service-token");
+
+    const result = await service.get({ actionId: "action-1", projectId: "project-1" });
+
+    assert.equal(result?.approvalExpiryPolicy, "ttl");
+    assert.equal(result?.approvalExpiresAt, "2026-07-15T00:00:01.000Z");
+    assert.equal(result?.consumptionPolicy, "reusable");
+    assert.equal(result?.isApprovalExpired, false);
+  });
 });

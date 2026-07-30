@@ -1,7 +1,13 @@
 import type { ToolActionActor, ToolActionState } from "../actions/toolActions.js";
 import type { ToolAuthority } from "../runtime/totalityPolicy.js";
 
-const ACTION_STATES: readonly ToolActionState[] = ["proposed", "approved", "rejected"];
+const ACTION_STATES: readonly ToolActionState[] = [
+  "proposed",
+  "approved",
+  "rejected",
+  "expired",
+  "revoked",
+];
 const ACTION_ACTORS: readonly ToolActionActor[] = ["user", "agent", "tool"];
 const TOOL_AUTHORITIES: readonly ToolAuthority[] = ["T0", "T1", "T2", "T3"];
 const MAX_ARGUMENT_DEPTH = 8;

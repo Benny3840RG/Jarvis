@@ -4,7 +4,13 @@ export const toolActionStateValidator = v.union(
   v.literal("proposed"),
   v.literal("approved"),
   v.literal("rejected"),
+  v.literal("expired"),
+  v.literal("revoked"),
 );
+
+export const approvalExpiryPolicyValidator = v.union(v.literal("ttl"), v.literal("non-expiring"));
+
+export const consumptionPolicyValidator = v.union(v.literal("single-use"), v.literal("reusable"));
 
 export const toolActionActorValidator = v.union(
   v.literal("user"),
@@ -43,4 +49,11 @@ export const toolActionDocumentValidator = v.object({
   updatedAt: v.number(),
   approvedAt: v.optional(v.number()),
   rejectedAt: v.optional(v.number()),
+  approvalExpiryPolicy: v.optional(approvalExpiryPolicyValidator),
+  approvalExpiresAt: v.optional(v.number()),
+  expiredObservedAt: v.optional(v.number()),
+  consumptionPolicy: v.optional(consumptionPolicyValidator),
+  revokedBy: v.optional(v.literal("user")),
+  revokedReason: v.optional(v.string()),
+  revokedAt: v.optional(v.number()),
 });

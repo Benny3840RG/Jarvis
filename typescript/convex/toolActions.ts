@@ -2,7 +2,10 @@ import { v } from "convex/values";
 
 import { requireOwner } from "./authHelpers.js";
 import {
+  clampApprovalTtlMs,
   cleanRequiredText,
+  deriveConsumptionPolicy,
+  isApprovalExpired,
   normaliseAuditPayload,
   normaliseToolArguments,
   requirePositiveRevision,
@@ -18,10 +21,54 @@ import {
 import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server.js";
 import type { Doc } from "./_generated/dataModel.js";
 
+const toolActionViewValidator = v.object({
+  ...toolActionDocumentValidator.fields,
+  isApprovalExpired: v.boolean(),
+});
+
+/** Adds the read-only, non-persisted `isApprovalExpired` view field a query can compute freely. */
+function withApprovalExpiryView(
+  action: Doc<"toolActions">,
+  now: number,
+): Doc<"toolActions"> & { isApprovalExpired: boolean } {
+  return {
+    ...action,
+    isApprovalExpired:
+      action.state === "approved" && action.approvalExpiryPolicy !== undefined
+        ? isApprovalExpired(
+            { policy: action.approvalExpiryPolicy, expiresAt: action.approvalExpiresAt },
+            now,
+          )
+        : false,
+  };
+}
+
 const MAX_LIST_LIMIT = 100;
 const DEFAULT_LIST_LIMIT = 25;
 
 type ReadCtx = QueryCtx | MutationCtx;
+
+const COMPLETED_RECEIPT_STATUSES = new Set(["succeeded", "failed", "indeterminate"]);
+
+/**
+ * A single-use action is "consumed" once any execution attempt against it
+ * reached a terminal, non-blocked, non-dry-run outcome — as opposed to being
+ * turned away by an earlier guard (blocked) or a validation-only run
+ * (dry-run). Bounded read: a correctly single-use action has at most one
+ * such receipt; the small `take` bound guards against ever scanning
+ * unbounded history even if that invariant is violated.
+ */
+async function hasCompletedExecutionReceipt(
+  ctx: ReadCtx,
+  ownerId: string,
+  actionId: string,
+): Promise<boolean> {
+  const receipts = await ctx.db
+    .query("toolExecutionReceipts")
+    .withIndex("by_owner_and_action_id", (q) => q.eq("ownerId", ownerId).eq("actionId", actionId))
+    .take(20);
+  return receipts.some((receipt) => COMPLETED_RECEIPT_STATUSES.has(receipt.status));
+}
 
 function boundedLimit(limit: number | undefined): number {
   const resolved = limit ?? DEFAULT_LIST_LIMIT;
@@ -191,8 +238,13 @@ export const stage = mutation({
 });
 
 export const get = query({
-  args: { serviceToken: v.string(), projectKey: v.string(), actionId: v.string() },
-  returns: v.union(toolActionDocumentValidator, v.null()),
+  args: {
+    serviceToken: v.string(),
+    projectKey: v.string(),
+    actionId: v.string(),
+    now: v.optional(v.number()),
+  },
+  returns: v.union(toolActionViewValidator, v.null()),
   handler: async (ctx, args) => {
     const ownerId = requireOwner(args.serviceToken);
     const projectKey = cleanRequiredText(args.projectKey, "Project key");
@@ -202,7 +254,8 @@ export const get = query({
         q.eq("ownerId", ownerId).eq("actionId", args.actionId.trim()),
       )
       .unique();
-    return action?.projectKey === projectKey ? action : null;
+    if (action?.projectKey !== projectKey) return null;
+    return withApprovalExpiryView(action, args.now ?? Date.now());
   },
 });
 
@@ -212,28 +265,31 @@ export const listRecent = query({
     projectKey: v.string(),
     state: v.optional(toolActionStateValidator),
     limit: v.optional(v.number()),
+    now: v.optional(v.number()),
   },
-  returns: v.array(toolActionDocumentValidator),
+  returns: v.array(toolActionViewValidator),
   handler: async (ctx, args) => {
     const ownerId = requireOwner(args.serviceToken);
     const projectKey = cleanRequiredText(args.projectKey, "Project key");
     const limit = boundedLimit(args.limit);
-    if (args.state === undefined) {
-      return ctx.db
-        .query("toolActions")
-        .withIndex("by_owner_and_project_key", (q) =>
-          q.eq("ownerId", ownerId).eq("projectKey", projectKey),
-        )
-        .order("desc")
-        .take(limit);
-    }
-    return ctx.db
-      .query("toolActions")
-      .withIndex("by_owner_and_project_key_and_state", (q) =>
-        q.eq("ownerId", ownerId).eq("projectKey", projectKey).eq("state", args.state!),
-      )
-      .order("desc")
-      .take(limit);
+    const now = args.now ?? Date.now();
+    const rows =
+      args.state === undefined
+        ? await ctx.db
+            .query("toolActions")
+            .withIndex("by_owner_and_project_key", (q) =>
+              q.eq("ownerId", ownerId).eq("projectKey", projectKey),
+            )
+            .order("desc")
+            .take(limit)
+        : await ctx.db
+            .query("toolActions")
+            .withIndex("by_owner_and_project_key_and_state", (q) =>
+              q.eq("ownerId", ownerId).eq("projectKey", projectKey).eq("state", args.state!),
+            )
+            .order("desc")
+            .take(limit);
+    return rows.map((row) => withApprovalExpiryView(row, now));
   },
 });
 
@@ -243,6 +299,13 @@ export const approve = mutation({
     projectKey: v.string(),
     actionId: v.string(),
     expectedRevision: v.number(),
+    // Optional clock injection for deterministic expiry tests; never read
+    // from an untrusted caller in production HTTP callers. A caller-supplied
+    // value can only ever shorten (via approvalTtlMs, clamped) the resulting
+    // window — it can never extend approval authority, since the ceiling is
+    // derived server-side from the proposal's own `destructive` flag.
+    now: v.optional(v.number()),
+    approvalTtlMs: v.optional(v.number()),
   },
   returns: toolActionDocumentValidator,
   handler: async (ctx, args) => {
@@ -251,6 +314,7 @@ export const approve = mutation({
     const actionId = cleanRequiredText(args.actionId, "Tool action ID");
     const expectedRevision = requirePositiveRevision(args.expectedRevision, "Expected revision");
     const action = await requireAction(ctx, ownerId, projectKey, actionId);
+    const now = args.now ?? Date.now();
 
     if (action.baseRevision !== expectedRevision) {
       throw new Error(
@@ -260,6 +324,12 @@ export const approve = mutation({
     if (action.state === "rejected") {
       throw new Error("Rejected tool actions cannot be approved.");
     }
+    if (action.state === "revoked") {
+      throw new Error("Revoked tool actions cannot be approved.");
+    }
+    if (action.state === "expired") {
+      throw new Error("Expired tool action approvals cannot be re-approved; restage the action.");
+    }
 
     const project = await requireProject(ctx, ownerId, projectKey);
     if (project.revision !== expectedRevision) {
@@ -267,14 +337,57 @@ export const approve = mutation({
         `Project revision conflict: expected ${expectedRevision}, current ${project.revision}.`,
       );
     }
-    if (action.state === "approved") return action;
 
-    const now = Date.now();
+    if (action.state === "approved") {
+      const stillValid =
+        action.approvalExpiryPolicy === undefined ||
+        !isApprovalExpired(
+          { policy: action.approvalExpiryPolicy, expiresAt: action.approvalExpiresAt },
+          now,
+        );
+      if (stillValid) return action;
+
+      // Lazily observed on next touch, matching this repo's no-cron
+      // convention. Convex mutations are all-or-nothing transactions — a
+      // write followed by a throw in the same call would roll the write
+      // back — so this persists the `expired` transition durably and
+      // *returns* the now-expired doc rather than throwing, mirroring how
+      // reject()'s own idempotent path already returns rather than throws.
+      // Callers must check the returned `state`, exactly as they already
+      // must for reject()'s idempotent-match case; a caller that blindly
+      // treated "no throw" as "still approved" would already be wrong
+      // today for that existing case too. The (deferred) HTTP boundary
+      // layer is where "not still approved" becomes an actual error
+      // response, since only a non-transactional layer can safely convert
+      // an already-committed result into a thrown/rejected response.
+      await ctx.db.patch("toolActions", action._id, {
+        state: "expired",
+        expiredObservedAt: now,
+        updatedAt: now,
+      });
+      await appendAudit(ctx, {
+        ownerId,
+        requestId: action.requestId,
+        projectKey,
+        eventType: "tool.action.approval-expired",
+        actor: "user",
+        payload: { actionId, approvalExpiresAt: action.approvalExpiresAt ?? null, observedAt: now },
+        createdAt: now,
+      });
+      const expiredDoc = await ctx.db.get("toolActions", action._id);
+      if (!expiredDoc) throw new Error("Tool action expiry observation failed.");
+      return expiredDoc;
+    }
+
+    const approvalTtlMs = clampApprovalTtlMs(args.approvalTtlMs, action.destructive);
     await ctx.db.patch("toolActions", action._id, {
       state: "approved",
       approvedBy: "user",
       approvedAt: now,
       updatedAt: now,
+      approvalExpiryPolicy: "ttl",
+      approvalExpiresAt: now + approvalTtlMs,
+      consumptionPolicy: deriveConsumptionPolicy(action.destructive),
     });
     await appendAudit(ctx, {
       ownerId,
@@ -341,5 +454,69 @@ export const reject = mutation({
     const rejected = await ctx.db.get("toolActions", action._id);
     if (!rejected) throw new Error("Tool action rejection failed.");
     return rejected;
+  },
+});
+
+/**
+ * Retracts an already-approved action (R-049). Prospective-only: it stops
+ * future execution attempts but cannot and does not claim to undo anything
+ * already executed. No `expectedRevision` — unlike approve/stage, revocation
+ * doesn't interact with project-revision-scoped conflicts. Deliberately does
+ * not delete the action or any audit evidence; it is a state transition, not
+ * a destructive record removal.
+ */
+export const revoke = mutation({
+  args: {
+    serviceToken: v.string(),
+    projectKey: v.string(),
+    actionId: v.string(),
+    reason: v.string(),
+    now: v.optional(v.number()),
+  },
+  returns: toolActionDocumentValidator,
+  handler: async (ctx, args) => {
+    const ownerId = requireOwner(args.serviceToken);
+    const projectKey = cleanRequiredText(args.projectKey, "Project key");
+    const actionId = cleanRequiredText(args.actionId, "Tool action ID");
+    const reason = cleanRequiredText(args.reason, "Tool action revocation reason");
+    const action = await requireAction(ctx, ownerId, projectKey, actionId);
+
+    if (action.state === "revoked") {
+      if (action.revokedReason === reason) return action;
+      throw new Error("Tool action already revoked for a different reason.");
+    }
+    if (action.state !== "approved") {
+      throw new Error(
+        `Tool action is ${action.state}, not approved; only an approved action can be revoked.`,
+      );
+    }
+    if (
+      action.consumptionPolicy === "single-use" &&
+      (await hasCompletedExecutionReceipt(ctx, ownerId, actionId))
+    ) {
+      throw new Error("Tool action is already consumed and cannot be revoked.");
+    }
+
+    const now = args.now ?? Date.now();
+    await ctx.db.patch("toolActions", action._id, {
+      state: "revoked",
+      revokedBy: "user",
+      revokedReason: reason,
+      revokedAt: now,
+      updatedAt: now,
+    });
+    await appendAudit(ctx, {
+      ownerId,
+      requestId: action.requestId,
+      projectKey,
+      eventType: "tool.action.revoked",
+      actor: "user",
+      payload: { actionId, reason },
+      createdAt: now,
+    });
+
+    const revoked = await ctx.db.get("toolActions", action._id);
+    if (!revoked) throw new Error("Tool action revocation failed.");
+    return revoked;
   },
 });

@@ -28,6 +28,14 @@ type ToolActionRow = {
   updatedAt: number;
   approvedAt?: number;
   rejectedAt?: number;
+  approvalExpiryPolicy?: ToolAction["approvalExpiryPolicy"];
+  approvalExpiresAt?: number;
+  expiredObservedAt?: number;
+  consumptionPolicy?: ToolAction["consumptionPolicy"];
+  revokedBy?: "user";
+  revokedReason?: string;
+  revokedAt?: number;
+  isApprovalExpired?: boolean;
 };
 
 function optionalTimestamp(value: number | undefined): string | undefined {
@@ -37,6 +45,9 @@ function optionalTimestamp(value: number | undefined): string | undefined {
 function actionFromConvex(row: ToolActionRow): ToolAction {
   const approvedAt = optionalTimestamp(row.approvedAt);
   const rejectedAt = optionalTimestamp(row.rejectedAt);
+  const approvalExpiresAt = optionalTimestamp(row.approvalExpiresAt);
+  const expiredObservedAt = optionalTimestamp(row.expiredObservedAt);
+  const revokedAt = optionalTimestamp(row.revokedAt);
   return {
     actionId: row.actionId,
     requestId: row.requestId,
@@ -58,6 +69,16 @@ function actionFromConvex(row: ToolActionRow): ToolAction {
     updatedAt: new Date(row.updatedAt).toISOString(),
     ...(approvedAt === undefined ? {} : { approvedAt }),
     ...(rejectedAt === undefined ? {} : { rejectedAt }),
+    ...(row.approvalExpiryPolicy === undefined
+      ? {}
+      : { approvalExpiryPolicy: row.approvalExpiryPolicy }),
+    ...(approvalExpiresAt === undefined ? {} : { approvalExpiresAt }),
+    ...(expiredObservedAt === undefined ? {} : { expiredObservedAt }),
+    ...(row.consumptionPolicy === undefined ? {} : { consumptionPolicy: row.consumptionPolicy }),
+    ...(row.revokedBy === undefined ? {} : { revokedBy: row.revokedBy }),
+    ...(row.revokedReason === undefined ? {} : { revokedReason: row.revokedReason }),
+    ...(revokedAt === undefined ? {} : { revokedAt }),
+    ...(row.isApprovalExpired === undefined ? {} : { isApprovalExpired: row.isApprovalExpired }),
   };
 }
 
@@ -129,6 +150,18 @@ export class ConvexToolActionService implements ToolActionService {
 
   async reject(input: Parameters<ToolActionService["reject"]>[0]): Promise<ToolAction> {
     const row = await this.client.mutation(toolActionFunctions.reject, {
+      serviceToken: this.serviceToken,
+      projectKey: input.projectId,
+      actionId: input.actionId,
+      reason: input.reason,
+    });
+    return actionFromConvex(row as ToolActionRow);
+  }
+
+  async revoke(
+    input: Parameters<NonNullable<ToolActionService["revoke"]>>[0],
+  ): Promise<ToolAction> {
+    const row = await this.client.mutation(toolActionFunctions.revoke, {
       serviceToken: this.serviceToken,
       projectKey: input.projectId,
       actionId: input.actionId,
