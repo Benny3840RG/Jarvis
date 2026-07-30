@@ -41,7 +41,9 @@ function unusedPersistence(): PersistenceProvider {
   };
 }
 
-function record(overrides: Partial<ExternalReconciliationRecord> = {}): ExternalReconciliationRecord {
+function record(
+  overrides: Partial<ExternalReconciliationRecord> = {},
+): ExternalReconciliationRecord {
   return {
     reconciliationId: "reconciliation-1",
     executionKey: "external:secret-scope",
@@ -148,7 +150,10 @@ describe("reconciliation operator HTTP reads", () => {
 
     assert.equal(response.statusCode, 200);
     assert.deepEqual(calls, [{ state: "escalated", limit: 25 }]);
-    const body = response.json() as { data: Record<string, unknown>[]; count: number };
+    const body = response.json() as {
+      data: Record<string, unknown>[];
+      count: number;
+    };
     assert.equal(body.count, 1);
     assert.equal(body.data[0]?.reconciliationId, "reconciliation-1");
     assert.equal(body.data[0]?.state, "escalated");
@@ -162,7 +167,11 @@ describe("reconciliation operator HTTP reads", () => {
       "leaseToken",
       "leaseExpiresAt",
     ]) {
-      assert.equal(forbidden in body.data[0]!, false, `${forbidden} must not leave the server`);
+      assert.equal(
+        forbidden in body.data[0]!,
+        false,
+        `${forbidden} must not leave the server`,
+      );
     }
   });
 
