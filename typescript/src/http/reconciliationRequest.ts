@@ -12,7 +12,10 @@ export function parseReconciliationState(
   value: unknown,
 ): ExternalReconciliationRecord["state"] | undefined {
   if (value === undefined) return undefined;
-  if (typeof value !== "string" || !STATES.has(value as ExternalReconciliationRecord["state"])) {
+  if (
+    typeof value !== "string" ||
+    !STATES.has(value as ExternalReconciliationRecord["state"])
+  ) {
     throw new Error("Unsupported reconciliation state.");
   }
   return value as ExternalReconciliationRecord["state"];
