@@ -4,7 +4,10 @@ import { Body, Controller, Get, HttpCode, Inject, Param, Post, Query, Req } from
 import type { FastifyRequest } from "fastify";
 
 import type { ToolActionService } from "../actions/toolActions.js";
-import type { ToolExecutionService } from "../actions/toolExecution.js";
+import {
+  deriveToolExecutionIdempotencyKey,
+  type ToolExecutionService,
+} from "../actions/toolExecution.js";
 import type { HttpAppConfig } from "./config.js";
 import { JarvisProblem } from "./problemDetails.js";
 import { requestIdFor } from "./requestId.js";
@@ -317,7 +320,10 @@ export class ToolActionController {
     return this.requireExecutionService().execute({
       action,
       authority: "T3",
-      idempotencyKey: parsed.idempotencyKey,
+      idempotencyKey: deriveToolExecutionIdempotencyKey(
+        action.actionId,
+        parsed.dryRun === true ? "dry-run" : "live",
+      ),
       ...(parsed.dryRun === undefined ? {} : { dryRun: parsed.dryRun }),
       ...(parsed.timeoutMs === undefined ? {} : { timeoutMs: parsed.timeoutMs }),
     });
