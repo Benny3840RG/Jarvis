@@ -107,6 +107,17 @@ function digest(value: unknown): string {
   return createHash("sha256").update(canonicalJson(value), "utf8").digest("hex");
 }
 
+export function deriveToolExecutionIdempotencyKey(
+  actionId: string,
+  mode: "live" | "dry-run",
+): string {
+  const cleanActionId = actionId.trim();
+  if (!cleanActionId) {
+    throw new Error("Tool action ID is required for execution idempotency.");
+  }
+  return `tool-action-execution:v1:${mode}:${digest({ actionId: cleanActionId, mode })}`;
+}
+
 function isEffectFingerprintConflict(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
   return (
