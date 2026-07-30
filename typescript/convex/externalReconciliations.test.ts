@@ -134,10 +134,7 @@ describe("claimNext lease-expiry reclaim (worker-crash recovery)", () => {
   });
 });
 
-async function seedQuoteDelivery(
-  ctx: MutationCtx,
-  reconciliationId = "reconciliation-1",
-) {
+async function seedQuoteDelivery(ctx: MutationCtx, reconciliationId = "reconciliation-1") {
   return ctx.db.insert("quoteDeliveryAttempts", {
     ownerId: OWNER_ID,
     deliveryAttemptId: "delivery-attempt-1",
@@ -290,9 +287,7 @@ describe("observing-process crash recovery", () => {
         .unique(),
     );
     expect(record?.state).toBe("escalated");
-    expect(record?.escalationReason).toBe(
-      "abandoned-observing-process-interruption",
-    );
+    expect(record?.escalationReason).toBe("abandoned-observing-process-interruption");
     expect(record?.escalatedAt).toBe(now);
   });
 
