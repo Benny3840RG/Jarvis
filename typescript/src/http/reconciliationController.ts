@@ -7,10 +7,7 @@ import type {
   ExternalReconciliationRecord,
 } from "../reconciliation/externalReconciliation.js";
 import { JarvisProblem } from "./problemDetails.js";
-import {
-  parseReconciliationLimit,
-  parseReconciliationState,
-} from "./reconciliationRequest.js";
+import { parseReconciliationLimit, parseReconciliationState } from "./reconciliationRequest.js";
 import { HTTP_EXTERNAL_RECONCILIATION_READ_STORE } from "./tokens.js";
 
 function unavailable(): JarvisProblem {
@@ -57,26 +54,16 @@ function recordResponse(record: ExternalReconciliationRecord) {
     state: record.state,
     attemptCount: record.attemptCount,
     nextAttemptAt: record.nextAttemptAt,
-    ...(record.terminalStatus === undefined
-      ? {}
-      : { terminalStatus: record.terminalStatus }),
+    ...(record.terminalStatus === undefined ? {} : { terminalStatus: record.terminalStatus }),
     ...(record.resolutionErrorCode === undefined
       ? {}
       : { resolutionErrorCode: record.resolutionErrorCode }),
-    ...(record.lastErrorCode === undefined
-      ? {}
-      : { lastErrorCode: record.lastErrorCode }),
-    ...(record.escalationReason === undefined
-      ? {}
-      : { escalationReason: record.escalationReason }),
+    ...(record.lastErrorCode === undefined ? {} : { lastErrorCode: record.lastErrorCode }),
+    ...(record.escalationReason === undefined ? {} : { escalationReason: record.escalationReason }),
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
-    ...(record.resolvedAt === undefined
-      ? {}
-      : { resolvedAt: record.resolvedAt }),
-    ...(record.escalatedAt === undefined
-      ? {}
-      : { escalatedAt: record.escalatedAt }),
+    ...(record.resolvedAt === undefined ? {} : { resolvedAt: record.resolvedAt }),
+    ...(record.escalatedAt === undefined ? {} : { escalatedAt: record.escalatedAt }),
   };
 }
 
@@ -89,9 +76,7 @@ function receiptResponse(receipt: ToolExecutionReceipt) {
     tool: receipt.tool,
     operation: receipt.operation,
     actor: receipt.actor,
-    ...(receipt.approvalId === undefined
-      ? {}
-      : { approvalId: receipt.approvalId }),
+    ...(receipt.approvalId === undefined ? {} : { approvalId: receipt.approvalId }),
     policyVersion: receipt.policyVersion,
     correlationId: receipt.correlationId,
     source: receipt.source,
@@ -106,9 +91,7 @@ function receiptResponse(receipt: ToolExecutionReceipt) {
       ? {}
       : { reconciliationId: receipt.reconciliationId }),
     status: receipt.status,
-    ...(receipt.errorCode === undefined
-      ? {}
-      : { errorCode: receipt.errorCode }),
+    ...(receipt.errorCode === undefined ? {} : { errorCode: receipt.errorCode }),
     ...(receipt.providerErrorCode === undefined
       ? {}
       : { providerErrorCode: receipt.providerErrorCode }),
@@ -120,8 +103,7 @@ function receiptResponse(receipt: ToolExecutionReceipt) {
 function detailResponse(envelope: ExternalReconciliationEnvelope) {
   return {
     reconciliation: recordResponse(envelope.reconciliation),
-    receipt:
-      envelope.receipt === null ? null : receiptResponse(envelope.receipt),
+    receipt: envelope.receipt === null ? null : receiptResponse(envelope.receipt),
   };
 }
 
@@ -138,10 +120,7 @@ export class ReconciliationController {
   }
 
   @Get()
-  async list(
-    @Query("state") stateValue: unknown,
-    @Query("limit") limitValue: unknown,
-  ) {
+  async list(@Query("state") stateValue: unknown, @Query("limit") limitValue: unknown) {
     let state;
     let limit;
     try {
