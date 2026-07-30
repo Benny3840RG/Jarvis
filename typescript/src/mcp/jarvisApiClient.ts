@@ -33,6 +33,10 @@ export type DashboardSnapshot = {
     status: "ready" | "unavailable";
     quotes: QuoteSummary[];
   };
+  /** `null` means the inbox endpoint itself could not be reached — distinct from an empty inbox. */
+  inbox: OperationsInbox | null;
+  /** `null` means the activity endpoint itself could not be reached — distinct from `{status: "unavailable"}`. */
+  activity: ActivityTimelineResult | null;
   counts: {
     activeTasks: number;
     completedTasks: number;
@@ -583,12 +587,34 @@ export class JarvisApiClient {
       (quotes) => ({ status: "ready" as const, quotes }),
       () => ({ status: "unavailable" as const, quotes: [] as QuoteSummary[] }),
     );
-    const [status, tasks, reminders, brief, resolvedQuoteRegister] = await Promise.all([
+    // A failure reaching either endpoint is reported as `null` here — distinct
+    // from a source *within* the inbox/activity response being unavailable,
+    // which those endpoints already report truthfully on their own. `null`
+    // must never be rendered as "0 items" or "no activity".
+    const inbox = this.getOperationsInbox().then(
+      (value) => value,
+      () => null,
+    );
+    const activity = this.getOperationsActivity({ limit: 5 }).then(
+      (value) => value,
+      () => null,
+    );
+    const [
+      status,
+      tasks,
+      reminders,
+      brief,
+      resolvedQuoteRegister,
+      resolvedInbox,
+      resolvedActivity,
+    ] = await Promise.all([
       this.getStatus(),
       this.listTasks(),
       this.listReminders(),
       this.getDailyBrief(),
       quoteRegister,
+      inbox,
+      activity,
     ]);
     return {
       status,
@@ -596,6 +622,8 @@ export class JarvisApiClient {
       reminders,
       brief,
       quoteRegister: resolvedQuoteRegister,
+      inbox: resolvedInbox,
+      activity: resolvedActivity,
       counts: {
         activeTasks: tasks.filter((task) => !task.completed).length,
         completedTasks: tasks.filter((task) => task.completed).length,

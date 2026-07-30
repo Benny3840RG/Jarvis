@@ -27,6 +27,8 @@ export const MCP_TOOL_OPERATIONS: Readonly<Record<string, readonly OpenApiOperat
     { method: "GET", path: "/api/v1/reminders" },
     { method: "GET", path: "/api/v1/brief" },
     { method: "GET", path: "/api/v1/quotes" },
+    { method: "GET", path: "/api/v1/operations/inbox" },
+    { method: "GET", path: "/api/v1/operations/activity" },
   ],
   get_jarvis_status: [{ method: "GET", path: "/api/v1/status" }],
   list_tasks: [{ method: "GET", path: "/api/v1/tasks" }],

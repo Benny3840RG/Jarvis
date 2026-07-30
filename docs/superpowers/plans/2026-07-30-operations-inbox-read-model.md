@@ -206,13 +206,33 @@ HTTP route `GET /api/v1/operations/activity`, `openapi/jarvis.openapi.json`, cor
 
 ### Task 7: HUD wiring
 
-**Files:** `src/mcp/dashboard-v1.html` (extend the existing Operations section; do not touch its already-
-truthful #241/#242 content), corresponding widget/renderer tests.
+**Files:** `src/mcp/dashboard-v1.html` (extend the existing Operations section; #241/#242's truthful
+project/quote/maintenance content untouched), `src/mcp/jarvisApiClient.ts` (`dashboard()` extended to fetch
+inbox + activity concurrently), `src/mcp/server.ts` (`dashboardOutputSchema` extended), corresponding tests.
 
-- [ ] RED: stale-response/monotonic-generation test, hostile-text test, empty-vs-unavailable test.
-- [ ] Wire real inbox/timeline/health data in; remove the session-only "Live operator feed" framing where
-      it would now conflict with genuine durable timeline data (or clearly relabel it if kept alongside).
-- [ ] Full repository CI + HUD build green.
+- [x] Architecture choice: folded `get_operations_inbox` and a bounded (`limit: 5`) `getOperationsActivity()`
+      read into the existing `dashboard()` combiner (mirroring the established `quoteRegister` resilience
+      pattern — `.then(value, () => null)`), rather than adding new per-widget fetches. This means there is
+      no new async race to guard with a monotonic request generation counter: `show_jarvis_dashboard`
+      already replaces state atomically via the existing `update()` function on every call, exactly as it
+      already did for `brief`/`quotes`/`status`. A failure reaching either endpoint degrades to `null` —
+      distinct from an empty inbox, and distinct from activity's own `{status: "unavailable"}` — and must
+      never be rendered as "nothing needs attention" or "no activity".
+- [x] RED → GREEN (`tests/mcpOperationsHudWiring.test.ts`, mirroring `tests/mcpWidget.test.ts`'s
+      regex-extraction-and-execute pattern): empty-vs-unavailable distinction for both the inbox (never
+      reports "nothing needs attention" while any source is `unavailable`/`degraded`) and the activity
+      timeline (`null`/`{status:"unavailable"}` vs a genuinely empty `{status:"available", events: []}`
+      page render distinct copy); hostile-text test (a `<img onerror>` payload in an item's title/explanation
+      lands as inert `textContent` on child elements — confirmed no `.innerHTML =` exists anywhere in the
+      widget); source-timestamp-not-render-time test for activity rows; integration-commissioning rendering
+      test (renders the literal `commissioned`/`not-commissioned` string, never a percentage).
+- [x] Added two new full-width panels to the existing Operations view (`Operations inbox`, `Activity
+      timeline`) and an `Integration commissioning` sub-section inside the existing Systems view's Runtime
+      Health panel — all additive, none of the four existing Operations panels' IDs or logic touched.
+- [x] Kept the existing session-only "Live operator feed" panel exactly as-is (still true — it reflects
+      real UI actions taken this session) rather than removing it: its `SESSION` tag already disambiguates
+      it from the new panel's `DURABLE` tag, so the two cannot be confused.
+- [x] GREEN: `npm run check` — all green.
 
 ### Task 8: Documentation + review + PR
 

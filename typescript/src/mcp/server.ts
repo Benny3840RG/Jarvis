@@ -414,6 +414,11 @@ const dashboardOutputSchema = {
     status: z.enum(["ready", "unavailable"]),
     quotes: z.array(quoteSummarySchema),
   }),
+  // `null` means the inbox/activity endpoint itself could not be reached —
+  // distinct from an empty inbox, or from activity's own `{status:
+  // "unavailable"}` — and must never be rendered as "nothing needs attention".
+  inbox: operationsInboxSchema.nullable(),
+  activity: activityTimelineResultSchema.nullable(),
   counts: countsSchema,
 };
 

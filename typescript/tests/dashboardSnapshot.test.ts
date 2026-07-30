@@ -107,6 +107,9 @@ const BRIEF: DailyBrief = {
   maintenance: { dueCount: 0, dueSoonCount: 0, due: [], dueSoon: [] },
 };
 
+const INBOX = { generatedAt: "2026-07-30T00:00:00.000Z", items: [], sources: [] };
+const ACTIVITY = { status: "available", events: [], cursor: "", isDone: true };
+
 describe("dashboard snapshot", () => {
   it("projects the daily brief through the existing authenticated dashboard read", async () => {
     const paths: string[] = [];
@@ -121,6 +124,8 @@ describe("dashboard snapshot", () => {
       if (url.pathname === "/api/v1/brief") return Response.json({ data: BRIEF });
       if (url.pathname === "/api/v1/quotes")
         return Response.json({ data: [LIFECYCLE_QUOTE], count: 1 });
+      if (url.pathname === "/api/v1/operations/inbox") return Response.json({ data: INBOX });
+      if (url.pathname === "/api/v1/operations/activity") return Response.json({ data: ACTIVITY });
       return Response.json({ title: "Not Found" }, { status: 404 });
     }) as typeof fetch;
 
@@ -133,6 +138,8 @@ describe("dashboard snapshot", () => {
 
     assert.deepEqual(paths.sort(), [
       "/api/v1/brief",
+      "/api/v1/operations/activity",
+      "/api/v1/operations/inbox",
       "/api/v1/quotes",
       "/api/v1/reminders",
       "/api/v1/status",
@@ -143,6 +150,8 @@ describe("dashboard snapshot", () => {
       status: "ready",
       quotes: [LIFECYCLE_QUOTE],
     });
+    assert.deepEqual(snapshot.inbox, INBOX);
+    assert.deepEqual(snapshot.activity, ACTIVITY);
     assert.notEqual(
       snapshot.quoteRegister.quotes[0]?.quoteId,
       snapshot.brief.quotes.awaitingResponse[0]?.id,
@@ -178,5 +187,9 @@ describe("dashboard snapshot", () => {
     assert.deepEqual(snapshot.quoteRegister, { status: "unavailable", quotes: [] });
     assert.deepEqual(snapshot.tasks, [TASK]);
     assert.deepEqual(snapshot.brief, BRIEF);
+    // The inbox/activity endpoints 404 in this fixture (unhandled paths) —
+    // that must degrade to null, never fail the whole dashboard read.
+    assert.equal(snapshot.inbox, null);
+    assert.equal(snapshot.activity, null);
   });
 });

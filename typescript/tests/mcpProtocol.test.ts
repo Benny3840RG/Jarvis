@@ -208,6 +208,8 @@ describe("Jarvis MCP preview protocol", () => {
         ],
         brief: BRIEF,
         quoteRegister: { status: "ready", quotes: [] },
+        inbox: null,
+        activity: null,
         counts: {
           activeTasks: 1,
           completedTasks: 0,
