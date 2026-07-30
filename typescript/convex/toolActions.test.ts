@@ -818,4 +818,126 @@ describe("concurrency: racing mutations against the same approved action", () =>
       }),
     ).rejects.toThrow(/single-use/i);
   });
+
+  it("refuses execution eligibility for a reusable action once it was revoked between the caller's read and the check", async () => {
+    // Full-repo-audit finding: reusable actions had no equivalent of
+    // claimSingleUseExecution's authoritative re-check — execute() trusted
+    // the caller's own, separately-fetched, potentially stale snapshot. A
+    // revoke landing between that read and the execute call must still be
+    // caught here, exactly as it already is for single-use actions above.
+    const t = harness();
+    await stageAndReturn(t, { destructive: false });
+    const now = Date.now();
+    await t.mutation(api.toolActions.approve, {
+      serviceToken: SERVICE_TOKEN,
+      projectKey: PROJECT_KEY,
+      actionId: "action-1",
+      expectedRevision: 1,
+      now,
+    });
+    await t.mutation(api.toolActions.revoke, {
+      serviceToken: SERVICE_TOKEN,
+      projectKey: PROJECT_KEY,
+      actionId: "action-1",
+      reason: "Operator changed their mind before execution.",
+      now,
+    });
+
+    const verification = await t.mutation(api.toolActions.verifyExecutionEligibility, {
+      serviceToken: SERVICE_TOKEN,
+      projectKey: PROJECT_KEY,
+      actionId: "action-1",
+      now,
+    });
+
+    expect(verification).toEqual({ eligible: false, blockReason: "not-approved" });
+    const stored = await t.query(api.toolActions.get, {
+      serviceToken: SERVICE_TOKEN,
+      projectKey: PROJECT_KEY,
+      actionId: "action-1",
+    });
+    expect(stored?.state).toBe("revoked");
+  });
+
+  it("refuses execution eligibility for a reusable action once its approval expired between the caller's read and the check, and durably observes the expiry", async () => {
+    const t = harness();
+    await stageAndReturn(t, { destructive: false });
+    const approvedAt = Date.now();
+    await t.mutation(api.toolActions.approve, {
+      serviceToken: SERVICE_TOKEN,
+      projectKey: PROJECT_KEY,
+      actionId: "action-1",
+      expectedRevision: 1,
+      now: approvedAt,
+      approvalTtlMs: 60_000, // clamped to the 1-minute floor
+    });
+
+    const checkAt = approvedAt + 60_001;
+    const verification = await t.mutation(api.toolActions.verifyExecutionEligibility, {
+      serviceToken: SERVICE_TOKEN,
+      projectKey: PROJECT_KEY,
+      actionId: "action-1",
+      now: checkAt,
+    });
+
+    expect(verification).toEqual({ eligible: false, blockReason: "expired" });
+    const stored = await t.query(api.toolActions.get, {
+      serviceToken: SERVICE_TOKEN,
+      projectKey: PROJECT_KEY,
+      actionId: "action-1",
+    });
+    // Expiry is durably observed, matching approve()'s and
+    // claimSingleUseExecution's own lazy-expiry convention.
+    expect(stored?.state).toBe("expired");
+  });
+
+  it("reports execution eligibility for a still-approved reusable action without disturbing its state", async () => {
+    const t = harness();
+    await stageAndReturn(t, { destructive: false });
+    const now = Date.now();
+    await t.mutation(api.toolActions.approve, {
+      serviceToken: SERVICE_TOKEN,
+      projectKey: PROJECT_KEY,
+      actionId: "action-1",
+      expectedRevision: 1,
+      now,
+    });
+
+    const verification = await t.mutation(api.toolActions.verifyExecutionEligibility, {
+      serviceToken: SERVICE_TOKEN,
+      projectKey: PROJECT_KEY,
+      actionId: "action-1",
+      now,
+    });
+
+    expect(verification).toEqual({ eligible: true });
+    const stored = await t.query(api.toolActions.get, {
+      serviceToken: SERVICE_TOKEN,
+      projectKey: PROJECT_KEY,
+      actionId: "action-1",
+    });
+    expect(stored?.state).toBe("approved");
+  });
+
+  it("refuses execution eligibility checks for a single-use action", async () => {
+    const t = harness();
+    await stageAndReturn(t, { destructive: true, requiredAuthority: "T3" });
+    const now = Date.now();
+    await t.mutation(api.toolActions.approve, {
+      serviceToken: SERVICE_TOKEN,
+      projectKey: PROJECT_KEY,
+      actionId: "action-1",
+      expectedRevision: 1,
+      now,
+    });
+
+    await expect(
+      t.mutation(api.toolActions.verifyExecutionEligibility, {
+        serviceToken: SERVICE_TOKEN,
+        projectKey: PROJECT_KEY,
+        actionId: "action-1",
+        now,
+      }),
+    ).rejects.toThrow(/single-use/i);
+  });
 });

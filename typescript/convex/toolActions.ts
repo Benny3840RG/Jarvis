@@ -550,6 +550,65 @@ const singleUseClaimBlockReasonValidator = v.union(
   v.literal("expired"),
 );
 
+const executionEligibilityBlockReasonValidator = v.union(
+  v.literal("not-approved"),
+  v.literal("expired"),
+);
+
+type StateAndExpiryRevision = { ok: true } | { ok: false; blockReason: "not-approved" | "expired" };
+
+/**
+ * Authoritative, same-transaction re-check of state/expiry shared by both
+ * `claimSingleUseExecution` and `verifyExecutionEligibility`. `action` above
+ * is a fresh read, but the caller's own decision to attempt execution was
+ * made against a *separate*, potentially stale, earlier read (the HTTP
+ * boundary's own `get()`). Revocation or TTL expiry can land on the
+ * authoritative document in the gap between that earlier read and this call.
+ * A read-before-effect check on stale data cannot catch that — only
+ * re-validating state and expiry here, in the same mutation transaction that
+ * either claims or clears the action for execution, closes the gap.
+ */
+async function reviseStateAndExpiryAtExecutionTime(
+  ctx: MutationCtx,
+  ownerId: string,
+  projectKey: string,
+  actionId: string,
+  action: Doc<"toolActions">,
+  now: number,
+): Promise<StateAndExpiryRevision> {
+  if (action.state !== "approved") {
+    return { ok: false, blockReason: "not-approved" };
+  }
+  if (
+    action.approvalExpiryPolicy !== undefined &&
+    isApprovalExpired(
+      { policy: action.approvalExpiryPolicy, expiresAt: action.approvalExpiresAt },
+      now,
+    )
+  ) {
+    // Lazily observed on next touch, matching approve()'s existing
+    // lazy-expiry-observation convention: persist the durable `expired`
+    // transition rather than merely reporting it, so it becomes true
+    // authoritative state, not just a transient read-time computation.
+    await ctx.db.patch("toolActions", action._id, {
+      state: "expired",
+      expiredObservedAt: now,
+      updatedAt: now,
+    });
+    await appendAudit(ctx, {
+      ownerId,
+      requestId: action.requestId,
+      projectKey,
+      eventType: "tool.action.approval-expired",
+      actor: "tool",
+      payload: { actionId, approvalExpiresAt: action.approvalExpiresAt ?? null, observedAt: now },
+      createdAt: now,
+    });
+    return { ok: false, blockReason: "expired" };
+  }
+  return { ok: true };
+}
+
 export const claimSingleUseExecution = mutation({
   args: {
     serviceToken: v.string(),
@@ -582,46 +641,16 @@ export const claimSingleUseExecution = mutation({
     }
 
     const now = args.now ?? Date.now();
-
-    // Authoritative, same-transaction re-check: `action` above is a fresh
-    // read, but the caller's own decision to attempt execution was made
-    // against a *separate*, potentially stale, earlier read (the HTTP
-    // boundary's own `get()`). Revocation or TTL expiry can land on the
-    // authoritative document in the gap between that earlier read and this
-    // claim. A read-before-effect check on stale data cannot catch that —
-    // only re-validating state and expiry here, atomically with the claim
-    // write, closes the gap. This mirrors the same "read-then-effect can't
-    // be trusted, only an atomic claim can" reasoning that motivated the
-    // claim mechanism itself.
-    if (action.state !== "approved") {
-      return { claimed: false, claimId: "", blockReason: "not-approved" as const };
-    }
-    if (
-      action.approvalExpiryPolicy !== undefined &&
-      isApprovalExpired(
-        { policy: action.approvalExpiryPolicy, expiresAt: action.approvalExpiresAt },
-        now,
-      )
-    ) {
-      // Lazily observed on next touch, matching approve()'s existing
-      // lazy-expiry-observation convention: persist the durable `expired`
-      // transition rather than merely reporting it, so it becomes true
-      // authoritative state, not just a transient read-time computation.
-      await ctx.db.patch("toolActions", action._id, {
-        state: "expired",
-        expiredObservedAt: now,
-        updatedAt: now,
-      });
-      await appendAudit(ctx, {
-        ownerId,
-        requestId: action.requestId,
-        projectKey,
-        eventType: "tool.action.approval-expired",
-        actor: "tool",
-        payload: { actionId, approvalExpiresAt: action.approvalExpiresAt ?? null, observedAt: now },
-        createdAt: now,
-      });
-      return { claimed: false, claimId: "", blockReason: "expired" as const };
+    const revision = await reviseStateAndExpiryAtExecutionTime(
+      ctx,
+      ownerId,
+      projectKey,
+      actionId,
+      action,
+      now,
+    );
+    if (!revision.ok) {
+      return { claimed: false, claimId: "", blockReason: revision.blockReason };
     }
 
     await ctx.db.patch("toolActions", action._id, {
@@ -639,5 +668,57 @@ export const claimSingleUseExecution = mutation({
       createdAt: now,
     });
     return { claimed: true, claimId };
+  },
+});
+
+/**
+ * The same authoritative, execute-time freshness guarantee as
+ * `claimSingleUseExecution`, for *reusable* (non-single-use) actions — which
+ * have nothing to claim (they may legitimately execute more than once) but
+ * still need their state/expiry re-verified against the authoritative
+ * document immediately before the external effect, not against the caller's
+ * earlier, separately-fetched, potentially stale snapshot. Without this, a
+ * revoke or TTL expiry landing between that snapshot's fetch and the
+ * execute() call would let a reusable action's effect run anyway — the same
+ * race `claimSingleUseExecution` closes for single-use actions, previously
+ * left open here. (Finding from a full-repo audit, not an independent
+ * review comment.)
+ */
+export const verifyExecutionEligibility = mutation({
+  args: {
+    serviceToken: v.string(),
+    projectKey: v.string(),
+    actionId: v.string(),
+    now: v.optional(v.number()),
+  },
+  returns: v.object({
+    eligible: v.boolean(),
+    blockReason: v.optional(executionEligibilityBlockReasonValidator),
+  }),
+  handler: async (ctx, args) => {
+    const ownerId = requireOwner(args.serviceToken);
+    const projectKey = cleanRequiredText(args.projectKey, "Project key");
+    const actionId = cleanRequiredText(args.actionId, "Tool action ID");
+    const action = await requireAction(ctx, ownerId, projectKey, actionId);
+
+    if (action.consumptionPolicy === "single-use") {
+      throw new Error(
+        "Single-use actions must use claimSingleUseExecution, not verifyExecutionEligibility.",
+      );
+    }
+
+    const now = args.now ?? Date.now();
+    const revision = await reviseStateAndExpiryAtExecutionTime(
+      ctx,
+      ownerId,
+      projectKey,
+      actionId,
+      action,
+      now,
+    );
+    if (!revision.ok) {
+      return { eligible: false, blockReason: revision.blockReason };
+    }
+    return { eligible: true };
   },
 });

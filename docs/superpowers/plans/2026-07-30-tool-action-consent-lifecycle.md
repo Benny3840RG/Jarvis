@@ -178,6 +178,32 @@ actionId, reason, now?}`. No `expectedRevision` — revocation doesn't interact 
   validation now runs immediately after the dry-run check, strictly before the
   single-use claim block, so a rejected request can never have taken a claim in the
   first place.
+- **Fourth correction, found by a full-repo audit rather than an independent PR
+  review:** the second correction above closed the revoke/expire-during-flight race
+  for single-use actions by re-checking state/expiry inside `claimSingleUseExecution`'s
+  own transaction — but that re-check only ran when `consumptionPolicy === "single-use"`.
+  A *reusable* (non-destructive) action's `executeOnce()` call never re-fetched anything;
+  it only checked the caller's own, separately-fetched, potentially stale snapshot (the
+  same snapshot the second correction proved unsafe to trust for single-use actions).
+  Concretely: fetch a reusable action showing `state: "approved"`, revoke it, then
+  execute against the stale snapshot — the effect ran anyway, contradicting the very
+  guarantee the operator doc already claimed for revocation. Verified genuinely RED
+  first (`tests/toolExecution.test.ts`, two new cases using a hand-written
+  `ExecutionEligibilityStore` test double, mirroring the existing claim-store-double
+  tests) against the pre-fix branch, which only ever called `this.claims.claim()` and
+  had no `else` arm at all. The fix adds the reusable-action counterpart to the
+  single-use mechanism, at every layer: a new Convex mutation
+  `verifyExecutionEligibility` sharing the same extracted
+  `reviseStateAndExpiryAtExecutionTime` helper `claimSingleUseExecution` now also calls,
+  a new `ExecutionEligibilityStore` interface (`InMemoryExecutionEligibilityStore` /
+  `ConvexExecutionEligibilityStore`, mirroring `SingleUseConsumptionClaimStore`'s own
+  in-memory/Convex split — the in-memory default is a deliberate no-op, matching the
+  in-memory claim store's own accepted scope), and an `else` branch in `executeOnce()`
+  that calls `verify()` for every action that isn't single-use (reusable and legacy/
+  unclassified rows alike) and maps `blockReason` to the same `errorCode`s the
+  single-use branch already uses. Four Convex-layer tests and two TS-layer tests cover
+  the revoke-mid-flight, expire-mid-flight, still-eligible, and wrong-consumption-policy
+  cases.
 
 ## Concurrency
 

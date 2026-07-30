@@ -62,6 +62,17 @@ refused with `errorCode: "not-authorized"`, and an approval found expired at cla
 `approve()`'s existing lazy-expiry-observation convention rather than only reporting the expiry transiently.
 Neither block reason invokes the provider.
 
+Reusable (non-single-use) actions have no claim to win, but need the identical execute-time freshness
+guarantee: `verifyExecutionEligibility` performs the same same-transaction state/expiry re-check as
+`claimSingleUseExecution`, minus the claim/consumption side effect, since a reusable action may legitimately
+execute more than once. **This closed a gap that predates the paragraph above**: a full-repo audit found the
+atomic re-check had only ever been wired up for single-use actions — a reusable action executed purely
+against the caller's own, separately fetched, potentially stale snapshot, so a revoke or TTL expiry landing
+in the same fetch-to-execute gap described above would previously let the effect run anyway. A revoked or
+expired reusable action is now refused with the same `errorCode`s (`"not-authorized"` / `"approval-expired"`)
+as the single-use path above, and expiry is durably observed the same way. Neither block reason invokes the
+provider.
+
 Revocation (`POST .../revoke`, see below) is owner-scoped, idempotent for a repeated identical reason, and
 prospective-only: it stops a future execution attempt and never claims to undo one already in flight. It
 refuses to revoke an action that has already produced a completed execution receipt — whichever terminal

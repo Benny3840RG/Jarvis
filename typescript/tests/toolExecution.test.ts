@@ -7,6 +7,8 @@ import type { ToolAction } from "../src/actions/toolActions.js";
 import {
   InMemoryToolExecutionReceiptStore,
   ToolExecutionService,
+  type ExecutionEligibilityResult,
+  type ExecutionEligibilityStore,
   type SingleUseConsumptionClaimStore,
   type SingleUseExecutionClaimResult,
 } from "../src/actions/toolExecution.js";
@@ -436,6 +438,64 @@ describe("consent-lifecycle execution enforcement (R-048/R-049/R-050)", () => {
     assert.equal(result.status, "blocked");
     assert.equal(result.errorCode, "approval-expired");
     assert.equal(executions.count, 0, "the provider must never be invoked for an expired claim");
+  });
+
+  it("maps an eligibility store's not-approved block reason to not-authorized for a reusable action, never invoking the definition", async () => {
+    // Full-repo-audit finding: the atomic, execute-time re-check above only
+    // ever ran for single-use actions. A reusable (or legacy/unclassified)
+    // action executed purely against the caller's own, separately-fetched,
+    // possibly-stale snapshot — a revoke landing between that fetch and this
+    // call would previously let the effect run anyway. The eligibility
+    // store's own fresh, same-transaction check must be what decides this.
+    const executions = { count: 0 };
+    const eligibility: ExecutionEligibilityStore = {
+      async verify(): Promise<ExecutionEligibilityResult> {
+        return { eligible: false, blockReason: "not-approved" };
+      },
+    };
+    const executor = new ToolExecutionService(
+      [definition(executions)],
+      new InMemoryToolExecutionReceiptStore(),
+      undefined,
+      undefined,
+      eligibility,
+    );
+
+    const result = await executor.execute({
+      action,
+      authority: "T1",
+      idempotencyKey: "revoked-between-get-and-verify",
+    });
+
+    assert.equal(result.status, "blocked");
+    assert.equal(result.errorCode, "not-authorized");
+    assert.equal(executions.count, 0, "the provider must never be invoked for a revoked action");
+  });
+
+  it("maps an eligibility store's expired block reason to approval-expired for a reusable action, never invoking the definition", async () => {
+    const executions = { count: 0 };
+    const eligibility: ExecutionEligibilityStore = {
+      async verify(): Promise<ExecutionEligibilityResult> {
+        return { eligible: false, blockReason: "expired" };
+      },
+    };
+    const executor = new ToolExecutionService(
+      [definition(executions)],
+      new InMemoryToolExecutionReceiptStore(),
+      undefined,
+      undefined,
+      eligibility,
+    );
+
+    const result = await executor.execute({
+      action,
+      authority: "T1",
+      idempotencyKey: "expired-between-get-and-verify",
+    });
+
+    assert.equal(result.status, "blocked");
+    assert.equal(result.errorCode, "approval-expired");
+    assert.equal(executions.count, 0, "the provider must never be invoked for an expired action");
   });
 
   it("does not block a dry-run against an already-consumed single-use action", async () => {

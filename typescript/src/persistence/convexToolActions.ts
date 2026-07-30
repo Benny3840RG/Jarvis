@@ -3,6 +3,8 @@ import { ConvexHttpClient } from "convex/browser";
 import { api } from "../../convex/_generated/api.js";
 import type { ToolAction, ToolActionService } from "../actions/toolActions.js";
 import type {
+  ExecutionEligibilityResult,
+  ExecutionEligibilityStore,
   SingleUseConsumptionClaimStore,
   SingleUseExecutionClaimResult,
 } from "../actions/toolExecution.js";
@@ -209,5 +211,41 @@ export class ConvexSingleUseConsumptionClaimStore implements SingleUseConsumptio
       actionId: action.actionId,
       claimId,
     })) as SingleUseExecutionClaimResult;
+  }
+}
+
+/**
+ * Backs `ExecutionEligibilityStore` with the authoritative Convex mutation
+ * `verifyExecutionEligibility` — the reusable-action counterpart to
+ * `ConvexSingleUseConsumptionClaimStore` above, re-checking state/expiry
+ * against a fresh read instead of the caller's own, potentially stale,
+ * separately-fetched snapshot.
+ */
+export class ConvexExecutionEligibilityStore implements ExecutionEligibilityStore {
+  private readonly client: ConvexClientLike;
+  private readonly serviceToken: string;
+
+  constructor(client?: ConvexClientLike, serviceToken = process.env.JARVIS_SERVICE_TOKEN) {
+    if (!serviceToken) {
+      throw new Error("Execution eligibility checks require JARVIS_SERVICE_TOKEN.");
+    }
+    this.serviceToken = serviceToken;
+
+    if (client) {
+      this.client = client;
+      return;
+    }
+
+    const convexUrl = process.env.CONVEX_URL;
+    if (!convexUrl) throw new Error("Execution eligibility checks require CONVEX_URL.");
+    this.client = new ConvexHttpClient(convexUrl);
+  }
+
+  async verify(action: ToolAction): Promise<ExecutionEligibilityResult> {
+    return (await this.client.mutation(toolActionFunctions.verifyExecutionEligibility, {
+      serviceToken: this.serviceToken,
+      projectKey: action.projectId,
+      actionId: action.actionId,
+    })) as ExecutionEligibilityResult;
   }
 }
