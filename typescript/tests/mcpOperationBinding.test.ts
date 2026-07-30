@@ -36,6 +36,7 @@ const STATUS: SystemStatus = {
     deploymentVersion: "dev:outgoing-ram-798",
   },
   reconciliation: { state: "disabled", enabled: false },
+  integrations: [],
   timezone: "Australia/Melbourne",
   layers: {
     runtime: { status: "ready" },

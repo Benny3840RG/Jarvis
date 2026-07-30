@@ -155,11 +155,32 @@ HTTP route `GET /api/v1/operations/activity`, `openapi/jarvis.openapi.json`, cor
 
 ### Task 5: Integration health
 
-**Files:** `src/http/systemStatusService.ts` (extend, additively), corresponding tests.
+**Files:** `src/http/systemStatusService.ts` (extend, additively), `src/http/contracts.ts` (new
+`IntegrationStatus` type, `SystemStatus.integrations`), `src/actions/toolExecution.ts` (new
+`ToolExecutionService.isRegistered()`), `src/mcp/server.ts` (status tool output schema),
+`openapi/jarvis.openapi.json`, corresponding tests.
 
-- [ ] RED: evidence-timestamp test, uncommissioned-vs-unavailable distinction test.
-- [ ] Extend with the additional evidence-backed line items described in the design doc.
-- [ ] GREEN.
+- [x] RED → GREEN: `tests/systemStatusIntegrations.test.ts` proves the reported commissioning state is a
+      live check against the actual injected `ToolExecutionService` (not a hardcoded constant — it flips
+      when a different service instance is injected), distinguishes "tool execution not configured at all"
+      from "configured but `quotes:send` specifically not registered" (both `not-commissioned`, with a
+      distinct concrete reason each), and reports `commissioned` with no `reason` once the tool is actually
+      registered.
+- [x] Added exactly one evidence-backed line item: `quote-delivery` commissioning state, derived from
+      `ToolExecutionService.isRegistered("quotes", "send")` — the same conditional registration
+      `toolExecutionFactory.ts` already performs from the real quote-repository/email-provider/delivery-
+      repository/PDF-artifact-repository bundle. No new live call to Outlook or any other external
+      provider is made by this check.
+- [x] Deliberately did not add a live "MCP catalogue registration success" check: constructing the real
+      `createJarvisMcpServer()` requires a `JarvisApiClient` wired to a live HTTP base URL, so a runtime
+      self-check from inside the status endpoint would mean either a new recursive HTTP call to this same
+      process (not a pre-existing "already computed" fact, and arguably a new live call) or a nontrivial
+      restructuring of MCP server bootstrap to capture a static success/failure fact — both beyond an
+      "additive" extension for this slice. `tests/mcpOperationBinding.test.ts` and the OpenAPI/MCP
+      route-alignment tests already prove the MCP tool surface is correct at CI time.
+- [x] GREEN: `npm run check` — all green, including the MCP status tool output schema and OpenAPI
+      `SystemStatus` schema updated to include `integrations` (both are `additionalProperties: false`,
+      so the field had to be added in lockstep rather than silently accepted).
 
 ### Task 6: MCP read tools
 

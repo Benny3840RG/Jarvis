@@ -352,6 +352,13 @@ const statusSchema = z.object({
     lastCycleProcessed: z.number().int().nonnegative().optional(),
     lastErrorCode: z.string().optional(),
   }),
+  integrations: z.array(
+    z.object({
+      name: z.string(),
+      status: z.enum(["commissioned", "not-commissioned"]),
+      reason: z.string().optional(),
+    }),
+  ),
   timezone: z.string(),
   layers: z.object({
     runtime: layerSchema,

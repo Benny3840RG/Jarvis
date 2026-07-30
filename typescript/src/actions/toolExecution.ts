@@ -303,6 +303,11 @@ export class ToolExecutionService {
     }
   }
 
+  /** Whether a `tool:operation` definition is registered — evidence for integration-commissioning checks. */
+  isRegistered(tool: string, operation: string): boolean {
+    return this.definitions.has(`${tool}:${operation}`);
+  }
+
   async execute(input: ExecuteInput): Promise<ToolExecutionReceipt> {
     const definition = this.definitions.get(`${input.action.tool}:${input.action.operation}`);
     const effectFingerprint = fingerprintToolEffect(input.action);

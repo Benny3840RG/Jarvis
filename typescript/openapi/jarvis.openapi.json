@@ -5425,6 +5425,7 @@
           "sourceVersion",
           "provider",
           "reconciliation",
+          "integrations",
           "timezone",
           "layers",
           "zState",
@@ -5451,6 +5452,12 @@
           },
           "reconciliation": {
             "$ref": "#/components/schemas/ReconciliationStatus"
+          },
+          "integrations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/IntegrationStatus"
+            }
           },
           "timezone": {
             "type": "string",
@@ -9472,6 +9479,25 @@
         "properties": {
           "data": {
             "$ref": "#/components/schemas/ActivityTimelineResult"
+          }
+        }
+      },
+      "IntegrationStatus": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "status"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "status": {
+            "type": "string",
+            "enum": ["commissioned", "not-commissioned"]
+          },
+          "reason": {
+            "type": "string",
+            "description": "Present when status is \"not-commissioned\" \u2014 a concrete, non-generic reason."
           }
         }
       }

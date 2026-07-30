@@ -18,6 +18,7 @@ const STATUS: SystemStatus = {
     deploymentVersion: null,
   },
   reconciliation: { state: "disabled", enabled: false },
+  integrations: [],
   timezone: "Australia/Melbourne",
   layers: {
     runtime: { status: "ready" },
