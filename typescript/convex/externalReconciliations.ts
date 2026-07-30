@@ -274,31 +274,20 @@ export const listForOperator = query({
     }
 
     if (args.state !== undefined) {
-      const records = await ctx.db
+      return ctx.db
         .query("externalReconciliations")
-        .withIndex("by_owner_and_state_and_next_attempt_at", (q) =>
+        .withIndex("by_owner_and_state_and_updated_at", (q) =>
           q.eq("ownerId", ownerId).eq("state", args.state!),
         )
         .order("desc")
         .take(limit);
-      return records.sort((left, right) => right.updatedAt - left.updatedAt);
     }
 
-    const states = ["observing", "pending", "claimed", "resolved", "escalated"] as const;
-    const records = (
-      await Promise.all(
-        states.map((state) =>
-          ctx.db
-            .query("externalReconciliations")
-            .withIndex("by_owner_and_state_and_next_attempt_at", (q) =>
-              q.eq("ownerId", ownerId).eq("state", state),
-            )
-            .order("desc")
-            .take(limit),
-        ),
-      )
-    ).flat();
-    return records.sort((left, right) => right.updatedAt - left.updatedAt).slice(0, limit);
+    return ctx.db
+      .query("externalReconciliations")
+      .withIndex("by_owner_and_updated_at", (q) => q.eq("ownerId", ownerId))
+      .order("desc")
+      .take(limit);
   },
 });
 
