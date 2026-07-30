@@ -122,6 +122,25 @@ meaning (only valid from `proposed`); `revoke()` is the only path out of `approv
   consumption check (blocking a second execution against an already-consumed
   single-use action, independent of idempotency key) is deferred with the rest of the
   `toolExecution.ts` wiring, since it requires touching that file.
+- **Correction found by independent review, after the execute()-time check landed:**
+  the first implementation of that check (`listReceiptsForAction` on
+  `ToolExecutionReceiptStore`, called at the top of `executeOnce()`) read past receipts
+  *before* invoking the tool, then relied on the *next* attempt observing a saved
+  receipt to detect consumption. Two different-key concurrent executions could both
+  run this read before either had saved anything, so both would observe "not yet
+  consumed" and both would cross the external-effect boundary — a genuine
+  read-before-effect race, proven by a focused concurrent regression test
+  (`Promise.all` of two different-key `execute()` calls; the buggy version invoked the
+  definition twice). The fix replaces that check with an **atomic execution claim**:
+  a new Convex mutation `claimSingleUseExecution` (owner + actionId scoped, new
+  `singleUseClaimedAt`/`singleUseClaimId` fields on `ToolAction`, both additive) that
+  Convex's own OCC serializes across any number of concurrent callers, called
+  immediately before the external effect rather than at the top of the function. The
+  claim is never released. `revoke()`'s own consumption check was extended to also
+  treat an outstanding claim as consumption, not only a completed receipt, closing an
+  adjacent gap (a claimed-but-not-yet-completed execution should not be revocable
+  either). The now-superseded `listReceiptsForAction` method/query was removed rather
+  than left as unused dead code.
 
 ## Concurrency
 

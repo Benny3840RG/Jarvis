@@ -1,8 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
+import type { ToolAction } from "../src/actions/toolActions.js";
 import type { ConvexClientLike } from "../src/persistence/convexPersistence.js";
-import { ConvexToolActionService } from "../src/persistence/convexToolActions.js";
+import {
+  ConvexSingleUseConsumptionClaimStore,
+  ConvexToolActionService,
+} from "../src/persistence/convexToolActions.js";
 
 function actionRow(state = "proposed") {
   return {
@@ -172,5 +176,49 @@ describe("ConvexToolActionService", () => {
     assert.equal(result?.approvalExpiresAt, "2026-07-15T00:00:01.000Z");
     assert.equal(result?.consumptionPolicy, "reusable");
     assert.equal(result?.isApprovalExpired, false);
+  });
+});
+
+describe("ConvexSingleUseConsumptionClaimStore", () => {
+  it("claims through one authenticated mutation, scoped by project and action", async () => {
+    const calls: Array<{ args: unknown }> = [];
+    const client = {
+      async query() {
+        throw new Error("query must not be called by claim()");
+      },
+      async mutation(_functionRef: unknown, args: unknown) {
+        calls.push({ args });
+        return { claimed: true, claimId: "claim-a" };
+      },
+    } as unknown as ConvexClientLike;
+    const store = new ConvexSingleUseConsumptionClaimStore(client, "service-token");
+    const action = { actionId: "action-1", projectId: "project-1" } as ToolAction;
+
+    const result = await store.claim(action, "claim-a");
+
+    assert.deepEqual(calls[0]?.args, {
+      serviceToken: "service-token",
+      projectKey: "project-1",
+      actionId: "action-1",
+      claimId: "claim-a",
+    });
+    assert.deepEqual(result, { claimed: true, claimId: "claim-a" });
+  });
+
+  it("surfaces the authoritative loser result unchanged when another claim already won", async () => {
+    const client = {
+      async query() {
+        throw new Error("query must not be called by claim()");
+      },
+      async mutation() {
+        return { claimed: false, claimId: "claim-a" };
+      },
+    } as unknown as ConvexClientLike;
+    const store = new ConvexSingleUseConsumptionClaimStore(client, "service-token");
+    const action = { actionId: "action-1", projectId: "project-1" } as ToolAction;
+
+    const result = await store.claim(action, "claim-b");
+
+    assert.deepEqual(result, { claimed: false, claimId: "claim-a" });
   });
 });

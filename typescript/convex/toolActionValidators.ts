@@ -56,4 +56,6 @@ export const toolActionDocumentValidator = v.object({
   revokedBy: v.optional(v.literal("user")),
   revokedReason: v.optional(v.string()),
   revokedAt: v.optional(v.number()),
+  singleUseClaimedAt: v.optional(v.number()),
+  singleUseClaimId: v.optional(v.string()),
 });

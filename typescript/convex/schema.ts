@@ -219,6 +219,13 @@ export default defineSchema({
     revokedBy: v.optional(v.literal("user")),
     revokedReason: v.optional(v.string()),
     revokedAt: v.optional(v.number()),
+    // Atomic single-use execution claim: set exactly once, by exactly one
+    // caller, via claimSingleUseExecution — never released. This is the
+    // authoritative consumption gate checked before the external effect;
+    // a read-before-effect check alone cannot prevent two different-key
+    // concurrent executions from both crossing the effect boundary.
+    singleUseClaimedAt: v.optional(v.number()),
+    singleUseClaimId: v.optional(v.string()),
   })
     .index("by_owner_and_action_id", ["ownerId", "actionId"])
     .index("by_owner_and_idempotency_key", ["ownerId", "idempotencyKey"])

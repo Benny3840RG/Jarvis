@@ -86,16 +86,6 @@ export type ToolExecutionDefinition = {
 export interface ToolExecutionReceiptStore {
   get(key: string): Promise<ToolExecutionReceipt | null>;
   save(key: string, receipt: ToolExecutionReceipt): Promise<void>;
-  /**
-   * Optional: a bounded lookup of every receipt recorded for one action,
-   * independent of idempotency key. Used only to enforce single-use
-   * consumption (R-050) against a *different* key than the one already
-   * checked by the primary get()-by-key replay path above — an
-   * implementation that omits this simply skips that specific enforcement,
-   * matching the optional-method pattern used elsewhere in this consent
-   * lifecycle (see `ToolActionService.revoke`).
-   */
-  listReceiptsForAction?(actionId: string): Promise<ToolExecutionReceipt[]>;
 }
 
 export class InMemoryToolExecutionReceiptStore implements ToolExecutionReceiptStore {
@@ -108,17 +98,37 @@ export class InMemoryToolExecutionReceiptStore implements ToolExecutionReceiptSt
   async save(key: string, receipt: ToolExecutionReceipt): Promise<void> {
     this.receipts.set(key, receipt);
   }
-
-  async listReceiptsForAction(actionId: string): Promise<ToolExecutionReceipt[]> {
-    return [...this.receipts.values()].filter((candidate) => candidate.actionId === actionId);
-  }
 }
 
-const COMPLETED_EXECUTION_STATUSES = new Set<ToolExecutionStatus>([
-  "succeeded",
-  "failed",
-  "indeterminate",
-]);
+export type SingleUseExecutionClaimResult = { claimed: boolean; claimId: string };
+
+/**
+ * Authoritative, atomic consumption gate for single-use governed actions.
+ * `claim()` must return `{claimed: true}` for exactly one caller across any
+ * number of concurrent attempts against the same action — every other
+ * caller (including a caller retrying its own already-lost attempt) must
+ * receive `{claimed: false, claimId: <winner's claimId>}` without ever
+ * having invoked, or being told to invoke, the external effect. The claim
+ * is never released once set.
+ */
+export interface SingleUseConsumptionClaimStore {
+  claim(action: ToolAction, claimId: string): Promise<SingleUseExecutionClaimResult>;
+}
+
+export class InMemorySingleUseConsumptionClaimStore implements SingleUseConsumptionClaimStore {
+  private readonly claims = new Map<string, string>();
+
+  // No `await` occurs between the read and the write below, so this method
+  // runs to completion in one synchronous turn of the event loop before
+  // yielding — the same guarantee a real backend must provide via OCC or an
+  // equivalent transactional check-and-set.
+  async claim(action: ToolAction, claimId: string): Promise<SingleUseExecutionClaimResult> {
+    const existing = this.claims.get(action.actionId);
+    if (existing !== undefined) return { claimed: false, claimId: existing };
+    this.claims.set(action.actionId, claimId);
+    return { claimed: true, claimId };
+  }
+}
 
 const AUTHORITY_LEVEL: Record<ToolAuthority, number> = { T0: 0, T1: 1, T2: 2, T3: 3 };
 const MAX_TIMEOUT_MS = 30_000;
@@ -314,6 +324,7 @@ export class ToolExecutionService {
     definitions: readonly ToolExecutionDefinition[],
     private readonly receipts: ToolExecutionReceiptStore = new InMemoryToolExecutionReceiptStore(),
     private readonly reconciliations?: ExternalReconciliationStore,
+    private readonly claims: SingleUseConsumptionClaimStore = new InMemorySingleUseConsumptionClaimStore(),
   ) {
     for (const definition of definitions) {
       const key = `${definition.tool}:${definition.operation}`;
@@ -514,31 +525,6 @@ export class ToolExecutionService {
         ),
       );
     }
-    if (!input.dryRun && input.action.consumptionPolicy === "single-use") {
-      // Reaching here means `key` itself has no receipt yet (the primary
-      // get()-by-key replay above already returned early otherwise), so any
-      // completed receipt found for this actionId at all must be under a
-      // *different* key — i.e. a genuine second consumption attempt, not a
-      // replay of the same request. Dry-run is exempt: it never consumes.
-      const priorReceipts =
-        (await this.receipts.listReceiptsForAction?.(input.action.actionId)) ?? [];
-      const alreadyConsumed = priorReceipts.some((candidate) =>
-        COMPLETED_EXECUTION_STATUSES.has(candidate.status),
-      );
-      if (alreadyConsumed) {
-        return this.persistDecision(
-          key,
-          receipt(
-            input.action,
-            input.idempotencyKey,
-            "blocked",
-            "approval-consumed",
-            startedAt,
-            input,
-          ),
-        );
-      }
-    }
     if (!definition) {
       return this.persistDecision(
         key,
@@ -565,6 +551,33 @@ export class ToolExecutionService {
         key,
         receipt(input.action, input.idempotencyKey, "dry-run", undefined, startedAt, input),
       );
+    }
+
+    // Authoritative, atomic single-use consumption gate — placed as close as
+    // possible to the actual external-effect call below, after every
+    // deterministic pre-check (authority, expiry, allowlist, argument
+    // validation, dry-run) has already passed. Two different-key concurrent
+    // callers racing to this point both call claim(); the store's own
+    // atomicity (Convex OCC for the real deployment, a synchronous
+    // check-then-set for the in-memory default) guarantees exactly one
+    // caller receives `claimed: true`. The claim is never released, so it
+    // also proves this is not merely a fingerprint replay of a claim someone
+    // else already holds.
+    if (input.action.consumptionPolicy === "single-use") {
+      const claim = await this.claims.claim(input.action, input.idempotencyKey);
+      if (!claim.claimed) {
+        return this.persistDecision(
+          key,
+          receipt(
+            input.action,
+            input.idempotencyKey,
+            "blocked",
+            "approval-consumed",
+            startedAt,
+            input,
+          ),
+        );
+      }
     }
 
     const timeoutMs = input.timeoutMs ?? 5_000;

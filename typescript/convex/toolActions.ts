@@ -492,7 +492,8 @@ export const revoke = mutation({
     }
     if (
       action.consumptionPolicy === "single-use" &&
-      (await hasCompletedExecutionReceipt(ctx, ownerId, actionId))
+      (action.singleUseClaimId !== undefined ||
+        (await hasCompletedExecutionReceipt(ctx, ownerId, actionId)))
     ) {
       throw new Error("Tool action is already consumed and cannot be revoked.");
     }
@@ -518,5 +519,60 @@ export const revoke = mutation({
     const revoked = await ctx.db.get("toolActions", action._id);
     if (!revoked) throw new Error("Tool action revocation failed.");
     return revoked;
+  },
+});
+
+/**
+ * The authoritative, atomic single-use execution claim. This is the
+ * consumption gate: it must be called and must return `claimed: true`
+ * before a single-use action's external effect may be attempted. A
+ * read-then-later-write check (e.g. inspecting past receipts) cannot
+ * prevent two different-key concurrent executions from both observing "not
+ * yet consumed" and both crossing the external-effect boundary — Convex's
+ * OCC on this single document is what actually serializes concurrent
+ * claims and guarantees exactly one winner. The claim is never released:
+ * once set, it stands regardless of the eventual execution outcome
+ * (succeeded, failed, or indeterminate), matching this slice's existing
+ * "any attempt consumes a single-use action" semantics.
+ */
+export const claimSingleUseExecution = mutation({
+  args: {
+    serviceToken: v.string(),
+    projectKey: v.string(),
+    actionId: v.string(),
+    claimId: v.string(),
+    now: v.optional(v.number()),
+  },
+  returns: v.object({ claimed: v.boolean(), claimId: v.string() }),
+  handler: async (ctx, args) => {
+    const ownerId = requireOwner(args.serviceToken);
+    const projectKey = cleanRequiredText(args.projectKey, "Project key");
+    const actionId = cleanRequiredText(args.actionId, "Tool action ID");
+    const claimId = cleanRequiredText(args.claimId, "Execution claim ID");
+    const action = await requireAction(ctx, ownerId, projectKey, actionId);
+
+    if (action.consumptionPolicy !== "single-use") {
+      throw new Error("Only single-use actions require an execution claim.");
+    }
+    if (action.singleUseClaimId !== undefined) {
+      return { claimed: false, claimId: action.singleUseClaimId };
+    }
+
+    const now = args.now ?? Date.now();
+    await ctx.db.patch("toolActions", action._id, {
+      singleUseClaimedAt: now,
+      singleUseClaimId: claimId,
+      updatedAt: now,
+    });
+    await appendAudit(ctx, {
+      ownerId,
+      requestId: action.requestId,
+      projectKey,
+      eventType: "tool.action.execution-claimed",
+      actor: "tool",
+      payload: { actionId, claimId },
+      createdAt: now,
+    });
+    return { claimed: true, claimId };
   },
 });

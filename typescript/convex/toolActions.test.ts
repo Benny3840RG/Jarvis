@@ -633,4 +633,105 @@ describe("concurrency: racing mutations against the same approved action", () =>
     expect(stored?.state).toBe("revoked");
     expect(["Reason A", "Reason B"]).toContain(stored?.revokedReason);
   });
+
+  it("two concurrent single-use execution claims with different claim IDs produce exactly one winner", async () => {
+    const t = harness();
+    await stageAndReturn(t, { destructive: true, requiredAuthority: "T3" });
+    const now = Date.now();
+    await t.mutation(api.toolActions.approve, {
+      serviceToken: SERVICE_TOKEN,
+      projectKey: PROJECT_KEY,
+      actionId: "action-1",
+      expectedRevision: 1,
+      now,
+    });
+
+    const results = await Promise.all([
+      t.mutation(api.toolActions.claimSingleUseExecution, {
+        serviceToken: SERVICE_TOKEN,
+        projectKey: PROJECT_KEY,
+        actionId: "action-1",
+        claimId: "claim-a",
+        now,
+      }),
+      t.mutation(api.toolActions.claimSingleUseExecution, {
+        serviceToken: SERVICE_TOKEN,
+        projectKey: PROJECT_KEY,
+        actionId: "action-1",
+        claimId: "claim-b",
+        now,
+      }),
+    ]);
+
+    const winners = results.filter((result) => result.claimed);
+    expect(winners).toHaveLength(1);
+    // Convex's OCC serializes the two mutations touching the same document:
+    // whichever commits first claims the row; the other observes the
+    // already-set claim and reports the winner's ID rather than its own.
+    const winnerClaimId = winners[0]?.claimId;
+    for (const result of results) {
+      expect(result.claimId).toBe(winnerClaimId);
+    }
+
+    const stored = await t.query(api.toolActions.get, {
+      serviceToken: SERVICE_TOKEN,
+      projectKey: PROJECT_KEY,
+      actionId: "action-1",
+    });
+    expect(stored?.singleUseClaimId).toBe(winnerClaimId);
+  });
+
+  it("repeating the same claim ID is idempotent, not a second winner", async () => {
+    const t = harness();
+    await stageAndReturn(t, { destructive: true, requiredAuthority: "T3" });
+    const now = Date.now();
+    await t.mutation(api.toolActions.approve, {
+      serviceToken: SERVICE_TOKEN,
+      projectKey: PROJECT_KEY,
+      actionId: "action-1",
+      expectedRevision: 1,
+      now,
+    });
+
+    const first = await t.mutation(api.toolActions.claimSingleUseExecution, {
+      serviceToken: SERVICE_TOKEN,
+      projectKey: PROJECT_KEY,
+      actionId: "action-1",
+      claimId: "claim-a",
+      now,
+    });
+    const second = await t.mutation(api.toolActions.claimSingleUseExecution, {
+      serviceToken: SERVICE_TOKEN,
+      projectKey: PROJECT_KEY,
+      actionId: "action-1",
+      claimId: "claim-a",
+      now,
+    });
+
+    expect(first).toEqual({ claimed: true, claimId: "claim-a" });
+    expect(second).toEqual({ claimed: false, claimId: "claim-a" });
+  });
+
+  it("refuses to claim single-use execution for a reusable action", async () => {
+    const t = harness();
+    await stageAndReturn(t, { destructive: false });
+    const now = Date.now();
+    await t.mutation(api.toolActions.approve, {
+      serviceToken: SERVICE_TOKEN,
+      projectKey: PROJECT_KEY,
+      actionId: "action-1",
+      expectedRevision: 1,
+      now,
+    });
+
+    await expect(
+      t.mutation(api.toolActions.claimSingleUseExecution, {
+        serviceToken: SERVICE_TOKEN,
+        projectKey: PROJECT_KEY,
+        actionId: "action-1",
+        claimId: "claim-a",
+        now,
+      }),
+    ).rejects.toThrow(/single-use/i);
+  });
 });

@@ -300,6 +300,43 @@ describe("consent-lifecycle execution enforcement (R-048/R-049/R-050)", () => {
     assert.equal(executions.count, 1, "the already-consumed action must not be executed again");
   });
 
+  it("blocks a genuinely concurrent execution of a single-use action under different keys — the definition is invoked at most once", async () => {
+    // Regression for a real race: two different-key attempts must not both
+    // observe "not yet consumed" and both cross the external-effect
+    // boundary. Both calls are dispatched together via Promise.all so their
+    // internal awaits (receipt lookup, in-flight check, schema parse) truly
+    // interleave, the same way two concurrent HTTP requests would.
+    const invocations: string[] = [];
+    const receipts = new InMemoryToolExecutionReceiptStore();
+    const executor = new ToolExecutionService(
+      [
+        {
+          tool: "clock",
+          operation: "read",
+          schema: z.object({ zone: z.string() }),
+          async execute() {
+            invocations.push("call");
+            await new Promise((resolve) => setTimeout(resolve, 15));
+            return { now: "2026-07-18T00:00:00.000Z" };
+          },
+        },
+      ],
+      receipts,
+    );
+    const singleUse = { ...action, consumptionPolicy: "single-use" as const };
+
+    const [first, second] = await Promise.all([
+      executor.execute({ action: singleUse, authority: "T1", idempotencyKey: "concurrent-a" }),
+      executor.execute({ action: singleUse, authority: "T1", idempotencyKey: "concurrent-b" }),
+    ]);
+
+    assert.equal(invocations.length, 1, "the definition must be invoked exactly once");
+    const outcomes = [first.status, second.status].sort();
+    assert.deepEqual(outcomes, ["blocked", "succeeded"]);
+    const loser = first.status === "blocked" ? first : second;
+    assert.equal(loser.errorCode, "approval-consumed");
+  });
+
   it("does not block a dry-run against an already-consumed single-use action", async () => {
     const executions = { count: 0 };
     const receipts = new InMemoryToolExecutionReceiptStore();

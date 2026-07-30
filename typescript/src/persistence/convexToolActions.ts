@@ -2,6 +2,10 @@ import { ConvexHttpClient } from "convex/browser";
 
 import { api } from "../../convex/_generated/api.js";
 import type { ToolAction, ToolActionService } from "../actions/toolActions.js";
+import type {
+  SingleUseConsumptionClaimStore,
+  SingleUseExecutionClaimResult,
+} from "../actions/toolExecution.js";
 import type { ToolAuthority } from "../runtime/totalityPolicy.js";
 import type { ConvexClientLike } from "./convexPersistence.js";
 
@@ -168,5 +172,42 @@ export class ConvexToolActionService implements ToolActionService {
       reason: input.reason,
     });
     return actionFromConvex(row as ToolActionRow);
+  }
+}
+
+/**
+ * Backs `SingleUseConsumptionClaimStore` with the authoritative Convex
+ * mutation `claimSingleUseExecution`, whose atomicity comes from Convex's
+ * own OCC serializing concurrent mutations against the same document — see
+ * that mutation's doc comment for why a read-then-write check in the caller
+ * cannot provide the same guarantee.
+ */
+export class ConvexSingleUseConsumptionClaimStore implements SingleUseConsumptionClaimStore {
+  private readonly client: ConvexClientLike;
+  private readonly serviceToken: string;
+
+  constructor(client?: ConvexClientLike, serviceToken = process.env.JARVIS_SERVICE_TOKEN) {
+    if (!serviceToken) {
+      throw new Error("Single-use execution claims require JARVIS_SERVICE_TOKEN.");
+    }
+    this.serviceToken = serviceToken;
+
+    if (client) {
+      this.client = client;
+      return;
+    }
+
+    const convexUrl = process.env.CONVEX_URL;
+    if (!convexUrl) throw new Error("Single-use execution claims require CONVEX_URL.");
+    this.client = new ConvexHttpClient(convexUrl);
+  }
+
+  async claim(action: ToolAction, claimId: string): Promise<SingleUseExecutionClaimResult> {
+    return (await this.client.mutation(toolActionFunctions.claimSingleUseExecution, {
+      serviceToken: this.serviceToken,
+      projectKey: action.projectId,
+      actionId: action.actionId,
+      claimId,
+    })) as SingleUseExecutionClaimResult;
   }
 }

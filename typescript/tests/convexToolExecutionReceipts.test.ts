@@ -106,36 +106,6 @@ describe("ConvexToolExecutionReceiptStore", () => {
     assert.equal(await store.get("missing-key"), null);
   });
 
-  it("lists every receipt recorded for an action, independent of idempotency key", async () => {
-    const calls: Array<{ args: unknown }> = [];
-    const client = {
-      async query(_functionRef: unknown, args: unknown) {
-        calls.push({ args });
-        return [
-          receiptRow({ receiptKey: "project-1:action-1:exec-1", idempotencyKey: "exec-1" }),
-          receiptRow({
-            receiptKey: "project-1:action-1:exec-2",
-            idempotencyKey: "exec-2",
-            status: "failed",
-          }),
-        ];
-      },
-      async mutation() {
-        throw new Error("mutation must not be called by listReceiptsForAction()");
-      },
-    } as unknown as ConvexClientLike;
-    const store = new ConvexToolExecutionReceiptStore(client, "service-token");
-
-    const receipts = await store.listReceiptsForAction("action-1");
-
-    assert.equal(calls.length, 1);
-    assert.deepEqual(calls[0]?.args, { serviceToken: "service-token", actionId: "action-1" });
-    assert.equal(receipts.length, 2);
-    assert.equal(receipts[0]?.idempotencyKey, "exec-1");
-    assert.equal(receipts[1]?.idempotencyKey, "exec-2");
-    assert.equal(receipts[1]?.status, "failed");
-  });
-
   it("saves a receipt with project, fingerprint and audit metadata", async () => {
     const calls: Array<{ args: unknown }> = [];
     const client = {

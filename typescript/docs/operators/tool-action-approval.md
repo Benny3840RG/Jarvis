@@ -36,11 +36,16 @@ caller-supplied clock value (`now`) is accepted only for test determinism and is
 request in production, so it can never extend or fabricate approval authority.
 
 Every approval also carries a `consumptionPolicy: "single-use" | "reusable"`, derived from the proposal's
-own `destructive` flag (destructive → single-use). `POST /execute` refuses a live (non-dry-run) execution
-of an already-consumed single-use action — where "consumed" means any prior completed receipt
-(`succeeded`, `failed`, or `indeterminate`) exists for that action, independent of idempotency key — with
-`errorCode: "approval-consumed"`. A dry-run is exempt: it never consumes and is never blocked by this
-check. `POST /execute` also refuses an action whose approval has already expired
+own `destructive` flag (destructive → single-use). A live (non-dry-run) execution of a single-use action
+must first win an atomic execution claim (`claimSingleUseExecution`, keyed by owner + action ID) before
+its external effect may be attempted — Convex's own optimistic concurrency control serializes concurrent
+claims against the same action, so exactly one caller ever wins regardless of how many different
+idempotency keys race for it. The claim is never released, so every other attempt — including retries —
+is refused with `errorCode: "approval-consumed"` before the tool is ever invoked. A dry-run is exempt: it
+never claims and is never blocked by this check. (An earlier version of this check inspected past receipts
+before invoking the tool; that read-then-later-write approach could not prevent two different-key
+concurrent executions from both observing "not yet consumed" and both crossing the effect boundary — the
+atomic claim replaces it.) `POST /execute` also refuses an action whose approval has already expired
 (`isApprovalExpired: true` at fetch time) with `errorCode: "approval-expired"`, even if the stored `state`
 still shows `"approved"` because nothing has yet persisted the lazy expiry transition.
 
@@ -154,14 +159,16 @@ that were previously listed as required before this stage could be built:
    approved live action with any caller key returns the original receipt byte-for-byte rather than
    executing again. A `dryRun: true` request validates everything and writes a durable decision/audit
    receipt under its own derived dry-run scope, so it cannot consume or mutate the live execution scope.
-   4a. **Consent-lifecycle enforcement** — before any of the above, `ToolExecutionService.execute()` also
-   checks the fetched action's consent-lifecycle fields: a lapsed approval (`isApprovalExpired: true`,
-   even if `state` still shows `"approved"` because nobody has yet persisted the lazy transition) is
-   blocked with `errorCode: "approval-expired"`; a live (non-dry-run) attempt against a `single-use`
-   action that already has a completed receipt under any key is blocked with `errorCode:
- "approval-consumed"`. Dry-run is exempt from the consumption check. A `"revoked"` action is already
-   blocked by the ordinary state check above (`errorCode: "not-authorized"`), since revocation is
-   terminal and never re-reaches `"approved"`.
+   4a. **Consent-lifecycle enforcement** — `ToolExecutionService.execute()` also checks the fetched
+   action's consent-lifecycle fields, in two places. Early (alongside the state/authority check): a
+   lapsed approval (`isApprovalExpired: true`, even if `state` still shows `"approved"` because nobody
+   has yet persisted the lazy transition) is blocked with `errorCode: "approval-expired"`. Immediately
+   before the external effect (after every deterministic pre-check — authority, expiry, allowlist,
+   argument validation, dry-run — has passed): a live (non-dry-run) `single-use` action must win the
+   atomic `claimSingleUseExecution` claim; the loser (whichever different-key attempt does not win the
+   race) is blocked with `errorCode: "approval-consumed"` **without the definition ever being invoked**.
+   Dry-run is exempt from the claim. A `"revoked"` action is already blocked by the ordinary state check
+   above (`errorCode: "not-authorized"`), since revocation is terminal and never re-reaches `"approved"`.
 5. **Bounded timeouts and redacted failures** — `timeoutMs` is clamped to 1–30000ms (default 5000ms).
    Failure receipts carry a fixed `errorCode` enum, never a raw error message or the tool's output.
 6. **Durable execution receipts** — receipts are stored in the `toolExecutionReceipts` Convex table,

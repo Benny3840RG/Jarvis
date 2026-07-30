@@ -3,6 +3,7 @@ import { ConvexControlledReminderStore } from "../persistence/convexControlledRe
 import { ConvexControlledTaskStore } from "../persistence/convexControlledTasks.js";
 import { ConvexExternalReconciliationStore } from "../persistence/convexExternalReconciliations.js";
 import { ConvexNoteStore } from "../persistence/convexNotes.js";
+import { ConvexSingleUseConsumptionClaimStore } from "../persistence/convexToolActions.js";
 import { ConvexToolExecutionReceiptStore } from "../persistence/convexToolExecutionReceipts.js";
 import { resolvePersistenceProviderName } from "../persistence/providerSelection.js";
 import type { QuoteDeliveryRepository } from "../quotes/quoteDeliveryRepository.js";
@@ -80,5 +81,6 @@ export function createToolExecutionServiceFromEnv(
     ),
     new ConvexToolExecutionReceiptStore(),
     new ConvexExternalReconciliationStore(),
+    new ConvexSingleUseConsumptionClaimStore(),
   );
 }
