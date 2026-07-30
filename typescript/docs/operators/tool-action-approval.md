@@ -3,9 +3,11 @@
 Jarvis stores tool actions as explicit project-scoped proposals before any external operation may be
 considered. Proposal, inspection, approval, and rejection are one durable stage. Execution is a second,
 separately gated stage, wired to a small, reviewed allowlist: `notes:create`, `tasks:create`,
-`tasks:complete`, `reminders:create`, and `reminders:cancel` (see [Execution](#execution) below). Every
-other `tool:operation` pair — including quote finalize/send, which have no implemented tool or state
-transition yet — is blocked with `errorCode: "not-allowlisted"`.
+`tasks:complete`, `reminders:create`, and `reminders:cancel` (see [Execution](#execution) below).
+A sixth definition, `quotes:send`, is registered only when Convex persistence and every quote-delivery
+dependency — including the explicitly enabled Outlook provider — are available. `quotes:finalize` and
+every other unregistered `tool:operation` pair are blocked with `errorCode: "not-allowlisted"`.
+Quote send remains uncommissioned and is not exposed through MCP or the HUD.
 
 ## State machine
 
@@ -16,9 +18,10 @@ proposed -> approved
 
 There is deliberately no `executed` state on the `ToolAction` record itself. Approval records operator
 intent; it does not call a tool or mutate an external system. Execution is tracked separately, as an
-immutable receipt keyed by the action and a caller-supplied idempotency key — an approved action can be
-the subject of an execution attempt any number of times (each with its own key), without the proposal's
-own state ever changing.
+immutable receipt keyed by the approved action and a server-derived execution scope. Caller retry keys
+remain part of the HTTP compatibility contract but cannot create a new commercial execution scope.
+Repeated live attempts for one approved action replay the same receipt; dry-run and live execution use
+separate derived scopes. The proposal's own state does not change during execution.
 
 ## Proposal requirements
 
@@ -56,9 +59,9 @@ inside Convex optimistic concurrency control, so only one proposal can acquire t
 A destructive proposal below `T3` is rejected before persistence. This is a classification boundary,
 not permission to execute. Reaching `approved` state still does not authorise a specific tool call —
 `ToolExecutionService` separately checks the acting authority against `requiredAuthority`, and beyond
-that, requires the exact `tool`:`operation` pair to be explicitly registered server-side. Only the five
-pairs listed above are registered; every other attempt is blocked with `errorCode: "not-allowlisted"`
-regardless of authority or approval state.
+that, requires the exact `tool`:`operation` pair to be explicitly registered server-side. The five base pairs listed above are always registered in the maintained Convex runtime.
+`quotes:send` is conditionally registered only when all delivery dependencies resolve; every other
+attempt is blocked with `errorCode: "not-allowlisted"` regardless of authority or approval state.
 
 ## Revision boundary
 
@@ -102,18 +105,20 @@ that were previously listed as required before this stage could be built:
    other `tool:operation` pair returns a receipt with `status: "blocked"` and
    `errorCode: "not-allowlisted"`, regardless of the action's own approval or authority. Registering each
    new definition remains a deliberate, separately reviewed decision — not a side effect of this stage
-   having shipped.
+   having shipped. `quotes:send` is the only conditional definition: it is included only when Convex
+   persistence, the quote repository, delivery ledger, PDF artifact repository and Outlook email
+   provider all resolve successfully. It remains uncommissioned and unreachable through MCP/HUD.
 2. **Exact argument schemas per operation** — each registered definition carries its own zod schema;
    the action's stored `arguments` are re-validated against it immediately before any call.
 3. **Authority and destructive-operation checks** — the acting authority (asserted server-side as `T3`,
    since a single Bearer service token gates this whole HTTP surface and there is no separate per-caller
    authority signal) must meet or exceed the action's `requiredAuthority`.
-4. **Idempotency and replay protection** — the request body's `idempotencyKey`, combined with the
-   action ID, is the receipt's primary lookup key. Replaying the same key returns the original receipt
-   byte-for-byte rather than executing again. A `dryRun: true` request validates everything and still
-   writes a durable receipt, but as a decision/audit record under a separate key (`…:decision:…`) rather
-   than into that primary idempotency slot — so the dry-run does not occupy the key, and the same
-   `idempotencyKey` can still be used for a real attempt afterward.
+4. **Idempotency and replay protection** — the controller derives the execution key from the approved
+   action ID and the server-selected mode (`live` or `dry-run`). The caller's `idempotencyKey` remains
+   required for HTTP compatibility but is not trusted to define execution identity. Retrying one
+   approved live action with any caller key returns the original receipt byte-for-byte rather than
+   executing again. A `dryRun: true` request validates everything and writes a durable decision/audit
+   receipt under its own derived dry-run scope, so it cannot consume or mutate the live execution scope.
 5. **Bounded timeouts and redacted failures** — `timeoutMs` is clamped to 1–30000ms (default 5000ms).
    Failure receipts carry a fixed `errorCode` enum, never a raw error message or the tool's output.
 6. **Durable execution receipts** — receipts are stored in the `toolExecutionReceipts` Convex table,
