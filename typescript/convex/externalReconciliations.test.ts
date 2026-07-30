@@ -408,7 +408,7 @@ describe("operator reconciliation reads", () => {
     const t = harness();
     const now = Date.now();
     await t.run(async (ctx) => {
-      for (const [index, state] of ["escalated", "escalated", "resolved"] as const.entries()) {
+      for (const [index, state] of (["escalated", "escalated", "resolved"] as const).entries()) {
         await ctx.db.insert("externalReconciliations", {
           ownerId: OWNER_ID,
           reconciliationId: `operator-${index}`,
