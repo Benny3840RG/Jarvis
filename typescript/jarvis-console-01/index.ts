@@ -106,9 +106,24 @@ const noteSchema = z.object({
   createdAt: z.number(),
 });
 
+const governedActionSchema = z.object({
+  id: z.string(),
+  tool: z.string(),
+  operation: z.string(),
+  state: z.enum(["proposed", "approved", "rejected", "expired", "revoked"]),
+  rationale: z.string(),
+  requiredAuthority: z.enum(["T0", "T1", "T2", "T3"]),
+  destructive: z.boolean(),
+  approvalExpiresAt: z.number().optional(),
+  isApprovalExpired: z.boolean().optional(),
+  revokedReason: z.string().optional(),
+  createdAt: z.number(),
+});
+
 /**
  * Console 01 has no project-selection UI, unlike the rest of Jarvis where
- * notes are project-scoped. Every note created or listed through the
+ * notes (and governed tool-action proposals) are project-scoped. Every note
+ * created or listed, and every governed action inspected, through the
  * console lives in this single fixed project namespace, kept separate from
  * whatever projects the rest of Jarvis manages.
  */
@@ -133,6 +148,7 @@ const consoleStateSchema = z.object({
   tasks: z.array(taskSchema).max(100),
   reminders: z.array(reminderSchema).max(100),
   notes: z.array(noteSchema).max(100),
+  governedActions: z.array(governedActionSchema).max(100),
   systems: z.array(
     z.object({
       label: z.string(),
@@ -189,6 +205,20 @@ type NoteRow = {
   createdAt: number;
 };
 
+type ToolActionRow = {
+  _id: string;
+  tool: string;
+  operation: string;
+  state: "proposed" | "approved" | "rejected" | "expired" | "revoked";
+  rationale: string;
+  requiredAuthority: "T0" | "T1" | "T2" | "T3";
+  destructive: boolean;
+  approvalExpiresAt?: number;
+  isApprovalExpired?: boolean;
+  revokedReason?: string;
+  createdAt: number;
+};
+
 type ConsoleState = z.infer<typeof consoleStateSchema>;
 
 function requireBridge() {
@@ -234,6 +264,27 @@ function mapNote(row: NoteRow) {
   };
 }
 
+/**
+ * Read-only mapping. Console 01 exposes no way to propose, approve, revoke,
+ * reject, or execute a governed action — only to inspect its consent-
+ * lifecycle state (see docs/superpowers/plans/2026-07-30-tool-action-consent-lifecycle.md).
+ */
+function mapGovernedAction(row: ToolActionRow) {
+  return {
+    id: row._id,
+    tool: row.tool,
+    operation: row.operation,
+    state: row.state,
+    rationale: row.rationale,
+    requiredAuthority: row.requiredAuthority,
+    destructive: row.destructive,
+    ...(row.approvalExpiresAt === undefined ? {} : { approvalExpiresAt: row.approvalExpiresAt }),
+    ...(row.isApprovalExpired === undefined ? {} : { isApprovalExpired: row.isApprovalExpired }),
+    ...(row.revokedReason === undefined ? {} : { revokedReason: row.revokedReason }),
+    createdAt: row.createdAt,
+  };
+}
+
 function emptyPageMetadata(requestedPageSize: number) {
   return { isDone: true, continueCursor: "", returnedCount: 0, requestedPageSize };
 }
@@ -249,7 +300,7 @@ async function loadConsoleState(
     const request = normaliseConsolePageRequest(pageRequest);
     requestedPageSize = request.pageSize;
     const { client, serviceToken } = requireBridge();
-    const [taskPage, reminderPage, notePage] = await Promise.all([
+    const [taskPage, reminderPage, notePage, governedActionRows] = await Promise.all([
       client.query(anyApi.tasks.listPage, {
         serviceToken,
         paginationOpts: { numItems: request.pageSize, cursor: request.taskCursor },
@@ -263,10 +314,18 @@ async function loadConsoleState(
         projectId: NOTES_PROJECT_ID,
         paginationOpts: { numItems: request.pageSize, cursor: request.noteCursor },
       }) as Promise<ConsolePage<NoteRow>>,
+      // Read-only inspection: no cursor pagination exists for tool actions
+      // yet, so this is a bounded recent-first snapshot, not a full register.
+      client.query(anyApi.toolActions.listRecent, {
+        serviceToken,
+        projectKey: NOTES_PROJECT_ID,
+        limit: request.pageSize,
+      }) as Promise<ToolActionRow[]>,
     ]);
     const tasks = taskPage.page.map(mapTask);
     const reminders = reminderPage.page.map(mapReminder);
     const notes = notePage.page.map(mapNote);
+    const governedActions = governedActionRows.map(mapGovernedAction);
     const summary = buildConsolePageSummary(taskPage, reminderPage, notePage, request.pageSize, {
       taskCursor: request.taskCursor,
       reminderCursor: request.reminderCursor,
@@ -291,6 +350,7 @@ async function loadConsoleState(
       tasks,
       reminders,
       notes,
+      governedActions,
       systems: [
         { label: "MCP endpoint", value: "ONLINE", state: "good" },
         { label: "Manufact", value: "DEPLOYED", state: "good" },
@@ -324,6 +384,7 @@ async function loadConsoleState(
       tasks: [],
       reminders: [],
       notes: [],
+      governedActions: [],
       systems: [
         { label: "MCP endpoint", value: "ONLINE", state: "good" },
         { label: "Manufact", value: "DEPLOYED", state: "good" },

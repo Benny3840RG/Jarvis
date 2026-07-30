@@ -29,6 +29,20 @@ export const noteSchema = z.object({
   createdAt: z.number(),
 });
 
+export const governedActionSchema = z.object({
+  id: z.string(),
+  tool: z.string(),
+  operation: z.string(),
+  state: z.enum(["proposed", "approved", "rejected", "expired", "revoked"]),
+  rationale: z.string(),
+  requiredAuthority: z.enum(["T0", "T1", "T2", "T3"]),
+  destructive: z.boolean(),
+  approvalExpiresAt: z.number().optional(),
+  isApprovalExpired: z.boolean().optional(),
+  revokedReason: z.string().optional(),
+  createdAt: z.number(),
+});
+
 export const systemSchema = z.object({
   label: z.string(),
   value: z.string(),
@@ -54,6 +68,7 @@ export const propSchema = z.object({
   tasks: z.array(taskSchema).max(100),
   reminders: z.array(reminderSchema).max(100),
   notes: z.array(noteSchema).max(100),
+  governedActions: z.array(governedActionSchema).max(100),
   systems: z.array(systemSchema),
   activity: z.array(z.string()),
   counts: z.object({
@@ -79,4 +94,5 @@ export const propSchema = z.object({
 export type JarvisTask = z.infer<typeof taskSchema>;
 export type JarvisReminder = z.infer<typeof reminderSchema>;
 export type JarvisNote = z.infer<typeof noteSchema>;
+export type JarvisGovernedAction = z.infer<typeof governedActionSchema>;
 export type JarvisConsoleProps = z.infer<typeof propSchema>;
