@@ -7,6 +7,7 @@ import type {
   ExternalReconciliationClaim,
   ExternalReconciliationEnvelope,
   ExternalReconciliationRecord,
+  ExternalReconciliationReadStore,
   ExternalReconciliationStore,
   ExternalExecutionScope,
   MarkExternalIndeterminateInput,
@@ -204,7 +205,9 @@ function scopeArgs(scope: ExternalExecutionScope) {
   };
 }
 
-export class ConvexExternalReconciliationStore implements ExternalReconciliationStore {
+export class ConvexExternalReconciliationStore
+  implements ExternalReconciliationStore, ExternalReconciliationReadStore
+{
   private readonly client: ConvexClientLike;
   private readonly serviceToken: string;
   private readonly deployment: string;
@@ -231,6 +234,35 @@ export class ConvexExternalReconciliationStore implements ExternalReconciliation
     const row = await this.client.query(externalReconciliationFunctions.getByScope, {
       serviceToken: this.serviceToken,
       ...scopeArgs(scope),
+    });
+    return row === null
+      ? null
+      : envelopeFromConvex(
+          row as {
+            reconciliation: ReconciliationRow;
+            receipt: ReceiptRow | null;
+          },
+        );
+  }
+
+  async listForOperator(input: {
+    state?: ExternalReconciliationRecord["state"];
+    limit?: number;
+  } = {}): Promise<ExternalReconciliationRecord[]> {
+    const rows = await this.client.query(externalReconciliationFunctions.listForOperator, {
+      serviceToken: this.serviceToken,
+      ...(input.state === undefined ? {} : { state: input.state }),
+      ...(input.limit === undefined ? {} : { limit: input.limit }),
+    });
+    return (rows as ReconciliationRow[]).map(reconciliationFromConvex);
+  }
+
+  async getForOperator(
+    reconciliationId: string,
+  ): Promise<ExternalReconciliationEnvelope | null> {
+    const row = await this.client.query(externalReconciliationFunctions.getForOperator, {
+      serviceToken: this.serviceToken,
+      reconciliationId,
     });
     return row === null
       ? null
