@@ -40,10 +40,7 @@ import { ReconciliationController } from "./reconciliationController.js";
 import { ReminderController } from "./reminderController.js";
 import { RequestIdInterceptor } from "./requestId.js";
 import { ServiceTokenGuard } from "./serviceTokenGuard.js";
-import {
-  HealthController,
-  OperatorSystemController,
-} from "./systemControllers.js";
+import { HealthController, OperatorSystemController } from "./systemControllers.js";
 import { SystemStatusService } from "./systemStatusService.js";
 import { TaskController } from "./taskController.js";
 import { ToolActionController } from "./toolActionController.js";
