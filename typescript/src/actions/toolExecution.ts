@@ -564,12 +564,26 @@ export class ToolExecutionService {
       );
     }
 
+    // Deterministic and must run before the claim below: an invalid
+    // `timeoutMs` throws, and a throw here happens *before* any claim has
+    // been taken, so nothing is spent. Validating this *after* the claim
+    // would durably consume a single-use action's one-and-only attempt for
+    // an error that has nothing to do with authorization or consumption —
+    // the claim is never released, so a legitimate retry would then be
+    // blocked as `"approval-consumed"` for an action that never actually
+    // reached the provider. (Independent review finding: this check
+    // previously ran after the claim.)
+    const timeoutMs = input.timeoutMs ?? 5_000;
+    if (!Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > MAX_TIMEOUT_MS) {
+      throw new Error(`timeoutMs must be an integer between 1 and ${MAX_TIMEOUT_MS}.`);
+    }
+
     // Authoritative, atomic single-use consumption gate — placed as close as
     // possible to the actual external-effect call below, after every
     // deterministic pre-check (authority, expiry, allowlist, argument
-    // validation, dry-run) has already passed. Two different-key concurrent
-    // callers racing to this point both call claim(); the store's own
-    // atomicity (Convex OCC for the real deployment, a synchronous
+    // validation, dry-run, timeout) has already passed. Two different-key
+    // concurrent callers racing to this point both call claim(); the store's
+    // own atomicity (Convex OCC for the real deployment, a synchronous
     // check-then-set for the in-memory default) guarantees exactly one
     // caller receives `claimed: true`. The claim is never released, so it
     // also proves this is not merely a fingerprint replay of a claim someone
@@ -599,11 +613,6 @@ export class ToolExecutionService {
           receipt(input.action, input.idempotencyKey, "blocked", errorCode, startedAt, input),
         );
       }
-    }
-
-    const timeoutMs = input.timeoutMs ?? 5_000;
-    if (!Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > MAX_TIMEOUT_MS) {
-      throw new Error(`timeoutMs must be an integer between 1 and ${MAX_TIMEOUT_MS}.`);
     }
 
     const controller = new AbortController();

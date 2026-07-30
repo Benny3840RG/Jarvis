@@ -277,6 +277,46 @@ describe("consent-lifecycle execution enforcement (R-048/R-049/R-050)", () => {
     assert.equal(executions.count, 0);
   });
 
+  it("never consumes a single-use action's claim when timeoutMs validation rejects the request", async () => {
+    // Independent review finding: the claim used to be taken *before*
+    // timeoutMs validation. An out-of-range timeoutMs (the HTTP boundary
+    // accepts any positive number, so a caller-supplied 30_001 reaches here)
+    // would throw after the claim was already spent, permanently consuming a
+    // single-use action's one attempt for an error unrelated to
+    // authorization or consumption — and blocking every legitimate retry as
+    // "approval-consumed" from then on.
+    const executions = { count: 0 };
+    const executor = new ToolExecutionService(
+      [definition(executions)],
+      new InMemoryToolExecutionReceiptStore(),
+    );
+    const singleUse = { ...action, consumptionPolicy: "single-use" as const };
+
+    await assert.rejects(
+      executor.execute({
+        action: singleUse,
+        authority: "T1",
+        idempotencyKey: "bad-timeout",
+        timeoutMs: 30_001,
+      }),
+      /timeoutMs must be an integer between 1 and 30000/,
+    );
+    assert.equal(executions.count, 0, "the provider must never be invoked for a rejected timeout");
+
+    const retry = await executor.execute({
+      action: singleUse,
+      authority: "T1",
+      idempotencyKey: "good-timeout",
+    });
+
+    assert.equal(
+      retry.status,
+      "succeeded",
+      "the invalid-timeout attempt must not have consumed the single-use claim",
+    );
+    assert.equal(executions.count, 1);
+  });
+
   it("blocks a live re-execution of an already-consumed single-use action under a different key", async () => {
     const executions = { count: 0 };
     const receipts = new InMemoryToolExecutionReceiptStore();

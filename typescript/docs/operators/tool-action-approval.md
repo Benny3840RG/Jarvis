@@ -177,11 +177,17 @@ that were previously listed as required before this stage could be built:
    lapsed approval (`isApprovalExpired: true`, even if `state` still shows `"approved"` because nobody
    has yet persisted the lazy transition) is blocked with `errorCode: "approval-expired"`. Immediately
    before the external effect (after every deterministic pre-check — authority, expiry, allowlist,
-   argument validation, dry-run — has passed): a live (non-dry-run) `single-use` action must win the
-   atomic `claimSingleUseExecution` claim; the loser (whichever different-key attempt does not win the
-   race) is blocked with `errorCode: "approval-consumed"` **without the definition ever being invoked**.
-   Dry-run is exempt from the claim. A `"revoked"` action is already blocked by the ordinary state check
-   above (`errorCode: "not-authorized"`), since revocation is terminal and never re-reaches `"approved"`.
+   argument validation, dry-run, **and timeout validation** — has passed): a live (non-dry-run)
+   `single-use` action must win the atomic `claimSingleUseExecution` claim; the loser (whichever
+   different-key attempt does not win the race) is blocked with `errorCode: "approval-consumed"`
+   **without the definition ever being invoked**. Dry-run is exempt from the claim. A `"revoked"` action
+   is already blocked by the ordinary state check above (`errorCode: "not-authorized"`), since revocation
+   is terminal and never re-reaches `"approved"`. **Ordering matters here and is deliberately strict:**
+   an earlier version validated `timeoutMs` _after_ taking the claim, so an out-of-range value (accepted
+   by the HTTP boundary, which only requires a positive number) would throw after a single-use action's
+   one-and-only claim was already spent — permanently consuming it for an error that never reached the
+   provider, and blocking every legitimate retry as `"approval-consumed"` from then on. Timeout validation
+   was moved ahead of the claim so a rejected request can never consume anything.
 5. **Bounded timeouts and redacted failures** — `timeoutMs` is clamped to 1–30000ms (default 5000ms).
    Failure receipts carry a fixed `errorCode` enum, never a raw error message or the tool's output.
 6. **Durable execution receipts** — receipts are stored in the `toolExecutionReceipts` Convex table,

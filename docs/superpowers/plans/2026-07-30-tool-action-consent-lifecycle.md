@@ -164,6 +164,20 @@ actionId, reason, now?}`. No `expectedRevision` — revocation doesn't interact 
   also durably persisted (state → `expired`) inside the same mutation, mirroring
   `approve()`'s existing lazy-expiry-observation convention, rather than only being
   reported transiently for that one call.
+- **Third correction found by independent review, after the second landed:** the
+  single-use claim was taken _before_ `timeoutMs` validation, not after every
+  deterministic pre-check as the code's own comment claimed. The HTTP boundary accepts
+  any positive `timeoutMs`; a caller-supplied out-of-range value (e.g. 30,001ms against
+  the 30,000ms ceiling) would throw _after_ the claim was already spent — permanently
+  consuming a single-use action's one attempt for an error with nothing to do with
+  authorization or consumption, and blocking every legitimate retry as
+  `"approval-consumed"` from then on, forever. Proven by a regression
+  (`tests/toolExecution.test.ts`) confirmed genuinely RED against the pre-fix ordering
+  (an out-of-range `timeoutMs` left the claim consumed; a subsequent valid retry was
+  blocked instead of executing) before the fix. The fix simply reorders: `timeoutMs`
+  validation now runs immediately after the dry-run check, strictly before the
+  single-use claim block, so a rejected request can never have taken a claim in the
+  first place.
 
 ## Concurrency
 
