@@ -82,8 +82,7 @@ type InjectedPersistenceOptions = {
 export type RegisteredRoute = { method: string; url: string };
 
 export type CreateJarvisHttpAppOptions = (
-  | DefaultPersistenceOptions
-  | InjectedPersistenceOptions
+  DefaultPersistenceOptions | InjectedPersistenceOptions
 ) & {
   config?: HttpAppConfig;
   reconciliationHealth?: () => RuntimeReconciliationHealth;
