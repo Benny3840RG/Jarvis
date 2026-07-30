@@ -40,7 +40,10 @@ import { ReconciliationController } from "./reconciliationController.js";
 import { ReminderController } from "./reminderController.js";
 import { RequestIdInterceptor } from "./requestId.js";
 import { ServiceTokenGuard } from "./serviceTokenGuard.js";
-import { HealthController, OperatorSystemController } from "./systemControllers.js";
+import {
+  HealthController,
+  OperatorSystemController,
+} from "./systemControllers.js";
 import { SystemStatusService } from "./systemStatusService.js";
 import { TaskController } from "./taskController.js";
 import { ToolActionController } from "./toolActionController.js";
@@ -126,7 +129,10 @@ export class JarvisHttpModule {
         { provide: HTTP_PROJECT_STORE, useValue: options.projectStore },
         { provide: HTTP_QUOTE_STORE, useValue: options.quoteStore },
         { provide: HTTP_QUOTE_REPOSITORY, useValue: options.quoteRepository },
-        { provide: HTTP_QUOTE_DELIVERY_REPOSITORY, useValue: options.quoteDeliveryRepository },
+        {
+          provide: HTTP_QUOTE_DELIVERY_REPOSITORY,
+          useValue: options.quoteDeliveryRepository,
+        },
         { provide: HTTP_ERRAND_STORE, useValue: options.errandStore },
         { provide: HTTP_BUILD_STORE, useValue: options.buildStore },
         { provide: HTTP_BUILD_LOG_STORE, useValue: options.buildLogStore },
@@ -135,15 +141,24 @@ export class JarvisHttpModule {
         { provide: HTTP_PREFERENCE_STORE, useValue: options.preferenceStore },
         { provide: HTTP_NOTE_STORE, useValue: options.noteStore },
         { provide: HTTP_PROVIDER_NAME, useValue: options.providerName },
-        { provide: HTTP_RECONCILIATION_HEALTH, useValue: options.reconciliationHealth },
+        {
+          provide: HTTP_RECONCILIATION_HEALTH,
+          useValue: options.reconciliationHealth,
+        },
         {
           provide: HTTP_EXTERNAL_RECONCILIATION_READ_STORE,
           useValue: options.externalReconciliationReadStore,
         },
         { provide: HTTP_TOTALITY_PIPELINE, useValue: options.totalityPipeline },
-        { provide: HTTP_MEMORY_CHANGE_SETS, useValue: options.memoryChangeSetService },
+        {
+          provide: HTTP_MEMORY_CHANGE_SETS,
+          useValue: options.memoryChangeSetService,
+        },
         { provide: HTTP_TOOL_ACTIONS, useValue: options.toolActionService },
-        { provide: HTTP_TOOL_EXECUTION, useValue: options.toolExecutionService },
+        {
+          provide: HTTP_TOOL_EXECUTION,
+          useValue: options.toolExecutionService,
+        },
         SystemStatusService,
         { provide: APP_GUARD, useClass: ServiceTokenGuard },
         { provide: APP_INTERCEPTOR, useClass: RequestIdInterceptor },
