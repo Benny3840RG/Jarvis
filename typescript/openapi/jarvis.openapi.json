@@ -5406,13 +5406,7 @@
       "Capability": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "operationId",
-          "summary",
-          "mutating",
-          "destructive",
-          "mcpExposed"
-        ],
+        "required": ["operationId", "summary", "mutating", "destructive", "mcpExposed"],
         "properties": {
           "operationId": {
             "type": "string",
@@ -5496,14 +5490,7 @@
         "properties": {
           "state": {
             "type": "string",
-            "enum": [
-              "disabled",
-              "starting",
-              "running",
-              "stopping",
-              "stopped",
-              "degraded"
-            ]
+            "enum": ["disabled", "starting", "running", "stopping", "stopped", "degraded"]
           },
           "enabled": {
             "type": "boolean"
@@ -5539,12 +5526,7 @@
       "ProviderStatus": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "name",
-          "reachability",
-          "authentication",
-          "schemaCompatibility"
-        ],
+        "required": ["name", "reachability", "authentication", "schemaCompatibility"],
         "properties": {
           "name": {
             "type": "string",
@@ -5759,13 +5741,7 @@
             "uniqueItems": true,
             "items": {
               "type": "string",
-              "enum": [
-                "domain",
-                "cross-domain",
-                "memory",
-                "reliability",
-                "proposal"
-              ]
+              "enum": ["domain", "cross-domain", "memory", "reliability", "proposal"]
             }
           }
         }
@@ -5985,14 +5961,7 @@
       "BackupArchive": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "format",
-          "version",
-          "createdAt",
-          "state",
-          "tasks",
-          "reminders"
-        ],
+        "required": ["format", "version", "createdAt", "state", "tasks", "reminders"],
         "properties": {
           "format": {
             "const": "jarvis-backup"
@@ -6024,14 +5993,7 @@
       "BackupArchiveInput": {
         "type": "object",
         "description": "A version 1 or version 2 Jarvis backup archive. Version 1 is accepted for migration compatibility.",
-        "required": [
-          "format",
-          "version",
-          "createdAt",
-          "state",
-          "tasks",
-          "reminders"
-        ],
+        "required": ["format", "version", "createdAt", "state", "tasks", "reminders"],
         "properties": {
           "format": {
             "const": "jarvis-backup"
@@ -6065,13 +6027,7 @@
       "BackupVerificationResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "valid",
-          "format",
-          "version",
-          "taskCount",
-          "reminderCount"
-        ],
+        "required": ["valid", "format", "version", "taskCount", "reminderCount"],
         "properties": {
           "valid": {
             "const": true
@@ -6139,14 +6095,7 @@
       "ProblemDetails": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "type",
-          "title",
-          "status",
-          "detail",
-          "instance",
-          "requestId"
-        ],
+        "required": ["type", "title", "status", "detail", "instance", "requestId"],
         "properties": {
           "type": {
             "type": "string",
@@ -6278,12 +6227,7 @@
           },
           "outputStyle": {
             "type": "string",
-            "enum": [
-              "for_benny_engineering",
-              "for_benny_workshop",
-              "for_client",
-              "default"
-            ]
+            "enum": ["for_benny_engineering", "for_benny_workshop", "for_client", "default"]
           },
           "actionPolicy": {
             "$ref": "#/components/schemas/TotalityActionPolicy"
@@ -6338,13 +6282,7 @@
       "TotalityPermissionEnvelope": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "reasoningLevel",
-          "riskLevel",
-          "toolAuthority",
-          "dataAccess",
-          "actionState"
-        ],
+        "required": ["reasoningLevel", "riskLevel", "toolAuthority", "dataAccess", "actionState"],
         "properties": {
           "reasoningLevel": {
             "type": "string",
@@ -6371,13 +6309,7 @@
       "TotalityRoutingDecision": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "primaryMode",
-          "supportingModes",
-          "permission",
-          "confidence",
-          "reasonCodes"
-        ],
+        "required": ["primaryMode", "supportingModes", "permission", "confidence", "reasonCodes"],
         "properties": {
           "primaryMode": {
             "type": "string"
@@ -6455,12 +6387,7 @@
               {
                 "type": "object",
                 "additionalProperties": false,
-                "required": [
-                  "answer",
-                  "responseId",
-                  "memoryChangeSetId",
-                  "memoryProposalCount"
-                ],
+                "required": ["answer", "responseId", "memoryChangeSetId", "memoryProposalCount"],
                 "properties": {
                   "answer": {
                     "type": "string"
@@ -6524,14 +6451,7 @@
       "MemoryFact": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "kind",
-          "recordId",
-          "statement",
-          "source",
-          "confidence",
-          "recordedAt"
-        ],
+        "required": ["kind", "recordId", "statement", "source", "confidence", "recordedAt"],
         "properties": {
           "kind": {
             "const": "fact"
@@ -6772,13 +6692,7 @@
       "StageMemoryChangeSetRequest": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "changeSetId",
-          "expectedRevision",
-          "records",
-          "rationale",
-          "proposedBy"
-        ],
+        "required": ["changeSetId", "expectedRevision", "records", "rationale", "proposedBy"],
         "properties": {
           "changeSetId": {
             "type": "string",
@@ -6905,13 +6819,7 @@
       "MemoryUpdateProposal": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "operation",
-          "target",
-          "value",
-          "classification",
-          "requiresApproval"
-        ],
+        "required": ["operation", "target", "value", "classification", "requiresApproval"],
         "properties": {
           "operation": {
             "const": "append"
@@ -7199,13 +7107,7 @@
           },
           "errorCode": {
             "type": "string",
-            "enum": [
-              "not-authorized",
-              "not-allowlisted",
-              "invalid-arguments",
-              "timeout",
-              "failed"
-            ]
+            "enum": ["not-authorized", "not-allowlisted", "invalid-arguments", "timeout", "failed"]
           },
           "startedAt": {
             "type": "string",
@@ -7343,14 +7245,7 @@
       "Project": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "id",
-          "clientId",
-          "title",
-          "status",
-          "createdAt",
-          "updatedAt"
-        ],
+        "required": ["id", "clientId", "title", "status", "createdAt", "updatedAt"],
         "properties": {
           "id": {
             "$ref": "#/components/schemas/RecordId"
@@ -7926,11 +7821,7 @@
       "UpdateQuoteDraftRequest": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "expectedAggregateVersion",
-          "expectedRevisionVersion",
-          "patch"
-        ],
+        "required": ["expectedAggregateVersion", "expectedRevisionVersion", "patch"],
         "properties": {
           "expectedAggregateVersion": {
             "type": "integer",
@@ -7984,12 +7875,7 @@
       "FinalizeQuoteRevisionRequest": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "expectedAggregateVersion",
-          "expectedRevisionVersion",
-          "issuer",
-          "client"
-        ],
+        "required": ["expectedAggregateVersion", "expectedRevisionVersion", "issuer", "client"],
         "properties": {
           "expectedAggregateVersion": {
             "type": "integer",
@@ -8025,11 +7911,7 @@
       "ForkQuoteRevisionRequest": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "expectedAggregateVersion",
-          "expectedRevisionVersion",
-          "expectedFingerprint"
-        ],
+        "required": ["expectedAggregateVersion", "expectedRevisionVersion", "expectedFingerprint"],
         "properties": {
           "expectedAggregateVersion": {
             "type": "integer",
@@ -8066,14 +7948,7 @@
       },
       "QuoteDeliveryStatus": {
         "type": "string",
-        "enum": [
-          "pending",
-          "executing",
-          "succeeded",
-          "failed",
-          "indeterminate",
-          "reconciled"
-        ]
+        "enum": ["pending", "executing", "succeeded", "failed", "indeterminate", "reconciled"]
       },
       "QuoteDeliveryAttempt": {
         "type": "object",
@@ -8238,13 +8113,7 @@
           "reminders": {
             "type": "object",
             "additionalProperties": false,
-            "required": [
-              "dueCount",
-              "upcomingCount",
-              "undatedCount",
-              "due",
-              "upcoming"
-            ],
+            "required": ["dueCount", "upcomingCount", "undatedCount", "due", "upcoming"],
             "properties": {
               "dueCount": {
                 "type": "integer",
@@ -9566,13 +9435,7 @@
           },
           "status": {
             "type": "string",
-            "enum": [
-              "dry-run",
-              "succeeded",
-              "failed",
-              "indeterminate",
-              "blocked"
-            ]
+            "enum": ["dry-run", "succeeded", "failed", "indeterminate", "blocked"]
           },
           "errorCode": {
             "type": "string"
