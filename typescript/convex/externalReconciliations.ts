@@ -13,7 +13,12 @@ import {
   toolExecutionReceiptInputValidator,
 } from "./toolExecutionValidators.js";
 import type { Doc } from "./_generated/dataModel.js";
-import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server.js";
+import {
+  mutation,
+  query,
+  type MutationCtx,
+  type QueryCtx,
+} from "./_generated/server.js";
 
 const scopeArgs = {
   projectId: v.string(),
@@ -36,15 +41,26 @@ function cleanScope(args: {
     projectId: cleanRequiredText(args.projectId, "Project ID"),
     tool: cleanRequiredText(args.tool, "Tool name"),
     operation: cleanRequiredText(args.operation, "Tool operation"),
-    idempotencyKey: cleanRequiredText(args.idempotencyKey, "Execution idempotency key"),
-    effectFingerprint: cleanRequiredText(args.effectFingerprint, "Effect fingerprint"),
+    idempotencyKey: cleanRequiredText(
+      args.idempotencyKey,
+      "Execution idempotency key",
+    ),
+    effectFingerprint: cleanRequiredText(
+      args.effectFingerprint,
+      "Effect fingerprint",
+    ),
   };
 }
 
 async function findByScope(
   ctx: QueryCtx | MutationCtx,
   ownerId: string,
-  scope: { projectId: string; tool: string; operation: string; idempotencyKey: string },
+  scope: {
+    projectId: string;
+    tool: string;
+    operation: string;
+    idempotencyKey: string;
+  },
 ) {
   return ctx.db
     .query("externalReconciliations")
@@ -72,7 +88,11 @@ async function findByReconciliationId(
     .unique();
 }
 
-async function findReceipt(ctx: QueryCtx | MutationCtx, ownerId: string, receiptKey?: string) {
+async function findReceipt(
+  ctx: QueryCtx | MutationCtx,
+  ownerId: string,
+  receiptKey?: string,
+) {
   if (!receiptKey) return null;
   return ctx.db
     .query("toolExecutionReceipts")
@@ -82,13 +102,21 @@ async function findReceipt(ctx: QueryCtx | MutationCtx, ownerId: string, receipt
     .unique();
 }
 
-function assertEffect(record: Doc<"externalReconciliations">, effectFingerprint: string): void {
+function assertEffect(
+  record: Doc<"externalReconciliations">,
+  effectFingerprint: string,
+): void {
   if (record.effectFingerprint !== effectFingerprint) {
-    throw new Error("External execution scope belongs to another effect fingerprint.");
+    throw new Error(
+      "External execution scope belongs to another effect fingerprint.",
+    );
   }
 }
 
-function assertProvider(record: Doc<"externalReconciliations">, provider: string): void {
+function assertProvider(
+  record: Doc<"externalReconciliations">,
+  provider: string,
+): void {
   if (record.provider !== provider) {
     throw new Error("External execution scope belongs to another provider.");
   }
@@ -143,11 +171,22 @@ function receiptDocument(
     actionId: cleanRequiredText(receipt.actionId, "Tool action ID"),
     requestId: cleanRequiredText(receipt.requestId, "Request ID"),
     projectId: cleanRequiredText(receipt.projectId, "Project ID"),
-    idempotencyKey: cleanRequiredText(receipt.idempotencyKey, "Execution idempotency key"),
-    actionFingerprint: cleanRequiredText(receipt.actionFingerprint, "Action fingerprint"),
+    idempotencyKey: cleanRequiredText(
+      receipt.idempotencyKey,
+      "Execution idempotency key",
+    ),
+    actionFingerprint: cleanRequiredText(
+      receipt.actionFingerprint,
+      "Action fingerprint",
+    ),
     ...(receipt.effectFingerprint === undefined
       ? {}
-      : { effectFingerprint: cleanRequiredText(receipt.effectFingerprint, "Effect fingerprint") }),
+      : {
+          effectFingerprint: cleanRequiredText(
+            receipt.effectFingerprint,
+            "Effect fingerprint",
+          ),
+        }),
     tool: cleanRequiredText(receipt.tool, "Tool name"),
     operation: cleanRequiredText(receipt.operation, "Tool operation"),
     actor: receipt.actor,
@@ -162,7 +201,12 @@ function receiptDocument(
       : { provider: cleanRequiredText(receipt.provider, "Provider") }),
     ...(receipt.providerRequestId === undefined
       ? {}
-      : { providerRequestId: cleanRequiredText(receipt.providerRequestId, "Provider request ID") }),
+      : {
+          providerRequestId: cleanRequiredText(
+            receipt.providerRequestId,
+            "Provider request ID",
+          ),
+        }),
     ...(receipt.providerCorrelationId === undefined
       ? {}
       : {
@@ -173,15 +217,32 @@ function receiptDocument(
         }),
     ...(receipt.reconciliationId === undefined
       ? {}
-      : { reconciliationId: cleanRequiredText(receipt.reconciliationId, "Reconciliation ID") }),
+      : {
+          reconciliationId: cleanRequiredText(
+            receipt.reconciliationId,
+            "Reconciliation ID",
+          ),
+        }),
     status: receipt.status,
     ...(receipt.outputDigest === undefined
       ? {}
-      : { outputDigest: cleanRequiredText(receipt.outputDigest, "Output digest") }),
-    ...(receipt.errorCode === undefined ? {} : { errorCode: receipt.errorCode }),
+      : {
+          outputDigest: cleanRequiredText(
+            receipt.outputDigest,
+            "Output digest",
+          ),
+        }),
+    ...(receipt.errorCode === undefined
+      ? {}
+      : { errorCode: receipt.errorCode }),
     ...(receipt.providerErrorCode === undefined
       ? {}
-      : { providerErrorCode: cleanRequiredText(receipt.providerErrorCode, "Provider error code") }),
+      : {
+          providerErrorCode: cleanRequiredText(
+            receipt.providerErrorCode,
+            "Provider error code",
+          ),
+        }),
     startedAt: receipt.startedAt,
     completedAt: receipt.completedAt,
     createdAt,
@@ -198,7 +259,12 @@ async function upsertReceipt(
   if (existing && existing.actionFingerprint !== receipt.actionFingerprint) {
     throw new Error("Execution receipt fingerprint conflict.");
   }
-  const document = receiptDocument(ownerId, receiptKey, receipt, existing?.createdAt ?? Date.now());
+  const document = receiptDocument(
+    ownerId,
+    receiptKey,
+    receipt,
+    existing?.createdAt ?? Date.now(),
+  );
   if (existing) {
     await ctx.db.replace("toolExecutionReceipts", existing._id, document);
     const replaced = await ctx.db.get("toolExecutionReceipts", existing._id);
@@ -224,7 +290,9 @@ function assertLease(
     record.leaseExpiresAt === undefined ||
     record.leaseExpiresAt <= now
   ) {
-    throw new Error("Reconciliation claim lease is stale or belongs to another worker.");
+    throw new Error(
+      "Reconciliation claim lease is stale or belongs to another worker.",
+    );
   }
 }
 
@@ -255,7 +323,9 @@ export const listForOperator = query({
     const ownerId = requireOwner(args.serviceToken);
     const limit = args.limit ?? 50;
     if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
-      throw new Error("Reconciliation list limit must be an integer between 1 and 100.");
+      throw new Error(
+        "Reconciliation list limit must be an integer between 1 and 100.",
+      );
     }
 
     if (args.state !== undefined) {
@@ -269,7 +339,13 @@ export const listForOperator = query({
       return records.sort((left, right) => right.updatedAt - left.updatedAt);
     }
 
-    const states = ["observing", "pending", "claimed", "resolved", "escalated"] as const;
+    const states = [
+      "observing",
+      "pending",
+      "claimed",
+      "resolved",
+      "escalated",
+    ] as const;
     const records = (
       await Promise.all(
         states.map((state) =>
@@ -283,7 +359,9 @@ export const listForOperator = query({
         ),
       )
     ).flat();
-    return records.sort((left, right) => right.updatedAt - left.updatedAt).slice(0, limit);
+    return records
+      .sort((left, right) => right.updatedAt - left.updatedAt)
+      .slice(0, limit);
   },
 });
 
@@ -292,8 +370,15 @@ export const getForOperator = query({
   returns: v.union(externalReconciliationEnvelopeValidator, v.null()),
   handler: async (ctx, args) => {
     const ownerId = requireOwner(args.serviceToken);
-    const reconciliationId = cleanRequiredText(args.reconciliationId, "Reconciliation ID");
-    const reconciliation = await findByReconciliationId(ctx, ownerId, reconciliationId);
+    const reconciliationId = cleanRequiredText(
+      args.reconciliationId,
+      "Reconciliation ID",
+    );
+    const reconciliation = await findByReconciliationId(
+      ctx,
+      ownerId,
+      reconciliationId,
+    );
     if (!reconciliation) return null;
     return {
       reconciliation,
@@ -319,13 +404,22 @@ export const registerAttempt = mutation({
   handler: async (ctx, args) => {
     const ownerId = requireOwner(args.serviceToken);
     const scope = cleanScope(args);
-    const reconciliationId = cleanRequiredText(args.reconciliationId, "Reconciliation ID");
+    const reconciliationId = cleanRequiredText(
+      args.reconciliationId,
+      "Reconciliation ID",
+    );
     const executionKey = cleanRequiredText(args.executionKey, "Execution key");
     const actionId = cleanRequiredText(args.actionId, "Tool action ID");
     const requestId = cleanRequiredText(args.requestId, "Request ID");
-    const actionFingerprint = cleanRequiredText(args.actionFingerprint, "Action fingerprint");
+    const actionFingerprint = cleanRequiredText(
+      args.actionFingerprint,
+      "Action fingerprint",
+    );
     const provider = cleanRequiredText(args.provider, "Provider");
-    const providerRequestId = cleanRequiredText(args.providerRequestId, "Provider request ID");
+    const providerRequestId = cleanRequiredText(
+      args.providerRequestId,
+      "Provider request ID",
+    );
     const providerCorrelationId = cleanRequiredText(
       args.providerCorrelationId,
       "Provider correlation ID",
@@ -340,14 +434,22 @@ export const registerAttempt = mutation({
         existing.providerRequestId !== providerRequestId ||
         existing.providerCorrelationId !== providerCorrelationId
       ) {
-        throw new Error("External execution scope has a conflicting provider attempt reference.");
+        throw new Error(
+          "External execution scope has a conflicting provider attempt reference.",
+        );
       }
       return existing;
     }
 
-    const duplicateId = await findByReconciliationId(ctx, ownerId, reconciliationId);
+    const duplicateId = await findByReconciliationId(
+      ctx,
+      ownerId,
+      reconciliationId,
+    );
     if (duplicateId)
-      throw new Error("Reconciliation ID already belongs to another execution scope.");
+      throw new Error(
+        "Reconciliation ID already belongs to another execution scope.",
+      );
 
     const now = Date.now();
     const id = await ctx.db.insert("externalReconciliations", {
@@ -395,12 +497,21 @@ export const markIndeterminate = mutation({
   handler: async (ctx, args) => {
     const ownerId = requireOwner(args.serviceToken);
     const scope = cleanScope(args);
-    const reconciliationId = cleanRequiredText(args.reconciliationId, "Reconciliation ID");
+    const reconciliationId = cleanRequiredText(
+      args.reconciliationId,
+      "Reconciliation ID",
+    );
     const executionKey = cleanRequiredText(args.executionKey, "Execution key");
     const actionId = cleanRequiredText(args.actionId, "Tool action ID");
     const requestId = cleanRequiredText(args.requestId, "Request ID");
-    const actionFingerprint = cleanRequiredText(args.actionFingerprint, "Action fingerprint");
-    const expectedProvider = cleanRequiredText(args.expectedProvider, "Expected provider");
+    const actionFingerprint = cleanRequiredText(
+      args.actionFingerprint,
+      "Action fingerprint",
+    );
+    const expectedProvider = cleanRequiredText(
+      args.expectedProvider,
+      "Expected provider",
+    );
     const receiptKey = cleanRequiredText(args.receiptKey, "Receipt key");
     if (args.receipt.status !== "indeterminate") {
       throw new Error("markIndeterminate requires an indeterminate receipt.");
@@ -409,9 +520,15 @@ export const markIndeterminate = mutation({
     let reconciliation = await findByScope(ctx, ownerId, scope);
     const now = Date.now();
     if (!reconciliation) {
-      const duplicateId = await findByReconciliationId(ctx, ownerId, reconciliationId);
+      const duplicateId = await findByReconciliationId(
+        ctx,
+        ownerId,
+        reconciliationId,
+      );
       if (duplicateId)
-        throw new Error("Reconciliation ID already belongs to another execution scope.");
+        throw new Error(
+          "Reconciliation ID already belongs to another execution scope.",
+        );
       const escalationReason = cleanRequiredText(
         args.missingReferenceReason ?? "provider-reference-missing",
         "Missing provider reference reason",
@@ -429,7 +546,8 @@ export const markIndeterminate = mutation({
         tool: scope.tool,
         operation: scope.operation,
         provider: expectedProvider,
-        providerCorrelationId: args.receipt.providerCorrelationId ?? args.receipt.correlationId,
+        providerCorrelationId:
+          args.receipt.providerCorrelationId ?? args.receipt.correlationId,
         receiptKey,
         receiptId: args.receipt.receiptId,
         state: "escalated",
@@ -441,7 +559,8 @@ export const markIndeterminate = mutation({
         escalatedAt: now,
       });
       reconciliation = await ctx.db.get("externalReconciliations", id);
-      if (!reconciliation) throw new Error("Escalated reconciliation creation failed.");
+      if (!reconciliation)
+        throw new Error("Escalated reconciliation creation failed.");
     } else {
       assertEffect(reconciliation, scope.effectFingerprint);
       assertProvider(reconciliation, expectedProvider);
@@ -464,7 +583,8 @@ export const markIndeterminate = mutation({
       providerCorrelationId: reconciliation.providerCorrelationId,
       reconciliationId: reconciliation.reconciliationId,
       status: "indeterminate",
-      errorCode: state === "pending" ? "indeterminate" : "provider-reference-missing",
+      errorCode:
+        state === "pending" ? "indeterminate" : "provider-reference-missing",
     });
 
     await ctx.db.patch("externalReconciliations", reconciliation._id, {
@@ -475,13 +595,18 @@ export const markIndeterminate = mutation({
       updatedAt: now,
       ...(state === "escalated"
         ? {
-            escalationReason: args.missingReferenceReason ?? "provider-reference-missing",
+            escalationReason:
+              args.missingReferenceReason ?? "provider-reference-missing",
             escalatedAt: now,
           }
         : {}),
     });
-    const updated = await ctx.db.get("externalReconciliations", reconciliation._id);
-    if (!updated) throw new Error("Indeterminate reconciliation update failed.");
+    const updated = await ctx.db.get(
+      "externalReconciliations",
+      reconciliation._id,
+    );
+    if (!updated)
+      throw new Error("Indeterminate reconciliation update failed.");
     return { reconciliation: updated, receipt: boundReceipt };
   },
 });
@@ -503,7 +628,10 @@ export const completeAttempt = mutation({
   handler: async (ctx, args) => {
     const ownerId = requireOwner(args.serviceToken);
     const scope = cleanScope(args);
-    const expectedProvider = cleanRequiredText(args.expectedProvider, "Expected provider");
+    const expectedProvider = cleanRequiredText(
+      args.expectedProvider,
+      "Expected provider",
+    );
     const receiptKey = cleanRequiredText(args.receiptKey, "Receipt key");
     let reconciliation = await findByScope(ctx, ownerId, scope);
     const now = Date.now();
@@ -513,7 +641,8 @@ export const completeAttempt = mutation({
         ...args.receipt,
         effectFingerprint: scope.effectFingerprint,
         provider: expectedProvider,
-        providerCorrelationId: args.receipt.providerCorrelationId ?? args.receipt.correlationId,
+        providerCorrelationId:
+          args.receipt.providerCorrelationId ?? args.receipt.correlationId,
         reconciliationId: args.reconciliationId,
         status: "indeterminate" as const,
         errorCode: "provider-reference-missing" as const,
@@ -522,13 +651,19 @@ export const completeAttempt = mutation({
       if (!reconciliation) {
         const id = await ctx.db.insert("externalReconciliations", {
           ownerId,
-          reconciliationId: cleanRequiredText(args.reconciliationId, "Reconciliation ID"),
+          reconciliationId: cleanRequiredText(
+            args.reconciliationId,
+            "Reconciliation ID",
+          ),
           executionKey: cleanRequiredText(args.executionKey, "Execution key"),
           actionId: cleanRequiredText(args.actionId, "Tool action ID"),
           requestId: cleanRequiredText(args.requestId, "Request ID"),
           projectId: scope.projectId,
           idempotencyKey: scope.idempotencyKey,
-          actionFingerprint: cleanRequiredText(args.actionFingerprint, "Action fingerprint"),
+          actionFingerprint: cleanRequiredText(
+            args.actionFingerprint,
+            "Action fingerprint",
+          ),
           effectFingerprint: scope.effectFingerprint,
           tool: scope.tool,
           operation: scope.operation,
@@ -556,17 +691,28 @@ export const completeAttempt = mutation({
           updatedAt: now,
           escalatedAt: now,
         });
-        reconciliation = await ctx.db.get("externalReconciliations", reconciliation._id);
+        reconciliation = await ctx.db.get(
+          "externalReconciliations",
+          reconciliation._id,
+        );
       }
-      if (!reconciliation) throw new Error("Missing-reference escalation failed.");
-      const receipt = await upsertReceipt(ctx, ownerId, receiptKey, indeterminateReceipt);
+      if (!reconciliation)
+        throw new Error("Missing-reference escalation failed.");
+      const receipt = await upsertReceipt(
+        ctx,
+        ownerId,
+        receiptKey,
+        indeterminateReceipt,
+      );
       return { reconciliation, receipt };
     }
 
     assertEffect(reconciliation, scope.effectFingerprint);
     assertProvider(reconciliation, expectedProvider);
     if (
-      !(["succeeded", "failed"] as const).includes(args.receipt.status as "succeeded" | "failed")
+      !(["succeeded", "failed"] as const).includes(
+        args.receipt.status as "succeeded" | "failed",
+      )
     ) {
       throw new Error("completeAttempt requires a terminal receipt.");
     }
@@ -593,7 +739,10 @@ export const completeAttempt = mutation({
       updatedAt: now,
       resolvedAt: now,
     });
-    const updated = await ctx.db.get("externalReconciliations", reconciliation._id);
+    const updated = await ctx.db.get(
+      "externalReconciliations",
+      reconciliation._id,
+    );
     if (!updated) throw new Error("Terminal reconciliation update failed.");
     return { reconciliation: updated, receipt: boundReceipt };
   },
@@ -612,8 +761,14 @@ export const claimNext = mutation({
     const ownerId = requireOwner(args.serviceToken);
     const workerId = cleanRequiredText(args.workerId, "Worker ID");
     const leaseToken = cleanRequiredText(args.leaseToken, "Lease token");
-    if (!Number.isSafeInteger(args.leaseMs) || args.leaseMs < 1 || args.leaseMs > 300_000) {
-      throw new Error("Lease duration must be an integer between 1 and 300000 milliseconds.");
+    if (
+      !Number.isSafeInteger(args.leaseMs) ||
+      args.leaseMs < 1 ||
+      args.leaseMs > 300_000
+    ) {
+      throw new Error(
+        "Lease duration must be an integer between 1 and 300000 milliseconds.",
+      );
     }
 
     const abandonedObservation = await ctx.db
@@ -638,14 +793,20 @@ export const claimNext = mutation({
     let candidate = await ctx.db
       .query("externalReconciliations")
       .withIndex("by_owner_and_state_and_next_attempt_at", (q) =>
-        q.eq("ownerId", ownerId).eq("state", "pending").lte("nextAttemptAt", args.now),
+        q
+          .eq("ownerId", ownerId)
+          .eq("state", "pending")
+          .lte("nextAttemptAt", args.now),
       )
       .first();
     if (!candidate) {
       candidate = await ctx.db
         .query("externalReconciliations")
         .withIndex("by_owner_and_state_and_lease_expires_at", (q) =>
-          q.eq("ownerId", ownerId).eq("state", "claimed").lte("leaseExpiresAt", args.now),
+          q
+            .eq("ownerId", ownerId)
+            .eq("state", "claimed")
+            .lte("leaseExpiresAt", args.now),
         )
         .first();
     }
@@ -693,25 +854,40 @@ export const resolveClaim = mutation({
     leaseToken: v.string(),
     now: v.number(),
     result: v.union(
-      v.object({ status: v.literal("succeeded"), outputDigest: v.optional(v.string()) }),
+      v.object({
+        status: v.literal("succeeded"),
+        outputDigest: v.optional(v.string()),
+      }),
       v.object({ status: v.literal("failed"), errorCode: v.string() }),
     ),
   },
   returns: toolExecutionReceiptDocumentValidator,
   handler: async (ctx, args) => {
     const ownerId = requireOwner(args.serviceToken);
-    const reconciliationId = cleanRequiredText(args.reconciliationId, "Reconciliation ID");
+    const reconciliationId = cleanRequiredText(
+      args.reconciliationId,
+      "Reconciliation ID",
+    );
     const workerId = cleanRequiredText(args.workerId, "Worker ID");
     const leaseToken = cleanRequiredText(args.leaseToken, "Lease token");
-    const reconciliation = await findByReconciliationId(ctx, ownerId, reconciliationId);
-    if (!reconciliation) throw new Error("Reconciliation record was not found.");
+    const reconciliation = await findByReconciliationId(
+      ctx,
+      ownerId,
+      reconciliationId,
+    );
+    if (!reconciliation)
+      throw new Error("Reconciliation record was not found.");
     assertLease(reconciliation, workerId, leaseToken, args.now);
     const receipt = await findReceipt(ctx, ownerId, reconciliation.receiptKey);
-    if (!receipt) throw new Error("Authoritative reconciliation receipt was not found.");
+    if (!receipt)
+      throw new Error("Authoritative reconciliation receipt was not found.");
 
     const providerErrorCode =
       args.result.status === "failed"
-        ? cleanRequiredText(args.result.errorCode, "Provider reconciliation error code")
+        ? cleanRequiredText(
+            args.result.errorCode,
+            "Provider reconciliation error code",
+          )
         : undefined;
     const quoteDelivery = await ctx.db
       .query("quoteDeliveryAttempts")
@@ -720,8 +896,10 @@ export const resolveClaim = mutation({
       )
       .unique();
     if (quoteDelivery?.status === "reconciled") {
-      const outcomeConflicts = quoteDelivery.reconciledOutcome !== args.result.status;
-      const providerErrorConflicts = quoteDelivery.providerErrorCode !== providerErrorCode;
+      const outcomeConflicts =
+        quoteDelivery.reconciledOutcome !== args.result.status;
+      const providerErrorConflicts =
+        quoteDelivery.providerErrorCode !== providerErrorCode;
       if (outcomeConflicts || providerErrorConflicts) {
         throw new Error(
           "Quote delivery reconciliation outcome conflicts with the provider result.",
@@ -747,22 +925,34 @@ export const resolveClaim = mutation({
         tool: receipt.tool,
         operation: receipt.operation,
         actor: receipt.actor ?? "tool",
-        ...(receipt.approvalId === undefined ? {} : { approvalId: receipt.approvalId }),
+        ...(receipt.approvalId === undefined
+          ? {}
+          : { approvalId: receipt.approvalId }),
         policyVersion: receipt.policyVersion ?? "legacy-unversioned",
-        correlationId: receipt.correlationId ?? reconciliation.providerCorrelationId,
+        correlationId:
+          receipt.correlationId ?? reconciliation.providerCorrelationId,
         source: receipt.source ?? "external-reconciliation-worker",
         provider: reconciliation.provider,
         providerRequestId: reconciliation.providerRequestId,
         providerCorrelationId: reconciliation.providerCorrelationId,
         reconciliationId: reconciliation.reconciliationId,
         status: args.result.status,
-        ...(args.result.status === "succeeded" && args.result.outputDigest !== undefined
-          ? { outputDigest: cleanRequiredText(args.result.outputDigest, "Output digest") }
+        ...(args.result.status === "succeeded" &&
+        args.result.outputDigest !== undefined
+          ? {
+              outputDigest: cleanRequiredText(
+                args.result.outputDigest,
+                "Output digest",
+              ),
+            }
           : {}),
         ...(args.result.status === "failed"
           ? {
               errorCode: "provider-failed" as const,
-              providerErrorCode: cleanRequiredText(args.result.errorCode, "Provider error code"),
+              providerErrorCode: cleanRequiredText(
+                args.result.errorCode,
+                "Provider error code",
+              ),
             }
           : {}),
         startedAt: receipt.startedAt,
@@ -774,10 +964,13 @@ export const resolveClaim = mutation({
     await ctx.db.patch("externalReconciliations", reconciliation._id, {
       state: "resolved",
       terminalStatus: args.result.status,
-      ...(args.result.status === "succeeded" && args.result.outputDigest !== undefined
+      ...(args.result.status === "succeeded" &&
+      args.result.outputDigest !== undefined
         ? { resolutionDigest: args.result.outputDigest }
         : {}),
-      ...(args.result.status === "failed" ? { resolutionErrorCode: args.result.errorCode } : {}),
+      ...(args.result.status === "failed"
+        ? { resolutionErrorCode: args.result.errorCode }
+        : {}),
       updatedAt: args.now,
       resolvedAt: args.now,
     });
@@ -794,8 +987,12 @@ export const resolveClaim = mutation({
         updatedAt: args.now,
       });
     }
-    const updatedReceipt = await ctx.db.get("toolExecutionReceipts", receipt._id);
-    if (!updatedReceipt) throw new Error("Authoritative receipt resolution failed.");
+    const updatedReceipt = await ctx.db.get(
+      "toolExecutionReceipts",
+      receipt._id,
+    );
+    if (!updatedReceipt)
+      throw new Error("Authoritative receipt resolution failed.");
     return updatedReceipt;
   },
 });
@@ -814,15 +1011,30 @@ export const releaseClaim = mutation({
   returns: externalReconciliationDocumentValidator,
   handler: async (ctx, args) => {
     const ownerId = requireOwner(args.serviceToken);
-    const reconciliationId = cleanRequiredText(args.reconciliationId, "Reconciliation ID");
+    const reconciliationId = cleanRequiredText(
+      args.reconciliationId,
+      "Reconciliation ID",
+    );
     const workerId = cleanRequiredText(args.workerId, "Worker ID");
     const leaseToken = cleanRequiredText(args.leaseToken, "Lease token");
-    const errorCode = cleanRequiredText(args.errorCode, "Reconciliation error code");
-    if (!Number.isSafeInteger(args.maxAttempts) || args.maxAttempts < 1 || args.maxAttempts > 100) {
+    const errorCode = cleanRequiredText(
+      args.errorCode,
+      "Reconciliation error code",
+    );
+    if (
+      !Number.isSafeInteger(args.maxAttempts) ||
+      args.maxAttempts < 1 ||
+      args.maxAttempts > 100
+    ) {
       throw new Error("Maximum attempts must be an integer between 1 and 100.");
     }
-    const reconciliation = await findByReconciliationId(ctx, ownerId, reconciliationId);
-    if (!reconciliation) throw new Error("Reconciliation record was not found.");
+    const reconciliation = await findByReconciliationId(
+      ctx,
+      ownerId,
+      reconciliationId,
+    );
+    if (!reconciliation)
+      throw new Error("Reconciliation record was not found.");
     assertLease(reconciliation, workerId, leaseToken, args.now);
 
     if (reconciliation.attemptCount >= args.maxAttempts) {
@@ -835,7 +1047,9 @@ export const releaseClaim = mutation({
       });
     } else {
       if (args.nextAttemptAt <= args.now) {
-        throw new Error("Next reconciliation attempt must be scheduled in the future.");
+        throw new Error(
+          "Next reconciliation attempt must be scheduled in the future.",
+        );
       }
       await ctx.db.patch("externalReconciliations", reconciliation._id, {
         state: "pending",
@@ -844,7 +1058,10 @@ export const releaseClaim = mutation({
         updatedAt: args.now,
       });
     }
-    const updated = await ctx.db.get("externalReconciliations", reconciliation._id);
+    const updated = await ctx.db.get(
+      "externalReconciliations",
+      reconciliation._id,
+    );
     if (!updated) throw new Error("Reconciliation release failed.");
     return updated;
   },
@@ -864,8 +1081,15 @@ export const cleanup = mutation({
         "External reconciliation cleanup is restricted to the authorised development deployment.",
       );
     }
-    const reconciliationId = cleanRequiredText(args.reconciliationId, "Reconciliation ID");
-    const reconciliation = await findByReconciliationId(ctx, ownerId, reconciliationId);
+    const reconciliationId = cleanRequiredText(
+      args.reconciliationId,
+      "Reconciliation ID",
+    );
+    const reconciliation = await findByReconciliationId(
+      ctx,
+      ownerId,
+      reconciliationId,
+    );
     if (!reconciliation) return false;
     const receipt = await findReceipt(ctx, ownerId, reconciliation.receiptKey);
     if (receipt) await ctx.db.delete("toolExecutionReceipts", receipt._id);
