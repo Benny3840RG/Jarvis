@@ -7,7 +7,8 @@ export const EXTERNAL_RECONCILIATION_STATES = [
   "resolved",
   "escalated",
 ] as const;
-export type ExternalReconciliationState = (typeof EXTERNAL_RECONCILIATION_STATES)[number];
+export type ExternalReconciliationState =
+  (typeof EXTERNAL_RECONCILIATION_STATES)[number];
 
 export type ExternalExecutionScope = {
   projectId: string;
@@ -127,15 +128,27 @@ export type ExternalReconciliationListInput = {
 };
 
 export interface ExternalReconciliationReadStore {
-  listForOperator(input?: ExternalReconciliationListInput): Promise<ExternalReconciliationRecord[]>;
-  getForOperator(reconciliationId: string): Promise<ExternalReconciliationEnvelope | null>;
+  listForOperator(
+    input?: ExternalReconciliationListInput,
+  ): Promise<ExternalReconciliationRecord[]>;
+  getForOperator(
+    reconciliationId: string,
+  ): Promise<ExternalReconciliationEnvelope | null>;
 }
 
 export interface ExternalReconciliationStore {
-  getByScope(scope: ExternalExecutionScope): Promise<ExternalReconciliationEnvelope | null>;
-  registerAttempt(input: RegisterExternalAttemptInput): Promise<ExternalReconciliationRecord>;
-  markIndeterminate(input: MarkExternalIndeterminateInput): Promise<ExternalReconciliationEnvelope>;
-  completeAttempt(input: CompleteExternalAttemptInput): Promise<ExternalReconciliationEnvelope>;
+  getByScope(
+    scope: ExternalExecutionScope,
+  ): Promise<ExternalReconciliationEnvelope | null>;
+  registerAttempt(
+    input: RegisterExternalAttemptInput,
+  ): Promise<ExternalReconciliationRecord>;
+  markIndeterminate(
+    input: MarkExternalIndeterminateInput,
+  ): Promise<ExternalReconciliationEnvelope>;
+  completeAttempt(
+    input: CompleteExternalAttemptInput,
+  ): Promise<ExternalReconciliationEnvelope>;
   claimNext(input: {
     workerId: string;
     leaseToken: string;
