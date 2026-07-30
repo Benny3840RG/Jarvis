@@ -1713,7 +1713,7 @@
           }
         ],
         "x-mcp-tool": {
-          "exposed": false,
+          "exposed": true,
           "annotations": {
             "readOnlyHint": true,
             "destructiveHint": false,
@@ -1859,7 +1859,7 @@
           }
         ],
         "x-mcp-tool": {
-          "exposed": false,
+          "exposed": true,
           "annotations": {
             "readOnlyHint": true,
             "destructiveHint": false,
@@ -6724,7 +6724,15 @@
       },
       "ToolActionState": {
         "type": "string",
-        "enum": ["proposed", "approved", "rejected"]
+        "enum": ["proposed", "approved", "rejected", "expired", "revoked"]
+      },
+      "ApprovalExpiryPolicy": {
+        "type": "string",
+        "enum": ["ttl", "non-expiring"]
+      },
+      "ConsumptionPolicy": {
+        "type": "string",
+        "enum": ["single-use", "reusable"]
       },
       "ToolAuthority": {
         "type": "string",
@@ -6834,6 +6842,35 @@
           "rejectedAt": {
             "type": "string",
             "format": "date-time"
+          },
+          "approvalExpiryPolicy": {
+            "$ref": "#/components/schemas/ApprovalExpiryPolicy"
+          },
+          "approvalExpiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "expiredObservedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "consumptionPolicy": {
+            "$ref": "#/components/schemas/ConsumptionPolicy"
+          },
+          "revokedBy": {
+            "const": "user"
+          },
+          "revokedReason": {
+            "type": "string",
+            "minLength": 1
+          },
+          "revokedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "isApprovalExpired": {
+            "type": "boolean",
+            "description": "Computed, read-only view: true when an approval's ttl has lapsed but the terminal `expired` transition hasn't been persisted by a mutation yet."
           }
         }
       },
