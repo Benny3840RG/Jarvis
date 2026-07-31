@@ -17,7 +17,7 @@ function digest(value: string): Buffer {
 }
 
 function hasConfiguredToken(value: string | undefined): value is string {
-  return typeof value === "string" && value.trim().length > 0;
+  return typeof value === "string" && /^\S+$/.test(value);
 }
 
 function matchesToken(candidate: string, configured: string): boolean {
