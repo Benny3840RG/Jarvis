@@ -65,18 +65,39 @@ server.use(async (c, next) => {
     path.startsWith("/sse/");
   if (!isGatedRoute) return next();
 
+  const candidateToken = parseBearerToken(c.req.header("authorization"));
   const rpcMethod = path === "/mcp" ? await readJsonRpcMethod(c.req.raw) : undefined;
   const decision = decideGatewayAccess({
     configuredToken: gatewayToken,
-    candidateToken: parseBearerToken(c.req.header("authorization")),
+    candidateToken,
     rpcMethod,
   });
 
-  if (decision === "allow-initialize" || decision === "allow-token") return next();
-  if (decision === "missing-configuration") {
-    return c.json({ error: "Console gateway authentication is not configured." }, 503);
+  if (decision === "allow-initialize" || decision === "allow-token") {
+    return next();
   }
-  return c.json({ error: "A valid Bearer gateway token is required." }, 401);
+  if (decision === "missing-configuration") {
+    return c.json(
+      {
+        error: "Console gateway authentication is not configured.",
+        code: "gateway_not_configured",
+      },
+      503,
+    );
+  }
+  // decision === "unauthorized"
+  return c.json(
+    candidateToken === undefined
+      ? {
+          error: "A Bearer gateway token is required.",
+          code: "gateway_token_missing",
+        }
+      : {
+          error: "The supplied gateway token is invalid.",
+          code: "gateway_token_invalid",
+        },
+    401,
+  );
 });
 
 const taskSchema = z.object({
