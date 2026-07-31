@@ -85,10 +85,12 @@ jobs:
           fi
 
           for variable in JARVIS_SERVICE_TOKEN OPENAI_API_KEY CONVEX_DEPLOY_KEY; do
-            if [[ -z "${!variable:-}" ]]; then
+            secret_value="${!variable:-}"
+            if [[ -z "$secret_value" ]]; then
               echo "::error::Required repository secret $variable is unavailable."
               exit 1
             fi
+            echo "::add-mask::$secret_value"
           done
 
       - name: Set up Node.js
@@ -149,7 +151,11 @@ jobs:
           const outputPath = process.argv[3];
           let text = fs.existsSync(inputPath) ? fs.readFileSync(inputPath, "utf8") : "";
 
-          for (const secret of [process.env.OPENAI_API_KEY, process.env.JARVIS_SERVICE_TOKEN]) {
+          for (const secret of [
+            process.env.OPENAI_API_KEY,
+            process.env.JARVIS_SERVICE_TOKEN,
+            process.env.CONVEX_DEPLOY_KEY,
+          ]) {
             if (secret) text = text.split(secret).join("[REDACTED]");
           }
 
@@ -158,7 +164,7 @@ jobs:
             .replace(/(Bearer\s+)[A-Za-z0-9._~+\/-]+/g, "$1[REDACTED]")
             .replace(/\bsk-(?:proj-)?[A-Za-z0-9_-]{8,}\b/g, "[REDACTED_OPENAI_KEY]")
             .replace(
-              /((?:OPENAI_API_KEY|JARVIS_SERVICE_TOKEN)\s*[:=]\s*)[^\s"',]+/g,
+              /((?:OPENAI_API_KEY|JARVIS_SERVICE_TOKEN|CONVEX_DEPLOY_KEY)\s*[:=]\s*)[^\s"',]+/g,
               "$1[REDACTED]",
             );
 
@@ -177,7 +183,7 @@ jobs:
 
           ready=false
           for _ in {1..30}; do
-            if curl --silent --show-error --fail \
+            if curl --silent --show-error --fail --max-time 5 \
               "http://127.0.0.1:8787/" \
               --output /dev/null; then
               ready=true
