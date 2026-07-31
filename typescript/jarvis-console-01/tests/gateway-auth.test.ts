@@ -25,6 +25,19 @@ describe("Console gateway authentication", () => {
     assert.equal(decideGatewayAccess({}), "missing-configuration");
   });
 
+  it("treats blank configured tokens as missing configuration", () => {
+    for (const configuredToken of ["", " ", "\t", "\n", "  \t\n  "]) {
+      assert.equal(
+        decideGatewayAccess({
+          configuredToken,
+          candidateToken: "anything",
+          rpcMethod: "tools/list",
+        }),
+        "missing-configuration",
+      );
+    }
+  });
+
   it("accepts an exact configured bearer token for protected requests", () => {
     assert.equal(
       decideGatewayAccess({
