@@ -10,7 +10,7 @@ The slice adds read-only list and detail endpoints over the existing `externalRe
 
 ## Architecture
 
-Convex remains authoritative. A dedicated `ExternalReconciliationReadStore` exposes only `list` and `get`; the existing worker store retains mutation capabilities. The Convex query uses existing owner/state indexes and bounded `.take(limit)` reads. HTTP maps records into an operator response that omits owner IDs, execution/idempotency keys, fingerprints, receipt keys, lease owners/tokens, and raw output digests.
+Convex remains authoritative. A dedicated `ExternalReconciliationReadStore` exposes only `listForOperator` and `getForOperator`; the existing worker store retains mutation capabilities. The Convex list queries use additive owner/update-time indexes (`by_owner_and_updated_at` and `by_owner_and_state_and_updated_at`) with bounded `.take(limit)` reads so operator lists are newest-first without unbounded collection. HTTP maps records into an operator response that omits owner IDs, execution/idempotency keys, fingerprints, receipt keys, lease owners/tokens, and raw output digests.
 
 ## Contract
 
@@ -20,7 +20,7 @@ Convex remains authoritative. A dedicated `ExternalReconciliationReadStore` expo
 - Default limit is 50; maximum is 100.
 - Missing and cross-owner detail reads return the same 404 problem.
 - JSON-mode or uncommissioned Convex read access returns an explicit 503.
-- List ordering is newest `updatedAt` first within the selected bounded query.
+- List ordering is newest `updatedAt` first through the owner/update-time indexes.
 - Responses expose operational identity, provider references, state, attempts, terminal/error/escalation facts, timestamps, and a sanitised receipt summary.
 
 ## Failure and security rules
