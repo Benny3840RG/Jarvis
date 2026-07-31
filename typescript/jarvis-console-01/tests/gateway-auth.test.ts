@@ -77,4 +77,13 @@ describe("Console gateway authentication", () => {
     assert.match(source, /missing-configuration/);
     assert.match(source, /path === "\/sse"/);
   });
+
+  it("preserves distinct machine-readable gateway failure codes", () => {
+    const source = readFileSync(new URL("../index.ts", import.meta.url), "utf8");
+
+    assert.ok(source.includes('code: "gateway_not_configured"'));
+    assert.ok(source.includes('code: "gateway_token_missing"'));
+    assert.ok(source.includes('code: "gateway_token_invalid"'));
+    assert.ok(source.includes("candidateToken === undefined"));
+  });
 });
