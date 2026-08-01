@@ -38,6 +38,25 @@ describe("Console gateway authentication", () => {
     }
   });
 
+  it("treats configured tokens containing whitespace as missing configuration", () => {
+    for (const configuredToken of [
+      " configured-console-token",
+      "configured-console-token ",
+      "configured console token",
+      "configured\tconsole-token",
+      "configured-console-token\n",
+    ]) {
+      assert.equal(
+        decideGatewayAccess({
+          configuredToken,
+          candidateToken: "configured-console-token",
+          rpcMethod: "tools/list",
+        }),
+        "missing-configuration",
+      );
+    }
+  });
+
   it("accepts an exact configured bearer token for protected requests", () => {
     assert.equal(
       decideGatewayAccess({
