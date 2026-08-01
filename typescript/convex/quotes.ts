@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 
-import { requireOwner } from "./authHelpers.js";
+import { collectBounded, requireOwner } from "./authHelpers.js";
 import {
   applyQuoteDraftPatch,
   buildInitialQuoteRecords,
@@ -376,22 +376,26 @@ export const cleanup = mutation({
     const quoteId = cleanRequiredText(args.quoteId, "Quote ID");
     const aggregate = await findAggregate(ctx, ownerId, quoteId);
     if (!aggregate) return false;
-    const artifacts = await ctx.db
-      .query("quotePdfArtifacts")
-      .withIndex("by_owner_quote_and_revision", (q) =>
-        q.eq("ownerId", ownerId).eq("quoteId", quoteId),
-      )
-      .collect();
+    const artifacts = await collectBounded(
+      ctx.db
+        .query("quotePdfArtifacts")
+        .withIndex("by_owner_quote_and_revision", (q) =>
+          q.eq("ownerId", ownerId).eq("quoteId", quoteId),
+        ),
+      "Quote PDF artifact",
+    );
     for (const artifact of artifacts) {
       await ctx.storage.delete(artifact.storageId);
       await ctx.db.delete("quotePdfArtifacts", artifact._id);
     }
-    const revisions = await ctx.db
-      .query("quoteRevisions")
-      .withIndex("by_owner_quote_and_revision", (q) =>
-        q.eq("ownerId", ownerId).eq("quoteId", quoteId),
-      )
-      .collect();
+    const revisions = await collectBounded(
+      ctx.db
+        .query("quoteRevisions")
+        .withIndex("by_owner_quote_and_revision", (q) =>
+          q.eq("ownerId", ownerId).eq("quoteId", quoteId),
+        ),
+      "Quote revision",
+    );
     for (const revision of revisions) {
       await ctx.db.delete("quoteRevisions", revision._id);
     }

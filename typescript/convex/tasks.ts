@@ -429,12 +429,14 @@ export const cleanupControlled = mutation({
     if (task && task.ownerId === ownerId && task.projectId === projectId) {
       await ctx.db.delete("tasks", id);
     }
-    const receipts = await ctx.db
-      .query("internalActionResults")
-      .withIndex("by_owner_entity", (q) =>
-        q.eq("ownerId", ownerId).eq("entityType", "task").eq("entityId", id),
-      )
-      .collect();
+    const receipts = await collectBounded(
+      ctx.db
+        .query("internalActionResults")
+        .withIndex("by_owner_entity", (q) =>
+          q.eq("ownerId", ownerId).eq("entityType", "task").eq("entityId", id),
+        ),
+      "Task action result",
+    );
     for (const receipt of receipts) {
       if (receipt.projectId === projectId)
         await ctx.db.delete("internalActionResults", receipt._id);

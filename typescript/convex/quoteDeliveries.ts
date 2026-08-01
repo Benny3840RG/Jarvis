@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 
-import { requireOwner } from "./authHelpers.js";
+import { collectBounded, requireOwner } from "./authHelpers.js";
 import {
   quoteDeliveryAttemptDocumentValidator,
   quoteDeliveryChannelValidator,
@@ -310,12 +310,14 @@ export const cleanup = mutation({
       );
     }
     const quoteId = cleanRequiredText(args.quoteId, "Quote ID");
-    const attempts = await ctx.db
-      .query("quoteDeliveryAttempts")
-      .withIndex("by_owner_quote_and_revision", (q) =>
-        q.eq("ownerId", ownerId).eq("quoteId", quoteId),
-      )
-      .collect();
+    const attempts = await collectBounded(
+      ctx.db
+        .query("quoteDeliveryAttempts")
+        .withIndex("by_owner_quote_and_revision", (q) =>
+          q.eq("ownerId", ownerId).eq("quoteId", quoteId),
+        ),
+      "Quote delivery attempt",
+    );
     if (attempts.length === 0) return false;
     for (const attempt of attempts) {
       await ctx.db.delete("quoteDeliveryAttempts", attempt._id);

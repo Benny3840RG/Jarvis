@@ -486,12 +486,14 @@ export const cleanupControlled = mutation({
     if (reminder && reminder.ownerId === ownerId && reminder.projectId === projectId) {
       await ctx.db.delete("reminders", id);
     }
-    const results = await ctx.db
-      .query("internalActionResults")
-      .withIndex("by_owner_entity", (q) =>
-        q.eq("ownerId", ownerId).eq("entityType", "reminder").eq("entityId", id),
-      )
-      .collect();
+    const results = await collectBounded(
+      ctx.db
+        .query("internalActionResults")
+        .withIndex("by_owner_entity", (q) =>
+          q.eq("ownerId", ownerId).eq("entityType", "reminder").eq("entityId", id),
+        ),
+      "Reminder action result",
+    );
     for (const result of results) {
       if (result.projectId === projectId) {
         await ctx.db.delete("internalActionResults", result._id);
