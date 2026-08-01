@@ -1,1 +1,36 @@
-# This is a placeholder - PR body updates require API calls
+# PR Summary
+
+Remove the accidental whitespace-only agent workdir artifact that was committed under `.github/home/workdir/artifacts/am-214-conversation-receipts`, and ignore `.github/home/` so generated workdir files are not committed again.
+
+- No command / flag / provider / endpoint / reminder rule changes
+
+# Implementation (ChatGPT)
+
+- CLI: unchanged
+- Convex: unchanged
+- Tests: N/A — deletion and gitignore only; no runtime behaviour
+- OpenAPI: unchanged
+- Runbooks: unchanged
+- `.gitignore`: ignore `.github/home/`
+- Deleted: `.github/home/workdir/artifacts/am-214-conversation-receipts`
+
+# Reasoning (Claude)
+
+PR #255 failed the Copilot Review Check because the description still had template placeholders, and the only file change was an accidental generated artifact (confirmed by code review). The durable repo fix is to delete that artifact and prevent recurrence via gitignore. The PR description must also carry a filled Copilot Review section so the workflow can pass.
+
+# Copilot Review
+
+Use [/docs/copilot/copilot-review-template.md](/docs/copilot/copilot-review-template.md):
+
+- CLI Contract: N/A — this change only deletes a generated artifact and updates `.gitignore`; no CLI commands, flags, or parsing behaviour are modified.
+- Persistence Providers: N/A — no JSON or Convex provider code, schema, auth, or ownership boundaries are touched.
+- Backup / Restore: N/A — no archive format, restore guards, record-id remapping, or temp-directory cleanup paths are changed.
+- HTTP / MCP: N/A — no HTTP operator API, MCP preview surface, bind address, or token-handling code is modified.
+- Tests & Checks: N/A — no `typescript/src/` or `typescript/convex/` runtime source changed; only artifact removal and gitignore, so no new unit tests are warranted. Copilot Review Check should pass once this description is applied.
+- Documentation: `.gitignore` documents that `.github/home/` is generated agent workdir output and must not be committed; no runbook or architecture drift.
+
+# Operator Verification
+
+- Confirm the accidental artifact path is gone from the branch tip
+- Confirm `.github/home/` is listed in `.gitignore`
+- Re-run the Copilot Review Check workflow on the PR after the description includes the filled section above

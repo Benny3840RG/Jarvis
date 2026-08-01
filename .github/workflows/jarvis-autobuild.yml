@@ -546,7 +546,7 @@ jobs:
             typescript/jarvis-console-01/package-lock.json
 
       - name: Verify autonomous policy
-        run: node --test .github/automation/validate-autobuild.test.mjs
+        run: node --test .github/automation/validate-autobuild.test.mjs .github/automation/validate-copilot-review.test.mjs
 
       - name: Install locked TypeScript dependencies
         run: npm ci --prefix typescript
