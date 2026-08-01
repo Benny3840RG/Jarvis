@@ -11,76 +11,42 @@ jobs:
   copilot-review-section:
     runs-on: ubuntu-latest
     steps:
+      - name: Check out the pull request head
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
       - name: Verify the Copilot Review section is filled in and tests accompany source changes
         uses: actions/github-script@v9
         with:
           script: |
-            const body = context.payload.pull_request.body || "";
-            const failures = [];
+            const fs = require("node:fs");
+            const path = require("node:path");
+            const { pathToFileURL } = require("node:url");
 
-            const requiredHeadings = [
-              "CLI Contract",
-              "Persistence Providers",
-              "Backup / Restore",
-              "HTTP / MCP",
-              "Tests & Checks",
-              "Documentation",
-            ];
+            const validatorUrl = pathToFileURL(
+              path.join(process.cwd(), ".github/automation/validate-copilot-review.mjs"),
+            ).href;
+            const {
+              resolveReviewSource,
+              validateSourceTestCoverage,
+            } = await import(validatorUrl);
 
-            const MIN_CONTENT_LENGTH = 12;
-            const fillerPatterns = [
-              /^n\/?a$/i,
-              /^(none|nope|ok|okay|done|yes|no)\.?$/i,
-              /^(lgtm|looks good( to me)?|ship it)\.?$/i,
-              /^no (issues|regressions|changes)\.?$/i,
-              /^tested\.?$/i,
-            ];
-            const naWithReason = /^n\/a\s*[—-]\s*(.+)/i;
+            const prBody = context.payload.pull_request.body || "";
+            let updateBody = "";
+            const updatePath = path.join(process.cwd(), ".github/pull_request_update");
+            if (fs.existsSync(updatePath)) {
+              updateBody = fs.readFileSync(updatePath, "utf8");
+            }
 
-            if (!body.includes("Copilot Review")) {
-              failures.push(
-                "PR description must include a '# Copilot Review' section (see .github/PULL_REQUEST_TEMPLATE.md).",
-              );
-            } else {
-              for (const heading of requiredHeadings) {
-                const escaped = heading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-                const pattern = new RegExp(`-\\s*${escaped}\\s*:\\s*(.+)`);
-                const match = body.match(pattern);
-                if (!match) {
-                  failures.push(`Copilot Review is missing the "${heading}" line.`);
-                  continue;
-                }
-                const content = match[1].trim();
-                if (content.length === 0 || content === "[...]") {
-                  failures.push(
-                    `Copilot Review's "${heading}" line is still a placeholder — fill it in with an actual finding (or "N/A — <reason>").`,
-                  );
-                  continue;
-                }
+            const { failures: reviewFailures, reviewSource } = resolveReviewSource(
+              prBody,
+              updateBody,
+            );
+            const failures = [...reviewFailures];
 
-                const naMatch = content.match(naWithReason);
-                if (naMatch) {
-                  if (naMatch[1].trim().length < MIN_CONTENT_LENGTH) {
-                    failures.push(
-                      `Copilot Review's "${heading}" line gives "N/A" without a real reason — say why it doesn't apply.`,
-                    );
-                  }
-                  continue;
-                }
-
-                if (fillerPatterns.some((rx) => rx.test(content))) {
-                  failures.push(
-                    `Copilot Review's "${heading}" line looks like filler ("${content}") — give a concrete finding tied to the code change, or "N/A — <reason>".`,
-                  );
-                  continue;
-                }
-
-                if (content.length < MIN_CONTENT_LENGTH) {
-                  failures.push(
-                    `Copilot Review's "${heading}" line is too short ("${content}") — give a concrete finding, or "N/A — <reason>".`,
-                  );
-                }
-              }
+            if (reviewFailures.length === 0) {
+              core.info(`Accepted Copilot Review from ${reviewSource}.`);
             }
 
             const { data: files } = await github.rest.pulls.listFiles({
@@ -90,22 +56,10 @@ jobs:
               per_page: 100,
             });
             const paths = files.map((file) => file.filename);
-            const sourceChanged = paths.some(
-              (path) =>
-                (path.startsWith("typescript/src/") || path.startsWith("typescript/convex/")) &&
-                !path.endsWith(".test.ts"),
-            );
-            const testsChanged = paths.some(
-              (path) =>
-                path.startsWith("typescript/tests/") ||
-                (path.startsWith("typescript/convex/") && path.endsWith(".test.ts")),
-            );
-            if (sourceChanged && !testsChanged) {
-              failures.push(
-                "This PR changes files under typescript/src/ or typescript/convex/ but touches no test file. Add coverage, or explain in Copilot Review's \"Tests & Checks\" line why none is needed.",
-              );
-            }
+            failures.push(...validateSourceTestCoverage(paths));
 
             if (failures.length > 0) {
               core.setFailed(failures.join("\n"));
+            } else {
+              core.info(`Copilot Review check passed using ${reviewSource}.`);
             }

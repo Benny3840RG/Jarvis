@@ -20,7 +20,10 @@ Paste Claude's refined problem statement.
 
 # Copilot Review
 
-Use [/docs/copilot/copilot-review-template.md](/docs/copilot/copilot-review-template.md):
+Use [/docs/copilot/copilot-review-template.md](/docs/copilot/copilot-review-template.md).
+Replace every `[...]` with a concrete finding or `N/A — <reason>` (reasons must be specific).
+Agents that cannot edit the PR description may instead put the same filled section in
+`.github/pull_request_update` — the Copilot Review Check accepts that file as a fallback.
 
 - CLI Contract: [...]
 - Persistence Providers: [...]
