@@ -54,6 +54,10 @@ export const MCP_TOOL_OPERATIONS: Readonly<Record<string, readonly OpenApiOperat
   delete_project: [{ method: "DELETE", path: "/api/v1/projects/{projectId}" }],
   list_quotes: [{ method: "GET", path: "/api/v1/quotes" }],
   get_quote: [{ method: "GET", path: "/api/v1/quotes/{quoteId}" }],
+  list_tool_actions: [{ method: "GET", path: "/api/v1/projects/{projectId}/tool-actions" }],
+  get_tool_action: [
+    { method: "GET", path: "/api/v1/projects/{projectId}/tool-actions/{actionId}" },
+  ],
   get_daily_brief: [{ method: "GET", path: "/api/v1/brief" }],
   get_operations_inbox: [{ method: "GET", path: "/api/v1/operations/inbox" }],
   list_activity: [{ method: "GET", path: "/api/v1/operations/activity" }],

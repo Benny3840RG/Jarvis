@@ -427,6 +427,105 @@ describe("Tool action approval HTTP boundary", () => {
     assert.equal(response.json().state, "rejected");
   });
 
+  it("revokes an approved action with a reason, gated by the same approval token as /approve", async () => {
+    let reason = "";
+    const app = await makeApp(
+      successfulService({
+        async revoke(input) {
+          reason = input.reason;
+          return {
+            ...action("revoked"),
+            revokedBy: "user",
+            revokedReason: input.reason,
+          };
+        },
+      }),
+    );
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/v1/projects/project-1/tool-actions/action-1/revoke",
+      headers: authHeaders(),
+      payload: { reason: "No longer needed.", approvalToken: "approval-secret" },
+    });
+
+    assert.equal(response.statusCode, 200);
+    assert.equal(reason, "No longer needed.");
+    assert.equal(response.json().state, "revoked");
+  });
+
+  it("rejects revocation without a valid approval token before calling the service", async () => {
+    let called = false;
+    const app = await makeApp(
+      successfulService({
+        async revoke(input) {
+          called = true;
+          return { ...action("revoked"), revokedBy: "user", revokedReason: input.reason };
+        },
+      }),
+    );
+
+    const missingToken = await app.inject({
+      method: "POST",
+      url: "/api/v1/projects/project-1/tool-actions/action-1/revoke",
+      headers: authHeaders(),
+      payload: { reason: "No longer needed." },
+    });
+    const wrongToken = await app.inject({
+      method: "POST",
+      url: "/api/v1/projects/project-1/tool-actions/action-1/revoke",
+      headers: authHeaders(),
+      payload: { reason: "No longer needed.", approvalToken: "not-the-secret" },
+    });
+
+    assert.equal(missingToken.statusCode, 422);
+    assert.equal(wrongToken.statusCode, 401);
+    assert.equal(called, false);
+  });
+
+  it("returns 503 for revoke when no approval token is configured", async () => {
+    const app = await makeApp(successfulService(), null, CONFIG_NO_APPROVAL_TOKEN);
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/v1/projects/project-1/tool-actions/action-1/revoke",
+      headers: authHeaders(),
+      payload: { reason: "No longer needed.", approvalToken: "anything" },
+    });
+
+    assert.equal(response.statusCode, 503);
+    assert.equal(response.json().type, "urn:jarvis:problem:tool-action-approval-token-unavailable");
+  });
+
+  it("returns 503 when the tool action service does not implement revoke", async () => {
+    const app = await makeApp(successfulService());
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/v1/projects/project-1/tool-actions/action-1/revoke",
+      headers: authHeaders(),
+      payload: { reason: "No longer needed.", approvalToken: "approval-secret" },
+    });
+
+    assert.equal(response.statusCode, 503);
+  });
+
+  it("maps an already-consumed revoke conflict without leaking backend details", async () => {
+    const app = await makeApp(
+      successfulService({
+        async revoke() {
+          throw new Error("Tool action is already consumed and cannot be revoked.");
+        },
+      }),
+    );
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/v1/projects/project-1/tool-actions/action-1/revoke",
+      headers: authHeaders(),
+      payload: { reason: "Too late.", approvalToken: "approval-secret" },
+    });
+
+    assert.equal(response.statusCode, 409);
+    assert.equal(response.json().type, "urn:jarvis:problem:tool-action-state-conflict");
+  });
+
   it("maps revision conflicts without leaking backend details", async () => {
     const app = await makeApp(
       successfulService({

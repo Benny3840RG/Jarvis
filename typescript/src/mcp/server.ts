@@ -17,6 +17,7 @@ import type { Preference } from "../preferences/preference.js";
 import type { Errand } from "../errands/errand.js";
 import type { Project } from "../projects/project.js";
 import type { QuoteSnapshot } from "../quotes/quoteLifecycle.js";
+import type { ToolAction } from "../actions/toolActions.js";
 import type { Reminder, Task } from "../persistence/persistence.js";
 import {
   JarvisApiClient,
@@ -154,6 +155,40 @@ const quoteRevisionSchema = z.object({
 const quoteSnapshotSchema = z.object({
   aggregate: quoteAggregateSchema,
   revision: quoteRevisionSchema,
+});
+
+// Consent-lifecycle inspection (R-048/R-049/R-050): read-only. Mirrors the
+// ToolAction shape exactly; no schema here ever represents approve, revoke,
+// reject, or execute — those remain unavailable through MCP in this slice.
+const toolActionSchema = z.object({
+  actionId: z.string(),
+  requestId: z.string(),
+  projectId: z.string(),
+  baseRevision: z.number().int(),
+  state: z.enum(["proposed", "approved", "rejected", "expired", "revoked"]),
+  tool: z.string(),
+  operation: z.string(),
+  arguments: z.record(z.string(), z.unknown()),
+  rationale: z.string(),
+  requiredAuthority: z.enum(["T0", "T1", "T2", "T3"]),
+  destructive: z.boolean(),
+  idempotencyKey: z.string(),
+  proposedBy: z.enum(["user", "agent", "tool"]),
+  approvedBy: z.literal("user").optional(),
+  rejectedBy: z.literal("user").optional(),
+  rejectedReason: z.string().optional(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  approvedAt: z.string().optional(),
+  rejectedAt: z.string().optional(),
+  approvalExpiryPolicy: z.enum(["ttl", "non-expiring"]).optional(),
+  approvalExpiresAt: z.string().optional(),
+  expiredObservedAt: z.string().optional(),
+  consumptionPolicy: z.enum(["single-use", "reusable"]).optional(),
+  revokedBy: z.literal("user").optional(),
+  revokedReason: z.string().optional(),
+  revokedAt: z.string().optional(),
+  isApprovalExpired: z.boolean().optional(),
 });
 
 const errandLocationSchema = z.object({
@@ -1292,6 +1327,70 @@ export function createJarvisMcpServer(client: JarvisApiClient): McpServer {
             },
           ],
           structuredContent: { quote },
+        };
+      } catch (error: unknown) {
+        return safeError(error);
+      }
+    },
+  );
+
+  registerAppTool(
+    server,
+    "list_tool_actions",
+    {
+      title: "List tool-action proposals",
+      description:
+        "Use this to inspect the governed proposal/approval register for one project — including consent-lifecycle state (approved, expired, revoked) and exact approval expiry. This tool is strictly read-only: it cannot propose, approve, revoke, reject, or execute anything.",
+      inputSchema: {
+        projectId: z.string().min(1),
+        state: z.enum(["proposed", "approved", "rejected", "expired", "revoked"]).optional(),
+        limit: z.number().int().min(1).max(100).optional(),
+      },
+      outputSchema: {
+        actions: z.array(toolActionSchema),
+        count: z.number().int().nonnegative(),
+      },
+      annotations: readAnnotations,
+      _meta: { ui: { visibility: ["model"] } },
+    },
+    async ({ projectId }) => {
+      try {
+        const actions: ToolAction[] = await client.listToolActions(projectId);
+        return {
+          content: [
+            { type: "text" as const, text: `Found ${actions.length} tool-action proposals.` },
+          ],
+          structuredContent: { actions, count: actions.length },
+        };
+      } catch (error: unknown) {
+        return safeError(error);
+      }
+    },
+  );
+
+  registerAppTool(
+    server,
+    "get_tool_action",
+    {
+      title: "Inspect a tool-action proposal",
+      description:
+        "Use this to inspect one proposal's exact consent-lifecycle state — approval timestamp, exact expiry, revocation reason, or consumption policy. This tool is read-only and cannot approve, revoke, reject, or execute the action.",
+      inputSchema: { projectId: z.string().min(1), actionId: z.string().min(1) },
+      outputSchema: { action: toolActionSchema },
+      annotations: readAnnotations,
+      _meta: { ui: { visibility: ["model"] } },
+    },
+    async ({ projectId, actionId }) => {
+      try {
+        const action: ToolAction = await client.getToolAction(projectId, actionId);
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: `Tool action ${action.actionId}: ${action.tool}:${action.operation}, state ${action.state}.`,
+            },
+          ],
+          structuredContent: { action },
         };
       } catch (error: unknown) {
         return safeError(error);

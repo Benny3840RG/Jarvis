@@ -7,6 +7,10 @@ import type { ToolAction } from "../src/actions/toolActions.js";
 import {
   InMemoryToolExecutionReceiptStore,
   ToolExecutionService,
+  type ExecutionEligibilityResult,
+  type ExecutionEligibilityStore,
+  type SingleUseConsumptionClaimStore,
+  type SingleUseExecutionClaimResult,
 } from "../src/actions/toolExecution.js";
 
 const action: ToolAction = {
@@ -245,5 +249,315 @@ describe("tool execution stage", () => {
       idempotencyKey: "timeout",
     });
     assert.deepEqual(replay, result);
+  });
+});
+
+describe("consent-lifecycle execution enforcement (R-048/R-049/R-050)", () => {
+  function definition(executions: { count: number }) {
+    return {
+      tool: "clock",
+      operation: "read",
+      schema: z.object({ zone: z.string() }),
+      async execute() {
+        executions.count += 1;
+        return { now: "2026-07-18T00:00:00.000Z" };
+      },
+    };
+  }
+
+  it("blocks execution when the fetched action's approval has already expired", async () => {
+    const executions = { count: 0 };
+    const executor = new ToolExecutionService([definition(executions)]);
+
+    const result = await executor.execute({
+      action: { ...action, isApprovalExpired: true },
+      authority: "T1",
+      idempotencyKey: "expired-attempt",
+    });
+
+    assert.equal(result.status, "blocked");
+    assert.equal(result.errorCode, "approval-expired");
+    assert.equal(executions.count, 0);
+  });
+
+  it("still blocks a revoked action as not-authorized, never reaching the definition", async () => {
+    const executions = { count: 0 };
+    const executor = new ToolExecutionService([definition(executions)]);
+
+    const result = await executor.execute({
+      action: { ...action, state: "revoked", revokedBy: "user", revokedReason: "no longer needed" },
+      authority: "T1",
+      idempotencyKey: "revoked-attempt",
+    });
+
+    assert.equal(result.status, "blocked");
+    assert.equal(result.errorCode, "not-authorized");
+    assert.equal(executions.count, 0);
+  });
+
+  it("never consumes a single-use action's claim when timeoutMs validation rejects the request", async () => {
+    // Independent review finding: the claim used to be taken *before*
+    // timeoutMs validation. An out-of-range timeoutMs (the HTTP boundary
+    // accepts any positive number, so a caller-supplied 30_001 reaches here)
+    // would throw after the claim was already spent, permanently consuming a
+    // single-use action's one attempt for an error unrelated to
+    // authorization or consumption — and blocking every legitimate retry as
+    // "approval-consumed" from then on.
+    const executions = { count: 0 };
+    const executor = new ToolExecutionService(
+      [definition(executions)],
+      new InMemoryToolExecutionReceiptStore(),
+    );
+    const singleUse = { ...action, consumptionPolicy: "single-use" as const };
+
+    await assert.rejects(
+      executor.execute({
+        action: singleUse,
+        authority: "T1",
+        idempotencyKey: "bad-timeout",
+        timeoutMs: 30_001,
+      }),
+      /timeoutMs must be an integer between 1 and 30000/,
+    );
+    assert.equal(executions.count, 0, "the provider must never be invoked for a rejected timeout");
+
+    const retry = await executor.execute({
+      action: singleUse,
+      authority: "T1",
+      idempotencyKey: "good-timeout",
+    });
+
+    assert.equal(
+      retry.status,
+      "succeeded",
+      "the invalid-timeout attempt must not have consumed the single-use claim",
+    );
+    assert.equal(executions.count, 1);
+  });
+
+  it("blocks a live re-execution of an already-consumed single-use action under a different key", async () => {
+    const executions = { count: 0 };
+    const receipts = new InMemoryToolExecutionReceiptStore();
+    const executor = new ToolExecutionService([definition(executions)], receipts);
+    const singleUse = { ...action, consumptionPolicy: "single-use" as const };
+
+    const first = await executor.execute({
+      action: singleUse,
+      authority: "T1",
+      idempotencyKey: "first-key",
+    });
+    assert.equal(first.status, "succeeded");
+    assert.equal(executions.count, 1);
+
+    const second = await executor.execute({
+      action: singleUse,
+      authority: "T1",
+      idempotencyKey: "second-key",
+    });
+
+    assert.equal(second.status, "blocked");
+    assert.equal(second.errorCode, "approval-consumed");
+    assert.equal(executions.count, 1, "the already-consumed action must not be executed again");
+  });
+
+  it("blocks a genuinely concurrent execution of a single-use action under different keys — the definition is invoked at most once", async () => {
+    // Regression for a real race: two different-key attempts must not both
+    // observe "not yet consumed" and both cross the external-effect
+    // boundary. Both calls are dispatched together via Promise.all so their
+    // internal awaits (receipt lookup, in-flight check, schema parse) truly
+    // interleave, the same way two concurrent HTTP requests would.
+    const invocations: string[] = [];
+    const receipts = new InMemoryToolExecutionReceiptStore();
+    const executor = new ToolExecutionService(
+      [
+        {
+          tool: "clock",
+          operation: "read",
+          schema: z.object({ zone: z.string() }),
+          async execute() {
+            invocations.push("call");
+            await new Promise((resolve) => setTimeout(resolve, 15));
+            return { now: "2026-07-18T00:00:00.000Z" };
+          },
+        },
+      ],
+      receipts,
+    );
+    const singleUse = { ...action, consumptionPolicy: "single-use" as const };
+
+    const [first, second] = await Promise.all([
+      executor.execute({ action: singleUse, authority: "T1", idempotencyKey: "concurrent-a" }),
+      executor.execute({ action: singleUse, authority: "T1", idempotencyKey: "concurrent-b" }),
+    ]);
+
+    assert.equal(invocations.length, 1, "the definition must be invoked exactly once");
+    const outcomes = [first.status, second.status].sort();
+    assert.deepEqual(outcomes, ["blocked", "succeeded"]);
+    const loser = first.status === "blocked" ? first : second;
+    assert.equal(loser.errorCode, "approval-consumed");
+  });
+
+  it("maps a claim store's not-approved block reason to not-authorized, never invoking the definition", async () => {
+    // Reproduces the exact-head review finding at the TS mapping layer: the
+    // claim store's own fresh, same-transaction check (not the caller's
+    // separately-fetched, potentially stale action snapshot) is what must
+    // decide this — a revoke landing between that earlier fetch and the
+    // claim call must still block, and must map to the same "not-authorized"
+    // code the earlier deterministic check would have produced had it seen
+    // current state.
+    const executions = { count: 0 };
+    const claims: SingleUseConsumptionClaimStore = {
+      async claim(): Promise<SingleUseExecutionClaimResult> {
+        return { claimed: false, claimId: "", blockReason: "not-approved" };
+      },
+    };
+    const executor = new ToolExecutionService(
+      [definition(executions)],
+      new InMemoryToolExecutionReceiptStore(),
+      undefined,
+      claims,
+    );
+    const singleUse = { ...action, consumptionPolicy: "single-use" as const };
+
+    const result = await executor.execute({
+      action: singleUse,
+      authority: "T1",
+      idempotencyKey: "revoked-between-get-and-claim",
+    });
+
+    assert.equal(result.status, "blocked");
+    assert.equal(result.errorCode, "not-authorized");
+    assert.equal(executions.count, 0, "the provider must never be invoked for a revoked claim");
+  });
+
+  it("maps a claim store's expired block reason to approval-expired, never invoking the definition", async () => {
+    const executions = { count: 0 };
+    const claims: SingleUseConsumptionClaimStore = {
+      async claim(): Promise<SingleUseExecutionClaimResult> {
+        return { claimed: false, claimId: "", blockReason: "expired" };
+      },
+    };
+    const executor = new ToolExecutionService(
+      [definition(executions)],
+      new InMemoryToolExecutionReceiptStore(),
+      undefined,
+      claims,
+    );
+    const singleUse = { ...action, consumptionPolicy: "single-use" as const };
+
+    const result = await executor.execute({
+      action: singleUse,
+      authority: "T1",
+      idempotencyKey: "expired-between-get-and-claim",
+    });
+
+    assert.equal(result.status, "blocked");
+    assert.equal(result.errorCode, "approval-expired");
+    assert.equal(executions.count, 0, "the provider must never be invoked for an expired claim");
+  });
+
+  it("maps an eligibility store's not-approved block reason to not-authorized for a reusable action, never invoking the definition", async () => {
+    // Full-repo-audit finding: the atomic, execute-time re-check above only
+    // ever ran for single-use actions. A reusable (or legacy/unclassified)
+    // action executed purely against the caller's own, separately-fetched,
+    // possibly-stale snapshot — a revoke landing between that fetch and this
+    // call would previously let the effect run anyway. The eligibility
+    // store's own fresh, same-transaction check must be what decides this.
+    const executions = { count: 0 };
+    const eligibility: ExecutionEligibilityStore = {
+      async verify(): Promise<ExecutionEligibilityResult> {
+        return { eligible: false, blockReason: "not-approved" };
+      },
+    };
+    const executor = new ToolExecutionService(
+      [definition(executions)],
+      new InMemoryToolExecutionReceiptStore(),
+      undefined,
+      undefined,
+      eligibility,
+    );
+
+    const result = await executor.execute({
+      action,
+      authority: "T1",
+      idempotencyKey: "revoked-between-get-and-verify",
+    });
+
+    assert.equal(result.status, "blocked");
+    assert.equal(result.errorCode, "not-authorized");
+    assert.equal(executions.count, 0, "the provider must never be invoked for a revoked action");
+  });
+
+  it("maps an eligibility store's expired block reason to approval-expired for a reusable action, never invoking the definition", async () => {
+    const executions = { count: 0 };
+    const eligibility: ExecutionEligibilityStore = {
+      async verify(): Promise<ExecutionEligibilityResult> {
+        return { eligible: false, blockReason: "expired" };
+      },
+    };
+    const executor = new ToolExecutionService(
+      [definition(executions)],
+      new InMemoryToolExecutionReceiptStore(),
+      undefined,
+      undefined,
+      eligibility,
+    );
+
+    const result = await executor.execute({
+      action,
+      authority: "T1",
+      idempotencyKey: "expired-between-get-and-verify",
+    });
+
+    assert.equal(result.status, "blocked");
+    assert.equal(result.errorCode, "approval-expired");
+    assert.equal(executions.count, 0, "the provider must never be invoked for an expired action");
+  });
+
+  it("does not block a dry-run against an already-consumed single-use action", async () => {
+    const executions = { count: 0 };
+    const receipts = new InMemoryToolExecutionReceiptStore();
+    const executor = new ToolExecutionService([definition(executions)], receipts);
+    const singleUse = { ...action, consumptionPolicy: "single-use" as const };
+
+    await executor.execute({
+      action: singleUse,
+      authority: "T1",
+      idempotencyKey: "first-key",
+    });
+    assert.equal(executions.count, 1);
+
+    const dryRun = await executor.execute({
+      action: singleUse,
+      authority: "T1",
+      idempotencyKey: "dry-run-key",
+      dryRun: true,
+    });
+
+    assert.equal(dryRun.status, "dry-run");
+    assert.equal(dryRun.errorCode, undefined);
+    assert.equal(executions.count, 1, "dry-run must never invoke the definition");
+  });
+
+  it("allows a second live execution of a reusable (non-single-use) action under a different key", async () => {
+    const executions = { count: 0 };
+    const receipts = new InMemoryToolExecutionReceiptStore();
+    const executor = new ToolExecutionService([definition(executions)], receipts);
+    const reusable = { ...action, consumptionPolicy: "reusable" as const };
+
+    const first = await executor.execute({
+      action: reusable,
+      authority: "T1",
+      idempotencyKey: "first-key",
+    });
+    const second = await executor.execute({
+      action: reusable,
+      authority: "T1",
+      idempotencyKey: "second-key",
+    });
+
+    assert.equal(first.status, "succeeded");
+    assert.equal(second.status, "succeeded");
+    assert.equal(executions.count, 2);
   });
 });

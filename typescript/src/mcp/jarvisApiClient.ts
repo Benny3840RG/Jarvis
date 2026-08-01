@@ -14,6 +14,7 @@ import type { Preference, PreferenceInput, PreferenceUpdate } from "../preferenc
 import type { Project, ProjectInput, ProjectUpdate } from "../projects/project.js";
 import type { QuoteSnapshot } from "../quotes/quoteLifecycle.js";
 import type { QuoteSummary } from "../quotes/quoteRepository.js";
+import type { ToolAction } from "../actions/toolActions.js";
 import type { SystemStatus } from "../http/contracts.js";
 import type { Reminder, Task } from "../persistence/persistence.js";
 import type { TaskUpdate } from "../persistence/updates.js";
@@ -553,6 +554,22 @@ export class JarvisApiClient {
         `/api/v1/quotes/${encodeURIComponent(quoteId)}`,
       )
     ).data;
+  }
+
+  /** Read-only: lists tool-action proposals for one project. Cannot approve, revoke, or execute. */
+  async listToolActions(projectId: string): Promise<ToolAction[]> {
+    return this.request<ToolAction[]>(
+      "GET",
+      `/api/v1/projects/${encodeURIComponent(projectId)}/tool-actions`,
+    );
+  }
+
+  /** Read-only: inspects one tool-action proposal and its consent-lifecycle state. */
+  async getToolAction(projectId: string, actionId: string): Promise<ToolAction> {
+    return this.request<ToolAction>(
+      "GET",
+      `/api/v1/projects/${encodeURIComponent(projectId)}/tool-actions/${encodeURIComponent(actionId)}`,
+    );
   }
 
   async getDailyBrief(): Promise<DailyBrief> {

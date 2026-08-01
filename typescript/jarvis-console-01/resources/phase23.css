@@ -83,7 +83,8 @@
 }
 
 .reminder-panel,
-.note-panel {
+.note-panel,
+.governed-action-panel {
   max-height: 260px;
   overflow: hidden;
 }
@@ -99,6 +100,21 @@
 
 .reminder-row:last-child,
 .note-row:last-child {
+  border-bottom: 0;
+}
+
+.governed-action-row {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 9px;
+  padding: 9px 10px;
+  border-bottom: 1px solid #2c3341;
+}
+
+.governed-action-row:last-child {
   border-bottom: 0;
 }
 
