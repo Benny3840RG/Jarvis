@@ -106,6 +106,13 @@ Layer readiness is deliberately independent of process health. The maintained st
 be healthy while prototype Z-State layers remain `partial` or `inactive`; Z-State therefore stays
 `disabled` until the stabilisation, proposal-safety, and reliability requirements are implemented.
 
+Status also reports `integrations`: an array of evidence-backed integration-commissioning line items
+(`{name, status: "commissioned" | "not-commissioned", reason?}`), never a percentage and never inferred
+from an environment variable simply being set. See
+[Operations Inbox, Activity Timeline & Integration Health](./operations-inbox.md) for the full source-of-
+truth map, including the read-only Operations Inbox (`GET /api/v1/operations/inbox`) and Activity Timeline
+(`GET /api/v1/operations/activity`) endpoints.
+
 ## Exposure boundary
 
 The default loopback bind is intentional. Remote HTTP and MCP exposure are disabled, not merely

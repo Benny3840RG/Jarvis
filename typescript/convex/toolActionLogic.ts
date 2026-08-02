@@ -1,10 +1,20 @@
-export const TOOL_ACTION_STATES = ["proposed", "approved", "rejected"] as const;
+export const TOOL_ACTION_STATES = [
+  "proposed",
+  "approved",
+  "rejected",
+  "expired",
+  "revoked",
+] as const;
 export const TOOL_ACTION_ACTORS = ["user", "agent", "tool"] as const;
 export const TOOL_AUTHORITIES = ["T0", "T1", "T2", "T3"] as const;
+export const APPROVAL_EXPIRY_POLICIES = ["ttl", "non-expiring"] as const;
+export const CONSUMPTION_POLICIES = ["single-use", "reusable"] as const;
 
 export type ToolActionState = (typeof TOOL_ACTION_STATES)[number];
 export type ToolActionActor = (typeof TOOL_ACTION_ACTORS)[number];
 export type ToolAuthority = (typeof TOOL_AUTHORITIES)[number];
+export type ApprovalExpiryPolicy = (typeof APPROVAL_EXPIRY_POLICIES)[number];
+export type ConsumptionPolicy = (typeof CONSUMPTION_POLICIES)[number];
 
 export type ToolActionProposalValues = {
   projectKey: string;
@@ -167,6 +177,54 @@ export function validateToolAuthority(
   if (destructive && requiredAuthority !== "T3") {
     throw new Error("Destructive tool actions require T3 authority.");
   }
+}
+
+// Consent-lifecycle policy (R-048 expiry, R-049 revocation, R-050 consumption).
+//
+// Both the expiry ceiling and the consumption policy are *derived* from the
+// proposal's own `destructive` flag rather than a new per-tool/operation config
+// surface. `destructive` is already a caller-declared, server-validated field
+// (validateToolAuthority already requires T3 authority whenever it's true), so
+// this reuses an existing trust boundary instead of introducing a new one.
+const DEFAULT_APPROVAL_TTL_MS = 4 * 60 * 60 * 1000; // 4h — routine, non-destructive approvals.
+const DESTRUCTIVE_APPROVAL_TTL_MS = 60 * 60 * 1000; // 1h — destructive approvals get a tighter window.
+const MIN_APPROVAL_TTL_MS = 60 * 1000; // 1 minute floor: shorter is not meaningfully reviewable.
+const MAX_APPROVAL_TTL_MS = 24 * 60 * 60 * 1000; // 24h ceiling for routine approvals.
+const MAX_DESTRUCTIVE_APPROVAL_TTL_MS = 60 * 60 * 1000; // destructive approvals may not be lengthened past 1h.
+
+export function deriveConsumptionPolicy(destructive: boolean): ConsumptionPolicy {
+  return destructive ? "single-use" : "reusable";
+}
+
+export function deriveDefaultApprovalTtlMs(destructive: boolean): number {
+  return destructive ? DESTRUCTIVE_APPROVAL_TTL_MS : DEFAULT_APPROVAL_TTL_MS;
+}
+
+/**
+ * Clamps a caller-supplied approval TTL override into a bounded, risk-tiered
+ * range. A caller can shorten a specific approval's window but can never
+ * lengthen it past the tier's ceiling, and never select "non-expiring" this
+ * way — that classification is reserved for a separately reviewed allowlist.
+ */
+export function clampApprovalTtlMs(requested: number | undefined, destructive: boolean): number {
+  const max = destructive ? MAX_DESTRUCTIVE_APPROVAL_TTL_MS : MAX_APPROVAL_TTL_MS;
+  if (requested === undefined) return deriveDefaultApprovalTtlMs(destructive);
+  if (!Number.isFinite(requested) || !Number.isInteger(requested)) {
+    throw new Error("Approval TTL override must be a finite integer of milliseconds.");
+  }
+  return Math.min(Math.max(requested, MIN_APPROVAL_TTL_MS), max);
+}
+
+/**
+ * `now >= expiresAt` is treated as expired — the boundary favors fail-closed
+ * over granting one extra instant of authority at the exact expiry tick.
+ */
+export function isApprovalExpired(
+  approval: { policy: ApprovalExpiryPolicy; expiresAt?: number },
+  now: number,
+): boolean {
+  if (approval.policy === "non-expiring") return false;
+  return approval.expiresAt !== undefined && now >= approval.expiresAt;
 }
 
 export function sameToolActionProposal(

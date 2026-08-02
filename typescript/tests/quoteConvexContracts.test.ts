@@ -43,9 +43,11 @@ describe("quote Convex contracts", () => {
     assert.ok(callerFacingSource.includes(".unique()"));
     assert.ok(callerFacingSource.includes(".take("));
 
-    // `cleanup` is dev-only (see below) and its `.collect()` stays fully
-    // bounded by the owner+quote index — never an unscoped table scan.
-    assert.ok(cleanupSource.includes(".collect("));
+    // `cleanup` is dev-only (see below). Reads stay owner+quote indexed and
+    // go through collectBounded so they fail closed at MAX_OWNER_LIST_RESULTS
+    // instead of an unbounded .collect().
+    assert.ok(cleanupSource.includes("collectBounded("));
+    assert.equal(cleanupSource.includes(".collect("), false);
     assert.ok(cleanupSource.includes('withIndex("by_owner_quote_and_revision"'));
   });
 

@@ -133,7 +133,9 @@
         "operationId": "getHealth",
         "summary": "Check process liveness",
         "description": "Returns process liveness without touching persistence or exposing configuration.",
-        "tags": ["System"],
+        "tags": [
+          "System"
+        ],
         "security": [],
         "x-mcp-tool": {
           "exposed": false,
@@ -174,7 +176,9 @@
         "operationId": "getHelp",
         "summary": "List supported operator capabilities",
         "description": "Returns the stable operator-facing capability map for the subset of this contract implemented by the running adapter.",
-        "tags": ["System"],
+        "tags": [
+          "System"
+        ],
         "x-mcp-tool": {
           "exposed": false,
           "annotations": {
@@ -217,7 +221,9 @@
         "operationId": "getJarvisStatus",
         "summary": "Inspect Jarvis runtime and provider status",
         "description": "Checks storage reachability, authentication, schema compatibility, layer readiness, timezone, and Z-State activation without returning secrets.",
-        "tags": ["System"],
+        "tags": [
+          "System"
+        ],
         "x-mcp-tool": {
           "exposed": true,
           "title": "Check Jarvis status",
@@ -262,7 +268,9 @@
         "operationId": "executeConversation",
         "summary": "Execute a safety-gated conversation turn",
         "description": "Parses one text input, constructs an execution plan, routes each step, evaluates the complete output through the immutable safety envelope, and returns the result. ChatGPT should use focused task and reminder tools instead of exposing this broad runtime endpoint as an MCP tool.",
-        "tags": ["Runtime"],
+        "tags": [
+          "Runtime"
+        ],
         "parameters": [
           {
             "$ref": "#/components/parameters/IdempotencyKey"
@@ -332,7 +340,9 @@
         "operationId": "listTasks",
         "summary": "List durable tasks",
         "description": "Returns the authoritative task list from the configured persistence provider.",
-        "tags": ["Tasks"],
+        "tags": [
+          "Tasks"
+        ],
         "x-mcp-tool": {
           "exposed": true,
           "title": "List Jarvis tasks",
@@ -375,7 +385,9 @@
         "operationId": "createTask",
         "summary": "Create a durable task",
         "description": "Creates one task after explicit user intent. Reusing an Idempotency-Key must replay the original result rather than create a duplicate.",
-        "tags": ["Tasks"],
+        "tags": [
+          "Tasks"
+        ],
         "parameters": [
           {
             "$ref": "#/components/parameters/IdempotencyKey"
@@ -459,7 +471,9 @@
         "operationId": "getTask",
         "summary": "Get one durable task",
         "description": "Returns one task by its opaque provider-issued identifier.",
-        "tags": ["Tasks"],
+        "tags": [
+          "Tasks"
+        ],
         "x-mcp-tool": {
           "exposed": true,
           "title": "Get a Jarvis task",
@@ -505,7 +519,9 @@
         "operationId": "updateTask",
         "summary": "Update a durable task",
         "description": "Updates the supplied task title and/or category without changing identity, completion, or creation time.",
-        "tags": ["Tasks"],
+        "tags": [
+          "Tasks"
+        ],
         "x-mcp-tool": {
           "exposed": true,
           "title": "Update a Jarvis task",
@@ -567,7 +583,9 @@
         "operationId": "deleteTask",
         "summary": "Delete a durable task",
         "description": "Permanently removes one task after explicit user confirmation.",
-        "tags": ["Tasks"],
+        "tags": [
+          "Tasks"
+        ],
         "x-mcp-tool": {
           "exposed": true,
           "title": "Delete a Jarvis task",
@@ -620,7 +638,9 @@
         "operationId": "completeTask",
         "summary": "Complete a durable task",
         "description": "Sets the task completed flag to true. Repeated calls leave the task completed.",
-        "tags": ["Tasks"],
+        "tags": [
+          "Tasks"
+        ],
         "x-mcp-tool": {
           "exposed": true,
           "title": "Complete a Jarvis task",
@@ -668,7 +688,9 @@
         "operationId": "listReminders",
         "summary": "List durable reminders",
         "description": "Returns the authoritative reminder list from the configured persistence provider.",
-        "tags": ["Reminders"],
+        "tags": [
+          "Reminders"
+        ],
         "x-mcp-tool": {
           "exposed": true,
           "title": "List Jarvis reminders",
@@ -711,7 +733,9 @@
         "operationId": "createReminder",
         "summary": "Create a durable reminder",
         "description": "Creates one reminder and preserves its exact due text. Jarvis only adds a timestamp when the due value is unambiguous in the supplied timezone.",
-        "tags": ["Reminders"],
+        "tags": [
+          "Reminders"
+        ],
         "parameters": [
           {
             "$ref": "#/components/parameters/IdempotencyKey"
@@ -795,7 +819,9 @@
         "operationId": "getReminder",
         "summary": "Get one durable reminder",
         "description": "Returns one reminder by its opaque provider-issued identifier.",
-        "tags": ["Reminders"],
+        "tags": [
+          "Reminders"
+        ],
         "x-mcp-tool": {
           "exposed": true,
           "title": "Get a Jarvis reminder",
@@ -841,7 +867,9 @@
         "operationId": "updateReminder",
         "summary": "Update a durable reminder",
         "description": "Updates the supplied title and/or due value. Sending due=null explicitly clears all due fields.",
-        "tags": ["Reminders"],
+        "tags": [
+          "Reminders"
+        ],
         "x-mcp-tool": {
           "exposed": true,
           "title": "Update a Jarvis reminder",
@@ -903,7 +931,9 @@
         "operationId": "deleteReminder",
         "summary": "Delete a durable reminder",
         "description": "Permanently removes one reminder after explicit user confirmation.",
-        "tags": ["Reminders"],
+        "tags": [
+          "Reminders"
+        ],
         "x-mcp-tool": {
           "exposed": true,
           "title": "Delete a Jarvis reminder",
@@ -951,7 +981,9 @@
         "operationId": "exportBackup",
         "summary": "Export a provider-neutral backup",
         "description": "Takes one coherent persistence snapshot and returns a version 2 Jarvis backup archive. This sensitive operation is intentionally excluded from the model tool surface.",
-        "tags": ["Backups"],
+        "tags": [
+          "Backups"
+        ],
         "x-mcp-tool": {
           "exposed": false,
           "annotations": {
@@ -1001,7 +1033,9 @@
         "operationId": "verifyBackup",
         "summary": "Verify a backup archive",
         "description": "Validates a version 1 or 2 archive and verifies it in isolated storage without touching the configured live provider.",
-        "tags": ["Backups"],
+        "tags": [
+          "Backups"
+        ],
         "x-mcp-tool": {
           "exposed": false,
           "annotations": {
@@ -1060,7 +1094,9 @@
         "operationId": "restoreBackup",
         "summary": "Restore a backup into an empty provider",
         "description": "Restores a verified archive only when the configured target has no assistant state, tasks, or reminders. The confirmation field must be exactly true. This operation is never exposed as a model tool.",
-        "tags": ["Backups"],
+        "tags": [
+          "Backups"
+        ],
         "parameters": [
           {
             "$ref": "#/components/parameters/IdempotencyKey"
@@ -1130,7 +1166,9 @@
         "operationId": "reasonWithTotality",
         "summary": "Run proposal-only Totality reasoning with validation and audit journalling",
         "description": "Runs proposal-only Totality reasoning against bounded authoritative project context. Successful typed memory suggestions are validated locally and staged as approval-required project-memory change sets in the same Convex transaction as validation and audit evidence. No memory is approved or applied by this operation.",
-        "tags": ["Runtime"],
+        "tags": [
+          "Runtime"
+        ],
         "x-mcp-tool": {
           "exposed": false,
           "annotations": {
@@ -1202,7 +1240,9 @@
         "operationId": "listMemoryChangeSets",
         "summary": "List staged project-memory change sets",
         "description": "Lists bounded, owner-scoped memory change sets, optionally filtered by state.",
-        "tags": ["Memory"],
+        "tags": [
+          "Memory"
+        ],
         "parameters": [
           {
             "name": "projectId",
@@ -1219,7 +1259,12 @@
             "in": "query",
             "schema": {
               "type": "string",
-              "enum": ["proposed", "approved", "rejected", "applied"]
+              "enum": [
+                "proposed",
+                "approved",
+                "rejected",
+                "applied"
+              ]
             }
           },
           {
@@ -1282,7 +1327,9 @@
         "operationId": "stageMemoryChangeSet",
         "summary": "Stage typed project-memory changes for explicit approval",
         "description": "Stages one idempotent change set against the current project revision without writing canonical memory.",
-        "tags": ["Memory"],
+        "tags": [
+          "Memory"
+        ],
         "parameters": [
           {
             "name": "projectId",
@@ -1356,7 +1403,9 @@
         "operationId": "getMemoryChangeSet",
         "summary": "Inspect one project-memory change set",
         "description": "Returns one staged memory change set without modifying its state.",
-        "tags": ["Memory"],
+        "tags": [
+          "Memory"
+        ],
         "parameters": [
           {
             "name": "projectId",
@@ -1430,7 +1479,9 @@
         "operationId": "approveMemoryChangeSet",
         "summary": "Approve a revision-matched project-memory change set",
         "description": "Transitions the memory change set to approved without writing canonical memory.",
-        "tags": ["Memory"],
+        "tags": [
+          "Memory"
+        ],
         "parameters": [
           {
             "name": "projectId",
@@ -1514,7 +1565,9 @@
         "operationId": "rejectMemoryChangeSet",
         "summary": "Reject a staged project-memory change set",
         "description": "Transitions the memory change set to rejected without writing canonical memory.",
-        "tags": ["Memory"],
+        "tags": [
+          "Memory"
+        ],
         "parameters": [
           {
             "name": "projectId",
@@ -1598,7 +1651,9 @@
         "operationId": "applyMemoryChangeSet",
         "summary": "Transactionally apply an approved project-memory change set",
         "description": "Applies all approved records, increments the project revision, and appends audit evidence in one Convex transaction.",
-        "tags": ["Memory"],
+        "tags": [
+          "Memory"
+        ],
         "parameters": [
           {
             "name": "projectId",
@@ -1682,7 +1737,9 @@
         "operationId": "listToolActions",
         "summary": "List revision-bound tool-action proposals",
         "description": "Returns recent tool-action proposals for one project. This operation cannot execute a tool.",
-        "tags": ["Tool Actions"],
+        "tags": [
+          "Tool Actions"
+        ],
         "parameters": [
           {
             "name": "projectId",
@@ -1713,7 +1770,7 @@
           }
         ],
         "x-mcp-tool": {
-          "exposed": false,
+          "exposed": true,
           "annotations": {
             "readOnlyHint": true,
             "destructiveHint": false,
@@ -1761,7 +1818,9 @@
         "operationId": "stageToolAction",
         "summary": "Stage a tool-action proposal for explicit review",
         "description": "Stores one idempotent proposal against the authoritative project revision. Staging never calls the named tool.",
-        "tags": ["Tool Actions"],
+        "tags": [
+          "Tool Actions"
+        ],
         "parameters": [
           {
             "name": "projectId",
@@ -1835,7 +1894,9 @@
         "operationId": "getToolAction",
         "summary": "Inspect one tool-action proposal",
         "description": "Returns one proposal and its approval state without invoking the named tool.",
-        "tags": ["Tool Actions"],
+        "tags": [
+          "Tool Actions"
+        ],
         "parameters": [
           {
             "name": "projectId",
@@ -1859,7 +1920,7 @@
           }
         ],
         "x-mcp-tool": {
-          "exposed": false,
+          "exposed": true,
           "annotations": {
             "readOnlyHint": true,
             "destructiveHint": false,
@@ -1909,7 +1970,9 @@
         "operationId": "approveToolAction",
         "summary": "Approve a revision-matched tool-action proposal",
         "description": "Records explicit operator approval after checking the project revision. Approval does not execute the proposal.",
-        "tags": ["Tool Actions"],
+        "tags": [
+          "Tool Actions"
+        ],
         "parameters": [
           {
             "name": "projectId",
@@ -1993,7 +2056,9 @@
         "operationId": "rejectToolAction",
         "summary": "Reject a tool-action proposal",
         "description": "Records an explicit rejection reason. Rejection does not call the named tool.",
-        "tags": ["Tool Actions"],
+        "tags": [
+          "Tool Actions"
+        ],
         "parameters": [
           {
             "name": "projectId",
@@ -2077,7 +2142,9 @@
         "operationId": "executeToolAction",
         "summary": "Execute an approved tool-action proposal",
         "description": "Runs an approved proposal against the reviewed tool/operation allowlist and returns a durable receipt. The active internal allowlist contains notes:create, tasks:create, tasks:complete, reminders:create, and reminders:cancel. Blocked, timed-out, indeterminate, and failed outcomes are returned as receipts with a 200 status because the execution attempt itself completed. Quote finalisation and sending remain unavailable until separately commissioned.",
-        "tags": ["Tool Actions"],
+        "tags": [
+          "Tool Actions"
+        ],
         "parameters": [
           {
             "name": "projectId",
@@ -2158,7 +2225,9 @@
         "operationId": "listClients",
         "summary": "List business clients",
         "description": "Returns the authoritative client list from the configured client store.",
-        "tags": ["Clients"],
+        "tags": [
+          "Clients"
+        ],
         "x-mcp-tool": {
           "exposed": true,
           "annotations": {
@@ -2199,7 +2268,9 @@
         "operationId": "createClient",
         "summary": "Create a business client",
         "description": "Creates one client after explicit user intent.",
-        "tags": ["Clients"],
+        "tags": [
+          "Clients"
+        ],
         "x-mcp-tool": {
           "exposed": true,
           "annotations": {
@@ -2260,7 +2331,9 @@
         "operationId": "getClient",
         "summary": "Get one business client",
         "description": "Returns one client by its opaque identifier.",
-        "tags": ["Clients"],
+        "tags": [
+          "Clients"
+        ],
         "x-mcp-tool": {
           "exposed": true,
           "annotations": {
@@ -2304,7 +2377,9 @@
         "operationId": "updateClient",
         "summary": "Update a business client",
         "description": "Updates the name, contacts, or notes of one client.",
-        "tags": ["Clients"],
+        "tags": [
+          "Clients"
+        ],
         "x-mcp-tool": {
           "exposed": true,
           "annotations": {
@@ -2361,7 +2436,9 @@
         "operationId": "deleteClient",
         "summary": "Delete a business client",
         "description": "Permanently removes one client by its identifier.",
-        "tags": ["Clients"],
+        "tags": [
+          "Clients"
+        ],
         "x-mcp-tool": {
           "exposed": true,
           "annotations": {
@@ -2407,7 +2484,9 @@
         "operationId": "listProjects",
         "summary": "List business projects",
         "description": "Returns the authoritative project list.",
-        "tags": ["Projects"],
+        "tags": [
+          "Projects"
+        ],
         "x-mcp-tool": {
           "exposed": true,
           "annotations": {
@@ -2448,7 +2527,9 @@
         "operationId": "createProject",
         "summary": "Create a business project",
         "description": "Creates one project linked to a client.",
-        "tags": ["Projects"],
+        "tags": [
+          "Projects"
+        ],
         "x-mcp-tool": {
           "exposed": true,
           "annotations": {
@@ -2509,7 +2590,9 @@
         "operationId": "getProject",
         "summary": "Get one business project",
         "description": "Returns one project by identifier.",
-        "tags": ["Projects"],
+        "tags": [
+          "Projects"
+        ],
         "x-mcp-tool": {
           "exposed": true,
           "annotations": {
@@ -2553,7 +2636,9 @@
         "operationId": "updateProject",
         "summary": "Update a business project",
         "description": "Updates client, title, status, or notes.",
-        "tags": ["Projects"],
+        "tags": [
+          "Projects"
+        ],
         "x-mcp-tool": {
           "exposed": true,
           "annotations": {
@@ -2610,7 +2695,9 @@
         "operationId": "deleteProject",
         "summary": "Delete a business project",
         "description": "Permanently removes one project.",
-        "tags": ["Projects"],
+        "tags": [
+          "Projects"
+        ],
         "x-mcp-tool": {
           "exposed": true,
           "annotations": {
@@ -2656,7 +2743,9 @@
         "operationId": "listQuotes",
         "summary": "List quote lifecycle snapshots",
         "description": "Returns the authoritative list of quote aggregate/revision snapshots. Requires the Convex persistence provider.",
-        "tags": ["Quotes"],
+        "tags": [
+          "Quotes"
+        ],
         "x-mcp-tool": {
           "exposed": false,
           "annotations": {
@@ -2736,7 +2825,9 @@
         "operationId": "createQuote",
         "summary": "Create a quote and its first revision",
         "description": "Creates one quote aggregate and its draft revision 1; totals are derived server-side from the line items. Requires the Convex persistence provider.",
-        "tags": ["Quotes"],
+        "tags": [
+          "Quotes"
+        ],
         "x-mcp-tool": {
           "exposed": false,
           "annotations": {
@@ -2797,7 +2888,9 @@
         "operationId": "getQuote",
         "summary": "Get one quote lifecycle snapshot",
         "description": "Returns the current aggregate and current revision for one quote. Requires the Convex persistence provider.",
-        "tags": ["Quotes"],
+        "tags": [
+          "Quotes"
+        ],
         "x-mcp-tool": {
           "exposed": false,
           "annotations": {
@@ -2851,7 +2944,9 @@
         "operationId": "updateQuoteDraft",
         "summary": "Patch a draft revision",
         "description": "Applies a partial patch to a draft revision after checking the expected aggregate and revision versions. Requires the Convex persistence provider.",
-        "tags": ["Quotes"],
+        "tags": [
+          "Quotes"
+        ],
         "x-mcp-tool": {
           "exposed": false,
           "annotations": {
@@ -2921,7 +3016,9 @@
         "operationId": "submitQuoteForReview",
         "summary": "Submit a draft revision for review",
         "description": "Transitions a draft revision to reviewed after checking the expected aggregate and revision versions. Requires the Convex persistence provider.",
-        "tags": ["Quotes"],
+        "tags": [
+          "Quotes"
+        ],
         "x-mcp-tool": {
           "exposed": false,
           "annotations": {
@@ -2991,7 +3088,9 @@
         "operationId": "reopenQuoteForEditing",
         "summary": "Reopen a reviewed revision for editing",
         "description": "Transitions a reviewed revision back to draft after checking the expected aggregate and revision versions. Requires the Convex persistence provider.",
-        "tags": ["Quotes"],
+        "tags": [
+          "Quotes"
+        ],
         "x-mcp-tool": {
           "exposed": false,
           "annotations": {
@@ -3061,7 +3160,9 @@
         "operationId": "finalizeQuote",
         "summary": "Finalize a reviewed revision",
         "description": "Generates and stores the exact client-ready PDF, then atomically transitions the reviewed revision to finalized and locks the artefact to its immutable fingerprint. Requires explicit issuer and client presentation snapshots; the server stamps the finalisation time. Requires the Convex persistence provider.",
-        "tags": ["Quotes"],
+        "tags": [
+          "Quotes"
+        ],
         "x-mcp-tool": {
           "exposed": false,
           "annotations": {
@@ -3131,7 +3232,9 @@
         "operationId": "forkQuote",
         "summary": "Fork a new draft revision from a finalized revision",
         "description": "Creates the next numbered draft revision from an exact-fingerprint-matched finalized revision, after checking the expected aggregate and revision versions. Requires the Convex persistence provider.",
-        "tags": ["Quotes"],
+        "tags": [
+          "Quotes"
+        ],
         "x-mcp-tool": {
           "exposed": false,
           "annotations": {
@@ -3198,7 +3301,9 @@
         "operationId": "recordQuoteCommercialOutcome",
         "summary": "Record a quote's commercial outcome",
         "description": "Records the accepted, declined, or expired outcome against the exact finalized revision, after checking the expected aggregate version. Requires the Convex persistence provider.",
-        "tags": ["Quotes"],
+        "tags": [
+          "Quotes"
+        ],
         "x-mcp-tool": {
           "exposed": false,
           "annotations": {
@@ -3265,7 +3370,9 @@
         "operationId": "listQuoteDeliveries",
         "summary": "List a quote's delivery attempts",
         "description": "Returns delivery attempts for one quote's revisions, newest first. 503 outside the configured Convex persistence provider.",
-        "tags": ["Quotes"],
+        "tags": [
+          "Quotes"
+        ],
         "x-mcp-tool": {
           "exposed": false,
           "annotations": {
@@ -3305,7 +3412,9 @@
         "operationId": "getDailyBrief",
         "summary": "Get the daily brief",
         "description": "Composes a read-only digest of open tasks, due reminders, active projects, and outstanding quotes. Derived on request from the authoritative stores; nothing is stored.",
-        "tags": ["Briefs"],
+        "tags": [
+          "Briefs"
+        ],
         "x-mcp-tool": {
           "exposed": true,
           "annotations": {
@@ -3348,7 +3457,9 @@
         "operationId": "listErrands",
         "summary": "List errands",
         "description": "Returns the authoritative errand list, including any stored locations.",
-        "tags": ["Errands"],
+        "tags": [
+          "Errands"
+        ],
         "x-mcp-tool": {
           "exposed": true,
           "annotations": {
@@ -3389,7 +3500,9 @@
         "operationId": "createErrand",
         "summary": "Create an errand",
         "description": "Creates one pick-up-on-the-way item, optionally tagged with a structured location resolved at the conversation layer. The server stores locations; it never geocodes.",
-        "tags": ["Errands"],
+        "tags": [
+          "Errands"
+        ],
         "x-mcp-tool": {
           "exposed": true,
           "annotations": {
@@ -3450,7 +3563,9 @@
         "operationId": "getErrand",
         "summary": "Get one errand",
         "description": "Returns one errand by identifier.",
-        "tags": ["Errands"],
+        "tags": [
+          "Errands"
+        ],
         "x-mcp-tool": {
           "exposed": true,
           "annotations": {
@@ -3494,7 +3609,9 @@
         "operationId": "updateErrand",
         "summary": "Update an errand",
         "description": "Updates fields; marking an errand done stamps its completion time once, and reopening clears it.",
-        "tags": ["Errands"],
+        "tags": [
+          "Errands"
+        ],
         "x-mcp-tool": {
           "exposed": true,
           "annotations": {
@@ -3551,7 +3668,9 @@
         "operationId": "deleteErrand",
         "summary": "Delete an errand",
         "description": "Permanently removes one errand.",
-        "tags": ["Errands"],
+        "tags": [
+          "Errands"
+        ],
         "x-mcp-tool": {
           "exposed": true,
           "annotations": {
@@ -3597,7 +3716,9 @@
         "operationId": "listBuilds",
         "summary": "List builds",
         "description": "Returns the authoritative list of Benny's builds and machines.",
-        "tags": ["Builds"],
+        "tags": [
+          "Builds"
+        ],
         "x-mcp-tool": {
           "exposed": true,
           "annotations": {
@@ -3638,7 +3759,9 @@
         "operationId": "createBuild",
         "summary": "Create a build",
         "description": "Records one machine or project — the RC crawler, the trailer, a tool.",
-        "tags": ["Builds"],
+        "tags": [
+          "Builds"
+        ],
         "x-mcp-tool": {
           "exposed": true,
           "annotations": {
@@ -3699,7 +3822,9 @@
         "operationId": "getBuild",
         "summary": "Get one build",
         "description": "Returns one build by identifier.",
-        "tags": ["Builds"],
+        "tags": [
+          "Builds"
+        ],
         "x-mcp-tool": {
           "exposed": true,
           "annotations": {
@@ -3743,7 +3868,9 @@
         "operationId": "updateBuild",
         "summary": "Update a build",
         "description": "Updates a build's name, kind, status, description, nickname, or notes.",
-        "tags": ["Builds"],
+        "tags": [
+          "Builds"
+        ],
         "x-mcp-tool": {
           "exposed": true,
           "annotations": {
@@ -3800,7 +3927,9 @@
         "operationId": "deleteBuild",
         "summary": "Delete a build",
         "description": "Permanently removes one build.",
-        "tags": ["Builds"],
+        "tags": [
+          "Builds"
+        ],
         "x-mcp-tool": {
           "exposed": true,
           "annotations": {
@@ -3846,7 +3975,9 @@
         "operationId": "listNotes",
         "summary": "List notes",
         "description": "Returns the authoritative, owner+project-scoped list of durable notes. Note creation is not exposed here: it stays on the governed tool-actions execute path (POST /api/v1/projects/{projectId}/tool-actions), which is where the mandatory idempotency/fingerprint contract on note creation is actually enforced.",
-        "tags": ["Notes"],
+        "tags": [
+          "Notes"
+        ],
         "parameters": [
           {
             "name": "projectId",
@@ -3921,7 +4052,9 @@
         "operationId": "getNote",
         "summary": "Get one note",
         "description": "Returns one owner+project-scoped note by identifier.",
-        "tags": ["Notes"],
+        "tags": [
+          "Notes"
+        ],
         "x-mcp-tool": {
           "exposed": false,
           "annotations": {
@@ -3965,7 +4098,9 @@
         "operationId": "removeNote",
         "summary": "Remove a note",
         "description": "Deletes one owner+project-scoped note by identifier.",
-        "tags": ["Notes"],
+        "tags": [
+          "Notes"
+        ],
         "x-mcp-tool": {
           "exposed": false,
           "annotations": {
@@ -4011,7 +4146,9 @@
         "operationId": "listBuildLogs",
         "summary": "List build log entries",
         "description": "Returns the dated lore attached to Benny's builds — origins, milestones, failures, anecdotes, notes.",
-        "tags": ["Build Log"],
+        "tags": [
+          "Build Log"
+        ],
         "x-mcp-tool": {
           "exposed": true,
           "annotations": {
@@ -4052,7 +4189,9 @@
         "operationId": "createBuildLog",
         "summary": "Record a build log entry",
         "description": "Adds one dated entry to a build's story — why it started, a milestone, a failure, an anecdote, or a loose note.",
-        "tags": ["Build Log"],
+        "tags": [
+          "Build Log"
+        ],
         "x-mcp-tool": {
           "exposed": true,
           "annotations": {
@@ -4113,7 +4252,9 @@
         "operationId": "getBuildLog",
         "summary": "Get one build log entry",
         "description": "Returns one build log entry by identifier.",
-        "tags": ["Build Log"],
+        "tags": [
+          "Build Log"
+        ],
         "x-mcp-tool": {
           "exposed": true,
           "annotations": {
@@ -4157,7 +4298,9 @@
         "operationId": "updateBuildLog",
         "summary": "Update a build log entry",
         "description": "Updates a build log entry's build, kind, title, body, or occurred time.",
-        "tags": ["Build Log"],
+        "tags": [
+          "Build Log"
+        ],
         "x-mcp-tool": {
           "exposed": true,
           "annotations": {
@@ -4214,7 +4357,9 @@
         "operationId": "deleteBuildLog",
         "summary": "Delete a build log entry",
         "description": "Permanently removes one build log entry.",
-        "tags": ["Build Log"],
+        "tags": [
+          "Build Log"
+        ],
         "x-mcp-tool": {
           "exposed": true,
           "annotations": {
@@ -4260,7 +4405,9 @@
         "operationId": "listUpgrades",
         "summary": "List upgrades",
         "description": "Returns the upgrade chronicle — the changes made to Benny's builds over time.",
-        "tags": ["Upgrades"],
+        "tags": [
+          "Upgrades"
+        ],
         "x-mcp-tool": {
           "exposed": true,
           "annotations": {
@@ -4301,7 +4448,9 @@
         "operationId": "createUpgrade",
         "summary": "Record an upgrade",
         "description": "Records one change to a build — what was swapped or modified, why, the before/after, the outcome, and the parts involved.",
-        "tags": ["Upgrades"],
+        "tags": [
+          "Upgrades"
+        ],
         "x-mcp-tool": {
           "exposed": true,
           "annotations": {
@@ -4362,7 +4511,9 @@
         "operationId": "getUpgrade",
         "summary": "Get one upgrade",
         "description": "Returns one upgrade by identifier.",
-        "tags": ["Upgrades"],
+        "tags": [
+          "Upgrades"
+        ],
         "x-mcp-tool": {
           "exposed": true,
           "annotations": {
@@ -4406,7 +4557,9 @@
         "operationId": "updateUpgrade",
         "summary": "Update an upgrade",
         "description": "Updates an upgrade's build, title, reason, before/after state, outcome, parts, version, or occurred time.",
-        "tags": ["Upgrades"],
+        "tags": [
+          "Upgrades"
+        ],
         "x-mcp-tool": {
           "exposed": true,
           "annotations": {
@@ -4463,7 +4616,9 @@
         "operationId": "deleteUpgrade",
         "summary": "Delete an upgrade",
         "description": "Permanently removes one upgrade.",
-        "tags": ["Upgrades"],
+        "tags": [
+          "Upgrades"
+        ],
         "x-mcp-tool": {
           "exposed": true,
           "annotations": {
@@ -4509,7 +4664,9 @@
         "operationId": "listAssets",
         "summary": "List assets",
         "description": "Returns Benny's tools and machines with derived maintenance status (next due, overdue).",
-        "tags": ["Assets"],
+        "tags": [
+          "Assets"
+        ],
         "x-mcp-tool": {
           "exposed": true,
           "annotations": {
@@ -4550,7 +4707,9 @@
         "operationId": "createAsset",
         "summary": "Create an asset",
         "description": "Records one tool or machine to keep on top of servicing, with an optional service interval and last-serviced date.",
-        "tags": ["Assets"],
+        "tags": [
+          "Assets"
+        ],
         "x-mcp-tool": {
           "exposed": true,
           "annotations": {
@@ -4611,7 +4770,9 @@
         "operationId": "getAsset",
         "summary": "Get one asset",
         "description": "Returns one asset by identifier with derived maintenance status.",
-        "tags": ["Assets"],
+        "tags": [
+          "Assets"
+        ],
         "x-mcp-tool": {
           "exposed": true,
           "annotations": {
@@ -4655,7 +4816,9 @@
         "operationId": "updateAsset",
         "summary": "Update an asset",
         "description": "Updates an asset's name, kind, service interval, last-serviced date, or notes.",
-        "tags": ["Assets"],
+        "tags": [
+          "Assets"
+        ],
         "x-mcp-tool": {
           "exposed": true,
           "annotations": {
@@ -4712,7 +4875,9 @@
         "operationId": "deleteAsset",
         "summary": "Delete an asset",
         "description": "Permanently removes one asset.",
-        "tags": ["Assets"],
+        "tags": [
+          "Assets"
+        ],
         "x-mcp-tool": {
           "exposed": true,
           "annotations": {
@@ -4758,7 +4923,9 @@
         "operationId": "listPreferences",
         "summary": "List preferences",
         "description": "Returns Benny's settings and standing choices — brands, tools, naming, defaults.",
-        "tags": ["Preferences"],
+        "tags": [
+          "Preferences"
+        ],
         "x-mcp-tool": {
           "exposed": true,
           "annotations": {
@@ -4799,7 +4966,9 @@
         "operationId": "createPreference",
         "summary": "Create a preference",
         "description": "Records one standing choice as a key/value pair, with an optional category.",
-        "tags": ["Preferences"],
+        "tags": [
+          "Preferences"
+        ],
         "x-mcp-tool": {
           "exposed": true,
           "annotations": {
@@ -4860,7 +5029,9 @@
         "operationId": "getPreference",
         "summary": "Get one preference",
         "description": "Returns one preference by identifier.",
-        "tags": ["Preferences"],
+        "tags": [
+          "Preferences"
+        ],
         "x-mcp-tool": {
           "exposed": true,
           "annotations": {
@@ -4904,7 +5075,9 @@
         "operationId": "updatePreference",
         "summary": "Update a preference",
         "description": "Updates a preference's key, value, or category.",
-        "tags": ["Preferences"],
+        "tags": [
+          "Preferences"
+        ],
         "x-mcp-tool": {
           "exposed": true,
           "annotations": {
@@ -4961,7 +5134,9 @@
         "operationId": "deletePreference",
         "summary": "Delete a preference",
         "description": "Permanently removes one preference.",
-        "tags": ["Preferences"],
+        "tags": [
+          "Preferences"
+        ],
         "x-mcp-tool": {
           "exposed": true,
           "annotations": {
@@ -5007,7 +5182,9 @@
         "operationId": "listExternalReconciliations",
         "summary": "List external reconciliation records",
         "description": "Returns a bounded owner-scoped operator view of external reconciliation state. 503 outside the configured Convex persistence provider.",
-        "tags": ["Operations"],
+        "tags": [
+          "Operations"
+        ],
         "x-mcp-tool": {
           "exposed": false,
           "annotations": {
@@ -5082,7 +5259,9 @@
         "operationId": "getExternalReconciliation",
         "summary": "Get an external reconciliation record",
         "description": "Returns one sanitised reconciliation record and its durable receipt when present.",
-        "tags": ["Operations"],
+        "tags": [
+          "Operations"
+        ],
         "x-mcp-tool": {
           "exposed": false,
           "annotations": {
@@ -5116,6 +5295,202 @@
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{projectId}/tool-actions/{actionId}/revoke": {
+      "post": {
+        "operationId": "revokeToolAction",
+        "summary": "Revoke an approved tool-action proposal before consumption",
+        "description": "Owner-scoped revocation of a pending or approved proposal, gated by the same approvalToken as /approve. Idempotent when repeated with the same reason. Refuses to revoke an action that has already produced a completed execution receipt (already consumed). Never deletes the action or its audit trail.",
+        "tags": [
+          "Tool Actions"
+        ],
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "actionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          }
+        ],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RevokeToolActionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Tool-action proposal revoked.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ToolAction"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/operations/inbox": {
+      "get": {
+        "operationId": "getOperationsInbox",
+        "summary": "Get the read-only Operations Inbox",
+        "description": "Composes what genuinely needs the operator's attention now from existing authoritative sources (overdue reminders, overdue/due-soon maintenance; governed tool actions, reconciliation escalations, and quote-delivery problems are reported as a separately-commissioned source rather than fabricated). Each source reports its own availability — one source failing never fails this response or hides another source's items. Read-only: no source is mutated or retried from this endpoint.",
+        "tags": [
+          "Operations"
+        ],
+        "x-mcp-tool": {
+          "exposed": true,
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Current Operations Inbox.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperationsInboxResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/operations/activity": {
+      "get": {
+        "operationId": "getOperationsActivity",
+        "summary": "Get one bounded page of the read-only Operations Activity Timeline",
+        "description": "A bounded, cursor-paginated, owner-wide feed of durable audit events across every project scope, newest first. Unlike the Operations Inbox, this endpoint has exactly one source (the audit event log), so a read failure or an unconfigured deployment is reported as {status: \"unavailable\", reason} rather than as an empty page or a thrown error — an empty page always means \"no activity\", never \"the read failed\". Each event's summary is built only from a fixed, known-safe subset of its fields; an unrecognized event type falls back to a type-only summary rather than exposing its raw payload. Read-only: nothing is mutated from this endpoint.",
+        "tags": [
+          "Operations"
+        ],
+        "x-mcp-tool": {
+          "exposed": true,
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 50
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "One page of the Operations Activity Timeline.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActivityTimelineResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
         }
       }
@@ -5368,7 +5743,12 @@
       "HealthResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["status", "service", "version", "time"],
+        "required": [
+          "status",
+          "service",
+          "version",
+          "time"
+        ],
         "properties": {
           "status": {
             "const": "ok"
@@ -5390,7 +5770,10 @@
       "HelpResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["apiVersion", "capabilities"],
+        "required": [
+          "apiVersion",
+          "capabilities"
+        ],
         "properties": {
           "apiVersion": {
             "const": "v1"
@@ -5406,7 +5789,13 @@
       "Capability": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["operationId", "summary", "mutating", "destructive", "mcpExposed"],
+        "required": [
+          "operationId",
+          "summary",
+          "mutating",
+          "destructive",
+          "mcpExposed"
+        ],
         "properties": {
           "operationId": {
             "type": "string",
@@ -5437,6 +5826,7 @@
           "sourceVersion",
           "provider",
           "reconciliation",
+          "integrations",
           "timezone",
           "layers",
           "zState",
@@ -5445,7 +5835,11 @@
         "properties": {
           "status": {
             "type": "string",
-            "enum": ["ok", "degraded", "unavailable"]
+            "enum": [
+              "ok",
+              "degraded",
+              "unavailable"
+            ]
           },
           "version": {
             "type": "string",
@@ -5464,18 +5858,31 @@
           "reconciliation": {
             "$ref": "#/components/schemas/ReconciliationStatus"
           },
+          "integrations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/IntegrationStatus"
+            }
+          },
           "timezone": {
             "type": "string",
             "minLength": 1,
             "maxLength": 128,
-            "examples": ["Australia/Melbourne"]
+            "examples": [
+              "Australia/Melbourne"
+            ]
           },
           "layers": {
             "$ref": "#/components/schemas/LayersStatus"
           },
           "zState": {
             "type": "string",
-            "enum": ["disabled", "stabilising", "active", "suspended"]
+            "enum": [
+              "disabled",
+              "stabilising",
+              "active",
+              "suspended"
+            ]
           },
           "checkedAt": {
             "type": "string",
@@ -5486,11 +5893,21 @@
       "ReconciliationStatus": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["state", "enabled"],
+        "required": [
+          "state",
+          "enabled"
+        ],
         "properties": {
           "state": {
             "type": "string",
-            "enum": ["disabled", "starting", "running", "stopping", "stopped", "degraded"]
+            "enum": [
+              "disabled",
+              "starting",
+              "running",
+              "stopping",
+              "stopped",
+              "degraded"
+            ]
           },
           "enabled": {
             "type": "boolean"
@@ -5519,30 +5936,51 @@
           },
           "lastErrorCode": {
             "type": "string",
-            "enum": ["reconciliation-loop-failed"]
+            "enum": [
+              "reconciliation-loop-failed"
+            ]
           }
         }
       },
       "ProviderStatus": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["name", "reachability", "authentication", "schemaCompatibility"],
+        "required": [
+          "name",
+          "reachability",
+          "authentication",
+          "schemaCompatibility"
+        ],
         "properties": {
           "name": {
             "type": "string",
-            "enum": ["json", "convex"]
+            "enum": [
+              "json",
+              "convex"
+            ]
           },
           "reachability": {
             "type": "string",
-            "enum": ["ok", "unavailable"]
+            "enum": [
+              "ok",
+              "unavailable"
+            ]
           },
           "authentication": {
             "type": "string",
-            "enum": ["not-required", "ok", "failed"]
+            "enum": [
+              "not-required",
+              "ok",
+              "failed"
+            ]
           },
           "schemaCompatibility": {
             "type": "string",
-            "enum": ["compatible", "incompatible", "unknown"]
+            "enum": [
+              "compatible",
+              "incompatible",
+              "unknown"
+            ]
           },
           "deploymentVersion": {
             "oneOf": [
@@ -5601,11 +6039,18 @@
       "LayerStatus": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["status"],
+        "required": [
+          "status"
+        ],
         "properties": {
           "status": {
             "type": "string",
-            "enum": ["ready", "partial", "inactive", "blocked"]
+            "enum": [
+              "ready",
+              "partial",
+              "inactive",
+              "blocked"
+            ]
           },
           "reason": {
             "type": "string",
@@ -5617,7 +6062,9 @@
       "ConversationRequest": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["message"],
+        "required": [
+          "message"
+        ],
         "properties": {
           "message": {
             "type": "string",
@@ -5632,7 +6079,10 @@
           },
           "mode": {
             "type": "string",
-            "enum": ["plan", "execute"],
+            "enum": [
+              "plan",
+              "execute"
+            ],
             "default": "execute"
           }
         }
@@ -5640,7 +6090,12 @@
       "ConversationResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["requestId", "parsed", "plan", "safety"],
+        "required": [
+          "requestId",
+          "parsed",
+          "plan",
+          "safety"
+        ],
         "properties": {
           "requestId": {
             "type": "string",
@@ -5665,7 +6120,12 @@
       "ParsedConversation": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["text", "intent", "entities", "context"],
+        "required": [
+          "text",
+          "intent",
+          "entities",
+          "context"
+        ],
         "properties": {
           "text": {
             "type": "string",
@@ -5674,7 +6134,12 @@
           },
           "intent": {
             "type": "string",
-            "enum": ["greeting", "planning", "memory", "general"]
+            "enum": [
+              "greeting",
+              "planning",
+              "memory",
+              "general"
+            ]
           },
           "entities": {
             "type": "object",
@@ -5689,7 +6154,9 @@
       "ExecutionPlan": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["steps"],
+        "required": [
+          "steps"
+        ],
         "properties": {
           "steps": {
             "type": "array",
@@ -5704,7 +6171,11 @@
       "PlanStep": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["module", "action", "payload"],
+        "required": [
+          "module",
+          "action",
+          "payload"
+        ],
         "properties": {
           "module": {
             "type": "string",
@@ -5722,11 +6193,19 @@
       "SafetyDecision": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["status", "reasons", "evaluatedCategories"],
+        "required": [
+          "status",
+          "reasons",
+          "evaluatedCategories"
+        ],
         "properties": {
           "status": {
             "type": "string",
-            "enum": ["ok", "warning", "blocked"]
+            "enum": [
+              "ok",
+              "warning",
+              "blocked"
+            ]
           },
           "reasons": {
             "type": "array",
@@ -5741,7 +6220,13 @@
             "uniqueItems": true,
             "items": {
               "type": "string",
-              "enum": ["domain", "cross-domain", "memory", "reliability", "proposal"]
+              "enum": [
+                "domain",
+                "cross-domain",
+                "memory",
+                "reliability",
+                "proposal"
+              ]
             }
           }
         }
@@ -5749,7 +6234,13 @@
       "Task": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["id", "title", "completed", "category", "createdAt"],
+        "required": [
+          "id",
+          "title",
+          "completed",
+          "category",
+          "createdAt"
+        ],
         "properties": {
           "id": {
             "$ref": "#/components/schemas/RecordId"
@@ -5775,7 +6266,9 @@
       "CreateTaskRequest": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["title"],
+        "required": [
+          "title"
+        ],
         "properties": {
           "title": {
             "type": "string",
@@ -5810,7 +6303,9 @@
       "TaskResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["data"],
+        "required": [
+          "data"
+        ],
         "properties": {
           "data": {
             "$ref": "#/components/schemas/Task"
@@ -5820,7 +6315,10 @@
       "TaskListResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["data", "count"],
+        "required": [
+          "data",
+          "count"
+        ],
         "properties": {
           "data": {
             "type": "array",
@@ -5837,7 +6335,9 @@
       "ReminderDueInput": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["text"],
+        "required": [
+          "text"
+        ],
         "properties": {
           "text": {
             "type": "string",
@@ -5850,17 +6350,29 @@
             "minLength": 1,
             "maxLength": 128,
             "description": "IANA timezone used only for local wall-clock input. Defaults to the configured Jarvis timezone.",
-            "examples": ["Australia/Melbourne"]
+            "examples": [
+              "Australia/Melbourne"
+            ]
           }
         }
       },
       "Reminder": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["id", "title", "createdAt"],
+        "required": [
+          "id",
+          "title",
+          "createdAt"
+        ],
         "dependentRequired": {
-          "dueAt": ["dueRaw", "dueTimezone"],
-          "dueTimezone": ["dueRaw", "dueAt"]
+          "dueAt": [
+            "dueRaw",
+            "dueTimezone"
+          ],
+          "dueTimezone": [
+            "dueRaw",
+            "dueAt"
+          ]
         },
         "properties": {
           "id": {
@@ -5892,7 +6404,9 @@
       "CreateReminderRequest": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["title"],
+        "required": [
+          "title"
+        ],
         "properties": {
           "title": {
             "type": "string",
@@ -5929,7 +6443,9 @@
       "ReminderResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["data"],
+        "required": [
+          "data"
+        ],
         "properties": {
           "data": {
             "$ref": "#/components/schemas/Reminder"
@@ -5939,7 +6455,10 @@
       "ReminderListResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["data", "count"],
+        "required": [
+          "data",
+          "count"
+        ],
         "properties": {
           "data": {
             "type": "array",
@@ -5961,7 +6480,14 @@
       "BackupArchive": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["format", "version", "createdAt", "state", "tasks", "reminders"],
+        "required": [
+          "format",
+          "version",
+          "createdAt",
+          "state",
+          "tasks",
+          "reminders"
+        ],
         "properties": {
           "format": {
             "const": "jarvis-backup"
@@ -5993,14 +6519,24 @@
       "BackupArchiveInput": {
         "type": "object",
         "description": "A version 1 or version 2 Jarvis backup archive. Version 1 is accepted for migration compatibility.",
-        "required": ["format", "version", "createdAt", "state", "tasks", "reminders"],
+        "required": [
+          "format",
+          "version",
+          "createdAt",
+          "state",
+          "tasks",
+          "reminders"
+        ],
         "properties": {
           "format": {
             "const": "jarvis-backup"
           },
           "version": {
             "type": "integer",
-            "enum": [1, 2]
+            "enum": [
+              1,
+              2
+            ]
           },
           "createdAt": {
             "type": "string",
@@ -6027,7 +6563,13 @@
       "BackupVerificationResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["valid", "format", "version", "taskCount", "reminderCount"],
+        "required": [
+          "valid",
+          "format",
+          "version",
+          "taskCount",
+          "reminderCount"
+        ],
         "properties": {
           "valid": {
             "const": true
@@ -6037,7 +6579,10 @@
           },
           "version": {
             "type": "integer",
-            "enum": [1, 2]
+            "enum": [
+              1,
+              2
+            ]
           },
           "taskCount": {
             "type": "integer",
@@ -6052,7 +6597,10 @@
       "RestoreBackupRequest": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["archive", "confirmEmptyTarget"],
+        "required": [
+          "archive",
+          "confirmEmptyTarget"
+        ],
         "properties": {
           "archive": {
             "$ref": "#/components/schemas/BackupArchiveInput"
@@ -6066,7 +6614,12 @@
       "RestoreBackupResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["taskCount", "reminderCount", "taskIds", "reminderIds"],
+        "required": [
+          "taskCount",
+          "reminderCount",
+          "taskIds",
+          "reminderIds"
+        ],
         "properties": {
           "taskCount": {
             "type": "integer",
@@ -6095,7 +6648,14 @@
       "ProblemDetails": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["type", "title", "status", "detail", "instance", "requestId"],
+        "required": [
+          "type",
+          "title",
+          "status",
+          "detail",
+          "instance",
+          "requestId"
+        ],
         "properties": {
           "type": {
             "type": "string",
@@ -6138,7 +6698,10 @@
       "ValidationError": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["path", "message"],
+        "required": [
+          "path",
+          "message"
+        ],
         "properties": {
           "path": {
             "type": "string",
@@ -6154,11 +6717,19 @@
       "TotalityActionPolicy": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["maximumToolAuthority", "requireApprovalBeforeExecution"],
+        "required": [
+          "maximumToolAuthority",
+          "requireApprovalBeforeExecution"
+        ],
         "properties": {
           "maximumToolAuthority": {
             "type": "string",
-            "enum": ["T0", "T1", "T2", "T3"]
+            "enum": [
+              "T0",
+              "T1",
+              "T2",
+              "T3"
+            ]
           },
           "requireApprovalBeforeExecution": {
             "type": "boolean"
@@ -6181,7 +6752,10 @@
         ],
         "properties": {
           "projectId": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "minLength": 1
           },
           "sessionId": {
@@ -6227,7 +6801,12 @@
           },
           "outputStyle": {
             "type": "string",
-            "enum": ["for_benny_engineering", "for_benny_workshop", "for_client", "default"]
+            "enum": [
+              "for_benny_engineering",
+              "for_benny_workshop",
+              "for_client",
+              "default"
+            ]
           },
           "actionPolicy": {
             "$ref": "#/components/schemas/TotalityActionPolicy"
@@ -6237,14 +6816,21 @@
       "TotalityValidationCheck": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["id", "status"],
+        "required": [
+          "id",
+          "status"
+        ],
         "properties": {
           "id": {
             "type": "string"
           },
           "status": {
             "type": "string",
-            "enum": ["pass", "warning", "fail"]
+            "enum": [
+              "pass",
+              "warning",
+              "fail"
+            ]
           },
           "message": {
             "type": "string"
@@ -6254,7 +6840,12 @@
       "TotalityValidationReport": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["passed", "checks", "warnings", "blockingFailures"],
+        "required": [
+          "passed",
+          "checks",
+          "warnings",
+          "blockingFailures"
+        ],
         "properties": {
           "passed": {
             "type": "boolean"
@@ -6282,34 +6873,71 @@
       "TotalityPermissionEnvelope": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["reasoningLevel", "riskLevel", "toolAuthority", "dataAccess", "actionState"],
+        "required": [
+          "reasoningLevel",
+          "riskLevel",
+          "toolAuthority",
+          "dataAccess",
+          "actionState"
+        ],
         "properties": {
           "reasoningLevel": {
             "type": "string",
-            "enum": ["R0", "R1", "R2", "R3"]
+            "enum": [
+              "R0",
+              "R1",
+              "R2",
+              "R3"
+            ]
           },
           "riskLevel": {
             "type": "string",
-            "enum": ["low", "moderate", "high", "critical"]
+            "enum": [
+              "low",
+              "moderate",
+              "high",
+              "critical"
+            ]
           },
           "toolAuthority": {
             "type": "string",
-            "enum": ["T0", "T1", "T2", "T3"]
+            "enum": [
+              "T0",
+              "T1",
+              "T2",
+              "T3"
+            ]
           },
           "dataAccess": {
             "type": "string",
-            "enum": ["D0", "D1", "D2", "D3"]
+            "enum": [
+              "D0",
+              "D1",
+              "D2",
+              "D3"
+            ]
           },
           "actionState": {
             "type": "string",
-            "enum": ["read", "propose", "approve", "execute"]
+            "enum": [
+              "read",
+              "propose",
+              "approve",
+              "execute"
+            ]
           }
         }
       },
       "TotalityRoutingDecision": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["primaryMode", "supportingModes", "permission", "confidence", "reasonCodes"],
+        "required": [
+          "primaryMode",
+          "supportingModes",
+          "permission",
+          "confidence",
+          "reasonCodes"
+        ],
         "properties": {
           "primaryMode": {
             "type": "string"
@@ -6339,7 +6967,11 @@
       "TotalityError": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["code", "message", "retryable"],
+        "required": [
+          "code",
+          "message",
+          "retryable"
+        ],
         "properties": {
           "code": {
             "type": "string"
@@ -6374,7 +7006,12 @@
           },
           "status": {
             "type": "string",
-            "enum": ["completed", "partial", "blocked", "failed"]
+            "enum": [
+              "completed",
+              "partial",
+              "blocked",
+              "failed"
+            ]
           },
           "routing": {
             "$ref": "#/components/schemas/TotalityRoutingDecision"
@@ -6387,16 +7024,27 @@
               {
                 "type": "object",
                 "additionalProperties": false,
-                "required": ["answer", "responseId", "memoryChangeSetId", "memoryProposalCount"],
+                "required": [
+                  "answer",
+                  "responseId",
+                  "memoryChangeSetId",
+                  "memoryProposalCount"
+                ],
                 "properties": {
                   "answer": {
                     "type": "string"
                   },
                   "responseId": {
-                    "type": ["string", "null"]
+                    "type": [
+                      "string",
+                      "null"
+                    ]
                   },
                   "memoryChangeSetId": {
-                    "type": ["string", "null"]
+                    "type": [
+                      "string",
+                      "null"
+                    ]
                   },
                   "memoryProposalCount": {
                     "type": "integer",
@@ -6451,7 +7099,14 @@
       "MemoryFact": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["kind", "recordId", "statement", "source", "confidence", "recordedAt"],
+        "required": [
+          "kind",
+          "recordId",
+          "statement",
+          "source",
+          "confidence",
+          "recordedAt"
+        ],
         "properties": {
           "kind": {
             "const": "fact"
@@ -6467,7 +7122,13 @@
           },
           "source": {
             "type": "string",
-            "enum": ["user", "file", "tool", "measurement", "inference"]
+            "enum": [
+              "user",
+              "file",
+              "tool",
+              "measurement",
+              "inference"
+            ]
           },
           "confidence": {
             "type": "number",
@@ -6483,7 +7144,13 @@
       "MemoryAssumption": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["kind", "recordId", "statement", "status", "impact"],
+        "required": [
+          "kind",
+          "recordId",
+          "statement",
+          "status",
+          "impact"
+        ],
         "properties": {
           "kind": {
             "const": "assumption"
@@ -6499,18 +7166,33 @@
           },
           "status": {
             "type": "string",
-            "enum": ["unverified", "verified", "rejected"]
+            "enum": [
+              "unverified",
+              "verified",
+              "rejected"
+            ]
           },
           "impact": {
             "type": "string",
-            "enum": ["low", "medium", "high"]
+            "enum": [
+              "low",
+              "medium",
+              "high"
+            ]
           }
         }
       },
       "MemoryMeasurement": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["kind", "recordId", "name", "value", "unit", "source"],
+        "required": [
+          "kind",
+          "recordId",
+          "name",
+          "value",
+          "unit",
+          "source"
+        ],
         "properties": {
           "kind": {
             "const": "measurement"
@@ -6635,7 +7317,12 @@
           },
           "state": {
             "type": "string",
-            "enum": ["proposed", "approved", "rejected", "applied"]
+            "enum": [
+              "proposed",
+              "approved",
+              "rejected",
+              "applied"
+            ]
           },
           "records": {
             "type": "array",
@@ -6651,7 +7338,11 @@
           },
           "proposedBy": {
             "type": "string",
-            "enum": ["user", "agent", "tool"]
+            "enum": [
+              "user",
+              "agent",
+              "tool"
+            ]
           },
           "approvedBy": {
             "const": "user"
@@ -6692,7 +7383,13 @@
       "StageMemoryChangeSetRequest": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["changeSetId", "expectedRevision", "records", "rationale", "proposedBy"],
+        "required": [
+          "changeSetId",
+          "expectedRevision",
+          "records",
+          "rationale",
+          "proposedBy"
+        ],
         "properties": {
           "changeSetId": {
             "type": "string",
@@ -6717,14 +7414,20 @@
           },
           "proposedBy": {
             "type": "string",
-            "enum": ["user", "agent", "tool"]
+            "enum": [
+              "user",
+              "agent",
+              "tool"
+            ]
           }
         }
       },
       "ExpectedRevisionRequest": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["expectedRevision"],
+        "required": [
+          "expectedRevision"
+        ],
         "properties": {
           "expectedRevision": {
             "type": "integer",
@@ -6735,7 +7438,10 @@
       "ToolActionApprovalRequest": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["expectedRevision", "approvalToken"],
+        "required": [
+          "expectedRevision",
+          "approvalToken"
+        ],
         "properties": {
           "expectedRevision": {
             "type": "integer",
@@ -6751,7 +7457,9 @@
       "RejectMemoryChangeSetRequest": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["reason"],
+        "required": [
+          "reason"
+        ],
         "properties": {
           "reason": {
             "type": "string",
@@ -6768,7 +7476,13 @@
       "AppliedMemoryRecord": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["recordId", "projectId", "kind", "record", "updatedAt"],
+        "required": [
+          "recordId",
+          "projectId",
+          "kind",
+          "record",
+          "updatedAt"
+        ],
         "properties": {
           "recordId": {
             "type": "string",
@@ -6782,7 +7496,12 @@
           },
           "kind": {
             "type": "string",
-            "enum": ["fact", "assumption", "measurement", "decision"]
+            "enum": [
+              "fact",
+              "assumption",
+              "measurement",
+              "decision"
+            ]
           },
           "record": {
             "$ref": "#/components/schemas/MemoryRecord"
@@ -6796,7 +7515,12 @@
       "ApplyMemoryChangeSetResult": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["changeSet", "projectRevision", "records", "idempotent"],
+        "required": [
+          "changeSet",
+          "projectRevision",
+          "records",
+          "idempotent"
+        ],
         "properties": {
           "changeSet": {
             "$ref": "#/components/schemas/MemoryChangeSet"
@@ -6819,21 +7543,37 @@
       "MemoryUpdateProposal": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["operation", "target", "value", "classification", "requiresApproval"],
+        "required": [
+          "operation",
+          "target",
+          "value",
+          "classification",
+          "requiresApproval"
+        ],
         "properties": {
           "operation": {
             "const": "append"
           },
           "target": {
             "type": "string",
-            "enum": ["facts", "assumptions", "measurements", "decisions"]
+            "enum": [
+              "facts",
+              "assumptions",
+              "measurements",
+              "decisions"
+            ]
           },
           "value": {
             "$ref": "#/components/schemas/MemoryRecord"
           },
           "classification": {
             "type": "string",
-            "enum": ["fact", "assumption", "measurement", "decision"]
+            "enum": [
+              "fact",
+              "assumption",
+              "measurement",
+              "decision"
+            ]
           },
           "requiresApproval": {
             "const": true
@@ -6842,11 +7582,21 @@
       },
       "ToolActionState": {
         "type": "string",
-        "enum": ["proposed", "approved", "rejected"]
+        "enum": [
+          "proposed",
+          "approved",
+          "rejected",
+          "expired",
+          "revoked"
+        ]
       },
       "ToolAuthority": {
         "type": "string",
-        "enum": ["T1", "T2", "T3"]
+        "enum": [
+          "T1",
+          "T2",
+          "T3"
+        ]
       },
       "ToolAction": {
         "type": "object",
@@ -6925,7 +7675,11 @@
           },
           "proposedBy": {
             "type": "string",
-            "enum": ["user", "agent", "tool"]
+            "enum": [
+              "user",
+              "agent",
+              "tool"
+            ]
           },
           "approvedBy": {
             "const": "user"
@@ -6952,6 +7706,35 @@
           "rejectedAt": {
             "type": "string",
             "format": "date-time"
+          },
+          "approvalExpiryPolicy": {
+            "$ref": "#/components/schemas/ApprovalExpiryPolicy"
+          },
+          "approvalExpiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "expiredObservedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "consumptionPolicy": {
+            "$ref": "#/components/schemas/ConsumptionPolicy"
+          },
+          "revokedBy": {
+            "const": "user"
+          },
+          "revokedReason": {
+            "type": "string",
+            "minLength": 1
+          },
+          "revokedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "isApprovalExpired": {
+            "type": "boolean",
+            "description": "Computed, read-only view: true when an approval's ttl has lapsed but the terminal `expired` transition hasn't been persisted by a mutation yet."
           }
         }
       },
@@ -7015,14 +7798,20 @@
           },
           "proposedBy": {
             "type": "string",
-            "enum": ["user", "agent", "tool"]
+            "enum": [
+              "user",
+              "agent",
+              "tool"
+            ]
           }
         }
       },
       "RejectToolActionRequest": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["reason"],
+        "required": [
+          "reason"
+        ],
         "properties": {
           "reason": {
             "type": "string",
@@ -7039,7 +7828,9 @@
       "ExecuteToolActionRequest": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["idempotencyKey"],
+        "required": [
+          "idempotencyKey"
+        ],
         "properties": {
           "idempotencyKey": {
             "type": "string",
@@ -7099,7 +7890,13 @@
           },
           "status": {
             "type": "string",
-            "enum": ["dry-run", "succeeded", "failed", "timed-out", "blocked"]
+            "enum": [
+              "dry-run",
+              "succeeded",
+              "failed",
+              "timed-out",
+              "blocked"
+            ]
           },
           "outputDigest": {
             "type": "string",
@@ -7107,7 +7904,15 @@
           },
           "errorCode": {
             "type": "string",
-            "enum": ["not-authorized", "not-allowlisted", "invalid-arguments", "timeout", "failed"]
+            "enum": [
+              "not-authorized",
+              "not-allowlisted",
+              "invalid-arguments",
+              "timeout",
+              "failed",
+              "approval-expired",
+              "approval-consumed"
+            ]
           },
           "startedAt": {
             "type": "string",
@@ -7122,7 +7927,9 @@
       "ClientContact": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["value"],
+        "required": [
+          "value"
+        ],
         "properties": {
           "label": {
             "type": "string",
@@ -7139,7 +7946,13 @@
       "Client": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["id", "name", "contacts", "createdAt", "updatedAt"],
+        "required": [
+          "id",
+          "name",
+          "contacts",
+          "createdAt",
+          "updatedAt"
+        ],
         "properties": {
           "id": {
             "$ref": "#/components/schemas/RecordId"
@@ -7171,7 +7984,9 @@
       "ClientResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["data"],
+        "required": [
+          "data"
+        ],
         "properties": {
           "data": {
             "$ref": "#/components/schemas/Client"
@@ -7181,7 +7996,10 @@
       "ClientListResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["data", "count"],
+        "required": [
+          "data",
+          "count"
+        ],
         "properties": {
           "data": {
             "type": "array",
@@ -7198,7 +8016,9 @@
       "CreateClientRequest": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["name"],
+        "required": [
+          "name"
+        ],
         "properties": {
           "name": {
             "type": "string",
@@ -7237,7 +8057,10 @@
             }
           },
           "notes": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "maxLength": 2000
           }
         }
@@ -7245,7 +8068,14 @@
       "Project": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["id", "clientId", "title", "status", "createdAt", "updatedAt"],
+        "required": [
+          "id",
+          "clientId",
+          "title",
+          "status",
+          "createdAt",
+          "updatedAt"
+        ],
         "properties": {
           "id": {
             "$ref": "#/components/schemas/RecordId"
@@ -7262,7 +8092,13 @@
           },
           "status": {
             "type": "string",
-            "enum": ["lead", "quoted", "active", "on_hold", "done"]
+            "enum": [
+              "lead",
+              "quoted",
+              "active",
+              "on_hold",
+              "done"
+            ]
           },
           "notes": {
             "type": "string",
@@ -7280,7 +8116,9 @@
       "ProjectResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["data"],
+        "required": [
+          "data"
+        ],
         "properties": {
           "data": {
             "$ref": "#/components/schemas/Project"
@@ -7290,7 +8128,10 @@
       "ProjectListResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["data", "count"],
+        "required": [
+          "data",
+          "count"
+        ],
         "properties": {
           "data": {
             "type": "array",
@@ -7307,7 +8148,10 @@
       "CreateProjectRequest": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["clientId", "title"],
+        "required": [
+          "clientId",
+          "title"
+        ],
         "properties": {
           "clientId": {
             "type": "string",
@@ -7321,7 +8165,13 @@
           },
           "status": {
             "type": "string",
-            "enum": ["lead", "quoted", "active", "on_hold", "done"]
+            "enum": [
+              "lead",
+              "quoted",
+              "active",
+              "on_hold",
+              "done"
+            ]
           },
           "notes": {
             "type": "string",
@@ -7347,10 +8197,19 @@
           },
           "status": {
             "type": "string",
-            "enum": ["lead", "quoted", "active", "on_hold", "done"]
+            "enum": [
+              "lead",
+              "quoted",
+              "active",
+              "on_hold",
+              "done"
+            ]
           },
           "notes": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "maxLength": 2000
           }
         }
@@ -7391,7 +8250,12 @@
           },
           "status": {
             "type": "string",
-            "enum": ["draft", "sent", "accepted", "declined"]
+            "enum": [
+              "draft",
+              "sent",
+              "accepted",
+              "declined"
+            ]
           },
           "lineItems": {
             "type": "array",
@@ -7437,7 +8301,11 @@
       "QuoteLineItem": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["description", "quantity", "unitPrice"],
+        "required": [
+          "description",
+          "quantity",
+          "unitPrice"
+        ],
         "properties": {
           "description": {
             "type": "string",
@@ -7456,11 +8324,20 @@
       },
       "QuoteCommercialStatus": {
         "type": "string",
-        "enum": ["open", "accepted", "declined", "expired"]
+        "enum": [
+          "open",
+          "accepted",
+          "declined",
+          "expired"
+        ]
       },
       "QuoteHistoricalOutcome": {
         "type": "string",
-        "enum": ["accepted", "declined", "expired"]
+        "enum": [
+          "accepted",
+          "declined",
+          "expired"
+        ]
       },
       "QuoteAggregate": {
         "type": "object",
@@ -7563,7 +8440,11 @@
           },
           "status": {
             "type": "string",
-            "enum": ["draft", "reviewed", "finalized"]
+            "enum": [
+              "draft",
+              "reviewed",
+              "finalized"
+            ]
           },
           "lineItems": {
             "type": "array",
@@ -7592,7 +8473,9 @@
           },
           "currency": {
             "type": "string",
-            "enum": ["AUD"]
+            "enum": [
+              "AUD"
+            ]
           },
           "validUntil": {
             "type": "string",
@@ -7629,7 +8512,9 @@
           },
           "source": {
             "type": "string",
-            "enum": ["legacy-migration"]
+            "enum": [
+              "legacy-migration"
+            ]
           },
           "createdAt": {
             "$ref": "#/components/schemas/TimestampMs"
@@ -7642,7 +8527,10 @@
       "QuoteRevisionSnapshot": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["aggregate", "revision"],
+        "required": [
+          "aggregate",
+          "revision"
+        ],
         "properties": {
           "aggregate": {
             "$ref": "#/components/schemas/QuoteAggregate"
@@ -7655,7 +8543,9 @@
       "QuoteRevisionSnapshotResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["data"],
+        "required": [
+          "data"
+        ],
         "properties": {
           "data": {
             "$ref": "#/components/schemas/QuoteRevisionSnapshot"
@@ -7702,7 +8592,11 @@
           },
           "revisionStatus": {
             "type": "string",
-            "enum": ["draft", "reviewed", "finalized"]
+            "enum": [
+              "draft",
+              "reviewed",
+              "finalized"
+            ]
           },
           "commercialStatus": {
             "$ref": "#/components/schemas/QuoteCommercialStatus"
@@ -7713,7 +8607,9 @@
           },
           "currency": {
             "type": "string",
-            "enum": ["AUD"]
+            "enum": [
+              "AUD"
+            ]
           },
           "updatedAt": {
             "$ref": "#/components/schemas/TimestampMs"
@@ -7723,7 +8619,10 @@
       "QuoteRevisionListResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["data", "count"],
+        "required": [
+          "data",
+          "count"
+        ],
         "properties": {
           "data": {
             "type": "array",
@@ -7740,7 +8639,12 @@
       "CreateQuoteRevisionRequest": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["clientId", "number", "lineItems", "termsIncluded"],
+        "required": [
+          "clientId",
+          "number",
+          "lineItems",
+          "termsIncluded"
+        ],
         "properties": {
           "clientId": {
             "type": "string",
@@ -7799,17 +8703,26 @@
             }
           },
           "taxRate": {
-            "type": ["number", "null"],
+            "type": [
+              "number",
+              "null"
+            ],
             "minimum": 0,
             "maximum": 1
           },
           "validUntil": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "minLength": 1,
             "maxLength": 100
           },
           "notes": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "minLength": 1,
             "maxLength": 2000
           },
@@ -7821,7 +8734,11 @@
       "UpdateQuoteDraftRequest": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["expectedAggregateVersion", "expectedRevisionVersion", "patch"],
+        "required": [
+          "expectedAggregateVersion",
+          "expectedRevisionVersion",
+          "patch"
+        ],
         "properties": {
           "expectedAggregateVersion": {
             "type": "integer",
@@ -7839,7 +8756,9 @@
       "QuotePdfParty": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["name"],
+        "required": [
+          "name"
+        ],
         "properties": {
           "name": {
             "type": "string",
@@ -7875,7 +8794,12 @@
       "FinalizeQuoteRevisionRequest": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["expectedAggregateVersion", "expectedRevisionVersion", "issuer", "client"],
+        "required": [
+          "expectedAggregateVersion",
+          "expectedRevisionVersion",
+          "issuer",
+          "client"
+        ],
         "properties": {
           "expectedAggregateVersion": {
             "type": "integer",
@@ -7896,7 +8820,10 @@
       "QuoteRevisionCommandRequest": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["expectedAggregateVersion", "expectedRevisionVersion"],
+        "required": [
+          "expectedAggregateVersion",
+          "expectedRevisionVersion"
+        ],
         "properties": {
           "expectedAggregateVersion": {
             "type": "integer",
@@ -7911,7 +8838,11 @@
       "ForkQuoteRevisionRequest": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["expectedAggregateVersion", "expectedRevisionVersion", "expectedFingerprint"],
+        "required": [
+          "expectedAggregateVersion",
+          "expectedRevisionVersion",
+          "expectedFingerprint"
+        ],
         "properties": {
           "expectedAggregateVersion": {
             "type": "integer",
@@ -7931,7 +8862,11 @@
       "RecordQuoteCommercialOutcomeRequest": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["revision", "expectedAggregateVersion", "outcome"],
+        "required": [
+          "revision",
+          "expectedAggregateVersion",
+          "outcome"
+        ],
         "properties": {
           "revision": {
             "type": "integer",
@@ -7948,7 +8883,14 @@
       },
       "QuoteDeliveryStatus": {
         "type": "string",
-        "enum": ["pending", "executing", "succeeded", "failed", "indeterminate", "reconciled"]
+        "enum": [
+          "pending",
+          "executing",
+          "succeeded",
+          "failed",
+          "indeterminate",
+          "reconciled"
+        ]
       },
       "QuoteDeliveryAttempt": {
         "type": "object",
@@ -7992,14 +8934,19 @@
           },
           "channel": {
             "type": "string",
-            "enum": ["email"]
+            "enum": [
+              "email"
+            ]
           },
           "status": {
             "$ref": "#/components/schemas/QuoteDeliveryStatus"
           },
           "reconciledOutcome": {
             "type": "string",
-            "enum": ["succeeded", "failed"]
+            "enum": [
+              "succeeded",
+              "failed"
+            ]
           },
           "provider": {
             "type": "string",
@@ -8046,7 +8993,10 @@
       "QuoteDeliveryListResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["data", "count"],
+        "required": [
+          "data",
+          "count"
+        ],
         "properties": {
           "data": {
             "type": "array",
@@ -8091,7 +9041,11 @@
           "tasks": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["openCount", "completedCount", "open"],
+            "required": [
+              "openCount",
+              "completedCount",
+              "open"
+            ],
             "properties": {
               "openCount": {
                 "type": "integer",
@@ -8113,7 +9067,13 @@
           "reminders": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["dueCount", "upcomingCount", "undatedCount", "due", "upcoming"],
+            "required": [
+              "dueCount",
+              "upcomingCount",
+              "undatedCount",
+              "due",
+              "upcoming"
+            ],
             "properties": {
               "dueCount": {
                 "type": "integer",
@@ -8146,7 +9106,11 @@
           "projects": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["activeCount", "countsByStatus", "active"],
+            "required": [
+              "activeCount",
+              "countsByStatus",
+              "active"
+            ],
             "properties": {
               "activeCount": {
                 "type": "integer",
@@ -8205,7 +9169,12 @@
           "maintenance": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["dueCount", "dueSoonCount", "due", "dueSoon"],
+            "required": [
+              "dueCount",
+              "dueSoonCount",
+              "due",
+              "dueSoon"
+            ],
             "properties": {
               "dueCount": {
                 "type": "integer",
@@ -8234,7 +9203,13 @@
       "BriefProjectStatusCounts": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["lead", "quoted", "active", "on_hold", "done"],
+        "required": [
+          "lead",
+          "quoted",
+          "active",
+          "on_hold",
+          "done"
+        ],
         "properties": {
           "lead": {
             "type": "integer",
@@ -8261,7 +9236,12 @@
       "BriefQuoteStatusCounts": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["draft", "sent", "accepted", "declined"],
+        "required": [
+          "draft",
+          "sent",
+          "accepted",
+          "declined"
+        ],
         "properties": {
           "draft": {
             "type": "integer",
@@ -8284,7 +9264,9 @@
       "BriefResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["data"],
+        "required": [
+          "data"
+        ],
         "properties": {
           "data": {
             "$ref": "#/components/schemas/DailyBrief"
@@ -8294,7 +9276,13 @@
       "Errand": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["id", "title", "status", "createdAt", "updatedAt"],
+        "required": [
+          "id",
+          "title",
+          "status",
+          "createdAt",
+          "updatedAt"
+        ],
         "properties": {
           "id": {
             "$ref": "#/components/schemas/RecordId"
@@ -8310,7 +9298,10 @@
           },
           "status": {
             "type": "string",
-            "enum": ["open", "done"]
+            "enum": [
+              "open",
+              "done"
+            ]
           },
           "location": {
             "$ref": "#/components/schemas/ErrandLocation"
@@ -8339,10 +9330,16 @@
       "ErrandLocation": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["label"],
+        "required": [
+          "label"
+        ],
         "dependentRequired": {
-          "lat": ["lon"],
-          "lon": ["lat"]
+          "lat": [
+            "lon"
+          ],
+          "lon": [
+            "lat"
+          ]
         },
         "properties": {
           "label": {
@@ -8370,7 +9367,9 @@
       "ErrandResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["data"],
+        "required": [
+          "data"
+        ],
         "properties": {
           "data": {
             "$ref": "#/components/schemas/Errand"
@@ -8380,7 +9379,10 @@
       "ErrandListResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["data", "count"],
+        "required": [
+          "data",
+          "count"
+        ],
         "properties": {
           "data": {
             "type": "array",
@@ -8397,7 +9399,9 @@
       "CreateErrandRequest": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["title"],
+        "required": [
+          "title"
+        ],
         "properties": {
           "title": {
             "type": "string",
@@ -8410,7 +9414,10 @@
           },
           "status": {
             "type": "string",
-            "enum": ["open", "done"]
+            "enum": [
+              "open",
+              "done"
+            ]
           },
           "location": {
             "$ref": "#/components/schemas/ErrandLocation"
@@ -8438,12 +9445,18 @@
             "maxLength": 500
           },
           "quantity": {
-            "type": ["number", "null"],
+            "type": [
+              "number",
+              "null"
+            ],
             "exclusiveMinimum": 0
           },
           "status": {
             "type": "string",
-            "enum": ["open", "done"]
+            "enum": [
+              "open",
+              "done"
+            ]
           },
           "location": {
             "anyOf": [
@@ -8456,12 +9469,18 @@
             ]
           },
           "projectId": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "minLength": 1,
             "maxLength": 200
           },
           "notes": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "maxLength": 2000
           }
         }
@@ -8469,7 +9488,14 @@
       "Build": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["id", "name", "kind", "status", "createdAt", "updatedAt"],
+        "required": [
+          "id",
+          "name",
+          "kind",
+          "status",
+          "createdAt",
+          "updatedAt"
+        ],
         "properties": {
           "id": {
             "$ref": "#/components/schemas/RecordId"
@@ -8486,7 +9512,12 @@
           },
           "status": {
             "type": "string",
-            "enum": ["planning", "active", "shelved", "retired"]
+            "enum": [
+              "planning",
+              "active",
+              "shelved",
+              "retired"
+            ]
           },
           "description": {
             "type": "string",
@@ -8514,7 +9545,9 @@
       "BuildResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["data"],
+        "required": [
+          "data"
+        ],
         "properties": {
           "data": {
             "$ref": "#/components/schemas/Build"
@@ -8524,7 +9557,10 @@
       "BuildListResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["data", "count"],
+        "required": [
+          "data",
+          "count"
+        ],
         "properties": {
           "data": {
             "type": "array",
@@ -8586,15 +9622,28 @@
           },
           "domain": {
             "type": "string",
-            "enum": ["business", "home", "workshop", "shared"]
+            "enum": [
+              "business",
+              "home",
+              "workshop",
+              "shared"
+            ]
           },
           "sensitivity": {
             "type": "string",
-            "enum": ["internal", "private", "secret"]
+            "enum": [
+              "internal",
+              "private",
+              "secret"
+            ]
           },
           "retention": {
             "type": "string",
-            "enum": ["ephemeral", "standard", "long_term"]
+            "enum": [
+              "ephemeral",
+              "standard",
+              "long_term"
+            ]
           },
           "sourceRequestId": {
             "type": "string",
@@ -8623,7 +9672,9 @@
       "NoteResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["data"],
+        "required": [
+          "data"
+        ],
         "properties": {
           "data": {
             "$ref": "#/components/schemas/Note"
@@ -8633,7 +9684,10 @@
       "NoteListResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["data", "count"],
+        "required": [
+          "data",
+          "count"
+        ],
         "properties": {
           "data": {
             "type": "array",
@@ -8650,7 +9704,10 @@
       "CreateBuildRequest": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["name", "kind"],
+        "required": [
+          "name",
+          "kind"
+        ],
         "properties": {
           "name": {
             "type": "string",
@@ -8664,7 +9721,12 @@
           },
           "status": {
             "type": "string",
-            "enum": ["planning", "active", "shelved", "retired"]
+            "enum": [
+              "planning",
+              "active",
+              "shelved",
+              "retired"
+            ]
           },
           "description": {
             "type": "string",
@@ -8700,20 +9762,34 @@
           },
           "status": {
             "type": "string",
-            "enum": ["planning", "active", "shelved", "retired"]
+            "enum": [
+              "planning",
+              "active",
+              "shelved",
+              "retired"
+            ]
           },
           "description": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "minLength": 1,
             "maxLength": 2000
           },
           "nickname": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "minLength": 1,
             "maxLength": 100
           },
           "notes": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "maxLength": 2000
           }
         }
@@ -8721,7 +9797,13 @@
       "BuildLogEntry": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["id", "buildId", "kind", "title", "createdAt"],
+        "required": [
+          "id",
+          "buildId",
+          "kind",
+          "title",
+          "createdAt"
+        ],
         "properties": {
           "id": {
             "$ref": "#/components/schemas/RecordId"
@@ -8731,7 +9813,13 @@
           },
           "kind": {
             "type": "string",
-            "enum": ["origin", "milestone", "failure", "anecdote", "note"]
+            "enum": [
+              "origin",
+              "milestone",
+              "failure",
+              "anecdote",
+              "note"
+            ]
           },
           "title": {
             "type": "string",
@@ -8757,7 +9845,9 @@
       "BuildLogResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["data"],
+        "required": [
+          "data"
+        ],
         "properties": {
           "data": {
             "$ref": "#/components/schemas/BuildLogEntry"
@@ -8767,7 +9857,10 @@
       "BuildLogListResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["data", "count"],
+        "required": [
+          "data",
+          "count"
+        ],
         "properties": {
           "data": {
             "type": "array",
@@ -8784,7 +9877,10 @@
       "CreateBuildLogRequest": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["buildId", "title"],
+        "required": [
+          "buildId",
+          "title"
+        ],
         "properties": {
           "buildId": {
             "type": "string",
@@ -8793,7 +9889,13 @@
           },
           "kind": {
             "type": "string",
-            "enum": ["origin", "milestone", "failure", "anecdote", "note"]
+            "enum": [
+              "origin",
+              "milestone",
+              "failure",
+              "anecdote",
+              "note"
+            ]
           },
           "title": {
             "type": "string",
@@ -8822,7 +9924,13 @@
           },
           "kind": {
             "type": "string",
-            "enum": ["origin", "milestone", "failure", "anecdote", "note"]
+            "enum": [
+              "origin",
+              "milestone",
+              "failure",
+              "anecdote",
+              "note"
+            ]
           },
           "title": {
             "type": "string",
@@ -8830,12 +9938,18 @@
             "maxLength": 200
           },
           "body": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "minLength": 1,
             "maxLength": 4000
           },
           "occurredAt": {
-            "type": ["integer", "null"],
+            "type": [
+              "integer",
+              "null"
+            ],
             "format": "int64",
             "minimum": 0
           }
@@ -8844,7 +9958,12 @@
       "Upgrade": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["id", "buildId", "title", "createdAt"],
+        "required": [
+          "id",
+          "buildId",
+          "title",
+          "createdAt"
+        ],
         "properties": {
           "id": {
             "$ref": "#/components/schemas/RecordId"
@@ -8905,7 +10024,9 @@
       "UpgradeResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["data"],
+        "required": [
+          "data"
+        ],
         "properties": {
           "data": {
             "$ref": "#/components/schemas/Upgrade"
@@ -8915,7 +10036,10 @@
       "UpgradeListResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["data", "count"],
+        "required": [
+          "data",
+          "count"
+        ],
         "properties": {
           "data": {
             "type": "array",
@@ -8932,7 +10056,10 @@
       "CreateUpgradeRequest": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["buildId", "title"],
+        "required": [
+          "buildId",
+          "title"
+        ],
         "properties": {
           "buildId": {
             "type": "string",
@@ -8999,27 +10126,42 @@
             "maxLength": 200
           },
           "reason": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "minLength": 1,
             "maxLength": 4000
           },
           "beforeState": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "minLength": 1,
             "maxLength": 4000
           },
           "afterState": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "minLength": 1,
             "maxLength": 4000
           },
           "outcome": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "minLength": 1,
             "maxLength": 4000
           },
           "parts": {
-            "type": ["array", "null"],
+            "type": [
+              "array",
+              "null"
+            ],
             "items": {
               "type": "string",
               "minLength": 1,
@@ -9028,12 +10170,18 @@
             "maxItems": 100
           },
           "version": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "minLength": 1,
             "maxLength": 100
           },
           "occurredAt": {
-            "type": ["integer", "null"],
+            "type": [
+              "integer",
+              "null"
+            ],
             "format": "int64",
             "minimum": 0
           }
@@ -9042,7 +10190,14 @@
       "Asset": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["id", "name", "kind", "due", "createdAt", "updatedAt"],
+        "required": [
+          "id",
+          "name",
+          "kind",
+          "due",
+          "createdAt",
+          "updatedAt"
+        ],
         "properties": {
           "id": {
             "$ref": "#/components/schemas/RecordId"
@@ -9087,7 +10242,9 @@
       "AssetResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["data"],
+        "required": [
+          "data"
+        ],
         "properties": {
           "data": {
             "$ref": "#/components/schemas/Asset"
@@ -9097,7 +10254,10 @@
       "AssetListResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["data", "count"],
+        "required": [
+          "data",
+          "count"
+        ],
         "properties": {
           "data": {
             "type": "array",
@@ -9114,7 +10274,10 @@
       "CreateAssetRequest": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["name", "kind"],
+        "required": [
+          "name",
+          "kind"
+        ],
         "properties": {
           "name": {
             "type": "string",
@@ -9156,16 +10319,25 @@
             "maxLength": 100
           },
           "serviceIntervalDays": {
-            "type": ["integer", "null"],
+            "type": [
+              "integer",
+              "null"
+            ],
             "minimum": 1
           },
           "lastServicedAt": {
-            "type": ["integer", "null"],
+            "type": [
+              "integer",
+              "null"
+            ],
             "format": "int64",
             "minimum": 0
           },
           "notes": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "minLength": 1,
             "maxLength": 2000
           }
@@ -9174,7 +10346,13 @@
       "Preference": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["id", "key", "value", "createdAt", "updatedAt"],
+        "required": [
+          "id",
+          "key",
+          "value",
+          "createdAt",
+          "updatedAt"
+        ],
         "properties": {
           "id": {
             "$ref": "#/components/schemas/RecordId"
@@ -9205,7 +10383,9 @@
       "PreferenceResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["data"],
+        "required": [
+          "data"
+        ],
         "properties": {
           "data": {
             "$ref": "#/components/schemas/Preference"
@@ -9215,7 +10395,10 @@
       "PreferenceListResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["data", "count"],
+        "required": [
+          "data",
+          "count"
+        ],
         "properties": {
           "data": {
             "type": "array",
@@ -9232,7 +10415,10 @@
       "CreatePreferenceRequest": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["key", "value"],
+        "required": [
+          "key",
+          "value"
+        ],
         "properties": {
           "key": {
             "type": "string",
@@ -9267,7 +10453,10 @@
             "maxLength": 2000
           },
           "category": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "minLength": 1,
             "maxLength": 100
           }
@@ -9275,7 +10464,13 @@
       },
       "ExternalReconciliationState": {
         "type": "string",
-        "enum": ["observing", "pending", "claimed", "resolved", "escalated"]
+        "enum": [
+          "observing",
+          "pending",
+          "claimed",
+          "resolved",
+          "escalated"
+        ]
       },
       "ExternalReconciliationOperatorRecord": {
         "type": "object",
@@ -9339,7 +10534,10 @@
           },
           "terminalStatus": {
             "type": "string",
-            "enum": ["succeeded", "failed"]
+            "enum": [
+              "succeeded",
+              "failed"
+            ]
           },
           "resolutionErrorCode": {
             "type": "string"
@@ -9407,7 +10605,11 @@
           },
           "actor": {
             "type": "string",
-            "enum": ["user", "agent", "tool"]
+            "enum": [
+              "user",
+              "agent",
+              "tool"
+            ]
           },
           "approvalId": {
             "type": "string"
@@ -9435,7 +10637,13 @@
           },
           "status": {
             "type": "string",
-            "enum": ["dry-run", "succeeded", "failed", "indeterminate", "blocked"]
+            "enum": [
+              "dry-run",
+              "succeeded",
+              "failed",
+              "indeterminate",
+              "blocked"
+            ]
           },
           "errorCode": {
             "type": "string"
@@ -9456,7 +10664,10 @@
       "ExternalReconciliationListResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["data", "count"],
+        "required": [
+          "data",
+          "count"
+        ],
         "properties": {
           "data": {
             "type": "array",
@@ -9473,7 +10684,10 @@
       "ExternalReconciliationDetailResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["reconciliation", "receipt"],
+        "required": [
+          "reconciliation",
+          "receipt"
+        ],
         "properties": {
           "reconciliation": {
             "$ref": "#/components/schemas/ExternalReconciliationOperatorRecord"
@@ -9487,6 +10701,339 @@
                 "type": "null"
               }
             ]
+          }
+        }
+      },
+      "ApprovalExpiryPolicy": {
+        "type": "string",
+        "enum": [
+          "ttl",
+          "non-expiring"
+        ]
+      },
+      "ConsumptionPolicy": {
+        "type": "string",
+        "enum": [
+          "single-use",
+          "reusable"
+        ]
+      },
+      "RevokeToolActionRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "reason",
+          "approvalToken"
+        ],
+        "properties": {
+          "reason": {
+            "type": "string",
+            "minLength": 1
+          },
+          "approvalToken": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The same separately configured operator secret required by /approve — proves a human, not just the shared service token, decided to revoke this specific proposal."
+          }
+        }
+      },
+      "InboxSourceReport": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "source",
+          "status",
+          "checkedAt"
+        ],
+        "properties": {
+          "source": {
+            "type": "string",
+            "enum": [
+              "reminders",
+              "maintenance",
+              "toolActions",
+              "reconciliation",
+              "quoteDelivery"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "available",
+              "unavailable",
+              "degraded",
+              "unsupported"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "description": "Present when status is not \"available\" — a concrete, non-generic reason."
+          },
+          "checkedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "InboxItem": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "itemId",
+          "kind",
+          "severity",
+          "title",
+          "explanation",
+          "sourceSubsystem",
+          "sourceRecordId",
+          "createdAt",
+          "updatedAt",
+          "status",
+          "actionRequired"
+        ],
+        "properties": {
+          "itemId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "reminder-overdue",
+              "maintenance-overdue",
+              "maintenance-due-soon"
+            ]
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "critical",
+              "high",
+              "elevated",
+              "normal",
+              "informational"
+            ]
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "explanation": {
+            "type": "string",
+            "minLength": 1
+          },
+          "sourceSubsystem": {
+            "type": "string",
+            "enum": [
+              "reminders",
+              "maintenance",
+              "toolActions",
+              "reconciliation",
+              "quoteDelivery"
+            ]
+          },
+          "sourceRecordId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "dueAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "status": {
+            "type": "string",
+            "minLength": 1
+          },
+          "actionRequired": {
+            "type": "boolean"
+          }
+        }
+      },
+      "OperationsInbox": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "generatedAt",
+          "items",
+          "sources"
+        ],
+        "properties": {
+          "generatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InboxItem"
+            }
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InboxSourceReport"
+            }
+          }
+        }
+      },
+      "OperationsInboxResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "data"
+        ],
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/OperationsInbox"
+          }
+        }
+      },
+      "ActivityEvent": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "activityId",
+          "occurredAt",
+          "eventType",
+          "actor",
+          "summary"
+        ],
+        "properties": {
+          "activityId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "occurredAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "eventType": {
+            "type": "string",
+            "minLength": 1
+          },
+          "actor": {
+            "type": "string",
+            "enum": [
+              "user",
+              "agent",
+              "tool"
+            ]
+          },
+          "summary": {
+            "type": "string",
+            "minLength": 1,
+            "description": "A safe, factual summary built only from a fixed, known-safe subset of the source event's fields — never the raw event payload."
+          },
+          "projectKey": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Omitted when the source event was recorded without a project scope."
+          }
+        }
+      },
+      "ActivityTimelineAvailable": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "status",
+          "events",
+          "cursor",
+          "isDone"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "available"
+            ]
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ActivityEvent"
+            }
+          },
+          "cursor": {
+            "type": "string",
+            "description": "Opaque cursor for the next page; pass back as the `cursor` query parameter."
+          },
+          "isDone": {
+            "type": "boolean"
+          }
+        }
+      },
+      "ActivityTimelineUnavailable": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "status",
+          "reason"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "unavailable"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "ActivityTimelineResult": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/ActivityTimelineAvailable"
+          },
+          {
+            "$ref": "#/components/schemas/ActivityTimelineUnavailable"
+          }
+        ]
+      },
+      "ActivityTimelineResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "data"
+        ],
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ActivityTimelineResult"
+          }
+        }
+      },
+      "IntegrationStatus": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "status"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "commissioned",
+              "not-commissioned"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "description": "Present when status is \"not-commissioned\" — a concrete, non-generic reason."
           }
         }
       }

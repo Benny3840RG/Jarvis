@@ -13,6 +13,7 @@ import "../styles.css";
 import "../phase23.css";
 import type {
   JarvisConsoleProps,
+  JarvisGovernedAction,
   JarvisNote,
   JarvisReminder,
   JarvisTask,
@@ -37,6 +38,21 @@ const statusClass = (state: "good" | "guarded" | "pending") =>
 function formatDue(reminder: JarvisReminder) {
   if (reminder.dueAt) return new Date(reminder.dueAt).toLocaleString("en-AU");
   return reminder.dueRaw || "No due time";
+}
+
+// Read-only status line. Never fabricates an expiry or reason the record
+// doesn't actually carry — falls back to the literal string "UNAVAILABLE".
+function formatGovernedActionStatus(action: JarvisGovernedAction) {
+  if (action.state === "revoked") return `REVOKED — ${action.revokedReason || "UNAVAILABLE"}`;
+  if (action.state === "expired") return "EXPIRED";
+  if (action.state === "approved") {
+    if (action.isApprovalExpired) return "APPROVAL EXPIRED (pending sync)";
+    if (action.approvalExpiresAt) {
+      return `APPROVED — expires ${new Date(action.approvalExpiresAt).toLocaleString("en-AU")}`;
+    }
+    return "APPROVED — UNAVAILABLE expiry";
+  }
+  return action.state.toUpperCase();
 }
 
 const JarvisConsole: React.FC = () => {
@@ -349,6 +365,25 @@ const JarvisConsole: React.FC = () => {
                     <div className="note-row interactive-row" key={note.id}>
                       <div className="row-copy"><strong>{note.title}</strong><small>{note.domain.toUpperCase()}</small></div>
                       <button type="button" disabled={busy} onClick={() => dismissNote(note)}>REMOVE</button>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              <div className="hud-panel governed-action-panel">
+                <div className="panel-title">GOVERNED ACTIONS</div>
+                {snapshot.governedActions.length === 0 ? (
+                  <div className="console-empty">No governed actions proposed.</div>
+                ) : (
+                  snapshot.governedActions.slice(0, 5).map((action) => (
+                    <div className="governed-action-row" key={action.id}>
+                      <div className="row-copy">
+                        <strong>{`${action.tool}.${action.operation}`}</strong>
+                        <small>{formatGovernedActionStatus(action)}</small>
+                      </div>
+                      <span className={statusClass(action.destructive ? "guarded" : "good")}>
+                        {action.requiredAuthority}
+                      </span>
                     </div>
                   ))
                 )}

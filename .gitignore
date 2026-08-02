@@ -15,3 +15,6 @@ typescript/data/.jarvis-state.json.tmp-*
 
 # Local backup archives may contain private Jarvis data
 /typescript/backups/
+
+# mcp-use deployment
+.mcp-use

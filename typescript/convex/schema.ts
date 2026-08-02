@@ -207,6 +207,25 @@ export default defineSchema({
     updatedAt: v.number(),
     approvedAt: v.optional(v.number()),
     rejectedAt: v.optional(v.number()),
+    // Consent lifecycle (R-048/R-049/R-050): all optional — existing rows
+    // predate these fields and are treated as legacy/unenforced, never
+    // retroactively expired or single-use. Stamped by approve(); consumed
+    // by revoke() and by the (deferred, execute()-time) expiry/consumption
+    // checks. See docs/superpowers/plans/2026-07-30-tool-action-consent-lifecycle.md.
+    approvalExpiryPolicy: v.optional(v.union(v.literal("ttl"), v.literal("non-expiring"))),
+    approvalExpiresAt: v.optional(v.number()),
+    expiredObservedAt: v.optional(v.number()),
+    consumptionPolicy: v.optional(v.union(v.literal("single-use"), v.literal("reusable"))),
+    revokedBy: v.optional(v.literal("user")),
+    revokedReason: v.optional(v.string()),
+    revokedAt: v.optional(v.number()),
+    // Atomic single-use execution claim: set exactly once, by exactly one
+    // caller, via claimSingleUseExecution — never released. This is the
+    // authoritative consumption gate checked before the external effect;
+    // a read-before-effect check alone cannot prevent two different-key
+    // concurrent executions from both crossing the effect boundary.
+    singleUseClaimedAt: v.optional(v.number()),
+    singleUseClaimId: v.optional(v.string()),
   })
     .index("by_owner_and_action_id", ["ownerId", "actionId"])
     .index("by_owner_and_idempotency_key", ["ownerId", "idempotencyKey"])
@@ -416,7 +435,11 @@ export default defineSchema({
     createdAt: v.number(),
   })
     .index("by_owner_and_scope_key", ["ownerId", "scopeKey"])
-    .index("by_owner_and_request_id", ["ownerId", "requestId"]),
+    .index("by_owner_and_request_id", ["ownerId", "requestId"])
+    // Owner-wide, time-ordered read across all scopes — `by_owner_and_scope_key`
+    // can only page through one project/global scope at a time, which cannot
+    // serve a genuine cross-scope activity timeline.
+    .index("by_owner_and_created_at", ["ownerId", "createdAt"]),
   builds: defineTable({
     ownerId: v.string(),
     name: v.string(),

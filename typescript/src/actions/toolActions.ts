@@ -1,7 +1,9 @@
 import type { ToolAuthority } from "../runtime/totalityPolicy.js";
 
-export type ToolActionState = "proposed" | "approved" | "rejected";
+export type ToolActionState = "proposed" | "approved" | "rejected" | "expired" | "revoked";
 export type ToolActionActor = "user" | "agent" | "tool";
+export type ApprovalExpiryPolicy = "ttl" | "non-expiring";
+export type ConsumptionPolicy = "single-use" | "reusable";
 
 export type ToolAction = {
   actionId: string;
@@ -24,6 +26,16 @@ export type ToolAction = {
   updatedAt: string;
   approvedAt?: string;
   rejectedAt?: string;
+  // Consent lifecycle (R-048/R-049/R-050) — absent on legacy/pre-existing rows.
+  approvalExpiryPolicy?: ApprovalExpiryPolicy;
+  approvalExpiresAt?: string;
+  expiredObservedAt?: string;
+  consumptionPolicy?: ConsumptionPolicy;
+  revokedBy?: "user";
+  revokedReason?: string;
+  revokedAt?: string;
+  /** Computed, read-only view field: true when an approval's ttl has lapsed but the transition hasn't been persisted yet. */
+  isApprovalExpired?: boolean;
 };
 
 export interface ToolActionService {
@@ -53,4 +65,12 @@ export interface ToolActionService {
     expectedRevision: number;
   }): Promise<ToolAction>;
   reject(input: { actionId: string; projectId: string; reason: string }): Promise<ToolAction>;
+  /**
+   * Optional on the interface (rather than required, like the other methods)
+   * so existing `ToolActionService` implementations/fakes elsewhere in the
+   * codebase don't need updating before this capability has an HTTP route —
+   * that wiring is a deferred follow-up. `ConvexToolActionService` always
+   * implements it.
+   */
+  revoke?(input: { actionId: string; projectId: string; reason: string }): Promise<ToolAction>;
 }

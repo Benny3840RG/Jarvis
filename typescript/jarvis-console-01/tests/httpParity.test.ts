@@ -16,6 +16,10 @@ import test from "node:test";
  * it stays behind the governed tool-actions propose/approve/execute flow,
  * which is where its mandatory idempotency/fingerprint contract is actually
  * enforced, so it maps to that generic execute path instead.
+ *
+ * `toolActions.listRecent` is read-only inspection of the same governed
+ * tool-actions register — Console 01 exposes no approve/revoke/execute
+ * Convex call, so no further entries are expected for that namespace.
  */
 const EXPECTED_COVERAGE: { functionName: string; operation: string }[] = [
   { functionName: "anyApi.tasks.listPage", operation: "GET /api/v1/tasks" },
@@ -28,6 +32,10 @@ const EXPECTED_COVERAGE: { functionName: string; operation: string }[] = [
   {
     functionName: "anyApi.notes.create",
     operation: "POST /api/v1/projects/{projectId}/tool-actions",
+  },
+  {
+    functionName: "anyApi.toolActions.listRecent",
+    operation: "GET /api/v1/projects/{projectId}/tool-actions",
   },
 ];
 
@@ -75,6 +83,24 @@ test("Console 01 makes no notes Convex calls beyond the ones this file accounts 
       `index.ts calls ${call}, which isn't covered by EXPECTED_COVERAGE above — add it and its ` +
         "OpenAPI mapping (or note explicitly why none is needed) so a future notes.* call can't " +
         "silently reintroduce this gap.",
+    );
+  }
+});
+
+test("Console 01 makes no toolActions Convex calls beyond the ones this file accounts for", async () => {
+  const source = await readFile(new URL("../index.ts", import.meta.url), "utf8");
+  const calls = new Set(source.match(/anyApi\.toolActions\.\w+/g) ?? []);
+  const accountedFor = new Set(
+    EXPECTED_COVERAGE.filter((entry) => entry.functionName.startsWith("anyApi.toolActions.")).map(
+      (entry) => entry.functionName,
+    ),
+  );
+  for (const call of calls) {
+    assert.ok(
+      accountedFor.has(call),
+      `index.ts calls ${call}, which isn't covered by EXPECTED_COVERAGE above — add it and its ` +
+        "OpenAPI mapping so a future toolActions.* call (e.g. approve/revoke) can't silently " +
+        "bypass this parity check.",
     );
   }
 });

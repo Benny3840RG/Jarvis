@@ -269,4 +269,23 @@ describe("quoteDeliveries.cleanup (development-only)", () => {
     });
     expect(again).toBe(false);
   });
+
+  it("returns false without error when no delivery attempts exist for the given quote", async () => {
+    const t = harness();
+
+    // Attempts for a different quote must not be removed
+    await t.mutation(api.quoteDeliveries.createPending, createInput({ quoteId: "other-quote" }));
+
+    const result = await t.mutation(api.quoteDeliveries.cleanup, {
+      serviceToken: SERVICE_TOKEN,
+      quoteId: "quote-1",
+      deployment: "dev:outgoing-ram-798",
+    });
+    expect(result).toBe(false);
+
+    const rowCount = await t.run(
+      async (ctx) => (await ctx.db.query("quoteDeliveryAttempts").collect()).length,
+    );
+    expect(rowCount).toBe(1);
+  });
 });

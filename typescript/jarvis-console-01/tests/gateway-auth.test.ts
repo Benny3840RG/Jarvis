@@ -25,6 +25,38 @@ describe("Console gateway authentication", () => {
     assert.equal(decideGatewayAccess({}), "missing-configuration");
   });
 
+  it("treats blank configured tokens as missing configuration", () => {
+    for (const configuredToken of ["", " ", "\t", "\n", "  \t\n  "]) {
+      assert.equal(
+        decideGatewayAccess({
+          configuredToken,
+          candidateToken: "anything",
+          rpcMethod: "tools/list",
+        }),
+        "missing-configuration",
+      );
+    }
+  });
+
+  it("treats configured tokens containing whitespace as missing configuration", () => {
+    for (const configuredToken of [
+      " configured-console-token",
+      "configured-console-token ",
+      "configured console token",
+      "configured\tconsole-token",
+      "configured-console-token\n",
+    ]) {
+      assert.equal(
+        decideGatewayAccess({
+          configuredToken,
+          candidateToken: "configured-console-token",
+          rpcMethod: "tools/list",
+        }),
+        "missing-configuration",
+      );
+    }
+  });
+
   it("accepts an exact configured bearer token for protected requests", () => {
     assert.equal(
       decideGatewayAccess({
@@ -76,5 +108,14 @@ describe("Console gateway authentication", () => {
     assert.match(source, /allow-token/);
     assert.match(source, /missing-configuration/);
     assert.match(source, /path === "\/sse"/);
+  });
+
+  it("preserves distinct machine-readable gateway failure codes", () => {
+    const source = readFileSync(new URL("../index.ts", import.meta.url), "utf8");
+
+    assert.ok(source.includes('code: "gateway_not_configured"'));
+    assert.ok(source.includes('code: "gateway_token_missing"'));
+    assert.ok(source.includes('code: "gateway_token_invalid"'));
+    assert.ok(source.includes("candidateToken === undefined"));
   });
 });

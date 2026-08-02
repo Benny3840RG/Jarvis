@@ -21,3 +21,4 @@ export const HTTP_UPGRADE_STORE = Symbol("HTTP_UPGRADE_STORE");
 export const HTTP_ASSET_STORE = Symbol("HTTP_ASSET_STORE");
 export const HTTP_PREFERENCE_STORE = Symbol("HTTP_PREFERENCE_STORE");
 export const HTTP_NOTE_STORE = Symbol("HTTP_NOTE_STORE");
+export const HTTP_ACTIVITY_EVENTS = Symbol("HTTP_ACTIVITY_EVENTS");

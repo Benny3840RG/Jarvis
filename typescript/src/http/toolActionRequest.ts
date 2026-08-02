@@ -1,7 +1,13 @@
 import type { ToolActionActor, ToolActionState } from "../actions/toolActions.js";
 import type { ToolAuthority } from "../runtime/totalityPolicy.js";
 
-const ACTION_STATES: readonly ToolActionState[] = ["proposed", "approved", "rejected"];
+const ACTION_STATES: readonly ToolActionState[] = [
+  "proposed",
+  "approved",
+  "rejected",
+  "expired",
+  "revoked",
+];
 const ACTION_ACTORS: readonly ToolActionActor[] = ["user", "agent", "tool"];
 const TOOL_AUTHORITIES: readonly ToolAuthority[] = ["T0", "T1", "T2", "T3"];
 const MAX_ARGUMENT_DEPTH = 8;
@@ -195,6 +201,17 @@ export function parseToolActionApproval(body: unknown): {
 export function parseToolActionRejectionReason(body: unknown): string {
   if (!isRecord(body)) throw new Error("Request body must be a JSON object.");
   return requiredString(body.reason, "reason");
+}
+
+export function parseToolActionRevocation(body: unknown): {
+  reason: string;
+  approvalToken: string;
+} {
+  if (!isRecord(body)) throw new Error("Request body must be a JSON object.");
+  return {
+    reason: requiredString(body.reason, "reason"),
+    approvalToken: requiredString(body.approvalToken, "approvalToken"),
+  };
 }
 
 export function parseToolActionState(value: unknown): ToolActionState | undefined {

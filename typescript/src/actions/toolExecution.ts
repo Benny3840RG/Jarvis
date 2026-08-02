@@ -28,7 +28,9 @@ export type ToolExecutionErrorCode =
   | "provider-reference-missing"
   | "retry-blocked-pending-reconciliation"
   | "reconciliation-escalated"
-  | "reconciliation-unavailable";
+  | "reconciliation-unavailable"
+  | "approval-expired"
+  | "approval-consumed";
 
 export type ToolExecutionReceipt = {
   receiptId: string;
@@ -95,6 +97,83 @@ export class InMemoryToolExecutionReceiptStore implements ToolExecutionReceiptSt
 
   async save(key: string, receipt: ToolExecutionReceipt): Promise<void> {
     this.receipts.set(key, receipt);
+  }
+}
+
+export type SingleUseExecutionClaimResult = {
+  claimed: boolean;
+  claimId: string;
+  /**
+   * Present when `claimed` is false. `"already-claimed"` means a winner
+   * already holds the claim (the existing replay-safe path). `"not-approved"`
+   * and `"expired"` mean the store's own authoritative, same-transaction
+   * check found the action no longer approved or its approval expired —
+   * decided fresh at claim time, never from the caller's earlier snapshot.
+   */
+  blockReason?: "already-claimed" | "not-approved" | "expired";
+};
+
+/**
+ * Authoritative, atomic consumption gate for single-use governed actions.
+ * `claim()` must return `{claimed: true}` for exactly one caller across any
+ * number of concurrent attempts against the same action — every other
+ * caller (including a caller retrying its own already-lost attempt) must
+ * receive `{claimed: false, claimId: <winner's claimId>}` without ever
+ * having invoked, or being told to invoke, the external effect. The claim
+ * is never released once set.
+ */
+export interface SingleUseConsumptionClaimStore {
+  claim(action: ToolAction, claimId: string): Promise<SingleUseExecutionClaimResult>;
+}
+
+export class InMemorySingleUseConsumptionClaimStore implements SingleUseConsumptionClaimStore {
+  private readonly claims = new Map<string, string>();
+
+  // No `await` occurs between the read and the write below, so this method
+  // runs to completion in one synchronous turn of the event loop before
+  // yielding — the same guarantee a real backend must provide via OCC or an
+  // equivalent transactional check-and-set.
+  async claim(action: ToolAction, claimId: string): Promise<SingleUseExecutionClaimResult> {
+    const existing = this.claims.get(action.actionId);
+    if (existing !== undefined) return { claimed: false, claimId: existing };
+    this.claims.set(action.actionId, claimId);
+    return { claimed: true, claimId };
+  }
+}
+
+export type ExecutionEligibilityResult = {
+  eligible: boolean;
+  /** Present when `eligible` is false; same meaning as the identically-named `SingleUseExecutionClaimResult` reasons. */
+  blockReason?: "not-approved" | "expired";
+};
+
+/**
+ * The reusable-action counterpart to `SingleUseConsumptionClaimStore`: the
+ * same authoritative, execute-time re-check of state/expiry, but with no
+ * claim/consumption semantics, since a reusable action may execute more than
+ * once. `verify()` must be called and must return `{eligible: true}`
+ * immediately before a reusable action's external effect may be attempted —
+ * skipping it leaves the same revoke/expire-during-flight race that the
+ * single-use claim closes, just for actions that were never given a claim to
+ * make atomic in the first place.
+ */
+export interface ExecutionEligibilityStore {
+  verify(action: ToolAction): Promise<ExecutionEligibilityResult>;
+}
+
+/**
+ * Matches `InMemorySingleUseConsumptionClaimStore`'s own scope: this default
+ * provides no independent freshness guarantee (it has no authoritative store
+ * to re-read from other than the snapshot it's handed), the same limitation
+ * already accepted for the in-memory single-use claim store. The real
+ * guarantee comes from `ConvexExecutionEligibilityStore`'s backing mutation;
+ * tests exercising the blocked branches use a hand-written test double, the
+ * same pattern already used to test `SingleUseConsumptionClaimStore`'s
+ * blocked branches.
+ */
+export class InMemoryExecutionEligibilityStore implements ExecutionEligibilityStore {
+  async verify(): Promise<ExecutionEligibilityResult> {
+    return { eligible: true };
   }
 }
 
@@ -292,6 +371,8 @@ export class ToolExecutionService {
     definitions: readonly ToolExecutionDefinition[],
     private readonly receipts: ToolExecutionReceiptStore = new InMemoryToolExecutionReceiptStore(),
     private readonly reconciliations?: ExternalReconciliationStore,
+    private readonly claims: SingleUseConsumptionClaimStore = new InMemorySingleUseConsumptionClaimStore(),
+    private readonly eligibility: ExecutionEligibilityStore = new InMemoryExecutionEligibilityStore(),
   ) {
     for (const definition of definitions) {
       const key = `${definition.tool}:${definition.operation}`;
@@ -301,6 +382,11 @@ export class ToolExecutionService {
       }
       this.definitions.set(key, definition);
     }
+  }
+
+  /** Whether a `tool:operation` definition is registered — evidence for integration-commissioning checks. */
+  isRegistered(tool: string, operation: string): boolean {
+    return this.definitions.has(`${tool}:${operation}`);
   }
 
   async execute(input: ExecuteInput): Promise<ToolExecutionReceipt> {
@@ -473,6 +559,25 @@ export class ToolExecutionService {
         receipt(input.action, input.idempotencyKey, "blocked", "not-authorized", startedAt, input),
       );
     }
+    // isApprovalExpired is computed server-side by the caller's fetch of the
+    // action (never client-supplied), so this is a truthful, server-derived
+    // check — not a caller-controlled clock. Legacy/pre-consent-lifecycle
+    // rows never set this field, so it stays undefined (falsy) and
+    // unenforced for them, matching the additive migration's own rule that
+    // rows without an explicit classification are legacy/unenforced.
+    if (input.action.isApprovalExpired) {
+      return this.persistDecision(
+        key,
+        receipt(
+          input.action,
+          input.idempotencyKey,
+          "blocked",
+          "approval-expired",
+          startedAt,
+          input,
+        ),
+      );
+    }
     if (!definition) {
       return this.persistDecision(
         key,
@@ -501,9 +606,74 @@ export class ToolExecutionService {
       );
     }
 
+    // Deterministic and must run before the claim below: an invalid
+    // `timeoutMs` throws, and a throw here happens *before* any claim has
+    // been taken, so nothing is spent. Validating this *after* the claim
+    // would durably consume a single-use action's one-and-only attempt for
+    // an error that has nothing to do with authorization or consumption —
+    // the claim is never released, so a legitimate retry would then be
+    // blocked as `"approval-consumed"` for an action that never actually
+    // reached the provider. (Independent review finding: this check
+    // previously ran after the claim.)
     const timeoutMs = input.timeoutMs ?? 5_000;
     if (!Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > MAX_TIMEOUT_MS) {
       throw new Error(`timeoutMs must be an integer between 1 and ${MAX_TIMEOUT_MS}.`);
+    }
+
+    // Authoritative, execute-time re-check — placed as close as possible to
+    // the actual external-effect call below, after every deterministic
+    // pre-check (authority, expiry, allowlist, argument validation, dry-run,
+    // timeout) has already passed.
+    //
+    // The earlier `input.action.state`/`isApprovalExpired` checks above run
+    // against the caller's own, separately-fetched, potentially stale
+    // snapshot — revocation or TTL expiry can land on the authoritative
+    // document in the gap between that fetch and this call. Both branches
+    // below re-verify against a fresh, same-transaction read instead of that
+    // stale snapshot; a `blockReason` of `"not-approved"` or `"expired"`
+    // means the store's own fresh read caught exactly that race, and must
+    // map to the same receipt codes the earlier checks would have produced
+    // had they seen current state.
+    //
+    // Single-use actions additionally need claim *uniqueness*: two
+    // different-key concurrent callers racing to this point both call
+    // claim(); the store's own atomicity (Convex OCC for the real
+    // deployment, a synchronous check-then-set for the in-memory default)
+    // guarantees exactly one caller receives `claimed: true`, and the claim
+    // is never released, so a `blockReason` of `"approval-consumed"` proves
+    // this is a replay of a claim someone else already holds — never
+    // confusable with the "not-approved"/"expired" cases above.
+    //
+    // Reusable actions have nothing to claim (they may legitimately execute
+    // more than once), but skipping this re-check for them would leave the
+    // exact same revoke/expire-during-flight race open — only for actions
+    // that were never given a claim to make atomic. `verify()` closes it
+    // without any consumption semantics. (Finding from a full-repo audit:
+    // this re-check previously ran only for single-use actions.)
+    if (input.action.consumptionPolicy === "single-use") {
+      const claim = await this.claims.claim(input.action, input.idempotencyKey);
+      if (!claim.claimed) {
+        const errorCode =
+          claim.blockReason === "not-approved"
+            ? "not-authorized"
+            : claim.blockReason === "expired"
+              ? "approval-expired"
+              : "approval-consumed";
+        return this.persistDecision(
+          key,
+          receipt(input.action, input.idempotencyKey, "blocked", errorCode, startedAt, input),
+        );
+      }
+    } else {
+      const verification = await this.eligibility.verify(input.action);
+      if (!verification.eligible) {
+        const errorCode =
+          verification.blockReason === "expired" ? "approval-expired" : "not-authorized";
+        return this.persistDecision(
+          key,
+          receipt(input.action, input.idempotencyKey, "blocked", errorCode, startedAt, input),
+        );
+      }
     }
 
     const controller = new AbortController();

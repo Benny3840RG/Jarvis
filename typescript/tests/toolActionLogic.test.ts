@@ -2,6 +2,10 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+  clampApprovalTtlMs,
+  deriveConsumptionPolicy,
+  deriveDefaultApprovalTtlMs,
+  isApprovalExpired,
   normaliseAuditPayload,
   normaliseToolArguments,
   requirePageSize,
@@ -152,5 +156,50 @@ describe("audit payload sanitisation", () => {
 
   it("labels its errors as audit payload rejections, not tool-action arguments", () => {
     assert.throws(() => normaliseAuditPayload({ apiKey: "secret" }), /Audit payload key/);
+  });
+});
+
+describe("consent-lifecycle policy derivation (R-048/R-049/R-050)", () => {
+  it("derives single-use for destructive proposals and reusable otherwise", () => {
+    assert.equal(deriveConsumptionPolicy(true), "single-use");
+    assert.equal(deriveConsumptionPolicy(false), "reusable");
+  });
+
+  it("derives a shorter default approval TTL for destructive proposals", () => {
+    const destructiveTtl = deriveDefaultApprovalTtlMs(true);
+    const nonDestructiveTtl = deriveDefaultApprovalTtlMs(false);
+    assert.ok(destructiveTtl > 0);
+    assert.ok(nonDestructiveTtl > 0);
+    assert.ok(destructiveTtl < nonDestructiveTtl);
+  });
+
+  it("clamps a caller-supplied TTL override into the bounded range for that risk tier", () => {
+    const defaultTtl = deriveDefaultApprovalTtlMs(false);
+    assert.equal(clampApprovalTtlMs(undefined, false), defaultTtl);
+    assert.equal(clampApprovalTtlMs(1, false), clampApprovalTtlMs(0, false));
+    assert.ok(
+      clampApprovalTtlMs(1, false) > 0,
+      "a too-small override is clamped up, not accepted verbatim",
+    );
+    assert.ok(
+      clampApprovalTtlMs(Number.MAX_SAFE_INTEGER, false) < Number.MAX_SAFE_INTEGER,
+      "a too-large override is clamped down, not accepted verbatim",
+    );
+  });
+
+  it("rejects non-finite or non-integer TTL overrides rather than silently falling back", () => {
+    assert.throws(() => clampApprovalTtlMs(Number.NaN, false), /finite integer/);
+    assert.throws(() => clampApprovalTtlMs(1.5, false), /finite integer/);
+    assert.throws(() => clampApprovalTtlMs(Number.POSITIVE_INFINITY, false), /finite integer/);
+  });
+
+  it("treats now === expiresAt as already expired (fail-closed boundary)", () => {
+    assert.equal(isApprovalExpired({ policy: "ttl", expiresAt: 1000 }, 999), false);
+    assert.equal(isApprovalExpired({ policy: "ttl", expiresAt: 1000 }, 1000), true);
+    assert.equal(isApprovalExpired({ policy: "ttl", expiresAt: 1000 }, 1001), true);
+  });
+
+  it("never treats a non-expiring policy as expired regardless of the clock", () => {
+    assert.equal(isApprovalExpired({ policy: "non-expiring" }, Number.MAX_SAFE_INTEGER), false);
   });
 });
