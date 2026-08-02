@@ -4,7 +4,6 @@
 # To make this agent available, merge this file into the default repository branch.
 # For format details, see: https://gh.io/customagents/config
 
-name:---
 name: build-guardian
 description: Reviews Jarvis changes for known failure patterns (auth gaps, unsafe writes, routing junk records) and keeps output concise. Trigger with "use build-guardian" or on PR review.
 tools: ["read", "search", "edit"]
