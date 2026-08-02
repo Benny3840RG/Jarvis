@@ -1,1 +1,8 @@
-# This is a placeholder - PR body updates require API calls
+# Copilot Review
+
+- CLI Contract: N/A — this PR only edits the Copilot agent profile (.github/agents/my-agent.agent.md); no CLI commands, flags, or providers are touched.
+- Persistence Providers: N/A — no persistence/storage code is touched; the diff is limited to agent-profile Markdown and its YAML frontmatter.
+- Backup / Restore: N/A — no backup/restore code paths are touched by this change.
+- HTTP / MCP: N/A — the agent's tools list is unchanged (read/search/edit); no mcp-servers key or HTTP endpoint was added in this revision.
+- Tests & Checks: N/A — no files under typescript/src/ or typescript/convex/ changed, so no test coverage is required for this PR.
+- Documentation: The agent profile is self-documenting — its own Markdown body is the instructions Copilot reads. No separate docs/ file needs updating for this change.
