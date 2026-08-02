@@ -1,10 +1,11 @@
-import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
+import { randomUUID } from "node:crypto";
 
 import { ConvexHttpClient } from "convex/browser";
 import { anyApi } from "convex/server";
 import { MCPServer, text, widget } from "mcp-use/server";
 import { z } from "zod";
 
+import { decideGatewayAccess } from "./gatewayAuth.js";
 import {
   bridgeFailureActivity,
   buildConsolePageSummary,
@@ -40,27 +41,63 @@ function parseBearerToken(header: string | null | undefined): string | undefined
   return match?.[1];
 }
 
-function digest(value: string): Buffer {
-  return createHash("sha256").update(value, "utf8").digest();
-}
+async function readJsonRpcMethod(request: Request): Promise<string | undefined> {
+  if (request.method !== "POST") return undefined;
+  const contentType = request.headers.get("content-type")?.toLowerCase();
+  if (!contentType?.includes("application/json")) return undefined;
 
-function matchesGatewayToken(candidate: string, configured: string): boolean {
-  return timingSafeEqual(digest(candidate), digest(configured));
+  try {
+    const body: unknown = await request.clone().json();
+    if (typeof body !== "object" || body === null || Array.isArray(body)) return undefined;
+    const method = (body as { method?: unknown }).method;
+    return typeof method === "string" ? method : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 server.use(async (c, next) => {
   const path = new URL(c.req.url).pathname;
-  const isGatedRoute = path === "/mcp" || path.startsWith("/mcp/") || path === "/sse" || path.startsWith("/sse/");
+  const isGatedRoute =
+    path === "/mcp" ||
+    path.startsWith("/mcp/") ||
+    path === "/sse" ||
+    path.startsWith("/sse/");
   if (!isGatedRoute) return next();
 
-  if (!gatewayToken) {
-    return c.json({ error: "Console gateway authentication is not configured." }, 503);
+  const candidateToken = parseBearerToken(c.req.header("authorization"));
+  const rpcMethod = path === "/mcp" ? await readJsonRpcMethod(c.req.raw) : undefined;
+  const decision = decideGatewayAccess({
+    configuredToken: gatewayToken,
+    candidateToken,
+    rpcMethod,
+  });
+
+  if (decision === "allow-initialize" || decision === "allow-token") {
+    return next();
   }
-  const candidate = parseBearerToken(c.req.header("authorization"));
-  if (candidate === undefined || !matchesGatewayToken(candidate, gatewayToken)) {
-    return c.json({ error: "A valid Bearer gateway token is required." }, 401);
+  if (decision === "missing-configuration") {
+    return c.json(
+      {
+        error: "Console gateway authentication is not configured.",
+        code: "gateway_not_configured",
+      },
+      503,
+    );
   }
-  return next();
+  // decision === "unauthorized"
+  return c.json(
+    candidateToken === undefined
+      ? {
+          error: "A Bearer gateway token is required.",
+          code: "gateway_token_missing",
+        }
+      : {
+          error: "The supplied gateway token is invalid.",
+          code: "gateway_token_invalid",
+        },
+    401,
+  );
 });
 
 const taskSchema = z.object({
@@ -90,13 +127,35 @@ const noteSchema = z.object({
   createdAt: z.number(),
 });
 
+const governedActionSchema = z.object({
+  id: z.string(),
+  tool: z.string(),
+  operation: z.string(),
+  state: z.enum(["proposed", "approved", "rejected", "expired", "revoked"]),
+  rationale: z.string(),
+  requiredAuthority: z.enum(["T0", "T1", "T2", "T3"]),
+  destructive: z.boolean(),
+  approvalExpiresAt: z.number().optional(),
+  isApprovalExpired: z.boolean().optional(),
+  revokedReason: z.string().optional(),
+  createdAt: z.number(),
+});
+
 /**
  * Console 01 has no project-selection UI, unlike the rest of Jarvis where
- * notes are project-scoped. Every note created or listed through the
+ * notes (and governed tool-action proposals) are project-scoped. Every note
+ * created or listed, and every governed action inspected, through the
  * console lives in this single fixed project namespace, kept separate from
  * whatever projects the rest of Jarvis manages.
  */
 const NOTES_PROJECT_ID = "jarvis-console-01";
+
+const paginationMetaSchema = z.object({
+  isDone: z.boolean(),
+  continueCursor: z.string(),
+  returnedCount: z.number().int().nonnegative(),
+  requestedPageSize: z.number().int().min(1).max(100),
+});
 
 const consoleStateSchema = z.object({
   title: z.string(),
@@ -110,6 +169,7 @@ const consoleStateSchema = z.object({
   tasks: z.array(taskSchema).max(100),
   reminders: z.array(reminderSchema).max(100),
   notes: z.array(noteSchema).max(100),
+  governedActions: z.array(governedActionSchema).max(100),
   systems: z.array(
     z.object({
       label: z.string(),
@@ -128,24 +188,9 @@ const consoleStateSchema = z.object({
     notesPartial: z.boolean(),
   }),
   pagination: z.object({
-    tasks: z.object({
-      isDone: z.boolean(),
-      continueCursor: z.string(),
-      returnedCount: z.number().int().nonnegative(),
-      requestedPageSize: z.number().int().min(1).max(100),
-    }),
-    reminders: z.object({
-      isDone: z.boolean(),
-      continueCursor: z.string(),
-      returnedCount: z.number().int().nonnegative(),
-      requestedPageSize: z.number().int().min(1).max(100),
-    }),
-    notes: z.object({
-      isDone: z.boolean(),
-      continueCursor: z.string(),
-      returnedCount: z.number().int().nonnegative(),
-      requestedPageSize: z.number().int().min(1).max(100),
-    }),
+    tasks: paginationMetaSchema,
+    reminders: paginationMetaSchema,
+    notes: paginationMetaSchema,
   }),
 }).superRefine((value, ctx) => {
   for (const issue of consolePaginationInvariantIssues(value)) {
@@ -178,6 +223,20 @@ type NoteRow = {
   tags: string[];
   domain: "business" | "home" | "workshop" | "shared";
   sensitivity: "internal" | "private" | "secret";
+  createdAt: number;
+};
+
+type ToolActionRow = {
+  _id: string;
+  tool: string;
+  operation: string;
+  state: "proposed" | "approved" | "rejected" | "expired" | "revoked";
+  rationale: string;
+  requiredAuthority: "T0" | "T1" | "T2" | "T3";
+  destructive: boolean;
+  approvalExpiresAt?: number;
+  isApprovalExpired?: boolean;
+  revokedReason?: string;
   createdAt: number;
 };
 
@@ -226,6 +285,31 @@ function mapNote(row: NoteRow) {
   };
 }
 
+/**
+ * Read-only mapping. Console 01 exposes no way to propose, approve, revoke,
+ * reject, or execute a governed action — only to inspect its consent-
+ * lifecycle state (see docs/superpowers/plans/2026-07-30-tool-action-consent-lifecycle.md).
+ */
+function mapGovernedAction(row: ToolActionRow) {
+  return {
+    id: row._id,
+    tool: row.tool,
+    operation: row.operation,
+    state: row.state,
+    rationale: row.rationale,
+    requiredAuthority: row.requiredAuthority,
+    destructive: row.destructive,
+    ...(row.approvalExpiresAt === undefined ? {} : { approvalExpiresAt: row.approvalExpiresAt }),
+    ...(row.isApprovalExpired === undefined ? {} : { isApprovalExpired: row.isApprovalExpired }),
+    ...(row.revokedReason === undefined ? {} : { revokedReason: row.revokedReason }),
+    createdAt: row.createdAt,
+  };
+}
+
+function emptyPageMetadata(requestedPageSize: number) {
+  return { isDone: true, continueCursor: "", returnedCount: 0, requestedPageSize };
+}
+
 async function loadConsoleState(
   activity: string[] = [],
   pageRequest: ConsolePageRequest = {},
@@ -237,7 +321,7 @@ async function loadConsoleState(
     const request = normaliseConsolePageRequest(pageRequest);
     requestedPageSize = request.pageSize;
     const { client, serviceToken } = requireBridge();
-    const [taskPage, reminderPage, notePage] = await Promise.all([
+    const [taskPage, reminderPage, notePage, governedActionRows] = await Promise.all([
       client.query(anyApi.tasks.listPage, {
         serviceToken,
         paginationOpts: { numItems: request.pageSize, cursor: request.taskCursor },
@@ -251,10 +335,18 @@ async function loadConsoleState(
         projectId: NOTES_PROJECT_ID,
         paginationOpts: { numItems: request.pageSize, cursor: request.noteCursor },
       }) as Promise<ConsolePage<NoteRow>>,
+      // Read-only inspection: no cursor pagination exists for tool actions
+      // yet, so this is a bounded recent-first snapshot, not a full register.
+      client.query(anyApi.toolActions.listRecent, {
+        serviceToken,
+        projectKey: NOTES_PROJECT_ID,
+        limit: request.pageSize,
+      }) as Promise<ToolActionRow[]>,
     ]);
     const tasks = taskPage.page.map(mapTask);
     const reminders = reminderPage.page.map(mapReminder);
     const notes = notePage.page.map(mapNote);
+    const governedActions = governedActionRows.map(mapGovernedAction);
     const summary = buildConsolePageSummary(taskPage, reminderPage, notePage, request.pageSize, {
       taskCursor: request.taskCursor,
       reminderCursor: request.reminderCursor,
@@ -279,6 +371,7 @@ async function loadConsoleState(
       tasks,
       reminders,
       notes,
+      governedActions,
       systems: [
         { label: "MCP endpoint", value: "ONLINE", state: "good" },
         { label: "Manufact", value: "DEPLOYED", state: "good" },
@@ -312,6 +405,7 @@ async function loadConsoleState(
       tasks: [],
       reminders: [],
       notes: [],
+      governedActions: [],
       systems: [
         { label: "MCP endpoint", value: "ONLINE", state: "good" },
         { label: "Manufact", value: "DEPLOYED", state: "good" },
@@ -331,24 +425,9 @@ async function loadConsoleState(
         notesPartial: false,
       },
       pagination: {
-        tasks: {
-          isDone: true,
-          continueCursor: "",
-          returnedCount: 0,
-          requestedPageSize,
-        },
-        reminders: {
-          isDone: true,
-          continueCursor: "",
-          returnedCount: 0,
-          requestedPageSize,
-        },
-        notes: {
-          isDone: true,
-          continueCursor: "",
-          returnedCount: 0,
-          requestedPageSize,
-        },
+        tasks: emptyPageMetadata(requestedPageSize),
+        reminders: emptyPageMetadata(requestedPageSize),
+        notes: emptyPageMetadata(requestedPageSize),
       },
     };
   }

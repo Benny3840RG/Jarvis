@@ -5,6 +5,7 @@ import { afterEach, describe, it } from "node:test";
 import type { NestFastifyApplication } from "@nestjs/platform-fastify";
 
 import { createJarvisHttpApp, type RegisteredRoute } from "../src/http/app.js";
+import type { RuntimeReconciliationHealth } from "../src/reconciliation/runtimeReconciliationHost.js";
 import { IMPLEMENTED_CAPABILITIES, type Capability } from "../src/http/contracts.js";
 import {
   resolveHttpAppConfig,
@@ -89,12 +90,14 @@ async function makeApp(
     persistence?: PersistenceProvider;
     providerName?: "json" | "convex";
     config?: Partial<HttpAppConfig>;
+    reconciliationHealth?: () => RuntimeReconciliationHealth;
   } = {},
 ): Promise<NestFastifyApplication> {
   const app = await createJarvisHttpApp({
     persistence: options.persistence ?? makePersistence(),
     providerName: options.providerName ?? "json",
     config: { ...BASE_CONFIG, ...options.config },
+    reconciliationHealth: options.reconciliationHealth,
     logger: false,
   });
   openApps.push(app);
@@ -583,6 +586,7 @@ describe("Jarvis HTTP system boundary", () => {
       version: string;
       sourceVersion: string;
       provider: Record<string, unknown>;
+      reconciliation: { state: string; enabled: boolean };
       timezone: string;
       layers: Record<string, { status: string; reason?: string }>;
       zState: string;
@@ -601,12 +605,52 @@ describe("Jarvis HTTP system boundary", () => {
       schemaCompatibility: "compatible",
       deploymentVersion: "dev/outgoing-ram-798",
     });
+    assert.deepEqual(body.reconciliation, { state: "disabled", enabled: false });
     assert.equal(body.timezone, "Australia/Melbourne");
     assert.equal(body.layers.runtime.status, "partial");
     assert.equal(body.layers.integration.status, "inactive");
     assert.equal(body.layers.reliability.status, "inactive");
     assert.equal(body.zState, "disabled");
     assert.equal(Number.isNaN(Date.parse(body.checkedAt)), false);
+  });
+
+  it("returns injected degraded reconciliation health without raw errors", async () => {
+    const app = await makeApp({
+      reconciliationHealth: () => ({
+        state: "degraded",
+        enabled: true,
+        workerId: "runtime-worker-1",
+        startedAt: "2026-07-27T23:00:00.000Z",
+        lastCycleStartedAt: "2026-07-27T23:00:05.000Z",
+        lastCycleCompletedAt: "2026-07-27T23:00:06.000Z",
+        lastCycleProcessed: 2,
+        lastErrorCode: "reconciliation-loop-failed",
+      }),
+    });
+    const response = await app
+      .getHttpAdapter()
+      .getInstance()
+      .inject({
+        method: "GET",
+        url: "/api/v1/status",
+        headers: { authorization: "Bearer current-secret" },
+      });
+
+    assert.equal(response.statusCode, 200);
+    assert.deepEqual(
+      response.json<{ reconciliation: RuntimeReconciliationHealth }>().reconciliation,
+      {
+        state: "degraded",
+        enabled: true,
+        workerId: "runtime-worker-1",
+        startedAt: "2026-07-27T23:00:00.000Z",
+        lastCycleStartedAt: "2026-07-27T23:00:05.000Z",
+        lastCycleCompletedAt: "2026-07-27T23:00:06.000Z",
+        lastCycleProcessed: 2,
+        lastErrorCode: "reconciliation-loop-failed",
+      },
+    );
+    assert.doesNotMatch(response.body, /secret|stack|provider-reference/);
   });
 
   it("returns a redacted service problem when persistence is unavailable", async () => {

@@ -3,7 +3,7 @@ import { v } from "convex/values";
 
 import { collectBounded, requireOwner } from "./authHelpers.js";
 import { reminderActionResultValidator } from "./internalActionValidators.js";
-import { cleanRequiredText } from "./toolActionLogic.js";
+import { cleanRequiredText, requirePageSize } from "./toolActionLogic.js";
 import { mutation, query, type MutationCtx } from "./_generated/server.js";
 
 const reminderValidator = v.object({
@@ -16,6 +16,8 @@ const reminderValidator = v.object({
   dueAt: v.optional(v.number()),
   dueTimezone: v.optional(v.string()),
   projectId: v.optional(v.string()),
+  directCreateIdempotencyKey: v.optional(v.string()),
+  directCreateFingerprint: v.optional(v.string()),
   updatedAt: v.optional(v.number()),
   revision: v.optional(v.number()),
   createdAt: v.number(),
@@ -26,6 +28,33 @@ type DueFields = { dueRaw?: string; dueAt?: number; dueTimezone?: string };
 function cleanOptionalText(value: string | undefined, field: string): string | undefined {
   if (value === undefined) return undefined;
   return cleanRequiredText(value, field);
+}
+
+function directCreateIdentity(
+  idempotencyKey: string | undefined,
+  requestFingerprint: string | undefined,
+): { idempotencyKey?: string; requestFingerprint?: string } {
+  if ((idempotencyKey === undefined) !== (requestFingerprint === undefined)) {
+    throw new Error(
+      "Reminder create idempotency key and request fingerprint must be supplied together.",
+    );
+  }
+  if (idempotencyKey === undefined || requestFingerprint === undefined) return {};
+  return {
+    idempotencyKey: cleanRequiredText(idempotencyKey, "Reminder create idempotency key"),
+    requestFingerprint: cleanRequiredText(
+      requestFingerprint,
+      "Reminder create request fingerprint",
+    ),
+  };
+}
+
+function requireDirectlyMutableReminder(reminder: { projectId?: string }): void {
+  if (reminder.projectId !== undefined) {
+    throw new Error(
+      "Project-scoped reminders must be changed through controlled reminder execution.",
+    );
+  }
 }
 
 function validatedDue(args: DueFields): DueFields {
@@ -119,19 +148,86 @@ export const create = mutation({
     dueRaw: v.optional(v.string()),
     dueAt: v.optional(v.number()),
     dueTimezone: v.optional(v.string()),
+    idempotencyKey: v.optional(v.string()),
+    requestFingerprint: v.optional(v.string()),
   },
   returns: reminderValidator,
   handler: async (ctx, args) => {
     const ownerId = requireOwner(args.serviceToken);
+    const title = cleanRequiredText(args.title, "Reminder title");
     const due = validatedDue(args);
+    const identity = directCreateIdentity(args.idempotencyKey, args.requestFingerprint);
+
+    if (identity.idempotencyKey !== undefined && identity.requestFingerprint !== undefined) {
+      const receipt = await ctx.db
+        .query("directCreateReceipts")
+        .withIndex("by_owner_type_and_key", (q) =>
+          q
+            .eq("ownerId", ownerId)
+            .eq("entityType", "reminder")
+            .eq("idempotencyKey", identity.idempotencyKey as string),
+        )
+        .unique();
+      if (receipt) {
+        if (receipt.requestFingerprint !== identity.requestFingerprint) {
+          throw new Error("Reminder create idempotency key conflict.");
+        }
+        const receiptReminderId = ctx.db.normalizeId("reminders", receipt.entityId);
+        const receiptReminder = receiptReminderId
+          ? await ctx.db.get("reminders", receiptReminderId)
+          : null;
+        if (!receiptReminder || receiptReminder.ownerId !== ownerId) {
+          throw new Error("Reminder from this create request is no longer available.");
+        }
+        return receiptReminder;
+      }
+
+      const existing = await ctx.db
+        .query("reminders")
+        .withIndex("by_owner_and_direct_create_idempotency_key", (q) =>
+          q.eq("ownerId", ownerId).eq("directCreateIdempotencyKey", identity.idempotencyKey),
+        )
+        .unique();
+      if (existing) {
+        if (existing.directCreateFingerprint !== identity.requestFingerprint) {
+          throw new Error("Reminder create idempotency key conflict.");
+        }
+        await ctx.db.insert("directCreateReceipts", {
+          ownerId,
+          entityType: "reminder",
+          entityId: existing._id,
+          idempotencyKey: identity.idempotencyKey,
+          requestFingerprint: identity.requestFingerprint,
+          createdAt: Date.now(),
+        });
+        return existing;
+      }
+    }
+
     const id = await ctx.db.insert("reminders", {
       ownerId,
-      title: args.title,
+      title,
       ...due,
+      ...(identity.idempotencyKey === undefined
+        ? {}
+        : {
+            directCreateIdempotencyKey: identity.idempotencyKey,
+            directCreateFingerprint: identity.requestFingerprint as string,
+          }),
       createdAt: Date.now(),
     });
     const reminder = await ctx.db.get("reminders", id);
     if (!reminder) throw new Error("Reminder creation failed.");
+    if (identity.idempotencyKey !== undefined && identity.requestFingerprint !== undefined) {
+      await ctx.db.insert("directCreateReceipts", {
+        ownerId,
+        entityType: "reminder",
+        entityId: id,
+        idempotencyKey: identity.idempotencyKey,
+        requestFingerprint: identity.requestFingerprint,
+        createdAt: Date.now(),
+      });
+    }
     return reminder;
   },
 });
@@ -224,10 +320,7 @@ export const listPage = query({
   returns: paginationResultValidator(reminderValidator),
   handler: async (ctx, args) => {
     const ownerId = requireOwner(args.serviceToken);
-    const { numItems } = args.paginationOpts;
-    if (!Number.isInteger(numItems) || numItems < 1 || numItems > 100) {
-      throw new Error("Reminder page size must be an integer from 1 to 100.");
-    }
+    requirePageSize(args.paginationOpts.numItems, "Reminder");
     return ctx.db
       .query("reminders")
       .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
@@ -282,15 +375,19 @@ export const update = mutation({
     if (!id) return null;
     const reminder = await ctx.db.get("reminders", id);
     if (!reminder || reminder.ownerId !== ownerId) return null;
+    requireDirectlyMutableReminder(reminder);
 
     const due = clearDue ? {} : (suppliedDue ?? existingDue(reminder));
     await ctx.db.replace("reminders", id, {
       ownerId,
       title: title ?? reminder.title,
       ...due,
-      ...(reminder.projectId === undefined ? {} : { projectId: reminder.projectId }),
-      ...(reminder.updatedAt === undefined ? {} : { updatedAt: reminder.updatedAt }),
-      ...(reminder.revision === undefined ? {} : { revision: reminder.revision }),
+      ...(reminder.directCreateIdempotencyKey === undefined
+        ? {}
+        : { directCreateIdempotencyKey: reminder.directCreateIdempotencyKey }),
+      ...(reminder.directCreateFingerprint === undefined
+        ? {}
+        : { directCreateFingerprint: reminder.directCreateFingerprint }),
       createdAt: reminder.createdAt,
     });
     return ctx.db.get("reminders", id);
@@ -371,6 +468,7 @@ export const remove = mutation({
     if (!id) return null;
     const reminder = await ctx.db.get("reminders", id);
     if (!reminder || reminder.ownerId !== ownerId) return null;
+    requireDirectlyMutableReminder(reminder);
     await ctx.db.delete("reminders", id);
     return reminder;
   },
@@ -388,12 +486,14 @@ export const cleanupControlled = mutation({
     if (reminder && reminder.ownerId === ownerId && reminder.projectId === projectId) {
       await ctx.db.delete("reminders", id);
     }
-    const results = await ctx.db
-      .query("internalActionResults")
-      .withIndex("by_owner_entity", (q) =>
-        q.eq("ownerId", ownerId).eq("entityType", "reminder").eq("entityId", id),
-      )
-      .collect();
+    const results = await collectBounded(
+      ctx.db
+        .query("internalActionResults")
+        .withIndex("by_owner_entity", (q) =>
+          q.eq("ownerId", ownerId).eq("entityType", "reminder").eq("entityId", id),
+        ),
+      "Reminder action result",
+    );
     for (const result of results) {
       if (result.projectId === projectId) {
         await ctx.db.delete("internalActionResults", result._id);

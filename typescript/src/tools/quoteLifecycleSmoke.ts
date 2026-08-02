@@ -86,6 +86,14 @@ export async function runQuoteLifecycleSmoke(
       revision: 1,
       expectedAggregateVersion: reviewed.aggregate.aggregateVersion,
       expectedRevisionVersion: reviewed.revision.revisionVersion,
+      issuer: {
+        name: "Jarvis Smoke Issuer",
+        email: "issuer@example.invalid",
+      },
+      client: {
+        name: "Jarvis Smoke Client",
+        email: recipient,
+      },
     });
     requireCondition(
       finalized.revision.status === "finalized" && finalized.revision.fingerprint !== undefined,

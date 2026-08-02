@@ -94,13 +94,24 @@ internal stack details are never included.
 ## Status semantics
 
 A successful status read checks state, tasks, and reminders through the selected persistence
-provider before returning `reachability: ok` and `schemaCompatibility: compatible`. JSON reports
+provider before returning `reachability: ok` and `schemaCompatibility: compatible`. It also returns
+a process-local `reconciliation` snapshot. The snapshot is `disabled` unless reconciliation is
+explicitly enabled; enabled snapshots may include the safe worker ID, cycle timestamps, bounded
+processed count, and the stable `reconciliation-loop-failed` code. Tokens, record IDs, provider
+references, raw exceptions, and stacks are never returned. JSON reports
 `authentication: not-required`; Convex reports `authentication: ok` only after its authenticated
 reads succeed.
 
 Layer readiness is deliberately independent of process health. The maintained storage runtime can
 be healthy while prototype Z-State layers remain `partial` or `inactive`; Z-State therefore stays
 `disabled` until the stabilisation, proposal-safety, and reliability requirements are implemented.
+
+Status also reports `integrations`: an array of evidence-backed integration-commissioning line items
+(`{name, status: "commissioned" | "not-commissioned", reason?}`), never a percentage and never inferred
+from an environment variable simply being set. See
+[Operations Inbox, Activity Timeline & Integration Health](./operations-inbox.md) for the full source-of-
+truth map, including the read-only Operations Inbox (`GET /api/v1/operations/inbox`) and Activity Timeline
+(`GET /api/v1/operations/activity`) endpoints.
 
 ## Exposure boundary
 

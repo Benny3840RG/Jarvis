@@ -8,12 +8,19 @@ type SchedulerOptions = {
   intervalMs: number;
   maxBatchSize: number;
   sleep?: (milliseconds: number, signal: AbortSignal) => Promise<void>;
+  observeCycle?: (observation: ReconciliationCycleObservation) => void;
 };
 
 export type ReconciliationCycleResult = {
   processed: number;
   skipped: boolean;
 };
+
+export type ReconciliationCycleObservation =
+  | { type: "started" }
+  | { type: "completed"; processed: number }
+  | { type: "skipped" }
+  | { type: "failed" };
 
 function positiveInteger(value: number, name: string): number {
   if (!Number.isSafeInteger(value) || value < 1) {
@@ -41,6 +48,8 @@ export class ReconciliationScheduler {
   private readonly intervalMs: number;
   private readonly maxBatchSize: number;
   private readonly sleep: (milliseconds: number, signal: AbortSignal) => Promise<void>;
+  private readonly observeCycle:
+    ((observation: ReconciliationCycleObservation) => void) | undefined;
   private cycleRunning = false;
 
   constructor(
@@ -56,11 +65,16 @@ export class ReconciliationScheduler {
       "Reconciliation scheduler batch size",
     );
     this.sleep = options.sleep ?? abortableSleep;
+    this.observeCycle = options.observeCycle;
   }
 
   async runCycle(signal: AbortSignal): Promise<ReconciliationCycleResult> {
-    if (this.cycleRunning) return { processed: 0, skipped: true };
+    if (this.cycleRunning) {
+      this.notify({ type: "skipped" });
+      return { processed: 0, skipped: true };
+    }
     this.cycleRunning = true;
+    this.notify({ type: "started" });
     try {
       let processed = 0;
       while (!signal.aborted && processed < this.maxBatchSize) {
@@ -72,7 +86,11 @@ export class ReconciliationScheduler {
         if (result.status === "idle") break;
         processed += 1;
       }
+      this.notify({ type: "completed", processed });
       return { processed, skipped: false };
+    } catch (error: unknown) {
+      this.notify({ type: "failed" });
+      throw error;
     } finally {
       this.cycleRunning = false;
     }
@@ -83,6 +101,14 @@ export class ReconciliationScheduler {
       await this.runCycle(signal);
       if (signal.aborted) break;
       await this.sleep(this.intervalMs, signal);
+    }
+  }
+
+  private notify(observation: ReconciliationCycleObservation): void {
+    try {
+      this.observeCycle?.(observation);
+    } catch {
+      // Observation is best-effort and must not alter reconciliation outcomes.
     }
   }
 }

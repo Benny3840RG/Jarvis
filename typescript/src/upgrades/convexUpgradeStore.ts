@@ -18,6 +18,7 @@ type UpgradeRow = {
   version?: string;
   occurredAt?: number;
   createdAt: number;
+  updatedAt?: number;
 };
 
 function upgradeFromConvex(row: UpgradeRow): Upgrade {
@@ -33,6 +34,7 @@ function upgradeFromConvex(row: UpgradeRow): Upgrade {
     ...(row.version === undefined ? {} : { version: row.version }),
     ...(row.occurredAt === undefined ? {} : { occurredAt: row.occurredAt }),
     createdAt: row.createdAt,
+    ...(row.updatedAt === undefined ? {} : { updatedAt: row.updatedAt }),
   };
 }
 

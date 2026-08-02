@@ -15,17 +15,23 @@ import type { BuildLogStore } from "../buildLog/buildLogEntry.js";
 import type { UpgradeStore } from "../upgrades/upgrade.js";
 import type { AssetStore } from "../assets/asset.js";
 import type { PreferenceStore } from "../preferences/preference.js";
+import type { NoteStore } from "../notes/note.js";
 import type { MemoryChangeSetService } from "../memory/memoryChangeSets.js";
 import type { PersistenceProvider } from "../persistence/persistence.js";
 import type { PersistenceProviderName } from "../persistence/providerSelection.js";
 import type { TotalityPipeline } from "../totality/totalityPipeline.js";
+import type { RuntimeReconciliationHealth } from "../reconciliation/runtimeReconciliationHost.js";
+import type { ActivityEventReader } from "../operations/activityTimeline.js";
 import type { HttpAppConfig } from "./config.js";
+import { ActivityTimelineController } from "./activityTimelineController.js";
 import { BriefController } from "./briefController.js";
 import { BuildController } from "./buildController.js";
 import { BuildLogController } from "./buildLogController.js";
 import { UpgradeController } from "./upgradeController.js";
 import { AssetController } from "./assetController.js";
 import { PreferenceController } from "./preferenceController.js";
+import { NoteController } from "./noteController.js";
+import { OperationsInboxController } from "./operationsInboxController.js";
 import { ErrandController } from "./errandController.js";
 import { MemoryChangeSetController } from "./memoryChangeSetController.js";
 import { ProblemDetailsFilter } from "./problemDetails.js";
@@ -53,9 +59,12 @@ import {
   HTTP_UPGRADE_STORE,
   HTTP_ASSET_STORE,
   HTTP_PREFERENCE_STORE,
+  HTTP_NOTE_STORE,
+  HTTP_ACTIVITY_EVENTS,
   HTTP_MEMORY_CHANGE_SETS,
   HTTP_PERSISTENCE,
   HTTP_PROVIDER_NAME,
+  HTTP_RECONCILIATION_HEALTH,
   HTTP_TOOL_ACTIONS,
   HTTP_TOOL_EXECUTION,
   HTTP_TOTALITY_PIPELINE,
@@ -64,6 +73,7 @@ import {
 export type JarvisHttpModuleOptions = {
   persistence: PersistenceProvider;
   providerName: PersistenceProviderName;
+  reconciliationHealth: () => RuntimeReconciliationHealth;
   config: HttpAppConfig;
   totalityPipeline: TotalityPipeline | null;
   memoryChangeSetService: MemoryChangeSetService | null;
@@ -80,6 +90,8 @@ export type JarvisHttpModuleOptions = {
   upgradeStore: UpgradeStore;
   assetStore: AssetStore;
   preferenceStore: PreferenceStore;
+  noteStore: NoteStore;
+  activityEventReader: ActivityEventReader | null;
 };
 
 @Module({})
@@ -104,7 +116,10 @@ export class JarvisHttpModule {
         UpgradeController,
         AssetController,
         PreferenceController,
+        NoteController,
         BriefController,
+        OperationsInboxController,
+        ActivityTimelineController,
       ],
       providers: [
         { provide: HTTP_APP_CONFIG, useValue: options.config },
@@ -120,7 +135,10 @@ export class JarvisHttpModule {
         { provide: HTTP_UPGRADE_STORE, useValue: options.upgradeStore },
         { provide: HTTP_ASSET_STORE, useValue: options.assetStore },
         { provide: HTTP_PREFERENCE_STORE, useValue: options.preferenceStore },
+        { provide: HTTP_NOTE_STORE, useValue: options.noteStore },
+        { provide: HTTP_ACTIVITY_EVENTS, useValue: options.activityEventReader },
         { provide: HTTP_PROVIDER_NAME, useValue: options.providerName },
+        { provide: HTTP_RECONCILIATION_HEALTH, useValue: options.reconciliationHealth },
         { provide: HTTP_TOTALITY_PIPELINE, useValue: options.totalityPipeline },
         { provide: HTTP_MEMORY_CHANGE_SETS, useValue: options.memoryChangeSetService },
         { provide: HTTP_TOOL_ACTIONS, useValue: options.toolActionService },

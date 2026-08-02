@@ -2,8 +2,13 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+  clampApprovalTtlMs,
+  deriveConsumptionPolicy,
+  deriveDefaultApprovalTtlMs,
+  isApprovalExpired,
   normaliseAuditPayload,
   normaliseToolArguments,
+  requirePageSize,
   sameToolActionProposal,
   validateToolAuthority,
   type ToolActionProposalValues,
@@ -97,6 +102,35 @@ describe("tool action proposal validation", () => {
   });
 });
 
+describe("page size bounds shared by tasks, reminders, and notes listPage queries", () => {
+  it("accepts integers from 1 to 100 and returns them unchanged", () => {
+    assert.equal(requirePageSize(1, "Task"), 1);
+    assert.equal(requirePageSize(50, "Reminder"), 50);
+    assert.equal(requirePageSize(100, "Note"), 100);
+  });
+
+  it("rejects out-of-range, non-integer, and non-finite values with a domain-labelled message", () => {
+    for (const value of [
+      0,
+      101,
+      1.5,
+      Number.NaN,
+      Number.POSITIVE_INFINITY,
+      Number.NEGATIVE_INFINITY,
+    ]) {
+      assert.throws(
+        () => requirePageSize(value, "Task"),
+        /Task page size must be an integer from 1 to 100\./,
+      );
+    }
+  });
+
+  it("labels the error with the caller's domain name", () => {
+    assert.throws(() => requirePageSize(0, "Reminder"), /Reminder page size/);
+    assert.throws(() => requirePageSize(0, "Note"), /Note page size/);
+  });
+});
+
 describe("audit payload sanitisation", () => {
   it("normalises a clean payload deterministically", () => {
     assert.deepEqual(normaliseAuditPayload({ actionId: "a-1", nested: { b: 2, a: 1 }, count: 3 }), {
@@ -122,5 +156,50 @@ describe("audit payload sanitisation", () => {
 
   it("labels its errors as audit payload rejections, not tool-action arguments", () => {
     assert.throws(() => normaliseAuditPayload({ apiKey: "secret" }), /Audit payload key/);
+  });
+});
+
+describe("consent-lifecycle policy derivation (R-048/R-049/R-050)", () => {
+  it("derives single-use for destructive proposals and reusable otherwise", () => {
+    assert.equal(deriveConsumptionPolicy(true), "single-use");
+    assert.equal(deriveConsumptionPolicy(false), "reusable");
+  });
+
+  it("derives a shorter default approval TTL for destructive proposals", () => {
+    const destructiveTtl = deriveDefaultApprovalTtlMs(true);
+    const nonDestructiveTtl = deriveDefaultApprovalTtlMs(false);
+    assert.ok(destructiveTtl > 0);
+    assert.ok(nonDestructiveTtl > 0);
+    assert.ok(destructiveTtl < nonDestructiveTtl);
+  });
+
+  it("clamps a caller-supplied TTL override into the bounded range for that risk tier", () => {
+    const defaultTtl = deriveDefaultApprovalTtlMs(false);
+    assert.equal(clampApprovalTtlMs(undefined, false), defaultTtl);
+    assert.equal(clampApprovalTtlMs(1, false), clampApprovalTtlMs(0, false));
+    assert.ok(
+      clampApprovalTtlMs(1, false) > 0,
+      "a too-small override is clamped up, not accepted verbatim",
+    );
+    assert.ok(
+      clampApprovalTtlMs(Number.MAX_SAFE_INTEGER, false) < Number.MAX_SAFE_INTEGER,
+      "a too-large override is clamped down, not accepted verbatim",
+    );
+  });
+
+  it("rejects non-finite or non-integer TTL overrides rather than silently falling back", () => {
+    assert.throws(() => clampApprovalTtlMs(Number.NaN, false), /finite integer/);
+    assert.throws(() => clampApprovalTtlMs(1.5, false), /finite integer/);
+    assert.throws(() => clampApprovalTtlMs(Number.POSITIVE_INFINITY, false), /finite integer/);
+  });
+
+  it("treats now === expiresAt as already expired (fail-closed boundary)", () => {
+    assert.equal(isApprovalExpired({ policy: "ttl", expiresAt: 1000 }, 999), false);
+    assert.equal(isApprovalExpired({ policy: "ttl", expiresAt: 1000 }, 1000), true);
+    assert.equal(isApprovalExpired({ policy: "ttl", expiresAt: 1000 }, 1001), true);
+  });
+
+  it("never treats a non-expiring policy as expired regardless of the clock", () => {
+    assert.equal(isApprovalExpired({ policy: "non-expiring" }, Number.MAX_SAFE_INTEGER), false);
   });
 });

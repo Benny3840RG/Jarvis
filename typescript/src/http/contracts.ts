@@ -1,3 +1,5 @@
+import type { RuntimeReconciliationHealth } from "../reconciliation/runtimeReconciliationHost.js";
+
 export type Capability = {
   operationId: string;
   summary: string;
@@ -42,11 +44,19 @@ export type ProviderStatus = {
   deploymentVersion: string | null;
 };
 
+export type IntegrationStatus = {
+  name: string;
+  status: "commissioned" | "not-commissioned";
+  reason?: string;
+};
+
 export type SystemStatus = {
   status: "ok" | "degraded" | "unavailable";
   version: string;
   sourceVersion: string;
   provider: ProviderStatus;
+  reconciliation: RuntimeReconciliationHealth;
+  integrations: IntegrationStatus[];
   timezone: string;
   layers: LayersStatus;
   zState: "disabled" | "stabilising" | "active" | "suspended";

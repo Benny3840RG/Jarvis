@@ -22,6 +22,8 @@ const scopeArgs = {
   effectFingerprint: v.string(),
 };
 
+const OBSERVING_RECOVERY_MS = 60_000;
+
 function cleanScope(args: {
   projectId: string;
   tool: string;
@@ -126,7 +128,9 @@ function receiptDocument(
       | "provider-reference-missing"
       | "retry-blocked-pending-reconciliation"
       | "reconciliation-escalated"
-      | "reconciliation-unavailable";
+      | "reconciliation-unavailable"
+      | "approval-expired"
+      | "approval-consumed";
     providerErrorCode?: string;
     startedAt: number;
     completedAt: number;
@@ -555,6 +559,25 @@ export const claimNext = mutation({
       throw new Error("Lease duration must be an integer between 1 and 300000 milliseconds.");
     }
 
+    const abandonedObservation = await ctx.db
+      .query("externalReconciliations")
+      .withIndex("by_owner_and_state_and_next_attempt_at", (q) =>
+        q
+          .eq("ownerId", ownerId)
+          .eq("state", "observing")
+          .lt("nextAttemptAt", args.now - OBSERVING_RECOVERY_MS),
+      )
+      .first();
+    if (abandonedObservation) {
+      await ctx.db.patch("externalReconciliations", abandonedObservation._id, {
+        state: "escalated",
+        escalationReason: "abandoned-observing-process-interruption",
+        updatedAt: args.now,
+        escalatedAt: args.now,
+      });
+      return null;
+    }
+
     let candidate = await ctx.db
       .query("externalReconciliations")
       .withIndex("by_owner_and_state_and_next_attempt_at", (q) =>
@@ -629,6 +652,30 @@ export const resolveClaim = mutation({
     const receipt = await findReceipt(ctx, ownerId, reconciliation.receiptKey);
     if (!receipt) throw new Error("Authoritative reconciliation receipt was not found.");
 
+    const providerErrorCode =
+      args.result.status === "failed"
+        ? cleanRequiredText(args.result.errorCode, "Provider reconciliation error code")
+        : undefined;
+    const quoteDelivery = await ctx.db
+      .query("quoteDeliveryAttempts")
+      .withIndex("by_owner_and_reconciliation_id", (q) =>
+        q.eq("ownerId", ownerId).eq("reconciliationId", reconciliationId),
+      )
+      .unique();
+    if (quoteDelivery?.status === "reconciled") {
+      const outcomeConflicts = quoteDelivery.reconciledOutcome !== args.result.status;
+      const providerErrorConflicts = quoteDelivery.providerErrorCode !== providerErrorCode;
+      if (outcomeConflicts || providerErrorConflicts) {
+        throw new Error(
+          "Quote delivery reconciliation outcome conflicts with the provider result.",
+        );
+      }
+    } else if (quoteDelivery && quoteDelivery.status !== "indeterminate") {
+      throw new Error(
+        `Quote delivery attempt is ${quoteDelivery.status}, expected indeterminate before reconciliation.`,
+      );
+    }
+
     const replacement = receiptDocument(
       ownerId,
       receipt.receiptKey,
@@ -677,6 +724,19 @@ export const resolveClaim = mutation({
       updatedAt: args.now,
       resolvedAt: args.now,
     });
+    if (quoteDelivery?.status === "indeterminate") {
+      await ctx.db.patch("quoteDeliveryAttempts", quoteDelivery._id, {
+        status: "reconciled",
+        reconciledOutcome: args.result.status,
+        ...(args.result.status === "failed"
+          ? {
+              providerErrorCode: providerErrorCode!,
+            }
+          : {}),
+        reconciledAt: args.now,
+        updatedAt: args.now,
+      });
+    }
     const updatedReceipt = await ctx.db.get("toolExecutionReceipts", receipt._id);
     if (!updatedReceipt) throw new Error("Authoritative receipt resolution failed.");
     return updatedReceipt;

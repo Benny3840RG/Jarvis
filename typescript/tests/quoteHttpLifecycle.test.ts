@@ -32,6 +32,11 @@ const CONFIG: HttpAppConfig = {
 
 const AUTH = { authorization: "Bearer current-secret" };
 const ENVELOPE = { expectedAggregateVersion: 0, expectedRevisionVersion: 0 };
+const FINALIZE_PAYLOAD = {
+  ...ENVELOPE,
+  issuer: { name: "Benny's Trade Services", email: "quotes@example.com" },
+  client: { name: "Example Client", email: "client@example.com" },
+};
 
 function unusedPersistence(): PersistenceProvider {
   const forbidden = (): never => {
@@ -231,7 +236,7 @@ describe("controlled quote HTTP lifecycle", () => {
     assert.equal(
       (
         await inject(app, "POST", "/api/v1/quotes/quote-1/revisions/1/finalize", {
-          payload: ENVELOPE,
+          payload: FINALIZE_PAYLOAD,
         })
       ).statusCode,
       200,
@@ -320,7 +325,7 @@ describe("controlled quote HTTP lifecycle", () => {
     assert.equal(
       (
         await inject(finalizeApp, "POST", "/api/v1/quotes/quote-1/revisions/1/finalize", {
-          payload: ENVELOPE,
+          payload: FINALIZE_PAYLOAD,
         })
       ).statusCode,
       409,

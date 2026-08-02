@@ -24,6 +24,7 @@ import {
   quoteDeliveryReconciledOutcomeValidator,
   quoteDeliveryStatusValidator,
 } from "./quoteDeliveryValidators.js";
+import { quotePdfPartyValidator } from "./quotePdfArtifactValidators.js";
 import {
   quoteCommercialStatusValidator,
   quoteHistoricalOutcomeValidator,
@@ -54,12 +55,15 @@ export default defineSchema({
     completed: v.boolean(),
     category: v.string(),
     projectId: v.optional(v.string()),
+    directCreateIdempotencyKey: v.optional(v.string()),
+    directCreateFingerprint: v.optional(v.string()),
     updatedAt: v.optional(v.number()),
     revision: v.optional(v.number()),
     createdAt: v.number(),
   })
     .index("by_owner", ["ownerId"])
-    .index("by_owner_and_project", ["ownerId", "projectId"]),
+    .index("by_owner_and_project", ["ownerId", "projectId"])
+    .index("by_owner_and_direct_create_idempotency_key", ["ownerId", "directCreateIdempotencyKey"]),
   reminders: defineTable({
     ownerId: v.string(),
     title: v.string(),
@@ -68,12 +72,23 @@ export default defineSchema({
     dueAt: v.optional(v.number()),
     dueTimezone: v.optional(v.string()),
     projectId: v.optional(v.string()),
+    directCreateIdempotencyKey: v.optional(v.string()),
+    directCreateFingerprint: v.optional(v.string()),
     updatedAt: v.optional(v.number()),
     revision: v.optional(v.number()),
     createdAt: v.number(),
   })
     .index("by_owner", ["ownerId"])
-    .index("by_owner_and_project", ["ownerId", "projectId"]),
+    .index("by_owner_and_project", ["ownerId", "projectId"])
+    .index("by_owner_and_direct_create_idempotency_key", ["ownerId", "directCreateIdempotencyKey"]),
+  directCreateReceipts: defineTable({
+    ownerId: v.string(),
+    entityType: v.union(v.literal("task"), v.literal("reminder")),
+    entityId: v.string(),
+    idempotencyKey: v.string(),
+    requestFingerprint: v.string(),
+    createdAt: v.number(),
+  }).index("by_owner_type_and_key", ["ownerId", "entityType", "idempotencyKey"]),
   internalActionResults: defineTable({
     ownerId: v.string(),
     projectId: v.string(),
@@ -192,6 +207,25 @@ export default defineSchema({
     updatedAt: v.number(),
     approvedAt: v.optional(v.number()),
     rejectedAt: v.optional(v.number()),
+    // Consent lifecycle (R-048/R-049/R-050): all optional — existing rows
+    // predate these fields and are treated as legacy/unenforced, never
+    // retroactively expired or single-use. Stamped by approve(); consumed
+    // by revoke() and by the (deferred, execute()-time) expiry/consumption
+    // checks. See docs/superpowers/plans/2026-07-30-tool-action-consent-lifecycle.md.
+    approvalExpiryPolicy: v.optional(v.union(v.literal("ttl"), v.literal("non-expiring"))),
+    approvalExpiresAt: v.optional(v.number()),
+    expiredObservedAt: v.optional(v.number()),
+    consumptionPolicy: v.optional(v.union(v.literal("single-use"), v.literal("reusable"))),
+    revokedBy: v.optional(v.literal("user")),
+    revokedReason: v.optional(v.string()),
+    revokedAt: v.optional(v.number()),
+    // Atomic single-use execution claim: set exactly once, by exactly one
+    // caller, via claimSingleUseExecution — never released. This is the
+    // authoritative consumption gate checked before the external effect;
+    // a read-before-effect check alone cannot prevent two different-key
+    // concurrent executions from both crossing the effect boundary.
+    singleUseClaimedAt: v.optional(v.number()),
+    singleUseClaimId: v.optional(v.string()),
   })
     .index("by_owner_and_action_id", ["ownerId", "actionId"])
     .index("by_owner_and_idempotency_key", ["ownerId", "idempotencyKey"])
@@ -317,6 +351,25 @@ export default defineSchema({
     .index("by_owner_and_revision_id", ["ownerId", "revisionId"])
     .index("by_owner_quote_and_status", ["ownerId", "quoteId", "status"])
     .index("by_owner_and_fingerprint", ["ownerId", "fingerprint"]),
+  quotePdfArtifacts: defineTable({
+    ownerId: v.string(),
+    quoteId: v.string(),
+    revisionId: v.string(),
+    revision: v.number(),
+    revisionFingerprint: v.string(),
+    storageId: v.id("_storage"),
+    digest: v.string(),
+    byteLength: v.number(),
+    mediaType: v.literal("application/pdf"),
+    filename: v.string(),
+    rendererVersion: v.literal("quote-pdf:v1"),
+    generatedAt: v.string(),
+    issuer: quotePdfPartyValidator,
+    client: quotePdfPartyValidator,
+    createdAt: v.number(),
+  })
+    .index("by_owner_quote_and_revision", ["ownerId", "quoteId", "revision"])
+    .index("by_owner_and_revision_id", ["ownerId", "revisionId"]),
   quoteDeliveryAttempts: defineTable({
     ownerId: v.string(),
     deliveryAttemptId: v.string(),
@@ -380,7 +433,11 @@ export default defineSchema({
     createdAt: v.number(),
   })
     .index("by_owner_and_scope_key", ["ownerId", "scopeKey"])
-    .index("by_owner_and_request_id", ["ownerId", "requestId"]),
+    .index("by_owner_and_request_id", ["ownerId", "requestId"])
+    // Owner-wide, time-ordered read across all scopes — `by_owner_and_scope_key`
+    // can only page through one project/global scope at a time, which cannot
+    // serve a genuine cross-scope activity timeline.
+    .index("by_owner_and_created_at", ["ownerId", "createdAt"]),
   builds: defineTable({
     ownerId: v.string(),
     name: v.string(),
@@ -411,7 +468,12 @@ export default defineSchema({
     body: v.optional(v.string()),
     occurredAt: v.optional(v.number()),
     createdAt: v.number(),
-  }).index("by_owner", ["ownerId"]),
+    // Optional: existing rows predate this field. Convex requires widening
+    // with an optional field before any backfill migration narrows it.
+    updatedAt: v.optional(v.number()),
+  })
+    .index("by_owner", ["ownerId"])
+    .index("by_owner_and_build_id", ["ownerId", "buildId"]),
   upgrades: defineTable({
     ownerId: v.string(),
     buildId: v.string(),
@@ -424,7 +486,12 @@ export default defineSchema({
     version: v.optional(v.string()),
     occurredAt: v.optional(v.number()),
     createdAt: v.number(),
-  }).index("by_owner", ["ownerId"]),
+    // Optional: existing rows predate this field. Convex requires widening
+    // with an optional field before any backfill migration narrows it.
+    updatedAt: v.optional(v.number()),
+  })
+    .index("by_owner", ["ownerId"])
+    .index("by_owner_and_build_id", ["ownerId", "buildId"]),
   assets: defineTable({
     ownerId: v.string(),
     name: v.string(),

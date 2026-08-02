@@ -11,7 +11,12 @@ import {
 } from "../pagination.js";
 import { propSchema } from "../resources/product-search-result/types.js";
 
-function consoleProps(tasks: unknown[] = [], reminders: unknown[] = [], notes: unknown[] = []) {
+function consoleProps(
+  tasks: unknown[] = [],
+  reminders: unknown[] = [],
+  notes: unknown[] = [],
+  governedActions: unknown[] = [],
+) {
   return {
     title: "JARVIS SYSTEM // CONSOLE 01",
     phase: "TEST",
@@ -24,6 +29,7 @@ function consoleProps(tasks: unknown[] = [], reminders: unknown[] = [], notes: u
     tasks,
     reminders,
     notes,
+    governedActions,
     systems: [],
     activity: [],
     counts: {
@@ -226,15 +232,27 @@ test("Console output schemas reject more than 100 task, reminder, or note rows",
     sensitivity: "internal" as const,
     createdAt: index,
   }));
+  const governedActions = Array.from({ length: 101 }, (_, index) => ({
+    id: `action-${index}`,
+    tool: "notes",
+    operation: "create",
+    state: "proposed" as const,
+    rationale: "Test rationale",
+    requiredAuthority: "T2" as const,
+    destructive: false,
+    createdAt: index,
+  }));
 
   assert.equal(propSchema.safeParse(consoleProps(tasks, [], [])).success, false);
   assert.equal(propSchema.safeParse(consoleProps([], reminders, [])).success, false);
   assert.equal(propSchema.safeParse(consoleProps([], [], notes)).success, false);
+  assert.equal(propSchema.safeParse(consoleProps([], [], [], governedActions)).success, false);
 
   const serverSource = await readFile(new URL("../index.ts", import.meta.url), "utf8");
   assert.match(serverSource, /tasks: z\.array\(taskSchema\)\.max\(100\)/);
   assert.match(serverSource, /reminders: z\.array\(reminderSchema\)\.max\(100\)/);
   assert.match(serverSource, /notes: z\.array\(noteSchema\)\.max\(100\)/);
+  assert.match(serverSource, /governedActions: z\.array\(governedActionSchema\)\.max\(100\)/);
 });
 
 test("Console page summaries reject rows beyond the requested size", () => {
@@ -276,12 +294,16 @@ test("Console output schema enforces returned-count metadata invariants", () => 
   assert.equal(propSchema.safeParse(props).success, false);
 });
 
-test("Console 01 source calls only bounded task, reminder, and note page queries", async () => {
+test("Console 01 source calls only bounded task, reminder, note, and governed-action queries", async () => {
   const source = await readFile(new URL("../index.ts", import.meta.url), "utf8");
   assert.match(source, /anyApi\.tasks\.listPage/);
   assert.match(source, /anyApi\.reminders\.listPage/);
   assert.match(source, /anyApi\.notes\.listPage/);
+  assert.match(source, /anyApi\.toolActions\.listRecent/);
   assert.doesNotMatch(source, /anyApi\.tasks\.list[,)]/);
   assert.doesNotMatch(source, /anyApi\.reminders\.list[,)]/);
   assert.doesNotMatch(source, /anyApi\.notes\.list[,)]/);
+  // toolActions.listRecent must be called with an explicit bounded limit —
+  // never an unbounded full-table read of the governed-action register.
+  assert.match(source, /anyApi\.toolActions\.listRecent,\s*\{[^}]*limit:/s);
 });

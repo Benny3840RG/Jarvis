@@ -1,6 +1,8 @@
+import { paginationOptsValidator, paginationResultValidator } from "convex/server";
 import { v } from "convex/values";
 
 import { collectBounded, requireOwner } from "./authHelpers.js";
+import { requirePageSize } from "./toolActionLogic.js";
 import { mutation, query } from "./_generated/server.js";
 
 const statusValidator = v.union(
@@ -46,6 +48,23 @@ export const list = query({
       ctx.db.query("builds").withIndex("by_owner", (q) => q.eq("ownerId", ownerId)),
       "Build",
     );
+  },
+});
+
+export const listPage = query({
+  args: {
+    serviceToken: v.string(),
+    paginationOpts: paginationOptsValidator,
+  },
+  returns: paginationResultValidator(buildValidator),
+  handler: async (ctx, args) => {
+    const ownerId = requireOwner(args.serviceToken);
+    requirePageSize(args.paginationOpts.numItems, "Build");
+    return ctx.db
+      .query("builds")
+      .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+      .order("desc")
+      .paginate(args.paginationOpts);
   },
 });
 
@@ -161,6 +180,21 @@ export const remove = mutation({
     if (!id) return null;
     const build = await ctx.db.get("builds", id);
     if (!build || build.ownerId !== ownerId) return null;
+
+    const [buildLog, upgrade] = await Promise.all([
+      ctx.db
+        .query("buildLogs")
+        .withIndex("by_owner_and_build_id", (q) => q.eq("ownerId", ownerId).eq("buildId", id))
+        .first(),
+      ctx.db
+        .query("upgrades")
+        .withIndex("by_owner_and_build_id", (q) => q.eq("ownerId", ownerId).eq("buildId", id))
+        .first(),
+    ]);
+    if (buildLog || upgrade) {
+      throw new Error("Build cannot be deleted while build logs or upgrades still reference it.");
+    }
+
     await ctx.db.delete("builds", id);
     return build;
   },

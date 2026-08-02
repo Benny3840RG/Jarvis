@@ -22,6 +22,8 @@ const STATUS: SystemStatus = {
     schemaCompatibility: "compatible",
     deploymentVersion: "dev:outgoing-ram-798",
   },
+  reconciliation: { state: "disabled", enabled: false },
+  integrations: [],
   timezone: "Australia/Melbourne",
   layers: {
     runtime: { status: "ready" },
@@ -35,6 +37,62 @@ const STATUS: SystemStatus = {
   },
   zState: "active",
   checkedAt: "2026-07-18T12:00:00.000Z",
+};
+
+const BRIEF = {
+  generatedAt: "2026-07-30T00:00:00.000Z",
+  timezone: "Australia/Melbourne",
+  headline: "1 open task, 0 reminders due, 1 active project, 1 quote awaiting response.",
+  tasks: {
+    openCount: 1,
+    completedCount: 0,
+    open: [
+      {
+        id: "task-preview-1",
+        title: "Inspect Jarvis preview",
+        completed: false,
+        category: "builds",
+        createdAt: 1,
+      },
+    ],
+  },
+  reminders: { dueCount: 0, upcomingCount: 0, undatedCount: 1, due: [], upcoming: [] },
+  projects: {
+    activeCount: 1,
+    countsByStatus: { lead: 0, quoted: 0, active: 1, on_hold: 0, done: 0 },
+    active: [
+      {
+        id: "project-preview-1",
+        clientId: "client-preview-1",
+        title: "Frankston garden rebuild",
+        status: "active",
+        createdAt: 1,
+        updatedAt: 2,
+      },
+    ],
+  },
+  quotes: {
+    countsByStatus: { draft: 0, sent: 1, accepted: 0, declined: 0 },
+    pipelineTotal: 3200,
+    acceptedTotal: 0,
+    awaitingResponse: [
+      {
+        id: "quote-preview-1",
+        clientId: "client-preview-1",
+        projectId: "project-preview-1",
+        number: "174",
+        status: "sent",
+        lineItems: [{ description: "Garden works", quantity: 1, unitPrice: 3200 }],
+        subtotal: 3200,
+        tax: 0,
+        total: 3200,
+        createdAt: 1,
+        updatedAt: 2,
+      },
+    ],
+    drafts: [],
+  },
+  maintenance: { dueCount: 0, dueSoonCount: 0, due: [], dueSoon: [] },
 };
 
 async function freePort(): Promise<number> {
@@ -69,6 +127,8 @@ function mockFetch(): typeof fetch {
         count: 1,
       });
     }
+    if (path === "/api/v1/brief") return Response.json({ data: BRIEF });
+    if (path === "/api/v1/quotes") return Response.json({ data: [], count: 0 });
     if (path === "/api/v1/reminders") {
       return Response.json({
         data: [
@@ -119,6 +179,8 @@ describe("Jarvis MCP preview protocol", () => {
       assert.ok(names.includes("create_task"));
       assert.ok(names.includes("create_reminder"));
       assert.ok(names.includes("delete_task"));
+      assert.ok(names.includes("list_quotes"));
+      assert.ok(names.includes("get_quote"));
 
       const result = await client.callTool({
         name: "show_jarvis_dashboard",
@@ -144,6 +206,10 @@ describe("Jarvis MCP preview protocol", () => {
             createdAt: 1,
           },
         ],
+        brief: BRIEF,
+        quoteRegister: { status: "ready", quotes: [] },
+        inbox: null,
+        activity: null,
         counts: {
           activeTasks: 1,
           completedTasks: 0,

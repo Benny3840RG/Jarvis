@@ -3,11 +3,13 @@ import { describe, it } from "node:test";
 
 import { createToolExecutionDefinitions } from "../src/actions/toolExecutionFactory.js";
 import type {
+  QuoteEmailPrepareInput,
+  QuoteEmailPreparedReference,
   QuoteEmailProvider,
-  QuoteEmailSendInput,
-  QuoteEmailSendResult,
+  QuoteEmailSendAcceptance,
 } from "../src/quotes/quoteEmailProvider.js";
 import type { QuoteSnapshot } from "../src/quotes/quoteLifecycle.js";
+import type { QuotePdfArtifactRepository } from "../src/quotes/quotePdfArtifactRepository.js";
 import type { QuoteRepository, QuoteSummary } from "../src/quotes/quoteRepository.js";
 import type {
   BindQuoteProviderReferenceInput,
@@ -80,7 +82,10 @@ function unusedQuoteRepository(): QuoteRepository {
 function unusedEmailProvider(): QuoteEmailProvider {
   return {
     name: "unused-provider",
-    async send(_input: QuoteEmailSendInput): Promise<QuoteEmailSendResult> {
+    async prepare(_input: QuoteEmailPrepareInput): Promise<QuoteEmailPreparedReference> {
+      throw new Error("not used in this test");
+    },
+    async sendPrepared(): Promise<QuoteEmailSendAcceptance> {
       throw new Error("not used in this test");
     },
   };
@@ -117,6 +122,14 @@ function unusedDeliveryRepository(): QuoteDeliveryRepository {
       throw new Error("not used in this test");
     },
     async cleanup(_quoteId: string): Promise<boolean> {
+      throw new Error("not used in this test");
+    },
+  };
+}
+
+function unusedPdfArtifacts(): QuotePdfArtifactRepository {
+  return {
+    async getForRevision() {
       throw new Error("not used in this test");
     },
   };
@@ -165,6 +178,7 @@ describe("AM-012/AM-013 governance boundary", () => {
       unusedQuoteRepository(),
       unusedEmailProvider(),
       unusedDeliveryRepository(),
+      unusedPdfArtifacts(),
     );
 
     assert.equal(
@@ -173,7 +187,7 @@ describe("AM-012/AM-013 governance boundary", () => {
     );
   });
 
-  it("only allowlists quotes:send when every one of its three gates is supplied", () => {
+  it("only allowlists quotes:send when every one of its four gates is supplied", () => {
     const withEverythingElse = createToolExecutionDefinitions(
       unusedNoteStore(),
       unusedTaskStore(),
@@ -181,22 +195,24 @@ describe("AM-012/AM-013 governance boundary", () => {
       unusedQuoteRepository(),
       undefined,
       unusedDeliveryRepository(),
+      unusedPdfArtifacts(),
     );
     assert.equal(
       withEverythingElse.some(({ tool, operation }) => `${tool}:${operation}` === "quotes:send"),
       false,
     );
 
-    const withAllThree = createToolExecutionDefinitions(
+    const withAllFour = createToolExecutionDefinitions(
       unusedNoteStore(),
       unusedTaskStore(),
       unusedReminderStore(),
       unusedQuoteRepository(),
       unusedEmailProvider(),
       unusedDeliveryRepository(),
+      unusedPdfArtifacts(),
     );
     assert.equal(
-      withAllThree.some(({ tool, operation }) => `${tool}:${operation}` === "quotes:send"),
+      withAllFour.some(({ tool, operation }) => `${tool}:${operation}` === "quotes:send"),
       true,
     );
   });

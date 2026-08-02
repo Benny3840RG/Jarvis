@@ -1,6 +1,9 @@
+import { paginationOptsValidator, paginationResultValidator } from "convex/server";
 import { v } from "convex/values";
 
 import { collectBounded, requireOwner } from "./authHelpers.js";
+import { requirePageSize } from "./toolActionLogic.js";
+import { requireOwnedBuildId } from "./buildOwnership.js";
 import { mutation, query } from "./_generated/server.js";
 
 const kindValidator = v.union(
@@ -21,6 +24,7 @@ const buildLogValidator = v.object({
   body: v.optional(v.string()),
   occurredAt: v.optional(v.number()),
   createdAt: v.number(),
+  updatedAt: v.optional(v.number()),
 });
 
 function requireText(value: string, field: string): string {
@@ -48,6 +52,23 @@ export const list = query({
   },
 });
 
+export const listPage = query({
+  args: {
+    serviceToken: v.string(),
+    paginationOpts: paginationOptsValidator,
+  },
+  returns: paginationResultValidator(buildLogValidator),
+  handler: async (ctx, args) => {
+    const ownerId = requireOwner(args.serviceToken);
+    requirePageSize(args.paginationOpts.numItems, "Build log");
+    return ctx.db
+      .query("buildLogs")
+      .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+      .order("desc")
+      .paginate(args.paginationOpts);
+  },
+});
+
 export const get = query({
   args: { serviceToken: v.string(), id: v.string() },
   returns: v.union(buildLogValidator, v.null()),
@@ -72,15 +93,17 @@ export const create = mutation({
   returns: buildLogValidator,
   handler: async (ctx, args) => {
     const ownerId = requireOwner(args.serviceToken);
+    const buildId = await requireOwnedBuildId(ctx, ownerId, args.buildId);
     const body = cleanOptionalText(args.body, "Build log body");
     const id = await ctx.db.insert("buildLogs", {
       ownerId,
-      buildId: requireText(args.buildId, "Build log buildId"),
+      buildId,
       kind: args.kind ?? "note",
       title: requireText(args.title, "Build log title"),
       ...(body === undefined ? {} : { body }),
       ...(args.occurredAt === undefined ? {} : { occurredAt: args.occurredAt }),
       createdAt: Date.now(),
+      updatedAt: Date.now(),
     });
     const entry = await ctx.db.get("buildLogs", id);
     if (!entry) throw new Error("Build log creation failed.");
@@ -103,17 +126,25 @@ export const update = mutation({
   returns: v.union(buildLogValidator, v.null()),
   handler: async (ctx, args) => {
     const ownerId = requireOwner(args.serviceToken);
-
-    const buildId = cleanOptionalText(args.buildId, "Build log buildId");
     const title = cleanOptionalText(args.title, "Build log title");
     const body = cleanOptionalText(args.body, "Build log body");
 
+    const id = ctx.db.normalizeId("buildLogs", args.id);
+    if (!id) return null;
+    const entry = await ctx.db.get("buildLogs", id);
+    if (!entry || entry.ownerId !== ownerId) return null;
+
+    const buildId =
+      args.buildId === undefined
+        ? undefined
+        : await requireOwnedBuildId(ctx, ownerId, args.buildId);
     const patch: {
       buildId?: string;
       kind?: "origin" | "milestone" | "failure" | "anecdote" | "note";
       title?: string;
       body?: string | undefined;
       occurredAt?: number | undefined;
+      updatedAt?: number;
     } = {};
     if (buildId !== undefined) patch.buildId = buildId;
     if (args.kind !== undefined) patch.kind = args.kind;
@@ -126,11 +157,8 @@ export const update = mutation({
     if (Object.keys(patch).length === 0) {
       throw new Error("Build log update requires at least one changed field.");
     }
+    patch.updatedAt = Date.now();
 
-    const id = ctx.db.normalizeId("buildLogs", args.id);
-    if (!id) return null;
-    const entry = await ctx.db.get("buildLogs", id);
-    if (!entry || entry.ownerId !== ownerId) return null;
     await ctx.db.patch("buildLogs", id, patch);
     return ctx.db.get("buildLogs", id);
   },

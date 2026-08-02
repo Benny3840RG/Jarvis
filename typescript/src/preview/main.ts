@@ -1,9 +1,13 @@
 import { loadEnvFile } from "node:process";
 
+import { createToolExecutionServiceFromEnv } from "../actions/toolExecutionFactory.js";
+import { createMicrosoftOutlookRuntimeFromEnv } from "../auth/microsoftOutlookRuntime.js";
 import { createJarvisHttpApp } from "../http/app.js";
 import { resolveHttpListenConfig } from "../http/config.js";
 import { resolveJarvisMcpConfig } from "../mcp/config.js";
 import { startJarvisMcpHttpServer } from "../mcp/httpServer.js";
+import { createOutlookRuntimeReconciliationFactories } from "../reconciliation/outlookRuntimeReconciliation.js";
+import { createRuntimeReconciliationHost } from "../reconciliation/runtimeReconciliationHost.js";
 import { applyPreviewEnvironment } from "./environment.js";
 
 function loadLocalEnvironment(): void {
@@ -18,7 +22,18 @@ async function main(): Promise<void> {
   loadLocalEnvironment();
   applyPreviewEnvironment();
   const httpListen = resolveHttpListenConfig();
-  const httpApp = await createJarvisHttpApp();
+  const outlookRuntime = createMicrosoftOutlookRuntimeFromEnv();
+  const reconciliation = createRuntimeReconciliationHost(
+    process.env,
+    createOutlookRuntimeReconciliationFactories(outlookRuntime),
+  );
+  const toolExecutionService = createToolExecutionServiceFromEnv(
+    outlookRuntime?.quoteEmailProvider,
+  );
+  const httpApp = await createJarvisHttpApp({
+    reconciliationHealth: () => reconciliation.health(),
+    toolExecutionService,
+  });
   await httpApp.listen(httpListen);
 
   const mcpConfig = resolveJarvisMcpConfig({
@@ -29,7 +44,9 @@ async function main(): Promise<void> {
   let mcpServer;
   try {
     mcpServer = await startJarvisMcpHttpServer(mcpConfig);
+    await reconciliation.start();
   } catch (error: unknown) {
+    await reconciliation.stop();
     await httpApp.close();
     throw error;
   }
@@ -41,6 +58,7 @@ async function main(): Promise<void> {
   const shutdown = async () => {
     if (closing) return;
     closing = true;
+    await reconciliation.stop();
     await mcpServer.close();
     await httpApp.close();
     process.exit(0);

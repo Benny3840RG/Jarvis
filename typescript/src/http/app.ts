@@ -46,8 +46,13 @@ import type { PreferenceStore } from "../preferences/preference.js";
 import { InMemoryPreferenceStore } from "../preferences/inMemoryPreferenceStore.js";
 import { JsonPreferenceStore } from "../preferences/jsonPreferenceStore.js";
 import { ConvexPreferenceStore } from "../preferences/convexPreferenceStore.js";
+import type { NoteStore } from "../notes/note.js";
+import { InMemoryNoteStore } from "../notes/inMemoryNoteStore.js";
+import { ConvexNoteStore } from "../persistence/convexNotes.js";
 import { createMemoryChangeSetServiceFromEnv } from "../memory/memoryChangeSetFactory.js";
 import type { MemoryChangeSetService } from "../memory/memoryChangeSets.js";
+import { createActivityEventReaderFromEnv } from "../operations/activityTimelineFactory.js";
+import type { ActivityEventReader } from "../operations/activityTimeline.js";
 import {
   createPersistenceFromEnv,
   resolvePersistenceProviderName,
@@ -56,6 +61,7 @@ import {
 } from "../persistence/persistence.js";
 import { createTotalityPipelineFromEnv } from "../totality/totalityFactory.js";
 import type { TotalityPipeline } from "../totality/totalityPipeline.js";
+import type { RuntimeReconciliationHealth } from "../reconciliation/runtimeReconciliationHost.js";
 import { resolveHttpAppConfig, type HttpAppConfig } from "./config.js";
 import { JarvisHttpModule } from "./jarvisHttpModule.js";
 import { REQUEST_ID_HEADER, resolveRequestId } from "./requestId.js";
@@ -76,6 +82,7 @@ export type CreateJarvisHttpAppOptions = (
   DefaultPersistenceOptions | InjectedPersistenceOptions
 ) & {
   config?: HttpAppConfig;
+  reconciliationHealth?: () => RuntimeReconciliationHealth;
   logger?: NestApplicationOptions["logger"];
   totalityPipeline?: TotalityPipeline | null;
   memoryChangeSetService?: MemoryChangeSetService | null;
@@ -92,6 +99,8 @@ export type CreateJarvisHttpAppOptions = (
   upgradeStore?: UpgradeStore;
   assetStore?: AssetStore;
   preferenceStore?: PreferenceStore;
+  noteStore?: NoteStore;
+  activityEventReader?: ActivityEventReader | null;
   /**
    * Invoked once per Fastify route as it is registered. Exposed so contract
    * tests can enumerate the routes the app actually serves without parsing the
@@ -127,6 +136,8 @@ export async function createJarvisHttpApp(
   const persistence = options.persistence ?? createPersistenceFromEnv();
   const config = options.config ?? resolveHttpAppConfig();
   const usesEnvironment = options.persistence === undefined;
+  const reconciliationHealth =
+    options.reconciliationHealth ?? (() => ({ state: "disabled", enabled: false }));
   const totalityPipeline =
     options.totalityPipeline !== undefined
       ? options.totalityPipeline
@@ -150,6 +161,12 @@ export async function createJarvisHttpApp(
       ? options.toolExecutionService
       : usesEnvironment
         ? createToolExecutionServiceFromEnv()
+        : null;
+  const activityEventReader =
+    options.activityEventReader !== undefined
+      ? options.activityEventReader
+      : usesEnvironment
+        ? createActivityEventReaderFromEnv()
         : null;
   const clientStore =
     options.clientStore ?? (usesEnvironment ? new JsonClientStore() : new InMemoryClientStore());
@@ -201,6 +218,12 @@ export async function createJarvisHttpApp(
       inMemory: () => new InMemoryPreferenceStore(),
     },
   );
+  // Notes have no JSON-file store: per the AM-003 commissioning plan (issue
+  // #150), notes use only the Convex-backed persistence boundary in any real
+  // deployment, so this always uses Convex when an environment is present
+  // rather than following PERSISTENCE_PROVIDER like the other memory stores.
+  const noteStore =
+    options.noteStore ?? (usesEnvironment ? new ConvexNoteStore() : new InMemoryNoteStore());
   const adapter = new FastifyAdapter({
     genReqId: (request: IncomingMessage) =>
       resolveRequestId(request.headers[REQUEST_ID_HEADER], [
@@ -222,6 +245,7 @@ export async function createJarvisHttpApp(
       persistence,
       providerName,
       config,
+      reconciliationHealth,
       totalityPipeline,
       memoryChangeSetService,
       toolActionService,
@@ -237,6 +261,8 @@ export async function createJarvisHttpApp(
       upgradeStore,
       assetStore,
       preferenceStore,
+      noteStore,
+      activityEventReader,
     }),
     adapter,
     { logger: options.logger, abortOnError: false },

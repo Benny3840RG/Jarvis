@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 
 import type { DailyBrief } from "../briefs/brief.js";
+import type { ActivityTimelineResult } from "../operations/activityTimeline.js";
+import type { OperationsInbox } from "../operations/operationsInbox.js";
 import type { Client, ClientInput, ClientUpdate } from "../clients/client.js";
 import type { Errand, ErrandInput, ErrandUpdate } from "../errands/errand.js";
 import type { Build, BuildInput, BuildUpdate } from "../builds/build.js";
@@ -10,6 +12,9 @@ import type { AssetInput, AssetUpdate } from "../assets/asset.js";
 import type { AssetView } from "../assets/assetView.js";
 import type { Preference, PreferenceInput, PreferenceUpdate } from "../preferences/preference.js";
 import type { Project, ProjectInput, ProjectUpdate } from "../projects/project.js";
+import type { QuoteSnapshot } from "../quotes/quoteLifecycle.js";
+import type { QuoteSummary } from "../quotes/quoteRepository.js";
+import type { ToolAction } from "../actions/toolActions.js";
 import type { SystemStatus } from "../http/contracts.js";
 import type { Reminder, Task } from "../persistence/persistence.js";
 import type { TaskUpdate } from "../persistence/updates.js";
@@ -24,6 +29,15 @@ export type DashboardSnapshot = {
   status: SystemStatus;
   tasks: Task[];
   reminders: Reminder[];
+  brief: DailyBrief;
+  quoteRegister: {
+    status: "ready" | "unavailable";
+    quotes: QuoteSummary[];
+  };
+  /** `null` means the inbox endpoint itself could not be reached — distinct from an empty inbox. */
+  inbox: OperationsInbox | null;
+  /** `null` means the activity endpoint itself could not be reached — distinct from `{status: "unavailable"}`. */
+  activity: ActivityTimelineResult | null;
   counts: {
     activeTasks: number;
     completedTasks: number;
@@ -529,20 +543,104 @@ export class JarvisApiClient {
     ).data;
   }
 
+  async listQuotes(): Promise<QuoteSummary[]> {
+    return (await this.request<ListResponse<QuoteSummary>>("GET", "/api/v1/quotes")).data;
+  }
+
+  async getQuote(quoteId: string): Promise<QuoteSnapshot> {
+    return (
+      await this.request<DataResponse<QuoteSnapshot>>(
+        "GET",
+        `/api/v1/quotes/${encodeURIComponent(quoteId)}`,
+      )
+    ).data;
+  }
+
+  /** Read-only: lists tool-action proposals for one project. Cannot approve, revoke, or execute. */
+  async listToolActions(projectId: string): Promise<ToolAction[]> {
+    return this.request<ToolAction[]>(
+      "GET",
+      `/api/v1/projects/${encodeURIComponent(projectId)}/tool-actions`,
+    );
+  }
+
+  /** Read-only: inspects one tool-action proposal and its consent-lifecycle state. */
+  async getToolAction(projectId: string, actionId: string): Promise<ToolAction> {
+    return this.request<ToolAction>(
+      "GET",
+      `/api/v1/projects/${encodeURIComponent(projectId)}/tool-actions/${encodeURIComponent(actionId)}`,
+    );
+  }
+
   async getDailyBrief(): Promise<DailyBrief> {
     return (await this.request<DataResponse<DailyBrief>>("GET", "/api/v1/brief")).data;
   }
 
+  async getOperationsInbox(): Promise<OperationsInbox> {
+    return (await this.request<DataResponse<OperationsInbox>>("GET", "/api/v1/operations/inbox"))
+      .data;
+  }
+
+  async getOperationsActivity(
+    input: {
+      cursor?: string;
+      limit?: number;
+    } = {},
+  ): Promise<ActivityTimelineResult> {
+    const params = new URLSearchParams();
+    if (input.cursor !== undefined) params.set("cursor", input.cursor);
+    if (input.limit !== undefined) params.set("limit", String(input.limit));
+    const query = params.toString();
+    return (
+      await this.request<DataResponse<ActivityTimelineResult>>(
+        "GET",
+        `/api/v1/operations/activity${query ? `?${query}` : ""}`,
+      )
+    ).data;
+  }
+
   async dashboard(): Promise<DashboardSnapshot> {
-    const [status, tasks, reminders] = await Promise.all([
+    const quoteRegister = this.listQuotes().then(
+      (quotes) => ({ status: "ready" as const, quotes }),
+      () => ({ status: "unavailable" as const, quotes: [] as QuoteSummary[] }),
+    );
+    // A failure reaching either endpoint is reported as `null` here — distinct
+    // from a source *within* the inbox/activity response being unavailable,
+    // which those endpoints already report truthfully on their own. `null`
+    // must never be rendered as "0 items" or "no activity".
+    const inbox = this.getOperationsInbox().then(
+      (value) => value,
+      () => null,
+    );
+    const activity = this.getOperationsActivity({ limit: 5 }).then(
+      (value) => value,
+      () => null,
+    );
+    const [
+      status,
+      tasks,
+      reminders,
+      brief,
+      resolvedQuoteRegister,
+      resolvedInbox,
+      resolvedActivity,
+    ] = await Promise.all([
       this.getStatus(),
       this.listTasks(),
       this.listReminders(),
+      this.getDailyBrief(),
+      quoteRegister,
+      inbox,
+      activity,
     ]);
     return {
       status,
       tasks,
       reminders,
+      brief,
+      quoteRegister: resolvedQuoteRegister,
+      inbox: resolvedInbox,
+      activity: resolvedActivity,
       counts: {
         activeTasks: tasks.filter((task) => !task.completed).length,
         completedTasks: tasks.filter((task) => task.completed).length,

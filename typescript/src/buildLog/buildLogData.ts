@@ -44,6 +44,7 @@ export function createBuildLogEntry(input: BuildLogInput): BuildLogEntry {
     ...(input.body && input.body.trim() ? { body: input.body.trim() } : {}),
     ...(input.occurredAt === undefined ? {} : { occurredAt: validTimestamp(input.occurredAt) }),
     createdAt: Date.now(),
+    updatedAt: Date.now(),
   };
 }
 
@@ -65,4 +66,5 @@ export function applyBuildLogUpdate(entry: BuildLogEntry, update: BuildLogUpdate
     if (update.occurredAt === null) delete entry.occurredAt;
     else entry.occurredAt = validTimestamp(update.occurredAt);
   }
+  entry.updatedAt = Date.now();
 }

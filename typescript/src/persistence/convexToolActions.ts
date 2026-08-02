@@ -2,6 +2,12 @@ import { ConvexHttpClient } from "convex/browser";
 
 import { api } from "../../convex/_generated/api.js";
 import type { ToolAction, ToolActionService } from "../actions/toolActions.js";
+import type {
+  ExecutionEligibilityResult,
+  ExecutionEligibilityStore,
+  SingleUseConsumptionClaimStore,
+  SingleUseExecutionClaimResult,
+} from "../actions/toolExecution.js";
 import type { ToolAuthority } from "../runtime/totalityPolicy.js";
 import type { ConvexClientLike } from "./convexPersistence.js";
 
@@ -28,6 +34,14 @@ type ToolActionRow = {
   updatedAt: number;
   approvedAt?: number;
   rejectedAt?: number;
+  approvalExpiryPolicy?: ToolAction["approvalExpiryPolicy"];
+  approvalExpiresAt?: number;
+  expiredObservedAt?: number;
+  consumptionPolicy?: ToolAction["consumptionPolicy"];
+  revokedBy?: "user";
+  revokedReason?: string;
+  revokedAt?: number;
+  isApprovalExpired?: boolean;
 };
 
 function optionalTimestamp(value: number | undefined): string | undefined {
@@ -37,6 +51,9 @@ function optionalTimestamp(value: number | undefined): string | undefined {
 function actionFromConvex(row: ToolActionRow): ToolAction {
   const approvedAt = optionalTimestamp(row.approvedAt);
   const rejectedAt = optionalTimestamp(row.rejectedAt);
+  const approvalExpiresAt = optionalTimestamp(row.approvalExpiresAt);
+  const expiredObservedAt = optionalTimestamp(row.expiredObservedAt);
+  const revokedAt = optionalTimestamp(row.revokedAt);
   return {
     actionId: row.actionId,
     requestId: row.requestId,
@@ -58,6 +75,16 @@ function actionFromConvex(row: ToolActionRow): ToolAction {
     updatedAt: new Date(row.updatedAt).toISOString(),
     ...(approvedAt === undefined ? {} : { approvedAt }),
     ...(rejectedAt === undefined ? {} : { rejectedAt }),
+    ...(row.approvalExpiryPolicy === undefined
+      ? {}
+      : { approvalExpiryPolicy: row.approvalExpiryPolicy }),
+    ...(approvalExpiresAt === undefined ? {} : { approvalExpiresAt }),
+    ...(expiredObservedAt === undefined ? {} : { expiredObservedAt }),
+    ...(row.consumptionPolicy === undefined ? {} : { consumptionPolicy: row.consumptionPolicy }),
+    ...(row.revokedBy === undefined ? {} : { revokedBy: row.revokedBy }),
+    ...(row.revokedReason === undefined ? {} : { revokedReason: row.revokedReason }),
+    ...(revokedAt === undefined ? {} : { revokedAt }),
+    ...(row.isApprovalExpired === undefined ? {} : { isApprovalExpired: row.isApprovalExpired }),
   };
 }
 
@@ -135,5 +162,90 @@ export class ConvexToolActionService implements ToolActionService {
       reason: input.reason,
     });
     return actionFromConvex(row as ToolActionRow);
+  }
+
+  async revoke(
+    input: Parameters<NonNullable<ToolActionService["revoke"]>>[0],
+  ): Promise<ToolAction> {
+    const row = await this.client.mutation(toolActionFunctions.revoke, {
+      serviceToken: this.serviceToken,
+      projectKey: input.projectId,
+      actionId: input.actionId,
+      reason: input.reason,
+    });
+    return actionFromConvex(row as ToolActionRow);
+  }
+}
+
+/**
+ * Backs `SingleUseConsumptionClaimStore` with the authoritative Convex
+ * mutation `claimSingleUseExecution`, whose atomicity comes from Convex's
+ * own OCC serializing concurrent mutations against the same document — see
+ * that mutation's doc comment for why a read-then-write check in the caller
+ * cannot provide the same guarantee.
+ */
+export class ConvexSingleUseConsumptionClaimStore implements SingleUseConsumptionClaimStore {
+  private readonly client: ConvexClientLike;
+  private readonly serviceToken: string;
+
+  constructor(client?: ConvexClientLike, serviceToken = process.env.JARVIS_SERVICE_TOKEN) {
+    if (!serviceToken) {
+      throw new Error("Single-use execution claims require JARVIS_SERVICE_TOKEN.");
+    }
+    this.serviceToken = serviceToken;
+
+    if (client) {
+      this.client = client;
+      return;
+    }
+
+    const convexUrl = process.env.CONVEX_URL;
+    if (!convexUrl) throw new Error("Single-use execution claims require CONVEX_URL.");
+    this.client = new ConvexHttpClient(convexUrl);
+  }
+
+  async claim(action: ToolAction, claimId: string): Promise<SingleUseExecutionClaimResult> {
+    return (await this.client.mutation(toolActionFunctions.claimSingleUseExecution, {
+      serviceToken: this.serviceToken,
+      projectKey: action.projectId,
+      actionId: action.actionId,
+      claimId,
+    })) as SingleUseExecutionClaimResult;
+  }
+}
+
+/**
+ * Backs `ExecutionEligibilityStore` with the authoritative Convex mutation
+ * `verifyExecutionEligibility` — the reusable-action counterpart to
+ * `ConvexSingleUseConsumptionClaimStore` above, re-checking state/expiry
+ * against a fresh read instead of the caller's own, potentially stale,
+ * separately-fetched snapshot.
+ */
+export class ConvexExecutionEligibilityStore implements ExecutionEligibilityStore {
+  private readonly client: ConvexClientLike;
+  private readonly serviceToken: string;
+
+  constructor(client?: ConvexClientLike, serviceToken = process.env.JARVIS_SERVICE_TOKEN) {
+    if (!serviceToken) {
+      throw new Error("Execution eligibility checks require JARVIS_SERVICE_TOKEN.");
+    }
+    this.serviceToken = serviceToken;
+
+    if (client) {
+      this.client = client;
+      return;
+    }
+
+    const convexUrl = process.env.CONVEX_URL;
+    if (!convexUrl) throw new Error("Execution eligibility checks require CONVEX_URL.");
+    this.client = new ConvexHttpClient(convexUrl);
+  }
+
+  async verify(action: ToolAction): Promise<ExecutionEligibilityResult> {
+    return (await this.client.mutation(toolActionFunctions.verifyExecutionEligibility, {
+      serviceToken: this.serviceToken,
+      projectKey: action.projectId,
+      actionId: action.actionId,
+    })) as ExecutionEligibilityResult;
   }
 }

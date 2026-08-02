@@ -1,6 +1,9 @@
+import { paginationOptsValidator, paginationResultValidator } from "convex/server";
 import { v } from "convex/values";
 
 import { collectBounded, requireOwner } from "./authHelpers.js";
+import { requirePageSize } from "./toolActionLogic.js";
+import { requireOwnedBuildId } from "./buildOwnership.js";
 import { mutation, query } from "./_generated/server.js";
 
 const upgradeValidator = v.object({
@@ -17,6 +20,7 @@ const upgradeValidator = v.object({
   version: v.optional(v.string()),
   occurredAt: v.optional(v.number()),
   createdAt: v.number(),
+  updatedAt: v.optional(v.number()),
 });
 
 function requireText(value: string, field: string): string {
@@ -51,6 +55,23 @@ export const list = query({
   },
 });
 
+export const listPage = query({
+  args: {
+    serviceToken: v.string(),
+    paginationOpts: paginationOptsValidator,
+  },
+  returns: paginationResultValidator(upgradeValidator),
+  handler: async (ctx, args) => {
+    const ownerId = requireOwner(args.serviceToken);
+    requirePageSize(args.paginationOpts.numItems, "Upgrade");
+    return ctx.db
+      .query("upgrades")
+      .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+      .order("desc")
+      .paginate(args.paginationOpts);
+  },
+});
+
 export const get = query({
   args: { serviceToken: v.string(), id: v.string() },
   returns: v.union(upgradeValidator, v.null()),
@@ -79,6 +100,7 @@ export const create = mutation({
   returns: upgradeValidator,
   handler: async (ctx, args) => {
     const ownerId = requireOwner(args.serviceToken);
+    const buildId = await requireOwnedBuildId(ctx, ownerId, args.buildId);
     const reason = cleanOptionalText(args.reason, "Upgrade reason");
     const beforeState = cleanOptionalText(args.beforeState, "Upgrade beforeState");
     const afterState = cleanOptionalText(args.afterState, "Upgrade afterState");
@@ -87,7 +109,7 @@ export const create = mutation({
     const parts = normalizeParts(args.parts);
     const id = await ctx.db.insert("upgrades", {
       ownerId,
-      buildId: requireText(args.buildId, "Upgrade buildId"),
+      buildId,
       title: requireText(args.title, "Upgrade title"),
       ...(reason === undefined ? {} : { reason }),
       ...(beforeState === undefined ? {} : { beforeState }),
@@ -97,6 +119,7 @@ export const create = mutation({
       ...(version === undefined ? {} : { version }),
       ...(args.occurredAt === undefined ? {} : { occurredAt: args.occurredAt }),
       createdAt: Date.now(),
+      updatedAt: Date.now(),
     });
     const upgrade = await ctx.db.get("upgrades", id);
     if (!upgrade) throw new Error("Upgrade creation failed.");
@@ -128,8 +151,6 @@ export const update = mutation({
   returns: v.union(upgradeValidator, v.null()),
   handler: async (ctx, args) => {
     const ownerId = requireOwner(args.serviceToken);
-
-    const buildId = cleanOptionalText(args.buildId, "Upgrade buildId");
     const title = cleanOptionalText(args.title, "Upgrade title");
     const reason = cleanOptionalText(args.reason, "Upgrade reason");
     const beforeState = cleanOptionalText(args.beforeState, "Upgrade beforeState");
@@ -138,6 +159,15 @@ export const update = mutation({
     const version = cleanOptionalText(args.version, "Upgrade version");
     const parts = normalizeParts(args.parts);
 
+    const id = ctx.db.normalizeId("upgrades", args.id);
+    if (!id) return null;
+    const upgrade = await ctx.db.get("upgrades", id);
+    if (!upgrade || upgrade.ownerId !== ownerId) return null;
+
+    const buildId =
+      args.buildId === undefined
+        ? undefined
+        : await requireOwnedBuildId(ctx, ownerId, args.buildId);
     const patch: {
       buildId?: string;
       title?: string;
@@ -148,6 +178,7 @@ export const update = mutation({
       parts?: string[] | undefined;
       version?: string | undefined;
       occurredAt?: number | undefined;
+      updatedAt?: number;
     } = {};
     if (buildId !== undefined) patch.buildId = buildId;
     if (title !== undefined) patch.title = title;
@@ -163,18 +194,14 @@ export const update = mutation({
     else if (version !== undefined) patch.version = version;
     if (args.clearOccurredAt) patch.occurredAt = undefined;
     else if (args.occurredAt !== undefined) patch.occurredAt = args.occurredAt;
-    // Parts: an explicit clear flag, or an array that normalises to empty, clears.
     if (args.clearParts) patch.parts = undefined;
     else if (args.parts !== undefined) patch.parts = parts;
 
     if (Object.keys(patch).length === 0) {
       throw new Error("Upgrade update requires at least one changed field.");
     }
+    patch.updatedAt = Date.now();
 
-    const id = ctx.db.normalizeId("upgrades", args.id);
-    if (!id) return null;
-    const upgrade = await ctx.db.get("upgrades", id);
-    if (!upgrade || upgrade.ownerId !== ownerId) return null;
     await ctx.db.patch("upgrades", id, patch);
     return ctx.db.get("upgrades", id);
   },

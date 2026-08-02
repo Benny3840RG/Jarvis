@@ -4,6 +4,14 @@ import { describe, it } from "node:test";
 
 const schemaSource = readFileSync(new URL("../convex/schema.ts", import.meta.url), "utf8");
 const quotesSource = readFileSync(new URL("../convex/quotes.ts", import.meta.url), "utf8");
+const quotePdfArtifactsSource = readFileSync(
+  new URL("../convex/quotePdfArtifacts.ts", import.meta.url),
+  "utf8",
+);
+const quoteFinalizationSource = readFileSync(
+  new URL("../convex/quoteFinalization.ts", import.meta.url),
+  "utf8",
+);
 
 describe("quote Convex contracts", () => {
   it("defines owner-first quote aggregate and revision indexes", () => {
@@ -35,9 +43,11 @@ describe("quote Convex contracts", () => {
     assert.ok(callerFacingSource.includes(".unique()"));
     assert.ok(callerFacingSource.includes(".take("));
 
-    // `cleanup` is dev-only (see below) and its `.collect()` stays fully
-    // bounded by the owner+quote index — never an unscoped table scan.
-    assert.ok(cleanupSource.includes(".collect("));
+    // `cleanup` is dev-only (see below). Reads stay owner+quote indexed and
+    // go through collectBounded so they fail closed at MAX_OWNER_LIST_RESULTS
+    // instead of an unbounded .collect().
+    assert.ok(cleanupSource.includes("collectBounded("));
+    assert.equal(cleanupSource.includes(".collect("), false);
     assert.ok(cleanupSource.includes('withIndex("by_owner_quote_and_revision"'));
   });
 
@@ -71,9 +81,22 @@ describe("quote Convex contracts", () => {
     assert.ok(quotesSource.includes("buildInitialQuoteRecords"));
   });
 
-  it("finalizes and forks through authoritative atomic writes", () => {
-    assert.ok(quotesSource.includes("finalizeQuoteRevision"));
-    assert.ok(quotesSource.includes('ctx.db.replace("quoteRevisions"'));
+  it("finalizes with an immutable PDF artefact and forks through authoritative atomic writes", () => {
+    assert.ok(quotePdfArtifactsSource.includes("finalizeQuoteRevision"));
+    assert.ok(quotePdfArtifactsSource.includes('ctx.db.replace("quoteRevisions"'));
+    assert.ok(quotePdfArtifactsSource.includes('ctx.db.replace("quotes"'));
+    assert.ok(quotePdfArtifactsSource.includes('ctx.db.insert("quotePdfArtifacts"'));
+    assert.ok(
+      quotesSource.includes("Quote finalization requires a durable PDF artifact"),
+      "legacy mutation must fail closed",
+    );
+    const storePosition = quoteFinalizationSource.indexOf("ctx.storage.store");
+    const commitPosition = quoteFinalizationSource.indexOf("commitFinalization");
+    assert.ok(
+      storePosition >= 0 && commitPosition > storePosition,
+      "PDF must be stored before commit",
+    );
+
     assert.ok(quotesSource.includes("forkFinalizedQuote"));
     assert.ok(quotesSource.includes('ctx.db.insert("quoteRevisions"'));
     assert.ok(quotesSource.includes('ctx.db.replace("quotes"'));
@@ -92,6 +115,8 @@ describe("quote Convex contracts", () => {
     const cleanupSource = quotesSource.slice(cleanupStart);
     assert.ok(cleanupSource.includes('args.deployment !== "dev:outgoing-ram-798"'));
     assert.ok(cleanupSource.includes("throw new Error("));
+    assert.ok(cleanupSource.includes("ctx.storage.delete"));
+    assert.ok(cleanupSource.includes('ctx.db.delete("quotePdfArtifacts"'));
     assert.ok(cleanupSource.includes('ctx.db.delete("quoteRevisions"'));
     assert.ok(cleanupSource.includes('ctx.db.delete("quotes"'));
   });

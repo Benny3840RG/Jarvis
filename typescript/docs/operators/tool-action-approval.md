@@ -3,22 +3,82 @@
 Jarvis stores tool actions as explicit project-scoped proposals before any external operation may be
 considered. Proposal, inspection, approval, and rejection are one durable stage. Execution is a second,
 separately gated stage, wired to a small, reviewed allowlist: `notes:create`, `tasks:create`,
-`tasks:complete`, `reminders:create`, and `reminders:cancel` (see [Execution](#execution) below). Every
-other `tool:operation` pair — including quote finalize/send, which have no implemented tool or state
-transition yet — is blocked with `errorCode: "not-allowlisted"`.
+`tasks:complete`, `reminders:create`, and `reminders:cancel` (see [Execution](#execution) below).
+A sixth definition, `quotes:send`, is registered only when Convex persistence and every quote-delivery
+dependency — including the explicitly enabled Outlook provider — are available. `quotes:finalize` and
+every other unregistered `tool:operation` pair are blocked with `errorCode: "not-allowlisted"`.
+Quote send remains uncommissioned and is not exposed through MCP or the HUD.
 
 ## State machine
 
 ```text
 proposed -> approved
          -> rejected
+approved -> revoked    (owner-initiated, before consumption)
+approved -> expired    (server-observed, lazily, on next mutation touch)
 ```
 
-There is deliberately no `executed` state on the `ToolAction` record itself. Approval records operator
-intent; it does not call a tool or mutate an external system. Execution is tracked separately, as an
-immutable receipt keyed by the action and a caller-supplied idempotency key — an approved action can be
-the subject of an execution attempt any number of times (each with its own key), without the proposal's
-own state ever changing.
+`rejected`, `expired`, and `revoked` are terminal — no transition leaves them. There is deliberately no
+`executed` state on the `ToolAction` record itself. Approval records operator intent; it does not call a
+tool or mutate an external system. Execution is tracked separately, as an immutable receipt keyed by the
+approved action and a server-derived execution scope. Caller retry keys remain part of the HTTP
+compatibility contract but cannot create a new commercial execution scope. Repeated live attempts for one
+approved action replay the same receipt; dry-run and live execution use separate derived scopes. The
+proposal's own state does not change during execution — except for the two consent-lifecycle transitions
+above, which are lazy and server-observed rather than execution outcomes.
+
+An approval carries an explicit `approvalExpiryPolicy: "ttl" | "non-expiring"` and, when `"ttl"`, an
+`approvalExpiresAt` timestamp. `non-expiring` is not currently caller-selectable. `now >= approvalExpiresAt`
+(the exact boundary instant counts as expired, not one more valid instant) is checked and persisted the next
+time any mutation touches the row — there is no scheduled sweep. `get`/`listRecent` queries cannot write, so
+they instead expose a computed, non-persisted `isApprovalExpired` view field for the same check. A
+caller-supplied clock value (`now`) is accepted only for test determinism and is never read from an HTTP
+request in production, so it can never extend or fabricate approval authority.
+
+Every approval also carries a `consumptionPolicy: "single-use" | "reusable"`, derived from the proposal's
+own `destructive` flag (destructive → single-use). A live (non-dry-run) execution of a single-use action
+must first win an atomic execution claim (`claimSingleUseExecution`, keyed by owner + action ID) before
+its external effect may be attempted — Convex's own optimistic concurrency control serializes concurrent
+claims against the same action, so exactly one caller ever wins regardless of how many different
+idempotency keys race for it. The claim is never released, so every other attempt — including retries —
+is refused with `errorCode: "approval-consumed"` before the tool is ever invoked. A dry-run is exempt: it
+never claims and is never blocked by this check. (An earlier version of this check inspected past receipts
+before invoking the tool; that read-then-later-write approach could not prevent two different-key
+concurrent executions from both observing "not yet consumed" and both crossing the effect boundary — the
+atomic claim replaces it.) `POST /execute` also refuses an action whose approval has already expired
+(`isApprovalExpired: true` at fetch time) with `errorCode: "approval-expired"`, even if the stored `state`
+still shows `"approved"` because nothing has yet persisted the lazy expiry transition.
+
+`claimSingleUseExecution` is also the authoritative re-check for state and expiry, not just claim
+uniqueness. The execution path's earlier `state`/`isApprovalExpired` checks run against the caller's own,
+separately fetched snapshot of the action — a revoke or a TTL expiry can land on the authoritative document
+in the gap between that fetch and the claim call, since fetching the action and claiming it are two
+different Convex operations. (An earlier version of the claim mutation checked only prior-claim state,
+trusting that gap to be safe; an exact-head review found it wasn't — a revoked or just-expired action could
+still be claimed and its effect still run.) The claim mutation now re-validates `state === "approved"` and
+expiry inside the same transaction that writes the claim, using its own fresh read: a revoked action is
+refused with `errorCode: "not-authorized"`, and an approval found expired at claim time is refused with
+`errorCode: "approval-expired"` and its `expired` state is durably persisted right there — mirroring
+`approve()`'s existing lazy-expiry-observation convention rather than only reporting the expiry transiently.
+Neither block reason invokes the provider.
+
+Reusable (non-single-use) actions have no claim to win, but need the identical execute-time freshness
+guarantee: `verifyExecutionEligibility` performs the same same-transaction state/expiry re-check as
+`claimSingleUseExecution`, minus the claim/consumption side effect, since a reusable action may legitimately
+execute more than once. **This closed a gap that predates the paragraph above**: a full-repo audit found the
+atomic re-check had only ever been wired up for single-use actions — a reusable action executed purely
+against the caller's own, separately fetched, potentially stale snapshot, so a revoke or TTL expiry landing
+in the same fetch-to-execute gap described above would previously let the effect run anyway. A revoked or
+expired reusable action is now refused with the same `errorCode`s (`"not-authorized"` / `"approval-expired"`)
+as the single-use path above, and expiry is durably observed the same way. Neither block reason invokes the
+provider.
+
+Revocation (`POST .../revoke`, see below) is owner-scoped, idempotent for a repeated identical reason, and
+prospective-only: it stops a future execution attempt and never claims to undo one already in flight. It
+refuses to revoke an action that has already produced a completed execution receipt — whichever terminal
+fact (execution completing, or revocation) is recorded first is authoritative; the loser gets a clear,
+non-destructive rejection, never a silent no-op. Neither `expired` nor `revoked` deletes the action or any
+audit evidence; both are recorded exactly like `approved`/`rejected` today.
 
 ## Proposal requirements
 
@@ -56,9 +116,9 @@ inside Convex optimistic concurrency control, so only one proposal can acquire t
 A destructive proposal below `T3` is rejected before persistence. This is a classification boundary,
 not permission to execute. Reaching `approved` state still does not authorise a specific tool call —
 `ToolExecutionService` separately checks the acting authority against `requiredAuthority`, and beyond
-that, requires the exact `tool`:`operation` pair to be explicitly registered server-side. Only the five
-pairs listed above are registered; every other attempt is blocked with `errorCode: "not-allowlisted"`
-regardless of authority or approval state.
+that, requires the exact `tool`:`operation` pair to be explicitly registered server-side. The five base pairs listed above are always registered in the maintained Convex runtime.
+`quotes:send` is conditionally registered only when all delivery dependencies resolve; every other
+attempt is blocked with `errorCode: "not-allowlisted"` regardless of authority or approval state.
 
 ## Revision boundary
 
@@ -78,14 +138,21 @@ the service token — which an AI agent staging proposals necessarily does — i
 that a human decided to approve a specific one. If `JARVIS_APPROVAL_TOKEN` is not configured,
 `/approve` fails closed with a 503 rather than accepting any token.
 
-| Method | Path                                                           | Result                                          |
-| ------ | -------------------------------------------------------------- | ----------------------------------------------- |
-| POST   | `/api/v1/projects/{projectId}/tool-actions`                    | Stage a proposal                                |
-| GET    | `/api/v1/projects/{projectId}/tool-actions`                    | List recent proposals                           |
-| GET    | `/api/v1/projects/{projectId}/tool-actions/{actionId}`         | Inspect one proposal                            |
-| POST   | `/api/v1/projects/{projectId}/tool-actions/{actionId}/approve` | Approve after review (requires `approvalToken`) |
-| POST   | `/api/v1/projects/{projectId}/tool-actions/{actionId}/reject`  | Reject with a reason                            |
-| POST   | `/api/v1/projects/{projectId}/tool-actions/{actionId}/execute` | Attempt execution (see below)                   |
+| Method | Path                                                           | Result                                               |
+| ------ | -------------------------------------------------------------- | ---------------------------------------------------- |
+| POST   | `/api/v1/projects/{projectId}/tool-actions`                    | Stage a proposal                                     |
+| GET    | `/api/v1/projects/{projectId}/tool-actions`                    | List recent proposals                                |
+| GET    | `/api/v1/projects/{projectId}/tool-actions/{actionId}`         | Inspect one proposal                                 |
+| POST   | `/api/v1/projects/{projectId}/tool-actions/{actionId}/approve` | Approve after review (requires `approvalToken`)      |
+| POST   | `/api/v1/projects/{projectId}/tool-actions/{actionId}/reject`  | Reject with a reason                                 |
+| POST   | `/api/v1/projects/{projectId}/tool-actions/{actionId}/revoke`  | Revoke before consumption (requires `approvalToken`) |
+| POST   | `/api/v1/projects/{projectId}/tool-actions/{actionId}/execute` | Attempt execution (see below)                        |
+
+`POST .../revoke` requires the same `approvalToken` as `/approve` — the same human-only credential, not
+just the shared Bearer token. It is valid only from `approved`; repeating it with the same `reason` is a
+no-op, repeating it with a different `reason` fails. It rejects an action that has already produced a
+completed execution receipt with a state-conflict response, since the external effect (if any) may already
+have happened and revocation cannot retract it.
 
 ## Execution
 
@@ -102,18 +169,36 @@ that were previously listed as required before this stage could be built:
    other `tool:operation` pair returns a receipt with `status: "blocked"` and
    `errorCode: "not-allowlisted"`, regardless of the action's own approval or authority. Registering each
    new definition remains a deliberate, separately reviewed decision — not a side effect of this stage
-   having shipped.
+   having shipped. `quotes:send` is the only conditional definition: it is included only when Convex
+   persistence, the quote repository, delivery ledger, PDF artifact repository and Outlook email
+   provider all resolve successfully. It remains uncommissioned and unreachable through MCP/HUD.
 2. **Exact argument schemas per operation** — each registered definition carries its own zod schema;
    the action's stored `arguments` are re-validated against it immediately before any call.
 3. **Authority and destructive-operation checks** — the acting authority (asserted server-side as `T3`,
    since a single Bearer service token gates this whole HTTP surface and there is no separate per-caller
    authority signal) must meet or exceed the action's `requiredAuthority`.
-4. **Idempotency and replay protection** — the request body's `idempotencyKey`, combined with the
-   action ID, is the receipt's primary lookup key. Replaying the same key returns the original receipt
-   byte-for-byte rather than executing again. A `dryRun: true` request validates everything and still
-   writes a durable receipt, but as a decision/audit record under a separate key (`…:decision:…`) rather
-   than into that primary idempotency slot — so the dry-run does not occupy the key, and the same
-   `idempotencyKey` can still be used for a real attempt afterward.
+4. **Idempotency and replay protection** — the controller derives the execution key from the approved
+   action ID and the server-selected mode (`live` or `dry-run`). The caller's `idempotencyKey` remains
+   required for HTTP compatibility but is not trusted to define execution identity. Retrying one
+   approved live action with any caller key returns the original receipt byte-for-byte rather than
+   executing again. A `dryRun: true` request validates everything and writes a durable decision/audit
+   receipt under its own derived dry-run scope, so it cannot consume or mutate the live execution scope.
+   4a. **Consent-lifecycle enforcement** — `ToolExecutionService.execute()` also checks the fetched
+   action's consent-lifecycle fields, in two places. Early (alongside the state/authority check): a
+   lapsed approval (`isApprovalExpired: true`, even if `state` still shows `"approved"` because nobody
+   has yet persisted the lazy transition) is blocked with `errorCode: "approval-expired"`. Immediately
+   before the external effect (after every deterministic pre-check — authority, expiry, allowlist,
+   argument validation, dry-run, **and timeout validation** — has passed): a live (non-dry-run)
+   `single-use` action must win the atomic `claimSingleUseExecution` claim; the loser (whichever
+   different-key attempt does not win the race) is blocked with `errorCode: "approval-consumed"`
+   **without the definition ever being invoked**. Dry-run is exempt from the claim. A `"revoked"` action
+   is already blocked by the ordinary state check above (`errorCode: "not-authorized"`), since revocation
+   is terminal and never re-reaches `"approved"`. **Ordering matters here and is deliberately strict:**
+   an earlier version validated `timeoutMs` _after_ taking the claim, so an out-of-range value (accepted
+   by the HTTP boundary, which only requires a positive number) would throw after a single-use action's
+   one-and-only claim was already spent — permanently consuming it for an error that never reached the
+   provider, and blocking every legitimate retry as `"approval-consumed"` from then on. Timeout validation
+   was moved ahead of the claim so a rejected request can never consume anything.
 5. **Bounded timeouts and redacted failures** — `timeoutMs` is clamped to 1–30000ms (default 5000ms).
    Failure receipts carry a fixed `errorCode` enum, never a raw error message or the tool's output.
 6. **Durable execution receipts** — receipts are stored in the `toolExecutionReceipts` Convex table,
@@ -132,8 +217,19 @@ Convex appends project-scoped audit events for:
 
 - `tool.action.proposed`;
 - `tool.action.approved`;
-- `tool.action.rejected`.
+- `tool.action.rejected`;
+- `tool.action.approval-expired`;
+- `tool.action.revoked`.
 
 Audit payloads contain identifiers and decision metadata, not service credentials. The service-token
 boundary remains server-side. Execution attempts are recorded as receipts (see above), not as
 `auditEvents` rows.
+
+## Operator recovery
+
+An `indeterminate` execution receipt (see the reconciliation hardening work) means the external side
+effect's outcome is not yet known — neither a proven success nor a proven failure. Revoking the governing
+`ToolAction` in that state does not retract the in-flight external attempt; reconciliation, not
+revocation, is what eventually resolves an indeterminate receipt to its true terminal outcome. Revoke a
+proposal to stop _future_ executions of it; consult the receipt and its reconciliation state, not the
+`ToolAction`'s own `state` field, to find out whether an external write actually happened.

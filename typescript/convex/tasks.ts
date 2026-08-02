@@ -3,7 +3,7 @@ import { v } from "convex/values";
 
 import { taskActionResultValidator } from "./internalActionValidators.js";
 import { collectBounded, requireOwner } from "./authHelpers.js";
-import { cleanRequiredText } from "./toolActionLogic.js";
+import { cleanRequiredText, requirePageSize } from "./toolActionLogic.js";
 import { mutation, query, type MutationCtx } from "./_generated/server.js";
 
 const taskValidator = v.object({
@@ -14,6 +14,8 @@ const taskValidator = v.object({
   completed: v.boolean(),
   category: v.string(),
   projectId: v.optional(v.string()),
+  directCreateIdempotencyKey: v.optional(v.string()),
+  directCreateFingerprint: v.optional(v.string()),
   updatedAt: v.optional(v.number()),
   revision: v.optional(v.number()),
   createdAt: v.number(),
@@ -22,6 +24,28 @@ const taskValidator = v.object({
 function cleanOptionalText(value: string | undefined, field: string): string | undefined {
   if (value === undefined) return undefined;
   return cleanRequiredText(value, field);
+}
+
+function directCreateIdentity(
+  idempotencyKey: string | undefined,
+  requestFingerprint: string | undefined,
+): { idempotencyKey?: string; requestFingerprint?: string } {
+  if ((idempotencyKey === undefined) !== (requestFingerprint === undefined)) {
+    throw new Error(
+      "Task create idempotency key and request fingerprint must be supplied together.",
+    );
+  }
+  if (idempotencyKey === undefined || requestFingerprint === undefined) return {};
+  return {
+    idempotencyKey: cleanRequiredText(idempotencyKey, "Task create idempotency key"),
+    requestFingerprint: cleanRequiredText(requestFingerprint, "Task create request fingerprint"),
+  };
+}
+
+function requireDirectlyMutableTask(task: { projectId?: string }): void {
+  if (task.projectId !== undefined) {
+    throw new Error("Project-scoped tasks must be changed through controlled task execution.");
+  }
 }
 
 function controlledTaskResult(
@@ -74,19 +98,89 @@ async function findControlledResult(
 }
 
 export const create = mutation({
-  args: { serviceToken: v.string(), title: v.string(), category: v.string() },
+  args: {
+    serviceToken: v.string(),
+    title: v.string(),
+    category: v.string(),
+    idempotencyKey: v.optional(v.string()),
+    requestFingerprint: v.optional(v.string()),
+  },
   returns: taskValidator,
   handler: async (ctx, args) => {
     const ownerId = requireOwner(args.serviceToken);
+    const title = cleanRequiredText(args.title, "Task title");
+    const category = cleanRequiredText(args.category, "Task category");
+    const identity = directCreateIdentity(args.idempotencyKey, args.requestFingerprint);
+
+    if (identity.idempotencyKey !== undefined && identity.requestFingerprint !== undefined) {
+      const receipt = await ctx.db
+        .query("directCreateReceipts")
+        .withIndex("by_owner_type_and_key", (q) =>
+          q
+            .eq("ownerId", ownerId)
+            .eq("entityType", "task")
+            .eq("idempotencyKey", identity.idempotencyKey as string),
+        )
+        .unique();
+      if (receipt) {
+        if (receipt.requestFingerprint !== identity.requestFingerprint) {
+          throw new Error("Task create idempotency key conflict.");
+        }
+        const receiptTaskId = ctx.db.normalizeId("tasks", receipt.entityId);
+        const receiptTask = receiptTaskId ? await ctx.db.get("tasks", receiptTaskId) : null;
+        if (!receiptTask || receiptTask.ownerId !== ownerId) {
+          throw new Error("Task from this create request is no longer available.");
+        }
+        return receiptTask;
+      }
+
+      const existing = await ctx.db
+        .query("tasks")
+        .withIndex("by_owner_and_direct_create_idempotency_key", (q) =>
+          q.eq("ownerId", ownerId).eq("directCreateIdempotencyKey", identity.idempotencyKey),
+        )
+        .unique();
+      if (existing) {
+        if (existing.directCreateFingerprint !== identity.requestFingerprint) {
+          throw new Error("Task create idempotency key conflict.");
+        }
+        await ctx.db.insert("directCreateReceipts", {
+          ownerId,
+          entityType: "task",
+          entityId: existing._id,
+          idempotencyKey: identity.idempotencyKey,
+          requestFingerprint: identity.requestFingerprint,
+          createdAt: Date.now(),
+        });
+        return existing;
+      }
+    }
+
     const id = await ctx.db.insert("tasks", {
       ownerId,
-      title: args.title,
+      title,
       completed: false,
-      category: args.category,
+      category,
+      ...(identity.idempotencyKey === undefined
+        ? {}
+        : {
+            directCreateIdempotencyKey: identity.idempotencyKey,
+            directCreateFingerprint: identity.requestFingerprint as string,
+          }),
       createdAt: Date.now(),
     });
     const task = await ctx.db.get("tasks", id);
     if (!task) throw new Error("Task creation failed.");
+    if (identity.idempotencyKey !== undefined && identity.requestFingerprint !== undefined) {
+      await ctx.db.insert("directCreateReceipts", {
+        ownerId,
+        entityType: "task",
+        entityId: id,
+        idempotencyKey: identity.idempotencyKey,
+        requestFingerprint: identity.requestFingerprint,
+        createdAt: Date.now(),
+      });
+    }
     return task;
   },
 });
@@ -176,10 +270,7 @@ export const listPage = query({
   returns: paginationResultValidator(taskValidator),
   handler: async (ctx, args) => {
     const ownerId = requireOwner(args.serviceToken);
-    const { numItems } = args.paginationOpts;
-    if (!Number.isInteger(numItems) || numItems < 1 || numItems > 100) {
-      throw new Error("Task page size must be an integer from 1 to 100.");
-    }
+    requirePageSize(args.paginationOpts.numItems, "Task");
     return ctx.db
       .query("tasks")
       .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
@@ -222,6 +313,7 @@ export const update = mutation({
     if (!id) return null;
     const task = await ctx.db.get("tasks", id);
     if (!task || task.ownerId !== ownerId) return null;
+    requireDirectlyMutableTask(task);
     await ctx.db.patch("tasks", id, {
       ...(title === undefined ? {} : { title }),
       ...(category === undefined ? {} : { category }),
@@ -239,6 +331,7 @@ export const complete = mutation({
     if (!id) return null;
     const task = await ctx.db.get("tasks", id);
     if (!task || task.ownerId !== ownerId) return null;
+    requireDirectlyMutableTask(task);
     await ctx.db.patch("tasks", id, { completed: true });
     return ctx.db.get("tasks", id);
   },
@@ -318,6 +411,7 @@ export const remove = mutation({
     if (!id) return null;
     const task = await ctx.db.get("tasks", id);
     if (!task || task.ownerId !== ownerId) return null;
+    requireDirectlyMutableTask(task);
     await ctx.db.delete("tasks", id);
     return task;
   },
@@ -335,12 +429,14 @@ export const cleanupControlled = mutation({
     if (task && task.ownerId === ownerId && task.projectId === projectId) {
       await ctx.db.delete("tasks", id);
     }
-    const receipts = await ctx.db
-      .query("internalActionResults")
-      .withIndex("by_owner_entity", (q) =>
-        q.eq("ownerId", ownerId).eq("entityType", "task").eq("entityId", id),
-      )
-      .collect();
+    const receipts = await collectBounded(
+      ctx.db
+        .query("internalActionResults")
+        .withIndex("by_owner_entity", (q) =>
+          q.eq("ownerId", ownerId).eq("entityType", "task").eq("entityId", id),
+        ),
+      "Task action result",
+    );
     for (const receipt of receipts) {
       if (receipt.projectId === projectId)
         await ctx.db.delete("internalActionResults", receipt._id);

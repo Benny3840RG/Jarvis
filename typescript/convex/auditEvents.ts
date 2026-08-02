@@ -1,7 +1,8 @@
+import { paginationOptsValidator, paginationResultValidator } from "convex/server";
 import { v } from "convex/values";
 
 import { requireOwner } from "./authHelpers.js";
-import { normaliseAuditPayload } from "./toolActionLogic.js";
+import { normaliseAuditPayload, requirePageSize } from "./toolActionLogic.js";
 import { auditEventValidator } from "./totalityValidators.js";
 import { mutation, query } from "./_generated/server.js";
 
@@ -69,6 +70,28 @@ export const listRecent = query({
       )
       .order("desc")
       .take(boundedLimit(args.limit));
+  },
+});
+
+/**
+ * A bounded, cursor-paginated, owner-wide activity feed across every scope —
+ * unlike `listRecent`, which only reads one `scopeKey` at a time. This is the
+ * read the Operations Activity Timeline is built from.
+ */
+export const listActivityPage = query({
+  args: {
+    serviceToken: v.string(),
+    paginationOpts: paginationOptsValidator,
+  },
+  returns: paginationResultValidator(auditEventValidator),
+  handler: async (ctx, args) => {
+    const ownerId = requireOwner(args.serviceToken);
+    requirePageSize(args.paginationOpts.numItems, "Activity");
+    return ctx.db
+      .query("auditEvents")
+      .withIndex("by_owner_and_created_at", (q) => q.eq("ownerId", ownerId))
+      .order("desc")
+      .paginate(args.paginationOpts);
   },
 });
 

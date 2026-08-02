@@ -6,7 +6,12 @@ import type {
   QuoteDeliveryAttempt,
   QuoteDeliveryRepository,
 } from "../quotes/quoteDeliveryRepository.js";
-import type { QuoteEmailProvider, QuoteEmailSendResult } from "../quotes/quoteEmailProvider.js";
+import {
+  prepareRegisterAndSendQuoteEmail,
+  QuoteEmailAcceptedIndeterminateError,
+} from "../quotes/quoteEmailDeliveryProtocol.js";
+import type { QuoteEmailProvider } from "../quotes/quoteEmailProvider.js";
+import type { QuotePdfArtifactRepository } from "../quotes/quotePdfArtifactRepository.js";
 import type { QuoteRepository } from "../quotes/quoteRepository.js";
 import { canonicalJson } from "./canonicalJson.js";
 import { computeExternalReconciliationId, type ToolExecutionDefinition } from "./toolExecution.js";
@@ -67,6 +72,7 @@ export function createQuoteSendToolDefinition(
   quotes: QuoteRepository,
   provider: QuoteEmailProvider,
   deliveries: QuoteDeliveryRepository,
+  pdfArtifacts: QuotePdfArtifactRepository,
 ): ToolExecutionDefinition {
   return {
     tool: QUOTE_SEND_TOOL,
@@ -93,6 +99,22 @@ export function createQuoteSendToolDefinition(
         throw new Error(
           `Quote ${parsed.quoteId} revision ${parsed.quoteRevision} fingerprint has changed since approval; a new approval is required.`,
         );
+      }
+
+      const artifact = await pdfArtifacts.getForRevision(
+        {
+          quoteId: parsed.quoteId,
+          revision: parsed.quoteRevision,
+          expectedRevisionFingerprint: snapshot.revision.fingerprint,
+        },
+        signal,
+      );
+      if (
+        !artifact ||
+        artifact.revisionId !== snapshot.revision.revisionId ||
+        artifact.revisionFingerprint !== snapshot.revision.fingerprint
+      ) {
+        throw new Error("quote-pdf-artifact-unavailable");
       }
 
       const scope = {
@@ -150,14 +172,56 @@ export function createQuoteSendToolDefinition(
       };
       signal.addEventListener("abort", onAbort, { once: true });
 
-      let result: QuoteEmailSendResult;
+      let providerReferenceRegistered = false;
       try {
-        result = await provider.send(
-          { quoteId: parsed.quoteId, revision: snapshot.revision, recipient: parsed.recipient },
+        await prepareRegisterAndSendQuoteEmail({
+          provider,
+          input: {
+            quoteId: parsed.quoteId,
+            revision: snapshot.revision,
+            recipient: parsed.recipient,
+            subject: `Quote ${snapshot.aggregate.number}`,
+            body: `Please find attached quote ${snapshot.aggregate.number}, revision ${parsed.quoteRevision}.`,
+            attachment: artifact,
+          },
           signal,
-        );
+          register: async (reference) => {
+            await context.registerProviderAttempt(reference);
+            providerReferenceRegistered = true;
+            await project(() =>
+              deliveries.bindProviderReference({
+                deliveryAttemptId: attempt.deliveryAttemptId,
+                expectedStatus: "executing",
+                providerRequestId: reference.providerRequestId,
+                providerCorrelationId: reference.providerCorrelationId,
+                reconciliationId: computeExternalReconciliationId(
+                  context.action,
+                  context.idempotencyKey,
+                  context.effectFingerprint,
+                ),
+              }),
+            );
+          },
+        });
+        throw new Error("quote-email-protocol-returned");
       } catch (error: unknown) {
-        if (!signal.aborted) {
+        if (
+          providerReferenceRegistered ||
+          error instanceof QuoteEmailAcceptedIndeterminateError ||
+          signal.aborted
+        ) {
+          await project(() =>
+            deliveries.markIndeterminate({
+              deliveryAttemptId: attempt.deliveryAttemptId,
+              expectedStatus: "executing",
+              reconciliationId: computeExternalReconciliationId(
+                context.action,
+                context.idempotencyKey,
+                context.effectFingerprint,
+              ),
+            }),
+          );
+        } else {
           await project(() =>
             deliveries.complete({
               deliveryAttemptId: attempt.deliveryAttemptId,
@@ -171,38 +235,6 @@ export function createQuoteSendToolDefinition(
       } finally {
         signal.removeEventListener("abort", onAbort);
       }
-
-      await project(() =>
-        deliveries.bindProviderReference({
-          deliveryAttemptId: attempt.deliveryAttemptId,
-          expectedStatus: "executing",
-          providerRequestId: result.providerRequestId,
-          providerCorrelationId: result.providerCorrelationId,
-          reconciliationId: computeExternalReconciliationId(
-            context.action,
-            context.idempotencyKey,
-            context.effectFingerprint,
-          ),
-        }),
-      );
-      await context.registerProviderAttempt({
-        provider: provider.name,
-        providerRequestId: result.providerRequestId,
-        providerCorrelationId: result.providerCorrelationId,
-      });
-      await project(() =>
-        deliveries.complete({
-          deliveryAttemptId: attempt.deliveryAttemptId,
-          expectedStatus: "executing",
-          outcome: "succeeded",
-        }),
-      );
-
-      return {
-        quoteId: parsed.quoteId,
-        revision: parsed.quoteRevision,
-        recipient: parsed.recipient,
-      };
     },
   };
 }

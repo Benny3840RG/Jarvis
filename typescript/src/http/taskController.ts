@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import {
   Body,
   Controller,
@@ -34,6 +36,22 @@ function invalid(detail: string): JarvisProblem {
 
 function operationProblem(error: unknown): JarvisProblem {
   const message = error instanceof Error ? error.message : String(error);
+  if (/controlled task execution/i.test(message)) {
+    return problem(
+      "controlled-task-boundary",
+      "Controlled Task Conflict",
+      HttpStatus.CONFLICT,
+      "This project-scoped task must be changed through its approved controlled action.",
+    );
+  }
+  if (/task create idempotency key conflict/i.test(message)) {
+    return problem(
+      "idempotency-conflict",
+      "Idempotency Key Conflict",
+      HttpStatus.CONFLICT,
+      "Idempotency-Key was already used for a different task request.",
+    );
+  }
   if (/does not exist|not found/i.test(message)) {
     return problem(
       "task-not-found",
@@ -52,6 +70,10 @@ function operationProblem(error: unknown): JarvisProblem {
 
 function taskResponse(task: Task): { data: Task } {
   return { data: task };
+}
+
+function requestFingerprint(input: unknown): string {
+  return createHash("sha256").update(JSON.stringify(input), "utf8").digest("hex");
 }
 
 @Controller("api/v1/tasks")
@@ -91,7 +113,7 @@ export class TaskController {
     } catch (error: unknown) {
       throw invalid(error instanceof Error ? error.message : "Idempotency-Key is invalid.");
     }
-    const fingerprint = JSON.stringify(input);
+    const fingerprint = requestFingerprint(input);
     const cached = this.cachedCreates.get(key);
     if (cached) {
       if (cached.fingerprint !== fingerprint) {
@@ -119,7 +141,10 @@ export class TaskController {
       reply.header("Location", `/api/v1/tasks/${task.id}`);
       return taskResponse(task);
     }
-    const create = this.persistence.addTask(input.title, input.category);
+    const create = this.persistence.addTask(input.title, input.category, {
+      idempotencyKey: key,
+      requestFingerprint: fingerprint,
+    });
     this.pendingCreates.set(key, { fingerprint, task: create });
     try {
       const task = await create;

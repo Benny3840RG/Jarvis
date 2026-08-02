@@ -3,6 +3,10 @@ import { ConvexControlledReminderStore } from "../persistence/convexControlledRe
 import { ConvexControlledTaskStore } from "../persistence/convexControlledTasks.js";
 import { ConvexExternalReconciliationStore } from "../persistence/convexExternalReconciliations.js";
 import { ConvexNoteStore } from "../persistence/convexNotes.js";
+import {
+  ConvexExecutionEligibilityStore,
+  ConvexSingleUseConsumptionClaimStore,
+} from "../persistence/convexToolActions.js";
 import { ConvexToolExecutionReceiptStore } from "../persistence/convexToolExecutionReceipts.js";
 import { resolvePersistenceProviderName } from "../persistence/providerSelection.js";
 import type { QuoteDeliveryRepository } from "../quotes/quoteDeliveryRepository.js";
@@ -12,6 +16,10 @@ import {
   type QuoteEmailProvider,
 } from "../quotes/quoteEmailProvider.js";
 import { createQuoteRepositoryFromEnv } from "../quotes/quoteRepositoryFactory.js";
+import {
+  createQuotePdfArtifactRepositoryFromEnv,
+  type QuotePdfArtifactRepository,
+} from "../quotes/quotePdfArtifactRepository.js";
 import type { QuoteRepository } from "../quotes/quoteRepository.js";
 import type { ControlledReminderStore } from "../reminders/controlledReminder.js";
 import type { ControlledTaskStore } from "../tasks/controlledTask.js";
@@ -27,6 +35,7 @@ export function createToolExecutionDefinitions(
   quoteRepository?: QuoteRepository,
   quoteEmailProvider?: QuoteEmailProvider,
   quoteDeliveryRepository?: QuoteDeliveryRepository,
+  quotePdfArtifactRepository?: QuotePdfArtifactRepository,
 ): ToolExecutionDefinition[] {
   if ((taskStore === undefined) !== (reminderStore === undefined)) {
     throw new Error("Task and reminder tool stores must be registered together.");
@@ -39,28 +48,29 @@ export function createToolExecutionDefinitions(
       : createTaskReminderToolDefinitions(taskStore, reminderStore)),
     ...(quoteRepository === undefined ||
     quoteEmailProvider === undefined ||
-    quoteDeliveryRepository === undefined
+    quoteDeliveryRepository === undefined ||
+    quotePdfArtifactRepository === undefined
       ? []
       : [
           createQuoteSendToolDefinition(
             quoteRepository,
             quoteEmailProvider,
             quoteDeliveryRepository,
+            quotePdfArtifactRepository,
           ),
         ]),
   ];
 }
 
 /**
- * Tool execution remains fail-closed. The live definitions are limited to the
- * reviewed internal mutations: notes:create, tasks:create, tasks:complete,
- * reminders:create and reminders:cancel, plus quotes:send once a real email
- * provider is configured. `createQuoteEmailProviderFromEnv` currently always
- * returns `null` — no vendor has been chosen yet — so quotes:send is not
- * allowlisted in any live deployment today; every other tool:operation pair
- * is blocked as not-allowlisted by ToolExecutionService.
+ * Tool execution remains fail-closed. `quotes:send` is registered only when
+ * Convex persistence and all four quote-delivery dependencies are available.
+ * Maintained process entrypoints inject the provider from the same Outlook
+ * runtime bundle used by reconciliation so token state is not duplicated.
  */
-export function createToolExecutionServiceFromEnv(): ToolExecutionService | null {
+export function createToolExecutionServiceFromEnv(
+  quoteEmailProvider: QuoteEmailProvider | null = createQuoteEmailProviderFromEnv(),
+): ToolExecutionService | null {
   if (resolvePersistenceProviderName() !== "convex") return null;
   return new ToolExecutionService(
     createToolExecutionDefinitions(
@@ -68,10 +78,13 @@ export function createToolExecutionServiceFromEnv(): ToolExecutionService | null
       new ConvexControlledTaskStore(),
       new ConvexControlledReminderStore(),
       createQuoteRepositoryFromEnv() ?? undefined,
-      createQuoteEmailProviderFromEnv() ?? undefined,
+      quoteEmailProvider ?? undefined,
       createQuoteDeliveryRepositoryFromEnv() ?? undefined,
+      createQuotePdfArtifactRepositoryFromEnv() ?? undefined,
     ),
     new ConvexToolExecutionReceiptStore(),
     new ConvexExternalReconciliationStore(),
+    new ConvexSingleUseConsumptionClaimStore(),
+    new ConvexExecutionEligibilityStore(),
   );
 }

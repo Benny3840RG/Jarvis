@@ -4,7 +4,10 @@ import { Body, Controller, Get, HttpCode, Inject, Param, Post, Query, Req } from
 import type { FastifyRequest } from "fastify";
 
 import type { ToolActionService } from "../actions/toolActions.js";
-import type { ToolExecutionService } from "../actions/toolExecution.js";
+import {
+  deriveToolExecutionIdempotencyKey,
+  type ToolExecutionService,
+} from "../actions/toolExecution.js";
 import type { HttpAppConfig } from "./config.js";
 import { JarvisProblem } from "./problemDetails.js";
 import { requestIdFor } from "./requestId.js";
@@ -14,6 +17,7 @@ import {
   parseToolActionApproval,
   parseToolActionListLimit,
   parseToolActionRejectionReason,
+  parseToolActionRevocation,
   parseToolActionState,
 } from "./toolActionRequest.js";
 import { HTTP_APP_CONFIG, HTTP_TOOL_ACTIONS, HTTP_TOOL_EXECUTION } from "./tokens.js";
@@ -58,6 +62,15 @@ function unavailable(): JarvisProblem {
     "tool-action-approval-unavailable",
     "Tool Action Approval Unavailable",
     "Tool action approval requires the configured Convex persistence provider.",
+  );
+}
+
+function revocationUnavailable(): JarvisProblem {
+  return new JarvisProblem(
+    503,
+    "tool-action-revocation-unavailable",
+    "Tool Action Revocation Unavailable",
+    "Tool action revocation requires the configured Convex persistence provider.",
   );
 }
 
@@ -278,6 +291,41 @@ export class ToolActionController {
     }
   }
 
+  // Revocation is gated by the same approvalToken as /approve — the same
+  // human-only credential that proves a person, not just the AI agent
+  // holding the shared service token, decided the outcome. This is an
+  // owner-scoped operation on one action: it never affects any other actor's
+  // rows (requireOwner/requireAction already enforce that at the Convex
+  // layer), and it never deletes the action or its audit trail.
+  @Post(":actionId/revoke")
+  @HttpCode(200)
+  async revoke(
+    @Param("projectId") projectId: string,
+    @Param("actionId") actionId: string,
+    @Body() body: unknown,
+  ) {
+    let parsed;
+    try {
+      parsed = parseToolActionRevocation(body);
+    } catch {
+      throw new JarvisProblem(
+        422,
+        "invalid-tool-action-revocation",
+        "Invalid Tool Action Revocation",
+        "Tool action revocation requires a non-empty reason and a valid approval token.",
+      );
+    }
+    this.requireApprovalToken(parsed.approvalToken);
+    const service = this.requireService();
+    if (!service.revoke) throw revocationUnavailable();
+    try {
+      return await service.revoke({ actionId, projectId, reason: parsed.reason });
+    } catch (error: unknown) {
+      if (error instanceof JarvisProblem) throw error;
+      throw operationProblem(error);
+    }
+  }
+
   @Post(":actionId/execute")
   @HttpCode(200)
   async execute(
@@ -317,7 +365,10 @@ export class ToolActionController {
     return this.requireExecutionService().execute({
       action,
       authority: "T3",
-      idempotencyKey: parsed.idempotencyKey,
+      idempotencyKey: deriveToolExecutionIdempotencyKey(
+        action.actionId,
+        parsed.dryRun === true ? "dry-run" : "live",
+      ),
       ...(parsed.dryRun === undefined ? {} : { dryRun: parsed.dryRun }),
       ...(parsed.timeoutMs === undefined ? {} : { timeoutMs: parsed.timeoutMs }),
     });

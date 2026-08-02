@@ -51,6 +51,7 @@ export function createUpgrade(input: UpgradeInput): Upgrade {
     ...(input.version && input.version.trim() ? { version: input.version.trim() } : {}),
     ...(input.occurredAt === undefined ? {} : { occurredAt: validTimestamp(input.occurredAt) }),
     createdAt: Date.now(),
+    updatedAt: Date.now(),
   };
 }
 
@@ -87,4 +88,5 @@ export function applyUpgradeUpdate(entry: Upgrade, update: UpgradeUpdate): void 
     if (update.occurredAt === null) delete entry.occurredAt;
     else entry.occurredAt = validTimestamp(update.occurredAt);
   }
+  entry.updatedAt = Date.now();
 }
