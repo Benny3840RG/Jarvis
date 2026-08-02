@@ -5,10 +5,7 @@ import { describe, it } from "node:test";
 const packageJson = JSON.parse(
   readFileSync(new URL("../package.json", import.meta.url), "utf8"),
 ) as { scripts?: Record<string, string> };
-const convexTsconfig = readFileSync(
-  new URL("../convex/tsconfig.json", import.meta.url),
-  "utf8",
-);
+const convexTsconfig = readFileSync(new URL("../convex/tsconfig.json", import.meta.url), "utf8");
 
 describe("Convex TypeScript configuration", () => {
   it("includes Node globals required by Convex and shared modules", () => {
