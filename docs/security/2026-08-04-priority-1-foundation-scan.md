@@ -31,7 +31,7 @@ Local checkout and local scanner execution were blocked in the available sandbox
 | JARVIS-SEC-008 | Dynamic command execution | Rejected / no sink found | Connector search found no production `child_process`, `spawn`, or `execFile` use in reachable code search. | No finding from connector-backed scan. |
 | JARVIS-SEC-009 | Dynamic JavaScript execution | Rejected / test-only | Connector search found `new Function`/VM usage in tests and static skill/reference documentation, not production request handling. `eval(` search returned no hits. | No finding from connector-backed scan. |
 | JARVIS-SEC-010 | Public HTTP routes | Rejected / intended exposure | Only `healthz` is marked `@PublicRoute()`. Operator API routes remain guarded by `ServiceTokenGuard`. | No finding. |
-| JARVIS-SEC-011 | GitHub Actions supply-chain and control-plane ownership | Reportable, remediated | Several workflows still used mutable action tags such as `actions/checkout@v7`, `actions/setup-node@v7`, `actions/setup-python@v7`, and `ruby/setup-ruby@v1`. Several checkout steps also retained credentials by default. No CODEOWNERS or root security policy existed for the active control plane. | PR #282 pins all workflow actions to full commit SHAs, sets `persist-credentials: false` for checkout steps that do not explicitly push, adds `.github/CODEOWNERS`, adds `SECURITY.md`, and records this truth. |
+| JARVIS-SEC-011 | GitHub Actions supply-chain and control-plane ownership | Reportable, remediated | Several workflows still used mutable action tags such as `actions/checkout@v7`, `actions/setup-node@v7`, `actions/setup-python@v7`, and `ruby/setup-ruby@v1`. Several checkout steps also retained credentials by default. No CODEOWNERS or root security policy existed for the active control plane. | PR #283 pins all workflow actions to full commit SHAs, sets `persist-credentials: false` for checkout steps that do not explicitly push, adds `.github/CODEOWNERS`, adds `SECURITY.md`, and records this truth. |
 
 ## Controls confirmed
 
@@ -57,7 +57,7 @@ Local checkout and local scanner execution were blocked in the available sandbox
 - PR #278 merged: immutable health evidence. TypeScript checks `30822207574`; Copilot Review Check `30822205799`.
 - PR #279 merged: CodeQL script extraction repair. TypeScript checks `30822575688`; Copilot Review Check `30822580976`.
 - PR #280 merged: MCP API origin lock-down. TypeScript checks `30823289076`; Copilot Review Check `30823290781`.
-- PR #282 pending: workflow hardening. Required verification before merge: TypeScript checks, Copilot Review Check, and branch diff review proving no mutable `uses:` refs remain in workflow files.
+- PR #283 pending: workflow hardening. Required verification before merge: TypeScript checks, Copilot Review Check, and branch diff review proving no mutable `uses:` refs remain in workflow files.
 
 ## Slice 3 status
 
@@ -65,4 +65,4 @@ Priority 1 / Slice 3 is complete for the connector-backed scan path. It produced
 
 ## Slice 4 status
 
-Priority 1 / Slice 4 is complete only after PR #282 passes CI and is merged. The intended state is: all GitHub Actions pinned to immutable commit SHAs, checkout credential persistence disabled unless explicitly required, control-plane CODEOWNERS coverage present, and SECURITY.md present at the repository root.
+Priority 1 / Slice 4 is complete only after PR #283 passes CI and is merged. The intended state is: all GitHub Actions pinned to immutable commit SHAs, checkout credential persistence disabled unless explicitly required, control-plane CODEOWNERS coverage present, and SECURITY.md present at the repository root.
