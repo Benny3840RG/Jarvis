@@ -45,8 +45,13 @@ function validHost(host: string): boolean {
   );
 }
 
+function normalizedHost(host: string): string {
+  return host.startsWith("[") && host.endsWith("]") ? host.slice(1, -1) : host.toLowerCase();
+}
+
 function isLoopbackHost(host: string): boolean {
-  return host === "localhost" || host === "127.0.0.1" || host === "::1";
+  const normalized = normalizedHost(host);
+  return normalized === "localhost" || normalized === "127.0.0.1" || normalized === "::1";
 }
 
 function resolveHost(env: NodeJS.ProcessEnv): string {
@@ -71,6 +76,14 @@ function resolveApiBaseUrl(env: NodeJS.ProcessEnv): URL {
   }
   if (!["http:", "https:"].includes(url.protocol)) {
     throw new Error("JARVIS_API_BASE_URL must use HTTP or HTTPS.");
+  }
+  if (url.username || url.password) {
+    throw new Error("JARVIS_API_BASE_URL must not include embedded credentials.");
+  }
+  if (!isLoopbackHost(url.hostname)) {
+    throw new Error(
+      "Remote Jarvis API access is disabled until the approved OAuth 2.1, TLS, and deployment boundary exists.",
+    );
   }
   url.pathname = url.pathname.endsWith("/") ? url.pathname : `${url.pathname}/`;
   url.search = "";
