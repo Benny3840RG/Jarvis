@@ -12,6 +12,7 @@ import { ZState } from "../src/agent/zState.js";
 import { createAgentSystem } from "../src/agent/system.js";
 import { runGovernedAutonomyDemo } from "../src/agent/autonomyDemo.js";
 import { runSystemCheck } from "../src/agent/systemCheck.js";
+import type { HealthMetric } from "../src/agent/healthMonitor.js";
 import type { InteractionRecord } from "../src/agent/learningEngine.js";
 
 function historyOf(intent: string, count = 5): InteractionRecord[] {
@@ -68,6 +69,38 @@ describe("agent prediction chain", () => {
 describe("agent reliability gating", () => {
   it("reports unknown when no health evidence is available", () => {
     assert.equal(new HealthMonitor().overallStatus(), "unknown");
+  });
+
+  it("keeps health evidence immutable after validation", () => {
+    const suppliedMetrics: HealthMetric[] = [
+      { name: "orchestrator_latency_ms", value: 20, status: "ok" },
+    ];
+    const health = new HealthMonitor(suppliedMetrics);
+
+    suppliedMetrics.push({ name: "domain_errors_last_minute", value: 99, status: "critical" });
+    suppliedMetrics[0] = { name: "orchestrator_latency_ms", value: 999, status: "critical" };
+
+    const exposedMetrics = health.getMetrics();
+    assert.equal(health.overallStatus(), "ok");
+    assert.equal(exposedMetrics.length, 1);
+    assert.deepEqual(exposedMetrics[0], {
+      name: "orchestrator_latency_ms",
+      value: 20,
+      status: "ok",
+    });
+    assert.equal(Object.isFrozen(exposedMetrics), true);
+    assert.equal(Object.isFrozen(exposedMetrics[0]), true);
+    assert.throws(() => {
+      (exposedMetrics as HealthMetric[]).push({
+        name: "domain_errors_last_minute",
+        value: 99,
+        status: "critical",
+      });
+    }, TypeError);
+    assert.throws(() => {
+      (exposedMetrics[0] as { status: HealthMetric["status"] }).status = "critical";
+    }, TypeError);
+    assert.equal(health.overallStatus(), "ok");
   });
 
   it("refuses autonomy when reliability is critical, even with ample history", () => {
