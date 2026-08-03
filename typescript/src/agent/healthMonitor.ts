@@ -1,15 +1,19 @@
 export interface HealthMetric {
-  name: string;
-  value: number;
-  status: "ok" | "warning" | "critical";
+  readonly name: string;
+  readonly value: number;
+  readonly status: "ok" | "warning" | "critical";
 }
 
 export type HealthStatus = "ok" | "warning" | "critical" | "unknown";
 
 export class HealthMonitor {
-  constructor(private readonly metrics: HealthMetric[] = []) {}
+  private readonly metrics: readonly Readonly<HealthMetric>[];
 
-  getMetrics(): HealthMetric[] {
+  constructor(metrics: readonly HealthMetric[] = []) {
+    this.metrics = Object.freeze(metrics.map((metric) => Object.freeze({ ...metric })));
+  }
+
+  getMetrics(): readonly Readonly<HealthMetric>[] {
     return this.metrics;
   }
 
