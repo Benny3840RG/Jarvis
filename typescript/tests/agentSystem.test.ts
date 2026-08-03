@@ -91,7 +91,7 @@ describe("agent reliability gating", () => {
     assert.equal(Object.isFrozen(exposedMetrics), true);
     assert.equal(Object.isFrozen(exposedMetrics[0]), true);
     assert.throws(() => {
-      (exposedMetrics as HealthMetric[]).push({
+      (exposedMetrics as unknown as HealthMetric[]).push({
         name: "domain_errors_last_minute",
         value: 99,
         status: "critical",
