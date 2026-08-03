@@ -20,6 +20,7 @@ import type { MemoryChangeSetService } from "../memory/memoryChangeSets.js";
 import type { PersistenceProvider } from "../persistence/persistence.js";
 import type { PersistenceProviderName } from "../persistence/providerSelection.js";
 import type { TotalityPipeline } from "../totality/totalityPipeline.js";
+import type { ExternalReconciliationReadStore } from "../reconciliation/externalReconciliation.js";
 import type { RuntimeReconciliationHealth } from "../reconciliation/runtimeReconciliationHost.js";
 import type { ActivityEventReader } from "../operations/activityTimeline.js";
 import type { HttpAppConfig } from "./config.js";
@@ -38,6 +39,7 @@ import { ProblemDetailsFilter } from "./problemDetails.js";
 import { ClientController } from "./clientController.js";
 import { ProjectController } from "./projectController.js";
 import { QuoteController } from "./quoteController.js";
+import { ReconciliationController } from "./reconciliationController.js";
 import { ReminderController } from "./reminderController.js";
 import { RequestIdInterceptor } from "./requestId.js";
 import { ServiceTokenGuard } from "./serviceTokenGuard.js";
@@ -65,6 +67,7 @@ import {
   HTTP_PERSISTENCE,
   HTTP_PROVIDER_NAME,
   HTTP_RECONCILIATION_HEALTH,
+  HTTP_EXTERNAL_RECONCILIATION_READ_STORE,
   HTTP_TOOL_ACTIONS,
   HTTP_TOOL_EXECUTION,
   HTTP_TOTALITY_PIPELINE,
@@ -74,6 +77,7 @@ export type JarvisHttpModuleOptions = {
   persistence: PersistenceProvider;
   providerName: PersistenceProviderName;
   reconciliationHealth: () => RuntimeReconciliationHealth;
+  externalReconciliationReadStore: ExternalReconciliationReadStore | null;
   config: HttpAppConfig;
   totalityPipeline: TotalityPipeline | null;
   memoryChangeSetService: MemoryChangeSetService | null;
@@ -110,6 +114,7 @@ export class JarvisHttpModule {
         ClientController,
         ProjectController,
         QuoteController,
+        ReconciliationController,
         ErrandController,
         BuildController,
         BuildLogController,
@@ -128,7 +133,10 @@ export class JarvisHttpModule {
         { provide: HTTP_PROJECT_STORE, useValue: options.projectStore },
         { provide: HTTP_QUOTE_STORE, useValue: options.quoteStore },
         { provide: HTTP_QUOTE_REPOSITORY, useValue: options.quoteRepository },
-        { provide: HTTP_QUOTE_DELIVERY_REPOSITORY, useValue: options.quoteDeliveryRepository },
+        {
+          provide: HTTP_QUOTE_DELIVERY_REPOSITORY,
+          useValue: options.quoteDeliveryRepository,
+        },
         { provide: HTTP_ERRAND_STORE, useValue: options.errandStore },
         { provide: HTTP_BUILD_STORE, useValue: options.buildStore },
         { provide: HTTP_BUILD_LOG_STORE, useValue: options.buildLogStore },
@@ -138,11 +146,24 @@ export class JarvisHttpModule {
         { provide: HTTP_NOTE_STORE, useValue: options.noteStore },
         { provide: HTTP_ACTIVITY_EVENTS, useValue: options.activityEventReader },
         { provide: HTTP_PROVIDER_NAME, useValue: options.providerName },
-        { provide: HTTP_RECONCILIATION_HEALTH, useValue: options.reconciliationHealth },
+        {
+          provide: HTTP_RECONCILIATION_HEALTH,
+          useValue: options.reconciliationHealth,
+        },
+        {
+          provide: HTTP_EXTERNAL_RECONCILIATION_READ_STORE,
+          useValue: options.externalReconciliationReadStore,
+        },
         { provide: HTTP_TOTALITY_PIPELINE, useValue: options.totalityPipeline },
-        { provide: HTTP_MEMORY_CHANGE_SETS, useValue: options.memoryChangeSetService },
+        {
+          provide: HTTP_MEMORY_CHANGE_SETS,
+          useValue: options.memoryChangeSetService,
+        },
         { provide: HTTP_TOOL_ACTIONS, useValue: options.toolActionService },
-        { provide: HTTP_TOOL_EXECUTION, useValue: options.toolExecutionService },
+        {
+          provide: HTTP_TOOL_EXECUTION,
+          useValue: options.toolExecutionService,
+        },
         SystemStatusService,
         { provide: APP_GUARD, useClass: ServiceTokenGuard },
         { provide: APP_INTERCEPTOR, useClass: RequestIdInterceptor },

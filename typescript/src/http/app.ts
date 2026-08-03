@@ -61,6 +61,8 @@ import {
 } from "../persistence/persistence.js";
 import { createTotalityPipelineFromEnv } from "../totality/totalityFactory.js";
 import type { TotalityPipeline } from "../totality/totalityPipeline.js";
+import { ConvexExternalReconciliationStore } from "../persistence/convexExternalReconciliations.js";
+import type { ExternalReconciliationReadStore } from "../reconciliation/externalReconciliation.js";
 import type { RuntimeReconciliationHealth } from "../reconciliation/runtimeReconciliationHost.js";
 import { resolveHttpAppConfig, type HttpAppConfig } from "./config.js";
 import { JarvisHttpModule } from "./jarvisHttpModule.js";
@@ -83,6 +85,7 @@ export type CreateJarvisHttpAppOptions = (
 ) & {
   config?: HttpAppConfig;
   reconciliationHealth?: () => RuntimeReconciliationHealth;
+  externalReconciliationReadStore?: ExternalReconciliationReadStore | null;
   logger?: NestApplicationOptions["logger"];
   totalityPipeline?: TotalityPipeline | null;
   memoryChangeSetService?: MemoryChangeSetService | null;
@@ -138,6 +141,12 @@ export async function createJarvisHttpApp(
   const usesEnvironment = options.persistence === undefined;
   const reconciliationHealth =
     options.reconciliationHealth ?? (() => ({ state: "disabled", enabled: false }));
+  const externalReconciliationReadStore =
+    options.externalReconciliationReadStore !== undefined
+      ? options.externalReconciliationReadStore
+      : usesEnvironment && providerName === "convex"
+        ? new ConvexExternalReconciliationStore()
+        : null;
   const totalityPipeline =
     options.totalityPipeline !== undefined
       ? options.totalityPipeline
@@ -246,6 +255,7 @@ export async function createJarvisHttpApp(
       providerName,
       config,
       reconciliationHealth,
+      externalReconciliationReadStore,
       totalityPipeline,
       memoryChangeSetService,
       toolActionService,

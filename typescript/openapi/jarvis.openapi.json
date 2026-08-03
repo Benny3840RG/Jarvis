@@ -2072,90 +2072,6 @@
         }
       }
     },
-    "/api/v1/projects/{projectId}/tool-actions/{actionId}/revoke": {
-      "post": {
-        "operationId": "revokeToolAction",
-        "summary": "Revoke an approved tool-action proposal before consumption",
-        "description": "Owner-scoped revocation of a pending or approved proposal, gated by the same approvalToken as /approve. Idempotent when repeated with the same reason. Refuses to revoke an action that has already produced a completed execution receipt (already consumed). Never deletes the action or its audit trail.",
-        "tags": ["Tool Actions"],
-        "parameters": [
-          {
-            "name": "projectId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 128
-            }
-          },
-          {
-            "name": "actionId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 128
-            }
-          }
-        ],
-        "x-mcp-tool": {
-          "exposed": false,
-          "annotations": {
-            "readOnlyHint": false,
-            "destructiveHint": false,
-            "openWorldHint": false,
-            "idempotentHint": true
-          }
-        },
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/RevokeToolActionRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Tool-action proposal revoked.",
-            "headers": {
-              "X-Request-Id": {
-                "$ref": "#/components/headers/RequestId"
-              }
-            },
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ToolAction"
-                }
-              }
-            }
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          },
-          "409": {
-            "$ref": "#/components/responses/Conflict"
-          },
-          "422": {
-            "$ref": "#/components/responses/UnprocessableEntity"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalServerError"
-          },
-          "503": {
-            "$ref": "#/components/responses/ServiceUnavailable"
-          }
-        }
-      }
-    },
     "/api/v1/projects/{projectId}/tool-actions/{actionId}/execute": {
       "post": {
         "operationId": "executeToolAction",
@@ -3411,49 +3327,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/BriefResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalServerError"
-          },
-          "503": {
-            "$ref": "#/components/responses/ServiceUnavailable"
-          }
-        }
-      }
-    },
-    "/api/v1/operations/inbox": {
-      "get": {
-        "operationId": "getOperationsInbox",
-        "summary": "Get the read-only Operations Inbox",
-        "description": "Composes what genuinely needs the operator's attention now from existing authoritative sources (overdue reminders, overdue/due-soon maintenance; governed tool actions, reconciliation escalations, and quote-delivery problems are reported as a separately-commissioned source rather than fabricated). Each source reports its own availability — one source failing never fails this response or hides another source's items. Read-only: no source is mutated or retried from this endpoint.",
-        "tags": ["Operations"],
-        "x-mcp-tool": {
-          "exposed": true,
-          "annotations": {
-            "readOnlyHint": true,
-            "destructiveHint": false,
-            "openWorldHint": false,
-            "idempotentHint": true
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Current Operations Inbox.",
-            "headers": {
-              "X-Request-Id": {
-                "$ref": "#/components/headers/RequestId"
-              }
-            },
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/OperationsInboxResponse"
                 }
               }
             }
@@ -5119,6 +4992,251 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/reconciliations": {
+      "get": {
+        "operationId": "listExternalReconciliations",
+        "summary": "List external reconciliation records",
+        "description": "Returns a bounded owner-scoped operator view of external reconciliation state. 503 outside the configured Convex persistence provider.",
+        "tags": ["Operations"],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "parameters": [
+          {
+            "name": "state",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/ExternalReconciliationState"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 50
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Sanitised reconciliation records.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExternalReconciliationListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/reconciliations/{reconciliationId}": {
+      "parameters": [
+        {
+          "name": "reconciliationId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      ],
+      "get": {
+        "operationId": "getExternalReconciliation",
+        "summary": "Get an external reconciliation record",
+        "description": "Returns one sanitised reconciliation record and its durable receipt when present.",
+        "tags": ["Operations"],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Sanitised reconciliation detail.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExternalReconciliationDetailResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{projectId}/tool-actions/{actionId}/revoke": {
+      "post": {
+        "operationId": "revokeToolAction",
+        "summary": "Revoke an approved tool-action proposal before consumption",
+        "description": "Owner-scoped revocation of a pending or approved proposal, gated by the same approvalToken as /approve. Idempotent when repeated with the same reason. Refuses to revoke an action that has already produced a completed execution receipt (already consumed). Never deletes the action or its audit trail.",
+        "tags": ["Tool Actions"],
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "actionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          }
+        ],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RevokeToolActionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Tool-action proposal revoked.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ToolAction"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/operations/inbox": {
+      "get": {
+        "operationId": "getOperationsInbox",
+        "summary": "Get the read-only Operations Inbox",
+        "description": "Composes what genuinely needs the operator's attention now from existing authoritative sources (overdue reminders, overdue/due-soon maintenance; governed tool actions, reconciliation escalations, and quote-delivery problems are reported as a separately-commissioned source rather than fabricated). Each source reports its own availability — one source failing never fails this response or hides another source's items. Read-only: no source is mutated or retried from this endpoint.",
+        "tags": ["Operations"],
+        "x-mcp-tool": {
+          "exposed": true,
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Current Operations Inbox.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperationsInboxResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
@@ -6923,14 +7041,6 @@
         "type": "string",
         "enum": ["proposed", "approved", "rejected", "expired", "revoked"]
       },
-      "ApprovalExpiryPolicy": {
-        "type": "string",
-        "enum": ["ttl", "non-expiring"]
-      },
-      "ConsumptionPolicy": {
-        "type": "string",
-        "enum": ["single-use", "reusable"]
-      },
       "ToolAuthority": {
         "type": "string",
         "enum": ["T1", "T2", "T3"]
@@ -7143,22 +7253,6 @@
           "reason": {
             "type": "string",
             "minLength": 1
-          }
-        }
-      },
-      "RevokeToolActionRequest": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": ["reason", "approvalToken"],
-        "properties": {
-          "reason": {
-            "type": "string",
-            "minLength": 1
-          },
-          "approvalToken": {
-            "type": "string",
-            "minLength": 1,
-            "description": "The same separately configured operator secret required by /approve — proves a human, not just the shared service token, decided to revoke this specific proposal."
           }
         }
       },
@@ -8431,128 +8525,6 @@
           }
         }
       },
-      "InboxSourceReport": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": ["source", "status", "checkedAt"],
-        "properties": {
-          "source": {
-            "type": "string",
-            "enum": ["reminders", "maintenance", "toolActions", "reconciliation", "quoteDelivery"]
-          },
-          "status": {
-            "type": "string",
-            "enum": ["available", "unavailable", "degraded", "unsupported"]
-          },
-          "reason": {
-            "type": "string",
-            "description": "Present when status is not \"available\" — a concrete, non-generic reason."
-          },
-          "checkedAt": {
-            "type": "string",
-            "format": "date-time"
-          }
-        }
-      },
-      "InboxItem": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "itemId",
-          "kind",
-          "severity",
-          "title",
-          "explanation",
-          "sourceSubsystem",
-          "sourceRecordId",
-          "createdAt",
-          "updatedAt",
-          "status",
-          "actionRequired"
-        ],
-        "properties": {
-          "itemId": {
-            "type": "string",
-            "minLength": 1
-          },
-          "kind": {
-            "type": "string",
-            "enum": ["reminder-overdue", "maintenance-overdue", "maintenance-due-soon"]
-          },
-          "severity": {
-            "type": "string",
-            "enum": ["critical", "high", "elevated", "normal", "informational"]
-          },
-          "title": {
-            "type": "string",
-            "minLength": 1
-          },
-          "explanation": {
-            "type": "string",
-            "minLength": 1
-          },
-          "sourceSubsystem": {
-            "type": "string",
-            "enum": ["reminders", "maintenance", "toolActions", "reconciliation", "quoteDelivery"]
-          },
-          "sourceRecordId": {
-            "type": "string",
-            "minLength": 1
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "dueAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "updatedAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "status": {
-            "type": "string",
-            "minLength": 1
-          },
-          "actionRequired": {
-            "type": "boolean"
-          }
-        }
-      },
-      "OperationsInbox": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": ["generatedAt", "items", "sources"],
-        "properties": {
-          "generatedAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "items": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/InboxItem"
-            }
-          },
-          "sources": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/InboxSourceReport"
-            }
-          }
-        }
-      },
-      "OperationsInboxResponse": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": ["data"],
-        "properties": {
-          "data": {
-            "$ref": "#/components/schemas/OperationsInbox"
-          }
-        }
-      },
       "Errand": {
         "type": "object",
         "additionalProperties": false,
@@ -9532,6 +9504,369 @@
             "type": ["string", "null"],
             "minLength": 1,
             "maxLength": 100
+          }
+        }
+      },
+      "ExternalReconciliationState": {
+        "type": "string",
+        "enum": ["observing", "pending", "claimed", "resolved", "escalated"]
+      },
+      "ExternalReconciliationOperatorRecord": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "reconciliationId",
+          "actionId",
+          "requestId",
+          "projectId",
+          "tool",
+          "operation",
+          "provider",
+          "providerCorrelationId",
+          "state",
+          "attemptCount",
+          "nextAttemptAt",
+          "createdAt",
+          "updatedAt"
+        ],
+        "properties": {
+          "reconciliationId": {
+            "type": "string"
+          },
+          "actionId": {
+            "type": "string"
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "projectId": {
+            "type": "string"
+          },
+          "tool": {
+            "type": "string"
+          },
+          "operation": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "providerRequestId": {
+            "type": "string"
+          },
+          "providerCorrelationId": {
+            "type": "string"
+          },
+          "receiptId": {
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/components/schemas/ExternalReconciliationState"
+          },
+          "attemptCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "nextAttemptAt": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "terminalStatus": {
+            "type": "string",
+            "enum": ["succeeded", "failed"]
+          },
+          "resolutionErrorCode": {
+            "type": "string"
+          },
+          "lastErrorCode": {
+            "type": "string"
+          },
+          "escalationReason": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "updatedAt": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "resolvedAt": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "escalatedAt": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "ExternalReconciliationReceiptSummary": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "receiptId",
+          "actionId",
+          "requestId",
+          "projectId",
+          "tool",
+          "operation",
+          "actor",
+          "policyVersion",
+          "correlationId",
+          "source",
+          "status",
+          "startedAt",
+          "completedAt"
+        ],
+        "properties": {
+          "receiptId": {
+            "type": "string"
+          },
+          "actionId": {
+            "type": "string"
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "projectId": {
+            "type": "string"
+          },
+          "tool": {
+            "type": "string"
+          },
+          "operation": {
+            "type": "string"
+          },
+          "actor": {
+            "type": "string",
+            "enum": ["user", "agent", "tool"]
+          },
+          "approvalId": {
+            "type": "string"
+          },
+          "policyVersion": {
+            "type": "string"
+          },
+          "correlationId": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "providerRequestId": {
+            "type": "string"
+          },
+          "providerCorrelationId": {
+            "type": "string"
+          },
+          "reconciliationId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["dry-run", "succeeded", "failed", "indeterminate", "blocked"]
+          },
+          "errorCode": {
+            "type": "string"
+          },
+          "providerErrorCode": {
+            "type": "string"
+          },
+          "startedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "completedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ExternalReconciliationListResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["data", "count"],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ExternalReconciliationOperatorRecord"
+            }
+          },
+          "count": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "ExternalReconciliationDetailResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["reconciliation", "receipt"],
+        "properties": {
+          "reconciliation": {
+            "$ref": "#/components/schemas/ExternalReconciliationOperatorRecord"
+          },
+          "receipt": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ExternalReconciliationReceiptSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "ApprovalExpiryPolicy": {
+        "type": "string",
+        "enum": ["ttl", "non-expiring"]
+      },
+      "ConsumptionPolicy": {
+        "type": "string",
+        "enum": ["single-use", "reusable"]
+      },
+      "RevokeToolActionRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["reason", "approvalToken"],
+        "properties": {
+          "reason": {
+            "type": "string",
+            "minLength": 1
+          },
+          "approvalToken": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The same separately configured operator secret required by /approve — proves a human, not just the shared service token, decided to revoke this specific proposal."
+          }
+        }
+      },
+      "InboxSourceReport": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["source", "status", "checkedAt"],
+        "properties": {
+          "source": {
+            "type": "string",
+            "enum": ["reminders", "maintenance", "toolActions", "reconciliation", "quoteDelivery"]
+          },
+          "status": {
+            "type": "string",
+            "enum": ["available", "unavailable", "degraded", "unsupported"]
+          },
+          "reason": {
+            "type": "string",
+            "description": "Present when status is not \"available\" — a concrete, non-generic reason."
+          },
+          "checkedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "InboxItem": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "itemId",
+          "kind",
+          "severity",
+          "title",
+          "explanation",
+          "sourceSubsystem",
+          "sourceRecordId",
+          "createdAt",
+          "updatedAt",
+          "status",
+          "actionRequired"
+        ],
+        "properties": {
+          "itemId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "kind": {
+            "type": "string",
+            "enum": ["reminder-overdue", "maintenance-overdue", "maintenance-due-soon"]
+          },
+          "severity": {
+            "type": "string",
+            "enum": ["critical", "high", "elevated", "normal", "informational"]
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "explanation": {
+            "type": "string",
+            "minLength": 1
+          },
+          "sourceSubsystem": {
+            "type": "string",
+            "enum": ["reminders", "maintenance", "toolActions", "reconciliation", "quoteDelivery"]
+          },
+          "sourceRecordId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "dueAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "status": {
+            "type": "string",
+            "minLength": 1
+          },
+          "actionRequired": {
+            "type": "boolean"
+          }
+        }
+      },
+      "OperationsInbox": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["generatedAt", "items", "sources"],
+        "properties": {
+          "generatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InboxItem"
+            }
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InboxSourceReport"
+            }
+          }
+        }
+      },
+      "OperationsInboxResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["data"],
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/OperationsInbox"
           }
         }
       },

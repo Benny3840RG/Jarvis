@@ -112,7 +112,11 @@ describe("ConvexExternalReconciliationStore", () => {
     const calls: unknown[] = [];
     const client = clientWithReturns(
       [
-        reconciliationRow({ state: "observing", receiptKey: undefined, receiptId: undefined }),
+        reconciliationRow({
+          state: "observing",
+          receiptKey: undefined,
+          receiptId: undefined,
+        }),
         {
           reconciliation: reconciliationRow(),
           receipt: receiptRow(),
@@ -230,7 +234,11 @@ describe("ConvexExternalReconciliationStore", () => {
           }),
           receipt: receiptRow(),
         },
-        receiptRow({ status: "succeeded", errorCode: undefined, outputDigest: "digest-1" }),
+        receiptRow({
+          status: "succeeded",
+          errorCode: undefined,
+          outputDigest: "digest-1",
+        }),
         reconciliationRow({
           state: "pending",
           attemptCount: 1,
@@ -311,5 +319,62 @@ describe("ConvexExternalReconciliationStore", () => {
         },
       ],
     );
+  });
+});
+
+describe("ConvexExternalReconciliationStore operator reads", () => {
+  it("maps bounded list and detail reads without invoking mutations", async () => {
+    const calls: unknown[] = [];
+    const client = clientWithReturns(
+      [
+        [
+          reconciliationRow({
+            state: "escalated",
+            escalationReason: "operator-review",
+          }),
+        ],
+        {
+          reconciliation: reconciliationRow({
+            state: "resolved",
+            terminalStatus: "succeeded",
+            resolvedAt: NOW,
+          }),
+          receipt: receiptRow({ status: "succeeded", errorCode: undefined }),
+        },
+      ],
+      calls,
+    );
+    const store = new ConvexExternalReconciliationStore(
+      client,
+      "owner-service-token",
+      "dev:outgoing-ram-798",
+    );
+
+    const listed = await store.listForOperator({
+      state: "escalated",
+      limit: 25,
+    });
+    const detail = await store.getForOperator("reconciliation-1");
+
+    assert.equal(listed[0]?.state, "escalated");
+    assert.equal(detail?.reconciliation.terminalStatus, "succeeded");
+    assert.equal(detail?.receipt?.completedAt, new Date(NOW).toISOString());
+    assert.deepEqual(calls, [
+      {
+        kind: "query",
+        args: {
+          serviceToken: "owner-service-token",
+          state: "escalated",
+          limit: 25,
+        },
+      },
+      {
+        kind: "query",
+        args: {
+          serviceToken: "owner-service-token",
+          reconciliationId: "reconciliation-1",
+        },
+      },
+    ]);
   });
 });

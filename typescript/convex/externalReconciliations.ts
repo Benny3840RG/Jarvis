@@ -4,6 +4,7 @@ import {
   externalReconciliationClaimValidator,
   externalReconciliationDocumentValidator,
   externalReconciliationEnvelopeValidator,
+  externalReconciliationStateValidator,
 } from "./externalReconciliationValidators.js";
 import { requireOwner } from "./authHelpers.js";
 import { cleanRequiredText } from "./toolActionLogic.js";
@@ -43,7 +44,12 @@ function cleanScope(args: {
 async function findByScope(
   ctx: QueryCtx | MutationCtx,
   ownerId: string,
-  scope: { projectId: string; tool: string; operation: string; idempotencyKey: string },
+  scope: {
+    projectId: string;
+    tool: string;
+    operation: string;
+    idempotencyKey: string;
+  },
 ) {
   return ctx.db
     .query("externalReconciliations")
@@ -148,7 +154,9 @@ function receiptDocument(
     actionFingerprint: cleanRequiredText(receipt.actionFingerprint, "Action fingerprint"),
     ...(receipt.effectFingerprint === undefined
       ? {}
-      : { effectFingerprint: cleanRequiredText(receipt.effectFingerprint, "Effect fingerprint") }),
+      : {
+          effectFingerprint: cleanRequiredText(receipt.effectFingerprint, "Effect fingerprint"),
+        }),
     tool: cleanRequiredText(receipt.tool, "Tool name"),
     operation: cleanRequiredText(receipt.operation, "Tool operation"),
     actor: receipt.actor,
@@ -163,7 +171,9 @@ function receiptDocument(
       : { provider: cleanRequiredText(receipt.provider, "Provider") }),
     ...(receipt.providerRequestId === undefined
       ? {}
-      : { providerRequestId: cleanRequiredText(receipt.providerRequestId, "Provider request ID") }),
+      : {
+          providerRequestId: cleanRequiredText(receipt.providerRequestId, "Provider request ID"),
+        }),
     ...(receipt.providerCorrelationId === undefined
       ? {}
       : {
@@ -174,15 +184,21 @@ function receiptDocument(
         }),
     ...(receipt.reconciliationId === undefined
       ? {}
-      : { reconciliationId: cleanRequiredText(receipt.reconciliationId, "Reconciliation ID") }),
+      : {
+          reconciliationId: cleanRequiredText(receipt.reconciliationId, "Reconciliation ID"),
+        }),
     status: receipt.status,
     ...(receipt.outputDigest === undefined
       ? {}
-      : { outputDigest: cleanRequiredText(receipt.outputDigest, "Output digest") }),
+      : {
+          outputDigest: cleanRequiredText(receipt.outputDigest, "Output digest"),
+        }),
     ...(receipt.errorCode === undefined ? {} : { errorCode: receipt.errorCode }),
     ...(receipt.providerErrorCode === undefined
       ? {}
-      : { providerErrorCode: cleanRequiredText(receipt.providerErrorCode, "Provider error code") }),
+      : {
+          providerErrorCode: cleanRequiredText(receipt.providerErrorCode, "Provider error code"),
+        }),
     startedAt: receipt.startedAt,
     completedAt: receipt.completedAt,
     createdAt,
@@ -238,6 +254,53 @@ export const getByScope = query({
     const reconciliation = await findByScope(ctx, ownerId, scope);
     if (!reconciliation) return null;
     assertEffect(reconciliation, scope.effectFingerprint);
+    return {
+      reconciliation,
+      receipt: await findReceipt(ctx, ownerId, reconciliation.receiptKey),
+    };
+  },
+});
+
+export const listForOperator = query({
+  args: {
+    serviceToken: v.string(),
+    state: v.optional(externalReconciliationStateValidator),
+    limit: v.optional(v.number()),
+  },
+  returns: v.array(externalReconciliationDocumentValidator),
+  handler: async (ctx, args) => {
+    const ownerId = requireOwner(args.serviceToken);
+    const limit = args.limit ?? 50;
+    if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
+      throw new Error("Reconciliation list limit must be an integer between 1 and 100.");
+    }
+
+    if (args.state !== undefined) {
+      return ctx.db
+        .query("externalReconciliations")
+        .withIndex("by_owner_and_state_and_updated_at", (q) =>
+          q.eq("ownerId", ownerId).eq("state", args.state!),
+        )
+        .order("desc")
+        .take(limit);
+    }
+
+    return ctx.db
+      .query("externalReconciliations")
+      .withIndex("by_owner_and_updated_at", (q) => q.eq("ownerId", ownerId))
+      .order("desc")
+      .take(limit);
+  },
+});
+
+export const getForOperator = query({
+  args: { serviceToken: v.string(), reconciliationId: v.string() },
+  returns: v.union(externalReconciliationEnvelopeValidator, v.null()),
+  handler: async (ctx, args) => {
+    const ownerId = requireOwner(args.serviceToken);
+    const reconciliationId = cleanRequiredText(args.reconciliationId, "Reconciliation ID");
+    const reconciliation = await findByReconciliationId(ctx, ownerId, reconciliationId);
+    if (!reconciliation) return null;
     return {
       reconciliation,
       receipt: await findReceipt(ctx, ownerId, reconciliation.receiptKey),
@@ -636,7 +699,10 @@ export const resolveClaim = mutation({
     leaseToken: v.string(),
     now: v.number(),
     result: v.union(
-      v.object({ status: v.literal("succeeded"), outputDigest: v.optional(v.string()) }),
+      v.object({
+        status: v.literal("succeeded"),
+        outputDigest: v.optional(v.string()),
+      }),
       v.object({ status: v.literal("failed"), errorCode: v.string() }),
     ),
   },
@@ -700,7 +766,9 @@ export const resolveClaim = mutation({
         reconciliationId: reconciliation.reconciliationId,
         status: args.result.status,
         ...(args.result.status === "succeeded" && args.result.outputDigest !== undefined
-          ? { outputDigest: cleanRequiredText(args.result.outputDigest, "Output digest") }
+          ? {
+              outputDigest: cleanRequiredText(args.result.outputDigest, "Output digest"),
+            }
           : {}),
         ...(args.result.status === "failed"
           ? {
