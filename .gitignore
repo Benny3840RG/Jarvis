@@ -10,8 +10,17 @@ __pycache__/
 typescript/data/jarvis-state.json*
 typescript/data/.jarvis-state.json.tmp-*
 
-# TypeScript dependencies
+# TypeScript dependencies and generated output
 /typescript/node_modules/
+/typescript/dist/
+/typescript/**/dist/
+*.tsbuildinfo
+
+# Removed scaffolds / accidental local PR-body files
+/jarvis-console-01/
+/.github/pull_request_update
+pr-body.md
+pull_request_update
 
 # Local backup archives may contain private Jarvis data
 /typescript/backups/
