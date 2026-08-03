@@ -45,6 +45,31 @@ describe("Jarvis MCP preview configuration", () => {
     );
   });
 
+  it("keeps the authenticated Jarvis API origin loopback-only", () => {
+    assert.throws(
+      () =>
+        resolveJarvisMcpConfig({
+          JARVIS_SERVICE_TOKEN: "test-service-token",
+          JARVIS_API_BASE_URL: "https://api.example.test/jarvis",
+        }),
+      /Remote Jarvis API access is disabled/,
+    );
+    assert.throws(
+      () =>
+        resolveJarvisMcpConfig({
+          JARVIS_SERVICE_TOKEN: "test-service-token",
+          JARVIS_API_BASE_URL: "http://user:pass@127.0.0.1:3000",
+        }),
+      /must not include embedded credentials/,
+    );
+
+    const config = resolveJarvisMcpConfig({
+      JARVIS_SERVICE_TOKEN: "test-service-token",
+      JARVIS_API_BASE_URL: "http://localhost:3000/jarvis?ignored=true#ignored",
+    });
+    assert.equal(config.api.baseUrl.href, "http://localhost:3000/jarvis/");
+  });
+
   it("accepts only absolute HTTP API URLs and valid ports", () => {
     assert.throws(
       () =>
