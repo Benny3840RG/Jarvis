@@ -337,7 +337,7 @@ describe("Jarvis preview widget", () => {
   });
 
   it("ships syntactically valid embedded dashboard JavaScript", () => {
-    const source = widget.match(/<script>([\s\S]*?)<\/script>/)?.[1];
+    const source = widget.match(/<script\b[^>]*>([\s\S]*?)<\/script\b[^>]*>/i)?.[1];
     assert.ok(source, "dashboard script was not found");
     assert.doesNotThrow(() => new Script(source));
   });
