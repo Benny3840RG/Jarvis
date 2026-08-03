@@ -11,6 +11,10 @@
     "jsx": "react-jsx",
     "skipLibCheck": true,
     "allowSyntheticDefaultImports": true,
+    /* TypeScript 6 no longer auto-includes @types packages; Convex functions
+     * and shared src modules pulled into this project need Node globals
+     * (process.env, Buffer) and node: built-ins. @types/node is installed. */
+    "types": ["node"],
 
     /* These compiler options are required by Convex */
     "target": "ESNext",
