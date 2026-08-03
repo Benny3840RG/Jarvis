@@ -758,6 +758,7 @@ describe("compact ID display and prefix alias resolution in CLI", () => {
     assert.ok(helpOutput.includes("task list"), "help should list task list");
     assert.ok(helpOutput.includes("reminder add"), "help should list reminder add");
     assert.ok(helpOutput.includes("abbreviated"), "help should mention abbreviated IDs");
+    assert.ok(helpOutput.includes("chronicle tips"), "help should list chronicle tips");
   });
 
   it("reports provider reachability and durable record counts", async () => {
@@ -833,5 +834,35 @@ describe("compact ID display and prefix alias resolution in CLI", () => {
       },
     });
     assert.equal("stale" in persistence.state, false);
+  });
+
+  it("chronicle tips prints personalised tips header and at least one bullet", async () => {
+    const persistence = new MockPersistence();
+    const logs = capture();
+    await runCli({
+      persistence,
+      readline: new ScriptedReadline(["chronicle tips", "exit"]),
+      stdout: logs.stdout,
+      stderr: logs.stderr,
+    });
+
+    const out = logs.output.join("\n");
+    assert.ok(out.includes("personalised tips"), "should print tips header");
+    assert.ok(out.includes("•"), "should print at least one bullet tip");
+  });
+
+  it("chronicle tips reflects struggling intents recorded during the session", async () => {
+    const persistence = new MockPersistence();
+    const logs = capture();
+    // Trigger a free-text interaction that records an intent outcome, then request tips
+    await runCli({
+      persistence,
+      readline: new ScriptedReadline(["what is my schedule?", "chronicle tips", "exit"]),
+      stdout: logs.stdout,
+      stderr: logs.stderr,
+    });
+
+    const out = logs.output.join("\n");
+    assert.ok(out.includes("•"), "should print at least one bullet tip after prior activity");
   });
 });

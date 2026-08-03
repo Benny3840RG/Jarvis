@@ -266,6 +266,7 @@ export async function runCli(deps: RunCliDependencies = {}): Promise<void> {
               "  reminder list",
               "  reminder update <id> [--title <title>] [--due <when> | --clear-due]",
               "  reminder remove <id>",
+              "  chronicle tips",
               "  status",
               "  help",
               "  exit",
@@ -273,6 +274,15 @@ export async function runCli(deps: RunCliDependencies = {}): Promise<void> {
               "IDs shown in listings are abbreviated. Use the abbreviated form or any unambiguous prefix as <id>.",
             ].join("\n"),
           );
+          continue;
+        }
+
+        if (lower === "chronicle tips") {
+          const tips = learningEngine.tips();
+          write("Jarvis: Here are your personalised tips based on this session:");
+          for (const tip of tips) {
+            write(`  • ${tip}`);
+          }
           continue;
         }
 

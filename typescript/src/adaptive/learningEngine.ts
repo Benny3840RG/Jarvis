@@ -53,4 +53,47 @@ export class LearningEngine {
     }
     return "Next action: confirm the main objective and break it into steps.";
   }
+
+  /**
+   * Returns personalized tips derived from the current session's usage patterns.
+   * Each tip is a short, actionable string. When there is nothing notable to
+   * report an encouraging fallback tip is included so the array is never empty.
+   */
+  tips(): string[] {
+    const result: string[] = [];
+    const stats = this.getStats();
+    const struggling = this.strugglingIntents();
+
+    for (const intent of struggling) {
+      result.push(
+        `"${intent}" commands have been failing — try rephrasing or type 'help' for the correct syntax.`,
+      );
+    }
+
+    const intents = Object.keys(stats);
+    if (intents.length > 0) {
+      const topIntent = intents.reduce((best, intent) =>
+        (stats[intent]?.total ?? 0) > (stats[best]?.total ?? 0) ? intent : best,
+      );
+      result.push(
+        `Your most-used intent this session is "${topIntent}". Consider creating a task to track that work.`,
+      );
+    }
+
+    const hasPlanning = this.history.some((e) => e.includes("plan"));
+    if (!hasPlanning) {
+      result.push("You haven't used planning mode yet — try typing a planning request to generate a structured workflow.");
+    }
+
+    const hasSummary = this.history.some((e) => e.includes("summary"));
+    if (!hasSummary) {
+      result.push("Type 'summary' at any time to get a quick overview of your open tasks.");
+    }
+
+    if (result.length === 0) {
+      result.push("Your session looks healthy. Keep it up — type 'summary' to review your open tasks.");
+    }
+
+    return result;
+  }
 }

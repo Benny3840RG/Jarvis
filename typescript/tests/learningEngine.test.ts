@@ -64,3 +64,52 @@ describe("LearningEngine per-intent stats", () => {
     assert.equal(engine.suggest(), "Next action: prepare a workshop-focused task plan.");
   });
 });
+
+describe("LearningEngine tips", () => {
+  it("returns at least one tip even with no prior activity", () => {
+    const engine = new LearningEngine();
+    const tips = engine.tips();
+    assert.ok(tips.length > 0);
+  });
+
+  it("surfaces a struggling-intent tip when failures outnumber successes", () => {
+    const engine = new LearningEngine();
+    engine.record("memory", false);
+    engine.record("memory", false);
+
+    const tips = engine.tips();
+    assert.ok(tips.some((t) => t.includes('"memory"')));
+  });
+
+  it("identifies the most-used intent and suggests tracking it", () => {
+    const engine = new LearningEngine();
+    engine.record("planning", true);
+    engine.record("planning", true);
+    engine.record("general", true);
+
+    const tips = engine.tips();
+    assert.ok(tips.some((t) => t.includes('"planning"') && t.includes("most-used")));
+  });
+
+  it("prompts the user to try planning mode when it has not been used", () => {
+    const engine = new LearningEngine();
+    const tips = engine.tips();
+    assert.ok(tips.some((t) => t.toLowerCase().includes("planning")));
+  });
+
+  it("omits the planning tip when planning has already been observed", () => {
+    const engine = new LearningEngine();
+    engine.observe("plan a project");
+
+    const tips = engine.tips();
+    assert.ok(!tips.some((t) => t.includes("planning mode yet")));
+  });
+
+  it("omits the summary tip when summary has already been observed", () => {
+    const engine = new LearningEngine();
+    engine.observe("show summary");
+
+    const tips = engine.tips();
+    assert.ok(!tips.some((t) => t.includes("Type 'summary'")));
+  });
+});
