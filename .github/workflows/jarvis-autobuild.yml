@@ -39,7 +39,7 @@ jobs:
     steps:
       - name: Validate approved issue and acquire lock
         id: eligibility
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           TRIGGER_ACTOR: ${{ github.actor }}
         with:
@@ -215,7 +215,7 @@ jobs:
           npm ci --prefix typescript/jarvis-console-01
 
       - name: Build the bounded prompt
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const fs = require("node:fs");
@@ -247,7 +247,7 @@ jobs:
 
       - name: Run bounded Codex implementation
         id: codex
-        uses: openai/codex-action@b11346a6fa031e2e164ab4b7c7ea201afffd7d59 # v1
+        uses: openai/codex-action@52fe01ec70a42f454c9d2ebd47598f9fd6893d56 # v1
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
           prompt-file: .jarvis-autobuild-prompt.md
@@ -508,7 +508,7 @@ jobs:
 
       - name: Release issue lock after build
         if: always() && steps.eligibility.outputs.lock_acquired == 'true'
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             try {
@@ -589,7 +589,7 @@ jobs:
     steps:
       - name: Publish verification status and release issue lock
         if: always()
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           ISSUE_NUMBER: ${{ github.event_name == 'workflow_dispatch' && inputs.issue_number || github.event.issue.number }}
           CANDIDATE_SHA: ${{ needs.build.outputs.candidate-sha }}
