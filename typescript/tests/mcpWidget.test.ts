@@ -8,6 +8,19 @@ const widget = readFileSync(
   "utf8",
 );
 
+function extractStaticDashboardScript(html: string): string | null {
+  const startMarker = "<script>";
+  const endMarker = "</script>";
+  const start = html.indexOf(startMarker);
+  if (start === -1) return null;
+
+  const sourceStart = start + startMarker.length;
+  const end = html.indexOf(endMarker, sourceStart);
+  if (end === -1) return null;
+
+  return html.slice(sourceStart, end);
+}
+
 describe("Jarvis preview widget", () => {
   it("uses the MCP Apps bridge inside the landscape command-centre HUD", () => {
     assert.match(widget, /ui\/initialize/);
@@ -337,7 +350,7 @@ describe("Jarvis preview widget", () => {
   });
 
   it("ships syntactically valid embedded dashboard JavaScript", () => {
-    const source = widget.match(/<script>([\s\S]*?)<\/script>/)?.[1];
+    const source = extractStaticDashboardScript(widget);
     assert.ok(source, "dashboard script was not found");
     assert.doesNotThrow(() => new Script(source));
   });
