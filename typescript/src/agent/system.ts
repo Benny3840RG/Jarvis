@@ -29,9 +29,10 @@ export interface AgentSystem {
 
 /**
  * Composition root for the isolated agent simulation. Wires every module into a
- * single governed orchestrator. In-memory only; nothing persists.
+ * single governed orchestrator. In-memory only; nothing persists. Without an
+ * evidence-backed health monitor, autonomy fails closed with unknown health.
  */
-export function createAgentSystem(): AgentSystem {
+export function createAgentSystem(health = new HealthMonitor()): AgentSystem {
   const conversation = new ConversationService();
   const memory = new MemoryService();
 
@@ -45,7 +46,6 @@ export function createAgentSystem(): AgentSystem {
 
   const learning = new LearningEngine();
   const prediction = new PredictionEngine();
-  const health = new HealthMonitor();
   const workflowGen = new WorkflowGenerator();
   const ruleEvolution = new RuleEvolution();
 

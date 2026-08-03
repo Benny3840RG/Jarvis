@@ -22,6 +22,10 @@ function historyOf(intent: string, count = 5): InteractionRecord[] {
   }));
 }
 
+function provenHealth(): HealthMonitor {
+  return new HealthMonitor([{ name: "orchestrator_latency_ms", value: 20, status: "ok" }]);
+}
+
 describe("agent conversation parsing", () => {
   it("extracts the job intent and jobId entity", () => {
     const parsed = new ConversationService().parse("Start job j1");
@@ -62,6 +66,10 @@ describe("agent prediction chain", () => {
 });
 
 describe("agent reliability gating", () => {
+  it("reports unknown when no health evidence is available", () => {
+    assert.equal(new HealthMonitor().overallStatus(), "unknown");
+  });
+
   it("refuses autonomy when reliability is critical, even with ample history", () => {
     const criticalHealth = new HealthMonitor([
       { name: "domain_errors_last_minute", value: 99, status: "critical" },
@@ -174,19 +182,19 @@ describe("agent Z-state gating", () => {
     success: true,
   }));
 
-  it("refuses to activate without enough history", () => {
+  it("refuses to activate without health evidence, even with ample history", () => {
     const { zState } = createAgentSystem();
     const report = zState.canActivate(
       "start_job",
       [{ module: "business", action: "start_job" }],
-      [],
+      fiveRecords,
     );
     assert.equal(report.active, false);
-    assert.ok(report.reasons.includes("Insufficient adaptive history"));
+    assert.deepEqual(report.reasons, ["Reliability status: unknown"]);
   });
 
   it("activates and returns advisory proposals when safe, healthy, and experienced", () => {
-    const { zState } = createAgentSystem();
+    const { zState } = createAgentSystem(provenHealth());
     const report = zState.canActivate(
       "start_job",
       [{ module: "business", action: "start_job" }],
@@ -200,7 +208,7 @@ describe("agent Z-state gating", () => {
 
 describe("agent governed autonomy demo", () => {
   it("gates autonomy without history, then activates with advisory proposals", () => {
-    const report = runGovernedAutonomyDemo(createAgentSystem());
+    const report = runGovernedAutonomyDemo(createAgentSystem(provenHealth()));
 
     assert.equal(report.beforeWarmup.active, false);
     assert.ok(report.beforeWarmup.reasons.includes("Insufficient adaptive history"));
