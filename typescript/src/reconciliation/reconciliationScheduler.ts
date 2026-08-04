@@ -1,4 +1,6 @@
 import type { SentryRuntime } from "../observability/sentry.js";
+import { performance } from "node:perf_hooks";
+
 import type { ReconciliationRunResult, ReconciliationWorker } from "./reconciliationWorker.js";
 
 type ReconciliationWorkerLike = Pick<ReconciliationWorker, "runOnce">;
