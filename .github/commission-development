@@ -1,7 +1,0 @@
-COMMISSION DEV
-request: 2026-08-05T08:24:00+10:00
-source: Priority 2 Slice 9 AM-012 activation after PR #292 merged at f966891c3c86c9f0d0700e856eda587c9ae38386
-scope: full verification gate, authorised Convex development sync, self-cleaning Convex smoke, HTTP/provider boundary checks, Totality reasoning probe, backup export and verification, AM-012 quote finalisation allowlist proof
-expected-main-baseline: f966891c3c86c9f0d0700e856eda587c9ae38386
-issue: 54
-production: not authorised
