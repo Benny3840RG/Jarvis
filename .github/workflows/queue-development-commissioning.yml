@@ -79,8 +79,8 @@ jobs:
           request_marker="<!-- jarvis-development-commission:${request_id} -->"
           gh api "repos/$GITHUB_REPOSITORY/issues/$STATUS_ISSUE/comments" \
             --method POST \
-            -f body="\$request_marker
-Queued from commit \$GITHUB_SHA; this request ID is now consumed."
+            -f body="$request_marker
+Queued from commit $GITHUB_SHA; this request ID is now consumed."
 
           gh workflow run development-commissioning.yml \
             --ref main \
