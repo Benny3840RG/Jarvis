@@ -33,7 +33,7 @@ Preview features must be isolated from the operational baseline at every level:
 ### Workflows
 
 - Preview commissioning runs are handled by a dedicated workflow (`.github/workflows/development-preview-commissioning.yml`) that is separate from the main development commissioning workflow.
-- Preview workflows are gated on `main` and require explicit dispatch confirmation (`PREVIEW DEV`).
+- Preview commissioning is manual-dispatch only on `main` and requires explicit confirmation (`PREVIEW DEV`). Secret-bearing preview runs never start from an ordinary push.
 - The main commissioning workflow (`development-commissioning.yml`) does not exercise preview code paths.
 
 ### Pull requests
