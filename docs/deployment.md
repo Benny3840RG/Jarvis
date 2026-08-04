@@ -127,21 +127,35 @@ All environment variables are loaded from `typescript/.env.local` at startup. Va
 
 Reconciliation is disabled by default and performs no Convex construction, claim, or polling work.
 
-The maintained HTTP and controlled preview compositions currently contain no provider
-reconciliation adapters. Setting `JARVIS_RECONCILIATION_ENABLED=true` therefore fails startup
-before a listener opens or Convex work begins. Do not enable reconciliation until a separately
-reviewed change explicitly composes at least one real provider adapter and proves its authority
-boundary.
+When Outlook is explicitly enabled and its delegated OAuth configuration is valid, the maintained
+HTTP and controlled preview compositions attach the Outlook provider and the existing Convex
+reconciliation worker. When Outlook is disabled, no provider or reconciliation worker is
+constructed. `JARVIS_RECONCILIATION_ENABLED=true` is accepted only for that explicitly composed
+provider path; all other configurations fail closed before a listener opens or Convex work begins.
 
-The `microsoft-graph-mail-v1` adapter is implemented only as an uncomposed, read-only library
-component. It can inspect one previously registered Outlook immutable message ID using a narrow
-Microsoft Graph `GET`; neither maintained entrypoint imports it. No token environment variable,
-OAuth setup, `Mail.Send` permission, send provider or activation procedure exists.
+The Outlook runtime requires an application ID, mailbox, and absolute owner-only refresh-token
+file path:
 
-Any future Outlook send implementation must create a draft while requesting immutable Outlook
-IDs, durably persist that immutable message ID before attempting the send, and then send the
-existing draft. A Graph `202 Accepted` response is not terminal evidence that message processing
-completed. That future OAuth/send-provider activation requires a separate reviewed design.
+```text
+JARVIS_OUTLOOK_ENABLED=true
+JARVIS_OUTLOOK_CLIENT_ID=<Microsoft app ID>
+JARVIS_OUTLOOK_MAILBOX=<mailbox>
+JARVIS_OUTLOOK_REFRESH_TOKEN_FILE=/absolute/private/path
+JARVIS_RECONCILIATION_ENABLED=true
+```
+
+The secure token file is rotated atomically and is not a GitHub secret or a checked-in artifact.
+The full delegated OAuth, scope, file-permission, and immutable-ID rules are in
+`docs/runbooks/outlook-delegated-oauth.md`.
+
+The `microsoft-graph-mail-v1` adapter uses immutable Outlook message IDs and a narrow Microsoft
+Graph boundary. The send provider creates a draft, persists its immutable message ID before
+sending, and records provider references for reconciliation. A Graph `202 Accepted` response is
+not terminal evidence that message processing completed.
+
+No live Microsoft credential, draft/send run, or production activation is evidenced by the current
+commissioning record. Outlook remains a separately gated development capability; production
+deployment and public email sending remain unauthorised.
 
 When an adapter-bearing runtime is supplied, the host uses the existing Convex reconciliation
 store, lease rules, worker, and bounded scheduler. Authenticated `GET /api/v1/status` reports
