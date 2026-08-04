@@ -1,6 +1,11 @@
 import { randomUUID } from "node:crypto";
 
-import type { Build, BuildInput, BuildStore, BuildUpdate } from "../builds/build.js";
+import type {
+  Build,
+  BuildInput,
+  BuildStore,
+  BuildUpdate,
+} from "../builds/build.js";
 import type {
   BuildLogEntry,
   BuildLogInput,
@@ -13,7 +18,12 @@ import type {
   UpgradeStore,
   UpgradeUpdate,
 } from "../upgrades/upgrade.js";
-import type { Asset, AssetInput, AssetStore, AssetUpdate } from "../assets/asset.js";
+import type {
+  Asset,
+  AssetInput,
+  AssetStore,
+  AssetUpdate,
+} from "../assets/asset.js";
 import type {
   Preference,
   PreferenceInput,
@@ -68,7 +78,7 @@ type DomainSpec<T extends { id: string }, I, U> = {
   update: U;
   /** Throws if the freshly created record does not match the input. */
   checkCreated: (entity: T) => void;
-  /** Throws if the updated record does not reflect the update (including cleared fields). */
+  /** Throws if the updated record reflects the update, including cleared fields. */
   checkUpdated: (entity: T) => void;
 };
 
@@ -100,8 +110,14 @@ async function runDomainSmoke<T extends { id: string }, I, U>(
     spec.checkCreated(created);
 
     const updated = await spec.makeStore().update(created.id, spec.update);
-    requireCondition(updated !== null, `${spec.label}: update returned null for a known id.`);
-    requireCondition(updated.id === created.id, `${spec.label}: update changed the record id.`);
+    requireCondition(
+      updated !== null,
+      `${spec.label}: update returned null for a known id.`,
+    );
+    requireCondition(
+      updated.id === created.id,
+      `${spec.label}: update changed the record id.`,
+    );
     spec.checkUpdated(updated);
 
     const listed = await spec.makeStore().list();
@@ -158,9 +174,14 @@ async function runDomainSmoke<T extends { id: string }, I, U>(
     );
   }
   if (primaryError !== undefined) throw primaryError;
-  requireCondition(result !== undefined, `${spec.label}: smoke finished without a result.`);
+  requireCondition(
+    result !== undefined,
+    `${spec.label}: smoke finished without a result.`,
+  );
 
-  write(`Convex smoke passed for ${spec.label}: create, update, restart visibility, remove.`);
+  write(
+    `Convex smoke passed for ${spec.label}: create, update, restart visibility, remove.`,
+  );
   return result;
 }
 
@@ -178,19 +199,44 @@ function buildSpecs(
   const buildsSpec: DomainSpec<Build, BuildInput, BuildUpdate> = {
     label: "builds",
     makeStore: factories.builds,
-    input: { name: `${marker} build`, kind: "shed", description: "before" },
+    input: {
+      name: `${marker} build`,
+      kind: "shed",
+      description: "before",
+    },
     update: { name: `${marker} build v2`, description: null },
     checkCreated: (build) => {
-      requireCondition(build.name === `${marker} build`, "builds: created name mismatch.");
+      requireCondition(
+        build.name === `${marker} build`,
+        "builds: created name mismatch.",
+      );
       requireCondition(build.kind === "shed", "builds: created kind mismatch.");
-      requireCondition(build.description === "before", "builds: created description mismatch.");
-      requireCondition(typeof build.createdAt === "number", "builds: createdAt missing.");
-      requireCondition(typeof build.updatedAt === "number", "builds: updatedAt missing.");
+      requireCondition(
+        build.description === "before",
+        "builds: created description mismatch.",
+      );
+      requireCondition(
+        typeof build.createdAt === "number",
+        "builds: createdAt missing.",
+      );
+      requireCondition(
+        typeof build.updatedAt === "number",
+        "builds: updatedAt missing.",
+      );
     },
     checkUpdated: (build) => {
-      requireCondition(build.name === `${marker} build v2`, "builds: updated name mismatch.");
-      requireCondition(build.description === undefined, "builds: description was not cleared.");
-      requireCondition(typeof build.updatedAt === "number", "builds: updatedAt missing.");
+      requireCondition(
+        build.name === `${marker} build v2`,
+        "builds: updated name mismatch.",
+      );
+      requireCondition(
+        build.description === undefined,
+        "builds: description was not cleared.",
+      );
+      requireCondition(
+        typeof build.updatedAt === "number",
+        "builds: updatedAt missing.",
+      );
     },
   };
 
@@ -209,8 +255,14 @@ function buildSpecs(
         log.buildId === childDomainBuildId,
         "buildLogs: created buildId mismatch.",
       );
-      requireCondition(log.title === `${marker} log`, "buildLogs: created title mismatch.");
-      requireCondition(log.kind === "milestone", "buildLogs: created kind mismatch.");
+      requireCondition(
+        log.title === `${marker} log`,
+        "buildLogs: created title mismatch.",
+      );
+      requireCondition(
+        log.kind === "milestone",
+        "buildLogs: created kind mismatch.",
+      );
       requireCondition(log.body === "first", "buildLogs: created body mismatch.");
     },
     checkUpdated: (log) => {
@@ -218,7 +270,10 @@ function buildSpecs(
         log.buildId === childDomainBuildId,
         "buildLogs: updated buildId mismatch.",
       );
-      requireCondition(log.title === `${marker} log v2`, "buildLogs: updated title mismatch.");
+      requireCondition(
+        log.title === `${marker} log v2`,
+        "buildLogs: updated title mismatch.",
+      );
       requireCondition(log.body === undefined, "buildLogs: body was not cleared.");
     },
   };
@@ -238,8 +293,14 @@ function buildSpecs(
         upgrade.buildId === childDomainBuildId,
         "upgrades: created buildId mismatch.",
       );
-      requireCondition(upgrade.title === `${marker} upgrade`, "upgrades: created title mismatch.");
-      requireCondition(upgrade.reason === "why", "upgrades: created reason mismatch.");
+      requireCondition(
+        upgrade.title === `${marker} upgrade`,
+        "upgrades: created title mismatch.",
+      );
+      requireCondition(
+        upgrade.reason === "why",
+        "upgrades: created reason mismatch.",
+      );
       requireCondition(
         JSON.stringify(upgrade.parts) === JSON.stringify(["motor"]),
         "upgrades: created parts mismatch.",
@@ -250,7 +311,10 @@ function buildSpecs(
         upgrade.buildId === childDomainBuildId,
         "upgrades: updated buildId mismatch.",
       );
-      requireCondition(upgrade.reason === undefined, "upgrades: reason was not cleared.");
+      requireCondition(
+        upgrade.reason === undefined,
+        "upgrades: reason was not cleared.",
+      );
       requireCondition(
         JSON.stringify(upgrade.parts) === JSON.stringify(["motor", "esc"]),
         "upgrades: updated parts mismatch.",
@@ -264,8 +328,14 @@ function buildSpecs(
     input: { name: `${marker} asset`, kind: "tool", serviceIntervalDays: 30 },
     update: { serviceIntervalDays: null, lastServicedAt: 1_700_000_000_000 },
     checkCreated: (asset) => {
-      requireCondition(asset.name === `${marker} asset`, "assets: created name mismatch.");
-      requireCondition(asset.serviceIntervalDays === 30, "assets: created interval mismatch.");
+      requireCondition(
+        asset.name === `${marker} asset`,
+        "assets: created name mismatch.",
+      );
+      requireCondition(
+        asset.serviceIntervalDays === 30,
+        "assets: created interval mismatch.",
+      );
     },
     checkUpdated: (asset) => {
       requireCondition(
@@ -286,14 +356,32 @@ function buildSpecs(
     input: { key: `${marker}-key`, value: "v1", category: "smoke" },
     update: { value: "v2", category: null },
     checkCreated: (preference) => {
-      requireCondition(preference.key === `${marker}-key`, "preferences: created key mismatch.");
-      requireCondition(preference.value === "v1", "preferences: created value mismatch.");
-      requireCondition(preference.category === "smoke", "preferences: created category mismatch.");
+      requireCondition(
+        preference.key === `${marker}-key`,
+        "preferences: created key mismatch.",
+      );
+      requireCondition(
+        preference.value === "v1",
+        "preferences: created value mismatch.",
+      );
+      requireCondition(
+        preference.category === "smoke",
+        "preferences: created category mismatch.",
+      );
     },
     checkUpdated: (preference) => {
-      requireCondition(preference.value === "v2", "preferences: updated value mismatch.");
-      requireCondition(preference.category === undefined, "preferences: category was not cleared.");
-      requireCondition(typeof preference.updatedAt === "number", "preferences: updatedAt missing.");
+      requireCondition(
+        preference.value === "v2",
+        "preferences: updated value mismatch.",
+      );
+      requireCondition(
+        preference.category === undefined,
+        "preferences: category was not cleared.",
+      );
+      requireCondition(
+        typeof preference.updatedAt === "number",
+        "preferences: updatedAt missing.",
+      );
     },
   };
 
