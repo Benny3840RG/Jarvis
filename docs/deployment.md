@@ -128,10 +128,10 @@ All environment variables are loaded from `typescript/.env.local` at startup. Va
 Reconciliation is disabled by default and performs no Convex construction, claim, or polling work.
 
 When Outlook is explicitly enabled and its delegated OAuth configuration is valid, the maintained
-HTTP and controlled preview compositions attach the Outlook provider and the existing Convex
-reconciliation worker. When Outlook is disabled, no provider or reconciliation worker is
-constructed. `JARVIS_RECONCILIATION_ENABLED=true` is accepted only for that explicitly composed
-provider path; all other configurations fail closed before a listener opens or Convex work begins.
+HTTP and controlled preview compositions attach the Outlook provider. The existing Convex
+reconciliation worker is constructed only when `JARVIS_RECONCILIATION_ENABLED=true` and that
+provider path is valid. When Outlook is disabled, no provider or reconciliation worker is
+constructed; all other configurations fail closed before a listener opens or Convex work begins.
 
 The Outlook runtime requires an application ID, mailbox, and absolute owner-only refresh-token
 file path:
