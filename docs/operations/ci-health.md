@@ -8,7 +8,7 @@ This document describes the expected state of each GitHub Actions workflow, what
 | --- | --- | --- | --- |
 | TypeScript checks | `typescript.yml` | Push to `main`, PR to `main` (TypeScript, automation, or workflow paths) | Full verification gate: automation policy, type-check, lint, format, OpenAPI lint, tests with coverage |
 | Python checks | `python-app.yml` | Push to `main`, PR to `main` (Python paths) | Lint and test the legacy Python prototype |
-| Queue development commissioning | `queue-development-commissioning.yml` | Push to `main` when `.github/commission-development` changes | Queues and monitors the guarded development commissioning run; updates issue #54 |
+| Queue development commissioning | `queue-development-commissioning.yml` | Push to `main` when a request file changes | Queues and monitors one uniquely identified development commissioning request; duplicate request IDs are ignored and issue #54 records consumption |
 | Development commissioning | `development-commissioning.yml` | Manual dispatch only (`workflow_dispatch`) | Authorised end-to-end commissioning: deps, checks, Convex sync, smoke test, HTTP start, Totality probe, backup verify |
 | Jarvis autonomous build | `jarvis-autobuild.yml` | `automation-approved` issue label or manual issue retry | Bounded Codex implementation that opens a draft PR; never merges, commissions, or deploys |
 
@@ -80,7 +80,7 @@ If commissioning fails:
 1. Check issue #54 for the failed-step name and redacted log.
 2. Reproduce the failing step locally if possible (Convex sync, HTTP start, Totality probe, or backup verify).
 3. Fix the root cause on `main` (or a PR targeting `main`).
-4. Re-trigger commissioning by pushing a new `COMMISSION DEV` line to `.github/commission-development`.
+4. Create a new `.github/commission-development` request containing the exact `COMMISSION DEV` first line and a fresh unique `request-id`; never reuse a consumed request ID. The queue workflow records the ID in issue #54 before dispatch.
 
 ## CI stability expectations
 
