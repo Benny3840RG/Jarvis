@@ -66,3 +66,9 @@ Priority 1 / Slice 3 is complete for the connector-backed scan path. It produced
 ## Slice 4 status
 
 Priority 1 / Slice 4 is complete only after PR #283 passes CI and is merged. The intended state is: all GitHub Actions pinned to immutable commit SHAs, checkout credential persistence disabled unless explicitly required, control-plane CODEOWNERS coverage present, and SECURITY.md present at the repository root.
+
+## Slice 4 follow-up — scheduled health-check workflow
+
+Post-merge repository-wide inspection found one control-plane exception not covered by PR #283: `.github/workflows/ci-health-check.yml` still used mutable `@v7` action tags and did not disable checkout credential persistence. PR #298 pins both actions to the validated full commit SHAs and sets `persist-credentials: false`. Exact-head TypeScript checks and Copilot Review Check passed on `67f24386`.
+
+After PR #298 lands, Slice 4 is complete for the repository workflow/configuration scope.
