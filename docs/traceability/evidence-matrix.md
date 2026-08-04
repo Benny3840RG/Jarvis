@@ -11,25 +11,25 @@
 | R-022–R-024F | Locality map, offline tests, sync evidence | — | Unverified | — | — |
 | R-025–R-033 | Persistence, restart, retrieval, migration evidence | — | Unverified | — | — |
 | R-034–R-038C | Policy definitions and authorisation tests | — | Unverified | — | — |
-| R-039–R-043 | Idempotency and correlation test artefacts | — | Unverified | — | — |
-| R-044–R-054 | Approval lifecycle and fingerprint tests | — | Unverified | — | — |
-| R-055–R-062 | Tool contracts, audit records, failure tests | — | Unverified | — | — |
+| R-039–R-043 | Idempotency and correlation test artefacts | Tool-action execution idempotency and replay tests | Partial | `5fabfae1` | Connector review |
+| R-044–R-054 | Approval lifecycle and fingerprint tests | ToolAction consent lifecycle schema, state literals, approve/revoke HTTP boundary, expiry/consumption execution tests, operator approval docs | Partial | `5fabfae1` | Connector review |
+| R-055–R-062 | Tool contracts, audit records, failure tests | Tool action execution receipts and guarded execution tests | Partial | `5fabfae1` | Connector review |
 | R-063–R-066 | Secret-storage review and redaction tests | — | Unverified | — | — |
-| R-067–R-072 | Schema, ownership, backup and restore evidence | — | Unverified | — | — |
-| R-073–R-076 | State diagrams and transition test results | State glossary | Partial | v2.2 | Requirements review |
-| R-077–R-081 | Retention policy and append-only history tests | — | Unverified | — | — |
-| R-082–R-090 | Safety policy and blocked-action evidence | — | Unverified | — | — |
-| R-091–R-098C | End-to-end execution and reconciliation evidence | — | Unverified | — | — |
-| R-099–R-104 | Failure injection and recovery reports | — | Unverified | — | — |
-| R-105–R-111 | CI results and populated traceability links | Test and evidence matrices | Partial | v2.2 | Requirements review |
+| R-067–R-072 | Schema, ownership, backup and restore evidence | ToolAction schema evidence only | Partial | `5fabfae1` | Connector review |
+| R-073–R-076 | State diagrams and transition test results | State glossary and ToolAction state-transition tests | Partial | `5fabfae1` | Connector review |
+| R-077–R-081 | Retention policy and append-only history tests | ToolAction lifecycle audit-event hooks only | Partial | `5fabfae1` | Connector review |
+| R-082–R-090 | Safety policy and blocked-action evidence | ToolAction blocked execution tests for expired, revoked, unauthorized, and consumed approvals | Partial | `5fabfae1` | Connector review |
+| R-091–R-098C | End-to-end execution and reconciliation evidence | ToolAction execution boundary tests only | Partial | `5fabfae1` | Connector review |
+| R-099–R-104 | Failure injection and recovery reports | Invalid input and blocked execution tests only | Partial | `5fabfae1` | Connector review |
+| R-105–R-111 | CI results and populated traceability links | Test and evidence matrices plus ToolAction lifecycle tests | Partial | `5fabfae1` | Requirements review + connector review |
 | R-112–R-116 | Release, rollback, backup and compatibility runs | — | Unverified | — | — |
 | R-117–R-121 | Setup, backup and incident runbook exercises | — | Unverified | — | — |
 | R-122–R-124 | Roadmap-to-requirement mapping | — | Unverified | — | — |
-| R-125–R-127 | Completed feature gate records | — | Unverified | — | — |
-| R-128–R-131 | Concurrent mutation and conflict evidence | — | Unverified | — | — |
+| R-125–R-127 | Completed feature gate records | Merged PR verification records for foundation slices only | Partial | `5fabfae1` | Connector review |
+| R-128–R-131 | Concurrent mutation and conflict evidence | ToolExecution single-use concurrent-consumption test and stale eligibility checks | Partial | `5fabfae1` | Connector review |
 | R-132–R-135 | Policy-version and revalidation evidence | — | Unverified | — | — |
 | R-136–R-140 | Timezone, DST and ambiguity test evidence | — | Unverified | — | — |
-| R-141–R-143 | Provider reconciliation and deduplication evidence | — | Unverified | — | — |
+| R-141–R-143 | Provider reconciliation and deduplication evidence | ToolAction idempotency and indeterminate execution receipt tests only | Partial | `5fabfae1` | Connector review |
 | R-144–R-150 | Namespace validation and frozen register | Master specification and `requirements.yaml` | Verified | v2.2 | Requirements review |
 
 ## Evidence rules
@@ -39,3 +39,14 @@
 - Partial evidence does not make the whole requirement range implemented.
 - Evidence links must identify the code or document revision tested.
 - Failed or superseded evidence remains traceable.
+
+## Approval lifecycle reconciliation — 2026-08-04
+
+Issue #244 is stale for the core consent-lifecycle implementation target. Current code includes:
+
+- widened ToolAction states: `proposed`, `approved`, `rejected`, `expired`, `revoked`;
+- additive schema fields for approval expiry policy, expiry time, expiry observation, consumption policy, revocation metadata, and single-use claim metadata;
+- HTTP `/approve` and `/revoke` boundaries gated by the separate approval token;
+- tests for TTL derivation, TTL clamping, expiry detection, revoked/expired blocking, single-use consumption, concurrent different-key single-use races, stale eligibility checks, and reusable approvals.
+
+The R-044–R-054 row remains **Partial**, not Verified, because that range also includes standing automation authorisation requirements (R-052–R-054) that still require separate policy and operational evidence.
