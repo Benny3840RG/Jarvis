@@ -218,7 +218,10 @@ function buildSpecs(
     },
     update: { reason: null, parts: ["motor", "esc"] },
     checkCreated: (upgrade) => {
-      requireCondition(upgrade.buildId === childDomainBuildId, "upgrades: created buildId mismatch.");
+      requireCondition(
+        upgrade.buildId === childDomainBuildId,
+        "upgrades: created buildId mismatch.",
+      );
       requireCondition(upgrade.title === `${marker} upgrade`, "upgrades: created title mismatch.");
       requireCondition(upgrade.reason === "why", "upgrades: created reason mismatch.");
       requireCondition(
@@ -227,7 +230,10 @@ function buildSpecs(
       );
     },
     checkUpdated: (upgrade) => {
-      requireCondition(upgrade.buildId === childDomainBuildId, "upgrades: updated buildId mismatch.");
+      requireCondition(
+        upgrade.buildId === childDomainBuildId,
+        "upgrades: updated buildId mismatch.",
+      );
       requireCondition(upgrade.reason === undefined, "upgrades: reason was not cleared.");
       requireCondition(
         JSON.stringify(upgrade.parts) === JSON.stringify(["motor", "esc"]),
@@ -324,7 +330,11 @@ export async function runMemoryStoresSmoke(
     supportBuildId = supportBuild.id;
     requireCondition(supportBuildId.length > 0, "builds: support parent id missing.");
 
-    const [, buildLogs, upgrades, assets, preferences] = buildSpecs(factories, marker, supportBuildId);
+    const [, buildLogs, upgrades, assets, preferences] = buildSpecs(
+      factories,
+      marker,
+      supportBuildId,
+    );
     childResults = {
       buildLogs: await runDomainSmoke(buildLogs, write),
       upgrades: await runDomainSmoke(upgrades, write),
@@ -351,7 +361,10 @@ export async function runMemoryStoresSmoke(
     );
   }
   if (primaryError !== undefined) throw primaryError;
-  requireCondition(childResults !== undefined, "memory stores: child-domain smoke finished without a result.");
+  requireCondition(
+    childResults !== undefined,
+    "memory stores: child-domain smoke finished without a result.",
+  );
 
   write("Convex smoke passed for all five durable-memory domains.");
   return { builds: buildsResult, ...childResults };
