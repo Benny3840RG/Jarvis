@@ -37,5 +37,5 @@ This is the historical provider-neutral commissioning record for the quote lifec
 - The guarded commissioning run for that current source is `30956407980`; it proved the AM-012 finalisation allowlist boundary on the authorised development deployment.
 - AM-013 `Send quote` remains `lifecycle_status: planned`; no live Outlook credential, draft, send, or reconciliation run is evidenced.
 - `TOOL-QUOTE-FINALIZE` is available only within the approved AM-012 boundary. `TOOL-QUOTE-SEND` remains unavailable.
-- `createQuoteEmailProviderFromEnv` remains disabled unless the explicit Outlook configuration is present; its configured path is not live commissioning evidence.
+- `createQuoteEmailProviderFromEnv` remains disabled when Outlook is not explicitly configured. If Outlook is enabled with missing or malformed delegated OAuth configuration, startup fails closed rather than constructing a provider; a configured path is not live commissioning evidence.
 - Production deployment and public email sending remain unauthorised.
