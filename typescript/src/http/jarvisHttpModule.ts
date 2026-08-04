@@ -17,6 +17,7 @@ import type { AssetStore } from "../assets/asset.js";
 import type { PreferenceStore } from "../preferences/preference.js";
 import type { NoteStore } from "../notes/note.js";
 import type { MemoryChangeSetService } from "../memory/memoryChangeSets.js";
+import type { ObservabilityReporter } from "../observability/sentry.js";
 import type { PersistenceProvider } from "../persistence/persistence.js";
 import type { PersistenceProviderName } from "../persistence/providerSelection.js";
 import type { TotalityPipeline } from "../totality/totalityPipeline.js";
@@ -35,6 +36,7 @@ import { NoteController } from "./noteController.js";
 import { OperationsInboxController } from "./operationsInboxController.js";
 import { ErrandController } from "./errandController.js";
 import { MemoryChangeSetController } from "./memoryChangeSetController.js";
+import { HttpObservabilityInterceptor } from "./observabilityInterceptor.js";
 import { ProblemDetailsFilter } from "./problemDetails.js";
 import { ClientController } from "./clientController.js";
 import { ProjectController } from "./projectController.js";
@@ -70,6 +72,7 @@ import {
   HTTP_EXTERNAL_RECONCILIATION_READ_STORE,
   HTTP_TOOL_ACTIONS,
   HTTP_TOOL_EXECUTION,
+  HTTP_OBSERVABILITY_REPORTER,
   HTTP_TOTALITY_PIPELINE,
 } from "./tokens.js";
 
@@ -83,6 +86,7 @@ export type JarvisHttpModuleOptions = {
   memoryChangeSetService: MemoryChangeSetService | null;
   toolActionService: ToolActionService | null;
   toolExecutionService: ToolExecutionService | null;
+  observabilityReporter: ObservabilityReporter;
   clientStore: ClientStore;
   projectStore: ProjectStore;
   quoteStore: QuoteStore;
@@ -146,6 +150,7 @@ export class JarvisHttpModule {
         { provide: HTTP_NOTE_STORE, useValue: options.noteStore },
         { provide: HTTP_ACTIVITY_EVENTS, useValue: options.activityEventReader },
         { provide: HTTP_PROVIDER_NAME, useValue: options.providerName },
+        { provide: HTTP_OBSERVABILITY_REPORTER, useValue: options.observabilityReporter },
         {
           provide: HTTP_RECONCILIATION_HEALTH,
           useValue: options.reconciliationHealth,
@@ -167,6 +172,7 @@ export class JarvisHttpModule {
         SystemStatusService,
         { provide: APP_GUARD, useClass: ServiceTokenGuard },
         { provide: APP_INTERCEPTOR, useClass: RequestIdInterceptor },
+        { provide: APP_INTERCEPTOR, useClass: HttpObservabilityInterceptor },
         { provide: APP_FILTER, useClass: ProblemDetailsFilter },
       ],
     };
