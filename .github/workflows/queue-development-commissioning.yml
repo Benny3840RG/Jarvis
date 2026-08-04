@@ -77,7 +77,7 @@ jobs:
 
           request_id="${{ steps.guard.outputs.request_id }}"
           request_marker="<!-- jarvis-development-commission:${request_id} -->"
-          gh api "repos/\$GITHUB_REPOSITORY/issues/\$STATUS_ISSUE/comments" \
+          gh api "repos/$GITHUB_REPOSITORY/issues/$STATUS_ISSUE/comments" \
             --method POST \
             -f body="\$request_marker
 Queued from commit \$GITHUB_SHA; this request ID is now consumed."
