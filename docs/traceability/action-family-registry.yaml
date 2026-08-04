@@ -467,7 +467,7 @@ action_families:
 
   - id: AM-012
     name: Finalize quote
-    lifecycle_status: planned
+    lifecycle_status: active
     owner: quoting_domain
     version: 1
     classification:
