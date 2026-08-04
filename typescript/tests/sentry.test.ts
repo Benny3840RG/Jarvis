@@ -27,7 +27,7 @@ describe("Sentry runtime adapter", () => {
       transport(events),
     );
 
-    await runtime.captureError(new Error("customer body must not be sent"), {
+    await runtime.captureError(new Error("failure must not be sent"), {
       operation: "http.request",
       route: "/api/v1/quotes",
     });
@@ -54,7 +54,7 @@ describe("Sentry runtime adapter", () => {
     );
 
     await runtime.captureError(
-      new Error("customer body service-secret john@example.com https://example.test/path?q=secret"),
+      new Error("failure service-secret john@example.com https://example.test/path?q=secret"),
       {
         operation: "http.request",
         route: "/api/v1/quotes/:quoteId",
@@ -77,7 +77,7 @@ describe("Sentry runtime adapter", () => {
     assert.equal(errorEvent.tags.operation, "http.request");
     assert.equal(errorEvent.tags.route, "/api/v1/quotes/:quoteId");
     assert.equal(errorEvent.tags.request_id, "request-123");
-    assert.match(errorEvent.exception?.values[0]?.value ?? "", /customer body/);
+    assert.match(errorEvent.exception?.values[0]?.value ?? "", /failure/);
     assert.doesNotMatch(JSON.stringify(errorEvent), /service-secret|john@example.com|https://example/);
     assert.equal("request" in errorEvent, false);
     assert.equal("body" in errorEvent, false);
