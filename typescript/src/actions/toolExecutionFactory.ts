@@ -24,6 +24,7 @@ import type { QuoteRepository } from "../quotes/quoteRepository.js";
 import type { ControlledReminderStore } from "../reminders/controlledReminder.js";
 import type { ControlledTaskStore } from "../tasks/controlledTask.js";
 import { createNoteToolDefinition } from "./createNoteTool.js";
+import { createQuoteFinalizeToolDefinition } from "./quoteFinalizeTool.js";
 import { createQuoteSendToolDefinition } from "./quoteSendTool.js";
 import { createTaskReminderToolDefinitions } from "./taskReminderTools.js";
 import { ToolExecutionService, type ToolExecutionDefinition } from "./toolExecution.js";
@@ -46,6 +47,9 @@ export function createToolExecutionDefinitions(
     ...(taskStore === undefined || reminderStore === undefined
       ? []
       : createTaskReminderToolDefinitions(taskStore, reminderStore)),
+    ...(quoteRepository === undefined
+      ? []
+      : [createQuoteFinalizeToolDefinition(quoteRepository)]),
     ...(quoteRepository === undefined ||
     quoteEmailProvider === undefined ||
     quoteDeliveryRepository === undefined ||
@@ -63,10 +67,12 @@ export function createToolExecutionDefinitions(
 }
 
 /**
- * Tool execution remains fail-closed. `quotes:send` is registered only when
- * Convex persistence and all four quote-delivery dependencies are available.
- * Maintained process entrypoints inject the provider from the same Outlook
- * runtime bundle used by reconciliation so token state is not duplicated.
+ * Tool execution remains fail-closed. `quotes:finalize` is registered only when
+ * Convex quote persistence is available. `quotes:send` remains registered only
+ * when Convex persistence and all four quote-delivery dependencies are
+ * available. Maintained process entrypoints inject the provider from the same
+ * Outlook runtime bundle used by reconciliation so token state is not
+ * duplicated.
  */
 export function createToolExecutionServiceFromEnv(
   quoteEmailProvider: QuoteEmailProvider | null = createQuoteEmailProviderFromEnv(),
