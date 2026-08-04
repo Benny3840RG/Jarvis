@@ -284,10 +284,7 @@ function buildSpecs(
   return [buildsSpec, buildLogsSpec, upgradesSpec, assetsSpec, preferencesSpec];
 }
 
-async function removeSupportBuild(
-  factories: MemoryStoreFactories,
-  buildId: string,
-): Promise<void> {
+async function removeSupportBuild(factories: MemoryStoreFactories, buildId: string): Promise<void> {
   await factories.builds().remove(buildId);
   const remaining = await factories.builds().list();
   requireCondition(
