@@ -60,7 +60,8 @@ jobs:
           fi
 
           request_marker="<!-- jarvis-development-commission:${request_id} -->"
-          if gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$STATUS_ISSUE/comments?per_page=100"             --jq '.[].body' | grep -Fqx "$request_marker"; then
+          if gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$STATUS_ISSUE/comments?per_page=100" \
+            --jq '.[].body' | grep -Fqx "$request_marker"; then
             echo "Development commissioning request $request_id was already consumed."
             exit 0
           fi
@@ -68,6 +69,7 @@ jobs:
           echo "request_id=$request_id" >> "$GITHUB_OUTPUT"
 
       - name: Queue guarded commissioning workflow
+        if: ${{ steps.guard.outputs.request_id != '' }}
         id: dispatch
         env:
           GH_TOKEN: ${{ github.token }}
@@ -133,6 +135,7 @@ Queued from commit $GITHUB_SHA; this request ID is now consumed."
           gh issue edit "$STATUS_ISSUE" --body-file "$queued_status"
 
       - name: Wait for development commissioning
+        if: ${{ steps.dispatch.outputs.run_id != '' }}
         id: watch
         continue-on-error: true
         env:
