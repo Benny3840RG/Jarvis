@@ -7,7 +7,12 @@ import type {
   BuildLogStore,
   BuildLogUpdate,
 } from "../buildLog/buildLogEntry.js";
-import type { Upgrade, UpgradeInput, UpgradeStore, UpgradeUpdate } from "../upgrades/upgrade.js";
+import type {
+  Upgrade,
+  UpgradeInput,
+  UpgradeStore,
+  UpgradeUpdate,
+} from "../upgrades/upgrade.js";
 import type { Asset, AssetInput, AssetStore, AssetUpdate } from "../assets/asset.js";
 import type {
   Preference,
@@ -25,7 +30,12 @@ export type DomainSmokeResult = {
   removed: boolean;
 };
 
-export type MemoryDomain = "builds" | "buildLogs" | "upgrades" | "assets" | "preferences";
+export type MemoryDomain =
+  | "builds"
+  | "buildLogs"
+  | "upgrades"
+  | "assets"
+  | "preferences";
 
 export type MemoryStoresSmokeResult = Record<MemoryDomain, DomainSmokeResult>;
 
@@ -187,16 +197,27 @@ function buildSpecs(
   const buildLogsSpec: DomainSpec<BuildLogEntry, BuildLogInput, BuildLogUpdate> = {
     label: "buildLogs",
     makeStore: factories.buildLogs,
-    input: { buildId: childDomainBuildId, title: `${marker} log`, kind: "milestone", body: "first" },
+    input: {
+      buildId: childDomainBuildId,
+      title: `${marker} log`,
+      kind: "milestone",
+      body: "first",
+    },
     update: { title: `${marker} log v2`, body: null },
     checkCreated: (log) => {
-      requireCondition(log.buildId === childDomainBuildId, "buildLogs: created buildId mismatch.");
+      requireCondition(
+        log.buildId === childDomainBuildId,
+        "buildLogs: created buildId mismatch.",
+      );
       requireCondition(log.title === `${marker} log`, "buildLogs: created title mismatch.");
       requireCondition(log.kind === "milestone", "buildLogs: created kind mismatch.");
       requireCondition(log.body === "first", "buildLogs: created body mismatch.");
     },
     checkUpdated: (log) => {
-      requireCondition(log.buildId === childDomainBuildId, "buildLogs: updated buildId mismatch.");
+      requireCondition(
+        log.buildId === childDomainBuildId,
+        "buildLogs: updated buildId mismatch.",
+      );
       requireCondition(log.title === `${marker} log v2`, "buildLogs: updated title mismatch.");
       requireCondition(log.body === undefined, "buildLogs: body was not cleared.");
     },
@@ -213,7 +234,10 @@ function buildSpecs(
     },
     update: { reason: null, parts: ["motor", "esc"] },
     checkCreated: (upgrade) => {
-      requireCondition(upgrade.buildId === childDomainBuildId, "upgrades: created buildId mismatch.");
+      requireCondition(
+        upgrade.buildId === childDomainBuildId,
+        "upgrades: created buildId mismatch.",
+      );
       requireCondition(upgrade.title === `${marker} upgrade`, "upgrades: created title mismatch.");
       requireCondition(upgrade.reason === "why", "upgrades: created reason mismatch.");
       requireCondition(
@@ -222,7 +246,10 @@ function buildSpecs(
       );
     },
     checkUpdated: (upgrade) => {
-      requireCondition(upgrade.buildId === childDomainBuildId, "upgrades: updated buildId mismatch.");
+      requireCondition(
+        upgrade.buildId === childDomainBuildId,
+        "upgrades: updated buildId mismatch.",
+      );
       requireCondition(upgrade.reason === undefined, "upgrades: reason was not cleared.");
       requireCondition(
         JSON.stringify(upgrade.parts) === JSON.stringify(["motor", "esc"]),
