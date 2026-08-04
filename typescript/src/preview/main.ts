@@ -35,6 +35,7 @@ async function main(): Promise<void> {
   const httpApp = await createJarvisHttpApp({
     reconciliationHealth: () => reconciliation.health(),
     toolExecutionService,
+    observability,
   });
   await httpApp.listen(httpListen);
 
