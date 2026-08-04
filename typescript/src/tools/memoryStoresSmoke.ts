@@ -58,7 +58,7 @@ type DomainSpec<T extends { id: string }, I, U> = {
   update: U;
   /** Throws if the freshly created record does not match the input. */
   checkCreated: (entity: T) => void;
-  /** Throws if the updated record does not reflect the update (including cleared fields). */
+  /** Throws if the updated record reflects the update, including cleared fields. */
   checkUpdated: (entity: T) => void;
 };
 
@@ -157,6 +157,7 @@ async function runDomainSmoke<T extends { id: string }, I, U>(
 function buildSpecs(
   factories: MemoryStoreFactories,
   marker: string,
+  childDomainBuildId: string,
 ): [
   DomainSpec<Build, BuildInput, BuildUpdate>,
   DomainSpec<BuildLogEntry, BuildLogInput, BuildLogUpdate>,
@@ -186,14 +187,21 @@ function buildSpecs(
   const buildLogsSpec: DomainSpec<BuildLogEntry, BuildLogInput, BuildLogUpdate> = {
     label: "buildLogs",
     makeStore: factories.buildLogs,
-    input: { buildId: `${marker}-build`, title: `${marker} log`, kind: "milestone", body: "first" },
+    input: {
+      buildId: childDomainBuildId,
+      title: `${marker} log`,
+      kind: "milestone",
+      body: "first",
+    },
     update: { title: `${marker} log v2`, body: null },
     checkCreated: (log) => {
+      requireCondition(log.buildId === childDomainBuildId, "buildLogs: created buildId mismatch.");
       requireCondition(log.title === `${marker} log`, "buildLogs: created title mismatch.");
       requireCondition(log.kind === "milestone", "buildLogs: created kind mismatch.");
       requireCondition(log.body === "first", "buildLogs: created body mismatch.");
     },
     checkUpdated: (log) => {
+      requireCondition(log.buildId === childDomainBuildId, "buildLogs: updated buildId mismatch.");
       requireCondition(log.title === `${marker} log v2`, "buildLogs: updated title mismatch.");
       requireCondition(log.body === undefined, "buildLogs: body was not cleared.");
     },
@@ -203,13 +211,17 @@ function buildSpecs(
     label: "upgrades",
     makeStore: factories.upgrades,
     input: {
-      buildId: `${marker}-build`,
+      buildId: childDomainBuildId,
       title: `${marker} upgrade`,
       reason: "why",
       parts: ["motor"],
     },
     update: { reason: null, parts: ["motor", "esc"] },
     checkCreated: (upgrade) => {
+      requireCondition(
+        upgrade.buildId === childDomainBuildId,
+        "upgrades: created buildId mismatch.",
+      );
       requireCondition(upgrade.title === `${marker} upgrade`, "upgrades: created title mismatch.");
       requireCondition(upgrade.reason === "why", "upgrades: created reason mismatch.");
       requireCondition(
@@ -218,6 +230,10 @@ function buildSpecs(
       );
     },
     checkUpdated: (upgrade) => {
+      requireCondition(
+        upgrade.buildId === childDomainBuildId,
+        "upgrades: updated buildId mismatch.",
+      );
       requireCondition(upgrade.reason === undefined, "upgrades: reason was not cleared.");
       requireCondition(
         JSON.stringify(upgrade.parts) === JSON.stringify(["motor", "esc"]),
@@ -268,6 +284,15 @@ function buildSpecs(
   return [buildsSpec, buildLogsSpec, upgradesSpec, assetsSpec, preferencesSpec];
 }
 
+async function removeSupportBuild(factories: MemoryStoreFactories, buildId: string): Promise<void> {
+  await factories.builds().remove(buildId);
+  const remaining = await factories.builds().list();
+  requireCondition(
+    !remaining.some((build) => build.id === buildId),
+    "builds: support parent remained after cleanup removal.",
+  );
+}
+
 /**
  * Exercises all five durable-memory Convex stores (builds, build logs, upgrades,
  * assets, preferences) end-to-end against a development deployment. Refuses any
@@ -286,16 +311,58 @@ export async function runMemoryStoresSmoke(
   }
 
   const marker = `jarvis-smoke-${randomUUID()}`;
-  const [builds, buildLogs, upgrades, assets, preferences] = buildSpecs(factories, marker);
+  const [builds] = buildSpecs(factories, marker, `${marker}-placeholder-build`);
+  const buildsResult = await runDomainSmoke(builds, write);
 
-  const result: MemoryStoresSmokeResult = {
-    builds: await runDomainSmoke(builds, write),
-    buildLogs: await runDomainSmoke(buildLogs, write),
-    upgrades: await runDomainSmoke(upgrades, write),
-    assets: await runDomainSmoke(assets, write),
-    preferences: await runDomainSmoke(preferences, write),
-  };
+  let supportBuildId: string | undefined;
+  let primaryError: Error | undefined;
+  let childResults: Omit<MemoryStoresSmokeResult, "builds"> | undefined;
+
+  try {
+    const supportBuild = await factories.builds().add({
+      name: `${marker} child-domain parent`,
+      kind: "shed",
+      description: "parent for child-domain smoke",
+    });
+    supportBuildId = supportBuild.id;
+    requireCondition(supportBuildId.length > 0, "builds: support parent id missing.");
+
+    const [, buildLogs, upgrades, assets, preferences] = buildSpecs(
+      factories,
+      marker,
+      supportBuildId,
+    );
+    childResults = {
+      buildLogs: await runDomainSmoke(buildLogs, write),
+      upgrades: await runDomainSmoke(upgrades, write),
+      assets: await runDomainSmoke(assets, write),
+      preferences: await runDomainSmoke(preferences, write),
+    };
+  } catch (error: unknown) {
+    primaryError = normalizeError(error);
+  }
+
+  const cleanupErrors: unknown[] = [];
+  if (supportBuildId !== undefined) {
+    try {
+      await removeSupportBuild(factories, supportBuildId);
+    } catch (error: unknown) {
+      cleanupErrors.push(error);
+    }
+  }
+
+  if (cleanupErrors.length > 0) {
+    throw new AggregateError(
+      primaryError === undefined ? cleanupErrors : [primaryError, ...cleanupErrors],
+      "builds: support parent cleanup failed.",
+    );
+  }
+  if (primaryError !== undefined) throw primaryError;
+  requireCondition(
+    childResults !== undefined,
+    "memory stores: child-domain smoke finished without a result.",
+  );
 
   write("Convex smoke passed for all five durable-memory domains.");
-  return result;
+  return { builds: buildsResult, ...childResults };
 }

@@ -7,6 +7,8 @@ import { InMemoryBuildStore } from "../src/builds/inMemoryBuildStore.js";
 import { InMemoryPreferenceStore } from "../src/preferences/inMemoryPreferenceStore.js";
 import { InMemoryUpgradeStore } from "../src/upgrades/inMemoryUpgradeStore.js";
 import type { Build, BuildUpdate } from "../src/builds/build.js";
+import type { BuildLogEntry, BuildLogInput } from "../src/buildLog/buildLogEntry.js";
+import type { Upgrade, UpgradeInput } from "../src/upgrades/upgrade.js";
 import { runMemoryStoresSmoke, type MemoryStoreFactories } from "../src/tools/memoryStoresSmoke.js";
 
 type RealStores = {
@@ -101,6 +103,48 @@ describe("Memory stores smoke runner", () => {
     assert.deepEqual(await stores.preferences.list(), []);
 
     assert(messages.some((message) => message.includes("all five durable-memory domains")));
+  });
+
+  it("uses a live parent build for build-log and upgrade smoke", async () => {
+    const builds = new InMemoryBuildStore();
+
+    class ParentCheckingBuildLogStore extends InMemoryBuildLogStore {
+      override async add(input: BuildLogInput): Promise<BuildLogEntry> {
+        if ((await builds.get(input.buildId)) === null) throw new Error("Build does not exist.");
+        return super.add(input);
+      }
+    }
+
+    class ParentCheckingUpgradeStore extends InMemoryUpgradeStore {
+      override async add(input: UpgradeInput): Promise<Upgrade> {
+        if ((await builds.get(input.buildId)) === null) throw new Error("Build does not exist.");
+        return super.add(input);
+      }
+    }
+
+    const { stores, factories } = realStores({
+      builds,
+      buildLogs: new ParentCheckingBuildLogStore(),
+      upgrades: new ParentCheckingUpgradeStore(),
+    });
+
+    const result = await runMemoryStoresSmoke(factories, "dev:test", () => undefined);
+
+    assert.deepEqual(result.buildLogs, {
+      created: true,
+      updated: true,
+      restartVisible: true,
+      removed: true,
+    });
+    assert.deepEqual(result.upgrades, {
+      created: true,
+      updated: true,
+      restartVisible: true,
+      removed: true,
+    });
+    assert.deepEqual(await stores.builds.list(), []);
+    assert.deepEqual(await stores.buildLogs.list(), []);
+    assert.deepEqual(await stores.upgrades.list(), []);
   });
 
   it("removes the created record when a later stage fails", async () => {
