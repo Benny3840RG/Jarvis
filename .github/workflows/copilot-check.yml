@@ -2,6 +2,7 @@ name: Copilot Review Check
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, edited]
 
 permissions:
   contents: read
