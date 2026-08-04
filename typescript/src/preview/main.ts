@@ -7,6 +7,7 @@ import { resolveHttpListenConfig } from "../http/config.js";
 import { resolveJarvisMcpConfig } from "../mcp/config.js";
 import { startJarvisMcpHttpServer } from "../mcp/httpServer.js";
 import { createOutlookRuntimeReconciliationFactories } from "../reconciliation/outlookRuntimeReconciliation.js";
+import { createSentryRuntimeFromEnv } from "../observability/sentry.js";
 import { createRuntimeReconciliationHost } from "../reconciliation/runtimeReconciliationHost.js";
 import { applyPreviewEnvironment } from "./environment.js";
 
@@ -22,10 +23,11 @@ async function main(): Promise<void> {
   loadLocalEnvironment();
   applyPreviewEnvironment();
   const httpListen = resolveHttpListenConfig();
+  const observability = createSentryRuntimeFromEnv();
   const outlookRuntime = createMicrosoftOutlookRuntimeFromEnv();
   const reconciliation = createRuntimeReconciliationHost(
     process.env,
-    createOutlookRuntimeReconciliationFactories(outlookRuntime),
+    createOutlookRuntimeReconciliationFactories(outlookRuntime, { observability }),
   );
   const toolExecutionService = createToolExecutionServiceFromEnv(
     outlookRuntime?.quoteEmailProvider,
@@ -43,7 +45,7 @@ async function main(): Promise<void> {
 
   let mcpServer;
   try {
-    mcpServer = await startJarvisMcpHttpServer(mcpConfig);
+    mcpServer = await startJarvisMcpHttpServer(mcpConfig, undefined, observability);
     await reconciliation.start();
   } catch (error: unknown) {
     await reconciliation.stop();
