@@ -54,9 +54,10 @@ tools:
 
   - id: TOOL-QUOTE-FINALIZE
     lifecycle_status: planned
-    implemented: false
-    description: Transitions a reviewed quote revision to finalized via QuoteRepository.finalizeRevision, stamping an immutable fingerprint. The implementation exists and is tested, but is deliberately not wired into the live tool-execution allowlist — AM-012 stays planned until a deliberate commissioning/activation PR.
+    implemented: true
+    description: Transitions a reviewed quote revision to finalized via QuoteRepository.finalizeRevision, stamping an immutable fingerprint. Activation registers the allowlist binding, but lifecycle remains planned until the PR passes CI, merges, and authorised development commissioning reruns successfully.
     implementation: typescript/src/actions/quoteFinalizeTool.ts
+    allowlist: typescript/src/actions/toolExecutionFactory.ts
     bound_by: [AM-012]
 
   - id: TOOL-QUOTE-SEND

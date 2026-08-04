@@ -170,20 +170,30 @@ function unusedReminderStore(): ControlledReminderStore {
 }
 
 describe("AM-012/AM-013 governance boundary", () => {
-  it("never allowlists quotes:finalize, no matter what stores are supplied", () => {
-    const definitions = createToolExecutionDefinitions(
+  it("allowlists quotes:finalize only when quote persistence is supplied", () => {
+    const withoutQuoteRepository = createToolExecutionDefinitions(
+      unusedNoteStore(),
+      unusedTaskStore(),
+      unusedReminderStore(),
+    );
+    assert.equal(
+      withoutQuoteRepository.some(
+        ({ tool, operation }) => `${tool}:${operation}` === "quotes:finalize",
+      ),
+      false,
+    );
+
+    const withQuoteRepository = createToolExecutionDefinitions(
       unusedNoteStore(),
       unusedTaskStore(),
       unusedReminderStore(),
       unusedQuoteRepository(),
-      unusedEmailProvider(),
-      unusedDeliveryRepository(),
-      unusedPdfArtifacts(),
     );
-
     assert.equal(
-      definitions.some(({ tool, operation }) => `${tool}:${operation}` === "quotes:finalize"),
-      false,
+      withQuoteRepository.some(
+        ({ tool, operation }) => `${tool}:${operation}` === "quotes:finalize",
+      ),
+      true,
     );
   });
 
@@ -217,7 +227,7 @@ describe("AM-012/AM-013 governance boundary", () => {
     );
   });
 
-  it("never allowlists quotes:finalize or quotes:send with no quote wiring supplied at all", () => {
+  it("does not allowlist any quotes tool with no quote wiring supplied at all", () => {
     const definitions = createToolExecutionDefinitions(unusedNoteStore());
     assert.equal(
       definitions.some(({ tool }) => tool === "quotes"),
