@@ -1,0 +1,21 @@
+# Jarvis control-plane ownership
+# Keep automation, workflow, security, and governance changes explicitly owner-reviewed.
+
+.github/ @Benny3840
+.github/workflows/ @Benny3840
+.github/automation/ @Benny3840
+.github/actions/ @Benny3840
+SECURITY.md @Benny3840
+docs/security/ @Benny3840
+docs/operations/ @Benny3840
+docs/registries/ @Benny3840
+docs/validators/ @Benny3840
+docs/traceability/ @Benny3840
+scripts/ @Benny3840
+typescript/scripts/ @Benny3840
+typescript/src/auth/ @Benny3840
+typescript/src/http/ @Benny3840
+typescript/src/mcp/ @Benny3840
+typescript/src/tools/ @Benny3840
+typescript/src/quotes/ @Benny3840
+typescript/convex/ @Benny3840
