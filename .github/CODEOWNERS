@@ -19,3 +19,9 @@ typescript/src/mcp/ @Benny3840
 typescript/src/tools/ @Benny3840
 typescript/src/quotes/ @Benny3840
 typescript/convex/ @Benny3840
+# Active Console and frozen requirements/governance documents
+typescript/jarvis-console-01/ @Benny3840
+docs/requirements/ @Benny3840
+docs/governance/ @Benny3840
+/.gitignore @Benny3840
+.github/commission-development @Benny3840
