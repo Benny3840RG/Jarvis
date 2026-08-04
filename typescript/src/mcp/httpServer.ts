@@ -1,3 +1,4 @@
+import { performance } from "node:perf_hooks";
 import { createServer, type Server } from "node:http";
 
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
@@ -5,6 +6,7 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import type { JarvisMcpConfig } from "./config.js";
 import { JarvisApiClient } from "./jarvisApiClient.js";
 import { createJarvisMcpServer } from "./server.js";
+import { createSentryRuntimeFromEnv, type SentryRuntime } from "../observability/sentry.js";
 
 const MCP_PATH = "/mcp";
 const MCP_METHODS = new Set(["POST", "GET", "DELETE"]);
@@ -29,11 +31,23 @@ function closeHttpServer(server: Server): Promise<void> {
 
 export async function startJarvisMcpHttpServer(
   config: JarvisMcpConfig,
-  client: JarvisApiClient = new JarvisApiClient(config.api),
+  client?: JarvisApiClient,
+  observability: SentryRuntime = createSentryRuntimeFromEnv(),
 ): Promise<RunningJarvisMcpServer> {
+  const apiClient = client ?? new JarvisApiClient(config.api, fetch, observability);
   const httpServer = createServer(async (request, response) => {
+    const startedAt = performance.now();
+    const observe = async (statusCode: number): Promise<void> => {
+      await observability.recordMeasurement({
+        operation: "mcp.request",
+        durationMs: performance.now() - startedAt,
+        success: statusCode < 500,
+        tags: { method: request.method ?? "UNKNOWN", route: "/mcp", status_code: String(statusCode) },
+      });
+    };
     if (!request.url) {
       response.writeHead(400, { "content-type": "text/plain; charset=utf-8" }).end("Missing URL");
+      await observe(400);
       return;
     }
 
@@ -48,6 +62,7 @@ export async function startJarvisMcpHttpServer(
           "x-content-type-options": "nosniff",
         })
         .end(JSON.stringify({ status: "ok", service: "jarvis-mcp-preview", endpoint: MCP_PATH }));
+      await observe(200);
       return;
     }
 
@@ -59,6 +74,7 @@ export async function startJarvisMcpHttpServer(
         "Access-Control-Expose-Headers": "Mcp-Session-Id",
       });
       response.end();
+      await observe(204);
       return;
     }
 
@@ -68,7 +84,7 @@ export async function startJarvisMcpHttpServer(
       response.setHeader("Cache-Control", "no-store");
       response.setHeader("X-Content-Type-Options", "nosniff");
 
-      const server = createJarvisMcpServer(client);
+      const server = createJarvisMcpServer(apiClient);
       const transport = new StreamableHTTPServerTransport({
         sessionIdGenerator: undefined,
         enableJsonResponse: true,
@@ -80,17 +96,25 @@ export async function startJarvisMcpHttpServer(
       try {
         await server.connect(transport);
         await transport.handleRequest(request, response);
-      } catch {
+      } catch (error: unknown) {
+        await observability.captureError(error, {
+          operation: "mcp.request",
+          route: MCP_PATH,
+          method: request.method,
+        });
         if (!response.headersSent) {
           response
             .writeHead(500, { "content-type": "text/plain; charset=utf-8" })
             .end("Jarvis MCP request failed.");
         }
+        await observe(500);
       }
+      if (response.statusCode < 500) await observe(response.statusCode || 200);
       return;
     }
 
-    response.writeHead(404, { "content-type": "text/plain; charset=utf-8" }).end("Not Found");
+      response.writeHead(404, { "content-type": "text/plain; charset=utf-8" }).end("Not Found");
+    await observe(404);
   });
 
   await new Promise<void>((resolve, reject) => {
