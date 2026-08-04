@@ -193,8 +193,11 @@ class SentryEnvelopeTransport implements SentryTransport {
       event_id: event.event_id,
       sent_at: new Date().toISOString(),
     });
-    const itemHeader = JSON.stringify({ type: event.type });
-    const body = `${envelopeHeader}\n${itemHeader}\n${JSON.stringify(event)}\n`;
+    const itemHeader = JSON.stringify({
+      type: event.type === "transaction" ? "transaction" : "event",
+    });
+    const { type: _eventType, ...payload } = event;
+    const body = `${envelopeHeader}\n${itemHeader}\n${JSON.stringify(payload)}\n`;
     const response = await fetch(this.endpoint, {
       method: "POST",
       headers: { "content-type": "application/x-sentry-envelope" },
