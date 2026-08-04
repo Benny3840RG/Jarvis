@@ -86,4 +86,6 @@ jobs:
       - name: Audit dependencies
         run: npm run audit:ci
       - name: Build and type-check the MCP app
-        run: npm run build
+        run: |
+          npm run build
+          npm run type-check
