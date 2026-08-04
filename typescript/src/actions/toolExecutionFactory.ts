@@ -47,9 +47,7 @@ export function createToolExecutionDefinitions(
     ...(taskStore === undefined || reminderStore === undefined
       ? []
       : createTaskReminderToolDefinitions(taskStore, reminderStore)),
-    ...(quoteRepository === undefined
-      ? []
-      : [createQuoteFinalizeToolDefinition(quoteRepository)]),
+    ...(quoteRepository === undefined ? [] : [createQuoteFinalizeToolDefinition(quoteRepository)]),
     ...(quoteRepository === undefined ||
     quoteEmailProvider === undefined ||
     quoteDeliveryRepository === undefined ||
