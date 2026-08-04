@@ -51,6 +51,8 @@ import { InMemoryNoteStore } from "../notes/inMemoryNoteStore.js";
 import { ConvexNoteStore } from "../persistence/convexNotes.js";
 import { createMemoryChangeSetServiceFromEnv } from "../memory/memoryChangeSetFactory.js";
 import type { MemoryChangeSetService } from "../memory/memoryChangeSets.js";
+import type { ObservabilityReporter } from "../observability/sentry.js";
+import { createSentryReporterFromEnv } from "../observability/sentry.js";
 import { createActivityEventReaderFromEnv } from "../operations/activityTimelineFactory.js";
 import type { ActivityEventReader } from "../operations/activityTimeline.js";
 import {
@@ -91,6 +93,7 @@ export type CreateJarvisHttpAppOptions = (
   memoryChangeSetService?: MemoryChangeSetService | null;
   toolActionService?: ToolActionService | null;
   toolExecutionService?: ToolExecutionService | null;
+  observabilityReporter?: ObservabilityReporter;
   clientStore?: ClientStore;
   projectStore?: ProjectStore;
   quoteStore?: QuoteStore;
@@ -139,6 +142,13 @@ export async function createJarvisHttpApp(
   const persistence = options.persistence ?? createPersistenceFromEnv();
   const config = options.config ?? resolveHttpAppConfig();
   const usesEnvironment = options.persistence === undefined;
+  const observabilityReporter =
+    options.observabilityReporter ??
+    createSentryReporterFromEnv(process.env, {
+      secrets: [config.currentToken, config.previousToken].filter(
+        (secret): secret is string => secret !== undefined,
+      ),
+    });
   const reconciliationHealth =
     options.reconciliationHealth ?? (() => ({ state: "disabled", enabled: false }));
   const externalReconciliationReadStore =
@@ -260,6 +270,7 @@ export async function createJarvisHttpApp(
       memoryChangeSetService,
       toolActionService,
       toolExecutionService,
+      observabilityReporter,
       clientStore,
       projectStore,
       quoteStore,
