@@ -177,7 +177,9 @@ describe("AM-012/AM-013 governance boundary", () => {
       unusedReminderStore(),
     );
     assert.equal(
-      withoutQuoteRepository.some(({ tool, operation }) => `${tool}:${operation}` === "quotes:finalize"),
+      withoutQuoteRepository.some(
+        ({ tool, operation }) => `${tool}:${operation}` === "quotes:finalize",
+      ),
       false,
     );
 
@@ -188,7 +190,9 @@ describe("AM-012/AM-013 governance boundary", () => {
       unusedQuoteRepository(),
     );
     assert.equal(
-      withQuoteRepository.some(({ tool, operation }) => `${tool}:${operation}` === "quotes:finalize"),
+      withQuoteRepository.some(
+        ({ tool, operation }) => `${tool}:${operation}` === "quotes:finalize",
+      ),
       true,
     );
   });
