@@ -1,19 +1,6 @@
 name: Development preview commissioning
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - typescript/convex/**
-      - typescript/src/mcp/**
-      - typescript/src/preview/**
-      - typescript/src/tools/runMcpSmoke.ts
-      - typescript/tests/mcp*.test.ts
-      - typescript/tests/jarvisApiClient.test.ts
-      - typescript/package.json
-      - typescript/package-lock.json
-      - .github/workflows/development-preview-commissioning.yml
   workflow_dispatch:
     inputs:
       confirmation:
@@ -71,7 +58,7 @@ jobs:
             exit 1
           fi
 
-          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" && "$PREVIEW_CONFIRMATION" != "PREVIEW DEV" ]]; then
+          if [[ "$PREVIEW_CONFIRMATION" != "PREVIEW DEV" ]]; then
             echo "::error::Confirmation must exactly match PREVIEW DEV."
             exit 1
           fi
