@@ -52,7 +52,7 @@ describe("PostHog runtime telemetry", () => {
     await telemetry.flush();
 
     assert.equal(telemetry.enabled, false);
-    assert.equal(recorder.calls.length, 0);
+    assert.equal(calls.length, 1);
   });
 
   it("fails closed for malformed PostHog configuration", async () => {
@@ -120,7 +120,7 @@ describe("PostHog runtime telemetry", () => {
   });
 
   it("returns before a slow telemetry endpoint resolves", async () => {
-    const recorder = createFetchRecorder();
+    const { calls, fetchImpl: recorderFetch } = createFetchRecorder();
     let aborted = false;
     const fetchImpl: typeof fetch = async (_input, init = {}) =>
       new Promise<Response>((_resolve, reject) => {
@@ -133,7 +133,7 @@ describe("PostHog runtime telemetry", () => {
           { once: true },
         );
       });
-    const telemetry = createPostHogTelemetryFromEnv(developmentEnv(), fetchImpl);
+    const telemetry = createPostHogTelemetryFromEnv(developmentEnv(), recorderFetch);
 
     const startedAt = Date.now();
     captureHttpBoundary(telemetry, {
