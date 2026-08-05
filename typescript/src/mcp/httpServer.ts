@@ -37,21 +37,23 @@ export async function startJarvisMcpHttpServer(
   const apiClient = client ?? new JarvisApiClient(config.api, fetch, observability);
   const httpServer = createServer(async (request, response) => {
     const startedAt = performance.now();
-    const observe = async (statusCode: number): Promise<void> => {
-      await observability.recordMeasurement({
-        operation: "mcp.request",
-        durationMs: performance.now() - startedAt,
-        success: statusCode < 500,
-        tags: {
-          method: request.method ?? "UNKNOWN",
-          route: "/mcp",
-          status_code: String(statusCode),
-        },
-      });
+    const observe = (statusCode: number): void => {
+      void observability
+        .recordMeasurement({
+          operation: "mcp.request",
+          durationMs: performance.now() - startedAt,
+          success: statusCode < 500,
+          tags: {
+            method: request.method ?? "UNKNOWN",
+            route: "/mcp",
+            status_code: String(statusCode),
+          },
+        })
+        .catch(() => {});
     };
     if (!request.url) {
       response.writeHead(400, { "content-type": "text/plain; charset=utf-8" }).end("Missing URL");
-      await observe(400);
+      observe(400);
       return;
     }
 
@@ -66,7 +68,7 @@ export async function startJarvisMcpHttpServer(
           "x-content-type-options": "nosniff",
         })
         .end(JSON.stringify({ status: "ok", service: "jarvis-mcp-preview", endpoint: MCP_PATH }));
-      await observe(200);
+      observe(200);
       return;
     }
 
@@ -78,7 +80,7 @@ export async function startJarvisMcpHttpServer(
         "Access-Control-Expose-Headers": "Mcp-Session-Id",
       });
       response.end();
-      await observe(204);
+      observe(204);
       return;
     }
 
@@ -111,7 +113,7 @@ export async function startJarvisMcpHttpServer(
             .writeHead(500, { "content-type": "text/plain; charset=utf-8" })
             .end("Jarvis MCP request failed.");
         }
-        await observe(500);
+        observe(500);
       }
       if (response.statusCode < 500) await observe(response.statusCode || 200);
       return;
