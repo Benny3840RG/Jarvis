@@ -2,6 +2,7 @@ import { loadEnvFile } from "node:process";
 
 import { resolveJarvisMcpConfig } from "./config.js";
 import { startJarvisMcpHttpServer } from "./httpServer.js";
+import { createPostHogTelemetryFromEnv } from "../observability/posthog.js";
 
 function loadLocalEnvironment(): void {
   try {
@@ -13,7 +14,11 @@ function loadLocalEnvironment(): void {
 
 async function main(): Promise<void> {
   loadLocalEnvironment();
-  const running = await startJarvisMcpHttpServer(resolveJarvisMcpConfig());
+  const running = await startJarvisMcpHttpServer(
+    resolveJarvisMcpConfig(),
+    undefined,
+    createPostHogTelemetryFromEnv(),
+  );
   console.log(`Jarvis MCP preview is listening on ${running.url}`);
 
   const shutdown = async () => {
