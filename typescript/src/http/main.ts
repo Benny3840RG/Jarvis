@@ -4,6 +4,10 @@ import { createToolExecutionServiceFromEnv } from "../actions/toolExecutionFacto
 import { createMicrosoftOutlookRuntimeFromEnv } from "../auth/microsoftOutlookRuntime.js";
 import { createOutlookRuntimeReconciliationFactories } from "../reconciliation/outlookRuntimeReconciliation.js";
 import { createRuntimeReconciliationHost } from "../reconciliation/runtimeReconciliationHost.js";
+import {
+  createPostHogTelemetryFromEnv,
+  createReconciliationTelemetryObserver,
+} from "../observability/posthog.js";
 import { createJarvisHttpApp } from "./app.js";
 import { resolveHttpListenConfig } from "./config.js";
 
@@ -19,9 +23,12 @@ async function main(): Promise<void> {
   loadLocalEnvironment();
   const listen = resolveHttpListenConfig();
   const outlookRuntime = createMicrosoftOutlookRuntimeFromEnv();
+  const telemetry = createPostHogTelemetryFromEnv();
   const reconciliation = createRuntimeReconciliationHost(
     process.env,
-    createOutlookRuntimeReconciliationFactories(outlookRuntime),
+    createOutlookRuntimeReconciliationFactories(outlookRuntime, {
+      observeCycle: createReconciliationTelemetryObserver(telemetry),
+    }),
   );
   const toolExecutionService = createToolExecutionServiceFromEnv(
     outlookRuntime?.quoteEmailProvider,
@@ -29,6 +36,7 @@ async function main(): Promise<void> {
   const app = await createJarvisHttpApp({
     reconciliationHealth: () => reconciliation.health(),
     toolExecutionService,
+    telemetry,
   });
 
   try {
