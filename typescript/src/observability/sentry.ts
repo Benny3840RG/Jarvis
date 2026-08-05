@@ -51,11 +51,15 @@ export type SentryRuntimeConfig = {
   release: string;
   environment: string;
   secrets?: readonly string[];
+  timeoutMs?: number;
 };
 
 const SAFE_TAG = /^[A-Za-z0-9._:/-]{1,128}$/;
 const SAFE_ENVIRONMENT = /^[A-Za-z0-9._:/-]{1,64}$/;
 const MAX_ERROR_VALUE_LENGTH = 512;
+const DEFAULT_TIMEOUT_MS = 1_000;
+const MIN_TIMEOUT_MS = 25;
+const MAX_TIMEOUT_MS = 5_000;
 const ROUTE_SEGMENTS = new Set([
   "api",
   "v1",
@@ -162,6 +166,16 @@ function errorDetails(error: unknown, secrets: readonly string[]): { type: strin
   };
 }
 
+function resolveTimeout(timeoutMs: number | undefined): number {
+  if (timeoutMs === undefined) return DEFAULT_TIMEOUT_MS;
+  if (!Number.isSafeInteger(timeoutMs) || timeoutMs < MIN_TIMEOUT_MS || timeoutMs > MAX_TIMEOUT_MS) {
+    throw new Error(
+      `SENTRY_TIMEOUT_MS must be an integer between ${MIN_TIMEOUT_MS} and ${MAX_TIMEOUT_MS}.`,
+    );
+  }
+  return timeoutMs;
+}
+
 function dsnEndpoint(dsn: string): string {
   let parsed: URL;
   try {
@@ -184,7 +198,10 @@ function dsnEndpoint(dsn: string): string {
 class SentryEnvelopeTransport implements SentryTransport {
   private readonly endpoint: string;
 
-  constructor(dsn: string) {
+  constructor(
+    dsn: string,
+    private readonly timeoutMs: number,
+  ) {
     this.endpoint = dsnEndpoint(dsn);
   }
 
@@ -198,12 +215,19 @@ class SentryEnvelopeTransport implements SentryTransport {
     });
     const { type: _eventType, ...payload } = event;
     const body = `${envelopeHeader}\n${itemHeader}\n${JSON.stringify(payload)}\n`;
-    const response = await fetch(this.endpoint, {
-      method: "POST",
-      headers: { "content-type": "application/x-sentry-envelope" },
-      body,
-    });
-    if (!response.ok) throw new Error(`Sentry transport returned HTTP ${response.status}.`);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
+    try {
+      const response = await fetch(this.endpoint, {
+        method: "POST",
+        headers: { "content-type": "application/x-sentry-envelope" },
+        body,
+        signal: controller.signal,
+      });
+      if (!response.ok) throw new Error(`Sentry transport returned HTTP ${response.status}.`);
+    } finally {
+      clearTimeout(timeout);
+    }
   }
 }
 
@@ -221,11 +245,19 @@ export function createSentryRuntime(
   const environment = requiredIdentifier(config.environment, "SENTRY_ENVIRONMENT", 64);
   if (!config.enabled) return disabledRuntime;
 
-  const sender = transport ?? new SentryEnvelopeTransport(config.dsn ?? "");
+  const timeoutMs = resolveTimeout(config.timeoutMs);
+  const sender = transport ?? new SentryEnvelopeTransport(config.dsn ?? "", timeoutMs);
   const secrets = config.secrets ?? [];
   const send = async (event: SentryEvent): Promise<void> => {
     try {
-      await sender.send(event);
+      const sending = sender.send(event).catch(() => {});
+      await new Promise<void>((resolve) => {
+        const timeout = setTimeout(resolve, timeoutMs);
+        void sending.finally(() => {
+          clearTimeout(timeout);
+          resolve();
+        });
+      });
     } catch {
       // Telemetry is best-effort. An unavailable Sentry endpoint must not
       // change Jarvis request, tool, or reconciliation outcomes.
