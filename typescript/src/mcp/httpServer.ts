@@ -42,7 +42,11 @@ export async function startJarvisMcpHttpServer(
         operation: "mcp.request",
         durationMs: performance.now() - startedAt,
         success: statusCode < 500,
-        tags: { method: request.method ?? "UNKNOWN", route: "/mcp", status_code: String(statusCode) },
+        tags: {
+          method: request.method ?? "UNKNOWN",
+          route: "/mcp",
+          status_code: String(statusCode),
+        },
       });
     };
     if (!request.url) {
@@ -113,7 +117,7 @@ export async function startJarvisMcpHttpServer(
       return;
     }
 
-      response.writeHead(404, { "content-type": "text/plain; charset=utf-8" }).end("Not Found");
+    response.writeHead(404, { "content-type": "text/plain; charset=utf-8" }).end("Not Found");
     await observe(404);
   });
 

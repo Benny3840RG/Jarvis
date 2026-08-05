@@ -15,7 +15,11 @@ function loadLocalEnvironment(): void {
 async function main(): Promise<void> {
   loadLocalEnvironment();
   const observability = createSentryRuntimeFromEnv();
-  const running = await startJarvisMcpHttpServer(resolveJarvisMcpConfig(), undefined, observability);
+  const running = await startJarvisMcpHttpServer(
+    resolveJarvisMcpConfig(),
+    undefined,
+    observability,
+  );
   console.log(`Jarvis MCP preview is listening on ${running.url}`);
 
   const shutdown = async () => {

@@ -70,7 +70,11 @@ import type { RuntimeReconciliationHealth } from "../reconciliation/runtimeRecon
 import { resolveHttpAppConfig, type HttpAppConfig } from "./config.js";
 import { JarvisHttpModule } from "./jarvisHttpModule.js";
 import { requestIdFor, REQUEST_ID_HEADER, resolveRequestId } from "./requestId.js";
-import { createSentryRuntimeFromEnv, stableRoute, type SentryRuntime } from "../observability/sentry.js";
+import {
+  createSentryRuntimeFromEnv,
+  stableRoute,
+  type SentryRuntime,
+} from "../observability/sentry.js";
 
 type DefaultPersistenceOptions = {
   persistence?: never;

@@ -283,7 +283,10 @@ export function createSentryRuntimeFromEnv(
   environment: NodeJS.ProcessEnv = process.env,
 ): SentryRuntime {
   const dsn = environment.SENTRY_DSN?.trim();
-  const release = environment.SENTRY_RELEASE?.trim() || environment.JARVIS_SOURCE_VERSION?.trim() || "development";
+  const release =
+    environment.SENTRY_RELEASE?.trim() ||
+    environment.JARVIS_SOURCE_VERSION?.trim() ||
+    "development";
   const sentryEnvironment = environment.SENTRY_ENVIRONMENT?.trim() || "development";
   const secrets = [
     environment.JARVIS_SERVICE_TOKEN,
@@ -293,15 +296,13 @@ export function createSentryRuntimeFromEnv(
     environment.OPENAI_API_KEY,
     environment.MICROSOFT_CLIENT_SECRET,
   ].filter((value): value is string => value !== undefined);
-  return createSentryRuntime(
-    {
-      enabled: dsn !== undefined,
-      ...(dsn === undefined ? {} : { dsn }),
-      release,
-      environment: sentryEnvironment,
-      secrets,
-    },
-  );
+  return createSentryRuntime({
+    enabled: dsn !== undefined,
+    ...(dsn === undefined ? {} : { dsn }),
+    release,
+    environment: sentryEnvironment,
+    secrets,
+  });
 }
 
 export { stableRoute };

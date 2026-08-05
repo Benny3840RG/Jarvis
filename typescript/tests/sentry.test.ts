@@ -78,7 +78,10 @@ describe("Sentry runtime adapter", () => {
     assert.equal(errorEvent.tags.route, "/api/v1/quotes/:quoteId");
     assert.equal(errorEvent.tags.request_id, "request-123");
     assert.match(errorEvent.exception?.values[0]?.value ?? "", /failure/);
-    assert.doesNotMatch(JSON.stringify(errorEvent), /service-secret|john@example.com|https:\/\/example\//);
+    assert.doesNotMatch(
+      JSON.stringify(errorEvent),
+      /service-secret|john@example.com|https:\/\/example\//,
+    );
     assert.equal("request" in errorEvent, false);
     assert.equal("body" in errorEvent, false);
 
