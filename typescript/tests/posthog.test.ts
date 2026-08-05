@@ -148,7 +148,8 @@ describe("PostHog runtime telemetry", () => {
     assert.ok(elapsedMs < 20);
     await telemetry.flush();
     assert.equal(aborted, true);
-    assert.equal(recorder.calls.length, 1);
+    // One HTTP boundary emits operator-action, latency, and usage events.
+    assert.equal(recorder.calls.length, 3);
   });
 
   it("swallows telemetry transport failures without affecting the caller", async () => {
