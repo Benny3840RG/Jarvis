@@ -65,7 +65,9 @@ function boundedCount(value: number): number {
 }
 
 function safeMethod(value: string): string {
-  return /^(GET|POST|PUT|PATCH|DELETE|OPTIONS|HEAD)$/.test(value) ? value : "OTHER";
+  return /^(GET|POST|PUT|PATCH|DELETE|OPTIONS|HEAD)$/.test(value)
+    ? value
+    : "OTHER";
 }
 
 function hasControlCharacters(value: string): boolean {
@@ -87,7 +89,8 @@ function sharedProperties(boundary: "http" | "mcp" | "reconciliation") {
 function captureFailure(
   telemetry: PostHogTelemetry,
   boundary: "http" | "mcp" | "reconciliation",
-  failureKind: "http_5xx" | "mcp_request_failed" | "reconciliation_cycle_failed",
+  failureKind:
+    "http_5xx" | "mcp_request_failed" | "reconciliation_cycle_failed",
 ): void {
   telemetry.capture({
     event: "jarvis.runtime_failure",
@@ -132,7 +135,10 @@ export function captureHttpBoundary(
   if (outcome === "failure") captureFailure(telemetry, "http", "http_5xx");
 }
 
-export function captureMcpBoundary(telemetry: PostHogTelemetry, input: McpBoundaryInput): void {
+export function captureMcpBoundary(
+  telemetry: PostHogTelemetry,
+  input: McpBoundaryInput,
+): void {
   telemetry.capture({
     event: "jarvis.tool_outcome",
     properties: {
@@ -204,7 +210,8 @@ export function createReconciliationTelemetryObserver(
       startedAt = performance.now();
       return;
     }
-    const durationMs = startedAt === undefined ? 0 : performance.now() - startedAt;
+    const durationMs =
+      startedAt === undefined ? 0 : performance.now() - startedAt;
     startedAt = undefined;
     captureReconciliationCycle(telemetry, {
       outcome:
@@ -224,10 +231,14 @@ function parseTimeout(environment: Environment): number | null {
   if (raw === undefined) return DEFAULT_TIMEOUT_MS;
   if (!/^\d+$/.test(raw.trim())) return null;
   const value = Number(raw);
-  return Number.isSafeInteger(value) && value >= 25 && value <= 2_000 ? value : null;
+  return Number.isSafeInteger(value) && value >= 25 && value <= 2_000
+    ? value
+    : null;
 }
 
-function resolveEndpoint(environment: Environment): { endpoint: string; apiKey: string; timeoutMs: number } | null {
+function resolveEndpoint(
+  environment: Environment,
+): { endpoint: string; apiKey: string; timeoutMs: number } | null {
   if (
     environment.JARVIS_ENVIRONMENT !== "development" ||
     environment.JARVIS_POSTHOG_ENABLED !== "true"
@@ -240,7 +251,8 @@ function resolveEndpoint(environment: Environment): { endpoint: string; apiKey: 
     !apiKey ||
     apiKey.length > 256 ||
     !apiKey.startsWith("phc_") ||
-    /\s/.test(apiKey) || hasControlCharacters(apiKey)
+    /\s/.test(apiKey) ||
+    hasControlCharacters(apiKey)
   ) {
     return null;
   }
@@ -252,7 +264,13 @@ function resolveEndpoint(environment: Environment): { endpoint: string; apiKey: 
   } catch {
     return null;
   }
-  if (host.protocol !== "https:" || host.username || host.password || host.search || host.hash) {
+  if (
+    host.protocol !== "https:" ||
+    host.username ||
+    host.password ||
+    host.search ||
+    host.hash
+  ) {
     return null;
   }
 
