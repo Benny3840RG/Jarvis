@@ -297,7 +297,6 @@ class EnabledPostHogTelemetry implements PostHogTelemetry {
   private async send(event: PostHogEvent): Promise<void> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
-    timeout.unref?.();
     try {
       await this.fetchImpl(this.endpoint, {
         method: "POST",
