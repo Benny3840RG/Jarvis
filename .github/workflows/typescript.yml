@@ -14,7 +14,7 @@ on:
       - ".github/workflows/development-commissioning.yml"
       - ".github/workflows/queue-development-commissioning.yml"
       - ".github/workflows/jarvis-autobuild.yml"
-      - ".github/automation/**"
+      - ".github/automation/**
   pull_request:
     branches: [main]
 
@@ -64,6 +64,8 @@ jobs:
         run: npm run format:check
       - name: Validate OpenAPI contract
         run: npm run openapi:lint
+      - name: Isolate PostHog telemetry test
+        run: timeout --foreground --kill-after=10s 1m node --import tsx --test tests/posthog.test.ts
       - name: Test Node CLI and persistence with coverage
         run: timeout --foreground --kill-after=10s 5m node --import tsx --test --experimental-test-coverage tests/*.test.ts jarvis-console-01/tests/*.test.ts
       - name: Test Convex suite
