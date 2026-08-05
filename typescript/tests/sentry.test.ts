@@ -41,6 +41,30 @@ describe("Sentry runtime adapter", () => {
     assert.deepEqual(events, []);
   });
 
+  it("keeps disabled mode inert before validating metadata", () => {
+    const runtime = createSentryRuntime({
+      enabled: false,
+      release: "invalid release value",
+      environment: "invalid environment value",
+      timeoutMs: 10,
+    });
+
+    assert.equal(runtime.enabled, false);
+  });
+
+  it("accepts a maximum-length release identifier", () => {
+    const runtime = createSentryRuntime(
+      {
+        enabled: true,
+        release: "r".repeat(128),
+        environment: "test",
+      },
+      transport([]),
+    );
+
+    assert.equal(runtime.enabled, true);
+  });
+
   it("emits redacted errors and stable measurements without request bodies", async () => {
     const events: SentryEvent[] = [];
     const runtime = createSentryRuntime(
