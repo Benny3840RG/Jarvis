@@ -103,19 +103,21 @@ export async function startJarvisMcpHttpServer(
         await server.connect(transport);
         await transport.handleRequest(request, response);
       } catch (error: unknown) {
-        await observability.captureError(error, {
-          operation: "mcp.request",
-          route: MCP_PATH,
-          method: request.method,
-        });
         if (!response.headersSent) {
           response
             .writeHead(500, { "content-type": "text/plain; charset=utf-8" })
             .end("Jarvis MCP request failed.");
         }
+        void observability
+          .captureError(error, {
+            operation: "mcp.request",
+            route: MCP_PATH,
+            method: request.method,
+          })
+          .catch(() => {});
         observe(500);
       }
-      if (response.statusCode < 500) await observe(response.statusCode || 200);
+      if (response.statusCode < 500) observe(response.statusCode || 200);
       return;
     }
 
