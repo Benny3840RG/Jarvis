@@ -1,3 +1,6 @@
+import type { SentryRuntime } from "../observability/sentry.js";
+import { performance } from "node:perf_hooks";
+
 import type { ReconciliationRunResult, ReconciliationWorker } from "./reconciliationWorker.js";
 
 type ReconciliationWorkerLike = Pick<ReconciliationWorker, "runOnce">;
@@ -9,6 +12,7 @@ type SchedulerOptions = {
   maxBatchSize: number;
   sleep?: (milliseconds: number, signal: AbortSignal) => Promise<void>;
   observeCycle?: (observation: ReconciliationCycleObservation) => void;
+  observability?: SentryRuntime;
 };
 
 export type ReconciliationCycleResult = {
@@ -50,6 +54,7 @@ export class ReconciliationScheduler {
   private readonly sleep: (milliseconds: number, signal: AbortSignal) => Promise<void>;
   private readonly observeCycle:
     ((observation: ReconciliationCycleObservation) => void) | undefined;
+  private readonly observability: SentryRuntime | undefined;
   private cycleRunning = false;
 
   constructor(
@@ -66,17 +71,28 @@ export class ReconciliationScheduler {
     );
     this.sleep = options.sleep ?? abortableSleep;
     this.observeCycle = options.observeCycle;
+    this.observability = options.observability;
   }
 
   async runCycle(signal: AbortSignal): Promise<ReconciliationCycleResult> {
+    const startedAt = performance.now();
     if (this.cycleRunning) {
       this.notify({ type: "skipped" });
+      await this.observeMeasurement({
+        durationMs: 0,
+        success: true,
+        measurements: { processed: 0, failure_count: 0 },
+        tags: { cycle_outcome: "skipped" },
+      });
       return { processed: 0, skipped: true };
     }
+
     this.cycleRunning = true;
     this.notify({ type: "started" });
+    let processed = 0;
+    let failureCount = 0;
+    let success = false;
     try {
-      let processed = 0;
       while (!signal.aborted && processed < this.maxBatchSize) {
         const result: ReconciliationRunResult = await this.worker.runOnce({
           workerId: this.workerId,
@@ -85,13 +101,22 @@ export class ReconciliationScheduler {
         });
         if (result.status === "idle") break;
         processed += 1;
+        if (result.status === "released" || result.status === "escalated") failureCount += 1;
       }
+      success = failureCount === 0;
       this.notify({ type: "completed", processed });
       return { processed, skipped: false };
     } catch (error: unknown) {
       this.notify({ type: "failed" });
+      await this.observeError(error);
       throw error;
     } finally {
+      await this.observeMeasurement({
+        durationMs: performance.now() - startedAt,
+        success,
+        measurements: { processed, failure_count: failureCount },
+        tags: { outcome: success ? "success" : "failure" },
+      });
       this.cycleRunning = false;
     }
   }
@@ -101,6 +126,36 @@ export class ReconciliationScheduler {
       await this.runCycle(signal);
       if (signal.aborted) break;
       await this.sleep(this.intervalMs, signal);
+    }
+  }
+
+  private async observeMeasurement(input: {
+    durationMs: number;
+    success: boolean;
+    measurements: Record<string, number>;
+    tags: Record<string, string>;
+  }): Promise<void> {
+    try {
+      void this.observability
+        ?.recordMeasurement({
+          operation: "reconciliation.cycle",
+          ...input,
+        })
+        .catch(() => {});
+    } catch {
+      // Observability is best-effort and must not alter reconciliation outcomes.
+    }
+  }
+
+  private async observeError(error: unknown): Promise<void> {
+    try {
+      await this.observability?.captureError(error, {
+        operation: "reconciliation.cycle",
+        route: "worker",
+        tags: { worker: this.workerId },
+      });
+    } catch {
+      // Observability is best-effort and must not alter reconciliation outcomes.
     }
   }
 
