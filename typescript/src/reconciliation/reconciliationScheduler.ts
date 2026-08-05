@@ -136,10 +136,12 @@ export class ReconciliationScheduler {
     tags: Record<string, string>;
   }): Promise<void> {
     try {
-      void this.observability?.recordMeasurement({
-        operation: "reconciliation.cycle",
-        ...input,
-      }).catch(() => {});
+      void this.observability
+        ?.recordMeasurement({
+          operation: "reconciliation.cycle",
+          ...input,
+        })
+        .catch(() => {});
     } catch {
       // Observability is best-effort and must not alter reconciliation outcomes.
     }
