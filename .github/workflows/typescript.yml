@@ -66,8 +66,15 @@ jobs:
         run: npm run openapi:lint
       - name: Isolate PostHog telemetry test
         run: timeout --foreground --kill-after=10s 1m node --import tsx --test tests/posthog.test.ts
-      - name: Test Node CLI and persistence with coverage
-        run: timeout --foreground --kill-after=10s 5m node --import tsx --test --experimental-test-coverage tests/*.test.ts jarvis-console-01/tests/*.test.ts
+      - name: Test Node CLI and persistence with per-file coverage
+        shell: bash
+        run: |
+          set -euo pipefail
+          for test_file in tests/*.test.ts jarvis-console-01/tests/*.test.ts; do
+            echo "::group::${test_file}"
+            timeout --foreground --kill-after=10s 30s node --import tsx --test --experimental-test-coverage "${test_file}"
+            echo "::endgroup::"
+          done
       - name: Test Convex suite
         run: timeout --foreground --kill-after=10s 5m npm run test:convex
 
