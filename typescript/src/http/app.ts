@@ -247,17 +247,19 @@ export async function createJarvisHttpApp(
         config.previousToken,
       ]),
   });
-  const requestStartedAt = new WeakMap<object, number>();
-  adapter.getInstance().addHook("onRequest", (request) => {
-    requestStartedAt.set(request, performance.now());
-  });
-  adapter.getInstance().addHook("onResponse", (request, reply) => {
-    captureHttpBoundary(telemetry, {
-      method: request.method,
-      statusCode: reply.statusCode,
-      durationMs: performance.now() - (requestStartedAt.get(request) ?? performance.now()),
+  if (telemetry.enabled) {
+    const requestStartedAt = new WeakMap<object, number>();
+    adapter.getInstance().addHook("onRequest", (request) => {
+      requestStartedAt.set(request, performance.now());
     });
-  });
+    adapter.getInstance().addHook("onResponse", (request, reply) => {
+      captureHttpBoundary(telemetry, {
+        method: request.method,
+        statusCode: reply.statusCode,
+        durationMs: performance.now() - (requestStartedAt.get(request) ?? performance.now()),
+      });
+    });
+  }
   if (options.onRoute) {
     const collect = options.onRoute;
     adapter.getInstance().addHook("onRoute", (routeOptions) => {
