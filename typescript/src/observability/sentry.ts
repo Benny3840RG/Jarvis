@@ -168,7 +168,11 @@ function errorDetails(error: unknown, secrets: readonly string[]): { type: strin
 
 function resolveTimeout(timeoutMs: number | undefined): number {
   if (timeoutMs === undefined) return DEFAULT_TIMEOUT_MS;
-  if (!Number.isSafeInteger(timeoutMs) || timeoutMs < MIN_TIMEOUT_MS || timeoutMs > MAX_TIMEOUT_MS) {
+  if (
+    !Number.isSafeInteger(timeoutMs) ||
+    timeoutMs < MIN_TIMEOUT_MS ||
+    timeoutMs > MAX_TIMEOUT_MS
+  ) {
     throw new Error(
       `SENTRY_TIMEOUT_MS must be an integer between ${MIN_TIMEOUT_MS} and ${MAX_TIMEOUT_MS}.`,
     );
@@ -224,7 +228,9 @@ class SentryEnvelopeTransport implements SentryTransport {
         body,
         signal: controller.signal,
       });
-      if (!response.ok) throw new Error(`Sentry transport returned HTTP ${response.status}.`);
+      if (!response.ok) {
+        throw new Error(`Sentry transport returned HTTP ${response.status}.`);
+      }
     } finally {
       clearTimeout(timeout);
     }
