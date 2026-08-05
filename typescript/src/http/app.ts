@@ -67,6 +67,11 @@ import type { RuntimeReconciliationHealth } from "../reconciliation/runtimeRecon
 import { resolveHttpAppConfig, type HttpAppConfig } from "./config.js";
 import { JarvisHttpModule } from "./jarvisHttpModule.js";
 import { REQUEST_ID_HEADER, resolveRequestId } from "./requestId.js";
+import {
+  captureHttpBoundary,
+  createPostHogTelemetryFromEnv,
+  type PostHogTelemetry,
+} from "../observability/posthog.js";
 
 type DefaultPersistenceOptions = {
   persistence?: never;
@@ -104,6 +109,7 @@ export type CreateJarvisHttpAppOptions = (
   preferenceStore?: PreferenceStore;
   noteStore?: NoteStore;
   activityEventReader?: ActivityEventReader | null;
+  telemetry?: PostHogTelemetry;
   /**
    * Invoked once per Fastify route as it is registered. Exposed so contract
    * tests can enumerate the routes the app actually serves without parsing the
@@ -138,6 +144,7 @@ export async function createJarvisHttpApp(
   const providerName = options.providerName ?? resolvePersistenceProviderName();
   const persistence = options.persistence ?? createPersistenceFromEnv();
   const config = options.config ?? resolveHttpAppConfig();
+  const telemetry = options.telemetry ?? createPostHogTelemetryFromEnv();
   const usesEnvironment = options.persistence === undefined;
   const reconciliationHealth =
     options.reconciliationHealth ?? (() => ({ state: "disabled", enabled: false }));
@@ -239,6 +246,17 @@ export async function createJarvisHttpApp(
         config.currentToken,
         config.previousToken,
       ]),
+  });
+  const requestStartedAt = new WeakMap<object, number>();
+  adapter.getInstance().addHook("onRequest", (request) => {
+    requestStartedAt.set(request, performance.now());
+  });
+  adapter.getInstance().addHook("onResponse", (request, reply) => {
+    captureHttpBoundary(telemetry, {
+      method: request.method,
+      statusCode: reply.statusCode,
+      durationMs: performance.now() - (requestStartedAt.get(request) ?? performance.now()),
+    });
   });
   if (options.onRoute) {
     const collect = options.onRoute;
