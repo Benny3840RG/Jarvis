@@ -87,7 +87,7 @@ describe("PostHog runtime telemetry", () => {
       durationMs: 41,
     });
     captureReconciliationCycle(telemetry, {
-      outcome: "completed",
+      outcome: "success",
       processed: 3,
       durationMs: 52,
     });
