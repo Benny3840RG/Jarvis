@@ -134,7 +134,8 @@ describe("PostHog runtime telemetry", () => {
           { once: true },
         );
       });
-    const telemetry = createPostHogTelemetryFromEnv(developmentEnv(), recorderFetch);
+    };
+    const telemetry = createPostHogTelemetryFromEnv(developmentEnv(), fetchImpl);
 
     const startedAt = Date.now();
     captureHttpBoundary(telemetry, {
