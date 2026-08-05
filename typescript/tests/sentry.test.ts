@@ -95,7 +95,6 @@ describe("Sentry runtime adapter", () => {
     assert.equal(measurementEvent.environment, "development");
   });
 
-
   it("bounds a stalled telemetry transport", async () => {
     let calls = 0;
     const runtime = createSentryRuntime(
