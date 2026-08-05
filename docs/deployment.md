@@ -311,3 +311,19 @@ Blob and metadata with the quote.
 This commissions the durable artefact boundary only. It does not configure Outlook, create a draft,
 send email, expose an MCP send tool, or deploy production. A later Outlook provider may attach only
 the stored immutable artefact after the separate credential, live-send and deployment approvals.
+
+## Development PostHog runtime observability
+
+PostHog capture is disabled unless all three development gates are explicit:
+
+```text
+JARVIS_ENVIRONMENT=development
+JARVIS_POSTHOG_ENABLED=true
+POSTHOG_PROJECT_API_KEY=phc_<development-project-key>
+```
+
+The optional `POSTHOG_HOST` defaults to `https://us.i.posthog.com`. It must be HTTPS with no embedded credentials, query string or fragment. `POSTHOG_TIMEOUT_MS` is optional and must be 25–2000 ms; the default is 250 ms. Invalid configuration fails closed to inert telemetry. The project key is used only for the PostHog capture transport and is never included in event properties.
+
+The native adapter emits only the governed `jarvis.operator_action`, `jarvis.tool_outcome`, `jarvis.boundary_latency`, `jarvis.runtime_failure`, and bounded `jarvis.usage` events. Properties are limited to development environment, fixed distinct ID, maintained boundary, operation, allowlisted outcome/method/status, bounded duration, bounded count, and failure kind. Prompts, tokens, credentials, message bodies, customer quote data and raw provider payloads are not captured. Transport is best-effort, asynchronous and timeout-bounded; a PostHog failure cannot delay or fail a business operation.
+
+Later development commissioning requires an explicit authorised development credential, deliberate operator/tool/latency exercises, inspection of ingested properties and retention, and evidence that no customer content or secret entered the project. This change does not commission PostHog, add credentials, authorise production, or permit production deployment.
