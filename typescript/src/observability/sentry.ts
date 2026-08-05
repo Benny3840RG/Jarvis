@@ -55,7 +55,7 @@ export type SentryRuntimeConfig = {
 };
 
 const SAFE_TAG = /^[A-Za-z0-9._:/-]{1,128}$/;
-const SAFE_ENVIRONMENT = /^[A-Za-z0-9._:/-]{1,64}$/;
+const SAFE_IDENTIFIER = /^[A-Za-z0-9._:/-]+$/;
 const MAX_ERROR_VALUE_LENGTH = 512;
 const DEFAULT_TIMEOUT_MS = 1_000;
 const MIN_TIMEOUT_MS = 25;
@@ -95,7 +95,7 @@ const ROUTE_SEGMENTS = new Set([
 
 function requiredIdentifier(value: string, field: string, maximum: number): string {
   const clean = value.trim();
-  if (!SAFE_ENVIRONMENT.test(clean) || clean.length > maximum) {
+  if (!SAFE_IDENTIFIER.test(clean) || clean.length > maximum) {
     throw new Error(`${field} must contain only safe release/environment characters.`);
   }
   return clean;
@@ -247,10 +247,10 @@ export function createSentryRuntime(
   config: SentryRuntimeConfig,
   transport?: SentryTransport,
 ): SentryRuntime {
-  const release = requiredIdentifier(config.release, "SENTRY_RELEASE", 128);
-  const environment = requiredIdentifier(config.environment, "SENTRY_ENVIRONMENT", 64);
   if (!config.enabled) return disabledRuntime;
 
+  const release = requiredIdentifier(config.release, "SENTRY_RELEASE", 128);
+  const environment = requiredIdentifier(config.environment, "SENTRY_ENVIRONMENT", 64);
   const timeoutMs = resolveTimeout(config.timeoutMs);
   const sender = transport ?? new SentryEnvelopeTransport(config.dsn ?? "", timeoutMs);
   const secrets = config.secrets ?? [];
@@ -308,7 +308,7 @@ export function createSentryRuntime(
         level: input.success ? "info" : "error",
         tags: {
           ...tagsFor({ operation: input.operation, tags: input.tags }),
-          outcome: input.success ? "success" : "failure",
+          outcome: input.tags?.outcome ?? (input.success ? "success" : "failure"),
         },
         transaction: safeTag(input.operation) ?? "jarvis.operation",
         measurements,
