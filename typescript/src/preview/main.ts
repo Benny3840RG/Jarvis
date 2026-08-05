@@ -9,6 +9,10 @@ import { startJarvisMcpHttpServer } from "../mcp/httpServer.js";
 import { createOutlookRuntimeReconciliationFactories } from "../reconciliation/outlookRuntimeReconciliation.js";
 import { createRuntimeReconciliationHost } from "../reconciliation/runtimeReconciliationHost.js";
 import { applyPreviewEnvironment } from "./environment.js";
+import {
+  createPostHogTelemetryFromEnv,
+  createReconciliationTelemetryObserver,
+} from "../observability/posthog.js";
 
 function loadLocalEnvironment(): void {
   try {
@@ -23,9 +27,12 @@ async function main(): Promise<void> {
   applyPreviewEnvironment();
   const httpListen = resolveHttpListenConfig();
   const outlookRuntime = createMicrosoftOutlookRuntimeFromEnv();
+  const telemetry = createPostHogTelemetryFromEnv();
   const reconciliation = createRuntimeReconciliationHost(
     process.env,
-    createOutlookRuntimeReconciliationFactories(outlookRuntime),
+    createOutlookRuntimeReconciliationFactories(outlookRuntime, {
+      observeCycle: createReconciliationTelemetryObserver(telemetry),
+    }),
   );
   const toolExecutionService = createToolExecutionServiceFromEnv(
     outlookRuntime?.quoteEmailProvider,
@@ -33,6 +40,7 @@ async function main(): Promise<void> {
   const httpApp = await createJarvisHttpApp({
     reconciliationHealth: () => reconciliation.health(),
     toolExecutionService,
+    telemetry,
   });
   await httpApp.listen(httpListen);
 
@@ -43,7 +51,7 @@ async function main(): Promise<void> {
 
   let mcpServer;
   try {
-    mcpServer = await startJarvisMcpHttpServer(mcpConfig);
+    mcpServer = await startJarvisMcpHttpServer(mcpConfig, undefined, telemetry);
     await reconciliation.start();
   } catch (error: unknown) {
     await reconciliation.stop();
