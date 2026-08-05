@@ -82,7 +82,7 @@ export class ReconciliationScheduler {
         durationMs: 0,
         success: true,
         measurements: { processed: 0, failure_count: 0 },
-        tags: { outcome: "skipped" },
+        tags: { cycle_outcome: "skipped" },
       });
       return { processed: 0, skipped: true };
     }
