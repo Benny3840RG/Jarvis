@@ -5,6 +5,11 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import type { JarvisMcpConfig } from "./config.js";
 import { JarvisApiClient } from "./jarvisApiClient.js";
 import { createJarvisMcpServer } from "./server.js";
+import {
+  captureMcpBoundary,
+  createPostHogTelemetryFromEnv,
+  type PostHogTelemetry,
+} from "../observability/posthog.js";
 
 const MCP_PATH = "/mcp";
 const MCP_METHODS = new Set(["POST", "GET", "DELETE"]);
@@ -30,6 +35,7 @@ function closeHttpServer(server: Server): Promise<void> {
 export async function startJarvisMcpHttpServer(
   config: JarvisMcpConfig,
   client: JarvisApiClient = new JarvisApiClient(config.api),
+  telemetry: PostHogTelemetry = createPostHogTelemetryFromEnv(),
 ): Promise<RunningJarvisMcpServer> {
   const httpServer = createServer(async (request, response) => {
     if (!request.url) {
@@ -77,15 +83,23 @@ export async function startJarvisMcpHttpServer(
         void transport.close();
         void server.close();
       });
+      const startedAt = performance.now();
+      let outcome: "success" | "failure" = "success";
       try {
         await server.connect(transport);
         await transport.handleRequest(request, response);
       } catch {
+        outcome = "failure";
         if (!response.headersSent) {
           response
             .writeHead(500, { "content-type": "text/plain; charset=utf-8" })
             .end("Jarvis MCP request failed.");
         }
+      } finally {
+        captureMcpBoundary(telemetry, {
+          outcome,
+          durationMs: performance.now() - startedAt,
+        });
       }
       return;
     }
