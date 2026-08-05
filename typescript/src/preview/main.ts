@@ -7,9 +7,12 @@ import { resolveHttpListenConfig } from "../http/config.js";
 import { resolveJarvisMcpConfig } from "../mcp/config.js";
 import { startJarvisMcpHttpServer } from "../mcp/httpServer.js";
 import { createOutlookRuntimeReconciliationFactories } from "../reconciliation/outlookRuntimeReconciliation.js";
-import { createSentryRuntimeFromEnv } from "../observability/sentry.js";
 import { createRuntimeReconciliationHost } from "../reconciliation/runtimeReconciliationHost.js";
 import { applyPreviewEnvironment } from "./environment.js";
+import {
+  createPostHogTelemetryFromEnv,
+  createReconciliationTelemetryObserver,
+} from "../observability/posthog.js";
 
 function loadLocalEnvironment(): void {
   try {
@@ -23,11 +26,13 @@ async function main(): Promise<void> {
   loadLocalEnvironment();
   applyPreviewEnvironment();
   const httpListen = resolveHttpListenConfig();
-  const observability = createSentryRuntimeFromEnv();
   const outlookRuntime = createMicrosoftOutlookRuntimeFromEnv();
+  const telemetry = createPostHogTelemetryFromEnv();
   const reconciliation = createRuntimeReconciliationHost(
     process.env,
-    createOutlookRuntimeReconciliationFactories(outlookRuntime, { observability }),
+    createOutlookRuntimeReconciliationFactories(outlookRuntime, {
+      observeCycle: createReconciliationTelemetryObserver(telemetry),
+    }),
   );
   const toolExecutionService = createToolExecutionServiceFromEnv(
     outlookRuntime?.quoteEmailProvider,
@@ -35,7 +40,7 @@ async function main(): Promise<void> {
   const httpApp = await createJarvisHttpApp({
     reconciliationHealth: () => reconciliation.health(),
     toolExecutionService,
-    observability,
+    telemetry,
   });
   await httpApp.listen(httpListen);
 
@@ -46,7 +51,7 @@ async function main(): Promise<void> {
 
   let mcpServer;
   try {
-    mcpServer = await startJarvisMcpHttpServer(mcpConfig, undefined, observability);
+    mcpServer = await startJarvisMcpHttpServer(mcpConfig, undefined, telemetry);
     await reconciliation.start();
   } catch (error: unknown) {
     await reconciliation.stop();

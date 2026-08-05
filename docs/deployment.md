@@ -113,9 +113,6 @@ All environment variables are loaded from `typescript/.env.local` at startup. Va
 | `JARVIS_HTTP_PORT`                    | Optional                                        | `3000`                | Listener TCP port for the HTTP service. Must be in the valid port range.                                                                                                                                          |
 | `JARVIS_SOURCE_VERSION`               | Optional                                        | `development`         | Git SHA or version string embedded in health and status responses for diagnostics.                                                                                                                                |
 | `JARVIS_DEPLOYMENT_VERSION`           | Optional                                        | —                     | Deployment identifier (e.g. `dev:outgoing-ram-798`) embedded in status responses.                                                                                                                                 |
-| `SENTRY_DSN`                         | Optional                                        | —                     | HTTPS DSN for the authorised development Sentry project. If unset, the adapter is inert and makes no network calls. Never commit or print this value.                          |
-| `SENTRY_RELEASE`                     | Optional                                        | `JARVIS_SOURCE_VERSION` | Stable Sentry release identifier; safe release characters only.                                                                                                                   |
-| `SENTRY_ENVIRONMENT`                 | Optional                                        | `development`       | Sentry environment identifier; use a non-production value until the separate deployment gate is approved.                                                                    |
 | `CONVEX_DEPLOYMENT`                   | Set by Convex                                   | —                     | Set automatically by `npx convex dev` when the project is linked. Required by the Convex SDK and the smoke test (`npm run smoke:convex`). Do not set manually.                                                    |
 | `JARVIS_RECONCILIATION_ENABLED`       | Optional                                        | `false`               | Requests the external reconciliation scheduler only when exactly `true`. The maintained runtimes reject enabled startup until at least one provider adapter is explicitly composed. All other values fail closed. |
 | `JARVIS_RECONCILIATION_WORKER_ID`     | Optional                                        | Generated per process | Safe operator-visible worker identity; 1–128 letters, digits, dots, underscores, colons, or hyphens.                                                                                                              |
@@ -125,16 +122,6 @@ All environment variables are loaded from `typescript/.env.local` at startup. Va
 | `JARVIS_RECONCILIATION_MAX_ATTEMPTS`  | Optional                                        | `5`                   | Maximum reconciliation attempts before escalation; 1–100.                                                                                                                                                         |
 | `JARVIS_RECONCILIATION_BASE_RETRY_MS` | Optional                                        | `1000`                | Positive base retry delay.                                                                                                                                                                                        |
 | `JARVIS_RECONCILIATION_MAX_RETRY_MS`  | Optional                                        | `60000`               | Positive maximum retry delay, not below the base delay.                                                                                                                                                           |
-
-## Sentry runtime observability
-
-Sentry is optional and fail-closed. When `SENTRY_DSN` is absent, Jarvis does not initialise a transport and emits no telemetry. A malformed configured DSN prevents that runtime from activating; it does not silently send to an unknown destination.
-
-The HTTP app records bounded request latency and 5xx outcomes. The MCP boundary records transport latency and failures, while its API client records stable tool-route latency. The reconciliation scheduler records cycle latency, processed count and provider failure count. Boundary errors are redacted before capture: service credentials, bearer values, API keys, email addresses, URLs, request bodies, message bodies, and raw provider payloads are not sent.
-
-The adapter uses `JARVIS_SOURCE_VERSION` (or `SENTRY_RELEASE`) as release metadata and defaults `SENTRY_ENVIRONMENT` to `development`. Runtime delivery is best-effort and cannot change request, tool or reconciliation outcomes. No Sentry DSN is stored in the repository, and no live event or alert proof is claimed by the code-only change.
-
-Before any authorised development commissioning, provision the Sentry project and DSN outside Git, install the DSN only in the approved development environment, send a deliberate redacted test error, and verify alert rules for error count, latency and failure rate. Production configuration remains a separate explicit approval gate.
 
 ## Reconciliation runtime
 
@@ -324,3 +311,19 @@ Blob and metadata with the quote.
 This commissions the durable artefact boundary only. It does not configure Outlook, create a draft,
 send email, expose an MCP send tool, or deploy production. A later Outlook provider may attach only
 the stored immutable artefact after the separate credential, live-send and deployment approvals.
+
+## Development PostHog runtime observability
+
+PostHog capture is disabled unless all three development gates are explicit:
+
+```text
+JARVIS_ENVIRONMENT=development
+JARVIS_POSTHOG_ENABLED=true
+POSTHOG_PROJECT_API_KEY=phc_<development-project-key>
+```
+
+The optional `POSTHOG_HOST` defaults to `https://us.i.posthog.com`. It must be HTTPS with no embedded credentials, query string or fragment. `POSTHOG_TIMEOUT_MS` is optional and must be 25–2000 ms; the default is 250 ms. Invalid configuration fails closed to inert telemetry. The project key is used only for the PostHog capture transport and is never included in event properties.
+
+The native adapter emits only the governed `jarvis.operator_action`, `jarvis.tool_outcome`, `jarvis.boundary_latency`, `jarvis.runtime_failure`, and bounded `jarvis.usage` events. Properties are limited to development environment, fixed distinct ID, maintained boundary, operation, allowlisted outcome/method/status, bounded duration, bounded count, and failure kind. Prompts, tokens, credentials, message bodies, customer quote data and raw provider payloads are not captured. Transport is best-effort, asynchronous and timeout-bounded; a PostHog failure cannot delay or fail a business operation.
+
+Later development commissioning requires an explicit authorised development credential, deliberate operator/tool/latency exercises, inspection of ingested properties and retention, and evidence that no customer content or secret entered the project. This change does not commission PostHog, add credentials, authorise production, or permit production deployment.

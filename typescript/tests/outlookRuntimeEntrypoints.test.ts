@@ -26,7 +26,7 @@ describe("Outlook process composition", () => {
       assert.match(source, /const outlookRuntime = createMicrosoftOutlookRuntimeFromEnv\(\);/u);
       assert.match(
         source,
-        /createOutlookRuntimeReconciliationFactories\(\s*outlookRuntime,\s*\{\s*observability\s*\}\s*\)/u,
+        /createOutlookRuntimeReconciliationFactories\(outlookRuntime(?:,\s*\{[\s\S]*?\})?\)/u,
       );
       assert.match(
         source,

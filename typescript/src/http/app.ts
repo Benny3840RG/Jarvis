@@ -1,9 +1,6 @@
 import "reflect-metadata";
 
 import type { IncomingMessage } from "node:http";
-import { performance } from "node:perf_hooks";
-
-import type { FastifyRequest } from "fastify";
 
 import type { NestApplicationOptions } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
@@ -69,12 +66,12 @@ import type { ExternalReconciliationReadStore } from "../reconciliation/external
 import type { RuntimeReconciliationHealth } from "../reconciliation/runtimeReconciliationHost.js";
 import { resolveHttpAppConfig, type HttpAppConfig } from "./config.js";
 import { JarvisHttpModule } from "./jarvisHttpModule.js";
-import { requestIdFor, REQUEST_ID_HEADER, resolveRequestId } from "./requestId.js";
+import { REQUEST_ID_HEADER, resolveRequestId } from "./requestId.js";
 import {
-  createSentryRuntimeFromEnv,
-  stableRoute,
-  type SentryRuntime,
-} from "../observability/sentry.js";
+  captureHttpBoundary,
+  createPostHogTelemetryFromEnv,
+  type PostHogTelemetry,
+} from "../observability/posthog.js";
 
 type DefaultPersistenceOptions = {
   persistence?: never;
@@ -112,7 +109,7 @@ export type CreateJarvisHttpAppOptions = (
   preferenceStore?: PreferenceStore;
   noteStore?: NoteStore;
   activityEventReader?: ActivityEventReader | null;
-  observability?: SentryRuntime;
+  telemetry?: PostHogTelemetry;
   /**
    * Invoked once per Fastify route as it is registered. Exposed so contract
    * tests can enumerate the routes the app actually serves without parsing the
@@ -147,6 +144,7 @@ export async function createJarvisHttpApp(
   const providerName = options.providerName ?? resolvePersistenceProviderName();
   const persistence = options.persistence ?? createPersistenceFromEnv();
   const config = options.config ?? resolveHttpAppConfig();
+  const telemetry = options.telemetry ?? createPostHogTelemetryFromEnv();
   const usesEnvironment = options.persistence === undefined;
   const reconciliationHealth =
     options.reconciliationHealth ?? (() => ({ state: "disabled", enabled: false }));
@@ -242,8 +240,6 @@ export async function createJarvisHttpApp(
   // rather than following PERSISTENCE_PROVIDER like the other memory stores.
   const noteStore =
     options.noteStore ?? (usesEnvironment ? new ConvexNoteStore() : new InMemoryNoteStore());
-  const observability = options.observability ?? createSentryRuntimeFromEnv();
-  const requestStartedAt = new WeakMap<FastifyRequest, number>();
   const adapter = new FastifyAdapter({
     genReqId: (request: IncomingMessage) =>
       resolveRequestId(request.headers[REQUEST_ID_HEADER], [
@@ -251,36 +247,20 @@ export async function createJarvisHttpApp(
         config.previousToken,
       ]),
   });
-  adapter.getInstance().addHook("onRequest", async (request) => {
-    requestStartedAt.set(request, performance.now());
-  });
-  adapter.getInstance().addHook("onResponse", (request, reply) => {
-    const startedAt = requestStartedAt.get(request);
-    if (startedAt === undefined) return;
-    void observability
-      .recordMeasurement({
-        operation: "http.request",
-        durationMs: performance.now() - startedAt,
-        success: reply.statusCode < 500,
-        tags: {
-          method: request.method,
-          route: stableRoute(request.routeOptions?.url ?? request.url),
-          status_code: String(reply.statusCode),
-        },
-      })
-      .catch(() => {});
-  });
-  adapter.getInstance().addHook("onError", (request, reply, error) => {
-    void observability
-      .captureError(error, {
-        operation: "http.request",
-        route: stableRoute(request.routeOptions?.url ?? request.url),
+  if (telemetry.enabled) {
+    const requestStartedAt = new WeakMap<object, number>();
+    adapter.getInstance().addHook("onRequest", (request) => {
+      requestStartedAt.set(request, performance.now());
+    });
+    adapter.getInstance().addHook("onResponse", (request, reply) => {
+      const endedAt = performance.now();
+      captureHttpBoundary(telemetry, {
         method: request.method,
-        requestId: requestIdFor(request),
-        tags: { status_code: String(reply.statusCode || 500) },
-      })
-      .catch(() => {});
-  });
+        statusCode: reply.statusCode,
+        durationMs: endedAt - (requestStartedAt.get(request) ?? endedAt),
+      });
+    });
+  }
   if (options.onRoute) {
     const collect = options.onRoute;
     adapter.getInstance().addHook("onRoute", (routeOptions) => {
