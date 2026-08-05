@@ -94,7 +94,7 @@ describe("PostHog runtime telemetry", () => {
     await telemetry.flush();
 
     assert.equal(telemetry.enabled, true);
-    assert.equal(recorder.calls.length, 9);
+    assert.equal(recorder.calls.length, 10);
 
     for (const call of recorder.calls) {
       assert.equal(call.input, "https://example.test/capture/");
