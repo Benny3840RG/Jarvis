@@ -1,14 +1,11 @@
 import type { ReconciliationCycleObservation } from "../reconciliation/reconciliationScheduler.js";
 
-const POSTHOG_EVENT_NAMES = [
-  "jarvis.operator_action",
-  "jarvis.tool_outcome",
-  "jarvis.boundary_latency",
-  "jarvis.runtime_failure",
-  "jarvis.usage",
-] as const;
-
-type PostHogEventName = (typeof POSTHOG_EVENT_NAMES)[number];
+type PostHogEventName =
+  | "jarvis.operator_action"
+  | "jarvis.tool_outcome"
+  | "jarvis.boundary_latency"
+  | "jarvis.runtime_failure"
+  | "jarvis.usage";
 type PostHogProperty = string | number | boolean;
 type PostHogEvent = {
   event: PostHogEventName;
@@ -69,6 +66,14 @@ function boundedCount(value: number): number {
 
 function safeMethod(value: string): string {
   return /^(GET|POST|PUT|PATCH|DELETE|OPTIONS|HEAD)$/.test(value) ? value : "OTHER";
+}
+
+function hasControlCharacters(value: string): boolean {
+  for (const character of value) {
+    const code = character.charCodeAt(0);
+    if (code < 32 || code === 127) return true;
+  }
+  return false;
 }
 
 function sharedProperties(boundary: "http" | "mcp" | "reconciliation") {
@@ -235,7 +240,7 @@ function resolveEndpoint(environment: Environment): { endpoint: string; apiKey: 
     !apiKey ||
     apiKey.length > 256 ||
     !apiKey.startsWith("phc_") ||
-    /[\s\u0000-\u001f\u007f]/.test(apiKey)
+    /\s/.test(apiKey) || hasControlCharacters(apiKey)
   ) {
     return null;
   }
