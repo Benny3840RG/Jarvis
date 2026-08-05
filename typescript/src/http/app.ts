@@ -253,10 +253,11 @@ export async function createJarvisHttpApp(
       requestStartedAt.set(request, performance.now());
     });
     adapter.getInstance().addHook("onResponse", (request, reply) => {
+      const endedAt = performance.now();
       captureHttpBoundary(telemetry, {
         method: request.method,
         statusCode: reply.statusCode,
-        durationMs: performance.now() - (requestStartedAt.get(request) ?? performance.now()),
+        durationMs: endedAt - (requestStartedAt.get(request) ?? endedAt),
       });
     });
   }
