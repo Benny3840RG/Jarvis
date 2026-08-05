@@ -158,21 +158,29 @@ export class JarvisApiClient {
       return payload as T;
     } catch (error: unknown) {
       if (statusCode >= 500 || statusCode === 0) {
-        await this.observability?.captureError(error, {
-          operation: "mcp.tool",
-          route,
-          method,
-          tags: { status_code: String(statusCode || 503) },
-        });
+        if (this.observability) {
+          void this.observability
+            .captureError(error, {
+              operation: "mcp.tool",
+              route,
+              method,
+              tags: { status_code: String(statusCode || 503) },
+            })
+            .catch(() => {});
+        }
       }
       throw error;
     } finally {
-      await this.observability?.recordMeasurement({
-        operation: "mcp.tool",
-        durationMs: performance.now() - startedAt,
-        success: statusCode >= 200 && statusCode < 400,
-        tags: { method, route, status_code: String(statusCode || 503) },
-      });
+      if (this.observability) {
+        void this.observability
+          .recordMeasurement({
+            operation: "mcp.tool",
+            durationMs: performance.now() - startedAt,
+            success: statusCode >= 200 && statusCode < 400,
+            tags: { method, route, status_code: String(statusCode || 503) },
+          })
+          .catch(() => {});
+      }
     }
   }
 
