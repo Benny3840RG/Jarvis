@@ -254,28 +254,32 @@ export async function createJarvisHttpApp(
   adapter.getInstance().addHook("onRequest", async (request) => {
     requestStartedAt.set(request, performance.now());
   });
-  adapter.getInstance().addHook("onResponse", async (request, reply) => {
+  adapter.getInstance().addHook("onResponse", (request, reply) => {
     const startedAt = requestStartedAt.get(request);
     if (startedAt === undefined) return;
-    await observability.recordMeasurement({
-      operation: "http.request",
-      durationMs: performance.now() - startedAt,
-      success: reply.statusCode < 500,
-      tags: {
-        method: request.method,
-        route: stableRoute(request.routeOptions?.url ?? request.url),
-        status_code: String(reply.statusCode),
-      },
-    });
+    void observability
+      .recordMeasurement({
+        operation: "http.request",
+        durationMs: performance.now() - startedAt,
+        success: reply.statusCode < 500,
+        tags: {
+          method: request.method,
+          route: stableRoute(request.routeOptions?.url ?? request.url),
+          status_code: String(reply.statusCode),
+        },
+      })
+      .catch(() => {});
   });
-  adapter.getInstance().addHook("onError", async (request, reply, error) => {
-    await observability.captureError(error, {
-      operation: "http.request",
-      route: stableRoute(request.routeOptions?.url ?? request.url),
-      method: request.method,
-      requestId: requestIdFor(request),
-      tags: { status_code: String(reply.statusCode || 500) },
-    });
+  adapter.getInstance().addHook("onError", (request, reply, error) => {
+    void observability
+      .captureError(error, {
+        operation: "http.request",
+        route: stableRoute(request.routeOptions?.url ?? request.url),
+        method: request.method,
+        requestId: requestIdFor(request),
+        tags: { status_code: String(reply.statusCode || 500) },
+      })
+      .catch(() => {});
   });
   if (options.onRoute) {
     const collect = options.onRoute;
