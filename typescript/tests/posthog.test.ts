@@ -52,7 +52,7 @@ describe("PostHog runtime telemetry", () => {
     await telemetry.flush();
 
     assert.equal(telemetry.enabled, false);
-    assert.equal(calls.length, 1);
+    assert.equal(recorder.calls.length, 0);
   });
 
   it("fails closed for malformed PostHog configuration", async () => {
@@ -120,10 +120,11 @@ describe("PostHog runtime telemetry", () => {
   });
 
   it("returns before a slow telemetry endpoint resolves", async () => {
-    const { calls, fetchImpl: recorderFetch } = createFetchRecorder();
+    const recorder = createFetchRecorder();
     let aborted = false;
-    const fetchImpl: typeof fetch = async (_input, init = {}) =>
-      new Promise<Response>((_resolve, reject) => {
+    const fetchImpl: typeof fetch = async (input, init = {}) => {
+      recorder.calls.push({ input: String(input), init });
+      return new Promise<Response>((_resolve, reject) => {
         init.signal?.addEventListener(
           "abort",
           () => {
@@ -146,7 +147,7 @@ describe("PostHog runtime telemetry", () => {
     assert.ok(elapsedMs < 20);
     await telemetry.flush();
     assert.equal(aborted, true);
-    assert.equal(recorder.calls.length, 0);
+    assert.equal(recorder.calls.length, 1);
   });
 
   it("swallows telemetry transport failures without affecting the caller", async () => {
