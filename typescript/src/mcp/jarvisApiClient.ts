@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { performance } from "node:perf_hooks";
 
 import type { DailyBrief } from "../briefs/brief.js";
 import type { ActivityTimelineResult } from "../operations/activityTimeline.js";
@@ -19,6 +20,7 @@ import type { SystemStatus } from "../http/contracts.js";
 import type { Reminder, Task } from "../persistence/persistence.js";
 import type { TaskUpdate } from "../persistence/updates.js";
 import type { JarvisApiConfig } from "./config.js";
+import { stableRoute, type SentryRuntime } from "../observability/sentry.js";
 
 export type ReminderRequestUpdate = {
   title?: string;
@@ -95,6 +97,7 @@ export class JarvisApiClient {
   constructor(
     private readonly config: JarvisApiConfig,
     private readonly fetchImpl: FetchLike = fetch,
+    private readonly observability?: SentryRuntime,
   ) {}
 
   private async request<T>(
@@ -102,52 +105,83 @@ export class JarvisApiClient {
     path: string,
     options: { body?: unknown; idempotencyKey?: string } = {},
   ): Promise<T> {
-    const url = new URL(path.replace(/^\//, ""), this.config.baseUrl);
-    const headers: Record<string, string> = {
-      Accept: "application/json",
-      Authorization: `Bearer ${this.config.serviceToken}`,
-      "X-Request-Id": `mcp-${randomUUID()}`,
-    };
-    if (options.body !== undefined) headers["Content-Type"] = "application/json";
-    if (options.idempotencyKey) headers["Idempotency-Key"] = options.idempotencyKey;
-
-    let response: Response;
+    const startedAt = performance.now();
+    const route = stableRoute(path);
+    let statusCode = 0;
     try {
-      response = await this.fetchImpl(url, {
-        method,
-        headers,
-        ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }),
-      });
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : String(error);
-      throw new JarvisApiError(`Jarvis API network request failed: ${message}`, 503, null, null);
-    }
+      const url = new URL(path.replace(/^\//, ""), this.config.baseUrl);
+      const headers: Record<string, string> = {
+        Accept: "application/json",
+        Authorization: `Bearer ${this.config.serviceToken}`,
+        "X-Request-Id": `mcp-${randomUUID()}`,
+      };
+      if (options.body !== undefined) headers["Content-Type"] = "application/json";
+      if (options.idempotencyKey) headers["Idempotency-Key"] = options.idempotencyKey;
 
-    const text = await response.text();
-    const payload = parseJson(text);
-    if (!response.ok) {
-      const problem = safeProblem(payload);
-      const title = textField(problem?.title);
-      const detail = textField(problem?.detail);
-      const message =
-        [title, detail].filter(Boolean).join(": ") ||
-        `Jarvis API returned HTTP ${response.status}.`;
-      throw new JarvisApiError(
-        message,
-        response.status,
-        textField(problem?.type),
-        textField(problem?.requestId),
-      );
+      let response: Response;
+      try {
+        response = await this.fetchImpl(url, {
+          method,
+          headers,
+          ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }),
+        });
+        statusCode = response.status;
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        throw new JarvisApiError(`Jarvis API network request failed: ${message}`, 503, null, null);
+      }
+
+      const text = await response.text();
+      const payload = parseJson(text);
+      if (!response.ok) {
+        const problem = safeProblem(payload);
+        const title = textField(problem?.title);
+        const detail = textField(problem?.detail);
+        const message =
+          [title, detail].filter(Boolean).join(": ") ||
+          `Jarvis API returned HTTP ${response.status}.`;
+        throw new JarvisApiError(
+          message,
+          response.status,
+          textField(problem?.type),
+          textField(problem?.requestId),
+        );
+      }
+      if (payload === null) {
+        throw new JarvisApiError(
+          "Jarvis API returned an empty or non-JSON success response.",
+          502,
+          null,
+          null,
+        );
+      }
+      return payload as T;
+    } catch (error: unknown) {
+      if (statusCode >= 500 || statusCode === 0) {
+        if (this.observability) {
+          void this.observability
+            .captureError(error, {
+              operation: "mcp.tool",
+              route,
+              method,
+              tags: { status_code: String(statusCode || 503) },
+            })
+            .catch(() => {});
+        }
+      }
+      throw error;
+    } finally {
+      if (this.observability) {
+        void this.observability
+          .recordMeasurement({
+            operation: "mcp.tool",
+            durationMs: performance.now() - startedAt,
+            success: statusCode >= 200 && statusCode < 400,
+            tags: { method, route, status_code: String(statusCode || 503) },
+          })
+          .catch(() => {});
+      }
     }
-    if (payload === null) {
-      throw new JarvisApiError(
-        "Jarvis API returned an empty or non-JSON success response.",
-        502,
-        null,
-        null,
-      );
-    }
-    return payload as T;
   }
 
   async getStatus(): Promise<SystemStatus> {

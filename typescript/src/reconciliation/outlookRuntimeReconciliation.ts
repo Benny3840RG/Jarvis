@@ -1,6 +1,7 @@
 import { ConvexHttpClient } from "convex/browser";
 
 import type { MicrosoftOutlookRuntime } from "../auth/microsoftOutlookRuntime.js";
+import type { SentryRuntime } from "../observability/sentry.js";
 import { ConvexExternalReconciliationStore } from "../persistence/convexExternalReconciliations.js";
 import type { ExternalReconciliationStore } from "./externalReconciliation.js";
 import { ReconciliationScheduler } from "./reconciliationScheduler.js";
@@ -12,6 +13,7 @@ import type {
 
 export type OutlookRuntimeReconciliationDependencies = {
   createStore?: (config: EnabledRuntimeReconciliationConfig) => ExternalReconciliationStore;
+  observability?: SentryRuntime;
 };
 
 export function createOutlookRuntimeReconciliationFactories(
@@ -42,6 +44,7 @@ export function createOutlookRuntimeReconciliationFactories(
         intervalMs: config.intervalMs,
         maxBatchSize: config.maxBatchSize,
         observeCycle,
+        observability: dependencies.observability,
       });
     },
   };

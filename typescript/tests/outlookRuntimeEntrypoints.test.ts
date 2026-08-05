@@ -24,7 +24,10 @@ describe("Outlook process composition", () => {
     for (const relativePath of ["../src/http/main.ts", "../src/preview/main.ts"]) {
       const source = await readFile(new URL(relativePath, import.meta.url), "utf8");
       assert.match(source, /const outlookRuntime = createMicrosoftOutlookRuntimeFromEnv\(\);/u);
-      assert.match(source, /createOutlookRuntimeReconciliationFactories\(outlookRuntime\)/u);
+      assert.match(
+        source,
+        /createOutlookRuntimeReconciliationFactories\(\s*outlookRuntime,\s*\{\s*observability\s*\}\s*\)/u,
+      );
       assert.match(
         source,
         /createToolExecutionServiceFromEnv\(\s*outlookRuntime\?\.quoteEmailProvider,\s*\)/u,

@@ -2,6 +2,7 @@ import { loadEnvFile } from "node:process";
 
 import { resolveJarvisMcpConfig } from "./config.js";
 import { startJarvisMcpHttpServer } from "./httpServer.js";
+import { createSentryRuntimeFromEnv } from "../observability/sentry.js";
 
 function loadLocalEnvironment(): void {
   try {
@@ -13,7 +14,12 @@ function loadLocalEnvironment(): void {
 
 async function main(): Promise<void> {
   loadLocalEnvironment();
-  const running = await startJarvisMcpHttpServer(resolveJarvisMcpConfig());
+  const observability = createSentryRuntimeFromEnv();
+  const running = await startJarvisMcpHttpServer(
+    resolveJarvisMcpConfig(),
+    undefined,
+    observability,
+  );
   console.log(`Jarvis MCP preview is listening on ${running.url}`);
 
   const shutdown = async () => {
