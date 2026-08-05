@@ -95,6 +95,45 @@ describe("Sentry runtime adapter", () => {
     assert.equal(measurementEvent.environment, "development");
   });
 
+
+  it("bounds a stalled telemetry transport", async () => {
+    let calls = 0;
+    const runtime = createSentryRuntime(
+      {
+        enabled: true,
+        release: "jarvis-test-release",
+        environment: "test",
+        timeoutMs: 25,
+      },
+      {
+        async send() {
+          calls += 1;
+          await new Promise<void>(() => {});
+        },
+      },
+    );
+
+    const startedAt = performance.now();
+    await runtime.recordMeasurement({
+      operation: "http.request",
+      durationMs: 1,
+      success: true,
+    });
+
+    assert.equal(calls, 1);
+    assert.ok(performance.now() - startedAt < 500);
+    assert.throws(
+      () =>
+        createSentryRuntime({
+          enabled: true,
+          release: "jarvis-test-release",
+          environment: "test",
+          timeoutMs: 10,
+        }),
+      /SENTRY_TIMEOUT_MS/,
+    );
+  });
+
   it("rejects malformed configured DSNs before runtime activation", () => {
     assert.throws(
       () =>
