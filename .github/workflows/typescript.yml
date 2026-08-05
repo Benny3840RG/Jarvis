@@ -14,7 +14,7 @@ on:
       - ".github/workflows/development-commissioning.yml"
       - ".github/workflows/queue-development-commissioning.yml"
       - ".github/workflows/jarvis-autobuild.yml"
-      - ".github/automation/**
+      - ".github/automation/**"
   pull_request:
     branches: [main]
 
