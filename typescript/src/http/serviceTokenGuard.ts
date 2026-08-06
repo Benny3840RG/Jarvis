@@ -6,9 +6,10 @@ import { Reflector } from "@nestjs/core";
 import type { FastifyRequest } from "fastify";
 
 import type { HttpAppConfig } from "./config.js";
+import { OidcVerifier } from "./oidcVerifier.js";
 import { JarvisProblem } from "./problemDetails.js";
 import { PUBLIC_ROUTE } from "./publicRoute.js";
-import { HTTP_APP_CONFIG } from "./tokens.js";
+import { HTTP_APP_CONFIG, HTTP_OIDC_VERIFIER } from "./tokens.js";
 
 function parseBearerToken(header: string | string[] | undefined): string | undefined {
   if (typeof header !== "string") return undefined;
@@ -32,6 +33,10 @@ function matchesConfiguredToken(
   return currentMatch || previousMatch;
 }
 
+function unauthorized(detail: string): never {
+  throw new JarvisProblem(HttpStatus.UNAUTHORIZED, "unauthorized", "Unauthorized", detail);
+}
+
 @Injectable()
 export class ServiceTokenGuard implements CanActivate {
   private readonly logger = new Logger(ServiceTokenGuard.name);
@@ -39,14 +44,37 @@ export class ServiceTokenGuard implements CanActivate {
   constructor(
     @Inject(Reflector) private readonly reflector: Reflector,
     @Inject(HTTP_APP_CONFIG) private readonly config: HttpAppConfig,
+    @Inject(HTTP_OIDC_VERIFIER) private readonly oidcVerifier: OidcVerifier | null,
   ) {}
 
-  canActivate(context: ExecutionContext): boolean {
+  async canActivate(context: ExecutionContext): Promise<boolean> {
     const isPublic = this.reflector.getAllAndOverride<boolean>(PUBLIC_ROUTE, [
       context.getHandler(),
       context.getClass(),
     ]);
     if (isPublic) return true;
+
+    const request = context.switchToHttp().getRequest<FastifyRequest>();
+    const candidate = parseBearerToken(request.headers.authorization);
+
+    if (this.config.authMode === "oidc") {
+      if (this.oidcVerifier === null) {
+        throw new JarvisProblem(
+          HttpStatus.SERVICE_UNAVAILABLE,
+          "authentication-unavailable",
+          "Service Authentication Unavailable",
+          "OIDC authentication is not configured.",
+        );
+      }
+      if (candidate === undefined) unauthorized("A valid Bearer OIDC access token is required.");
+      try {
+        await this.oidcVerifier.verify(candidate);
+      } catch {
+        this.logger.warn(`Rejected an invalid OIDC access token from ${request.ip}.`);
+        unauthorized("A valid Bearer OIDC access token is required.");
+      }
+      return true;
+    }
 
     if (this.config.currentToken === undefined) {
       throw new JarvisProblem(
@@ -57,8 +85,6 @@ export class ServiceTokenGuard implements CanActivate {
       );
     }
 
-    const request = context.switchToHttp().getRequest<FastifyRequest>();
-    const candidate = parseBearerToken(request.headers.authorization);
     if (
       candidate === undefined ||
       !matchesConfiguredToken(candidate, this.config.currentToken, this.config.previousToken)
@@ -67,12 +93,7 @@ export class ServiceTokenGuard implements CanActivate {
       // happened and where from — so this is safe to leave on for brute-force
       // detection without becoming a secondary leak surface.
       this.logger.warn(`Rejected an invalid Bearer service token from ${request.ip}.`);
-      throw new JarvisProblem(
-        HttpStatus.UNAUTHORIZED,
-        "unauthorized",
-        "Unauthorized",
-        "A valid Bearer service token is required.",
-      );
+      unauthorized("A valid Bearer service token is required.");
     }
 
     return true;
