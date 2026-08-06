@@ -5,6 +5,8 @@ import type { PersistenceProvider } from "../persistence/persistence.js";
 import type { PersistenceProviderName } from "../persistence/providerSelection.js";
 import type { RuntimeReconciliationHealth } from "../reconciliation/runtimeReconciliationHost.js";
 import { resolveReminderTimezone } from "../reminders/due.js";
+import { ReliabilityController } from "../reliability/reliabilityController.js";
+import { assessReconciliationHealth } from "../reliability/reliabilityHealth.js";
 import type { HttpAppConfig } from "./config.js";
 import type { IntegrationStatus, LayersStatus, SystemStatus } from "./contracts.js";
 import { JarvisProblem } from "./problemDetails.js";
@@ -53,12 +55,14 @@ const LAYERS: LayersStatus = {
   },
   reliability: {
     status: "inactive",
-    reason: "Health monitoring, circuit breakers, and recovery management are not implemented.",
+    reason: "No reliability probe evidence has been collected.",
   },
 };
 
 @Injectable()
 export class SystemStatusService {
+  private readonly reliability = new ReliabilityController();
+
   constructor(
     @Inject(HTTP_PERSISTENCE) private readonly persistence: PersistenceProvider,
     @Inject(HTTP_PROVIDER_NAME) private readonly providerName: PersistenceProviderName,
@@ -112,11 +116,13 @@ export class SystemStatusService {
     }
 
     try {
-      await Promise.all([
-        this.persistence.loadState(),
-        this.persistence.listTasks(),
-        this.persistence.listReminders(),
-      ]);
+      await this.reliability.run("persistence", async () => {
+        await Promise.all([
+          this.persistence.loadState(),
+          this.persistence.listTasks(),
+          this.persistence.listReminders(),
+        ]);
+      });
     } catch {
       throw new JarvisProblem(
         HttpStatus.SERVICE_UNAVAILABLE,
@@ -126,8 +132,10 @@ export class SystemStatusService {
       );
     }
 
+    const reconciliation = { ...this.reconciliationHealth() };
+    const reconciliationAssessment = assessReconciliationHealth(reconciliation);
     return {
-      status: "ok",
+      status: reconciliationAssessment.healthy ? "ok" : "degraded",
       version: this.config.version,
       sourceVersion: this.config.sourceVersion,
       provider: {
@@ -137,10 +145,10 @@ export class SystemStatusService {
         schemaCompatibility: "compatible",
         deploymentVersion: this.config.deploymentVersion,
       },
-      reconciliation: { ...this.reconciliationHealth() },
+      reconciliation,
       integrations: [this.quoteDeliveryIntegrationStatus()],
       timezone,
-      layers: LAYERS,
+      layers: { ...LAYERS, reliability: this.reliability.layerStatus() },
       zState: "disabled",
       checkedAt: new Date().toISOString(),
     };

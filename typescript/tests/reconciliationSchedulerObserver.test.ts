@@ -40,7 +40,39 @@ describe("ReconciliationScheduler cycle observation", () => {
       processed: 1,
       skipped: false,
     });
-    assert.deepEqual(observations, [{ type: "started" }, { type: "completed", processed: 1 }]);
+    assert.deepEqual(observations, [
+      { type: "started" },
+      { type: "completed", processed: 1, failureCount: 0 },
+    ]);
+  });
+
+  it("reports released work as a degraded completed cycle", async () => {
+    const observations: ReconciliationCycleObservation[] = [];
+    const results = [
+      {
+        status: "released" as const,
+        reconciliationId: "one",
+        nextAttemptAt: 1_000,
+      },
+      { status: "idle" as const },
+    ];
+    const scheduler = new ReconciliationScheduler(
+      {
+        async runOnce() {
+          return results.shift() ?? { status: "idle" };
+        },
+      },
+      options((observation) => observations.push(observation)),
+    );
+
+    assert.deepEqual(await scheduler.runCycle(new AbortController().signal), {
+      processed: 1,
+      skipped: false,
+    });
+    assert.deepEqual(observations, [
+      { type: "started" },
+      { type: "completed", processed: 1, failureCount: 1 },
+    ]);
   });
 
   it("reports an overlapping cycle as skipped without another start", async () => {

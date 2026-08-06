@@ -136,6 +136,7 @@ All environment variables are loaded from `typescript/.env.local` at startup. Va
 | `JARVIS_RECONCILIATION_MAX_ATTEMPTS`  | Optional                                        | `5`                   | Maximum reconciliation attempts before escalation; 1–100.                                                                                                                                                         |
 | `JARVIS_RECONCILIATION_BASE_RETRY_MS` | Optional                                        | `1000`                | Positive base retry delay.                                                                                                                                                                                        |
 | `JARVIS_RECONCILIATION_MAX_RETRY_MS`  | Optional                                        | `60000`               | Positive maximum retry delay, not below the base delay.                                                                                                                                                           |
+| `JARVIS_RECONCILIATION_FRESHNESS_MS`  | Optional                                        | `60000`               | Maximum age of the last successful reconciliation cycle before authenticated status reports degraded; positive integer.                                                                                           |
 
 ## Reconciliation runtime
 

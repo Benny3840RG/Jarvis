@@ -22,7 +22,7 @@ export type ReconciliationCycleResult = {
 
 export type ReconciliationCycleObservation =
   | { type: "started" }
-  | { type: "completed"; processed: number }
+  | { type: "completed"; processed: number; failureCount: number }
   | { type: "skipped" }
   | { type: "failed" };
 
@@ -104,7 +104,7 @@ export class ReconciliationScheduler {
         if (result.status === "released" || result.status === "escalated") failureCount += 1;
       }
       success = failureCount === 0;
-      this.notify({ type: "completed", processed });
+      this.notify({ type: "completed", processed, failureCount });
       return { processed, skipped: false };
     } catch (error: unknown) {
       this.notify({ type: "failed" });

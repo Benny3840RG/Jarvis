@@ -8,11 +8,16 @@ export type RuntimeReconciliationState =
 export type RuntimeReconciliationHealth = {
   state: RuntimeReconciliationState;
   enabled: boolean;
+  freshnessMs?: number;
   workerId?: string;
   startedAt?: string;
   lastCycleStartedAt?: string;
   lastCycleCompletedAt?: string;
   lastCycleProcessed?: number;
+  lastCycleOutcome?: "success" | "degraded" | "failed";
+  lastCycleFailureCount?: number;
+  lastSuccessfulCycleAt?: string;
+  consecutiveFailureCount?: number;
   lastErrorCode?: string;
 };
 
@@ -33,6 +38,7 @@ export type EnabledRuntimeReconciliationConfig = {
   maxAttempts: number;
   baseRetryMs: number;
   maxRetryMs: number;
+  freshnessMs: number;
 };
 
 export type RuntimeReconciliationConfig =
@@ -64,6 +70,7 @@ const DEFAULTS = {
   maxAttempts: 5,
   baseRetryMs: 1_000,
   maxRetryMs: 60_000,
+  freshnessMs: 60_000,
 } as const;
 
 function requireNonEmpty(environment: Environment, name: string): string {
@@ -159,6 +166,11 @@ export function resolveRuntimeReconciliationConfig(
     ),
     baseRetryMs,
     maxRetryMs,
+    freshnessMs: parsePositiveSafeInteger(
+      environment,
+      "JARVIS_RECONCILIATION_FRESHNESS_MS",
+      DEFAULTS.freshnessMs,
+    ),
   };
 }
 
@@ -177,6 +189,10 @@ class EnabledReconciliationHost implements RuntimeReconciliationHost {
   private lastCycleStartedAt: string | undefined;
   private lastCycleCompletedAt: string | undefined;
   private lastCycleProcessed: number | undefined;
+  private lastCycleOutcome: "success" | "degraded" | "failed" | undefined;
+  private lastCycleFailureCount: number | undefined;
+  private lastSuccessfulCycleAt: string | undefined;
+  private consecutiveFailureCount = 0;
   private lastErrorCode: string | undefined;
   private controller: AbortController | undefined;
   private loopPromise: Promise<void> | undefined;
@@ -195,6 +211,10 @@ class EnabledReconciliationHost implements RuntimeReconciliationHost {
     if (this.loopPromise || this.state === "running" || this.state === "starting") return;
     this.state = "starting";
     this.startedAt = new Date().toISOString();
+    this.lastCycleOutcome = undefined;
+    this.lastCycleFailureCount = undefined;
+    this.lastSuccessfulCycleAt = undefined;
+    this.consecutiveFailureCount = 0;
     this.lastErrorCode = undefined;
     this.controller = new AbortController();
     this.state = "running";
@@ -230,6 +250,7 @@ class EnabledReconciliationHost implements RuntimeReconciliationHost {
     return {
       state: this.state,
       enabled: true,
+      freshnessMs: this.config.freshnessMs,
       workerId: this.config.workerId,
       ...(this.startedAt === undefined ? {} : { startedAt: this.startedAt }),
       ...(this.lastCycleStartedAt === undefined
@@ -241,6 +262,14 @@ class EnabledReconciliationHost implements RuntimeReconciliationHost {
       ...(this.lastCycleProcessed === undefined
         ? {}
         : { lastCycleProcessed: this.lastCycleProcessed }),
+      ...(this.lastCycleOutcome === undefined ? {} : { lastCycleOutcome: this.lastCycleOutcome }),
+      ...(this.lastCycleFailureCount === undefined
+        ? {}
+        : { lastCycleFailureCount: this.lastCycleFailureCount }),
+      ...(this.lastSuccessfulCycleAt === undefined
+        ? {}
+        : { lastSuccessfulCycleAt: this.lastSuccessfulCycleAt }),
+      consecutiveFailureCount: this.consecutiveFailureCount,
       ...(this.lastErrorCode === undefined ? {} : { lastErrorCode: this.lastErrorCode }),
     };
   }
@@ -254,6 +283,23 @@ class EnabledReconciliationHost implements RuntimeReconciliationHost {
     if (observation.type === "completed") {
       this.lastCycleCompletedAt = observedAt;
       this.lastCycleProcessed = observation.processed;
+      this.lastCycleFailureCount = observation.failureCount;
+      if (observation.failureCount === 0) {
+        this.lastCycleOutcome = "success";
+        this.lastSuccessfulCycleAt = observedAt;
+        this.consecutiveFailureCount = 0;
+        this.lastErrorCode = undefined;
+      } else {
+        this.lastCycleOutcome = "degraded";
+        this.consecutiveFailureCount += 1;
+        this.lastErrorCode = "reconciliation-cycle-failed";
+      }
+      return;
+    }
+    if (observation.type === "failed") {
+      this.lastCycleOutcome = "failed";
+      this.consecutiveFailureCount += 1;
+      this.lastErrorCode = "reconciliation-cycle-failed";
     }
   }
 
