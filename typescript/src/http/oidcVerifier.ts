@@ -26,17 +26,13 @@ class OidcVerificationError extends Error {
 
 function decodeBase64Url(value: string): Uint8Array {
   if (!/^[A-Za-z0-9_-]+$/.test(value)) throw new OidcVerificationError();
-  const padded =
-    value.replace(/-/g, "+").replace(/_/g, "/") +
-    "===".slice((value.length + 3) % 4);
+  const padded = value.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((value.length + 3) % 4);
   return new Uint8Array(Buffer.from(padded, "base64"));
 }
 
 function decodeJson<T>(value: string): T {
   try {
-    return JSON.parse(
-      Buffer.from(decodeBase64Url(value)).toString("utf8"),
-    ) as T;
+    return JSON.parse(Buffer.from(decodeBase64Url(value)).toString("utf8")) as T;
   } catch {
     throw new OidcVerificationError();
   }
@@ -74,8 +70,7 @@ export function createOidcVerifier(
   let cachedUntil = 0;
 
   async function loadKeys(force = false): Promise<Map<string, CryptoKey>> {
-    if (!force && cachedKeys !== undefined && cachedUntil > now())
-      return cachedKeys;
+    if (!force && cachedKeys !== undefined && cachedUntil > now()) return cachedKeys;
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 2_000);
     try {
@@ -126,11 +121,7 @@ export function createOidcVerifier(
       const parts = accessToken.split(".");
       if (parts.length !== 3) throw new OidcVerificationError();
       const header = decodeJson<{ alg?: unknown; kid?: unknown }>(parts[0]);
-      if (
-        header.alg !== "RS256" ||
-        typeof header.kid !== "string" ||
-        header.kid.length === 0
-      ) {
+      if (header.alg !== "RS256" || typeof header.kid !== "string" || header.kid.length === 0) {
         throw new OidcVerificationError();
       }
       const claims = bearerClaims(decodeJson<unknown>(parts[1]));
