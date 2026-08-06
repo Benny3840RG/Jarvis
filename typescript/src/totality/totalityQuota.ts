@@ -37,6 +37,10 @@ export class TotalityQuota {
     private readonly now: () => number = Date.now,
   ) {}
 
+  get maxOutputTokens(): number {
+    return this.config.maxOutputTokens;
+  }
+
   acquire(request: TotalityRequest): TotalityQuotaLease {
     const bytes = requestBytes(request);
     if (bytes > this.config.maxRequestBytes) throw new TotalityQuotaError("request-too-large");

@@ -88,7 +88,12 @@ describe("Gemini Totality reasoner", () => {
     }) as typeof fetch;
 
     const reasoner = new GeminiTotalityReasoner(
-      { apiKey: "test-key", model: "gemini-2.5-flash", timeoutMs: 5_000 },
+      {
+        apiKey: "test-key",
+        model: "gemini-2.5-flash",
+        timeoutMs: 5_000,
+        maxOutputTokens: 1_234,
+      },
       fetchImpl,
     );
     const result = await reasoner.reason(makeRequest(), makeContext());
@@ -109,7 +114,7 @@ describe("Gemini Totality reasoner", () => {
       (body.generationConfig as Record<string, unknown>).responseMimeType,
       "application/json",
     );
-    assert.equal((body.generationConfig as Record<string, unknown>).maxOutputTokens, 4_096);
+    assert.equal((body.generationConfig as Record<string, unknown>).maxOutputTokens, 1_234);
     const userPart = (
       (body.contents as Array<{ parts: Array<{ text: string }> }>)[0]!.parts[0] as {
         text: string;
@@ -141,7 +146,12 @@ describe("Gemini Totality reasoner", () => {
         { status: 200, headers: { "Content-Type": "application/json" } },
       )) as typeof fetch;
     const reasoner = new GeminiTotalityReasoner(
-      { apiKey: "test-key", model: "gemini-2.5-flash", timeoutMs: 5_000 },
+      {
+        apiKey: "test-key",
+        model: "gemini-2.5-flash",
+        timeoutMs: 5_000,
+        maxOutputTokens: 4_096,
+      },
       fetchImpl,
     );
 
@@ -173,7 +183,12 @@ describe("Gemini Totality reasoner", () => {
         headers: { "Content-Type": "application/json" },
       })) as typeof fetch;
     const reasoner = new GeminiTotalityReasoner(
-      { apiKey: "test-key", model: "gemini-2.5-flash", timeoutMs: 5_000 },
+      {
+        apiKey: "test-key",
+        model: "gemini-2.5-flash",
+        timeoutMs: 5_000,
+        maxOutputTokens: 4_096,
+      },
       fetchImpl,
     );
 
@@ -191,7 +206,12 @@ describe("Gemini Totality reasoner", () => {
         headers: { "Content-Type": "text/plain" },
       })) as typeof fetch;
     const reasoner = new GeminiTotalityReasoner(
-      { apiKey: "test-key", model: "gemini-2.5-flash", timeoutMs: 5_000 },
+      {
+        apiKey: "test-key",
+        model: "gemini-2.5-flash",
+        timeoutMs: 5_000,
+        maxOutputTokens: 4_096,
+      },
       fetchImpl,
     );
 
@@ -209,7 +229,12 @@ describe("Gemini Totality reasoner", () => {
         headers: { "Content-Type": "application/json" },
       })) as typeof fetch;
     const reasoner = new GeminiTotalityReasoner(
-      { apiKey: "test-key", model: "gemini-2.5-flash", timeoutMs: 5_000 },
+      {
+        apiKey: "test-key",
+        model: "gemini-2.5-flash",
+        timeoutMs: 5_000,
+        maxOutputTokens: 4_096,
+      },
       fetchImpl,
     );
 
@@ -226,7 +251,12 @@ describe("Gemini Totality reasoner", () => {
         { status: 200, headers: { "Content-Type": "application/json" } },
       )) as typeof fetch;
     const reasoner = new GeminiTotalityReasoner(
-      { apiKey: "test-key", model: "gemini-2.5-flash", timeoutMs: 5_000 },
+      {
+        apiKey: "test-key",
+        model: "gemini-2.5-flash",
+        timeoutMs: 5_000,
+        maxOutputTokens: 4_096,
+      },
       fetchImpl,
     );
 
@@ -243,7 +273,12 @@ describe("Gemini Totality reasoner", () => {
       return new Response(JSON.stringify(successfulPayload()), { status: 200 });
     }) as typeof fetch;
     const reasoner = new GeminiTotalityReasoner(
-      { apiKey: "test-key", model: "gemini-2.5-flash", timeoutMs: 5_000 },
+      {
+        apiKey: "test-key",
+        model: "gemini-2.5-flash",
+        timeoutMs: 5_000,
+        maxOutputTokens: 4_096,
+      },
       fetchImpl,
     );
     const request = makeRequest();
@@ -263,7 +298,12 @@ describe("Gemini Totality reasoner", () => {
       return new Response(JSON.stringify(successfulPayload()), { status: 200 });
     }) as typeof fetch;
     const reasoner = new GeminiTotalityReasoner(
-      { apiKey: "test-key", model: "gemini-2.5-flash", timeoutMs: 5_000 },
+      {
+        apiKey: "test-key",
+        model: "gemini-2.5-flash",
+        timeoutMs: 5_000,
+        maxOutputTokens: 4_096,
+      },
       fetchImpl,
     );
     const request = makeRequest();

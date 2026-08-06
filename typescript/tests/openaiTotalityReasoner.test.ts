@@ -87,7 +87,7 @@ describe("OpenAI Totality reasoner", () => {
     }) as typeof fetch;
 
     const reasoner = new OpenAITotalityReasoner(
-      { apiKey: "test-key", model: "gpt-5.6", timeoutMs: 5_000 },
+      { apiKey: "test-key", model: "gpt-5.6", timeoutMs: 5_000, maxOutputTokens: 1_234 },
       fetchImpl,
     );
     const result = await reasoner.reason(makeRequest(), makeContext());
@@ -100,7 +100,7 @@ describe("OpenAI Totality reasoner", () => {
 
     const body = JSON.parse(String(capturedInit?.body)) as Record<string, unknown>;
     assert.equal(body.store, false);
-    assert.equal(body.max_output_tokens, 4_096);
+    assert.equal(body.max_output_tokens, 1_234);
     assert.deepEqual(body.tools, undefined);
     const input = JSON.parse(String(body.input)) as Record<string, unknown>;
     assert.deepEqual(input.projectContext, makeContext().project);
@@ -128,7 +128,7 @@ describe("OpenAI Totality reasoner", () => {
         { status: 200, headers: { "Content-Type": "application/json" } },
       )) as typeof fetch;
     const reasoner = new OpenAITotalityReasoner(
-      { apiKey: "test-key", model: "gpt-5.6", timeoutMs: 5_000 },
+      { apiKey: "test-key", model: "gpt-5.6", timeoutMs: 5_000, maxOutputTokens: 4_096 },
       fetchImpl,
     );
 
@@ -160,7 +160,7 @@ describe("OpenAI Totality reasoner", () => {
         headers: { "Content-Type": "application/json" },
       })) as typeof fetch;
     const reasoner = new OpenAITotalityReasoner(
-      { apiKey: "test-key", model: "gpt-5.6", timeoutMs: 5_000 },
+      { apiKey: "test-key", model: "gpt-5.6", timeoutMs: 5_000, maxOutputTokens: 4_096 },
       fetchImpl,
     );
 
@@ -178,7 +178,7 @@ describe("OpenAI Totality reasoner", () => {
         headers: { "Content-Type": "text/plain" },
       })) as typeof fetch;
     const reasoner = new OpenAITotalityReasoner(
-      { apiKey: "test-key", model: "gpt-5.6", timeoutMs: 5_000 },
+      { apiKey: "test-key", model: "gpt-5.6", timeoutMs: 5_000, maxOutputTokens: 4_096 },
       fetchImpl,
     );
 
@@ -196,7 +196,7 @@ describe("OpenAI Totality reasoner", () => {
       return new Response(JSON.stringify(successfulPayload()), { status: 200 });
     }) as typeof fetch;
     const reasoner = new OpenAITotalityReasoner(
-      { apiKey: "test-key", model: "gpt-5.6", timeoutMs: 5_000 },
+      { apiKey: "test-key", model: "gpt-5.6", timeoutMs: 5_000, maxOutputTokens: 4_096 },
       fetchImpl,
     );
     const request = makeRequest();
@@ -216,7 +216,7 @@ describe("OpenAI Totality reasoner", () => {
       return new Response(JSON.stringify(successfulPayload()), { status: 200 });
     }) as typeof fetch;
     const reasoner = new OpenAITotalityReasoner(
-      { apiKey: "test-key", model: "gpt-5.6", timeoutMs: 5_000 },
+      { apiKey: "test-key", model: "gpt-5.6", timeoutMs: 5_000, maxOutputTokens: 4_096 },
       fetchImpl,
     );
     const request = makeRequest();

@@ -131,4 +131,20 @@ describe("remote gateway request policy", () => {
     );
     assert.equal(capped.rateBuckets.size, 10_000);
   });
+
+  it("prunes expired buckets only when the cap is reached", () => {
+    const capped = resolveRemoteGatewayConfig(REMOTE_ENV);
+    const now = Date.now();
+    for (let index = 0; index < 10_000; index += 1) {
+      capped.rateBuckets.set(`expired-${index}`, {
+        windowStartedAt: now - capped.rateLimitWindowMs,
+        count: 1,
+      });
+    }
+
+    assert.deepEqual(evaluateRemoteGatewayRequest(capped, request({ clientKey: "new-key" }), now), {
+      allowed: true,
+    });
+    assert.equal(capped.rateBuckets.size, 1);
+  });
 });
