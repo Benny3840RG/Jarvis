@@ -440,6 +440,20 @@ export default defineSchema({
     // can only page through one project/global scope at a time, which cannot
     // serve a genuine cross-scope activity timeline.
     .index("by_owner_and_created_at", ["ownerId", "createdAt"]),
+  runtimeEvents: defineTable({
+    ownerId: v.string(),
+    eventId: v.string(),
+    sequence: v.number(),
+    eventType: v.string(),
+    correlationId: v.string(),
+    route: v.optional(v.string()),
+    metadata: v.record(v.string(), v.any()),
+    occurredAt: v.number(),
+    createdAt: v.number(),
+  })
+    .index("by_owner_and_event_id", ["ownerId", "eventId"])
+    .index("by_owner_and_correlation_id", ["ownerId", "correlationId"])
+    .index("by_owner_and_created_at", ["ownerId", "createdAt"]),
   builds: defineTable({
     ownerId: v.string(),
     name: v.string(),

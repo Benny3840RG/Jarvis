@@ -87,6 +87,11 @@ It then runs the self-cleaning Convex smoke test and starts the HTTP service to 
 authenticated status, and operator boundaries. The workflow redacts configured credentials from
 diagnostics and explicitly reports that production was not performed.
 
+When `PERSISTENCE_PROVIDER=convex`, the CLI also composes an idempotent runtime-event sink. It
+records only bounded route/error metadata in the `runtimeEvents` table before dispatching runtime
+listeners; a failed append stops the route. This is an append foundation, not a commissioned
+outbox consumer or HTTP/MCP-wide runtime composition.
+
 ## JSON provider
 
 When `PERSISTENCE_PROVIDER` is unset or set to `json`, the maintained TypeScript runtime stores data at:

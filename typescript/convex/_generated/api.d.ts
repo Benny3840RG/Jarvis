@@ -35,6 +35,7 @@ import type * as quoteValidators from "../quoteValidators.js";
 import type * as quotes from "../quotes.js";
 import type * as reasoningJournal from "../reasoningJournal.js";
 import type * as reminders from "../reminders.js";
+import type * as runtimeEvents from "../runtimeEvents.js";
 import type * as tasks from "../tasks.js";
 import type * as toolActionLogic from "../toolActionLogic.js";
 import type * as toolActionValidators from "../toolActionValidators.js";
@@ -79,6 +80,7 @@ declare const fullApi: ApiFromModules<{
   quotes: typeof quotes;
   reasoningJournal: typeof reasoningJournal;
   reminders: typeof reminders;
+  runtimeEvents: typeof runtimeEvents;
   tasks: typeof tasks;
   toolActionLogic: typeof toolActionLogic;
   toolActionValidators: typeof toolActionValidators;

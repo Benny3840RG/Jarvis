@@ -29,7 +29,7 @@ const LAYERS: LayersStatus = {
   integration: {
     status: "partial",
     reason:
-      "The runtime has explicit EventBus, ToolGateway, domain registry, memory linker, and tool router contracts at the CLI seam; durable outbox persistence and governed HTTP composition remain pending.",
+      "The runtime has explicit EventBus, ToolGateway, domain registry, memory linker, tool router, and a Convex-backed metadata event sink at the CLI seam; governed HTTP composition and live commissioning remain pending.",
   },
   orchestration: {
     status: "partial",

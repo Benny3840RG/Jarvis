@@ -115,4 +115,47 @@ describe("runtime integration core", () => {
     core.memory.link(firstEvent, "manual:link", "started");
     assert.equal(core.memory.list("corr-manual").length, 1);
   });
+
+  it("persists each emitted event before dispatching listeners when a sink is configured", async () => {
+    const persisted: string[] = [];
+    const core = createRuntimeIntegrationCore({
+      sink: {
+        async append(event) {
+          persisted.push(event.id);
+        },
+      },
+    });
+    const dispatched: string[] = [];
+    core.events.subscribe("runtime.route.started", (event) => {
+      dispatched.push(event.id);
+      assert.deepEqual(persisted, [event.id]);
+    });
+    core.domains.register("runtime", async () => "ok");
+
+    await core.router.route("runtime", "health", {}, "corr-sink");
+
+    assert.equal(persisted.length, 2);
+    assert.deepEqual(dispatched, [persisted[0]]);
+  });
+
+  it("fails the route before dispatch when durable event append fails", async () => {
+    const core = createRuntimeIntegrationCore({
+      sink: {
+        async append() {
+          throw new Error("event-store-offline");
+        },
+      },
+    });
+    let dispatched = false;
+    core.events.subscribe("runtime.route.started", () => {
+      dispatched = true;
+    });
+    core.domains.register("runtime", async () => "must-not-run");
+
+    await assert.rejects(
+      () => core.router.route("runtime", "health", {}, "corr-offline"),
+      /event-store-offline/,
+    );
+    assert.equal(dispatched, false);
+  });
 });

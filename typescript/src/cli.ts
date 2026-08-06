@@ -32,6 +32,8 @@ import {
   type TaskUpdate,
 } from "./persistence/persistence.js";
 import { resolvePersistenceProviderName } from "./persistence/providerSelection.js";
+import { ConvexRuntimeEventSink } from "./persistence/convexRuntimeEvents.js";
+import type { RuntimeEventSink } from "./runtime/integrationCore.js";
 
 export interface ReadlineAdapter {
   question(prompt: string): Promise<string>;
@@ -46,6 +48,7 @@ export type RunCliDependencies = {
   stdout?: ConsoleWriter;
   stderr?: ConsoleWriter;
   providerName?: string;
+  runtimeEventSink?: RuntimeEventSink;
 };
 
 function errorMessage(error: unknown): string {
@@ -181,7 +184,12 @@ export async function runCli(deps: RunCliDependencies = {}): Promise<void> {
   ])
     graph.addEdge(edge);
 
-  const integration = createRuntimeIntegrationCore();
+  const runtimeEventSink =
+    deps.runtimeEventSink ??
+    (deps.persistence === undefined && resolvePersistenceProviderName() === "convex"
+      ? new ConvexRuntimeEventSink()
+      : undefined);
+  const integration = createRuntimeIntegrationCore({ sink: runtimeEventSink });
   integration.domains.register("domains", async (action, payload) => {
     if (action === "plan") {
       const workshopTask = workshop.createTask(
