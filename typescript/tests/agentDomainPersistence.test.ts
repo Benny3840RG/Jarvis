@@ -89,26 +89,27 @@ describe("durable agent domain state", () => {
       ]);
 
       const state = await persistence.loadState();
-      assert.equal(
-        (state[AGENT_DOMAIN_STATE_KEY] as { version: number }).version,
-        1,
-      );
+      assert.equal((state[AGENT_DOMAIN_STATE_KEY] as { version: number }).version, 1);
     } finally {
       await rm(directory, { recursive: true, force: true });
     }
   });
 
   it("rejects unsafe inventory mutations at the domain boundary", async () => {
-    const store = new PersistentDomainStateStore(
-      new JSONPersistence(path.join(await mkdtemp(path.join(os.tmpdir(), "jarvis-agent-domain-")), "state.json")),
-    );
-    const workshop = new WorkshopEngine(store);
+    const directory = await mkdtemp(path.join(os.tmpdir(), "jarvis-agent-domain-"));
 
-    assert.deepEqual(await workshop.handle("consume_item", { itemId: "i1", quantity: -1 }), {
-      error: "Quantity must be positive",
-    });
-    assert.deepEqual(await workshop.handle("restock_item", { itemId: "i1", quantity: 0 }), {
-      error: "Quantity must be positive",
-    });
+    try {
+      const persistence = new JSONPersistence(path.join(directory, "state.json"));
+      const workshop = new WorkshopEngine(new PersistentDomainStateStore(persistence));
+
+      assert.deepEqual(await workshop.handle("consume_item", { itemId: "i1", quantity: -1 }), {
+        error: "Quantity must be positive",
+      });
+      assert.deepEqual(await workshop.handle("restock_item", { itemId: "i1", quantity: 0 }), {
+        error: "Quantity must be positive",
+      });
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
   });
 });
