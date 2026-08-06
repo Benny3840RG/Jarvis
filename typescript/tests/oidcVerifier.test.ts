@@ -39,7 +39,11 @@ describe("OIDC verifier", () => {
       true,
       ["sign", "verify"],
     )) as CryptoKeyPair;
-    const publicJwk = await webcrypto.subtle.exportKey("jwk", pair.publicKey);
+    const publicJwk = (await webcrypto.subtle.exportKey("jwk", pair.publicKey)) as JsonWebKey & {
+      kid?: string;
+      alg?: string;
+      use?: string;
+    };
     publicJwk.kid = "key-1";
     publicJwk.alg = "RS256";
     publicJwk.use = "sig";
@@ -83,7 +87,11 @@ describe("OIDC verifier", () => {
       true,
       ["sign", "verify"],
     )) as CryptoKeyPair;
-    const publicJwk = await webcrypto.subtle.exportKey("jwk", pair.publicKey);
+    const publicJwk = (await webcrypto.subtle.exportKey("jwk", pair.publicKey)) as JsonWebKey & {
+      kid?: string;
+      alg?: string;
+      use?: string;
+    };
     publicJwk.kid = "key-1";
     const verifier = createOidcVerifier(
       config,
