@@ -91,6 +91,13 @@ describe("Jarvis development paddock", () => {
     );
   });
 
+  it("requires direct preview configuration to pass the paddock allowlist", () => {
+    assert.throws(
+      () => resolvePaddockConfig({ ...validEnvironment, CONVEX_DEPLOYMENT: "prod:jarvis" }),
+      /production is not authorised/,
+    );
+  });
+
   it("accepts only the commissioned Convex provider state", () => {
     assert.doesNotThrow(() =>
       assertPaddockStatus(healthyStatus(), AUTHORISED_DEVELOPMENT_DEPLOYMENT),

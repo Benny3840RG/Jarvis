@@ -1,4 +1,6 @@
 import { execSync } from "node:child_process";
+import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 
 /**
  * Console audit gate with a narrow, documented allowlist.
@@ -13,7 +15,7 @@ import { execSync } from "node:child_process";
  */
 const ALLOWLIST = new Map([
   [
-    "GHSA-qwww-vcr4-c8h2",
+    "GHSA-QWWW-VCR4-C8H2",
     "React Router RSC-mode CSRF bypass. Console 01 is a client-rendered mcp-use " +
       "widget and never runs React Router in RSC / server-action mode, so the " +
       "affected request path is unreachable here. The fix is react-router 8.3.0, " +
@@ -25,45 +27,66 @@ const ALLOWLIST = new Map([
 
 const BLOCKING_SEVERITIES = new Set(["moderate", "high", "critical"]);
 
-function advisoryId(url) {
-  const match = /\/(GHSA-[0-9a-z-]+)$/i.exec(url ?? "");
-  return match ? match[1] : null;
+function advisoryId(value) {
+  const match = /(?:^|\/)(GHSA-[0-9a-z-]+)(?:$|[?#])/i.exec(String(value ?? ""));
+  return match ? match[1].toUpperCase() : null;
 }
 
-let raw;
-try {
-  raw = execSync("npm audit --json", { encoding: "utf8" });
-} catch (error) {
-  // `npm audit` exits non-zero when vulnerabilities exist but still prints the
-  // JSON report to stdout; recover it rather than treating the exit as fatal.
-  raw = error.stdout?.toString() ?? "";
+function advisoryFrom(value, packageName, fallbackIndex) {
+  if (typeof value === "string") {
+    const id = advisoryId(value);
+    return id ? { id, title: "Advisory", severity: "moderate" } : null;
+  }
+  if (!value || typeof value !== "object") return null;
+  const id = advisoryId(value.url) ?? advisoryId(value.id) ?? advisoryId(value.source);
+  const fallbackId = id ?? `UNIDENTIFIED:${packageName ?? "unknown"}:${fallbackIndex}`;
+  return {
+    id: fallbackId,
+    title: typeof value.title === "string" ? value.title : "Advisory",
+    severity: typeof value.severity === "string" ? value.severity.toLowerCase() : "critical",
+  };
 }
 
-const report = JSON.parse(raw);
-const found = new Map();
-for (const vuln of Object.values(report.vulnerabilities ?? {})) {
-  for (const via of vuln.via ?? []) {
-    if (via && typeof via === "object") {
-      const id = advisoryId(via.url);
-      if (id) found.set(id, { title: via.title, severity: via.severity });
+export function findBlockingAdvisories(report) {
+  const found = new Map();
+  for (const [packageName, vuln] of Object.entries(report?.vulnerabilities ?? {})) {
+    const viaEntries = Array.isArray(vuln?.via) ? vuln.via.entries() : [];
+    for (const [index, via] of viaEntries) {
+      const advisory = advisoryFrom(via, packageName, index);
+      if (advisory) found.set(advisory.id, advisory);
     }
   }
-}
-
-const blocking = [...found].filter(
-  ([id, info]) => !ALLOWLIST.has(id) && BLOCKING_SEVERITIES.has(info.severity),
-);
-
-if (blocking.length > 0) {
-  console.error("Blocking vulnerabilities (moderate+ and not in the documented allowlist):");
-  for (const [id, info] of blocking) {
-    console.error(`  ${id} [${info.severity}] ${info.title}`);
+  for (const [index, advisory] of Object.entries(report?.advisories ?? {})) {
+    const normalized = advisoryFrom(advisory, advisory?.module_name, index);
+    if (normalized) found.set(normalized.id, normalized);
   }
-  process.exit(1);
+  return [...found.values()].filter(
+    (advisory) => !ALLOWLIST.has(advisory.id) && BLOCKING_SEVERITIES.has(advisory.severity),
+  );
 }
 
-const tolerated = [...found].filter(([id]) => ALLOWLIST.has(id));
-for (const [id] of tolerated) {
-  console.log(`Tolerating documented advisory ${id}: ${ALLOWLIST.get(id)}`);
+function main() {
+  let raw;
+  try {
+    raw = execSync("npm audit --json", { encoding: "utf8" });
+  } catch (error) {
+    // `npm audit` exits non-zero when vulnerabilities exist but still prints the
+    // JSON report to stdout; recover it rather than treating the exit as fatal.
+    raw = error.stdout?.toString() ?? "";
+  }
+
+  const report = JSON.parse(raw);
+  const blocking = findBlockingAdvisories(report);
+
+  if (blocking.length > 0) {
+    console.error("Blocking vulnerabilities (moderate+ and not in the documented allowlist):");
+    for (const advisory of blocking) {
+      console.error(`  ${advisory.id} [${advisory.severity}] ${advisory.title}`);
+    }
+    process.exit(1);
+  }
+
+  console.log("No blocking vulnerabilities.");
 }
-console.log("No blocking vulnerabilities.");
+
+if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) main();

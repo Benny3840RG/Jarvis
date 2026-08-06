@@ -9,6 +9,7 @@ export type OidcConfig = {
   audience: string;
   jwksUrl: string;
   clockSkewSeconds: number;
+  subject: string;
 };
 
 export type HttpAppConfig = {
@@ -117,15 +118,28 @@ function resolveOidcConfig(env: JarvisEnvironment, required: boolean): OidcConfi
   const issuer = secureUrl(env.JARVIS_OIDC_ISSUER, "JARVIS_OIDC_ISSUER");
   const jwksUrl = secureUrl(env.JARVIS_OIDC_JWKS_URL, "JARVIS_OIDC_JWKS_URL");
   const audience = optionalText(env.JARVIS_OIDC_AUDIENCE);
-  const provided = issuer !== undefined || jwksUrl !== undefined || audience !== undefined;
+  const subject = optionalText(env.JARVIS_OIDC_SUBJECT);
+  const provided =
+    issuer !== undefined ||
+    jwksUrl !== undefined ||
+    audience !== undefined ||
+    subject !== undefined;
   if (!required && !provided) return undefined;
-  if (issuer === undefined || jwksUrl === undefined || audience === undefined) {
+  if (
+    issuer === undefined ||
+    jwksUrl === undefined ||
+    audience === undefined ||
+    subject === undefined
+  ) {
     throw new Error(
-      "Remote HTTP exposure requires JARVIS_OIDC_ISSUER, JARVIS_OIDC_AUDIENCE and JARVIS_OIDC_JWKS_URL.",
+      "Remote HTTP exposure requires JARVIS_OIDC_ISSUER, JARVIS_OIDC_AUDIENCE, JARVIS_OIDC_JWKS_URL and JARVIS_OIDC_SUBJECT.",
     );
   }
   if (audience.length > 256 || /[\s]/.test(audience)) {
     throw new Error("JARVIS_OIDC_AUDIENCE must be a bounded value without whitespace.");
+  }
+  if (subject.length > 512 || /[\s]/.test(subject)) {
+    throw new Error("JARVIS_OIDC_SUBJECT must be a bounded value without whitespace.");
   }
   const rawSkew = optionalText(env.JARVIS_OIDC_CLOCK_SKEW_SECONDS) ?? "30";
   if (!/^\d+$/.test(rawSkew)) {
@@ -135,7 +149,7 @@ function resolveOidcConfig(env: JarvisEnvironment, required: boolean): OidcConfi
   if (!Number.isSafeInteger(clockSkewSeconds) || clockSkewSeconds < 0 || clockSkewSeconds > 300) {
     throw new Error("JARVIS_OIDC_CLOCK_SKEW_SECONDS must be an integer between 0 and 300.");
   }
-  return { issuer, audience, jwksUrl, clockSkewSeconds };
+  return { issuer, audience, jwksUrl, clockSkewSeconds, subject };
 }
 
 export function resolveHttpAppConfig(env: JarvisEnvironment = process.env): HttpAppConfig {

@@ -2,6 +2,7 @@ import type { TotalityRequest } from "../../runtime/totalityContracts.js";
 import { assertRequestAuthority } from "../../runtime/totalityContracts.js";
 import { routeTotalityTask } from "../../runtime/totalityPolicy.js";
 import type { TotalityReasoningContext } from "../../totality/totalityPipeline.js";
+import { DEFAULT_TOTALITY_MAX_OUTPUT_TOKENS } from "../../totality/totalityQuota.js";
 import {
   parseTotalityDraft,
   TOTALITY_SYSTEM_INSTRUCTIONS,
@@ -192,6 +193,7 @@ export class GeminiTotalityReasoner {
             ],
             generationConfig: {
               responseMimeType: "application/json",
+              maxOutputTokens: DEFAULT_TOTALITY_MAX_OUTPUT_TOKENS,
             },
           }),
           signal: controller.signal,

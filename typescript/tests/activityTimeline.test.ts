@@ -173,7 +173,8 @@ describe("readActivityTimelinePage", () => {
     const result = await readActivityTimelinePage({ reader, cursor: null, limit: 10 });
     assert.equal(result.status, "unavailable");
     if (result.status !== "unavailable") return;
-    assert.equal(result.reason, "audit events store offline");
+    assert.equal(result.reason, "Activity timeline is temporarily unavailable.");
+    assert.doesNotMatch(result.reason, /audit events store offline/);
   });
 
   it("passes the requested cursor and limit through to the reader unchanged", async () => {

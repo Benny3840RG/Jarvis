@@ -152,6 +152,6 @@ describe("operations activity timeline HTTP boundary", () => {
     assert.equal(response.statusCode, 200);
     const body = response.json() as { data: { status: string; reason?: string } };
     assert.equal(body.data.status, "unavailable");
-    assert.equal(body.data.reason, "audit events store offline");
+    assert.equal(body.data.reason, "Activity timeline is temporarily unavailable.");
   });
 });

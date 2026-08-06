@@ -13,6 +13,7 @@ import {
   type HttpAppConfig,
 } from "../src/http/config.js";
 import type { ProblemDetails } from "../src/http/problemDetails.js";
+import type { OidcVerifier } from "../src/http/oidcVerifier.js";
 import {
   resolvePersistenceProviderName,
   type AssistantState,
@@ -91,6 +92,7 @@ async function makeApp(
     providerName?: "json" | "convex";
     config?: Partial<HttpAppConfig>;
     reconciliationHealth?: () => RuntimeReconciliationHealth;
+    oidcVerifier?: OidcVerifier | null;
   } = {},
 ): Promise<NestFastifyApplication> {
   const app = await createJarvisHttpApp({
@@ -98,6 +100,7 @@ async function makeApp(
     providerName: options.providerName ?? "json",
     config: { ...BASE_CONFIG, ...options.config },
     reconciliationHealth: options.reconciliationHealth,
+    oidcVerifier: options.oidcVerifier,
     logger: false,
   });
   openApps.push(app);
@@ -109,6 +112,74 @@ afterEach(async () => {
 });
 
 describe("Jarvis HTTP system boundary", () => {
+  it("authorizes the verified OIDC subject before owner-scoped controllers", async () => {
+    const verifier: OidcVerifier = {
+      async verify() {
+        return {
+          subject: "not-benny",
+          issuer: "https://issuer.example.com/",
+          audience: "jarvis-api",
+        };
+      },
+    };
+    const app = await makeApp({
+      config: {
+        authMode: "oidc",
+        currentToken: undefined,
+        oidc: {
+          issuer: "https://issuer.example.com/",
+          audience: "jarvis-api",
+          jwksUrl: "https://issuer.example.com/.well-known/jwks.json",
+          clockSkewSeconds: 0,
+          subject: "benny",
+        },
+      },
+      oidcVerifier: verifier,
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/v1/help",
+      headers: { authorization: "Bearer signed-token" },
+    });
+
+    assert.equal(response.statusCode, 403);
+    assert.equal(response.json<ProblemDetails>().type, "urn:jarvis:problem:forbidden");
+  });
+
+  it("allows the configured OIDC owner subject after token verification", async () => {
+    const verifier: OidcVerifier = {
+      async verify() {
+        return {
+          subject: "benny",
+          issuer: "https://issuer.example.com/",
+          audience: "jarvis-api",
+        };
+      },
+    };
+    const app = await makeApp({
+      config: {
+        authMode: "oidc",
+        currentToken: undefined,
+        oidc: {
+          issuer: "https://issuer.example.com/",
+          audience: "jarvis-api",
+          jwksUrl: "https://issuer.example.com/.well-known/jwks.json",
+          clockSkewSeconds: 0,
+          subject: "benny",
+        },
+      },
+      oidcVerifier: verifier,
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/v1/help",
+      headers: { authorization: "Bearer signed-token" },
+    });
+
+    assert.equal(response.statusCode, 200);
+  });
   it("serves public liveness without authentication or persistence access", async () => {
     const persistence = makePersistence({
       async loadState() {

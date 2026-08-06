@@ -44,4 +44,55 @@ describe("Jarvis MCP HTTP boundary", () => {
       await running.close();
     }
   });
+
+  it("rejects cross-origin browser requests before privileged MCP handling", async () => {
+    const config: JarvisMcpConfig = {
+      host: "127.0.0.1",
+      port: await freePort(),
+      api: {
+        baseUrl: new URL("http://127.0.0.1:3000/"),
+        serviceToken: "never-print-this-token",
+      },
+    };
+    const running = await startJarvisMcpHttpServer(config);
+    try {
+      const response = await fetch(running.url, {
+        method: "OPTIONS",
+        headers: {
+          Origin: "https://evil.example",
+          "Access-Control-Request-Method": "POST",
+        },
+      });
+      assert.equal(response.status, 403);
+      assert.equal(response.headers.get("access-control-allow-origin"), null);
+    } finally {
+      await running.close();
+    }
+  });
+
+  it("emits CORS only for an explicitly configured origin", async () => {
+    const config: JarvisMcpConfig = {
+      host: "127.0.0.1",
+      port: await freePort(),
+      allowedOrigins: ["http://127.0.0.1:3000"],
+      api: {
+        baseUrl: new URL("http://127.0.0.1:3000/"),
+        serviceToken: "never-print-this-token",
+      },
+    };
+    const running = await startJarvisMcpHttpServer(config);
+    try {
+      const response = await fetch(running.url, {
+        method: "OPTIONS",
+        headers: {
+          Origin: "http://127.0.0.1:3000",
+          "Access-Control-Request-Method": "POST",
+        },
+      });
+      assert.equal(response.status, 204);
+      assert.equal(response.headers.get("access-control-allow-origin"), "http://127.0.0.1:3000");
+    } finally {
+      await running.close();
+    }
+  });
 });
