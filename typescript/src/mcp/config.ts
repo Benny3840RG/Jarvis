@@ -8,6 +8,7 @@ export type JarvisApiConfig = {
 export type JarvisMcpConfig = {
   host: string;
   port: number;
+  allowedOrigins?: readonly string[];
   api: JarvisApiConfig;
 };
 
@@ -22,6 +23,38 @@ function requiredSecret(value: string | undefined, field: string): string {
 function optionalText(value: string | undefined): string | undefined {
   const cleaned = value?.trim();
   return cleaned ? cleaned : undefined;
+}
+
+function parseAllowedOrigins(value: string | undefined): string[] {
+  const raw = optionalText(value);
+  if (raw === undefined) return [];
+  const origins = [
+    ...new Set(
+      raw
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean),
+    ),
+  ];
+  for (const origin of origins) {
+    let parsed: URL;
+    try {
+      parsed = new URL(origin);
+    } catch {
+      throw new Error("JARVIS_MCP_ALLOWED_ORIGINS must contain valid HTTP(S) origins.");
+    }
+    if (
+      !["http:", "https:"].includes(parsed.protocol) ||
+      parsed.username ||
+      parsed.password ||
+      parsed.pathname !== "/" ||
+      parsed.search ||
+      parsed.hash
+    ) {
+      throw new Error("JARVIS_MCP_ALLOWED_ORIGINS must contain valid HTTP(S) origins.");
+    }
+  }
+  return origins;
 }
 
 function parsePort(value: string | undefined): number {
@@ -95,6 +128,7 @@ export function resolveJarvisMcpConfig(env: NodeJS.ProcessEnv = process.env): Ja
   return {
     host: resolveHost(env),
     port: parsePort(env.JARVIS_MCP_PORT),
+    allowedOrigins: parseAllowedOrigins(env.JARVIS_MCP_ALLOWED_ORIGINS),
     api: {
       baseUrl: resolveApiBaseUrl(env),
       serviceToken: requiredSecret(env.JARVIS_SERVICE_TOKEN, "JARVIS_SERVICE_TOKEN"),

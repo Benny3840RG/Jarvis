@@ -79,10 +79,11 @@ jobs:
 
           request_id="${{ steps.guard.outputs.request_id }}"
           request_marker="<!-- jarvis-development-commission:${request_id} -->"
+          queued_comment="$request_marker
+          Queued from commit $GITHUB_SHA; this request ID is now consumed."
           gh api "repos/$GITHUB_REPOSITORY/issues/$STATUS_ISSUE/comments" \
             --method POST \
-            -f body="$request_marker
-Queued from commit $GITHUB_SHA; this request ID is now consumed."
+            -f body="$queued_comment"
 
           gh workflow run development-commissioning.yml \
             --ref main \
@@ -152,6 +153,9 @@ Queued from commit $GITHUB_SHA; this request ID is now consumed."
           RUN_ID: ${{ steps.dispatch.outputs.run_id }}
           RUN_URL: ${{ steps.dispatch.outputs.run_url }}
           STATUS_ISSUE: "54"
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          JARVIS_SERVICE_TOKEN: ${{ secrets.JARVIS_SERVICE_TOKEN }}
+          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
         run: |
           set -euo pipefail
 
@@ -182,18 +186,17 @@ Queued from commit $GITHUB_SHA; this request ID is now consumed."
           if [[ "$conclusion" != "success" ]]; then
             gh run view "$RUN_ID" --log-failed >"$failed_log" 2>&1 || true
 
-            perl -pe 's/\e\[[0-9;?]*[ -\/]*[@-~]//g' "$failed_log" \
-              | sed -E \
-                -e 's/(Bearer )[A-Za-z0-9._~+\/-]+/\1[REDACTED]/g' \
-                -e 's/(sk-[A-Za-z0-9_-]{12})[A-Za-z0-9_-]+/\1[REDACTED]/g' \
-                -e 's/([A-Za-z0-9_-]{24})[A-Za-z0-9_-]{20,}/\1[REDACTED]/g' \
-                -e 's/```/` ` `/g' \
-              | tail -n 120 >"$redacted_log"
+            if node typescript/scripts/redact-commissioning-log.mjs "$failed_log" "$redacted_log"; then
+              tail -n 120 "$redacted_log" >"$redacted_log.tail"
+              mv "$redacted_log.tail" "$redacted_log"
+            else
+              : >"$redacted_log"
+            fi
 
             if [[ -s "$redacted_log" ]]; then
               failed_log_excerpt="$(cat "$redacted_log")"
             else
-              failed_log_excerpt="Failed log output was unavailable."
+              failed_log_excerpt="Failed log output was withheld because safe redaction could not be proven."
             fi
           fi
 

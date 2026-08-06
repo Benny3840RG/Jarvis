@@ -23,6 +23,7 @@ const REMOTE_ENV = {
   JARVIS_OIDC_ISSUER: "https://issuer.example.com/",
   JARVIS_OIDC_AUDIENCE: "jarvis-api",
   JARVIS_OIDC_JWKS_URL: "https://issuer.example.com/.well-known/jwks.json",
+  JARVIS_OIDC_SUBJECT: "benny",
   JARVIS_ALLOWED_ORIGINS: "https://console.example.com,https://admin.example.com",
   JARVIS_SERVICE_TOKEN: "a".repeat(32),
 } as const;
@@ -51,6 +52,7 @@ describe("remote gateway configuration", () => {
     const config = resolveHttpAppConfig(REMOTE_ENV);
     assert.equal(config.authMode, "oidc");
     assert.equal(config.oidc?.issuer, "https://issuer.example.com/");
+    assert.equal(config.oidc?.subject, "benny");
     assert.deepEqual(config.remoteGateway?.allowedOrigins, [
       "https://console.example.com",
       "https://admin.example.com",
@@ -112,5 +114,21 @@ describe("remote gateway request policy", () => {
       rejection(evaluateRemoteGatewayRequest(limited, request())),
       "rate-limit-exceeded",
     );
+  });
+
+  it("keeps attacker-rotated client keys under a hard memory cap", () => {
+    const capped = resolveRemoteGatewayConfig(REMOTE_ENV);
+    const now = Date.now();
+    for (let index = 0; index < 10_000; index += 1) {
+      capped.rateBuckets.set(`client-${index}`, { windowStartedAt: now, count: 1 });
+    }
+
+    assert.equal(
+      rejection(
+        evaluateRemoteGatewayRequest(capped, request({ clientKey: "new-attacker-key" }), now),
+      ),
+      "rate-limit-exceeded",
+    );
+    assert.equal(capped.rateBuckets.size, 10_000);
   });
 });

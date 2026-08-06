@@ -54,10 +54,17 @@ Optional transport values are:
 | `JARVIS_TLS_TERMINATED`                       | unset       | Must be exactly `true`; the approved proxy must forward `X-Forwarded-Proto: https`. |
 | `JARVIS_OIDC_ISSUER` / `JARVIS_OIDC_AUDIENCE` | unset       | Required together for remote HTTP bearer-token verification.                        |
 | `JARVIS_OIDC_JWKS_URL`                        | unset       | Explicit HTTPS JWKS endpoint for RS256 verification.                                |
+| `JARVIS_OIDC_SUBJECT`                         | unset       | Exact verified OIDC `sub` claim authorised for the single Jarvis owner.             |
 | `JARVIS_ALLOWED_ORIGINS`                      | unset       | Comma-separated HTTPS browser origins accepted by the remote gateway.               |
 | `JARVIS_MAX_REQUEST_BYTES`                    | 1048576     | Remote request body limit, bounded to 1024–10485760 bytes.                          |
 | `JARVIS_RATE_LIMIT_MAX_REQUESTS`              | 60          | Per-client remote request budget per window.                                        |
 | `JARVIS_RATE_LIMIT_WINDOW_MS`                 | 60000       | Remote rate-limit window in milliseconds.                                           |
+| `JARVIS_TOTALITY_MAX_REQUEST_BYTES`           | 262144      | Aggregate Totality request-size ceiling before provider dispatch.                   |
+| `JARVIS_TOTALITY_MAX_INPUT_TOKENS`            | 32768       | Estimated aggregate input-token ceiling per Totality request.                       |
+| `JARVIS_TOTALITY_MAX_CONCURRENT`              | 4           | Maximum simultaneous Totality provider calls in one process.                        |
+| `JARVIS_TOTALITY_COST_UNITS_PER_WINDOW`       | 100000      | Rolling aggregate provider-cost reservation budget.                                 |
+| `JARVIS_TOTALITY_MAX_OUTPUT_TOKENS`           | 4096        | Hard output-token ceiling sent to the provider.                                     |
+| `JARVIS_TOTALITY_QUOTA_WINDOW_MS`             | 3600000     | Rolling provider-cost quota window in milliseconds.                                 |
 
 `JARVIS_SOURCE_VERSION` defaults to `development` for local work. Release automation should set
 it to the immutable source commit.

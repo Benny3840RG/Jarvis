@@ -21,6 +21,7 @@ import {
   type TotalityProjectContext,
   type TotalityReasoner,
 } from "../src/totality/totalityPipeline.js";
+import { TotalityQuota } from "../src/totality/totalityQuota.js";
 
 const CONFIG: HttpAppConfig = {
   version: "0.1.0",
@@ -107,6 +108,7 @@ function noOpJournal(): TotalityJournal {
 function successfulPipeline(
   journal: TotalityJournal = noOpJournal(),
   memoryProposals: Awaited<ReturnType<TotalityReasoner["reason"]>>["draft"]["memoryProposals"] = [],
+  quota?: TotalityQuota,
 ): TotalityPipeline {
   const reasoner: TotalityReasoner = {
     async reason() {
@@ -127,7 +129,7 @@ function successfulPipeline(
       };
     },
   };
-  return new TotalityPipeline(reasoner, journal, () => new Date("2026-07-16T00:00:00.000Z"));
+  return new TotalityPipeline(reasoner, journal, () => new Date("2026-07-16T00:00:00.000Z"), quota);
 }
 
 async function makeApp(totalityPipeline: TotalityPipeline | null): Promise<NestFastifyApplication> {
@@ -319,6 +321,32 @@ describe("Totality HTTP boundary", () => {
     assert.equal(response.statusCode, 429);
     assert.equal(response.json().type, "urn:jarvis:problem:reasoning-rate-limited");
     assert.doesNotMatch(response.body, /sensitive upstream detail/);
+  });
+
+  it("rejects aggregate Totality quota exhaustion before provider work", async () => {
+    const app = await makeApp(
+      successfulPipeline(
+        noOpJournal(),
+        [],
+        new TotalityQuota({
+          maxRequestBytes: 128,
+          maxEstimatedInputTokens: 32,
+          maxConcurrentRequests: 1,
+          maxCostUnitsPerWindow: 1_024,
+          maxOutputTokens: 256,
+          windowMs: 60_000,
+        }),
+      ),
+    );
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/v1/totality/reason",
+      headers: authHeaders(),
+      payload: body(),
+    });
+
+    assert.equal(response.statusCode, 413);
+    assert.equal(response.json().type, "urn:jarvis:problem:totality-request-too-large");
   });
 
   it("fails closed when the atomic Convex journal commit fails", async () => {

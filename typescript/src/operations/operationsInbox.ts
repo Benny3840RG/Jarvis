@@ -66,8 +66,8 @@ function iso(ms: number): string {
   return new Date(ms).toISOString();
 }
 
-async function reportSource<T>(
-  source: InboxSourceName,
+async function reportSource<T, TSource extends "reminders" | "maintenance">(
+  source: TSource,
   now: number,
   read: () => Promise<T>,
 ): Promise<{ report: InboxSourceReport; value: T | null }> {
@@ -75,8 +75,20 @@ async function reportSource<T>(
     const value = await read();
     return { report: { source, status: "available", checkedAt: iso(now) }, value };
   } catch (error: unknown) {
-    const reason = error instanceof Error ? error.message : "Unknown read failure.";
-    return { report: { source, status: "unavailable", reason, checkedAt: iso(now) }, value: null };
+    void error;
+    const reasonBySource: Record<"reminders" | "maintenance", string> = {
+      reminders: "Reminders source is temporarily unavailable.",
+      maintenance: "Maintenance source is temporarily unavailable.",
+    };
+    return {
+      report: {
+        source,
+        status: "unavailable",
+        reason: reasonBySource[source],
+        checkedAt: iso(now),
+      },
+      value: null,
+    };
   }
 }
 

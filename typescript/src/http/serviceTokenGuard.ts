@@ -37,6 +37,10 @@ function unauthorized(detail: string): never {
   throw new JarvisProblem(HttpStatus.UNAUTHORIZED, "unauthorized", "Unauthorized", detail);
 }
 
+function forbidden(detail: string): never {
+  throw new JarvisProblem(HttpStatus.FORBIDDEN, "forbidden", "Forbidden", detail);
+}
+
 @Injectable()
 export class ServiceTokenGuard implements CanActivate {
   private readonly logger = new Logger(ServiceTokenGuard.name);
@@ -67,11 +71,16 @@ export class ServiceTokenGuard implements CanActivate {
         );
       }
       if (candidate === undefined) unauthorized("A valid Bearer OIDC access token is required.");
+      let identity;
       try {
-        await this.oidcVerifier.verify(candidate);
+        identity = await this.oidcVerifier.verify(candidate);
       } catch {
         this.logger.warn(`Rejected an invalid OIDC access token from ${request.ip}.`);
         unauthorized("A valid Bearer OIDC access token is required.");
+      }
+      if (identity.subject !== this.config.oidc?.subject) {
+        this.logger.warn(`Rejected an authenticated OIDC subject from ${request.ip}.`);
+        forbidden("The authenticated OIDC subject is not authorised for this Jarvis owner.");
       }
       return true;
     }

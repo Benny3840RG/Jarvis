@@ -33,6 +33,9 @@ JARVIS_DEPLOYMENT_VERSION=dev:outgoing-ram-798
 JARVIS_SERVICE_TOKEN=<development service token>
 OPENAI_API_KEY=<development API key>
 JARVIS_TIMEZONE=Australia/Melbourne
+# Optional: exact browser origins allowed to call the loopback MCP endpoint.
+# Leave unset for native/non-browser MCP clients only.
+JARVIS_MCP_ALLOWED_ORIGINS=http://127.0.0.1:3000
 ```
 
 `JARVIS_DEPLOYMENT_VERSION` is the deployment identity reported by the HTTP status contract. The
@@ -72,6 +75,10 @@ nvm use
 npm ci
 npm run start:preview
 ```
+
+`start:preview` performs the same development-paddock allowlist checks as `npm run paddock`
+before opening either listener. It refuses non-Convex providers, unauthorised deployments, and
+production deployment identifiers.
 
 Default local endpoints:
 

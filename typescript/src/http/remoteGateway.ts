@@ -24,6 +24,8 @@ export type RemoteGatewayConfig = {
 
 type GatewayEnvironment = NodeJS.ProcessEnv;
 
+export const MAX_RATE_BUCKETS = 10_000;
+
 function optionalText(value: string | undefined): string | undefined {
   const cleaned = value?.trim();
   return cleaned ? cleaned : undefined;
@@ -140,7 +142,14 @@ export function evaluateRemoteGatewayRequest(
     return { allowed: false, code: "request-too-large" };
   }
 
+  for (const [key, candidate] of policy.rateBuckets) {
+    if (now - candidate.windowStartedAt >= policy.rateLimitWindowMs) policy.rateBuckets.delete(key);
+  }
+
   const existing = policy.rateBuckets.get(request.clientKey);
+  if (existing === undefined && policy.rateBuckets.size >= MAX_RATE_BUCKETS) {
+    return { allowed: false, code: "rate-limit-exceeded", retryAfterSeconds: 1 };
+  }
   const bucket =
     existing === undefined || now - existing.windowStartedAt >= policy.rateLimitWindowMs
       ? { windowStartedAt: now, count: 0 }
@@ -155,15 +164,5 @@ export function evaluateRemoteGatewayRequest(
   }
   bucket.count += 1;
   policy.rateBuckets.set(request.clientKey, bucket);
-
-  // Bound memory if an attacker rotates source addresses. The oldest buckets
-  // are safe to discard because they are already outside the enforcement window.
-  if (policy.rateBuckets.size > 10_000) {
-    for (const [key, candidate] of policy.rateBuckets) {
-      if (now - candidate.windowStartedAt >= policy.rateLimitWindowMs)
-        policy.rateBuckets.delete(key);
-      if (policy.rateBuckets.size <= 5_000) break;
-    }
-  }
   return { allowed: true };
 }

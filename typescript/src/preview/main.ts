@@ -9,6 +9,7 @@ import { startJarvisMcpHttpServer } from "../mcp/httpServer.js";
 import { createOutlookRuntimeReconciliationFactories } from "../reconciliation/outlookRuntimeReconciliation.js";
 import { createRuntimeReconciliationHost } from "../reconciliation/runtimeReconciliationHost.js";
 import { applyPreviewEnvironment } from "./environment.js";
+import { resolvePaddockConfig } from "./paddock.js";
 import {
   createPostHogTelemetryFromEnv,
   createReconciliationTelemetryObserver,
@@ -25,7 +26,9 @@ function loadLocalEnvironment(): void {
 async function main(): Promise<void> {
   loadLocalEnvironment();
   applyPreviewEnvironment();
-  const httpListen = resolveHttpListenConfig();
+  const paddock = resolvePaddockConfig(process.env);
+  Object.assign(process.env, paddock.environment);
+  const httpListen = resolveHttpListenConfig(process.env);
   const outlookRuntime = createMicrosoftOutlookRuntimeFromEnv();
   const telemetry = createPostHogTelemetryFromEnv();
   const reconciliation = createRuntimeReconciliationHost(
@@ -45,7 +48,7 @@ async function main(): Promise<void> {
   await httpApp.listen(httpListen);
 
   const mcpConfig = resolveJarvisMcpConfig({
-    ...process.env,
+    ...paddock.environment,
     JARVIS_API_BASE_URL: process.env.JARVIS_API_BASE_URL ?? `http://127.0.0.1:${httpListen.port}`,
   });
 

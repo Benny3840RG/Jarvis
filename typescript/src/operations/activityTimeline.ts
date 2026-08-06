@@ -106,7 +106,7 @@ export async function readActivityTimelinePage(input: {
       isDone: page.isDone,
     };
   } catch (error: unknown) {
-    const reason = error instanceof Error ? error.message : "Unknown read failure.";
-    return { status: "unavailable", reason };
+    void error;
+    return { status: "unavailable", reason: "Activity timeline is temporarily unavailable." };
   }
 }

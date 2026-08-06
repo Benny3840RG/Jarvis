@@ -7,6 +7,7 @@ import { categorizeOpenAIRequestError } from "../integrations/openai/errorCatego
 import { OpenAIRequestError } from "../integrations/openai/totalityReasoner.js";
 import type { TotalityResponse } from "../runtime/totalityContracts.js";
 import type { TotalityPipeline, TotalityReasoningResult } from "../totality/totalityPipeline.js";
+import { TotalityQuotaError } from "../totality/totalityQuota.js";
 import { JarvisProblem } from "./problemDetails.js";
 import { requestIdFor } from "./requestId.js";
 import { HTTP_TOTALITY_PIPELINE } from "./tokens.js";
@@ -67,6 +68,18 @@ export class TotalityController {
     try {
       return await this.pipeline.run(input);
     } catch (error: unknown) {
+      if (error instanceof TotalityQuotaError) {
+        const requestBound =
+          error.code === "request-too-large" || error.code === "input-token-limit";
+        throw new JarvisProblem(
+          requestBound ? 413 : 429,
+          requestBound ? "totality-request-too-large" : "totality-quota-exhausted",
+          requestBound ? "Totality Request Too Large" : "Totality Quota Exhausted",
+          requestBound
+            ? "The Totality request exceeds the configured provider input limit."
+            : "The Totality provider budget is temporarily exhausted.",
+        );
+      }
       const reasonerErrorCategory =
         error instanceof OpenAIRequestError
           ? categorizeOpenAIRequestError(error)

@@ -109,6 +109,7 @@ describe("Gemini Totality reasoner", () => {
       (body.generationConfig as Record<string, unknown>).responseMimeType,
       "application/json",
     );
+    assert.equal((body.generationConfig as Record<string, unknown>).maxOutputTokens, 4_096);
     const userPart = (
       (body.contents as Array<{ parts: Array<{ text: string }> }>)[0]!.parts[0] as {
         text: string;

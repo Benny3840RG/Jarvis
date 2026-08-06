@@ -32,6 +32,21 @@ function closeHttpServer(server: Server): Promise<void> {
   });
 }
 
+function originAllowed(config: JarvisMcpConfig, origin: string | undefined): boolean {
+  return origin === undefined || (config.allowedOrigins ?? []).includes(origin);
+}
+
+function corsHeaders(origin: string | undefined): Record<string, string> {
+  if (origin === undefined) return {};
+  return {
+    "Access-Control-Allow-Origin": origin,
+    "Access-Control-Allow-Methods": "POST, GET, DELETE, OPTIONS",
+    "Access-Control-Allow-Headers": "content-type, accept, mcp-session-id",
+    "Access-Control-Expose-Headers": "Mcp-Session-Id",
+    Vary: "Origin",
+  };
+}
+
 export async function startJarvisMcpHttpServer(
   config: JarvisMcpConfig,
   client: JarvisApiClient = new JarvisApiClient(config.api),
@@ -45,6 +60,7 @@ export async function startJarvisMcpHttpServer(
 
     const url = new URL(request.url, `http://${request.headers.host ?? "localhost"}`);
     const isMcpPath = url.pathname === MCP_PATH || url.pathname.startsWith(`${MCP_PATH}/`);
+    const origin = typeof request.headers.origin === "string" ? request.headers.origin : undefined;
 
     if (request.method === "GET" && url.pathname === "/") {
       response
@@ -58,19 +74,22 @@ export async function startJarvisMcpHttpServer(
     }
 
     if (request.method === "OPTIONS" && isMcpPath) {
-      response.writeHead(204, {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "POST, GET, DELETE, OPTIONS",
-        "Access-Control-Allow-Headers": "content-type, accept, mcp-session-id",
-        "Access-Control-Expose-Headers": "Mcp-Session-Id",
-      });
+      if (!originAllowed(config, origin)) {
+        response.writeHead(403, { "content-type": "text/plain; charset=utf-8" }).end("Forbidden");
+        return;
+      }
+      response.writeHead(204, corsHeaders(origin));
       response.end();
       return;
     }
 
     if (isMcpPath && request.method && MCP_METHODS.has(request.method)) {
-      response.setHeader("Access-Control-Allow-Origin", "*");
-      response.setHeader("Access-Control-Expose-Headers", "Mcp-Session-Id");
+      if (!originAllowed(config, origin)) {
+        response.writeHead(403, { "content-type": "text/plain; charset=utf-8" }).end("Forbidden");
+        return;
+      }
+      for (const [name, value] of Object.entries(corsHeaders(origin)))
+        response.setHeader(name, value);
       response.setHeader("Cache-Control", "no-store");
       response.setHeader("X-Content-Type-Options", "nosniff");
 

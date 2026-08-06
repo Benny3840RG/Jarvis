@@ -13,6 +13,11 @@ import type {
 import { assertRequestAuthority } from "../runtime/totalityContracts.js";
 import { routeTotalityTask } from "../runtime/totalityPolicy.js";
 import { validateTotalityResult, type ValidationReport } from "../runtime/validation.js";
+import {
+  TotalityQuota,
+  resolveTotalityQuotaConfig,
+  type TotalityQuotaLease,
+} from "./totalityQuota.js";
 
 export type TotalityProjectContext = {
   projectId: string;
@@ -139,104 +144,110 @@ export class TotalityPipeline {
     private readonly reasoner: TotalityReasoner,
     private readonly journal: TotalityJournal,
     private readonly now: () => Date = () => new Date(),
+    private readonly quota: TotalityQuota = new TotalityQuota(resolveTotalityQuotaConfig()),
   ) {}
 
   async run(request: TotalityRequest): Promise<TotalityResponse<TotalityReasoningResult>> {
-    const routing = routeTotalityTask({
-      taskType: request.taskType,
-      outputStyle: request.outputStyle,
-      domainContext: request.domainContext,
-    });
-    assertRequestAuthority(request, routing);
+    const lease: TotalityQuotaLease = this.quota.acquire(request);
+    try {
+      const routing = routeTotalityTask({
+        taskType: request.taskType,
+        outputStyle: request.outputStyle,
+        domainContext: request.domainContext,
+      });
+      assertRequestAuthority(request, routing);
 
-    const project =
-      request.projectId === null ? null : await this.journal.getProjectContext(request.projectId);
-    if (request.projectId !== null && project === null) {
-      throw new Error("Project context does not exist.");
-    }
-
-    const proposedAt = this.now().toISOString();
-    const reasoning = await this.reasoner.reason(request, { project, proposedAt });
-    let memoryProposal = emptyMemoryProposal();
-    let memoryProposalFailure: string | null = null;
-
-    if (reasoning.draft.memoryProposals.length > 0 && project !== null) {
-      try {
-        memoryProposal = materializeReasoningMemoryProposal({
-          projectId: project.projectId,
-          requestId: request.requestId,
-          proposedAt,
-          drafts: reasoning.draft.memoryProposals,
-          rationale: reasoning.draft.memoryRationale,
-        });
-      } catch (error: unknown) {
-        memoryProposalFailure = error instanceof Error ? error.message : String(error);
+      const project =
+        request.projectId === null ? null : await this.journal.getProjectContext(request.projectId);
+      if (request.projectId !== null && project === null) {
+        throw new Error("Project context does not exist.");
       }
-    }
 
-    const validation = memoryValidation(
-      validateTotalityResult({
+      const proposedAt = this.now().toISOString();
+      const reasoning = await this.reasoner.reason(request, { project, proposedAt });
+      let memoryProposal = emptyMemoryProposal();
+      let memoryProposalFailure: string | null = null;
+
+      if (reasoning.draft.memoryProposals.length > 0 && project !== null) {
+        try {
+          memoryProposal = materializeReasoningMemoryProposal({
+            projectId: project.projectId,
+            requestId: request.requestId,
+            proposedAt,
+            drafts: reasoning.draft.memoryProposals,
+            rationale: reasoning.draft.memoryRationale,
+          });
+        } catch (error: unknown) {
+          memoryProposalFailure = error instanceof Error ? error.message : String(error);
+        }
+      }
+
+      const validation = memoryValidation(
+        validateTotalityResult({
+          routing,
+          assumptions: reasoning.draft.assumptions,
+          unsupportedClaims: reasoning.draft.unsupportedClaims,
+          contradictions: reasoning.draft.contradictions,
+          hazards: reasoning.draft.risks,
+          controls: reasoning.draft.controls,
+        }),
+        {
+          proposalCount: reasoning.draft.memoryProposals.length,
+          projectAvailable: project !== null,
+          failure: memoryProposalFailure,
+        },
+      );
+      const status = validation.passed ? "completed" : "blocked";
+
+      const committed = await this.journal.commitOutcome({
+        requestId: request.requestId,
+        projectId: request.projectId,
+        report: validation,
+        eventType: `totality.reasoning.${status}`,
+        actor: "agent",
+        payload: {
+          responseId: reasoning.responseId,
+          primaryMode: routing.primaryMode,
+          supportingModes: routing.supportingModes,
+          riskLevel: routing.permission.riskLevel,
+          validationPassed: validation.passed,
+          blockingFailureCount: validation.blockingFailures.length,
+          memoryProposalCount: reasoning.draft.memoryProposals.length,
+        },
+        ...(validation.passed && project !== null && memoryProposal.records.length > 0
+          ? {
+              memoryProposal: {
+                changeSetId: reasoningChangeSetId(project.projectId, request.requestId),
+                expectedRevision: project.revision,
+                records: memoryProposal.records,
+                rationale: memoryProposal.rationale,
+              },
+            }
+          : {}),
+      });
+
+      return {
+        requestId: request.requestId,
+        status,
         routing,
+        result: validation.passed
+          ? {
+              answer: reasoning.draft.answer,
+              responseId: reasoning.responseId,
+              memoryChangeSetId: committed.memoryChangeSetId,
+              memoryProposalCount: memoryProposal.records.length,
+            }
+          : null,
         assumptions: reasoning.draft.assumptions,
-        unsupportedClaims: reasoning.draft.unsupportedClaims,
-        contradictions: reasoning.draft.contradictions,
-        hazards: reasoning.draft.risks,
-        controls: reasoning.draft.controls,
-      }),
-      {
-        proposalCount: reasoning.draft.memoryProposals.length,
-        projectAvailable: project !== null,
-        failure: memoryProposalFailure,
-      },
-    );
-    const status = validation.passed ? "completed" : "blocked";
-
-    const committed = await this.journal.commitOutcome({
-      requestId: request.requestId,
-      projectId: request.projectId,
-      report: validation,
-      eventType: `totality.reasoning.${status}`,
-      actor: "agent",
-      payload: {
-        responseId: reasoning.responseId,
-        primaryMode: routing.primaryMode,
-        supportingModes: routing.supportingModes,
-        riskLevel: routing.permission.riskLevel,
-        validationPassed: validation.passed,
-        blockingFailureCount: validation.blockingFailures.length,
-        memoryProposalCount: reasoning.draft.memoryProposals.length,
-      },
-      ...(validation.passed && project !== null && memoryProposal.records.length > 0
-        ? {
-            memoryProposal: {
-              changeSetId: reasoningChangeSetId(project.projectId, request.requestId),
-              expectedRevision: project.revision,
-              records: memoryProposal.records,
-              rationale: memoryProposal.rationale,
-            },
-          }
-        : {}),
-    });
-
-    return {
-      requestId: request.requestId,
-      status,
-      routing,
-      result: validation.passed
-        ? {
-            answer: reasoning.draft.answer,
-            responseId: reasoning.responseId,
-            memoryChangeSetId: committed.memoryChangeSetId,
-            memoryProposalCount: memoryProposal.records.length,
-          }
-        : null,
-      assumptions: reasoning.draft.assumptions,
-      unknowns: reasoning.draft.unknowns,
-      risks: reasoning.draft.risks,
-      validation,
-      memoryUpdates: validation.passed ? memoryProposal.updates : [],
-      toolActions: [],
-      errors: validation.passed ? [] : blockedErrors(validation.blockingFailures),
-    };
+        unknowns: reasoning.draft.unknowns,
+        risks: reasoning.draft.risks,
+        validation,
+        memoryUpdates: validation.passed ? memoryProposal.updates : [],
+        toolActions: [],
+        errors: validation.passed ? [] : blockedErrors(validation.blockingFailures),
+      };
+    } finally {
+      lease.release();
+    }
   }
 }

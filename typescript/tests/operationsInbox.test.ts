@@ -76,7 +76,8 @@ describe("buildOperationsInbox", () => {
 
     const remindersReport = inbox.sources.find((entry) => entry.source === "reminders");
     assert.equal(remindersReport?.status, "unavailable");
-    assert.ok(remindersReport?.reason);
+    assert.equal(remindersReport?.reason, "Reminders source is temporarily unavailable.");
+    assert.doesNotMatch(remindersReport?.reason ?? "", /must not be called/);
     // Maintenance must still succeed even though reminders failed.
     const maintenanceReport = inbox.sources.find((entry) => entry.source === "maintenance");
     assert.equal(maintenanceReport?.status, "available");

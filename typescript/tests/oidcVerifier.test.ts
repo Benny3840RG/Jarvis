@@ -9,6 +9,7 @@ const config = {
   audience: "jarvis-api",
   jwksUrl: "https://issuer.example.com/.well-known/jwks.json",
   clockSkewSeconds: 0,
+  subject: "benny",
 };
 
 function encode(value: string | Uint8Array): string {

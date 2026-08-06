@@ -109,6 +109,7 @@ jobs:
           set -euo pipefail
 
           sync_log="$RUNNER_TEMP/convex-development-sync.log"
+          redacted_sync_log="$RUNNER_TEMP/convex-development-sync.redacted.log"
           diagnostic_file="$RUNNER_TEMP/convex-development-sync-diagnostic.md"
 
           set +e
@@ -117,15 +118,15 @@ jobs:
           set -e
 
           if [[ "$sync_status" -ne 0 ]]; then
-            diagnostic_lines="$({
-              grep -Ei 'error|failed|invalid|unauthor|forbidden|deploy|convex|network|timeout|permission|credential|key' "$sync_log" || true
-            } | tail -n 60 | sed -E \
-              -e 's/(Bearer )[A-Za-z0-9._~+\/-]+/\1[REDACTED]/g' \
-              -e 's/(sk-[A-Za-z0-9_-]{12})[A-Za-z0-9_-]+/\1[REDACTED]/g' \
-              -e 's/([A-Za-z0-9_-]{24})[A-Za-z0-9_-]{20,}/\1[REDACTED]/g')"
-
-            if [[ -z "$diagnostic_lines" ]]; then
-              diagnostic_lines="$(tail -n 40 "$sync_log")"
+            if node scripts/redact-commissioning-log.mjs "$sync_log" "$redacted_sync_log"; then
+              diagnostic_lines="$({
+                grep -Ei 'error|failed|invalid|unauthor|forbidden|deploy|convex|network|timeout|permission|credential|key' "$redacted_sync_log" || true
+              } | tail -n 60)"
+              if [[ -z "$diagnostic_lines" ]]; then
+                diagnostic_lines="No safe diagnostic lines were available."
+              fi
+            else
+              diagnostic_lines="Diagnostic output withheld because safe redaction could not be proven."
             fi
 
             cat >"$diagnostic_file" <<EOF
@@ -165,35 +166,7 @@ jobs:
           redact_file() {
             local input_file="$1"
             local output_file="$2"
-
-            node --input-type=module - "$input_file" "$output_file" <<'NODE'
-          import fs from "node:fs";
-
-          const inputPath = process.argv[2];
-          const outputPath = process.argv[3];
-          let text = fs.existsSync(inputPath) ? fs.readFileSync(inputPath, "utf8") : "";
-
-          for (const secret of [
-            process.env.OPENAI_API_KEY,
-            process.env.JARVIS_SERVICE_TOKEN,
-            process.env.CONVEX_DEPLOY_KEY,
-          ]) {
-            if (secret) {
-              text = text.split(secret).join("[REDACTED]");
-            }
-          }
-
-          text = text
-            .replace(/(Authorization\s*:\s*Bearer\s+)[^\s"',]+/gi, "$1[REDACTED]")
-            .replace(/(Bearer\s+)[A-Za-z0-9._~+\/-]+/g, "$1[REDACTED]")
-            .replace(/\bsk-(?:proj-)?[A-Za-z0-9_-]{8,}\b/g, "[REDACTED_OPENAI_KEY]")
-            .replace(
-              /((?:OPENAI_API_KEY|JARVIS_SERVICE_TOKEN|CONVEX_DEPLOY_KEY)\s*[:=]\s*)[^\s"',]+/g,
-              "$1[REDACTED]",
-            );
-
-          fs.writeFileSync(outputPath, text);
-          NODE
+            node scripts/redact-commissioning-log.mjs "$input_file" "$output_file"
           }
 
           publish_totality_diagnostic() {
@@ -201,9 +174,13 @@ jobs:
             local http_status="$2"
             local curl_status="$3"
 
-            redact_file "$totality_response" "$redacted_totality_response"
+            if ! redact_file "$totality_response" "$redacted_totality_response"; then
+              printf '%s\n' "Response output withheld because safe redaction could not be proven." >"$redacted_totality_response"
+            fi
             tail -n 100 "$server_log" >"$server_log_tail" || true
-            redact_file "$server_log_tail" "$redacted_server_log_tail"
+            if ! redact_file "$server_log_tail" "$redacted_server_log_tail"; then
+              printf '%s\n' "Server log output withheld because safe redaction could not be proven." >"$redacted_server_log_tail"
+            fi
 
             echo "::error::$message"
             echo "Totality HTTP status: $http_status"
@@ -256,7 +233,9 @@ jobs:
           if [[ "$ready" != true ]]; then
             echo "::error::Jarvis HTTP service did not become healthy."
             tail -n 100 "$server_log" >"$server_log_tail" || true
-            redact_file "$server_log_tail" "$redacted_server_log_tail"
+            if ! redact_file "$server_log_tail" "$redacted_server_log_tail"; then
+              printf '%s\n' "Server log output withheld because safe redaction could not be proven." >"$redacted_server_log_tail"
+            fi
             sed 's/^/  /' "$redacted_server_log_tail" || true
             exit 1
           fi

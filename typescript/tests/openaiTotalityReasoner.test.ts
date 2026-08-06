@@ -100,6 +100,7 @@ describe("OpenAI Totality reasoner", () => {
 
     const body = JSON.parse(String(capturedInit?.body)) as Record<string, unknown>;
     assert.equal(body.store, false);
+    assert.equal(body.max_output_tokens, 4_096);
     assert.deepEqual(body.tools, undefined);
     const input = JSON.parse(String(body.input)) as Record<string, unknown>;
     assert.deepEqual(input.projectContext, makeContext().project);
