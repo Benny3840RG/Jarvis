@@ -1,6 +1,3 @@
-Warning: truncated output (original token count: 71835)
-Total output lines: 10007
-
 {
   "openapi": "3.1.0",
   "jsonSchemaDialect": "https://json-schema.org/draft/2020-12/schema",
@@ -3280,7 +3277,3003 @@ Total output lines: 10007
         },
         "responses": {
           "200": {
-            "description": "D…21835 tokens truncated… "$ref": "#/components/schemas/BackupArchiveInput"
+            "description": "Delivery attempts for this quote.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuoteDeliveryListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/brief": {
+      "get": {
+        "operationId": "getDailyBrief",
+        "summary": "Get the daily brief",
+        "description": "Composes a read-only digest of open tasks, due reminders, active projects, and outstanding quotes. Derived on request from the authoritative stores; nothing is stored.",
+        "tags": ["Briefs"],
+        "x-mcp-tool": {
+          "exposed": true,
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Current daily brief.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BriefResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/errands": {
+      "get": {
+        "operationId": "listErrands",
+        "summary": "List errands",
+        "description": "Returns the authoritative errand list, including any stored locations.",
+        "tags": ["Errands"],
+        "x-mcp-tool": {
+          "exposed": true,
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Current errands.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrandListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createErrand",
+        "summary": "Create an errand",
+        "description": "Creates one pick-up-on-the-way item, optionally tagged with a structured location resolved at the conversation layer. The server stores locations; it never geocodes.",
+        "tags": ["Errands"],
+        "x-mcp-tool": {
+          "exposed": true,
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": false
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateErrandRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Errand created.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrandResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/errands/{errandId}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ErrandId"
+        }
+      ],
+      "get": {
+        "operationId": "getErrand",
+        "summary": "Get one errand",
+        "description": "Returns one errand by identifier.",
+        "tags": ["Errands"],
+        "x-mcp-tool": {
+          "exposed": true,
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Errand found.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrandResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      },
+      "patch": {
+        "operationId": "updateErrand",
+        "summary": "Update an errand",
+        "description": "Updates fields; marking an errand done stamps its completion time once, and reopening clears it.",
+        "tags": ["Errands"],
+        "x-mcp-tool": {
+          "exposed": true,
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateErrandRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Errand updated.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrandResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteErrand",
+        "summary": "Delete an errand",
+        "description": "Permanently removes one errand.",
+        "tags": ["Errands"],
+        "x-mcp-tool": {
+          "exposed": true,
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": true,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Errand deleted.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrandResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/builds": {
+      "get": {
+        "operationId": "listBuilds",
+        "summary": "List builds",
+        "description": "Returns the authoritative list of Benny's builds and machines.",
+        "tags": ["Builds"],
+        "x-mcp-tool": {
+          "exposed": true,
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Current builds.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BuildListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createBuild",
+        "summary": "Create a build",
+        "description": "Records one machine or project — the RC crawler, the trailer, a tool.",
+        "tags": ["Builds"],
+        "x-mcp-tool": {
+          "exposed": true,
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": false
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateBuildRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Build created.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BuildResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/builds/{buildId}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/BuildId"
+        }
+      ],
+      "get": {
+        "operationId": "getBuild",
+        "summary": "Get one build",
+        "description": "Returns one build by identifier.",
+        "tags": ["Builds"],
+        "x-mcp-tool": {
+          "exposed": true,
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Build found.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BuildResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      },
+      "patch": {
+        "operationId": "updateBuild",
+        "summary": "Update a build",
+        "description": "Updates a build's name, kind, status, description, nickname, or notes.",
+        "tags": ["Builds"],
+        "x-mcp-tool": {
+          "exposed": true,
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateBuildRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Build updated.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BuildResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteBuild",
+        "summary": "Delete a build",
+        "description": "Permanently removes one build.",
+        "tags": ["Builds"],
+        "x-mcp-tool": {
+          "exposed": true,
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": true,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Build deleted.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BuildResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{projectId}/notes": {
+      "get": {
+        "operationId": "listNotes",
+        "summary": "List notes",
+        "description": "Returns the authoritative, owner+project-scoped list of durable notes. Note creation is not exposed here: it stays on the governed tool-actions execute path (POST /api/v1/projects/{projectId}/tool-actions), which is where the mandatory idempotency/fingerprint contract on note creation is actually enforced.",
+        "tags": ["Notes"],
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          }
+        ],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Current notes for the project.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NoteListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{projectId}/notes/{noteId}": {
+      "parameters": [
+        {
+          "name": "projectId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        {
+          "name": "noteId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "$ref": "#/components/schemas/RecordId"
+          }
+        }
+      ],
+      "get": {
+        "operationId": "getNote",
+        "summary": "Get one note",
+        "description": "Returns one owner+project-scoped note by identifier.",
+        "tags": ["Notes"],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Note found.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NoteResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "removeNote",
+        "summary": "Remove a note",
+        "description": "Deletes one owner+project-scoped note by identifier.",
+        "tags": ["Notes"],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": true,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Note removed.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NoteResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/build-logs": {
+      "get": {
+        "operationId": "listBuildLogs",
+        "summary": "List build log entries",
+        "description": "Returns the dated lore attached to Benny's builds — origins, milestones, failures, anecdotes, notes.",
+        "tags": ["Build Log"],
+        "x-mcp-tool": {
+          "exposed": true,
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Current build log entries.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BuildLogListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createBuildLog",
+        "summary": "Record a build log entry",
+        "description": "Adds one dated entry to a build's story — why it started, a milestone, a failure, an anecdote, or a loose note.",
+        "tags": ["Build Log"],
+        "x-mcp-tool": {
+          "exposed": true,
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": false
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateBuildLogRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Build log entry created.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BuildLogResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/build-logs/{entryId}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/BuildLogEntryId"
+        }
+      ],
+      "get": {
+        "operationId": "getBuildLog",
+        "summary": "Get one build log entry",
+        "description": "Returns one build log entry by identifier.",
+        "tags": ["Build Log"],
+        "x-mcp-tool": {
+          "exposed": true,
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Build log entry found.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BuildLogResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      },
+      "patch": {
+        "operationId": "updateBuildLog",
+        "summary": "Update a build log entry",
+        "description": "Updates a build log entry's build, kind, title, body, or occurred time.",
+        "tags": ["Build Log"],
+        "x-mcp-tool": {
+          "exposed": true,
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateBuildLogRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Build log entry updated.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BuildLogResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteBuildLog",
+        "summary": "Delete a build log entry",
+        "description": "Permanently removes one build log entry.",
+        "tags": ["Build Log"],
+        "x-mcp-tool": {
+          "exposed": true,
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": true,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Build log entry deleted.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BuildLogResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/upgrades": {
+      "get": {
+        "operationId": "listUpgrades",
+        "summary": "List upgrades",
+        "description": "Returns the upgrade chronicle — the changes made to Benny's builds over time.",
+        "tags": ["Upgrades"],
+        "x-mcp-tool": {
+          "exposed": true,
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Current upgrades.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpgradeListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createUpgrade",
+        "summary": "Record an upgrade",
+        "description": "Records one change to a build — what was swapped or modified, why, the before/after, the outcome, and the parts involved.",
+        "tags": ["Upgrades"],
+        "x-mcp-tool": {
+          "exposed": true,
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": false
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateUpgradeRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Upgrade created.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpgradeResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/upgrades/{upgradeId}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/UpgradeId"
+        }
+      ],
+      "get": {
+        "operationId": "getUpgrade",
+        "summary": "Get one upgrade",
+        "description": "Returns one upgrade by identifier.",
+        "tags": ["Upgrades"],
+        "x-mcp-tool": {
+          "exposed": true,
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Upgrade found.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpgradeResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      },
+      "patch": {
+        "operationId": "updateUpgrade",
+        "summary": "Update an upgrade",
+        "description": "Updates an upgrade's build, title, reason, before/after state, outcome, parts, version, or occurred time.",
+        "tags": ["Upgrades"],
+        "x-mcp-tool": {
+          "exposed": true,
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateUpgradeRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Upgrade updated.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpgradeResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteUpgrade",
+        "summary": "Delete an upgrade",
+        "description": "Permanently removes one upgrade.",
+        "tags": ["Upgrades"],
+        "x-mcp-tool": {
+          "exposed": true,
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": true,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Upgrade deleted.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpgradeResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/assets": {
+      "get": {
+        "operationId": "listAssets",
+        "summary": "List assets",
+        "description": "Returns Benny's tools and machines with derived maintenance status (next due, overdue).",
+        "tags": ["Assets"],
+        "x-mcp-tool": {
+          "exposed": true,
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Current assets.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createAsset",
+        "summary": "Create an asset",
+        "description": "Records one tool or machine to keep on top of servicing, with an optional service interval and last-serviced date.",
+        "tags": ["Assets"],
+        "x-mcp-tool": {
+          "exposed": true,
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": false
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAssetRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Asset created.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/assets/{assetId}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/AssetId"
+        }
+      ],
+      "get": {
+        "operationId": "getAsset",
+        "summary": "Get one asset",
+        "description": "Returns one asset by identifier with derived maintenance status.",
+        "tags": ["Assets"],
+        "x-mcp-tool": {
+          "exposed": true,
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Asset found.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      },
+      "patch": {
+        "operationId": "updateAsset",
+        "summary": "Update an asset",
+        "description": "Updates an asset's name, kind, service interval, last-serviced date, or notes.",
+        "tags": ["Assets"],
+        "x-mcp-tool": {
+          "exposed": true,
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateAssetRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Asset updated.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteAsset",
+        "summary": "Delete an asset",
+        "description": "Permanently removes one asset.",
+        "tags": ["Assets"],
+        "x-mcp-tool": {
+          "exposed": true,
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": true,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Asset deleted.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/preferences": {
+      "get": {
+        "operationId": "listPreferences",
+        "summary": "List preferences",
+        "description": "Returns Benny's settings and standing choices — brands, tools, naming, defaults.",
+        "tags": ["Preferences"],
+        "x-mcp-tool": {
+          "exposed": true,
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Current preferences.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreferenceListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createPreference",
+        "summary": "Create a preference",
+        "description": "Records one standing choice as a key/value pair, with an optional category.",
+        "tags": ["Preferences"],
+        "x-mcp-tool": {
+          "exposed": true,
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": false
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePreferenceRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Preference created.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreferenceResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/preferences/{preferenceId}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/PreferenceId"
+        }
+      ],
+      "get": {
+        "operationId": "getPreference",
+        "summary": "Get one preference",
+        "description": "Returns one preference by identifier.",
+        "tags": ["Preferences"],
+        "x-mcp-tool": {
+          "exposed": true,
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Preference found.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreferenceResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      },
+      "patch": {
+        "operationId": "updatePreference",
+        "summary": "Update a preference",
+        "description": "Updates a preference's key, value, or category.",
+        "tags": ["Preferences"],
+        "x-mcp-tool": {
+          "exposed": true,
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdatePreferenceRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Preference updated.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreferenceResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deletePreference",
+        "summary": "Delete a preference",
+        "description": "Permanently removes one preference.",
+        "tags": ["Preferences"],
+        "x-mcp-tool": {
+          "exposed": true,
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": true,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Preference deleted.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreferenceResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/reconciliations": {
+      "get": {
+        "operationId": "listExternalReconciliations",
+        "summary": "List external reconciliation records",
+        "description": "Returns a bounded owner-scoped operator view of external reconciliation state. 503 outside the configured Convex persistence provider.",
+        "tags": ["Operations"],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "parameters": [
+          {
+            "name": "state",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/ExternalReconciliationState"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 50
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Sanitised reconciliation records.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExternalReconciliationListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/reconciliations/{reconciliationId}": {
+      "parameters": [
+        {
+          "name": "reconciliationId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      ],
+      "get": {
+        "operationId": "getExternalReconciliation",
+        "summary": "Get an external reconciliation record",
+        "description": "Returns one sanitised reconciliation record and its durable receipt when present.",
+        "tags": ["Operations"],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Sanitised reconciliation detail.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExternalReconciliationDetailResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{projectId}/tool-actions/{actionId}/revoke": {
+      "post": {
+        "operationId": "revokeToolAction",
+        "summary": "Revoke an approved tool-action proposal before consumption",
+        "description": "Owner-scoped revocation of a pending or approved proposal, gated by the same approvalToken as /approve. Idempotent when repeated with the same reason. Refuses to revoke an action that has already produced a completed execution receipt (already consumed). Never deletes the action or its audit trail.",
+        "tags": ["Tool Actions"],
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "actionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          }
+        ],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RevokeToolActionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Tool-action proposal revoked.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ToolAction"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/operations/inbox": {
+      "get": {
+        "operationId": "getOperationsInbox",
+        "summary": "Get the read-only Operations Inbox",
+        "description": "Composes what genuinely needs the operator's attention now from existing authoritative sources (overdue reminders, overdue/due-soon maintenance; governed tool actions, reconciliation escalations, and quote-delivery problems are reported as a separately-commissioned source rather than fabricated). Each source reports its own availability — one source failing never fails this response or hides another source's items. Read-only: no source is mutated or retried from this endpoint.",
+        "tags": ["Operations"],
+        "x-mcp-tool": {
+          "exposed": true,
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Current Operations Inbox.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperationsInboxResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/operations/activity": {
+      "get": {
+        "operationId": "getOperationsActivity",
+        "summary": "Get one bounded page of the read-only Operations Activity Timeline",
+        "description": "A bounded, cursor-paginated, owner-wide feed of durable audit events across every project scope, newest first. Unlike the Operations Inbox, this endpoint has exactly one source (the audit event log), so a read failure or an unconfigured deployment is reported as {status: \"unavailable\", reason} rather than as an empty page or a thrown error — an empty page always means \"no activity\", never \"the read failed\". Each event's summary is built only from a fixed, known-safe subset of its fields; an unrecognized event type falls back to a type-only summary rather than exposing its raw payload. Read-only: nothing is mutated from this endpoint.",
+        "tags": ["Operations"],
+        "x-mcp-tool": {
+          "exposed": true,
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 50
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "One page of the Operations Activity Timeline.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActivityTimelineResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "serviceToken": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "opaque",
+        "description": "Single-user Jarvis service token. Send it only in the Authorization header. Never place it in URLs, logs, tool arguments, widget state, or model-visible output."
+      }
+    },
+    "headers": {
+      "RequestId": {
+        "description": "Opaque request correlation identifier safe to include in support reports.",
+        "schema": {
+          "type": "string",
+          "minLength": 8,
+          "maxLength": 128
+        }
+      }
+    },
+    "parameters": {
+      "TaskId": {
+        "name": "taskId",
+        "in": "path",
+        "required": true,
+        "description": "Opaque task identifier returned by Jarvis.",
+        "schema": {
+          "$ref": "#/components/schemas/RecordId"
+        }
+      },
+      "ReminderId": {
+        "name": "reminderId",
+        "in": "path",
+        "required": true,
+        "description": "Opaque reminder identifier returned by Jarvis.",
+        "schema": {
+          "$ref": "#/components/schemas/RecordId"
+        }
+      },
+      "IdempotencyKey": {
+        "name": "Idempotency-Key",
+        "in": "header",
+        "required": true,
+        "description": "A caller-generated key used to make retries safe. Reuse it only for an identical request body.",
+        "schema": {
+          "type": "string",
+          "minLength": 16,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9._:-]+$"
+        }
+      },
+      "ClientId": {
+        "name": "clientId",
+        "in": "path",
+        "required": true,
+        "description": "Opaque client identifier returned by Jarvis.",
+        "schema": {
+          "$ref": "#/components/schemas/RecordId"
+        }
+      },
+      "ProjectId": {
+        "name": "projectId",
+        "in": "path",
+        "required": true,
+        "description": "Opaque project identifier returned by Jarvis.",
+        "schema": {
+          "$ref": "#/components/schemas/RecordId"
+        }
+      },
+      "QuoteId": {
+        "name": "quoteId",
+        "in": "path",
+        "required": true,
+        "description": "Opaque quote identifier returned by Jarvis.",
+        "schema": {
+          "$ref": "#/components/schemas/RecordId"
+        }
+      },
+      "QuoteRevisionNumber": {
+        "name": "revision",
+        "in": "path",
+        "required": true,
+        "description": "1-based quote revision number.",
+        "schema": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "ErrandId": {
+        "name": "errandId",
+        "in": "path",
+        "required": true,
+        "description": "Opaque errand identifier returned by Jarvis.",
+        "schema": {
+          "$ref": "#/components/schemas/RecordId"
+        }
+      },
+      "BuildId": {
+        "name": "buildId",
+        "in": "path",
+        "required": true,
+        "description": "Opaque build identifier returned by Jarvis.",
+        "schema": {
+          "$ref": "#/components/schemas/RecordId"
+        }
+      },
+      "BuildLogEntryId": {
+        "name": "entryId",
+        "in": "path",
+        "required": true,
+        "description": "Opaque build log entry identifier returned by Jarvis.",
+        "schema": {
+          "$ref": "#/components/schemas/RecordId"
+        }
+      },
+      "UpgradeId": {
+        "name": "upgradeId",
+        "in": "path",
+        "required": true,
+        "description": "Opaque upgrade identifier returned by Jarvis.",
+        "schema": {
+          "$ref": "#/components/schemas/RecordId"
+        }
+      },
+      "AssetId": {
+        "name": "assetId",
+        "in": "path",
+        "required": true,
+        "description": "Opaque asset identifier returned by Jarvis.",
+        "schema": {
+          "$ref": "#/components/schemas/RecordId"
+        }
+      },
+      "PreferenceId": {
+        "name": "preferenceId",
+        "in": "path",
+        "required": true,
+        "description": "Opaque preference identifier returned by Jarvis.",
+        "schema": {
+          "$ref": "#/components/schemas/RecordId"
+        }
+      }
+    },
+    "responses": {
+      "BadRequest": {
+        "description": "The request could not be parsed or violated the transport contract.",
+        "$ref": "#/components/responses/ProblemResponse"
+      },
+      "Unauthorized": {
+        "description": "The service token is missing, invalid, or revoked.",
+        "headers": {
+          "WWW-Authenticate": {
+            "schema": {
+              "type": "string",
+              "example": "Bearer"
+            }
+          },
+          "X-Request-Id": {
+            "$ref": "#/components/headers/RequestId"
+          }
+        },
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "#/components/schemas/ProblemDetails"
+            }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "The requested record does not exist for this owner.",
+        "$ref": "#/components/responses/ProblemResponse"
+      },
+      "Conflict": {
+        "description": "The request conflicts with current state, an idempotency key, or an empty-target requirement.",
+        "$ref": "#/components/responses/ProblemResponse"
+      },
+      "PayloadTooLarge": {
+        "description": "The backup archive exceeds the 10 MiB limit.",
+        "$ref": "#/components/responses/ProblemResponse"
+      },
+      "UnprocessableEntity": {
+        "description": "The request is syntactically valid but violates Jarvis validation or safety rules.",
+        "$ref": "#/components/responses/ProblemResponse"
+      },
+      "TooManyRequests": {
+        "description": "The caller has exceeded the configured request rate.",
+        "headers": {
+          "Retry-After": {
+            "description": "Seconds before the caller should retry.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "X-Request-Id": {
+            "$ref": "#/components/headers/RequestId"
+          }
+        },
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "#/components/schemas/ProblemDetails"
+            }
+          }
+        }
+      },
+      "ServiceUnavailable": {
+        "description": "A required persistence, reliability, or safety dependency is unavailable.",
+        "$ref": "#/components/responses/ProblemResponse"
+      },
+      "InternalServerError": {
+        "description": "Jarvis failed without exposing credentials or internal exception details.",
+        "$ref": "#/components/responses/ProblemResponse"
+      },
+      "ProblemResponse": {
+        "description": "A problem response.",
+        "headers": {
+          "X-Request-Id": {
+            "$ref": "#/components/headers/RequestId"
+          }
+        },
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "#/components/schemas/ProblemDetails"
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "RecordId": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 256,
+        "pattern": "^[^\\s]+$",
+        "description": "Opaque identifier. Clients must not parse provider-specific structure."
+      },
+      "TimestampMs": {
+        "type": "integer",
+        "format": "int64",
+        "minimum": 0,
+        "description": "Unix timestamp in milliseconds."
+      },
+      "HealthResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["status", "service", "version", "time"],
+        "properties": {
+          "status": {
+            "const": "ok"
+          },
+          "service": {
+            "const": "jarvis"
+          },
+          "version": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "time": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "HelpResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["apiVersion", "capabilities"],
+        "properties": {
+          "apiVersion": {
+            "const": "v1"
+          },
+          "capabilities": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Capability"
+            }
+          }
+        }
+      },
+      "Capability": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["operationId", "summary", "mutating", "destructive", "mcpExposed"],
+        "properties": {
+          "operationId": {
+            "type": "string",
+            "pattern": "^[A-Za-z][A-Za-z0-9]+$"
+          },
+          "summary": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160
+          },
+          "mutating": {
+            "type": "boolean"
+          },
+          "destructive": {
+            "type": "boolean"
+          },
+          "mcpExposed": {
+            "type": "boolean"
+          }
+        }
+      },
+      "SystemStatus": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "status",
+          "version",
+          "sourceVersion",
+          "provider",
+          "reconciliation",
+          "integrations",
+          "timezone",
+          "layers",
+          "zState",
+          "checkedAt"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": ["ok", "degraded", "unavailable"]
+          },
+          "version": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "sourceVersion": {
+            "type": "string",
+            "minLength": 7,
+            "maxLength": 64,
+            "description": "Build commit or immutable source identifier."
+          },
+          "provider": {
+            "$ref": "#/components/schemas/ProviderStatus"
+          },
+          "reconciliation": {
+            "$ref": "#/components/schemas/ReconciliationStatus"
+          },
+          "integrations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/IntegrationStatus"
+            }
+          },
+          "timezone": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "examples": ["Australia/Melbourne"]
+          },
+          "layers": {
+            "$ref": "#/components/schemas/LayersStatus"
+          },
+          "zState": {
+            "type": "string",
+            "enum": ["disabled", "stabilising", "active", "suspended"]
+          },
+          "checkedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ReconciliationStatus": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["state", "enabled"],
+        "properties": {
+          "state": {
+            "type": "string",
+            "enum": ["disabled", "starting", "running", "stopping", "stopped", "degraded"]
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "freshnessMs": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "workerId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "startedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "lastCycleStartedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "lastCycleCompletedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "lastCycleProcessed": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "lastCycleOutcome": {
+            "type": "string",
+            "enum": ["success", "degraded", "failed"]
+          },
+          "lastCycleFailureCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "lastSuccessfulCycleAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "consecutiveFailureCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "lastErrorCode": {
+            "type": "string",
+            "enum": ["reconciliation-loop-failed", "reconciliation-cycle-failed"]
+          }
+        }
+      },
+      "ProviderStatus": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "reachability", "authentication", "schemaCompatibility"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "enum": ["json", "convex"]
+          },
+          "reachability": {
+            "type": "string",
+            "enum": ["ok", "unavailable"]
+          },
+          "authentication": {
+            "type": "string",
+            "enum": ["not-required", "ok", "failed"]
+          },
+          "schemaCompatibility": {
+            "type": "string",
+            "enum": ["compatible", "incompatible", "unknown"]
+          },
+          "deploymentVersion": {
+            "oneOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "LayersStatus": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "runtime",
+          "domains",
+          "integration",
+          "orchestration",
+          "safety",
+          "adaptive",
+          "autonomy",
+          "reliability"
+        ],
+        "properties": {
+          "runtime": {
+            "$ref": "#/components/schemas/LayerStatus"
+          },
+          "domains": {
+            "$ref": "#/components/schemas/LayerStatus"
+          },
+          "integration": {
+            "$ref": "#/components/schemas/LayerStatus"
+          },
+          "orchestration": {
+            "$ref": "#/components/schemas/LayerStatus"
+          },
+          "safety": {
+            "$ref": "#/components/schemas/LayerStatus"
+          },
+          "adaptive": {
+            "$ref": "#/components/schemas/LayerStatus"
+          },
+          "autonomy": {
+            "$ref": "#/components/schemas/LayerStatus"
+          },
+          "reliability": {
+            "$ref": "#/components/schemas/LayerStatus"
+          }
+        }
+      },
+      "LayerStatus": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["status"],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": ["ready", "partial", "inactive", "blocked"]
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          }
+        }
+      },
+      "ConversationRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["message"],
+        "properties": {
+          "message": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 10000
+          },
+          "context": {
+            "type": "object",
+            "maxProperties": 32,
+            "additionalProperties": true,
+            "description": "Small task-specific context only. Do not send full conversation transcripts or credentials."
+          },
+          "mode": {
+            "type": "string",
+            "enum": ["plan", "execute"],
+            "default": "execute"
+          }
+        }
+      },
+      "ConversationResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["requestId", "parsed", "plan", "safety"],
+        "properties": {
+          "requestId": {
+            "type": "string",
+            "minLength": 8,
+            "maxLength": 128
+          },
+          "parsed": {
+            "$ref": "#/components/schemas/ParsedConversation"
+          },
+          "plan": {
+            "$ref": "#/components/schemas/ExecutionPlan"
+          },
+          "outputs": {
+            "type": "array",
+            "items": true
+          },
+          "safety": {
+            "$ref": "#/components/schemas/SafetyDecision"
+          }
+        }
+      },
+      "ParsedConversation": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["text", "intent", "entities", "context"],
+        "properties": {
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 10000
+          },
+          "intent": {
+            "type": "string",
+            "enum": ["greeting", "planning", "memory", "general"]
+          },
+          "entities": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "context": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      },
+      "ExecutionPlan": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["steps"],
+        "properties": {
+          "steps": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 64,
+            "items": {
+              "$ref": "#/components/schemas/PlanStep"
+            }
+          }
+        }
+      },
+      "PlanStep": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["module", "action", "payload"],
+        "properties": {
+          "module": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "action": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "payload": true
+        }
+      },
+      "SafetyDecision": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["status", "reasons", "evaluatedCategories"],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": ["ok", "warning", "blocked"]
+          },
+          "reasons": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 500
+            }
+          },
+          "evaluatedCategories": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "enum": ["domain", "cross-domain", "memory", "reliability", "proposal"]
+            }
+          }
+        }
+      },
+      "Task": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "title", "completed", "category", "createdAt"],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/RecordId"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "completed": {
+            "type": "boolean"
+          },
+          "category": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "createdAt": {
+            "$ref": "#/components/schemas/TimestampMs"
+          }
+        }
+      },
+      "CreateTaskRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["title"],
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "category": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "default": "personal"
+          }
+        }
+      },
+      "UpdateTaskRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "minProperties": 1,
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "category": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          }
+        }
+      },
+      "TaskResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["data"],
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/Task"
+          }
+        }
+      },
+      "TaskListResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["data", "count"],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Task"
+            }
+          },
+          "count": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "ReminderDueInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["text"],
+        "properties": {
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500,
+            "description": "Exact due text to preserve, such as tomorrow 9am or after Claire calls."
+          },
+          "timezone": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "description": "IANA timezone used only for local wall-clock input. Defaults to the configured Jarvis timezone.",
+            "examples": ["Australia/Melbourne"]
+          }
+        }
+      },
+      "Reminder": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "title", "createdAt"],
+        "dependentRequired": {
+          "dueAt": ["dueRaw", "dueTimezone"],
+          "dueTimezone": ["dueRaw", "dueAt"]
+        },
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/RecordId"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "dueRaw": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "dueAt": {
+            "$ref": "#/components/schemas/TimestampMs"
+          },
+          "dueTimezone": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "createdAt": {
+            "$ref": "#/components/schemas/TimestampMs"
+          }
+        }
+      },
+      "CreateReminderRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["title"],
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "due": {
+            "$ref": "#/components/schemas/ReminderDueInput"
+          }
+        }
+      },
+      "UpdateReminderRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "minProperties": 1,
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "due": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ReminderDueInput"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "ReminderResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["data"],
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/Reminder"
+          }
+        }
+      },
+      "ReminderListResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["data", "count"],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Reminder"
+            }
+          },
+          "count": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "AssistantState": {
+        "type": "object",
+        "additionalProperties": true,
+        "description": "JSON-safe Jarvis runtime state. It may contain provider record references that are remapped during restore."
+      },
+      "BackupArchive": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["format", "version", "createdAt", "state", "tasks", "reminders"],
+        "properties": {
+          "format": {
+            "const": "jarvis-backup"
+          },
+          "version": {
+            "const": 2
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "state": {
+            "$ref": "#/components/schemas/AssistantState"
+          },
+          "tasks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Task"
+            }
+          },
+          "reminders": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Reminder"
+            }
+          }
+        }
+      },
+      "BackupArchiveInput": {
+        "type": "object",
+        "description": "A version 1 or version 2 Jarvis backup archive. Version 1 is accepted for migration compatibility.",
+        "required": ["format", "version", "createdAt", "state", "tasks", "reminders"],
+        "properties": {
+          "format": {
+            "const": "jarvis-backup"
+          },
+          "version": {
+            "type": "integer",
+            "enum": [1, 2]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "state": {
+            "$ref": "#/components/schemas/AssistantState"
+          },
+          "tasks": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "reminders": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "BackupVerificationResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["valid", "format", "version", "taskCount", "reminderCount"],
+        "properties": {
+          "valid": {
+            "const": true
+          },
+          "format": {
+            "const": "jarvis-backup"
+          },
+          "version": {
+            "type": "integer",
+            "enum": [1, 2]
+          },
+          "taskCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "reminderCount": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "RestoreBackupRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["archive", "confirmEmptyTarget"],
+        "properties": {
+          "archive": {
+            "$ref": "#/components/schemas/BackupArchiveInput"
           },
           "confirmEmptyTarget": {
             "const": true,
