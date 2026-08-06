@@ -1,14 +1,17 @@
+import { createPersistenceFromEnv } from "../persistence/persistence.js";
 import { runGovernedAutonomyDemo } from "./autonomyDemo.js";
 import { createAgentSystem } from "./system.js";
 import { runSystemCheck } from "./systemCheck.js";
 
 async function main(): Promise<void> {
-  const report = await runSystemCheck(createAgentSystem());
+  const persistence = createPersistenceFromEnv();
+  const system = createAgentSystem({ persistence });
+  const report = await runSystemCheck(system);
 
   console.log("=== JARVIS AGENT SYSTEM CHECK ===");
   console.log(JSON.stringify(report, null, 2));
 
-  const autonomy = runGovernedAutonomyDemo(createAgentSystem());
+  const autonomy = runGovernedAutonomyDemo(system);
   console.log("=== GOVERNED AUTONOMY DEMO ===");
   console.log(JSON.stringify(autonomy, null, 2));
   console.log(

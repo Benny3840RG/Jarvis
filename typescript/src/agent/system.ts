@@ -3,6 +3,11 @@ import { DomainRouter } from "./domainRouter.js";
 import { BusinessEngine } from "./businessEngine.js";
 import { HomeEngine } from "./homeEngine.js";
 import { WorkshopEngine } from "./workshopEngine.js";
+import {
+  InMemoryDomainStateStore,
+  PersistentDomainStateStore,
+  type DomainStateStore,
+} from "./domainState.js";
 import { OrchestrationGraph, defaultGraphConfig } from "./graph.js";
 import { HealthMonitor } from "./healthMonitor.js";
 import { LearningEngine } from "./learningEngine.js";
@@ -16,6 +21,7 @@ import { SafetyEnvelope } from "./safetyEnvelope.js";
 import { ValidationSuite } from "./validationSuite.js";
 import { WorkflowGenerator } from "./workflowGenerator.js";
 import { ZState } from "./zState.js";
+import type { PersistenceProvider } from "../persistence/types.js";
 
 export interface AgentSystem {
   conversation: ConversationService;
@@ -25,20 +31,38 @@ export interface AgentSystem {
   memoryManager: MemoryManager;
   validation: ValidationSuite;
   zState: ZState;
+  domainStateStore: DomainStateStore;
+}
+
+export interface AgentSystemOptions {
+  health?: HealthMonitor;
+  persistence?: PersistenceProvider;
+  domainStateStore?: DomainStateStore;
 }
 
 /**
- * Composition root for the isolated agent simulation. Wires every module into a
- * single governed orchestrator. In-memory only; nothing persists. Without an
- * evidence-backed health monitor, autonomy fails closed with unknown health.
+ * Composition root for the governed agent runtime. Domain state is durable when
+ * a Jarvis persistence provider is supplied; tests may inject the explicit
+ * in-memory store without confusing it for the maintained runtime.
  */
-export function createAgentSystem(health = new HealthMonitor()): AgentSystem {
+export function createAgentSystem(
+  healthOrOptions: HealthMonitor | AgentSystemOptions = new HealthMonitor(),
+): AgentSystem {
+  const options: AgentSystemOptions =
+    healthOrOptions instanceof HealthMonitor ? { health: healthOrOptions } : healthOrOptions;
+  const health = options.health ?? new HealthMonitor();
+  const domainStateStore =
+    options.domainStateStore ??
+    (options.persistence
+      ? new PersistentDomainStateStore(options.persistence)
+      : new InMemoryDomainStateStore());
+
   const conversation = new ConversationService();
   const memory = new MemoryService();
 
-  const workshop = new WorkshopEngine();
-  const business = new BusinessEngine();
-  const home = new HomeEngine();
+  const workshop = new WorkshopEngine(domainStateStore);
+  const business = new BusinessEngine(domainStateStore);
+  const home = new HomeEngine(domainStateStore);
 
   const router = new DomainRouter(workshop, business, home);
   const safety = new SafetyEnvelope();
@@ -69,5 +93,14 @@ export function createAgentSystem(health = new HealthMonitor()): AgentSystem {
     memoryManager,
   });
 
-  return { conversation, orchestrator, learning, prediction, memoryManager, validation, zState };
+  return {
+    conversation,
+    orchestrator,
+    learning,
+    prediction,
+    memoryManager,
+    validation,
+    zState,
+    domainStateStore,
+  };
 }

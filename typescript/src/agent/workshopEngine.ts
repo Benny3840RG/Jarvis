@@ -1,43 +1,33 @@
 import type { DomainEngine } from "./domainRouter.js";
+import {
+  InMemoryDomainStateStore,
+  type DomainStateStore,
+  type DomainTool,
+  type DomainInventoryItem,
+} from "./domainState.js";
 import { asNumber, asString, type Payload } from "./types.js";
 
-interface Tool {
-  id: string;
-  name: string;
-  inUse: boolean;
-}
-
-interface InventoryItem {
-  id: string;
-  name: string;
-  quantity: number;
+function clone<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
 }
 
 export class WorkshopEngine implements DomainEngine {
-  private readonly tools: Tool[] = [
-    { id: "t1", name: "Drill", inUse: false },
-    { id: "t2", name: "Saw", inUse: false },
-  ];
-
-  private readonly inventory: InventoryItem[] = [
-    { id: "i1", name: "Screws", quantity: 100 },
-    { id: "i2", name: "Timber", quantity: 20 },
-  ];
+  constructor(private readonly store: DomainStateStore = new InMemoryDomainStateStore()) {}
 
   handle(action: string, payload: Payload): Promise<unknown> {
-    return Promise.resolve(this.dispatch(action, payload));
+    return this.dispatch(action, payload);
   }
 
-  private dispatch(action: string, payload: Payload): unknown {
+  private async dispatch(action: string, payload: Payload): Promise<unknown> {
     switch (action) {
       case "list_tools":
-        return this.tools;
+        return (await this.store.load()).workshop.tools;
       case "use_tool":
         return this.setToolInUse(asString(payload.toolId), true);
       case "release_tool":
         return this.setToolInUse(asString(payload.toolId), false);
       case "list_inventory":
-        return this.inventory;
+        return (await this.store.load()).workshop.inventory;
       case "consume_item":
         return this.consumeItem(asString(payload.itemId), asNumber(payload.quantity));
       case "restock_item":
@@ -51,25 +41,42 @@ export class WorkshopEngine implements DomainEngine {
     }
   }
 
-  private setToolInUse(toolId: string, inUse: boolean): unknown {
-    const tool = this.tools.find((candidate) => candidate.id === toolId);
-    if (!tool) return { error: "Tool not found" };
-    tool.inUse = inUse;
-    return tool;
+  private async setToolInUse(toolId: string, inUse: boolean): Promise<unknown> {
+    let result: DomainTool | { error: string } = { error: "Tool not found" };
+    await this.store.update((state) => {
+      const tool = state.workshop.tools.find((candidate) => candidate.id === toolId);
+      if (!tool) return;
+      tool.inUse = inUse;
+      result = tool;
+    });
+    return clone(result);
   }
 
-  private consumeItem(itemId: string, quantity: number): unknown {
-    const item = this.inventory.find((candidate) => candidate.id === itemId);
-    if (!item) return { error: "Item not found" };
-    if (item.quantity < quantity) return { error: "Insufficient quantity" };
-    item.quantity -= quantity;
-    return item;
+  private async consumeItem(itemId: string, quantity: number): Promise<unknown> {
+    if (quantity <= 0) return { error: "Quantity must be positive" };
+    let result: DomainInventoryItem | { error: string } = { error: "Item not found" };
+    await this.store.update((state) => {
+      const item = state.workshop.inventory.find((candidate) => candidate.id === itemId);
+      if (!item) return;
+      if (item.quantity < quantity) {
+        result = { error: "Insufficient quantity" };
+        return;
+      }
+      item.quantity -= quantity;
+      result = item;
+    });
+    return clone(result);
   }
 
-  private restockItem(itemId: string, quantity: number): unknown {
-    const item = this.inventory.find((candidate) => candidate.id === itemId);
-    if (!item) return { error: "Item not found" };
-    item.quantity += quantity;
-    return item;
+  private async restockItem(itemId: string, quantity: number): Promise<unknown> {
+    if (quantity <= 0) return { error: "Quantity must be positive" };
+    let result: DomainInventoryItem | { error: string } = { error: "Item not found" };
+    await this.store.update((state) => {
+      const item = state.workshop.inventory.find((candidate) => candidate.id === itemId);
+      if (!item) return;
+      item.quantity += quantity;
+      result = item;
+    });
+    return clone(result);
   }
 }
