@@ -89,7 +89,9 @@ describe("durable agent domain state", () => {
       ]);
 
       const state = await persistence.loadState();
-      const domainState = state[AGENT_DOMAIN_STATE_KEY] as { version: number; home: { activeScene?: string } };\n      assert.equal(domainState.version, 1);\n      assert.equal(domainState.home.activeScene, "arrival");
+      const domainState = state[AGENT_DOMAIN_STATE_KEY] as { version: number; home: { activeScene?: string } };
+      assert.equal(domainState.version, 1);
+      assert.equal(domainState.home.activeScene, "arrival");
     } finally {
       await rm(directory, { recursive: true, force: true });
     }
