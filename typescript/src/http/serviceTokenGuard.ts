@@ -6,7 +6,7 @@ import { Reflector } from "@nestjs/core";
 import type { FastifyRequest } from "fastify";
 
 import type { HttpAppConfig } from "./config.js";
-import { OidcVerifier } from "./oidcVerifier.js";
+import type { OidcVerifier } from "./oidcVerifier.js";
 import { JarvisProblem } from "./problemDetails.js";
 import { PUBLIC_ROUTE } from "./publicRoute.js";
 import { HTTP_APP_CONFIG, HTTP_OIDC_VERIFIER } from "./tokens.js";
