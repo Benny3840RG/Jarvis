@@ -37,7 +37,7 @@
 
 Statuses above are reconciled to the implementation and evidence records on current `main` baseline `981ee36bfcbeaa406194c18fcab240dac9d3d192`. `Partial` means the repository contains implementation, tests, runbooks, or governance evidence, but the requirement range is not fully closed. `Unverified` means this reconciliation found no current evidence sufficient to assess the range. A `Partial` status is not a commissioning or production claim.
 
-The matrix now records the current reality rather than leaving known foundation controls marked `Unverified`: loopback locality, credential handling, release/operations scaffolding, roadmap linkage, timezone handling, and indeterminate-outcome machinery have repository evidence. The maintained runtime now also has an explicit in-process integration core at the CLI seam — EventBus, ToolGateway, domain registry, memory linker, and tool router — but its durable outbox, Convex composition, governed HTTP wiring, and broader P4 intelligence remain open until separately verified.
+The matrix now records the current reality rather than leaving known foundation controls marked `Unverified`: loopback locality, credential handling, release/operations scaffolding, roadmap linkage, timezone handling, and indeterminate-outcome machinery have repository evidence. The maintained runtime now also has an explicit in-process integration core at the CLI seam — EventBus, ToolGateway, domain registry, memory linker, and tool router — but its durable outbox, Convex composition, governed HTTP wiring, and broader P4 intelligence remain open until separately verified. The integration core is therefore evidence of a maintained foundation, not a claim that the full autonomous runtime is commissioned.
 
 ## Update rules
 
