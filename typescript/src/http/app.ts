@@ -65,6 +65,8 @@ import { ConvexExternalReconciliationStore } from "../persistence/convexExternal
 import type { ExternalReconciliationReadStore } from "../reconciliation/externalReconciliation.js";
 import type { RuntimeReconciliationHealth } from "../reconciliation/runtimeReconciliationHost.js";
 import { resolveHttpAppConfig, type HttpAppConfig } from "./config.js";
+import { evaluateRemoteGatewayRequest } from "./remoteGateway.js";
+import { createOidcVerifier, type OidcVerifier } from "./oidcVerifier.js";
 import { JarvisHttpModule } from "./jarvisHttpModule.js";
 import { REQUEST_ID_HEADER, resolveRequestId } from "./requestId.js";
 import {
@@ -89,6 +91,7 @@ export type CreateJarvisHttpAppOptions = (
   DefaultPersistenceOptions | InjectedPersistenceOptions
 ) & {
   config?: HttpAppConfig;
+  oidcVerifier?: OidcVerifier | null;
   reconciliationHealth?: () => RuntimeReconciliationHealth;
   externalReconciliationReadStore?: ExternalReconciliationReadStore | null;
   logger?: NestApplicationOptions["logger"];
@@ -144,6 +147,12 @@ export async function createJarvisHttpApp(
   const providerName = options.providerName ?? resolvePersistenceProviderName();
   const persistence = options.persistence ?? createPersistenceFromEnv();
   const config = options.config ?? resolveHttpAppConfig();
+  const oidcVerifier =
+    options.oidcVerifier ??
+    (config.authMode === "oidc" && config.oidc !== undefined
+      ? createOidcVerifier(config.oidc)
+      : null);
+  const remoteGateway = config.remoteGateway;
   const telemetry = options.telemetry ?? createPostHogTelemetryFromEnv();
   const usesEnvironment = options.persistence === undefined;
   const reconciliationHealth =
@@ -241,12 +250,51 @@ export async function createJarvisHttpApp(
   const noteStore =
     options.noteStore ?? (usesEnvironment ? new ConvexNoteStore() : new InMemoryNoteStore());
   const adapter = new FastifyAdapter({
+    bodyLimit: remoteGateway?.maxRequestBytes ?? 1_048_576,
     genReqId: (request: IncomingMessage) =>
       resolveRequestId(request.headers[REQUEST_ID_HEADER], [
         config.currentToken,
         config.previousToken,
       ]),
   });
+  if (remoteGateway !== undefined) {
+    adapter.getInstance().addHook("onRequest", async (request, reply) => {
+      const contentLengthHeader = request.headers["content-length"];
+      const contentLength =
+        typeof contentLengthHeader === "string" ? Number(contentLengthHeader) : undefined;
+      const decision = evaluateRemoteGatewayRequest(remoteGateway, {
+        origin: typeof request.headers.origin === "string" ? request.headers.origin : undefined,
+        forwardedProto:
+          typeof request.headers["x-forwarded-proto"] === "string"
+            ? request.headers["x-forwarded-proto"]
+            : undefined,
+        contentLength,
+        clientKey: request.ip,
+      });
+      if (decision.allowed) return;
+      const status =
+        decision.code === "tls-required"
+          ? 400
+          : decision.code === "origin-not-allowed"
+            ? 403
+            : decision.code === "request-too-large"
+              ? 413
+              : 429;
+      if (decision.retryAfterSeconds !== undefined) {
+        reply.header("retry-after", String(decision.retryAfterSeconds));
+      }
+      await reply
+        .code(status)
+        .type("application/problem+json")
+        .send({
+          type: `urn:jarvis:problem:remote-${decision.code}`,
+          title: "Remote Gateway Request Rejected",
+          status,
+          detail: "The request did not satisfy the configured remote gateway policy.",
+          instance: request.url.split("?")[0] ?? "/",
+        });
+    });
+  }
   if (telemetry.enabled) {
     const requestStartedAt = new WeakMap<object, number>();
     adapter.getInstance().addHook("onRequest", (request) => {
@@ -275,6 +323,7 @@ export async function createJarvisHttpApp(
       persistence,
       providerName,
       config,
+      oidcVerifier,
       reconciliationHealth,
       externalReconciliationReadStore,
       totalityPipeline,
