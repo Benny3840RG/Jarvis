@@ -8,6 +8,13 @@ import {
 } from "../src/http/remoteGateway.js";
 import { resolveHttpAppConfig, resolveHttpListenConfig } from "../src/http/config.js";
 
+type GatewayDecision = ReturnType<typeof evaluateRemoteGatewayRequest>;
+
+function rejection(decision: GatewayDecision): string {
+  if (decision.allowed) throw new Error("expected gateway rejection");
+  return decision.code;
+}
+
 const REMOTE_ENV = {
   JARVIS_HTTP_HOST: "0.0.0.0",
   JARVIS_HTTP_PORT: "3000",
@@ -69,13 +76,13 @@ describe("remote gateway request policy", () => {
   });
 
   it("rejects cleartext, disallowed origins, and oversized requests", () => {
-    assert.equal(evaluateRemoteGatewayRequest(policy, request({ forwardedProto: "http" })).code, "tls-required");
+    assert.equal(rejection(evaluateRemoteGatewayRequest(policy, request({ forwardedProto: "http" }))), "tls-required");
     assert.equal(
-      evaluateRemoteGatewayRequest(policy, request({ origin: "https://evil.example.com" })).code,
+      rejection(evaluateRemoteGatewayRequest(policy, request({ origin: "https://evil.example.com" }))),
       "origin-not-allowed",
     );
     assert.equal(
-      evaluateRemoteGatewayRequest(policy, request({ contentLength: policy.maxRequestBytes + 1 })).code,
+      rejection(evaluateRemoteGatewayRequest(policy, request({ contentLength: policy.maxRequestBytes + 1 }))),
       "request-too-large",
     );
   });
@@ -87,6 +94,6 @@ describe("remote gateway request policy", () => {
       JARVIS_RATE_LIMIT_WINDOW_MS: "1000",
     });
     assert.deepEqual(evaluateRemoteGatewayRequest(limited, request()), { allowed: true });
-    assert.equal(evaluateRemoteGatewayRequest(limited, request()).code, "rate-limit-exceeded");
+    assert.equal(rejection(evaluateRemoteGatewayRequest(limited, request())), "rate-limit-exceeded");
   });
 });
