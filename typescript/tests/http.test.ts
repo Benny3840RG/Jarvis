@@ -758,7 +758,7 @@ describe("Jarvis HTTP configuration", () => {
     );
     assert.throws(
       () => resolveHttpListenConfig({ JARVIS_HTTP_HOST: "example.com" }),
-      /Remote HTTP exposure is disabled/,
+      /Remote gateway HTTP exposure/,
     );
     assert.throws(() => resolveHttpListenConfig({ JARVIS_HTTP_PORT: "0" }), /JARVIS_HTTP_PORT/);
     assert.throws(() => resolveHttpListenConfig({ JARVIS_HTTP_PORT: "3.5" }), /JARVIS_HTTP_PORT/);
