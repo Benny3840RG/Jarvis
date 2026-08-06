@@ -1,33 +1,41 @@
 import type { DomainEngine } from "./domainRouter.js";
+import {
+  InMemoryDomainStateStore,
+  type DomainScene,
+  type DomainStateStore,
+} from "./domainState.js";
 import { asString, type Payload } from "./types.js";
 
-interface Scene {
-  name: string;
-  description: string;
-}
-
 export class HomeEngine implements DomainEngine {
-  private readonly scenes: Scene[] = [
-    { name: "arrival", description: "Lights on, kettle on" },
-    { name: "workshop_focus", description: "Workshop lights, music, tools ready" },
-  ];
+  constructor(private readonly store: DomainStateStore = new InMemoryDomainStateStore()) {}
 
   handle(action: string, payload: Payload): Promise<unknown> {
-    return Promise.resolve(this.dispatch(action, payload));
+    return this.dispatch(action, payload);
   }
 
-  private dispatch(action: string, payload: Payload): unknown {
+  private async dispatch(action: string, payload: Payload): Promise<unknown> {
     switch (action) {
       case "list_scenes":
-        return this.scenes;
-      case "activate_scene": {
-        const sceneName = asString(payload.sceneName);
-        const scene = this.scenes.find((candidate) => candidate.name === sceneName);
-        if (!scene) return { error: "Scene not found" };
-        return { activated: scene.name, description: scene.description };
-      }
+        return (await this.store.load()).home.scenes;
+      case "activate_scene":
+        return this.activateScene(asString(payload.sceneName));
       default:
         return { error: `Unknown home action: ${action}` };
     }
+  }
+
+  private async activateScene(sceneName: string): Promise<unknown> {
+    let result: { activated: string; description: string } | { error: string } = {
+      error: "Scene not found",
+    };
+    await this.store.update((state) => {
+      const scene = state.home.scenes.find((candidate) => candidate.name === sceneName);
+      if (!scene) return;
+      state.home.activeScene = scene.name;
+      result = scene;
+    });
+    if ("error" in result) return result;
+    const scene = result as DomainScene;
+    return { activated: scene.name, description: scene.description };
   }
 }
