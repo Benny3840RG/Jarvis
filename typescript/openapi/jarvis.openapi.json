@@ -7361,7 +7361,8 @@
               "timeout",
               "failed",
               "approval-expired",
-              "approval-consumed"
+              "approval-consumed",
+              "safety-blocked"
             ]
           },
           "startedAt": {

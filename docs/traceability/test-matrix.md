@@ -34,3 +34,15 @@
 ## Completion rule
 
 A requirement is not implemented until at least one passing test and one immutable evidence reference are linked in the evidence matrix.
+
+## Current safety-binding evidence
+
+| Requirement range | Passing tests | Evidence reference | Status |
+|---|---|---|---|
+| R-082–R-090 | `safetyBinder.test.ts`, `safetyCategoryMatrix.test.ts` | `src/safety/safetyBinder.ts`, `src/runtime/validation.ts`, `src/actions/toolExecution.ts` | Partial |
+| R-091–R-098C | `safetyCategoryMatrix.test.ts` | `src/safety/safetyBinder.ts` phase coverage for reasoning, memory, and tool lifecycle | Partial |
+| R-105–R-111 | `safetyBinder.test.ts`, `safetyCategoryMatrix.test.ts` | `docs/architecture/immutable-safety-category-binding.md` | Partial |
+
+The tests prove the six-category in-process contract and fail-closed negative
+paths. Convex lifecycle persistence of the complete category-decision object
+remains open and is intentionally not marked complete.

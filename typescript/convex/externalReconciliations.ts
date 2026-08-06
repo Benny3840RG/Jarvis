@@ -136,7 +136,8 @@ function receiptDocument(
       | "reconciliation-escalated"
       | "reconciliation-unavailable"
       | "approval-expired"
-      | "approval-consumed";
+      | "approval-consumed"
+      | "safety-blocked";
     providerErrorCode?: string;
     startedAt: number;
     completedAt: number;

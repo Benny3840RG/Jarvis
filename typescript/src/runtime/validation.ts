@@ -1,3 +1,4 @@
+import { bindSafety } from "../safety/safetyBinder.js";
 import type { PermissionEnvelope, RoutingDecision } from "./totalityPolicy.js";
 
 export type ValidationStatus = "pass" | "warning" | "fail";
@@ -108,6 +109,30 @@ export function validateTotalityResult(input: ValidationInput): ValidationReport
   } else {
     checks.push({ id: "HAZARDS_IDENTIFIED", status: "pass" });
   }
+
+  const safetyBinding = bindSafety({
+    phase: "reasoning",
+    riskLevel: input.routing.permission.riskLevel,
+    hazards,
+    controls: input.controls,
+    domainBound: true,
+    memorySafe: true,
+    reliabilityHealthy: true,
+    proposalSafe: unsupportedClaims.length === 0 && contradictions.length === 0,
+    requiredAuthority: requested?.toolAuthority,
+    grantedAuthority: input.routing.permission.toolAuthority,
+    actionState: requested?.actionState ?? input.routing.permission.actionState,
+    stateValid: true,
+  });
+  const safetyFailures = safetyBinding.categories.flatMap((category) =>
+    category.reasons.map((reason) => `${category.category}: ${reason}`),
+  );
+  checks.push({
+    id: "IMMUTABLE_SAFETY_CATEGORIES",
+    status: safetyBinding.status === "pass" ? "pass" : "fail",
+    ...(safetyFailures.length === 0 ? {} : { message: safetyFailures.join("; ") }),
+  });
+  blockingFailures.push(...safetyFailures.map((reason) => `Safety binding: ${reason}`));
 
   return {
     passed: blockingFailures.length === 0,
