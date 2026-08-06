@@ -13,6 +13,7 @@ import { HomeEngine } from "./domains/homeEngine.js";
 import { SafetyEnvelope } from "./safety/safetyEnvelope.js";
 import { OrchestrationGraph } from "./orchestration/graph.js";
 import { Orchestrator } from "./runtime/orchestrator.js";
+import { createRuntimeIntegrationCore } from "./runtime/integrationCore.js";
 import { WorkflowGenerator } from "./autonomy/workflowGenerator.js";
 import { LearningEngine } from "./adaptive/learningEngine.js";
 import { ReminderService } from "./runtime/reminderService.js";
@@ -180,43 +181,49 @@ export async function runCli(deps: RunCliDependencies = {}): Promise<void> {
   ])
     graph.addEdge(edge);
 
-  const domainRouter = {
-    async route(module: string, action: string, payload: unknown): Promise<unknown> {
-      if (module === "domains" && action === "plan") {
-        const workshopTask = workshop.createTask(
-          "Prototype Jarvis",
-          "Create the first workshop task",
-          "high",
-        );
-        const businessTask = business.createTask(
-          "Submit build update",
-          "Share the current Jarvis progress",
-        );
-        const homeTask = home.createTask(
-          "Reset living room",
-          "Tidy up the living room",
-          "living room",
-        );
-        state.set("lastIntent", String(payload));
-        return {
-          module,
-          action,
-          payload,
-          workshopTask,
-          workshopSummary: workshop.summarize(workshopTask),
-          businessTask,
-          businessSummary: business.summarize(businessTask),
-          homeTask,
-          homeSummary: home.summarize(homeTask),
-          graph: graph.getPlan(),
-          state: state.snapshot(),
-        };
-      }
-      return { module, action, payload };
-    },
-  };
+  const integration = createRuntimeIntegrationCore();
+  integration.domains.register("domains", async (action, payload) => {
+    if (action === "plan") {
+      const workshopTask = workshop.createTask(
+        "Prototype Jarvis",
+        "Create the first workshop task",
+        "high",
+      );
+      const businessTask = business.createTask(
+        "Submit build update",
+        "Share the current Jarvis progress",
+      );
+      const homeTask = home.createTask(
+        "Reset living room",
+        "Tidy up the living room",
+        "living room",
+      );
+      state.set("lastIntent", String(payload));
+      return {
+        module: "domains",
+        action,
+        payload,
+        workshopTask,
+        workshopSummary: workshop.summarize(workshopTask),
+        businessTask,
+        businessSummary: business.summarize(businessTask),
+        homeTask,
+        homeSummary: home.summarize(homeTask),
+        graph: graph.getPlan(),
+        state: state.snapshot(),
+      };
+    }
+    return { module: "domains", action, payload };
+  });
+  for (const domain of ["memory", "runtime"]) {
+    integration.domains.register(domain, async (action, payload) => ({
+      module: domain,
+      action,
+      payload,
+    }));
+  }
 
-  const orchestrator = new Orchestrator(memory, domainRouter, safety);
+  const orchestrator = new Orchestrator(memory, integration.router, safety);
 
   async function saveRuntimeState(extra: AssistantState = {}): Promise<boolean> {
     for (const [key, value] of Object.entries(extra)) state.set(key, value);
