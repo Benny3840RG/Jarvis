@@ -1,37 +1,31 @@
 import type { DomainEngine } from "./domainRouter.js";
+import {
+  InMemoryDomainStateStore,
+  type DomainStateStore,
+  type DomainJob,
+  type JobStatus,
+} from "./domainState.js";
 import { asString, type Payload } from "./types.js";
 
-interface Client {
-  id: string;
-  name: string;
-}
-
-type JobStatus = "new" | "scheduled" | "in_progress" | "completed" | "cancelled";
-
-interface Job {
-  id: string;
-  clientId: string;
-  description: string;
-  status: JobStatus;
+function clone<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
 }
 
 export class BusinessEngine implements DomainEngine {
-  private readonly clients: Client[] = [{ id: "c1", name: "Default Client" }];
-  private readonly jobs: Job[] = [];
-  private sequence = 0;
+  constructor(private readonly store: DomainStateStore = new InMemoryDomainStateStore()) {}
 
   handle(action: string, payload: Payload): Promise<unknown> {
-    return Promise.resolve(this.dispatch(action, payload));
+    return this.dispatch(action, payload);
   }
 
-  private dispatch(action: string, payload: Payload): unknown {
+  private async dispatch(action: string, payload: Payload): Promise<unknown> {
     switch (action) {
       case "list_clients":
-        return this.clients;
+        return (await this.store.load()).business.clients;
       case "add_client":
         return this.addClient(asString(payload.name, "Unnamed"));
       case "list_jobs":
-        return this.jobs;
+        return (await this.store.load()).business.jobs;
       case "create_job":
         return this.createJob(asString(payload.clientId), asString(payload.description));
       case "schedule_job":
@@ -47,27 +41,34 @@ export class BusinessEngine implements DomainEngine {
     }
   }
 
-  private addClient(name: string): Client {
-    const client: Client = { id: `c${(this.sequence += 1)}`, name };
-    this.clients.push(client);
-    return client;
+  private async addClient(name: string): Promise<unknown> {
+    let created: { id: string; name: string } | undefined;
+    await this.store.update((state) => {
+      const id = `c${(state.business.sequence += 1)}`;
+      created = { id, name };
+      state.business.clients.push(created);
+    });
+    return clone(created);
   }
 
-  private createJob(clientId: string, description: string): Job {
-    const job: Job = {
-      id: `j${(this.sequence += 1)}`,
-      clientId,
-      description,
-      status: "new",
-    };
-    this.jobs.push(job);
-    return job;
+  private async createJob(clientId: string, description: string): Promise<unknown> {
+    let created: DomainJob | undefined;
+    await this.store.update((state) => {
+      const id = `j${(state.business.sequence += 1)}`;
+      created = { id, clientId, description, status: "new" };
+      state.business.jobs.push(created);
+    });
+    return clone(created);
   }
 
-  private setJobStatus(jobId: string, status: JobStatus): unknown {
-    const job = this.jobs.find((candidate) => candidate.id === jobId);
-    if (!job) return { error: "Job not found" };
-    job.status = status;
-    return job;
+  private async setJobStatus(jobId: string, status: JobStatus): Promise<unknown> {
+    let result: DomainJob | { error: string } = { error: "Job not found" };
+    await this.store.update((state) => {
+      const job = state.business.jobs.find((candidate) => candidate.id === jobId);
+      if (!job) return;
+      job.status = status;
+      result = job;
+    });
+    return clone(result);
   }
 }
