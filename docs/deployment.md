@@ -111,6 +111,15 @@ All environment variables are loaded from `typescript/.env.local` at startup. Va
 | `OPENAI_API_KEY`                      | **Required** for Totality reasoning             | —                     | Server-side OpenAI API key. Never expose this in browser code, logs, issues, or chat.                                                                                                                             |
 | `JARVIS_HTTP_HOST`                    | Optional                                        | `127.0.0.1`           | Listener address for the HTTP service. Change only to expose the service on a non-loopback interface.                                                                                                             |
 | `JARVIS_HTTP_PORT`                    | Optional                                        | `3000`                | Listener TCP port for the HTTP service. Must be in the valid port range.                                                                                                                                          |
+| `JARVIS_REMOTE_GATEWAY_ENABLED`       | Optional                                        | unset                 | Must be exactly `true` before a non-loopback HTTP bind is accepted.                                                                                                                                                |
+| `JARVIS_TLS_TERMINATED`               | Required for remote HTTP                         | unset                 | Requires an approved TLS terminator and forwarded `X-Forwarded-Proto: https`.                                                                                                                                     |
+| `JARVIS_OIDC_ISSUER`                  | Required for remote HTTP                         | unset                 | HTTPS OIDC issuer URL used to validate bearer-token issuer claims.                                                                                                                                                  |
+| `JARVIS_OIDC_AUDIENCE`                | Required for remote HTTP                         | unset                 | Expected OIDC access-token audience.                                                                                                                                                                                |
+| `JARVIS_OIDC_JWKS_URL`                | Required for remote HTTP                         | unset                 | HTTPS JWKS URL containing RS256 signing keys.                                                                                                                                                                       |
+| `JARVIS_ALLOWED_ORIGINS`              | Required for remote HTTP                         | unset                 | Comma-separated HTTPS browser origins.                                                                                                                                                                              |
+| `JARVIS_MAX_REQUEST_BYTES`            | Optional                                        | `1048576`            | Remote HTTP body limit; bounded to 1024–10485760 bytes.                                                                                                                                                             |
+| `JARVIS_RATE_LIMIT_MAX_REQUESTS`      | Optional                                        | `60`                 | Per-client remote HTTP request budget per window.                                                                                                                                                                   |
+| `JARVIS_RATE_LIMIT_WINDOW_MS`         | Optional                                        | `60000`              | Per-client remote HTTP rate-limit window.                                                                                                                                                                            |
 | `JARVIS_SOURCE_VERSION`               | Optional                                        | `development`         | Git SHA or version string embedded in health and status responses for diagnostics.                                                                                                                                |
 | `JARVIS_DEPLOYMENT_VERSION`           | Optional                                        | —                     | Deployment identifier (e.g. `dev:outgoing-ram-798`) embedded in status responses.                                                                                                                                 |
 | `CONVEX_DEPLOYMENT`                   | Set by Convex                                   | —                     | Set automatically by `npx convex dev` when the project is linked. Required by the Convex SDK and the smoke test (`npm run smoke:convex`). Do not set manually.                                                    |
@@ -206,15 +215,16 @@ CONVEX_URL=https://outgoing-ram-798.convex.cloud
 OPENAI_API_KEY=<server-side OpenAI API key>
 ```
 
-The HTTP and MCP services must retain their loopback defaults:
+The MCP service must retain its loopback default:
 
 ```text
-JARVIS_HTTP_HOST=127.0.0.1
 JARVIS_MCP_HOST=127.0.0.1
 ```
 
-Do not change either value for a remote deployment. Remote exposure requires an approved OAuth 2.1
-or equivalent user-authentication boundary, TLS, origin policy, and deployment review.
+HTTP may use a non-loopback bind only with the repository's explicit remote gateway variables:
+OIDC bearer verification, TLS termination, HTTPS origin policy, request-size and rate limits, and
+an approved hosting/deployment review. These variables create a fail-closed boundary; they do not
+constitute production commissioning or authorise public exposure.
 
 ## Service-token rotation
 

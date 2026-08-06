@@ -45,11 +45,19 @@ by itself sufficient to approve one.
 
 Optional transport values are:
 
-| Variable                    | Default     | Meaning                                                  |
-| --------------------------- | ----------- | -------------------------------------------------------- |
-| `JARVIS_HTTP_HOST`          | `127.0.0.1` | Explicit bind host.                                      |
-| `JARVIS_HTTP_PORT`          | `3000`      | TCP port from 1 through 65535.                           |
-| `JARVIS_DEPLOYMENT_VERSION` | unset       | Safe provider deployment/contract identifier for status. |
+| Variable                                      | Default     | Meaning                                                                             |
+| --------------------------------------------- | ----------- | ----------------------------------------------------------------------------------- |
+| `JARVIS_HTTP_HOST`                            | `127.0.0.1` | Explicit bind host.                                                                 |
+| `JARVIS_HTTP_PORT`                            | `3000`      | TCP port from 1 through 65535.                                                      |
+| `JARVIS_DEPLOYMENT_VERSION`                   | unset       | Safe provider deployment/contract identifier for status.                            |
+| `JARVIS_REMOTE_GATEWAY_ENABLED`               | unset       | Must be exactly `true` before a non-loopback HTTP bind is accepted.                 |
+| `JARVIS_TLS_TERMINATED`                       | unset       | Must be exactly `true`; the approved proxy must forward `X-Forwarded-Proto: https`. |
+| `JARVIS_OIDC_ISSUER` / `JARVIS_OIDC_AUDIENCE` | unset       | Required together for remote HTTP bearer-token verification.                        |
+| `JARVIS_OIDC_JWKS_URL`                        | unset       | Explicit HTTPS JWKS endpoint for RS256 verification.                                |
+| `JARVIS_ALLOWED_ORIGINS`                      | unset       | Comma-separated HTTPS browser origins accepted by the remote gateway.               |
+| `JARVIS_MAX_REQUEST_BYTES`                    | 1048576     | Remote request body limit, bounded to 1024–10485760 bytes.                          |
+| `JARVIS_RATE_LIMIT_MAX_REQUESTS`              | 60          | Per-client remote request budget per window.                                        |
+| `JARVIS_RATE_LIMIT_WINDOW_MS`                 | 60000       | Remote rate-limit window in milliseconds.                                           |
 
 `JARVIS_SOURCE_VERSION` defaults to `development` for local work. Release automation should set
 it to the immutable source commit.
@@ -115,8 +123,12 @@ truth map, including the read-only Operations Inbox (`GET /api/v1/operations/inb
 
 ## Exposure boundary
 
-The default loopback bind is intentional. Remote HTTP and MCP exposure are disabled, not merely
-discouraged, until the planned OAuth 2.1 boundary, TLS, origin policy, and deployment review are
-explicitly approved. The service
-token must remain server-side and must never enter model input, widget state, URLs, logs, or tool
-arguments.
+The default loopback bind remains the supported development posture. A non-loopback HTTP bind is
+accepted only when the remote gateway is explicitly enabled with TLS termination, an HTTPS OIDC
+issuer/audience/JWKS configuration, an allowlisted HTTPS origin set, bounded request size, and a
+per-client rate budget. The proxy must terminate TLS and send `X-Forwarded-Proto: https`; the
+application does not expose a plaintext remote listener.
+
+This repository-side boundary does not commission a hosting provider, create OIDC credentials, or
+approve public exposure. MCP remains loopback-only. The service token must remain server-side and
+must never enter model input, widget state, URLs, logs, or tool arguments.

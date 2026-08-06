@@ -24,6 +24,7 @@ import type { ExternalReconciliationReadStore } from "../reconciliation/external
 import type { RuntimeReconciliationHealth } from "../reconciliation/runtimeReconciliationHost.js";
 import type { ActivityEventReader } from "../operations/activityTimeline.js";
 import type { HttpAppConfig } from "./config.js";
+import type { OidcVerifier } from "./oidcVerifier.js";
 import { ActivityTimelineController } from "./activityTimelineController.js";
 import { BriefController } from "./briefController.js";
 import { BuildController } from "./buildController.js";
@@ -50,6 +51,7 @@ import { ToolActionController } from "./toolActionController.js";
 import { TotalityController } from "./totalityController.js";
 import {
   HTTP_APP_CONFIG,
+  HTTP_OIDC_VERIFIER,
   HTTP_CLIENT_STORE,
   HTTP_PROJECT_STORE,
   HTTP_QUOTE_STORE,
@@ -79,6 +81,7 @@ export type JarvisHttpModuleOptions = {
   reconciliationHealth: () => RuntimeReconciliationHealth;
   externalReconciliationReadStore: ExternalReconciliationReadStore | null;
   config: HttpAppConfig;
+  oidcVerifier: OidcVerifier | null;
   totalityPipeline: TotalityPipeline | null;
   memoryChangeSetService: MemoryChangeSetService | null;
   toolActionService: ToolActionService | null;
@@ -128,6 +131,7 @@ export class JarvisHttpModule {
       ],
       providers: [
         { provide: HTTP_APP_CONFIG, useValue: options.config },
+        { provide: HTTP_OIDC_VERIFIER, useValue: options.oidcVerifier },
         { provide: HTTP_PERSISTENCE, useValue: options.persistence },
         { provide: HTTP_CLIENT_STORE, useValue: options.clientStore },
         { provide: HTTP_PROJECT_STORE, useValue: options.projectStore },
