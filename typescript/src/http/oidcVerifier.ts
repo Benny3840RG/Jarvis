@@ -125,6 +125,10 @@ export function createOidcVerifier(
       const claims = bearerClaims(decodeJson<unknown>(parts[1]));
       const signature = decodeBase64Url(parts[2]);
       const signed = new TextEncoder().encode(`${parts[0]}.${parts[1]}`);
+      const signatureBuffer = new Uint8Array(signature.byteLength);
+      signatureBuffer.set(signature);
+      const signedBuffer = new Uint8Array(signed.byteLength);
+      signedBuffer.set(signed);
       let keys = await loadKeys();
       let key = keys.get(header.kid);
       if (key === undefined) {
@@ -135,8 +139,8 @@ export function createOidcVerifier(
       const valid = await crypto.subtle.verify(
         { name: "RSASSA-PKCS1-v1_5" },
         key,
-        signature,
-        signed,
+        signatureBuffer.buffer,
+        signedBuffer.buffer,
       );
       if (!valid) throw new OidcVerificationError();
 
