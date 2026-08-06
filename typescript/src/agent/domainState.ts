@@ -1,6 +1,7 @@
 import type { PersistenceProvider } from "../persistence/types.js";
 
-export type JobStatus = "new" | "scheduled" | "in_progress" | "completed" | "cancelled";
+export type JobStatus =
+  "new" | "scheduled" | "in_progress" | "completed" | "cancelled";
 
 export interface DomainClient {
   id: string;
@@ -71,7 +72,10 @@ export function initialAgentDomainState(): AgentDomainState {
     home: {
       scenes: [
         { name: "arrival", description: "Lights on, kettle on" },
-        { name: "workshop_focus", description: "Workshop lights, music, tools ready" },
+        {
+          name: "workshop_focus",
+          description: "Workshop lights, music, tools ready",
+        },
       ],
     },
   };
@@ -115,7 +119,8 @@ function parseState(value: unknown): AgentDomainState {
     throw new Error("Persisted business domain state is malformed.");
   }
   const clients = business.clients.map((client, index) => {
-    if (!isRecord(client)) throw new Error(`Persisted client ${index} is malformed.`);
+    if (!isRecord(client))
+      throw new Error(`Persisted client ${index} is malformed.`);
     return {
       id: requiredString(client.id, `client ${index} id`),
       name: requiredString(client.name, `client ${index} name`),
@@ -158,9 +163,14 @@ function parseState(value: unknown): AgentDomainState {
     };
   });
   const inventory = workshop.inventory.map((item, index) => {
-    if (!isRecord(item)) throw new Error(`Persisted inventory item ${index} is malformed.`);
-    const quantity = requiredFiniteNumber(item.quantity, `inventory item ${index} quantity`);
-    if (quantity < 0) throw new Error(`Persisted inventory item ${index} is negative.`);
+    if (!isRecord(item))
+      throw new Error(`Persisted inventory item ${index} is malformed.`);
+    const quantity = requiredFiniteNumber(
+      item.quantity,
+      `inventory item ${index} quantity`,
+    );
+    if (quantity < 0)
+      throw new Error(`Persisted inventory item ${index} is negative.`);
     return {
       id: requiredString(item.id, `inventory item ${index} id`),
       name: requiredString(item.name, `inventory item ${index} name`),
@@ -172,10 +182,14 @@ function parseState(value: unknown): AgentDomainState {
     throw new Error("Persisted home domain state is malformed.");
   }
   const scenes = home.scenes.map((scene, index) => {
-    if (!isRecord(scene)) throw new Error(`Persisted scene ${index} is malformed.`);
+    if (!isRecord(scene))
+      throw new Error(`Persisted scene ${index} is malformed.`);
     return {
       name: requiredString(scene.name, `scene ${index} name`),
-      description: requiredString(scene.description, `scene ${index} description`),
+      description: requiredString(
+        scene.description,
+        `scene ${index} description`,
+      ),
     };
   });
   if (home.activeScene !== undefined && typeof home.activeScene !== "string") {
@@ -188,7 +202,9 @@ function parseState(value: unknown): AgentDomainState {
     workshop: { tools, inventory },
     home: {
       scenes,
-      ...(home.activeScene === undefined ? {} : { activeScene: home.activeScene }),
+      ...(home.activeScene === undefined
+        ? {}
+        : { activeScene: home.activeScene }),
     },
   };
 }
@@ -200,7 +216,9 @@ export function parseAgentDomainState(value: unknown): AgentDomainState {
 export interface DomainStateStore {
   readonly durable: boolean;
   load(): Promise<AgentDomainState>;
-  update(mutator: (state: AgentDomainState) => AgentDomainState | void): Promise<AgentDomainState>;
+  update(
+    mutator: (state: AgentDomainState) => AgentDomainState | void,
+  ): Promise<AgentDomainState>;
 }
 
 export class InMemoryDomainStateStore implements DomainStateStore {
@@ -255,7 +273,8 @@ export class PersistentDomainStateStore implements DomainStateStore {
     return this.enqueue(async () => {
       const currentState = await this.persistence.loadState();
       const current = currentState[AGENT_DOMAIN_STATE_KEY];
-      const draft = current === undefined ? initialAgentDomainState() : parseState(current);
+      const draft =
+        current === undefined ? initialAgentDomainState() : parseState(current);
       const next = parseState(mutator(clone(draft)) ?? draft);
       await this.persistence.saveState({
         ...currentState,
