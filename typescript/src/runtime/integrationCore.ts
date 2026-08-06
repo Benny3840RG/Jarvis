@@ -110,13 +110,14 @@ export class DomainRegistry {
   }
 
   resolve(name: string): DomainHandler {
-    const handler = this.domains.get(name);
-    if (!handler) throw new Error(`Unknown domain: ${name}`);
+    const key = name.trim();
+    const handler = this.domains.get(key);
+    if (!handler) throw new Error(`Unknown domain: ${key}`);
     return handler;
   }
 
   has(name: string): boolean {
-    return this.domains.has(name);
+    return this.domains.has(name.trim());
   }
 
   list(): readonly string[] {
@@ -222,7 +223,13 @@ export class ToolRouter {
     } catch (error: unknown) {
       const failed = await this.events.publish(
         "runtime.route.failed",
-        { route, errorCode: "handler-failed" },
+        {
+          route,
+          errorCode:
+            error instanceof Error && error.message.startsWith("Unknown domain:")
+              ? "route-unavailable"
+              : "handler-failed",
+        },
         correlationId,
       );
       this.memory.link(failed, route, "failed");
