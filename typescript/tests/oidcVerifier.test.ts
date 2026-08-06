@@ -23,11 +23,7 @@ async function createToken(
   const header = encode(JSON.stringify({ alg: algorithm, kid: "key-1", typ: "JWT" }));
   const payload = encode(JSON.stringify(claims));
   const signed = new TextEncoder().encode(`${header}.${payload}`);
-  const signature = await webcrypto.subtle.sign(
-    { name: "RSASSA-PKCS1-v1_5" },
-    privateKey,
-    signed,
-  );
+  const signature = await webcrypto.subtle.sign({ name: "RSASSA-PKCS1-v1_5" }, privateKey, signed);
   return `${header}.${payload}.${encode(new Uint8Array(signature))}`;
 }
 
