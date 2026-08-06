@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 export type RuntimeEvent = {
   version: 1;
   sequence: number;
@@ -10,6 +12,14 @@ export type RuntimeEvent = {
 
 export type RuntimeEventListener = (event: RuntimeEvent) => void | Promise<void>;
 
+export interface RuntimeEventSink {
+  append(event: RuntimeEvent): Promise<void>;
+}
+
+export type EventBusOptions = {
+  sink?: RuntimeEventSink;
+};
+
 export type ListenerFailure = {
   eventSequence: number;
   eventType: string;
@@ -20,6 +30,8 @@ export class EventBus {
   private nextSequence = 1;
   private readonly listeners = new Map<string, Set<RuntimeEventListener>>();
   private readonly listenerFailures: ListenerFailure[] = [];
+
+  constructor(private readonly options: EventBusOptions = {}) {}
 
   subscribe(type: string, listener: RuntimeEventListener): () => void {
     const listeners = this.listeners.get(type) ?? new Set<RuntimeEventListener>();
@@ -39,19 +51,20 @@ export class EventBus {
     const event: RuntimeEvent = {
       version: 1,
       sequence: this.nextSequence++,
-      id: `runtime-event-${String(this.nextSequence - 1)}`,
+      id: `runtime-event-${randomUUID()}`,
       type,
       occurredAt: new Date().toISOString(),
       correlationId,
       payload: { ...payload },
     };
+    await this.options.sink?.append(event);
     const failures = await this.dispatch(event);
     if (failures.length > 0) {
       this.listenerFailures.push(...failures);
       const failureEvent: RuntimeEvent = {
         version: 1,
         sequence: this.nextSequence++,
-        id: `runtime-event-${String(this.nextSequence - 1)}`,
+        id: `runtime-event-${randomUUID()}`,
         type: "runtime.listener.failed",
         occurredAt: new Date().toISOString(),
         correlationId,
@@ -61,6 +74,7 @@ export class EventBus {
           failureCount: failures.length,
         },
       };
+      await this.options.sink?.append(failureEvent);
       await this.dispatch(failureEvent);
     }
     return event;
@@ -246,8 +260,10 @@ export type RuntimeIntegrationCore = {
   router: ToolRouter;
 };
 
-export function createRuntimeIntegrationCore(): RuntimeIntegrationCore {
-  const events = new EventBus();
+export function createRuntimeIntegrationCore(
+  options: EventBusOptions = {},
+): RuntimeIntegrationCore {
+  const events = new EventBus(options);
   const domains = new DomainRegistry();
   const tools = new ToolGateway();
   const memory = new MemoryLinker();

@@ -11,6 +11,7 @@ import type {
   Task,
   TaskUpdate,
 } from "../src/persistence/persistence.js";
+import type { RuntimeEvent } from "../src/runtime/integrationCore.js";
 
 class ScriptedReadline implements ReadlineAdapter {
   readonly prompts: string[] = [];
@@ -556,6 +557,29 @@ describe("interactive CLI persistence wiring", () => {
       logs.output.some((line) => line.includes("Use `task add")),
       false,
     );
+  });
+
+  it("composes an injected durable runtime-event sink at the CLI seam", async () => {
+    const persistence = new MockPersistence();
+    const events: RuntimeEvent[] = [];
+    const logs = capture();
+    await runCli({
+      persistence,
+      readline: new ScriptedReadline(["plan workshop task", "exit"]),
+      stdout: logs.stdout,
+      stderr: logs.stderr,
+      runtimeEventSink: {
+        async append(event) {
+          events.push(event);
+        },
+      },
+    });
+
+    assert.deepEqual(
+      events.map((event) => event.type),
+      ["runtime.route.started", "runtime.route.completed"],
+    );
+    assert.equal(events[0]?.payload.route, "domains:plan");
   });
 });
 
