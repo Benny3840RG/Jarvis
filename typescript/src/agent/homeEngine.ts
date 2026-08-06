@@ -25,17 +25,14 @@ export class HomeEngine implements DomainEngine {
   }
 
   private async activateScene(sceneName: string): Promise<unknown> {
-    let result: { activated: string; description: string } | { error: string } = {
-      error: "Scene not found",
-    };
+    let sceneResult: DomainScene | undefined;
     await this.store.update((state) => {
       const scene = state.home.scenes.find((candidate) => candidate.name === sceneName);
       if (!scene) return;
       state.home.activeScene = scene.name;
-      result = scene;
+      sceneResult = scene;
     });
-    if ("error" in result) return result;
-    const scene = result as DomainScene;
-    return { activated: scene.name, description: scene.description };
+    if (!sceneResult) return { error: "Scene not found" };
+    return { activated: sceneResult.name, description: sceneResult.description };
   }
 }
