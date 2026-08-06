@@ -20,16 +20,16 @@ const LAYERS: LayersStatus = {
   runtime: {
     status: "partial",
     reason:
-      "Conversation, orchestration, and memory prototypes exist; EventBus and Tool Gateway remain pending.",
+      "Conversation, orchestration, and memory prototypes exist; the maintained runtime integration core is present, while durable event delivery remains pending.",
   },
   domains: {
     status: "partial",
     reason: "Business, workshop, and home engines remain non-durable prototypes.",
   },
   integration: {
-    status: "inactive",
+    status: "partial",
     reason:
-      "The domain registry, safety binder, memory linker, and tool router are not implemented.",
+      "The runtime has explicit EventBus, ToolGateway, domain registry, memory linker, and tool router contracts at the CLI seam; durable outbox persistence and governed HTTP composition remain pending.",
   },
   orchestration: {
     status: "partial",

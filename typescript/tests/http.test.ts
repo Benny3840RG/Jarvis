@@ -608,7 +608,7 @@ describe("Jarvis HTTP system boundary", () => {
     assert.deepEqual(body.reconciliation, { state: "disabled", enabled: false });
     assert.equal(body.timezone, "Australia/Melbourne");
     assert.equal(body.layers.runtime.status, "partial");
-    assert.equal(body.layers.integration.status, "inactive");
+    assert.equal(body.layers.integration.status, "partial");
     assert.equal(body.layers.reliability.status, "inactive");
     assert.equal(body.zState, "disabled");
     assert.equal(Number.isNaN(Date.parse(body.checkedAt)), false);
