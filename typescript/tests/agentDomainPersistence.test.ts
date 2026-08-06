@@ -29,13 +29,13 @@ describe("durable agent domain state", () => {
         description: "Clean tennis court",
       });
       assert.deepEqual(job, {
-        id: "j2",
+        id: "j3",
         clientId: "c2",
         description: "Clean tennis court",
         status: "new",
       });
-      assert.deepEqual(await business.handle("start_job", { jobId: "j2" }), {
-        id: "j2",
+      assert.deepEqual(await business.handle("start_job", { jobId: "j3" }), {
+        id: "j3",
         clientId: "c2",
         description: "Clean tennis court",
         status: "in_progress",
@@ -66,7 +66,7 @@ describe("durable agent domain state", () => {
       ]);
       assert.deepEqual(await restoredBusiness.handle("list_jobs", {}), [
         {
-          id: "j2",
+          id: "j3",
           clientId: "c2",
           description: "Clean tennis court",
           status: "in_progress",
