@@ -5692,6 +5692,10 @@
           "enabled": {
             "type": "boolean"
           },
+          "freshnessMs": {
+            "type": "integer",
+            "minimum": 1
+          },
           "workerId": {
             "type": "string",
             "minLength": 1,
@@ -5714,9 +5718,26 @@
             "minimum": 0,
             "maximum": 100
           },
+          "lastCycleOutcome": {
+            "type": "string",
+            "enum": ["success", "degraded", "failed"]
+          },
+          "lastCycleFailureCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "lastSuccessfulCycleAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "consecutiveFailureCount": {
+            "type": "integer",
+            "minimum": 0
+          },
           "lastErrorCode": {
             "type": "string",
-            "enum": ["reconciliation-loop-failed"]
+            "enum": ["reconciliation-loop-failed", "reconciliation-cycle-failed"]
           }
         }
       },

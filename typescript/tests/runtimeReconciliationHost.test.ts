@@ -156,10 +156,43 @@ describe("runtime reconciliation lifecycle", () => {
     assert.match(afterStart.lastCycleStartedAt ?? "", /^\d{4}-\d{2}-\d{2}T/);
     assert.equal(afterStart.lastCycleCompletedAt, undefined);
 
-    observeCycle({ type: "completed", processed: 3 });
+    observeCycle({ type: "completed", processed: 3, failureCount: 0 });
     const afterCompletion = host.health();
     assert.match(afterCompletion.lastCycleCompletedAt ?? "", /^\d{4}-\d{2}-\d{2}T/);
     assert.equal(afterCompletion.lastCycleProcessed, 3);
+    assert.equal(afterCompletion.lastCycleOutcome, "success");
+    assert.equal(afterCompletion.lastCycleFailureCount, 0);
+    assert.equal(afterCompletion.consecutiveFailureCount, 0);
+    assert.match(afterCompletion.lastSuccessfulCycleAt ?? "", /^\d{4}-\d{2}-\d{2}T/);
+    await host.stop();
+  });
+
+  it("recovers health after a later successful cycle", async () => {
+    let observeCycle:
+      Parameters<RuntimeReconciliationFactories["createEnabledRuntime"]>[1] | undefined;
+    const host = createRuntimeReconciliationHost(enabledEnvironment, {
+      createEnabledRuntime(_config, observer) {
+        observeCycle = observer;
+        return {
+          async run(signal) {
+            await new Promise<void>((resolve) => signal.addEventListener("abort", () => resolve()));
+          },
+        };
+      },
+    });
+
+    await host.start();
+    assert.ok(observeCycle);
+    observeCycle({ type: "started" });
+    observeCycle({ type: "completed", processed: 1, failureCount: 1 });
+    assert.equal(host.health().lastCycleOutcome, "degraded");
+    assert.equal(host.health().consecutiveFailureCount, 1);
+
+    observeCycle({ type: "started" });
+    observeCycle({ type: "completed", processed: 1, failureCount: 0 });
+    assert.equal(host.health().lastCycleOutcome, "success");
+    assert.equal(host.health().consecutiveFailureCount, 0);
+    assert.equal(host.health().lastErrorCode, undefined);
     await host.stop();
   });
 
@@ -241,8 +274,10 @@ describe("runtime reconciliation lifecycle", () => {
     assert.deepEqual(host.health(), {
       state: "degraded",
       enabled: true,
+      freshnessMs: 60_000,
       workerId: "test-worker",
       startedAt: host.health().startedAt,
+      consecutiveFailureCount: 0,
       lastErrorCode: "reconciliation-loop-failed",
     });
     assert.doesNotMatch(JSON.stringify(host.health()), /service-token|provider\/reference|secret/);

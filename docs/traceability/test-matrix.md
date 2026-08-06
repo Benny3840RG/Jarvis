@@ -19,7 +19,7 @@
 | R-077–R-081 | Persistence and audit | History overwrite and invalid pruning | `retentionHistory` | Planned |
 | R-082–R-090 | Workflow and policy | Unapproved external or destructive action | `safetyRules` | Planned |
 | R-091–R-098C | End-to-end workflow | Approval bypass, false success, state crossover | `executionFlow` | Planned |
-| R-099–R-104 | Failure injection | Mutation after invalid input or corrupt recovery | `errorRecovery` | Planned |
+| R-099–R-104 | Failure injection and recovery | Redacted persistence failure, circuit opening, and half-open recovery | `errorRecovery`, `reliabilityController` | Partial |
 | R-105–R-111 | CI meta-tests | Missing required test or evidence linkage | `traceabilityValidation` | Planned |
 | R-112–R-116 | Deployment checks | Incompatible runtime and failed rollback | `releaseSafety` | Planned |
 | R-117–R-121 | Runbook exercises | Recovery dependent on undocumented knowledge | `operationsRunbooks` | Planned |

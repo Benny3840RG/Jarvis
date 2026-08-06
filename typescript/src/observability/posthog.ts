@@ -37,6 +37,7 @@ type McpBoundaryInput = {
 type ReconciliationCycleInput = {
   outcome: BoundaryOutcome;
   processed: number;
+  failureCount: number;
   durationMs: number;
 };
 
@@ -87,7 +88,7 @@ function sharedProperties(boundary: "http" | "mcp" | "reconciliation") {
 function captureFailure(
   telemetry: PostHogTelemetry,
   boundary: "http" | "mcp" | "reconciliation",
-  failureKind: "http_5xx" | "mcp_request_failed" | "reconciliation_cycle_failed",
+  failureKind: "http_4xx" | "http_5xx" | "mcp_request_failed" | "reconciliation_cycle_failed",
 ): void {
   telemetry.capture({
     event: "jarvis.runtime_failure",
@@ -99,7 +100,7 @@ function captureFailure(
 }
 
 export function captureHttpBoundary(telemetry: PostHogTelemetry, input: HttpBoundaryInput): void {
-  const outcome = input.statusCode >= 500 ? "failure" : "success";
+  const outcome = input.statusCode >= 400 ? "failure" : "success";
   telemetry.capture({
     event: "jarvis.operator_action",
     properties: {
@@ -126,7 +127,9 @@ export function captureHttpBoundary(telemetry: PostHogTelemetry, input: HttpBoun
       value: 1,
     },
   });
-  if (outcome === "failure") captureFailure(telemetry, "http", "http_5xx");
+  if (outcome === "failure") {
+    captureFailure(telemetry, "http", input.statusCode >= 500 ? "http_5xx" : "http_4xx");
+  }
 }
 
 export function captureMcpBoundary(telemetry: PostHogTelemetry, input: McpBoundaryInput): void {
@@ -169,6 +172,7 @@ export function captureReconciliationCycle(
       ...sharedProperties("reconciliation"),
       operation: "reconciliation_cycle",
       outcome: input.outcome,
+      failure_count: boundedCount(input.failureCount),
     },
   });
   telemetry.capture({
@@ -187,7 +191,7 @@ export function captureReconciliationCycle(
       value: boundedCount(input.processed),
     },
   });
-  if (input.outcome === "failure") {
+  if (input.outcome === "failure" || input.failureCount > 0) {
     captureFailure(telemetry, "reconciliation", "reconciliation_cycle_failed");
   }
 }
@@ -206,11 +210,14 @@ export function createReconciliationTelemetryObserver(
     captureReconciliationCycle(telemetry, {
       outcome:
         observation.type === "completed"
-          ? "success"
+          ? observation.failureCount === 0
+            ? "success"
+            : "failure"
           : observation.type === "skipped"
             ? "skipped"
             : "failure",
       processed: observation.type === "completed" ? observation.processed : 0,
+      failureCount: observation.type === "completed" ? observation.failureCount : 0,
       durationMs,
     });
   };

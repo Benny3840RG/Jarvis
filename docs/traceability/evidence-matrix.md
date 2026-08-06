@@ -20,7 +20,7 @@
 | R-077–R-081 | Retention policy and append-only history tests | ToolAction lifecycle audit-event hooks only | Partial | `5fabfae1` | Connector review |
 | R-082–R-090 | Safety policy and blocked-action evidence | ToolAction blocked execution tests for expired, revoked, unauthorized, and consumed approvals | Partial | `5fabfae1` | Connector review |
 | R-091–R-098C | End-to-end execution and reconciliation evidence | ToolAction execution boundary tests only; Outlook/quote runtime remains uncommissioned | Partial | `981ee36b` | Connector review |
-| R-099–R-104 | Failure injection and recovery reports | Invalid input and blocked execution tests only | Partial | `5fabfae1` | Connector review |
+| R-099–R-104 | Failure injection and recovery reports | ReliabilityController redaction, circuit-open, cooldown, and recovery tests; HTTP persistence probe wiring | Partial | `pending PR exact-head CI` | Requirements review |
 | R-105–R-111 | CI results and populated traceability links | Test and evidence matrices plus foundation/observability CI records | Partial | `981ee36b` | Requirements review + connector review |
 | R-112–R-116 | Release, rollback, backup and compatibility runs | Deployment/runbook controls and backup verification/restore tests; live drills remain open | Partial | `981ee36b` | Connector review |
 | R-117–R-121 | Setup, backup and incident runbook exercises | Development runbooks and guarded commissioning workflows; live operational drills remain open | Partial | `981ee36b` | Connector review |

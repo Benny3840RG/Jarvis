@@ -609,7 +609,8 @@ describe("Jarvis HTTP system boundary", () => {
     assert.equal(body.timezone, "Australia/Melbourne");
     assert.equal(body.layers.runtime.status, "partial");
     assert.equal(body.layers.integration.status, "partial");
-    assert.equal(body.layers.reliability.status, "inactive");
+    assert.equal(body.layers.reliability.status, "partial");
+    assert.match(body.layers.reliability.reason ?? "", /Persistence probe passed/);
     assert.equal(body.zState, "disabled");
     assert.equal(Number.isNaN(Date.parse(body.checkedAt)), false);
   });
@@ -637,6 +638,7 @@ describe("Jarvis HTTP system boundary", () => {
       });
 
     assert.equal(response.statusCode, 200);
+    assert.equal(response.json<{ status: string }>().status, "degraded");
     assert.deepEqual(
       response.json<{ reconciliation: RuntimeReconciliationHealth }>().reconciliation,
       {

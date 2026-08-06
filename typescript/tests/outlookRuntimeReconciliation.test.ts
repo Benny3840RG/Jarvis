@@ -18,6 +18,7 @@ const config: EnabledRuntimeReconciliationConfig = {
   maxAttempts: 5,
   baseRetryMs: 1_000,
   maxRetryMs: 60_000,
+  freshnessMs: 60_000,
 };
 
 const outlookRuntime = {

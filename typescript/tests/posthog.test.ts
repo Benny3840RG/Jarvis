@@ -89,6 +89,7 @@ describe("PostHog runtime telemetry", () => {
     captureReconciliationCycle(telemetry, {
       outcome: "success",
       processed: 3,
+      failureCount: 0,
       durationMs: 52,
     });
     await telemetry.flush();
@@ -117,6 +118,49 @@ describe("PostHog runtime telemetry", () => {
       assert.equal("quote_data" in body.properties, false);
       assert.equal("payload" in body.properties, false);
     }
+  });
+
+  it("classifies HTTP client errors and failed reconciliation work as failures", async () => {
+    const recorder = createFetchRecorder();
+    const telemetry = createPostHogTelemetryFromEnv(developmentEnv(), recorder.fetchImpl);
+
+    captureHttpBoundary(telemetry, { method: "GET", statusCode: 401, durationMs: 5 });
+    captureReconciliationCycle(telemetry, {
+      outcome: "success",
+      processed: 2,
+      failureCount: 1,
+      durationMs: 8,
+    });
+    await telemetry.flush();
+
+    const events = recorder.calls.map((call) => {
+      const body = JSON.parse(String(call.init.body)) as {
+        event: string;
+        properties: Record<string, unknown>;
+      };
+      return body;
+    });
+    assert.ok(
+      events.some(
+        (event) =>
+          event.event === "jarvis.operator_action" &&
+          event.properties.outcome === "failure" &&
+          event.properties.status_code === 401,
+      ),
+    );
+    assert.ok(
+      events.some(
+        (event) =>
+          event.event === "jarvis.runtime_failure" && event.properties.failure_kind === "http_4xx",
+      ),
+    );
+    assert.ok(
+      events.some(
+        (event) =>
+          event.event === "jarvis.runtime_failure" &&
+          event.properties.failure_kind === "reconciliation_cycle_failed",
+      ),
+    );
   });
 
   it("returns before a slow telemetry endpoint resolves", async () => {

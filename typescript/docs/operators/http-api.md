@@ -113,6 +113,13 @@ reads succeed.
 Layer readiness is deliberately independent of process health. The maintained storage runtime can
 be healthy while prototype Z-State layers remain `partial` or `inactive`; Z-State therefore stays
 `disabled` until the stabilisation, proposal-safety, and reliability requirements are implemented.
+The reliability layer records the status read's persistence probe using a bounded circuit breaker.
+A passing probe reports `partial` because recovery and external dependency probes are not yet
+commissioned; repeated failures open the circuit and fail the status read closed. Raw provider
+errors are never included in the layer reason or response.
+When reconciliation is enabled, the top-level status is also `degraded` until the worker is running
+and has produced a fresh successful cycle with no released or escalated work. A stopped, failed,
+stale, or never-completed worker cannot be reported as healthy. `/healthz` remains liveness-only.
 
 Status also reports `integrations`: an array of evidence-backed integration-commissioning line items
 (`{name, status: "commissioned" | "not-commissioned", reason?}`), never a percentage and never inferred
