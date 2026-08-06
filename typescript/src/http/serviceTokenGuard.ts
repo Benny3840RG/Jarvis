@@ -6,7 +6,7 @@ import { Reflector } from "@nestjs/core";
 import type { FastifyRequest } from "fastify";
 
 import type { HttpAppConfig } from "./config.js";
-import type { OidcVerifier } from "./oidcVerifier.js";
+import type { OidcIdentity, OidcVerifier } from "./oidcVerifier.js";
 import { JarvisProblem } from "./problemDetails.js";
 import { PUBLIC_ROUTE } from "./publicRoute.js";
 import { HTTP_APP_CONFIG, HTTP_OIDC_VERIFIER } from "./tokens.js";
@@ -71,7 +71,7 @@ export class ServiceTokenGuard implements CanActivate {
         );
       }
       if (candidate === undefined) unauthorized("A valid Bearer OIDC access token is required.");
-      let identity;
+      let identity: OidcIdentity;
       try {
         identity = await this.oidcVerifier.verify(candidate);
       } catch {

@@ -2,7 +2,10 @@ import type { TotalityRequest } from "../../runtime/totalityContracts.js";
 import { assertRequestAuthority } from "../../runtime/totalityContracts.js";
 import { routeTotalityTask } from "../../runtime/totalityPolicy.js";
 import type { TotalityReasoningContext } from "../../totality/totalityPipeline.js";
-import { DEFAULT_TOTALITY_MAX_OUTPUT_TOKENS } from "../../totality/totalityQuota.js";
+import {
+  DEFAULT_TOTALITY_MAX_OUTPUT_TOKENS,
+  resolveTotalityQuotaConfig,
+} from "../../totality/totalityQuota.js";
 import {
   parseTotalityDraft,
   TOTALITY_SYSTEM_INSTRUCTIONS,
@@ -104,6 +107,7 @@ export interface OpenAITotalityConfig {
   apiKey: string;
   model: string;
   timeoutMs: number;
+  maxOutputTokens: number;
 }
 
 export class OpenAIRequestError extends Error {
@@ -165,6 +169,7 @@ export function resolveOpenAITotalityConfig(
     apiKey: cleanRequiredSecret(env.OPENAI_API_KEY, "OPENAI_API_KEY"),
     model: cleanModel(env.OPENAI_MODEL),
     timeoutMs: resolveTimeout(env.OPENAI_TIMEOUT_MS),
+    maxOutputTokens: resolveTotalityQuotaConfig(env).maxOutputTokens,
   };
 }
 
@@ -242,7 +247,10 @@ export class OpenAITotalityReasoner {
             proposalTimestamp: context.proposedAt,
           }),
           store: false,
-          max_output_tokens: DEFAULT_TOTALITY_MAX_OUTPUT_TOKENS,
+          max_output_tokens:
+            context.maxOutputTokens ??
+            this.config.maxOutputTokens ??
+            DEFAULT_TOTALITY_MAX_OUTPUT_TOKENS,
           text: {
             format: {
               type: "json_schema",

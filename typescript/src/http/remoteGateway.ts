@@ -142,8 +142,12 @@ export function evaluateRemoteGatewayRequest(
     return { allowed: false, code: "request-too-large" };
   }
 
-  for (const [key, candidate] of policy.rateBuckets) {
-    if (now - candidate.windowStartedAt >= policy.rateLimitWindowMs) policy.rateBuckets.delete(key);
+  if (policy.rateBuckets.size >= MAX_RATE_BUCKETS) {
+    for (const [key, candidate] of policy.rateBuckets) {
+      if (now - candidate.windowStartedAt >= policy.rateLimitWindowMs) {
+        policy.rateBuckets.delete(key);
+      }
+    }
   }
 
   const existing = policy.rateBuckets.get(request.clientKey);

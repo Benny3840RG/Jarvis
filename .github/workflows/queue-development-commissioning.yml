@@ -187,7 +187,8 @@ jobs:
             gh run view "$RUN_ID" --log-failed >"$failed_log" 2>&1 || true
 
             if node typescript/scripts/redact-commissioning-log.mjs "$failed_log" "$redacted_log"; then
-              tail -n 120 "$redacted_log" >"$redacted_log.tail"
+              grep -Ei 'error|failed|invalid|unauthor|forbidden|deploy|convex|network|timeout|permission|credential|key' "$redacted_log" \
+                | tail -n 120 >"$redacted_log.tail" || true
               mv "$redacted_log.tail" "$redacted_log"
             else
               : >"$redacted_log"

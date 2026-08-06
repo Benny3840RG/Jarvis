@@ -8,6 +8,7 @@ import {
   type TotalityProjectContext,
   type TotalityReasoner,
 } from "../src/totality/totalityPipeline.js";
+import { TotalityQuota, type TotalityQuotaConfig } from "../src/totality/totalityQuota.js";
 
 const PROPOSED_AT = "2026-07-16T00:00:00.000Z";
 
@@ -97,8 +98,12 @@ function makeJournal(project: TotalityProjectContext | null = makeProject()): To
   };
 }
 
-function makePipeline(reasoner: TotalityReasoner, journal: TotalityJournal): TotalityPipeline {
-  return new TotalityPipeline(reasoner, journal, () => new Date(PROPOSED_AT));
+function makePipeline(
+  reasoner: TotalityReasoner,
+  journal: TotalityJournal,
+  quota?: TotalityQuota,
+): TotalityPipeline {
+  return new TotalityPipeline(reasoner, journal, () => new Date(PROPOSED_AT), quota);
 }
 
 describe("TotalityPipeline", () => {
@@ -305,5 +310,28 @@ describe("TotalityPipeline", () => {
     await assert.rejects(() => pipeline.run(request), /exceeds the request action policy/);
     assert.equal(reasonerCalled, false);
     assert.equal(projectCalled, false);
+  });
+
+  it("does not reserve provider quota for requests rejected before provider dispatch", async () => {
+    const quotaConfig: TotalityQuotaConfig = {
+      maxRequestBytes: 10_000,
+      maxEstimatedInputTokens: 2_500,
+      maxConcurrentRequests: 1,
+      maxCostUnitsPerWindow: 1_000,
+      maxOutputTokens: 100,
+      windowMs: 60_000,
+    };
+    const quota = new TotalityQuota(quotaConfig);
+    const pipeline = makePipeline(makeReasoner(), makeJournal(), quota);
+    const unauthorizedRequest = makeRequest();
+    unauthorizedRequest.actionPolicy.maximumToolAuthority = "T0";
+
+    await assert.rejects(
+      () => pipeline.run(unauthorizedRequest),
+      /exceeds the request action policy/,
+    );
+    const response = await pipeline.run(makeRequest());
+
+    assert.equal(response.status, "completed");
   });
 });

@@ -113,8 +113,8 @@ jobs:
           diagnostic_file="$RUNNER_TEMP/convex-development-sync-diagnostic.md"
 
           set +e
-          npx convex dev --once --tail-logs disable 2>&1 | tee "$sync_log"
-          sync_status=${PIPESTATUS[0]}
+          npx convex dev --once --tail-logs disable >"$sync_log" 2>&1
+          sync_status=$?
           set -e
 
           if [[ "$sync_status" -ne 0 ]]; then

@@ -33,6 +33,7 @@ export type TotalityProjectContext = {
 export type TotalityReasoningContext = {
   project: TotalityProjectContext | null;
   proposedAt: string;
+  maxOutputTokens?: number;
 };
 
 export interface TotalityReasoningDraft {
@@ -148,23 +149,27 @@ export class TotalityPipeline {
   ) {}
 
   async run(request: TotalityRequest): Promise<TotalityResponse<TotalityReasoningResult>> {
+    const routing = routeTotalityTask({
+      taskType: request.taskType,
+      outputStyle: request.outputStyle,
+      domainContext: request.domainContext,
+    });
+    assertRequestAuthority(request, routing);
+
+    const project =
+      request.projectId === null ? null : await this.journal.getProjectContext(request.projectId);
+    if (request.projectId !== null && project === null) {
+      throw new Error("Project context does not exist.");
+    }
+
     const lease: TotalityQuotaLease = this.quota.acquire(request);
     try {
-      const routing = routeTotalityTask({
-        taskType: request.taskType,
-        outputStyle: request.outputStyle,
-        domainContext: request.domainContext,
-      });
-      assertRequestAuthority(request, routing);
-
-      const project =
-        request.projectId === null ? null : await this.journal.getProjectContext(request.projectId);
-      if (request.projectId !== null && project === null) {
-        throw new Error("Project context does not exist.");
-      }
-
       const proposedAt = this.now().toISOString();
-      const reasoning = await this.reasoner.reason(request, { project, proposedAt });
+      const reasoning = await this.reasoner.reason(request, {
+        project,
+        proposedAt,
+        maxOutputTokens: this.quota.maxOutputTokens,
+      });
       let memoryProposal = emptyMemoryProposal();
       let memoryProposalFailure: string | null = null;
 
