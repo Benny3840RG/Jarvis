@@ -9,7 +9,11 @@ export type RemoteGatewayDecision =
   | { allowed: true }
   | {
       allowed: false;
-      code: "tls-required" | "origin-not-allowed" | "request-too-large" | "rate-limit-exceeded";
+      code:
+        | "tls-required"
+        | "origin-not-allowed"
+        | "request-too-large"
+        | "rate-limit-exceeded";
       retryAfterSeconds?: number;
     };
 
@@ -49,20 +53,43 @@ function boundedInteger(
 
 function parseAllowedOrigins(value: string | undefined): string[] {
   const raw = optionalText(value);
-  if (raw === undefined) throw new Error("JARVIS_ALLOWED_ORIGINS is required for the remote gateway.");
-  const origins = [...new Set(raw.split(",").map((item) => item.trim()).filter(Boolean))];
+  if (raw === undefined)
+    throw new Error(
+      "JARVIS_ALLOWED_ORIGINS is required for the remote gateway.",
+    );
+  const origins = [
+    ...new Set(
+      raw
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean),
+    ),
+  ];
   if (origins.length === 0) {
-    throw new Error("JARVIS_ALLOWED_ORIGINS must contain at least one HTTPS origin.");
+    throw new Error(
+      "JARVIS_ALLOWED_ORIGINS must contain at least one HTTPS origin.",
+    );
   }
   for (const origin of origins) {
     let parsed: URL;
     try {
       parsed = new URL(origin);
     } catch {
-      throw new Error("JARVIS_ALLOWED_ORIGINS must contain valid HTTPS origins.");
+      throw new Error(
+        "JARVIS_ALLOWED_ORIGINS must contain valid HTTPS origins.",
+      );
     }
-    if (parsed.protocol !== "https:" || parsed.username || parsed.password || parsed.pathname !== "/" || parsed.search || parsed.hash) {
-      throw new Error("JARVIS_ALLOWED_ORIGINS must contain valid HTTPS origins.");
+    if (
+      parsed.protocol !== "https:" ||
+      parsed.username ||
+      parsed.password ||
+      parsed.pathname !== "/" ||
+      parsed.search ||
+      parsed.hash
+    ) {
+      throw new Error(
+        "JARVIS_ALLOWED_ORIGINS must contain valid HTTPS origins.",
+      );
     }
   }
   return origins;
@@ -77,7 +104,9 @@ export function resolveRemoteGatewayConfig(
     );
   }
   if (env.JARVIS_TLS_TERMINATED !== "true") {
-    throw new Error("Remote HTTP exposure requires JARVIS_TLS_TERMINATED=true.");
+    throw new Error(
+      "Remote HTTP exposure requires JARVIS_TLS_TERMINATED=true.",
+    );
   }
   return {
     allowedOrigins: parseAllowedOrigins(env.JARVIS_ALLOWED_ORIGINS),
@@ -115,25 +144,32 @@ export function evaluateRemoteGatewayRequest(
   if (request.forwardedProto?.toLowerCase() !== "https") {
     return { allowed: false, code: "tls-required" };
   }
-  if (request.origin !== undefined && !policy.allowedOrigins.includes(request.origin)) {
+  if (
+    request.origin !== undefined &&
+    !policy.allowedOrigins.includes(request.origin)
+  ) {
     return { allowed: false, code: "origin-not-allowed" };
   }
   if (
     request.contentLength !== undefined &&
-    (!Number.isSafeInteger(request.contentLength) || request.contentLength > policy.maxRequestBytes)
+    (!Number.isSafeInteger(request.contentLength) ||
+      request.contentLength > policy.maxRequestBytes)
   ) {
     return { allowed: false, code: "request-too-large" };
   }
 
   const existing = policy.rateBuckets.get(request.clientKey);
   const bucket =
-    existing === undefined || now - existing.windowStartedAt >= policy.rateLimitWindowMs
+    existing === undefined ||
+    now - existing.windowStartedAt >= policy.rateLimitWindowMs
       ? { windowStartedAt: now, count: 0 }
       : existing;
   if (bucket.count >= policy.rateLimitMaxRequests) {
     const retryAfterSeconds = Math.max(
       1,
-      Math.ceil((policy.rateLimitWindowMs - (now - bucket.windowStartedAt)) / 1_000),
+      Math.ceil(
+        (policy.rateLimitWindowMs - (now - bucket.windowStartedAt)) / 1_000,
+      ),
     );
     policy.rateBuckets.set(request.clientKey, bucket);
     return { allowed: false, code: "rate-limit-exceeded", retryAfterSeconds };
@@ -145,7 +181,8 @@ export function evaluateRemoteGatewayRequest(
   // are safe to discard because they are already outside the enforcement window.
   if (policy.rateBuckets.size > 10_000) {
     for (const [key, candidate] of policy.rateBuckets) {
-      if (now - candidate.windowStartedAt >= policy.rateLimitWindowMs) policy.rateBuckets.delete(key);
+      if (now - candidate.windowStartedAt >= policy.rateLimitWindowMs)
+        policy.rateBuckets.delete(key);
       if (policy.rateBuckets.size <= 5_000) break;
     }
   }
