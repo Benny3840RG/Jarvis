@@ -257,7 +257,8 @@ export class PersistentDomainStateStore implements DomainStateStore {
       const currentState = await this.persistence.loadState();
       const current = currentState[AGENT_DOMAIN_STATE_KEY];
       const draft = current === undefined ? initialAgentDomainState() : parseState(current);
-      const next = parseState(mutator(clone(draft)) ?? draft);
+      const working = clone(draft);
+      const next = parseState(mutator(working) ?? working);
       await this.persistence.saveState({
         ...currentState,
         [AGENT_DOMAIN_STATE_KEY]: clone(next),
