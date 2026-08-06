@@ -44,9 +44,9 @@ export class BusinessEngine implements DomainEngine {
   private async addClient(name: string): Promise<unknown> {
     let created: { id: string; name: string } | undefined;
     await this.store.update((state) => {
-      const id = `c${(state.business.sequence += 1)}`;
-      created = { id, name };
-      state.business.clients.push(created);
+      const client = { id: `c${(state.business.sequence += 1)}`, name };
+      created = client;
+      state.business.clients.push(client);
     });
     return clone(created);
   }
@@ -54,9 +54,14 @@ export class BusinessEngine implements DomainEngine {
   private async createJob(clientId: string, description: string): Promise<unknown> {
     let created: DomainJob | undefined;
     await this.store.update((state) => {
-      const id = `j${(state.business.sequence += 1)}`;
-      created = { id, clientId, description, status: "new" };
-      state.business.jobs.push(created);
+      const job: DomainJob = {
+        id: `j${(state.business.sequence += 1)}`,
+        clientId,
+        description,
+        status: "new",
+      };
+      created = job;
+      state.business.jobs.push(job);
     });
     return clone(created);
   }
