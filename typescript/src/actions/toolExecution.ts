@@ -11,7 +11,7 @@ import {
   externalExecutionScopeKey,
   providerReferenceFromRecord,
 } from "../reconciliation/externalReconciliation.js";
-import { bindSafety } from "../safety/safetyBinder.js";
+import { bindSafety, type SafetyBinding } from "../safety/safetyBinder.js";
 import type { ToolAuthority } from "../runtime/totalityPolicy.js";
 import { canonicalJson } from "./canonicalJson.js";
 import type { ToolAction } from "./toolActions.js";
@@ -57,6 +57,7 @@ export type ToolExecutionReceipt = {
   outputDigest?: string;
   errorCode?: ToolExecutionErrorCode;
   providerErrorCode?: string;
+  safetyBinding?: SafetyBinding;
   startedAt: string;
   completedAt: string;
 };
@@ -308,6 +309,7 @@ type ReceiptMetadata = ExecutionMetadata & {
   providerCorrelationId?: string;
   reconciliationId?: string;
   providerErrorCode?: string;
+  safetyBinding?: SafetyBinding;
 };
 
 function receipt(
@@ -350,6 +352,7 @@ function receipt(
     ...(metadata.providerErrorCode === undefined
       ? {}
       : { providerErrorCode: metadata.providerErrorCode }),
+    ...(metadata.safetyBinding === undefined ? {} : { safetyBinding: metadata.safetyBinding }),
     startedAt,
     completedAt: new Date().toISOString(),
   };
@@ -365,6 +368,7 @@ type ExecuteInput = {
   policyVersion?: string;
   correlationId?: string;
   source?: string;
+  safetyBinding?: SafetyBinding;
 };
 
 export class ToolExecutionService {
@@ -400,8 +404,31 @@ export class ToolExecutionService {
     const definition = this.definitions.get(`${input.action.tool}:${input.action.operation}`);
     const effectFingerprint = fingerprintToolEffect(input.action);
     const external = definition?.externalProvider !== undefined;
+    const safetyBinding = bindSafety({
+      phase: "tool-execute",
+      riskLevel: "moderate",
+      domainBound: true,
+      memorySafe: true,
+      reliabilityHealthy: !external || this.reconciliations !== undefined,
+      proposalSafe: true,
+      toolAllowlisted: definition !== undefined,
+      requiredAuthority: input.action.requiredAuthority,
+      grantedAuthority: input.authority,
+      actionState: "execute",
+      requiresApproval: true,
+      approvalPresent: input.action.state === "approved" && !input.action.isApprovalExpired,
+      destructive: input.action.destructive,
+      externalEffect: external,
+      idempotencyKey: input.idempotencyKey,
+      correlationId: input.correlationId ?? input.action.requestId,
+      payload: input.action.arguments,
+      stateValid: input.action.state === "approved" && !input.action.isApprovalExpired,
+      outcome: "pending",
+      recoveryAvailable: !external || this.reconciliations !== undefined,
+    });
+    const enrichedInput = { ...input, safetyBinding };
     const scope = external
-      ? externalScope(input.action, input.idempotencyKey, effectFingerprint)
+      ? externalScope(enrichedInput.action, enrichedInput.idempotencyKey, effectFingerprint)
       : undefined;
     const key = scope
       ? externalExecutionKey(scope)
@@ -409,7 +436,12 @@ export class ToolExecutionService {
     const expectedFingerprint = external ? effectFingerprint : fingerprintToolAction(input.action);
 
     if (scope && definition?.externalProvider) {
-      const replay = await this.replayExternal(input, definition.externalProvider, scope, key);
+      const replay = await this.replayExternal(
+        enrichedInput,
+        definition.externalProvider,
+        scope,
+        key,
+      );
       if (replay) return replay;
     }
 
@@ -422,13 +454,13 @@ export class ToolExecutionService {
         return this.persistDecision(
           key,
           receipt(
-            input.action,
-            input.idempotencyKey,
+            enrichedInput.action,
+            enrichedInput.idempotencyKey,
             "blocked",
             "fingerprint-mismatch",
             new Date().toISOString(),
             {
-              ...input,
+              ...enrichedInput,
               ...(external ? { effectFingerprint } : {}),
             },
           ),
@@ -443,13 +475,13 @@ export class ToolExecutionService {
         return this.persistDecision(
           key,
           receipt(
-            input.action,
-            input.idempotencyKey,
+            enrichedInput.action,
+            enrichedInput.idempotencyKey,
             "blocked",
             "fingerprint-mismatch",
             new Date().toISOString(),
             {
-              ...input,
+              ...enrichedInput,
               ...(external ? { effectFingerprint } : {}),
             },
           ),
@@ -458,7 +490,7 @@ export class ToolExecutionService {
       return active.promise;
     }
 
-    const execution = this.executeOnce(input, definition, key, effectFingerprint, scope);
+    const execution = this.executeOnce(enrichedInput, definition, key, effectFingerprint, scope);
     this.inFlight.set(key, {
       fingerprint: expectedFingerprint,
       promise: execution,
@@ -591,28 +623,30 @@ export class ToolExecutionService {
       );
     }
     const externalProvider = definition?.externalProvider;
-    const safetyBinding = bindSafety({
-      phase: "tool-execute",
-      riskLevel: "moderate",
-      domainBound: true,
-      memorySafe: true,
-      reliabilityHealthy: !externalProvider || this.reconciliations !== undefined,
-      proposalSafe: true,
-      toolAllowlisted: definition !== undefined,
-      requiredAuthority: input.action.requiredAuthority,
-      grantedAuthority: input.authority,
-      actionState: "execute",
-      requiresApproval: true,
-      approvalPresent: input.action.state === "approved" && !input.action.isApprovalExpired,
-      destructive: input.action.destructive,
-      externalEffect: externalProvider !== undefined,
-      idempotencyKey: input.idempotencyKey,
-      correlationId: input.correlationId ?? input.action.requestId,
-      payload: input.action.arguments,
-      stateValid: input.action.state === "approved" && !input.action.isApprovalExpired,
-      outcome: "pending",
-      recoveryAvailable: externalProvider === undefined || this.reconciliations !== undefined,
-    });
+    const safetyBinding =
+      input.safetyBinding ??
+      bindSafety({
+        phase: "tool-execute",
+        riskLevel: "moderate",
+        domainBound: true,
+        memorySafe: true,
+        reliabilityHealthy: !externalProvider || this.reconciliations !== undefined,
+        proposalSafe: true,
+        toolAllowlisted: definition !== undefined,
+        requiredAuthority: input.action.requiredAuthority,
+        grantedAuthority: input.authority,
+        actionState: "execute",
+        requiresApproval: true,
+        approvalPresent: input.action.state === "approved" && !input.action.isApprovalExpired,
+        destructive: input.action.destructive,
+        externalEffect: externalProvider !== undefined,
+        idempotencyKey: input.idempotencyKey,
+        correlationId: input.correlationId ?? input.action.requestId,
+        payload: input.action.arguments,
+        stateValid: input.action.state === "approved" && !input.action.isApprovalExpired,
+        outcome: "pending",
+        recoveryAvailable: externalProvider === undefined || this.reconciliations !== undefined,
+      });
     if (safetyBinding.status === "blocked") {
       const safetyReasons = safetyBinding.categories.flatMap((category) => category.reasons);
       const onlyAllowlistFailure =
@@ -767,6 +801,7 @@ export class ToolExecutionService {
           requestId: input.action.requestId,
           actionFingerprint,
           reference,
+          safetyBinding: input.safetyBinding!,
         });
         registeredReference = providerReferenceFromRecord(record) ?? reference;
       },

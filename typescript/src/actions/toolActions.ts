@@ -1,4 +1,5 @@
 import type { ToolAuthority } from "../runtime/totalityPolicy.js";
+import type { SafetyBinding } from "../safety/safetyBinder.js";
 
 export type ToolActionState = "proposed" | "approved" | "rejected" | "expired" | "revoked";
 export type ToolActionActor = "user" | "agent" | "tool";
@@ -34,6 +35,7 @@ export type ToolAction = {
   revokedBy?: "user";
   revokedReason?: string;
   revokedAt?: string;
+  safetyBinding?: SafetyBinding;
   /** Computed, read-only view field: true when an approval's ttl has lapsed but the transition hasn't been persisted yet. */
   isApprovalExpired?: boolean;
 };

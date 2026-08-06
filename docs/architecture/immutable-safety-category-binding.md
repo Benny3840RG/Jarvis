@@ -46,9 +46,14 @@ controls; it does not authorize an action and it never bypasses them.
 
 ## Evidence status
 
-This slice provides in-process category decisions and stable blocked receipts.
-Convex lifecycle records do not yet persist the complete category-decision
-object for every proposal, approval, revoke, execution, and reconciliation
-transition. The system status layer reports that boundary as partial. Closing
-that persistence attachment is the next safety slice; no production-complete
-claim should be made until its schema, migration, and restart tests exist.
+The versioned binding is now attached to the maintained Convex lifecycle
+records for proposals, approvals, observed expiry, revocation, execution
+receipts, and external reconciliation records. The field is additive and
+optional so legacy rows remain readable; a missing field is legacy evidence,
+never proof that the transition passed the binder. Audit payloads carry only
+the six-category decision projection and never action arguments or provider
+payloads. Convex tests cover lifecycle attachment and fresh reconciliation
+readback.
+
+Live production completeness remains separate: commissioning still requires a
+configured deployment and external provider evidence.

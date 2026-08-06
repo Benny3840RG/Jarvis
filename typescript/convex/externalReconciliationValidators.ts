@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 
 import { toolExecutionReceiptDocumentValidator } from "./toolExecutionValidators.js";
+import { safetyBindingValidator } from "./safetyBindingValidators.js";
 
 export const externalReconciliationStateValidator = v.union(
   v.literal("observing"),
@@ -49,6 +50,7 @@ export const externalReconciliationDocumentValidator = v.object({
   updatedAt: v.number(),
   resolvedAt: v.optional(v.number()),
   escalatedAt: v.optional(v.number()),
+  safetyBinding: v.optional(safetyBindingValidator),
 });
 
 export const externalReconciliationEnvelopeValidator = v.object({

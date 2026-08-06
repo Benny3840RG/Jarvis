@@ -2,6 +2,7 @@ import { ConvexHttpClient } from "convex/browser";
 
 import { api } from "../../convex/_generated/api.js";
 import type { ToolExecutionReceipt, ToolExecutionReceiptStore } from "../actions/toolExecution.js";
+import type { SafetyBinding } from "../safety/safetyBinder.js";
 import type { ConvexClientLike } from "./convexPersistence.js";
 
 export const toolExecutionReceiptFunctions = api.toolExecutionReceipts;
@@ -32,7 +33,21 @@ type ToolExecutionReceiptRow = {
   providerErrorCode?: string;
   startedAt: number;
   completedAt: number;
+  safetyBinding?: SafetyBinding;
 };
+
+function convexSafetyBinding(binding: NonNullable<ToolExecutionReceipt["safetyBinding"]>) {
+  return {
+    version: binding.version,
+    phase: binding.phase,
+    status: binding.status,
+    categories: binding.categories.map((category) => ({
+      category: category.category,
+      status: category.status,
+      reasons: [...category.reasons],
+    })),
+  };
+}
 
 function receiptFromConvex(row: ToolExecutionReceiptRow): ToolExecutionReceipt {
   const requestId = row.requestId ?? row.actionId;
@@ -63,6 +78,7 @@ function receiptFromConvex(row: ToolExecutionReceiptRow): ToolExecutionReceipt {
     ...(row.providerErrorCode === undefined ? {} : { providerErrorCode: row.providerErrorCode }),
     startedAt: new Date(row.startedAt).toISOString(),
     completedAt: new Date(row.completedAt).toISOString(),
+    ...(row.safetyBinding === undefined ? {} : { safetyBinding: row.safetyBinding }),
   };
 }
 
@@ -130,6 +146,9 @@ export class ConvexToolExecutionReceiptStore implements ToolExecutionReceiptStor
         : { providerErrorCode: receipt.providerErrorCode }),
       startedAt: new Date(receipt.startedAt).getTime(),
       completedAt: new Date(receipt.completedAt).getTime(),
+      ...(receipt.safetyBinding === undefined
+        ? {}
+        : { safetyBinding: convexSafetyBinding(receipt.safetyBinding) }),
     });
   }
 }

@@ -1,4 +1,5 @@
 import type { ToolExecutionReceipt } from "../actions/toolExecution.js";
+import type { SafetyBinding } from "../safety/safetyBinder.js";
 
 export const EXTERNAL_RECONCILIATION_STATES = [
   "observing",
@@ -49,6 +50,7 @@ export type ExternalReconciliationRecord = ExternalExecutionScope & {
   updatedAt: number;
   resolvedAt?: number;
   escalatedAt?: number;
+  safetyBinding?: SafetyBinding;
 };
 
 export type ExternalReconciliationEnvelope = {
@@ -96,6 +98,7 @@ export type RegisterExternalAttemptInput = ExternalExecutionScope & {
   requestId: string;
   actionFingerprint: string;
   reference: ProviderAttemptReference;
+  safetyBinding?: SafetyBinding;
 };
 
 export type MarkExternalIndeterminateInput = ExternalExecutionScope & {

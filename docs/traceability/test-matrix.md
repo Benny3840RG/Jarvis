@@ -41,8 +41,9 @@ A requirement is not implemented until at least one passing test and one immutab
 |---|---|---|---|
 | R-082–R-090 | `safetyBinder.test.ts`, `safetyCategoryMatrix.test.ts` | `src/safety/safetyBinder.ts`, `src/runtime/validation.ts`, `src/actions/toolExecution.ts` | Partial |
 | R-091–R-098C | `safetyCategoryMatrix.test.ts` | `src/safety/safetyBinder.ts` phase coverage for reasoning, memory, and tool lifecycle | Partial |
-| R-105–R-111 | `safetyBinder.test.ts`, `safetyCategoryMatrix.test.ts` | `docs/architecture/immutable-safety-category-binding.md` | Partial |
+| R-105–R-111 | `safetyBinder.test.ts`, `safetyCategoryMatrix.test.ts`, `convex/toolActions.test.ts`, `convex/toolExecutionReceiptMetadata.test.ts`, `convex/externalReconciliations.test.ts` | `convex/safetyBindingValidators.ts`, `convex/schema.ts`, `convex/toolActions.ts`, `convex/toolExecutionReceipts.ts`, `convex/externalReconciliations.ts` | Partial |
 
-The tests prove the six-category in-process contract and fail-closed negative
-paths. Convex lifecycle persistence of the complete category-decision object
-remains open and is intentionally not marked complete.
+The tests prove the six-category in-process contract, fail-closed negative
+paths, lifecycle attachment, and fresh Convex readback. The status remains
+partial until the exact change is merged and live commissioning evidence is
+available.

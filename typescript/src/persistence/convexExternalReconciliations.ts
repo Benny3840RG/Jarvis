@@ -2,6 +2,7 @@ import { ConvexHttpClient } from "convex/browser";
 
 import { api } from "../../convex/_generated/api.js";
 import type { ToolExecutionReceipt } from "../actions/toolExecution.js";
+import type { SafetyBinding } from "../safety/safetyBinder.js";
 import type {
   CompleteExternalAttemptInput,
   ExternalReconciliationClaim,
@@ -49,6 +50,7 @@ type ReconciliationRow = {
   updatedAt: number;
   resolvedAt?: number;
   escalatedAt?: number;
+  safetyBinding?: SafetyBinding;
 };
 
 type ReceiptRow = {
@@ -76,7 +78,21 @@ type ReceiptRow = {
   providerErrorCode?: string;
   startedAt: number;
   completedAt: number;
+  safetyBinding?: SafetyBinding;
 };
+
+function convexSafetyBinding(binding: NonNullable<ToolExecutionReceipt["safetyBinding"]>) {
+  return {
+    version: binding.version,
+    phase: binding.phase,
+    status: binding.status,
+    categories: binding.categories.map((category) => ({
+      category: category.category,
+      status: category.status,
+      reasons: [...category.reasons],
+    })),
+  };
+}
 
 function reconciliationFromConvex(row: ReconciliationRow): ExternalReconciliationRecord {
   return {
@@ -112,6 +128,7 @@ function reconciliationFromConvex(row: ReconciliationRow): ExternalReconciliatio
     updatedAt: row.updatedAt,
     ...(row.resolvedAt === undefined ? {} : { resolvedAt: row.resolvedAt }),
     ...(row.escalatedAt === undefined ? {} : { escalatedAt: row.escalatedAt }),
+    ...(row.safetyBinding === undefined ? {} : { safetyBinding: row.safetyBinding }),
   };
 }
 
@@ -143,6 +160,7 @@ function receiptFromConvex(row: ReceiptRow): ToolExecutionReceipt {
     ...(row.providerErrorCode === undefined ? {} : { providerErrorCode: row.providerErrorCode }),
     startedAt: new Date(row.startedAt).toISOString(),
     completedAt: new Date(row.completedAt).toISOString(),
+    ...(row.safetyBinding === undefined ? {} : { safetyBinding: row.safetyBinding }),
   } as ToolExecutionReceipt;
 }
 
@@ -190,6 +208,9 @@ function receiptInput(receipt: ToolExecutionReceipt) {
     ...(receipt.providerErrorCode === undefined
       ? {}
       : { providerErrorCode: receipt.providerErrorCode }),
+    ...(receipt.safetyBinding === undefined
+      ? {}
+      : { safetyBinding: convexSafetyBinding(receipt.safetyBinding) }),
     startedAt: new Date(receipt.startedAt).getTime(),
     completedAt: new Date(receipt.completedAt).getTime(),
   };
@@ -288,6 +309,9 @@ export class ConvexExternalReconciliationStore
       provider: input.reference.provider,
       providerRequestId: input.reference.providerRequestId,
       providerCorrelationId: input.reference.providerCorrelationId,
+      ...(input.safetyBinding === undefined
+        ? {}
+        : { safetyBinding: convexSafetyBinding(input.safetyBinding) }),
     });
     return reconciliationFromConvex(row as ReconciliationRow);
   }

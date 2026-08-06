@@ -9,6 +9,7 @@ import type {
   SingleUseExecutionClaimResult,
 } from "../actions/toolExecution.js";
 import type { ToolAuthority } from "../runtime/totalityPolicy.js";
+import type { SafetyBinding } from "../safety/safetyBinder.js";
 import type { ConvexClientLike } from "./convexPersistence.js";
 
 export const toolActionFunctions = api.toolActions;
@@ -42,6 +43,7 @@ type ToolActionRow = {
   revokedReason?: string;
   revokedAt?: number;
   isApprovalExpired?: boolean;
+  safetyBinding?: SafetyBinding;
 };
 
 function optionalTimestamp(value: number | undefined): string | undefined {
@@ -84,6 +86,7 @@ function actionFromConvex(row: ToolActionRow): ToolAction {
     ...(row.revokedBy === undefined ? {} : { revokedBy: row.revokedBy }),
     ...(row.revokedReason === undefined ? {} : { revokedReason: row.revokedReason }),
     ...(revokedAt === undefined ? {} : { revokedAt }),
+    ...(row.safetyBinding === undefined ? {} : { safetyBinding: row.safetyBinding }),
     ...(row.isApprovalExpired === undefined ? {} : { isApprovalExpired: row.isApprovalExpired }),
   };
 }
