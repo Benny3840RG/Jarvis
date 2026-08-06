@@ -45,19 +45,19 @@ by itself sufficient to approve one.
 
 Optional transport values are:
 
-| Variable                    | Default     | Meaning                                                  |
-| --------------------------- | ----------- | -------------------------------------------------------- |
-| `JARVIS_HTTP_HOST`          | `127.0.0.1` | Explicit bind host.                                      |
-| `JARVIS_HTTP_PORT`          | `3000`      | TCP port from 1 through 65535.                           |
-| `JARVIS_DEPLOYMENT_VERSION` | unset       | Safe provider deployment/contract identifier for status. |
-| `JARVIS_REMOTE_GATEWAY_ENABLED` | unset | Must be exactly `true` before a non-loopback HTTP bind is accepted. |
-| `JARVIS_TLS_TERMINATED` | unset | Must be exactly `true`; the approved proxy must forward `X-Forwarded-Proto: https`. |
-| `JARVIS_OIDC_ISSUER` / `JARVIS_OIDC_AUDIENCE` | unset | Required together for remote HTTP bearer-token verification. |
-| `JARVIS_OIDC_JWKS_URL` | unset | Explicit HTTPS JWKS endpoint for RS256 verification. |
-| `JARVIS_ALLOWED_ORIGINS` | unset | Comma-separated HTTPS browser origins accepted by the remote gateway. |
-| `JARVIS_MAX_REQUEST_BYTES` | 1048576 | Remote request body limit, bounded to 1024–10485760 bytes. |
-| `JARVIS_RATE_LIMIT_MAX_REQUESTS` | 60 | Per-client remote request budget per window. |
-| `JARVIS_RATE_LIMIT_WINDOW_MS` | 60000 | Remote rate-limit window in milliseconds. |
+| Variable                                      | Default     | Meaning                                                                             |
+| --------------------------------------------- | ----------- | ----------------------------------------------------------------------------------- |
+| `JARVIS_HTTP_HOST`                            | `127.0.0.1` | Explicit bind host.                                                                 |
+| `JARVIS_HTTP_PORT`                            | `3000`      | TCP port from 1 through 65535.                                                      |
+| `JARVIS_DEPLOYMENT_VERSION`                   | unset       | Safe provider deployment/contract identifier for status.                            |
+| `JARVIS_REMOTE_GATEWAY_ENABLED`               | unset       | Must be exactly `true` before a non-loopback HTTP bind is accepted.                 |
+| `JARVIS_TLS_TERMINATED`                       | unset       | Must be exactly `true`; the approved proxy must forward `X-Forwarded-Proto: https`. |
+| `JARVIS_OIDC_ISSUER` / `JARVIS_OIDC_AUDIENCE` | unset       | Required together for remote HTTP bearer-token verification.                        |
+| `JARVIS_OIDC_JWKS_URL`                        | unset       | Explicit HTTPS JWKS endpoint for RS256 verification.                                |
+| `JARVIS_ALLOWED_ORIGINS`                      | unset       | Comma-separated HTTPS browser origins accepted by the remote gateway.               |
+| `JARVIS_MAX_REQUEST_BYTES`                    | 1048576     | Remote request body limit, bounded to 1024–10485760 bytes.                          |
+| `JARVIS_RATE_LIMIT_MAX_REQUESTS`              | 60          | Per-client remote request budget per window.                                        |
+| `JARVIS_RATE_LIMIT_WINDOW_MS`                 | 60000       | Remote rate-limit window in milliseconds.                                           |
 
 `JARVIS_SOURCE_VERSION` defaults to `development` for local work. Release automation should set
 it to the immutable source commit.
