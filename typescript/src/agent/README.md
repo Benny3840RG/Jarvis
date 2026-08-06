@@ -51,7 +51,8 @@ created with Jarvis' JSON or Convex persistence provider.
 Each stage from the Jarvis v2 checklist, mapped to where it lives here — implemented against the code that actually exists, no invented real-world safety:
 
 1. **Safety envelope** — `safetyEnvelope.ts`: tool/quantity rules, business `complete_job` consistency, error-output detection, and a home-scene-requires-completed-job cross-domain rule.
-2. **Durable domain state** — `domainState.ts`: one shared, versioned store with serialized read-modify-write updates for business, workshop, and home.\n3. **Intent mapping** — `conversationService.ts`: canonical job intents with synonym phrasings (`start`/`kick off`/`begin`, `prepare`/`prep`/`set up`, `complete`/`finish`/`close`) plus `jobId` extraction.
+2. **Durable domain state** — `domainState.ts`: one shared, versioned store with serialized read-modify-write updates for business, workshop, and home.
+3. **Intent mapping** — `conversationService.ts`: canonical job intents with synonym phrasings (`start`/`kick off`/`begin`, `prepare`/`prep`/`set up`, `complete`/`finish`/`close`) plus `jobId` extraction.
 4. **Orchestration graph** — `graph.ts`: config-driven intent → weighted nodes (`defaultGraphConfig`).
 5. **Adaptive layer** — `learningEngine.ts` (per-intent success stats) and `predictionEngine.ts` (lifecycle next-intent prediction).
 6. **Autonomy layer** — `workflowGenerator.ts` / `ruleEvolution.ts`: data-driven, advisory proposals that are never auto-applied.
