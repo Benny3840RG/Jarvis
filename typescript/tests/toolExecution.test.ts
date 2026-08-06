@@ -61,6 +61,32 @@ describe("tool execution stage", () => {
     assert.equal(executions, 0);
   });
 
+  it("blocks credential-like arguments before provider invocation", async () => {
+    let executions = 0;
+    const executor = new ToolExecutionService([
+      {
+        tool: "clock",
+        operation: "read",
+        schema: z.object({ accessToken: z.string() }),
+        async execute() {
+          executions += 1;
+          return { now: "2026-07-18T00:00:00.000Z" };
+        },
+      },
+    ]);
+
+    const result = await executor.execute({
+      action: { ...action, arguments: { accessToken: "secret-value" } },
+      authority: "T1",
+      idempotencyKey: "credential-argument",
+    });
+
+    assert.equal(result.status, "blocked");
+    assert.equal(result.errorCode, "safety-blocked");
+    assert.equal(executions, 0);
+    assert.equal(JSON.stringify(result).includes("secret-value"), false);
+  });
+
   it("reports whether a tool:operation definition is registered", async () => {
     const executor = new ToolExecutionService([
       {

@@ -11,6 +11,7 @@ import {
   externalExecutionScopeKey,
   providerReferenceFromRecord,
 } from "../reconciliation/externalReconciliation.js";
+import { bindSafety } from "../safety/safetyBinder.js";
 import type { ToolAuthority } from "../runtime/totalityPolicy.js";
 import { canonicalJson } from "./canonicalJson.js";
 import type { ToolAction } from "./toolActions.js";
@@ -30,7 +31,8 @@ export type ToolExecutionErrorCode =
   | "reconciliation-escalated"
   | "reconciliation-unavailable"
   | "approval-expired"
-  | "approval-consumed";
+  | "approval-consumed"
+  | "safety-blocked";
 
 export type ToolExecutionReceipt = {
   receiptId: string;
@@ -177,7 +179,12 @@ export class InMemoryExecutionEligibilityStore implements ExecutionEligibilitySt
   }
 }
 
-const AUTHORITY_LEVEL: Record<ToolAuthority, number> = { T0: 0, T1: 1, T2: 2, T3: 3 };
+const AUTHORITY_LEVEL: Record<ToolAuthority, number> = {
+  T0: 0,
+  T1: 1,
+  T2: 2,
+  T3: 3,
+};
 const MAX_TIMEOUT_MS = 30_000;
 const ACTION_FINGERPRINT_VERSION = "jarvis-action-fingerprint:v1";
 const EFFECT_FINGERPRINT_VERSION = "jarvis-effect-fingerprint:v1";
@@ -452,7 +459,10 @@ export class ToolExecutionService {
     }
 
     const execution = this.executeOnce(input, definition, key, effectFingerprint, scope);
-    this.inFlight.set(key, { fingerprint: expectedFingerprint, promise: execution });
+    this.inFlight.set(key, {
+      fingerprint: expectedFingerprint,
+      promise: execution,
+    });
     try {
       return await execution;
     } finally {
@@ -524,7 +534,9 @@ export class ToolExecutionService {
       receiptKey: key,
       receipt: unresolved,
       ...(providerReference === null
-        ? { missingReferenceReason: "reconciliation-record-has-no-provider-request" }
+        ? {
+            missingReferenceReason: "reconciliation-record-has-no-provider-request",
+          }
         : {}),
     });
     if (!bound.receipt)
@@ -578,6 +590,49 @@ export class ToolExecutionService {
         ),
       );
     }
+    const externalProvider = definition?.externalProvider;
+    const safetyBinding = bindSafety({
+      phase: "tool-execute",
+      riskLevel: "moderate",
+      domainBound: true,
+      memorySafe: true,
+      reliabilityHealthy: !externalProvider || this.reconciliations !== undefined,
+      proposalSafe: true,
+      toolAllowlisted: definition !== undefined,
+      requiredAuthority: input.action.requiredAuthority,
+      grantedAuthority: input.authority,
+      actionState: "execute",
+      requiresApproval: true,
+      approvalPresent: input.action.state === "approved" && !input.action.isApprovalExpired,
+      destructive: input.action.destructive,
+      externalEffect: externalProvider !== undefined,
+      idempotencyKey: input.idempotencyKey,
+      correlationId: input.correlationId ?? input.action.requestId,
+      payload: input.action.arguments,
+      stateValid: input.action.state === "approved" && !input.action.isApprovalExpired,
+      outcome: "pending",
+      recoveryAvailable: externalProvider === undefined || this.reconciliations !== undefined,
+    });
+    if (safetyBinding.status === "blocked") {
+      const safetyReasons = safetyBinding.categories.flatMap((category) => category.reasons);
+      const onlyAllowlistFailure =
+        safetyReasons.length > 0 &&
+        safetyReasons.every(
+          (reason) => reason === "The tool action is not present in the reviewed allowlist.",
+        );
+      return this.persistDecision(
+        key,
+        receipt(
+          input.action,
+          input.idempotencyKey,
+          "blocked",
+          onlyAllowlistFailure ? "not-allowlisted" : "safety-blocked",
+          startedAt,
+          input,
+        ),
+      );
+    }
+
     if (!definition) {
       return this.persistDecision(
         key,
@@ -679,7 +734,6 @@ export class ToolExecutionService {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
     const actionFingerprint = fingerprintToolAction(input.action);
-    const externalProvider = definition.externalProvider;
     const externalReconciliationId = scope ? reconciliationId(scope) : undefined;
     let registeredReference: ProviderAttemptReference | undefined;
     const context: ToolExecutionContext = {
@@ -830,11 +884,15 @@ export class ToolExecutionService {
             receiptKey: key,
             receipt: unresolved,
             ...(registeredReference === undefined
-              ? { missingReferenceReason: "external-timeout-before-provider-reference" }
+              ? {
+                  missingReferenceReason: "external-timeout-before-provider-reference",
+                }
               : {}),
           });
           if (!envelope.receipt) {
-            throw new Error("External uncertainty did not persist a receipt.", { cause: error });
+            throw new Error("External uncertainty did not persist a receipt.", {
+              cause: error,
+            });
           }
           return envelope.receipt;
         }
