@@ -116,11 +116,11 @@ function resolveOidcConfig(env: JarvisEnvironment, required: boolean): OidcConfi
       "Remote HTTP exposure requires JARVIS_OIDC_ISSUER, JARVIS_OIDC_AUDIENCE and JARVIS_OIDC_JWKS_URL.",
     );
   }
-  if (audience.length > 256 || /[\\s]/.test(audience)) {
+  if (audience.length > 256 || /[\s]/.test(audience)) {
     throw new Error("JARVIS_OIDC_AUDIENCE must be a bounded value without whitespace.");
   }
   const rawSkew = optionalText(env.JARVIS_OIDC_CLOCK_SKEW_SECONDS) ?? "30";
-  if (!/^\\d+$/.test(rawSkew)) {
+  if (!/^\d+$/.test(rawSkew)) {
     throw new Error("JARVIS_OIDC_CLOCK_SKEW_SECONDS must be an integer between 0 and 300.");
   }
   const clockSkewSeconds = Number(rawSkew);
