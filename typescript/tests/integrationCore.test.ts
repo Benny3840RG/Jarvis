@@ -49,6 +49,8 @@ describe("runtime integration core", () => {
       () => domains.register("workshop", async () => "duplicate"),
       /already registered/,
     );
+    assert.equal(domains.has(" workshop "), true);
+    assert.equal(domains.resolve(" workshop "), domains.resolve("workshop"));
     assert.throws(() => domains.resolve("home"), /Unknown domain/);
     const listed = domains.list();
     assert.deepEqual(listed, ["workshop"]);
@@ -67,6 +69,10 @@ describe("runtime integration core", () => {
 
   it("routes tools and domains through one correlation-aware boundary", async () => {
     const core = createRuntimeIntegrationCore();
+    const failures: unknown[] = [];
+    core.events.subscribe("runtime.route.failed", (event) => {
+      failures.push(event.payload);
+    });
     core.domains.register("workshop", async (action, payload) => ({
       kind: "domain",
       action,
@@ -93,6 +99,7 @@ describe("runtime integration core", () => {
       correlationId: "corr-tool",
     });
     await assert.rejects(() => core.router.route("missing", "route", {}), /Unknown domain/);
+    assert.deepEqual(failures, [{ route: "missing:route", errorCode: "route-unavailable" }]);
 
     const domainLinks = core.memory.list("corr-domain");
     assert.deepEqual(
