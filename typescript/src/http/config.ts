@@ -1,6 +1,9 @@
 import { isIP } from "node:net";
 
-import { resolveRemoteGatewayConfig, type RemoteGatewayConfig } from "./remoteGateway.js";
+import {
+  resolveRemoteGatewayConfig,
+  type RemoteGatewayConfig,
+} from "./remoteGateway.js";
 
 export const JARVIS_VERSION = "0.1.0";
 
@@ -59,7 +62,9 @@ function resolveSourceVersion(value: string | undefined): string {
     sourceVersion.length > 64 ||
     !/^[A-Za-z0-9][A-Za-z0-9._/+:@-]*$/.test(sourceVersion)
   ) {
-    throw new Error("JARVIS_SOURCE_VERSION must contain between 7 and 64 characters.");
+    throw new Error(
+      "JARVIS_SOURCE_VERSION must contain between 7 and 64 characters.",
+    );
   }
   return sourceVersion;
 }
@@ -71,7 +76,9 @@ function resolveDeploymentVersion(value: string | undefined): string | null {
     deploymentVersion.length > 128 ||
     !/^[A-Za-z0-9][A-Za-z0-9._/+:@-]*$/.test(deploymentVersion)
   ) {
-    throw new Error("JARVIS_DEPLOYMENT_VERSION must be a safe identifier up to 128 characters.");
+    throw new Error(
+      "JARVIS_DEPLOYMENT_VERSION must be a safe identifier up to 128 characters.",
+    );
   }
   return deploymentVersion;
 }
@@ -87,10 +94,17 @@ function validHost(host: string): boolean {
 
 function isLoopbackHost(host: string): boolean {
   const normalized = host.toLowerCase();
-  return normalized === "localhost" || normalized === "127.0.0.1" || normalized === "::1";
+  return (
+    normalized === "localhost" ||
+    normalized === "127.0.0.1" ||
+    normalized === "::1"
+  );
 }
 
-function secureUrl(value: string | undefined, field: string): string | undefined {
+function secureUrl(
+  value: string | undefined,
+  field: string,
+): string | undefined {
   const raw = optionalText(value);
   if (raw === undefined) return undefined;
   let parsed: URL;
@@ -99,17 +113,29 @@ function secureUrl(value: string | undefined, field: string): string | undefined
   } catch {
     throw new Error(`${field} must be a valid HTTPS URL.`);
   }
-  if (parsed.protocol !== "https:" || parsed.username || parsed.password || parsed.search || parsed.hash) {
-    throw new Error(`${field} must be a valid HTTPS URL without credentials, query strings or fragments.`);
+  if (
+    parsed.protocol !== "https:" ||
+    parsed.username ||
+    parsed.password ||
+    parsed.search ||
+    parsed.hash
+  ) {
+    throw new Error(
+      `${field} must be a valid HTTPS URL without credentials, query strings or fragments.`,
+    );
   }
   return parsed.toString();
 }
 
-function resolveOidcConfig(env: JarvisEnvironment, required: boolean): OidcConfig | undefined {
+function resolveOidcConfig(
+  env: JarvisEnvironment,
+  required: boolean,
+): OidcConfig | undefined {
   const issuer = secureUrl(env.JARVIS_OIDC_ISSUER, "JARVIS_OIDC_ISSUER");
   const jwksUrl = secureUrl(env.JARVIS_OIDC_JWKS_URL, "JARVIS_OIDC_JWKS_URL");
   const audience = optionalText(env.JARVIS_OIDC_AUDIENCE);
-  const provided = issuer !== undefined || jwksUrl !== undefined || audience !== undefined;
+  const provided =
+    issuer !== undefined || jwksUrl !== undefined || audience !== undefined;
   if (!required && !provided) return undefined;
   if (issuer === undefined || jwksUrl === undefined || audience === undefined) {
     throw new Error(
@@ -117,20 +143,32 @@ function resolveOidcConfig(env: JarvisEnvironment, required: boolean): OidcConfi
     );
   }
   if (audience.length > 256 || /[\s]/.test(audience)) {
-    throw new Error("JARVIS_OIDC_AUDIENCE must be a bounded value without whitespace.");
+    throw new Error(
+      "JARVIS_OIDC_AUDIENCE must be a bounded value without whitespace.",
+    );
   }
   const rawSkew = optionalText(env.JARVIS_OIDC_CLOCK_SKEW_SECONDS) ?? "30";
   if (!/^\d+$/.test(rawSkew)) {
-    throw new Error("JARVIS_OIDC_CLOCK_SKEW_SECONDS must be an integer between 0 and 300.");
+    throw new Error(
+      "JARVIS_OIDC_CLOCK_SKEW_SECONDS must be an integer between 0 and 300.",
+    );
   }
   const clockSkewSeconds = Number(rawSkew);
-  if (!Number.isSafeInteger(clockSkewSeconds) || clockSkewSeconds < 0 || clockSkewSeconds > 300) {
-    throw new Error("JARVIS_OIDC_CLOCK_SKEW_SECONDS must be an integer between 0 and 300.");
+  if (
+    !Number.isSafeInteger(clockSkewSeconds) ||
+    clockSkewSeconds < 0 ||
+    clockSkewSeconds > 300
+  ) {
+    throw new Error(
+      "JARVIS_OIDC_CLOCK_SKEW_SECONDS must be an integer between 0 and 300.",
+    );
   }
   return { issuer, audience, jwksUrl, clockSkewSeconds };
 }
 
-export function resolveHttpAppConfig(env: JarvisEnvironment = process.env): HttpAppConfig {
+export function resolveHttpAppConfig(
+  env: JarvisEnvironment = process.env,
+): HttpAppConfig {
   const timezone = optionalText(env.JARVIS_TIMEZONE);
   const rawHost = optionalText(env.JARVIS_HTTP_HOST) ?? "127.0.0.1";
   const remote = !isLoopbackHost(rawHost.toLowerCase());
@@ -139,7 +177,9 @@ export function resolveHttpAppConfig(env: JarvisEnvironment = process.env): Http
   const currentToken = optionalSecret(env.JARVIS_SERVICE_TOKEN);
   const previousToken = optionalSecret(env.JARVIS_SERVICE_TOKEN_PREVIOUS);
   const currentApprovalToken = optionalSecret(env.JARVIS_APPROVAL_TOKEN);
-  const previousApprovalToken = optionalSecret(env.JARVIS_APPROVAL_TOKEN_PREVIOUS);
+  const previousApprovalToken = optionalSecret(
+    env.JARVIS_APPROVAL_TOKEN_PREVIOUS,
+  );
   return {
     version: JARVIS_VERSION,
     sourceVersion: resolveSourceVersion(env.JARVIS_SOURCE_VERSION),
@@ -155,7 +195,9 @@ export function resolveHttpAppConfig(env: JarvisEnvironment = process.env): Http
   };
 }
 
-export function resolveHttpListenConfig(env: JarvisEnvironment = process.env): HttpListenConfig {
+export function resolveHttpListenConfig(
+  env: JarvisEnvironment = process.env,
+): HttpListenConfig {
   const rawHost = optionalText(env.JARVIS_HTTP_HOST) ?? "127.0.0.1";
   if (!validHost(rawHost)) {
     throw new Error("JARVIS_HTTP_HOST must be a valid IP address or hostname.");
