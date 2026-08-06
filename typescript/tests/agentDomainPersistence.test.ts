@@ -5,19 +5,14 @@ import path from "node:path";
 import { describe, it } from "node:test";
 
 import { BusinessEngine } from "../src/agent/businessEngine.js";
-import {
-  AGENT_DOMAIN_STATE_KEY,
-  PersistentDomainStateStore,
-} from "../src/agent/domainState.js";
+import { AGENT_DOMAIN_STATE_KEY, PersistentDomainStateStore } from "../src/agent/domainState.js";
 import { HomeEngine } from "../src/agent/homeEngine.js";
 import { WorkshopEngine } from "../src/agent/workshopEngine.js";
 import { JSONPersistence } from "../src/persistence/jsonPersistence.js";
 
 describe("durable agent domain state", () => {
   it("survives engine reconstruction across business, workshop and home domains", async () => {
-    const directory = await mkdtemp(
-      path.join(os.tmpdir(), "jarvis-agent-domain-"),
-    );
+    const directory = await mkdtemp(path.join(os.tmpdir(), "jarvis-agent-domain-"));
     const filePath = path.join(directory, "state.json");
 
     try {
@@ -50,21 +45,15 @@ describe("durable agent domain state", () => {
         name: "Drill",
         inUse: true,
       });
-      assert.deepEqual(
-        await workshop.handle("consume_item", { itemId: "i1", quantity: 5 }),
-        {
-          id: "i1",
-          name: "Screws",
-          quantity: 95,
-        },
-      );
-      assert.deepEqual(
-        await home.handle("activate_scene", { sceneName: "arrival" }),
-        {
-          activated: "arrival",
-          description: "Lights on, kettle on",
-        },
-      );
+      assert.deepEqual(await workshop.handle("consume_item", { itemId: "i1", quantity: 5 }), {
+        id: "i1",
+        name: "Screws",
+        quantity: 95,
+      });
+      assert.deepEqual(await home.handle("activate_scene", { sceneName: "arrival" }), {
+        activated: "arrival",
+        description: "Lights on, kettle on",
+      });
 
       const secondStore = new PersistentDomainStateStore(persistence);
       const restoredBusiness = new BusinessEngine(secondStore);
@@ -112,30 +101,18 @@ describe("durable agent domain state", () => {
   });
 
   it("rejects unsafe inventory mutations at the domain boundary", async () => {
-    const directory = await mkdtemp(
-      path.join(os.tmpdir(), "jarvis-agent-domain-"),
-    );
+    const directory = await mkdtemp(path.join(os.tmpdir(), "jarvis-agent-domain-"));
 
     try {
-      const persistence = new JSONPersistence(
-        path.join(directory, "state.json"),
-      );
-      const workshop = new WorkshopEngine(
-        new PersistentDomainStateStore(persistence),
-      );
+      const persistence = new JSONPersistence(path.join(directory, "state.json"));
+      const workshop = new WorkshopEngine(new PersistentDomainStateStore(persistence));
 
-      assert.deepEqual(
-        await workshop.handle("consume_item", { itemId: "i1", quantity: -1 }),
-        {
-          error: "Quantity must be positive",
-        },
-      );
-      assert.deepEqual(
-        await workshop.handle("restock_item", { itemId: "i1", quantity: 0 }),
-        {
-          error: "Quantity must be positive",
-        },
-      );
+      assert.deepEqual(await workshop.handle("consume_item", { itemId: "i1", quantity: -1 }), {
+        error: "Quantity must be positive",
+      });
+      assert.deepEqual(await workshop.handle("restock_item", { itemId: "i1", quantity: 0 }), {
+        error: "Quantity must be positive",
+      });
     } finally {
       await rm(directory, { recursive: true, force: true });
     }
