@@ -88,7 +88,7 @@ export function resolveRemoteGatewayConfig(
 ): RemoteGatewayConfig {
   if (env.JARVIS_REMOTE_GATEWAY_ENABLED !== "true") {
     throw new Error(
-      "Remote HTTP exposure requires JARVIS_REMOTE_GATEWAY_ENABLED=true and the approved gateway boundary.",
+      "Remote gateway HTTP exposure requires JARVIS_REMOTE_GATEWAY_ENABLED=true and the approved gateway boundary.",
     );
   }
   if (env.JARVIS_TLS_TERMINATED !== "true") {
