@@ -38,11 +38,11 @@ function boundedInteger(
 ): number {
   const raw = optionalText(value) ?? String(defaultValue);
   if (!/^\d+$/.test(raw)) {
-    throw new Error(\`${field} must be an integer between ${min} and ${max}.\`);
+    throw new Error(`${field} must be an integer between ${min} and ${max}.`);
   }
   const parsed = Number(raw);
   if (!Number.isSafeInteger(parsed) || parsed < min || parsed > max) {
-    throw new Error(\`${field} must be an integer between ${min} and ${max}.\`);
+    throw new Error(`${field} must be an integer between ${min} and ${max}.`);
   }
   return parsed;
 }
