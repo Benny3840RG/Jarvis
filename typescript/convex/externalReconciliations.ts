@@ -14,6 +14,11 @@ import {
 } from "./toolExecutionValidators.js";
 import type { Doc } from "./_generated/dataModel.js";
 import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server.js";
+import {
+  assertCanonicalSafetyBinding,
+  toConvexSafetyBinding,
+  safetyBindingValidator,
+} from "./safetyBindingValidators.js";
 
 const scopeArgs = {
   projectId: v.string(),
@@ -141,9 +146,11 @@ function receiptDocument(
     providerErrorCode?: string;
     startedAt: number;
     completedAt: number;
+    safetyBinding?: Parameters<typeof assertCanonicalSafetyBinding>[0];
   },
   createdAt: number,
 ) {
+  if (receipt.safetyBinding !== undefined) assertCanonicalSafetyBinding(receipt.safetyBinding);
   return {
     ownerId,
     receiptKey,
@@ -200,6 +207,9 @@ function receiptDocument(
       : {
           providerErrorCode: cleanRequiredText(receipt.providerErrorCode, "Provider error code"),
         }),
+    ...(receipt.safetyBinding === undefined
+      ? {}
+      : { safetyBinding: toConvexSafetyBinding(receipt.safetyBinding) }),
     startedAt: receipt.startedAt,
     completedAt: receipt.completedAt,
     createdAt,
@@ -321,6 +331,7 @@ export const registerAttempt = mutation({
     provider: v.string(),
     providerRequestId: v.string(),
     providerCorrelationId: v.string(),
+    safetyBinding: v.optional(safetyBindingValidator),
   },
   returns: externalReconciliationDocumentValidator,
   handler: async (ctx, args) => {
@@ -337,6 +348,7 @@ export const registerAttempt = mutation({
       args.providerCorrelationId,
       "Provider correlation ID",
     );
+    if (args.safetyBinding !== undefined) assertCanonicalSafetyBinding(args.safetyBinding);
 
     const existing = await findByScope(ctx, ownerId, scope);
     if (existing) {
@@ -348,6 +360,15 @@ export const registerAttempt = mutation({
         existing.providerCorrelationId !== providerCorrelationId
       ) {
         throw new Error("External execution scope has a conflicting provider attempt reference.");
+      }
+      if (existing.safetyBinding === undefined && args.safetyBinding !== undefined) {
+        await ctx.db.patch("externalReconciliations", existing._id, {
+          safetyBinding: args.safetyBinding,
+          updatedAt: Date.now(),
+        });
+        const updated = await ctx.db.get("externalReconciliations", existing._id);
+        if (!updated) throw new Error("External reconciliation evidence update failed.");
+        return updated;
       }
       return existing;
     }
@@ -377,6 +398,7 @@ export const registerAttempt = mutation({
       nextAttemptAt: now,
       createdAt: now,
       updatedAt: now,
+      ...(args.safetyBinding === undefined ? {} : { safetyBinding: args.safetyBinding }),
     });
     const created = await ctx.db.get("externalReconciliations", id);
     if (!created) throw new Error("External reconciliation creation failed.");
@@ -439,6 +461,9 @@ export const markIndeterminate = mutation({
         providerCorrelationId: args.receipt.providerCorrelationId ?? args.receipt.correlationId,
         receiptKey,
         receiptId: args.receipt.receiptId,
+        ...(args.receipt.safetyBinding === undefined
+          ? {}
+          : { safetyBinding: args.receipt.safetyBinding }),
         state: "escalated",
         attemptCount: 0,
         nextAttemptAt: now,
@@ -480,6 +505,9 @@ export const markIndeterminate = mutation({
       state,
       nextAttemptAt: now,
       updatedAt: now,
+      ...(boundReceipt.safetyBinding === undefined
+        ? {}
+        : { safetyBinding: boundReceipt.safetyBinding }),
       ...(state === "escalated"
         ? {
             escalationReason: args.missingReferenceReason ?? "provider-reference-missing",
@@ -543,6 +571,9 @@ export const completeAttempt = mutation({
           providerCorrelationId: indeterminateReceipt.providerCorrelationId,
           receiptKey,
           receiptId: args.receipt.receiptId,
+          ...(indeterminateReceipt.safetyBinding === undefined
+            ? {}
+            : { safetyBinding: indeterminateReceipt.safetyBinding }),
           state: "escalated",
           attemptCount: 0,
           nextAttemptAt: now,
@@ -590,6 +621,9 @@ export const completeAttempt = mutation({
       receiptKey,
       receiptId: boundReceipt.receiptId,
       state: "resolved",
+      ...(boundReceipt.safetyBinding === undefined
+        ? {}
+        : { safetyBinding: boundReceipt.safetyBinding }),
       terminalStatus,
       ...(boundReceipt.outputDigest === undefined
         ? {}
@@ -779,6 +813,7 @@ export const resolveClaim = mutation({
           : {}),
         startedAt: receipt.startedAt,
         completedAt: args.now,
+        safetyBinding: receipt.safetyBinding ?? reconciliation.safetyBinding,
       },
       receipt.createdAt,
     );

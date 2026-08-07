@@ -122,6 +122,7 @@ describe("tool execution stage", () => {
       idempotencyKey: "same",
       dryRun: true,
     });
+    assert.equal(dryRun.safetyBinding?.version, "jarvis-safety-binding:v1");
     assert.equal(dryRun.status, "dry-run");
     assert.equal(executions, 0);
     const real = await executor.execute({

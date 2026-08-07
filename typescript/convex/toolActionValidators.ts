@@ -1,4 +1,5 @@
 import { v } from "convex/values";
+import { safetyBindingValidator } from "./safetyBindingValidators.js";
 
 export const toolActionStateValidator = v.union(
   v.literal("proposed"),
@@ -58,4 +59,5 @@ export const toolActionDocumentValidator = v.object({
   revokedAt: v.optional(v.number()),
   singleUseClaimedAt: v.optional(v.number()),
   singleUseClaimId: v.optional(v.string()),
+  safetyBinding: v.optional(safetyBindingValidator),
 });

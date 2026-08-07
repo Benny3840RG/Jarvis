@@ -13,12 +13,60 @@ function harness() {
   return convexTest(schema, modules);
 }
 
+const safetyBinding = {
+  version: "jarvis-safety-binding:v1" as const,
+  phase: "tool-execute" as const,
+  status: "pass" as const,
+  categories: ["domain", "cross-domain", "memory", "reliability", "proposal", "tool-action"].map(
+    (category) => ({
+      category: category as
+        "domain" | "cross-domain" | "memory" | "reliability" | "proposal" | "tool-action",
+      status: "pass" as const,
+      reasons: [],
+    }),
+  ),
+};
+
 beforeEach(() => {
   vi.stubEnv("JARVIS_SERVICE_TOKEN", SERVICE_TOKEN);
 });
 
 afterEach(() => {
   vi.unstubAllEnvs();
+});
+
+describe("external reconciliation safety evidence", () => {
+  it("persists and reads the originating safety binding across the reconciliation boundary", async () => {
+    const t = harness();
+    const registered = await t.mutation(api.externalReconciliations.registerAttempt, {
+      serviceToken: SERVICE_TOKEN,
+      projectId: "project-1",
+      tool: "quotes",
+      operation: "send",
+      idempotencyKey: "idempotency-1",
+      effectFingerprint: "effect-fingerprint-1",
+      reconciliationId: "reconciliation-1",
+      executionKey: "execution-1",
+      actionId: "action-1",
+      requestId: "request-1",
+      actionFingerprint: "action-fingerprint-1",
+      provider: "test-provider",
+      providerRequestId: "provider-request-1",
+      providerCorrelationId: "provider-correlation-1",
+      safetyBinding,
+    });
+    expect(registered.safetyBinding?.version).toBe("jarvis-safety-binding:v1");
+
+    const readback = await t.query(api.externalReconciliations.getByScope, {
+      serviceToken: SERVICE_TOKEN,
+      projectId: "project-1",
+      tool: "quotes",
+      operation: "send",
+      idempotencyKey: "idempotency-1",
+      effectFingerprint: "effect-fingerprint-1",
+    });
+    expect(readback?.reconciliation.safetyBinding?.phase).toBe("tool-execute");
+  });
 });
 
 async function seedReceipt(ctx: MutationCtx, receiptKey: string) {
@@ -33,6 +81,7 @@ async function seedReceipt(ctx: MutationCtx, receiptKey: string) {
     tool: "quotes",
     operation: "send",
     status: "indeterminate",
+    safetyBinding,
     startedAt: Date.now(),
     completedAt: Date.now(),
     createdAt: Date.now(),
@@ -69,6 +118,7 @@ async function seedClaimedReconciliation(
     leaseExpiresAt: overrides.leaseExpiresAt,
     createdAt: Date.now(),
     updatedAt: Date.now(),
+    safetyBinding,
   });
 }
 
@@ -221,6 +271,25 @@ describe("terminal quote delivery projection", () => {
     expect(delivery?.status).toBe("reconciled");
     expect(delivery?.reconciledOutcome).toBe("succeeded");
     expect(delivery?.reconciledAt).toBe(now);
+
+    const evidence = await t.run((ctx) =>
+      ctx.db
+        .query("externalReconciliations")
+        .withIndex("by_owner_and_reconciliation_id", (q) =>
+          q.eq("ownerId", OWNER_ID).eq("reconciliationId", "reconciliation-1"),
+        )
+        .unique(),
+    );
+    expect(evidence?.safetyBinding?.version).toBe("jarvis-safety-binding:v1");
+    const receiptEvidence = await t.run((ctx) =>
+      ctx.db
+        .query("toolExecutionReceipts")
+        .withIndex("by_owner_and_receipt_key", (q) =>
+          q.eq("ownerId", OWNER_ID).eq("receiptKey", "receipt-key-1"),
+        )
+        .unique(),
+    );
+    expect(receiptEvidence?.safetyBinding?.phase).toBe("tool-execute");
   });
 
   it("retains the provider error when the reconciled quote delivery failed", async () => {

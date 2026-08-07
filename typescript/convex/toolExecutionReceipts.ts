@@ -2,6 +2,7 @@ import { v } from "convex/values";
 
 import { requireOwner } from "./authHelpers.js";
 import { cleanRequiredText } from "./toolActionLogic.js";
+import { assertCanonicalSafetyBinding, safetyBindingValidator } from "./safetyBindingValidators.js";
 import {
   toolExecutionActorValidator,
   toolExecutionErrorCodeValidator,
@@ -57,6 +58,7 @@ export const save = mutation({
     providerErrorCode: v.optional(v.string()),
     startedAt: v.number(),
     completedAt: v.number(),
+    safetyBinding: v.optional(safetyBindingValidator),
   },
   returns: toolExecutionReceiptDocumentValidator,
   handler: async (ctx, args) => {
@@ -83,6 +85,7 @@ export const save = mutation({
     );
     const reconciliationId = cleanOptionalText(args.reconciliationId, "Reconciliation ID");
     const providerErrorCode = cleanOptionalText(args.providerErrorCode, "Provider error code");
+    if (args.safetyBinding !== undefined) assertCanonicalSafetyBinding(args.safetyBinding);
 
     const existing = await ctx.db
       .query("toolExecutionReceipts")
@@ -124,6 +127,7 @@ export const save = mutation({
       ...(providerErrorCode === undefined ? {} : { providerErrorCode }),
       startedAt: args.startedAt,
       completedAt: args.completedAt,
+      ...(args.safetyBinding === undefined ? {} : { safetyBinding: args.safetyBinding }),
       createdAt: Date.now(),
     });
     const created = await ctx.db.get("toolExecutionReceipts", id);

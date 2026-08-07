@@ -1,4 +1,5 @@
 import { v } from "convex/values";
+import { safetyBindingValidator } from "./safetyBindingValidators.js";
 
 export const toolExecutionStatusValidator = v.union(
   v.literal("dry-run"),
@@ -56,6 +57,7 @@ export const toolExecutionReceiptInputValidator = v.object({
   providerErrorCode: v.optional(v.string()),
   startedAt: v.number(),
   completedAt: v.number(),
+  safetyBinding: v.optional(safetyBindingValidator),
 });
 
 export const toolExecutionReceiptDocumentValidator = v.object({
@@ -88,4 +90,5 @@ export const toolExecutionReceiptDocumentValidator = v.object({
   startedAt: v.number(),
   completedAt: v.number(),
   createdAt: v.number(),
+  safetyBinding: v.optional(safetyBindingValidator),
 });

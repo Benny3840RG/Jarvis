@@ -12,6 +12,7 @@ import {
   sameToolActionProposal,
   validateToolAuthority,
 } from "./toolActionLogic.js";
+import { toConvexSafetyBinding } from "./safetyBindingValidators.js";
 import {
   toolActionActorValidator,
   toolActionDocumentValidator,
@@ -20,6 +21,7 @@ import {
 } from "./toolActionValidators.js";
 import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server.js";
 import type { Doc } from "./_generated/dataModel.js";
+import { bindSafety, type SafetyPhase } from "../src/safety/safetyBinder.js";
 
 const toolActionViewValidator = v.object({
   ...toolActionDocumentValidator.fields,
@@ -107,6 +109,42 @@ async function requireAction(
     throw new Error("Tool action does not exist.");
   }
   return action;
+}
+
+function safetyBindingForAction(
+  phase: Extract<SafetyPhase, "tool-stage" | "tool-approve" | "tool-revoke">,
+  action: {
+    destructive: boolean;
+    requiredAuthority: "T0" | "T1" | "T2" | "T3";
+    idempotencyKey: string;
+    requestId: string;
+  },
+  approvalPresent: boolean,
+): ReturnType<typeof toConvexSafetyBinding> {
+  return toConvexSafetyBinding(
+    bindSafety({
+      phase,
+      riskLevel: action.destructive ? "high" : "moderate",
+      hazards: action.destructive ? ["destructive tool action"] : ["governed tool action"],
+      controls: ["allowlisted execution", "approval", "idempotency"],
+      domainBound: true,
+      memorySafe: true,
+      reliabilityHealthy: true,
+      proposalSafe: true,
+      toolAllowlisted: true,
+      requiredAuthority: action.requiredAuthority,
+      grantedAuthority: action.requiredAuthority,
+      actionState: phase === "tool-stage" ? "propose" : "approve",
+      requiresApproval: phase !== "tool-stage",
+      approvalPresent,
+      destructive: action.destructive,
+      idempotencyKey: action.idempotencyKey,
+      correlationId: action.requestId,
+      stateValid: true,
+      outcome: "pending",
+      recoveryAvailable: true,
+    }),
+  );
 }
 
 async function appendAudit(
@@ -204,11 +242,13 @@ export const stage = mutation({
     }
 
     const now = Date.now();
+    const safetyBinding = safetyBindingForAction("tool-stage", { ...proposal, requestId }, false);
     const id = await ctx.db.insert("toolActions", {
       ownerId,
       actionId,
       requestId,
       ...proposal,
+      safetyBinding,
       state: "proposed",
       createdAt: now,
       updatedAt: now,
@@ -227,6 +267,7 @@ export const stage = mutation({
         requiredAuthority: args.requiredAuthority,
         destructive: args.destructive,
         idempotencyKey,
+        safetyBinding,
       },
       createdAt: now,
     });
@@ -360,10 +401,12 @@ export const approve = mutation({
       // layer is where "not still approved" becomes an actual error
       // response, since only a non-transactional layer can safely convert
       // an already-committed result into a thrown/rejected response.
+      const safetyBinding = safetyBindingForAction("tool-approve", action, false);
       await ctx.db.patch("toolActions", action._id, {
         state: "expired",
         expiredObservedAt: now,
         updatedAt: now,
+        safetyBinding,
       });
       await appendAudit(ctx, {
         ownerId,
@@ -371,7 +414,12 @@ export const approve = mutation({
         projectKey,
         eventType: "tool.action.approval-expired",
         actor: "user",
-        payload: { actionId, approvalExpiresAt: action.approvalExpiresAt ?? null, observedAt: now },
+        payload: {
+          actionId,
+          approvalExpiresAt: action.approvalExpiresAt ?? null,
+          observedAt: now,
+          safetyBinding,
+        },
         createdAt: now,
       });
       const expiredDoc = await ctx.db.get("toolActions", action._id);
@@ -380,6 +428,7 @@ export const approve = mutation({
     }
 
     const approvalTtlMs = clampApprovalTtlMs(args.approvalTtlMs, action.destructive);
+    const safetyBinding = safetyBindingForAction("tool-approve", action, true);
     await ctx.db.patch("toolActions", action._id, {
       state: "approved",
       approvedBy: "user",
@@ -388,6 +437,7 @@ export const approve = mutation({
       approvalExpiryPolicy: "ttl",
       approvalExpiresAt: now + approvalTtlMs,
       consumptionPolicy: deriveConsumptionPolicy(action.destructive),
+      safetyBinding,
     });
     await appendAudit(ctx, {
       ownerId,
@@ -400,6 +450,7 @@ export const approve = mutation({
         baseRevision: action.baseRevision,
         requiredAuthority: action.requiredAuthority,
         destructive: action.destructive,
+        safetyBinding,
       },
       createdAt: now,
     });
@@ -499,12 +550,14 @@ export const revoke = mutation({
     }
 
     const now = args.now ?? Date.now();
+    const safetyBinding = safetyBindingForAction("tool-revoke", action, true);
     await ctx.db.patch("toolActions", action._id, {
       state: "revoked",
       revokedBy: "user",
       revokedReason: reason,
       revokedAt: now,
       updatedAt: now,
+      safetyBinding,
     });
     await appendAudit(ctx, {
       ownerId,
@@ -512,7 +565,7 @@ export const revoke = mutation({
       projectKey,
       eventType: "tool.action.revoked",
       actor: "user",
-      payload: { actionId, reason },
+      payload: { actionId, reason, safetyBinding },
       createdAt: now,
     });
 

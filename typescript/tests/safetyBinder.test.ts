@@ -51,6 +51,7 @@ describe("immutable safety-category binder", () => {
   it("assesses every authoritative category and freezes the validated evidence", () => {
     const result = bindSafety(validExternalInput());
 
+    assert.equal(result.version, "jarvis-safety-binding:v1");
     assert.equal(result.status, "pass");
     assert.deepEqual(
       result.categories.map((category) => category.category),

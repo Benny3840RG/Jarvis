@@ -69,6 +69,71 @@ async function stageAndReturn(t: ReturnType<typeof harness>, overrides = {}) {
 }
 
 describe("approve() consent-lifecycle stamping", () => {
+  it("persists an immutable safety binding on each consent transition and audit record", async () => {
+    const t = harness();
+    const staged = await stageAndReturn(t);
+    expect(staged.safetyBinding?.version).toBe("jarvis-safety-binding:v1");
+
+    const approved = await t.mutation(api.toolActions.approve, {
+      serviceToken: SERVICE_TOKEN,
+      projectKey: PROJECT_KEY,
+      actionId: "action-1",
+      expectedRevision: 1,
+      now: Date.now(),
+    });
+    expect(approved.safetyBinding?.phase).toBe("tool-approve");
+
+    const revoked = await t.mutation(api.toolActions.revoke, {
+      serviceToken: SERVICE_TOKEN,
+      projectKey: PROJECT_KEY,
+      actionId: "action-1",
+      reason: "No longer required.",
+      now: Date.now(),
+    });
+    expect(revoked.safetyBinding?.phase).toBe("tool-revoke");
+
+    const auditRows = await t.run((ctx) =>
+      ctx.db
+        .query("auditEvents")
+        .withIndex("by_owner_and_request_id", (q) =>
+          q.eq("ownerId", OWNER_ID).eq("requestId", "request-1"),
+        )
+        .collect(),
+    );
+    const lifecycleRows = auditRows.filter((row) => row.eventType.startsWith("tool.action."));
+    expect(lifecycleRows).toHaveLength(3);
+    expect(
+      lifecycleRows.every(
+        (row) => row.payload.safetyBinding?.version === "jarvis-safety-binding:v1",
+      ),
+    ).toBe(true);
+    expect(JSON.stringify(lifecycleRows).includes("title")).toBe(false);
+  });
+
+  it("stamps the durable binding when an expired approval is observed", async () => {
+    const t = harness();
+    await stageAndReturn(t);
+    await t.mutation(api.toolActions.approve, {
+      serviceToken: SERVICE_TOKEN,
+      projectKey: PROJECT_KEY,
+      actionId: "action-1",
+      expectedRevision: 1,
+      now: 1_000,
+      approvalTtlMs: 60_000,
+    });
+
+    const expired = await t.mutation(api.toolActions.approve, {
+      serviceToken: SERVICE_TOKEN,
+      projectKey: PROJECT_KEY,
+      actionId: "action-1",
+      expectedRevision: 1,
+      now: 61_001,
+    });
+    expect(expired.state).toBe("expired");
+    expect(expired.safetyBinding?.phase).toBe("tool-approve");
+    expect(expired.safetyBinding?.version).toBe("jarvis-safety-binding:v1");
+  });
+
   it("stamps a ttl expiry policy and a reusable consumption policy for a non-destructive proposal", async () => {
     const t = harness();
     await stageAndReturn(t);

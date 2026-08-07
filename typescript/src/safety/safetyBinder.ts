@@ -9,6 +9,8 @@ export const IMMUTABLE_SAFETY_CATEGORIES = [
   "tool-action",
 ] as const;
 
+export const SAFETY_BINDING_VERSION = "jarvis-safety-binding:v1" as const;
+
 export type SafetyCategory = (typeof IMMUTABLE_SAFETY_CATEGORIES)[number];
 export type SafetyStatus = "pass" | "blocked";
 export type SafetyPhase =
@@ -57,6 +59,7 @@ export type SafetyCategoryDecision = Readonly<{
 }>;
 
 export type SafetyBinding = Readonly<{
+  version: typeof SAFETY_BINDING_VERSION;
   phase: SafetyPhase;
   status: SafetyStatus;
   categories: readonly SafetyCategoryDecision[];
@@ -233,6 +236,7 @@ export function bindSafety(input: SafetyBindingInput): SafetyBinding {
   };
   const categories = IMMUTABLE_SAFETY_CATEGORIES.map((category) => decisions[category]);
   return freeze({
+    version: SAFETY_BINDING_VERSION,
     phase: input.phase,
     status: categories.some((category) => category.status === "blocked") ? "blocked" : "pass",
     categories,

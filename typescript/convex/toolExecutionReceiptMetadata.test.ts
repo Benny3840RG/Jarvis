@@ -4,6 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { api } from "./_generated/api.js";
 import schema from "./schema.js";
 import { modules } from "./test.setup.js";
+import { bindSafety } from "../src/safety/safetyBinder.js";
+import { toConvexSafetyBinding } from "./safetyBindingValidators.js";
 
 const SERVICE_TOKEN = "receipt-metadata-service-token-00000000000";
 
@@ -46,6 +48,23 @@ describe("tool execution receipt metadata", () => {
       status: "indeterminate" as const,
       errorCode: "indeterminate" as const,
       providerErrorCode: "provider-timeout",
+      safetyBinding: toConvexSafetyBinding(
+        bindSafety({
+          phase: "tool-execute",
+          riskLevel: "moderate",
+          reliabilityHealthy: true,
+          proposalSafe: true,
+          toolAllowlisted: true,
+          requiredAuthority: "T1",
+          grantedAuthority: "T1",
+          actionState: "execute",
+          requiresApproval: true,
+          approvalPresent: true,
+          idempotencyKey: "execution-1",
+          correlationId: "correlation-1",
+          stateValid: true,
+        }),
+      ),
       startedAt: 1,
       completedAt: 2,
     };
@@ -62,5 +81,7 @@ describe("tool execution receipt metadata", () => {
     expect(loaded?.providerCorrelationId).toBe(input.providerCorrelationId);
     expect(loaded?.reconciliationId).toBe(input.reconciliationId);
     expect(loaded?.providerErrorCode).toBe(input.providerErrorCode);
+    expect(loaded?.safetyBinding?.version).toBe("jarvis-safety-binding:v1");
+    expect(loaded?.safetyBinding?.phase).toBe("tool-execute");
   });
 });

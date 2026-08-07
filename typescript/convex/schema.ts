@@ -40,6 +40,7 @@ import {
   toolExecutionErrorCodeValidator,
   toolExecutionStatusValidator,
 } from "./toolExecutionValidators.js";
+import { safetyBindingValidator } from "./safetyBindingValidators.js";
 import {
   projectPreferencesValidator,
   projectRecordValidator,
@@ -226,6 +227,7 @@ export default defineSchema({
     // concurrent executions from both crossing the effect boundary.
     singleUseClaimedAt: v.optional(v.number()),
     singleUseClaimId: v.optional(v.string()),
+    safetyBinding: v.optional(safetyBindingValidator),
   })
     .index("by_owner_and_action_id", ["ownerId", "actionId"])
     .index("by_owner_and_idempotency_key", ["ownerId", "idempotencyKey"])
@@ -260,6 +262,7 @@ export default defineSchema({
     startedAt: v.number(),
     completedAt: v.number(),
     createdAt: v.number(),
+    safetyBinding: v.optional(safetyBindingValidator),
   })
     .index("by_owner_and_receipt_key", ["ownerId", "receiptKey"])
     .index("by_owner_and_action_id", ["ownerId", "actionId"]),
@@ -295,6 +298,7 @@ export default defineSchema({
     updatedAt: v.number(),
     resolvedAt: v.optional(v.number()),
     escalatedAt: v.optional(v.number()),
+    safetyBinding: v.optional(safetyBindingValidator),
   })
     .index("by_owner_and_reconciliation_id", ["ownerId", "reconciliationId"])
     .index("by_owner_and_scope", ["ownerId", "projectId", "tool", "operation", "idempotencyKey"])
