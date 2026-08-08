@@ -348,10 +348,9 @@ export class OrchestrationRunner {
       };
     }
 
-    if (this.stepState && !stateUnavailable) {
+    if (this.stepState && !stateUnavailable && leaseToken !== undefined) {
       try {
-        const activeLeaseToken =
-          leaseToken ?? (await this.stepState.start({ context, node })).leaseToken;
+        const activeLeaseToken = leaseToken;
         await this.stepState.fail({
           context,
           node,
