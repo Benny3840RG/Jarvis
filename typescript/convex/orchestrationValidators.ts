@@ -46,6 +46,13 @@ export const orchestrationRecoveryStateValidator = v.union(
   v.literal("escalated"),
 );
 
+export const orchestrationReconciliationStateValidator = v.union(
+  v.literal("pending"),
+  v.literal("succeeded"),
+  v.literal("failed"),
+  v.literal("escalated"),
+);
+
 export const orchestrationRecoveryEvidenceValidator = v.object({
   kind: v.union(
     v.literal("checkpoint"),
@@ -110,15 +117,55 @@ export const orchestrationStepDocumentValidator = v.object({
   nextAttemptAt: v.optional(v.number()),
 });
 
-export const orchestrationRecoveryResultValidator = v.union(
-  v.object({
-    status: v.literal("indeterminate"),
-    run: orchestrationRunDocumentValidator,
-    step: orchestrationStepDocumentValidator,
-  }),
-  v.object({
-    status: v.literal("escalated"),
-    run: orchestrationRunDocumentValidator,
-    step: orchestrationStepDocumentValidator,
-  }),
-);
+export const orchestrationPublicStepDocumentValidator = v.object({
+  _id: v.id("orchestrationSteps"),
+  _creationTime: v.number(),
+  ownerId: v.string(),
+  runId: v.string(),
+  nodeId: v.string(),
+  operationId: v.optional(v.string()),
+  state: orchestrationStepStateValidator,
+  attempt: v.number(),
+  retryable: v.boolean(),
+  outputDigest: v.optional(v.string()),
+  failureCode: v.optional(orchestrationFailureCodeValidator),
+  indeterminateReason: v.optional(v.string()),
+  reconciliationId: v.optional(v.string()),
+  updatedAt: v.number(),
+  completedAt: v.optional(v.number()),
+  leaseOwner: v.optional(v.string()),
+  leaseExpiresAt: v.optional(v.number()),
+  nextAttemptAt: v.optional(v.number()),
+});
+
+export const orchestrationLeaseGrantValidator = v.object({
+  step: orchestrationPublicStepDocumentValidator,
+  leaseToken: v.string(),
+});
+
+export const orchestrationReconciliationDocumentValidator = v.object({
+  _id: v.id("orchestrationReconciliations"),
+  _creationTime: v.number(),
+  ownerId: v.string(),
+  reconciliationId: v.string(),
+  runId: v.string(),
+  nodeId: v.string(),
+  attempt: v.number(),
+  effectFingerprint: v.string(),
+  provider: v.string(),
+  providerRequestId: v.optional(v.string()),
+  providerCorrelationId: v.string(),
+  state: orchestrationReconciliationStateValidator,
+  outputDigest: v.optional(v.string()),
+  failureCode: v.optional(orchestrationFailureCodeValidator),
+  terminalEvidence: v.optional(orchestrationRecoveryEvidenceValidator),
+  createdAt: v.number(),
+  updatedAt: v.number(),
+  resolvedAt: v.optional(v.number()),
+});
+
+export const orchestrationRecoveryResultValidator = v.object({
+  status: v.literal("indeterminate"),
+  run: orchestrationRunDocumentValidator,
+  step: orchestrationPublicStepDocumentValidator,
+});
