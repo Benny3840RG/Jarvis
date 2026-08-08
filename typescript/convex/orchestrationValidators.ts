@@ -112,7 +112,7 @@ export const orchestrationStepDocumentValidator = v.object({
 
 export const orchestrationRecoveryResultValidator = v.union(
   v.object({
-    status: v.literal("recovered"),
+    status: v.literal("indeterminate"),
     run: orchestrationRunDocumentValidator,
     step: orchestrationStepDocumentValidator,
   }),
