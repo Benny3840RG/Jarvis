@@ -54,6 +54,29 @@ async function registerReconciliation(
   runId = "run-1",
   nodeId = "first",
 ) {
+  await t.run((ctx) =>
+    ctx.db.insert("externalReconciliations", {
+      ownerId: "jarvis-cli",
+      reconciliationId,
+      executionKey: "execution-" + reconciliationId,
+      actionId: "action-" + reconciliationId,
+      requestId: "request-" + reconciliationId,
+      projectId: "project-1",
+      idempotencyKey: "idempotency-" + reconciliationId,
+      actionFingerprint: "action-" + reconciliationId,
+      effectFingerprint: "effect-" + reconciliationId,
+      tool: "task-tool",
+      operation: nodeId === "first" ? "createTask" : "completeTask",
+      provider: "task-provider",
+      providerRequestId: "provider-request-" + reconciliationId,
+      providerCorrelationId: "provider-correlation-" + reconciliationId,
+      state: "observing",
+      attemptCount: 0,
+      nextAttemptAt: Date.now(),
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    }),
+  );
   return t.mutation(api.orchestrationState.registerReconciliation, {
     serviceToken: SERVICE_TOKEN,
     runId,
@@ -221,16 +244,26 @@ describe("Convex orchestration state", () => {
         nodeId: "first",
         reconciliationId: "lease-reconciliation",
       }),
-    ).rejects.toThrow(/no verified terminal/);
+    ).rejects.toThrow(/authenticated terminal/);
 
-    await t.mutation(api.orchestrationState.recordReconciliationOutcome, {
-      serviceToken: SERVICE_TOKEN,
-      reconciliationId: "lease-reconciliation",
-      outcome: "succeeded",
-      outputDigest: "reconciled-digest",
-      evidenceDetail: "Provider lookup returned the committed task.",
-      resolverId: "recovery-1",
-    });
+    await t.run((ctx) =>
+      ctx.db
+        .query("externalReconciliations")
+        .withIndex("by_owner_and_reconciliation_id", (q) =>
+          q.eq("ownerId", "jarvis-cli").eq("reconciliationId", "lease-reconciliation"),
+        )
+        .unique()
+        .then(async (record) => {
+          if (!record) throw new Error("seeded provider reconciliation missing");
+          await ctx.db.patch("externalReconciliations", record._id, {
+            state: "resolved",
+            terminalStatus: "succeeded",
+            resolutionDigest: "reconciled-digest",
+            resolvedAt: Date.now(),
+            updatedAt: Date.now(),
+          });
+        }),
+    );
     const resolved = await t.mutation(api.orchestrationState.resolveIndeterminate, {
       serviceToken: SERVICE_TOKEN,
       runId: "run-1",
@@ -292,5 +325,56 @@ describe("Convex orchestration state", () => {
         nodeId: "first",
       }),
     ).rejects.toThrow(/Only retryable/);
+  });
+
+  it("does not mark dependency failures retryable without a pre-effect safety classification", async () => {
+    const t = harness();
+    await t.mutation(api.orchestrationState.beginRun, begin({ nodeIds: ["first"] }));
+    const lease = await start(t);
+    const failed = await t.mutation(api.orchestrationState.recordStepFailure, {
+      serviceToken: SERVICE_TOKEN,
+      runId: "run-1",
+      nodeId: "first",
+      workerId: "worker-1",
+      leaseToken: lease,
+      failureCode: "dependency_failure",
+    });
+    expect(failed.retryable).toBe(false);
+  });
+
+  it("redacts non-allowlisted trigger payload fields before durable persistence", async () => {
+    const t = harness();
+    await t.mutation(
+      api.orchestrationState.beginRun,
+      begin({
+        triggerPayload: { taskType: "maintenance", metadata: "secret-value" },
+      }),
+    );
+    const run = await t.query(api.orchestrationState.getRun, {
+      serviceToken: SERVICE_TOKEN,
+      runId: "run-1",
+    });
+    expect(run?.triggerPayload).toEqual({ taskType: "maintenance" });
+  });
+
+  it("clears retryability when a retry returns a failed step to pending", async () => {
+    const t = harness();
+    await t.mutation(api.orchestrationState.beginRun, begin({ nodeIds: ["first"], maxRetries: 2 }));
+    const lease = await start(t);
+    await t.mutation(api.orchestrationState.recordStepFailure, {
+      serviceToken: SERVICE_TOKEN,
+      runId: "run-1",
+      nodeId: "first",
+      workerId: "worker-1",
+      leaseToken: lease,
+      failureCode: "execution_budget_exceeded",
+    });
+    const retried = await t.mutation(api.orchestrationState.retryFailedStep, {
+      serviceToken: SERVICE_TOKEN,
+      runId: "run-1",
+      nodeId: "first",
+    });
+    expect(retried.state).toBe("pending");
+    expect(retried.retryable).toBe(false);
   });
 });
