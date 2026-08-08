@@ -225,7 +225,6 @@ describe("Convex orchestration state", () => {
 
     await t.mutation(api.orchestrationState.recordReconciliationOutcome, {
       serviceToken: SERVICE_TOKEN,
-      runId: "run-1",
       reconciliationId: "lease-reconciliation",
       outcome: "succeeded",
       outputDigest: "reconciled-digest",
