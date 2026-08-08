@@ -35,8 +35,7 @@ describe("OrchestrationTriggerRegistry", () => {
     registry.register("operator.request", () => new OrchestrationGraph());
 
     assert.throws(
-      () =>
-        registry.register("operator.request", () => new OrchestrationGraph()),
+      () => registry.register("operator.request", () => new OrchestrationGraph()),
       /already registered/,
     );
     await assert.rejects(
