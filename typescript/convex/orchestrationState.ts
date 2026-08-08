@@ -1,4 +1,3 @@
-npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm.
 import { v } from "convex/values";
 
 import { requireOwner } from "./authHelpers.js";
@@ -10,7 +9,6 @@ import {
   orchestrationReconciliationDocumentValidator,
   orchestrationRecoveryResultValidator,
   orchestrationRunDocumentValidator,
-  orchestrationStepDocumentValidator,
   orchestrationTriggerSourceValidator,
 } from "./orchestrationValidators.js";
 import type { Doc } from "./_generated/dataModel.js";
@@ -278,7 +276,7 @@ export const listSteps = query({
   args: {
     ...runArgs,
   },
-  returns: v.array(orchestrationStepDocumentValidator),
+  returns: v.array(orchestrationPublicStepDocumentValidator),
   handler: async (ctx, args) => {
     const ownerId = requireOwner(args.serviceToken);
     const runId = cleanRequired(args.runId, "Orchestration run ID");
@@ -396,7 +394,7 @@ export const recordStepSuccess = mutation({
     });
     const updated = await ctx.db.get("orchestrationSteps", step._id);
     if (!updated) throw new Error("Orchestration step update failed.");
-    return updated;
+    return publicStep(updated);
   },
 });
 
@@ -443,7 +441,7 @@ export const recordStepFailure = mutation({
     });
     const updated = await ctx.db.get("orchestrationSteps", step._id);
     if (!updated) throw new Error("Orchestration step update failed.");
-    return updated;
+    return publicStep(updated);
   },
 });
 
@@ -593,7 +591,6 @@ export const recordStepIndeterminate = mutation({
     nodeId: v.string(),
     workerId: v.string(),
     leaseToken: v.string(),
-    failureCode: orchestrationFailureCodeValidator,
     indeterminateReason: v.string(),
     reconciliationId: v.string(),
   },
@@ -621,7 +618,7 @@ export const recordStepIndeterminate = mutation({
 
     await ctx.db.patch("orchestrationSteps", step._id, {
       state: "indeterminate",
-      failureCode: args.failureCode,
+      failureCode: "dependency_failure",
       retryable: false,
       indeterminateReason,
       reconciliationId,
@@ -633,7 +630,7 @@ export const recordStepIndeterminate = mutation({
     });
     await ctx.db.patch("orchestrationRuns", run._id, {
       state: "indeterminate",
-      failureCode: args.failureCode,
+      failureCode: "dependency_failure",
       recoveryState: "required",
       recoveryEvidence: evidence(run, {
         kind: "indeterminate",
@@ -648,7 +645,7 @@ export const recordStepIndeterminate = mutation({
     });
     const updated = await ctx.db.get("orchestrationSteps", step._id);
     if (!updated) throw new Error("Orchestration step update failed.");
-    return updated;
+    return publicStep(updated);
   },
 });
 
@@ -776,7 +773,7 @@ export const retryFailedStep = mutation({
     });
     const updated = await ctx.db.get("orchestrationSteps", step._id);
     if (!updated) throw new Error("Orchestration retry update failed.");
-    return updated;
+    return publicStep(updated);
   },
 });
 
@@ -854,8 +851,3 @@ export const resolveIndeterminate = mutation({
     return publicStep(updated);
   },
 });
-npm notice
-npm notice New minor version of npm available! 11.9.0 -> 11.19.0
-npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.19.0
-npm notice To update run: npm install -g npm@11.19.0
-npm notice
