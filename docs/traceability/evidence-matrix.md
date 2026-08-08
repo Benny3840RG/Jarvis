@@ -42,7 +42,7 @@
 
 ## Current-baseline reconciliation — 2026-08-06
 
-The historical `5fabfae1` references above remain intentionally preserved as the exact revisions for the original ToolAction lifecycle verification. The current repository baseline is `1d338026149d1452d9c83b59c19ba3f5b89ef4d6`; later rows cite historical baselines where the current implementation and merged observability/foundation controls were inspected. This matrix records evidence status, not a claim that live external commissioning has occurred.
+The historical `5fabfae1` references above remain intentionally preserved as the exact revisions for the original ToolAction lifecycle verification. The current repository baseline is `0485ba750c9f08735ab784a1a3877c84d345144d`; later rows cite historical baselines where the current implementation and merged observability/foundation controls were inspected. This matrix records evidence status, not a claim that live external commissioning has occurred.
 
 The 2026-08-08 orchestration review evidence is intentionally partial: it proves in-process trigger validation, nested payload immutability, weighted dependency ordering, graph-state immutability, and retryable bounded stopping. It does not prove durable run recovery or production trigger activation.
 
