@@ -35,10 +35,17 @@ export function createConvexOrchestrationRunner(
  * any graph node can cross the executor boundary.
  */
 export class ConvexOrchestrationRunner {
+  private readonly runner: OrchestrationRunner;
+
   constructor(
     private readonly state: ConvexOrchestrationStateBoundary,
-    private readonly runner: OrchestrationRunner,
-  ) {}
+    executor: OrchestrationExecutor,
+    safety: OrchestrationSafetyGate,
+    outcomes: OrchestrationOutcomeRecorder,
+    options: OrchestrationRunnerOptions = {},
+  ) {
+    this.runner = createConvexOrchestrationRunner(state, executor, safety, outcomes, options);
+  }
 
   async run(
     graph: OrchestrationGraph,
