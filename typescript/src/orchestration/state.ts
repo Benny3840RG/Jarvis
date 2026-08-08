@@ -1,3 +1,4 @@
+npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm.
 import type { DomainFailureCode, OrchestrationCommand } from "./contracts.js";
 import type { OrchestrationTriggerSource } from "./trigger.js";
 import type { ToolAuthority } from "../runtime/totalityPolicy.js";
@@ -87,13 +88,23 @@ export type RecordStepFailureInput = {
 };
 
 export type DurableOrchestrationStateStore = {
-  beginRun(input: BeginOrchestrationRunInput): Promise<BeginOrchestrationRunResult>;
+  beginRun(
+    input: BeginOrchestrationRunInput,
+  ): Promise<BeginOrchestrationRunResult>;
   getRun(runId: string): Promise<OrchestrationRunRecord | null>;
   listSteps(runId: string): Promise<readonly OrchestrationStepRecord[]>;
-  markStepRunning(input: MarkStepRunningInput): Promise<OrchestrationStepRecord>;
-  recordStepSuccess(input: RecordStepSuccessInput): Promise<OrchestrationStepRecord>;
-  recordStepFailure(input: RecordStepFailureInput): Promise<OrchestrationStepRecord>;
-  recordStepIndeterminate(input: RecordStepFailureInput): Promise<OrchestrationStepRecord>;
+  markStepRunning(
+    input: MarkStepRunningInput,
+  ): Promise<OrchestrationStepRecord>;
+  recordStepSuccess(
+    input: RecordStepSuccessInput,
+  ): Promise<OrchestrationStepRecord>;
+  recordStepFailure(
+    input: RecordStepFailureInput,
+  ): Promise<OrchestrationStepRecord>;
+  recordStepIndeterminate(
+    input: RecordStepFailureInput,
+  ): Promise<OrchestrationStepRecord>;
 };
 
 type MutableRun = {
@@ -132,7 +143,9 @@ function required(value: string, label: string): string {
 
 function validTimestamp(value: number): number {
   if (!Number.isFinite(value) || value < 0) {
-    throw new Error("orchestration timestamp must be a finite non-negative number");
+    throw new Error(
+      "orchestration timestamp must be a finite non-negative number",
+    );
   }
   return value;
 }
@@ -154,12 +167,17 @@ export class InMemoryOrchestrationStateStore implements DurableOrchestrationStat
   private readonly runByIdempotencyKey = new Map<string, string>();
   private readonly steps = new Map<string, Map<string, MutableStep>>();
 
-  async beginRun(input: BeginOrchestrationRunInput): Promise<BeginOrchestrationRunResult> {
+  async beginRun(
+    input: BeginOrchestrationRunInput,
+  ): Promise<BeginOrchestrationRunResult> {
     const runId = required(input.runId, "run ID");
     const triggerId = required(input.triggerId, "trigger ID");
     const triggerKind = required(input.triggerKind, "trigger kind");
     const idempotencyKey = required(input.idempotencyKey, "idempotency key");
-    const requestFingerprint = required(input.requestFingerprint, "request fingerprint");
+    const requestFingerprint = required(
+      input.requestFingerprint,
+      "request fingerprint",
+    );
     const nodeIds = input.nodeIds.map((nodeId) => required(nodeId, "node ID"));
     validTimestamp(input.now);
 
@@ -181,7 +199,8 @@ export class InMemoryOrchestrationStateStore implements DurableOrchestrationStat
       };
     }
 
-    if (this.runs.has(runId)) throw new Error(`orchestration run already exists: ${runId}`);
+    if (this.runs.has(runId))
+      throw new Error(`orchestration run already exists: ${runId}`);
 
     const run: MutableRun = {
       runId,
@@ -220,11 +239,14 @@ export class InMemoryOrchestrationStateStore implements DurableOrchestrationStat
 
   async listSteps(runId: string): Promise<readonly OrchestrationStepRecord[]> {
     const steps = this.steps.get(required(runId, "run ID"));
-    if (steps === undefined) throw new Error(`orchestration run not found: ${runId}`);
+    if (steps === undefined)
+      throw new Error(`orchestration run not found: ${runId}`);
     return Object.freeze([...steps.values()].map(freezeStep));
   }
 
-  async markStepRunning(input: MarkStepRunningInput): Promise<OrchestrationStepRecord> {
+  async markStepRunning(
+    input: MarkStepRunningInput,
+  ): Promise<OrchestrationStepRecord> {
     const run = this.requireRun(input.runId);
     const step = this.requireStep(input.runId, input.nodeId);
     validTimestamp(input.now);
@@ -244,28 +266,38 @@ export class InMemoryOrchestrationStateStore implements DurableOrchestrationStat
     return freezeStep(step);
   }
 
-  async recordStepSuccess(input: RecordStepSuccessInput): Promise<OrchestrationStepRecord> {
+  async recordStepSuccess(
+    input: RecordStepSuccessInput,
+  ): Promise<OrchestrationStepRecord> {
     const run = this.requireRun(input.runId);
     const step = this.requireStep(input.runId, input.nodeId);
     validTimestamp(input.now);
     this.requireRunningStep(step);
-    if (run.state !== "running") throw new Error(`cannot complete step for run ${run.state}`);
+    if (run.state !== "running")
+      throw new Error(`cannot complete step for run ${run.state}`);
 
     step.state = "succeeded";
-    if (input.outputDigest !== undefined) step.outputDigest = required(input.outputDigest, "output digest");
+    if (input.outputDigest !== undefined)
+      step.outputDigest = required(input.outputDigest, "output digest");
     step.updatedAt = input.now;
     step.completedAt = input.now;
-    if (!run.completedStepIds.includes(step.nodeId)) run.completedStepIds.push(step.nodeId);
-    if (run.completedStepIds.length === run.nodeIds.length) run.state = "succeeded";
+    if (!run.completedStepIds.includes(step.nodeId))
+      run.completedStepIds.push(step.nodeId);
+    if (run.completedStepIds.length === run.nodeIds.length)
+      run.state = "succeeded";
     run.updatedAt = input.now;
     return freezeStep(step);
   }
 
-  async recordStepFailure(input: RecordStepFailureInput): Promise<OrchestrationStepRecord> {
+  async recordStepFailure(
+    input: RecordStepFailureInput,
+  ): Promise<OrchestrationStepRecord> {
     return this.recordTerminalStep(input, "failed");
   }
 
-  async recordStepIndeterminate(input: RecordStepFailureInput): Promise<OrchestrationStepRecord> {
+  async recordStepIndeterminate(
+    input: RecordStepFailureInput,
+  ): Promise<OrchestrationStepRecord> {
     return this.recordTerminalStep(input, "indeterminate");
   }
 
@@ -277,7 +309,8 @@ export class InMemoryOrchestrationStateStore implements DurableOrchestrationStat
     const step = this.requireStep(input.runId, input.nodeId);
     validTimestamp(input.now);
     this.requireRunningStep(step);
-    if (run.state !== "running") throw new Error(`cannot stop step for run ${run.state}`);
+    if (run.state !== "running")
+      throw new Error(`cannot stop step for run ${run.state}`);
 
     step.state = state;
     step.failureCode = input.failureCode;
@@ -292,7 +325,8 @@ export class InMemoryOrchestrationStateStore implements DurableOrchestrationStat
   private requireRun(runId: string): MutableRun {
     const normalized = required(runId, "run ID");
     const run = this.runs.get(normalized);
-    if (run === undefined) throw new Error(`orchestration run not found: ${normalized}`);
+    if (run === undefined)
+      throw new Error(`orchestration run not found: ${normalized}`);
     return run;
   }
 
@@ -301,7 +335,9 @@ export class InMemoryOrchestrationStateStore implements DurableOrchestrationStat
     const normalizedNodeId = required(nodeId, "node ID");
     const step = this.steps.get(normalizedRunId)?.get(normalizedNodeId);
     if (step === undefined) {
-      throw new Error(`orchestration step not found: ${normalizedRunId}/${normalizedNodeId}`);
+      throw new Error(
+        `orchestration step not found: ${normalizedRunId}/${normalizedNodeId}`,
+      );
     }
     return step;
   }
@@ -312,3 +348,8 @@ export class InMemoryOrchestrationStateStore implements DurableOrchestrationStat
     }
   }
 }
+npm notice
+npm notice New minor version of npm available! 11.9.0 -> 11.19.0
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.19.0
+npm notice To update run: npm install -g npm@11.19.0
+npm notice
