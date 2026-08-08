@@ -2,6 +2,15 @@ import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
 import {
+  orchestrationFailureCodeValidator,
+  orchestrationRecoveryEvidenceValidator,
+  orchestrationRecoveryStateValidator,
+  orchestrationRunStateValidator,
+  orchestrationStepStateValidator,
+  orchestrationTriggerSourceValidator,
+  orchestrationReconciliationStateValidator,
+} from "./orchestrationValidators.js";
+import {
   externalReconciliationStateValidator,
   externalReconciliationTerminalStatusValidator,
 } from "./externalReconciliationValidators.js";
@@ -307,6 +316,87 @@ export default defineSchema({
     .index("by_owner_and_state_and_next_attempt_at", ["ownerId", "state", "nextAttemptAt"])
     .index("by_owner_and_state_and_lease_expires_at", ["ownerId", "state", "leaseExpiresAt"])
     .index("by_owner_and_receipt_key", ["ownerId", "receiptKey"]),
+  orchestrationRuns: defineTable({
+    ownerId: v.string(),
+    runId: v.string(),
+    triggerId: v.string(),
+    triggerSource: orchestrationTriggerSourceValidator,
+    triggerKind: v.string(),
+    idempotencyKey: v.string(),
+    requestFingerprint: v.string(),
+    planFingerprint: v.string(),
+    triggerPayload: v.record(v.string(), v.any()),
+    authority: toolAuthorityValidator,
+    policyVersion: v.string(),
+    policyFingerprint: v.string(),
+    nodeIds: v.array(v.string()),
+    completedStepIds: v.array(v.string()),
+    checkpointSequence: v.number(),
+    state: orchestrationRunStateValidator,
+    failureCode: v.optional(orchestrationFailureCodeValidator),
+    retryCount: v.number(),
+    maxRetries: v.number(),
+    recoveryState: orchestrationRecoveryStateValidator,
+    recoveryEvidence: v.array(orchestrationRecoveryEvidenceValidator),
+    checkpointNodeId: v.optional(v.string()),
+    checkpointAt: v.optional(v.number()),
+    recoveryReference: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_owner_and_run_id", ["ownerId", "runId"])
+    .index("by_owner_and_trigger_source_and_idempotency_key", [
+      "ownerId",
+      "triggerSource",
+      "idempotencyKey",
+    ])
+    .index("by_owner_and_state_and_updated_at", ["ownerId", "state", "updatedAt"]),
+  orchestrationSteps: defineTable({
+    ownerId: v.string(),
+    runId: v.string(),
+    nodeId: v.string(),
+    operationId: v.optional(v.string()),
+    state: orchestrationStepStateValidator,
+    attempt: v.number(),
+    retryable: v.boolean(),
+    outputDigest: v.optional(v.string()),
+    failureCode: v.optional(orchestrationFailureCodeValidator),
+    indeterminateReason: v.optional(v.string()),
+    reconciliationId: v.optional(v.string()),
+    updatedAt: v.number(),
+    completedAt: v.optional(v.number()),
+    leaseOwner: v.optional(v.string()),
+    leaseToken: v.optional(v.string()),
+    leaseExpiresAt: v.optional(v.number()),
+    nextAttemptAt: v.optional(v.number()),
+  })
+    .index("by_owner_and_run_id_and_node_id", ["ownerId", "runId", "nodeId"])
+    .index("by_owner_and_run_id_and_state", ["ownerId", "runId", "state"])
+    .index("by_owner_and_state_and_updated_at", ["ownerId", "state", "updatedAt"])
+    .index("by_owner_and_state_and_lease_expires_at", ["ownerId", "state", "leaseExpiresAt"])
+    .index("by_owner_and_state_and_next_attempt_at", ["ownerId", "state", "nextAttemptAt"]),
+  orchestrationReconciliations: defineTable({
+    ownerId: v.string(),
+    reconciliationId: v.string(),
+    runId: v.string(),
+    nodeId: v.string(),
+    attempt: v.number(),
+    operationId: v.string(),
+    effectFingerprint: v.string(),
+    provider: v.string(),
+    providerRequestId: v.optional(v.string()),
+    providerCorrelationId: v.string(),
+    state: orchestrationReconciliationStateValidator,
+    outputDigest: v.optional(v.string()),
+    failureCode: v.optional(orchestrationFailureCodeValidator),
+    terminalEvidence: v.optional(orchestrationRecoveryEvidenceValidator),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    resolvedAt: v.optional(v.number()),
+  })
+    .index("by_owner_and_reconciliation_id", ["ownerId", "reconciliationId"])
+    .index("by_owner_and_run_id_and_node_id", ["ownerId", "runId", "nodeId"])
+    .index("by_owner_and_state_and_updated_at", ["ownerId", "state", "updatedAt"]),
   quotes: defineTable({
     ownerId: v.string(),
     quoteId: v.string(),

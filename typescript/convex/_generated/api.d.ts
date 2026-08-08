@@ -22,6 +22,8 @@ import type * as memoryChangeSetValidators from "../memoryChangeSetValidators.js
 import type * as memoryChangeSets from "../memoryChangeSets.js";
 import type * as noteValidators from "../noteValidators.js";
 import type * as notes from "../notes.js";
+import type * as orchestrationState from "../orchestrationState.js";
+import type * as orchestrationValidators from "../orchestrationValidators.js";
 import type * as preferences from "../preferences.js";
 import type * as projectRecords from "../projectRecords.js";
 import type * as projects from "../projects.js";
@@ -67,6 +69,8 @@ declare const fullApi: ApiFromModules<{
   memoryChangeSets: typeof memoryChangeSets;
   noteValidators: typeof noteValidators;
   notes: typeof notes;
+  orchestrationState: typeof orchestrationState;
+  orchestrationValidators: typeof orchestrationValidators;
   preferences: typeof preferences;
   projectRecords: typeof projectRecords;
   projects: typeof projects;
