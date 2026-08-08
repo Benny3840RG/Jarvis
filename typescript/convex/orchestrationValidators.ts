@@ -152,6 +152,7 @@ export const orchestrationReconciliationDocumentValidator = v.object({
   runId: v.string(),
   nodeId: v.string(),
   attempt: v.number(),
+  operationId: v.string(),
   effectFingerprint: v.string(),
   provider: v.string(),
   providerRequestId: v.optional(v.string()),
