@@ -58,4 +58,24 @@ describe("OrchestrationTriggerRegistry", () => {
     received.payload.intent = "mutated";
     assert.equal(received.payload.intent, "mutated");
   });
+  it("deep-freezes nested trigger payloads without mutating caller input", async () => {
+    const registry = new OrchestrationTriggerRegistry();
+    let validated: OrchestrationTrigger | undefined;
+    registry.register("operator.request", (value) => {
+      validated = value;
+      return new OrchestrationGraph();
+    });
+    const callerPayload = { nested: { intent: "create-task" } };
+
+    await registry.dispatch({ ...trigger, payload: callerPayload });
+
+    assert.ok(validated);
+    assert.equal(Object.isFrozen(validated.payload), true);
+    assert.equal(Object.isFrozen(validated.payload.nested), true);
+    assert.notEqual(validated.payload, callerPayload);
+    assert.notEqual(validated.payload.nested, callerPayload.nested);
+    callerPayload.nested.intent = "changed";
+    assert.equal(validated.payload.nested.intent, "create-task");
+  });
+
 });
