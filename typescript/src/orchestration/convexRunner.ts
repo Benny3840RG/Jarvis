@@ -1,7 +1,4 @@
-import type {
-  OrchestrationExecutor,
-  OrchestrationOutcomeRecorder,
-} from "./contracts.js";
+import type { OrchestrationExecutor, OrchestrationOutcomeRecorder } from "./contracts.js";
 import type { OrchestrationGraph } from "./graph.js";
 import {
   ConvexOrchestrationStateBoundary,
