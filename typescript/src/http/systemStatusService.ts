@@ -8,7 +8,11 @@ import { resolveReminderTimezone } from "../reminders/due.js";
 import { ReliabilityController } from "../reliability/reliabilityController.js";
 import { assessReconciliationHealth } from "../reliability/reliabilityHealth.js";
 import type { HttpAppConfig } from "./config.js";
-import type { IntegrationStatus, LayersStatus, SystemStatus } from "./contracts.js";
+import type {
+  IntegrationStatus,
+  LayersStatus,
+  SystemStatus,
+} from "./contracts.js";
 import { JarvisProblem } from "./problemDetails.js";
 import {
   HTTP_APP_CONFIG,
@@ -26,7 +30,8 @@ const LAYERS: LayersStatus = {
   },
   domains: {
     status: "partial",
-    reason: "Business, workshop, and home domain state is versioned and durable through the configured JSON or Convex persistence provider; promotion into the maintained operational surface remains pending.",
+    reason:
+      "Business, workshop, and home domain state is versioned and durable through the configured JSON or Convex persistence provider; promotion into the maintained operational surface remains pending.",
   },
   integration: {
     status: "partial",
@@ -66,7 +71,8 @@ export class SystemStatusService {
 
   constructor(
     @Inject(HTTP_PERSISTENCE) private readonly persistence: PersistenceProvider,
-    @Inject(HTTP_PROVIDER_NAME) private readonly providerName: PersistenceProviderName,
+    @Inject(HTTP_PROVIDER_NAME)
+    private readonly providerName: PersistenceProviderName,
     @Inject(HTTP_APP_CONFIG) private readonly config: HttpAppConfig,
     @Inject(HTTP_RECONCILIATION_HEALTH)
     private readonly reconciliationHealth: () => RuntimeReconciliationHealth,
@@ -77,7 +83,7 @@ export class SystemStatusService {
   /**
    * Evidence-backed, not inferred from env-var presence: reports whether the
    * `quotes:send` tool is actually registered on the running
-   * `ToolExecutionService` — the same conditional registration
+   * `ToolExecutionService`  the same conditional registration
    * `toolExecutionFactory.ts` already performs from the real quote-delivery
    * dependency bundle (Convex, quote repository, email provider, delivery
    * repository, PDF artifact repository). No new live call to Outlook is
@@ -97,7 +103,7 @@ export class SystemStatusService {
         name: "quote-delivery",
         status: "not-commissioned",
         reason:
-          "The quotes:send tool is not registered — one or more of the quote repository, email provider, delivery repository, or PDF artifact repository is not configured.",
+          "The quotes:send tool is not registered  one or more of the quote repository, email provider, delivery repository, or PDF artifact repository is not configured.",
       };
     }
     return { name: "quote-delivery", status: "commissioned" };
