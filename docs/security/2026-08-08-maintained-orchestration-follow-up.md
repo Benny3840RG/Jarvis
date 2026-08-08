@@ -2,7 +2,7 @@
 
 ## Verified changes
 
-The following changes are now on main at a76cd07b547d13736623c670219368be4d25ead2:
+The following changes are now on main at a2786e58a48cdb4cf03e5d027eb005f4c2f378bd:
 
 - PR #321 refreshed js-yaml, nanoid, and console dompurify to audited versions.
 - The exact-head dependency repair checks passed npm audit for both TypeScript workspaces.
@@ -16,10 +16,11 @@ The following changes are now on main at a76cd07b547d13736623c670219368be4d25ead
 - PR #335 composes the maintained runner with the Convex boundary: begin-run replay/conflict is handled before execution, leases are acquired before the executor, and durable terminal writes follow the existing audit record. Exact-head workflow #1432 (31257664623) and Copilot Review Check 31257664737 passed.
 - PR #336 hardens that boundary by requiring provider/effect binding to the existing external reconciliation record, removing caller-attested terminal resolution, allowlisting trigger metadata, and narrowing retryability. Exact-head workflow #1440 (31257990451) and Copilot Review Check 31257990434 passed.
 - PR #344 repairs the composed runner's durable failure boundary: pre-lease failures cannot create a lease from `stop()`, and leased preflight/executor failures preserve audit-before-fail ordering. Exact-head workflow #1446 (31258557727) and Copilot Review Check #725 (31258557732) passed.
+- PR #350 binds composition-owned policy identity and derives canonical graph plan fingerprints before durable `beginRun`. Exact-head workflow #1470 (31260194108) and Copilot Review Check #749 (31260194109) passed.
 
 ## Review boundary
 
-The merged slices are maintained offline foundations, not a production commissioning claim. Runner composition is now verified, but the exact-head review still identifies blockers before live ingress or external effects are activated:
+The merged slices are maintained offline foundations, not a production commissioning claim. Runner composition and composition-owned plan/policy binding are now verified offline, but the exact-head review still identifies blockers before live ingress or external effects are activated:
 
 - the shared service-token boundary still needs a commissioned remote worker-identity and OIDC/gateway binding;
 - trigger persistence and policy fields need authoritative server-side binding rather than caller claims;
@@ -28,7 +29,7 @@ The merged slices are maintained offline foundations, not a production commissio
 
 ## Scope boundary
 
-Durable Convex run/step state and maintained-runner composition now exist, but production trigger ingress, authorization policy binding, checkpoint/resume drills, compensation, or governed HTTP/MCP activation remain open. Existing live blockers remain:
+Durable Convex run/step state, maintained-runner composition, and offline composition-owned policy binding now exist, but production trigger ingress, authenticated worker identity, checkpoint/resume drills, compensation, or governed HTTP/MCP activation remain open. Existing live blockers remain:
 
 - Outlook OAuth and quote delivery proof: issues #293, #294, and #297.
 - PostHog ingestion proof: issue #302.
@@ -38,4 +39,4 @@ Durable Convex run/step state and maintained-runner composition now exist, but p
 
 ## Next gate
 
-Issue #333 is complete as a pre-composition hardening slice. The next P4 gate is #324: bind real trigger ingress and authenticated worker identity to the maintained runner, then prove deployed restart/restore and provider-level reconciliation before any CLI, scheduler, HTTP, or MCP activation. No external credential or production side effect is implied by this record.
+Issue #333 is complete as a pre-composition hardening slice. The next P4 gates under #324 are real trigger ingress and authenticated worker identity, followed by deployed restart/restore and provider-level reconciliation before any CLI, scheduler, HTTP, or MCP activation. Composition-owned policy binding is now present offline; no external credential or production side effect is implied by this record.
