@@ -92,6 +92,7 @@ describe("Convex orchestration state", () => {
       serviceToken: SERVICE_TOKEN,
       runId: "run-1",
       nodeId: "first",
+      leaseToken: "lease-1",
       outputDigest: "digest-first",
       now: 120,
     });
@@ -119,6 +120,7 @@ describe("Convex orchestration state", () => {
       serviceToken: SERVICE_TOKEN,
       runId: "run-1",
       nodeId: "second",
+      leaseToken: "lease-2",
       outputDigest: "digest-second",
       now: 140,
     });
@@ -145,6 +147,17 @@ describe("Convex orchestration state", () => {
       leaseTtlMs: 1_000,
       now: 110,
     });
+
+    await expect(
+      t.mutation(api.orchestrationState.recordStepSuccess, {
+        serviceToken: SERVICE_TOKEN,
+        runId: "run-1",
+        nodeId: "first",
+        leaseToken: "lease-1",
+        outputDigest: "late-success",
+        now: 1_110,
+      }),
+    ).rejects.toThrow(/lease has expired/);
 
     const recovered = await t.mutation(api.orchestrationState.recoverExpiredStep, {
       serviceToken: SERVICE_TOKEN,
@@ -208,6 +221,7 @@ describe("Convex orchestration state", () => {
       serviceToken: SERVICE_TOKEN,
       runId: "run-1",
       nodeId: "first",
+      leaseToken: "lease-1",
       failureCode: "dependency_failure",
       indeterminateReason: "Provider did not confirm whether the effect committed.",
       reconciliationId: "provider-reconciliation-1",
