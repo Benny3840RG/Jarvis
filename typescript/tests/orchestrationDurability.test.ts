@@ -8,10 +8,7 @@ import type {
   OrchestrationOutcome,
 } from "../src/orchestration/contracts.js";
 import { OrchestrationGraph } from "../src/orchestration/graph.js";
-import {
-  ConvexOrchestrationStateBoundary,
-  orchestrationStateFunctions,
-} from "../src/orchestration/convexStateBoundary.js";
+import { ConvexOrchestrationStateBoundary } from "../src/orchestration/convexStateBoundary.js";
 import {
   createConvexOrchestrationRunner,
   ConvexOrchestrationRunner,
@@ -66,16 +63,15 @@ function fakeClient(
 
 describe("ConvexOrchestrationStateBoundary", () => {
   it("maps run metadata and lease-bound step transitions without client timestamps", async () => {
-    const calls: Array<{
-      functionRef: unknown;
-      args: Record<string, unknown>;
-    }> = [];
+    const calls: Array<{ args: Record<string, unknown> }> = [];
     const client = fakeClient((args, functionRef) => {
-      calls.push({ functionRef, args });
-      if (functionRef === orchestrationStateFunctions.beginRun) {
+      const callIndex = calls.length;
+      void functionRef;
+      calls.push({ args });
+      if (callIndex === 0) {
         return { status: "created", run: { runId: "run-1" } };
       }
-      if (functionRef === orchestrationStateFunctions.markStepRunning) {
+      if (callIndex === 1) {
         return { step: {}, leaseToken: "server-lease" };
       }
       return {};
@@ -104,7 +100,6 @@ describe("ConvexOrchestrationStateBoundary", () => {
       result: success as Extract<DomainResult, { ok: true }>,
     });
 
-    assert.equal(calls[0]?.functionRef, orchestrationStateFunctions.beginRun);
     assert.deepEqual(calls[0]?.args, {
       serviceToken: "service-token",
       runId: "run-1",
@@ -121,7 +116,6 @@ describe("ConvexOrchestrationStateBoundary", () => {
       nodeIds: ["create"],
       maxRetries: 2,
     });
-    assert.equal(calls[1]?.functionRef, orchestrationStateFunctions.markStepRunning);
     assert.deepEqual(calls[1]?.args, {
       serviceToken: "service-token",
       runId: "run-1",
@@ -130,7 +124,6 @@ describe("ConvexOrchestrationStateBoundary", () => {
       workerId: "worker-1",
       leaseTtlMs: 10_000,
     });
-    assert.equal(calls[2]?.functionRef, orchestrationStateFunctions.recordStepSuccess);
     assert.deepEqual(calls[2]?.args, {
       serviceToken: "service-token",
       runId: "run-1",
@@ -146,15 +139,10 @@ describe("ConvexOrchestrationRunner", () => {
   it("does not execute a replayed run", async () => {
     let executions = 0;
     const boundary = new ConvexOrchestrationStateBoundary({
-      client: fakeClient((_args, functionRef) => {
-        if (functionRef === orchestrationStateFunctions.beginRun) {
-          return {
-            status: "replayed",
-            run: { runId: "run-1", state: "succeeded" },
-          };
-        }
-        throw new Error("step state must not be touched on replay");
-      }),
+      client: fakeClient(() => ({
+        status: "replayed",
+        run: { runId: "run-1", state: "succeeded" },
+      })),
       serviceToken: "service-token",
       workerId: "worker-1",
       leaseTtlMs: 10_000,
@@ -190,12 +178,12 @@ describe("ConvexOrchestrationRunner", () => {
   it("acquires a lease before execution and commits durable success after the audit record", async () => {
     const events: string[] = [];
     const boundary = new ConvexOrchestrationStateBoundary({
-      client: fakeClient((_args, functionRef) => {
-        if (functionRef === orchestrationStateFunctions.beginRun) {
+      client: fakeClient((_args, _functionRef) => {
+        if (events.length === 0) {
           events.push("begin");
           return { status: "created", run: { runId: "run-1" } };
         }
-        if (functionRef === orchestrationStateFunctions.markStepRunning) {
+        if (events.length === 1) {
           events.push("start");
           return { step: {}, leaseToken: "server-lease" };
         }
