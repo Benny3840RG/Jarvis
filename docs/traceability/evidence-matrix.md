@@ -19,13 +19,13 @@
 | R-073–R-076 | State diagrams and transition test results | State glossary and ToolAction state-transition tests | Partial | 5fabfae1 | Connector review |
 | R-077–R-081 | Retention policy and append-only history tests | ToolAction lifecycle audit-event hooks only | Partial | 5fabfae1 | Connector review |
 | R-082–R-090 | Safety policy and blocked-action evidence | ToolAction blocked execution tests for expired, revoked, unauthorized, and consumed approvals | Partial | 5fabfae1 | Connector review |
-| R-091–R-098C | End-to-end execution and reconciliation evidence | Maintained orchestration graph/runner tests cover weighted dependency ordering, trigger validation, bounded step/duration execution, and fail-closed budget evidence; Outlook/quote runtime remains uncommissioned | Partial | 0485ba7 | Remote CI + requirements review |
-| R-099–R-104 | Failure injection and recovery reports | ReliabilityController redaction, circuit-open, cooldown, and recovery tests; truthful reconciliation health projection; bounded orchestration budget failures preserve completed-step evidence; HTTP persistence probe wiring | Partial | 0485ba7 | Remote CI + requirements review |
-| R-105–R-111 | CI results and populated traceability links | Test and evidence matrices plus foundation, observability, dependency-audit, and orchestration CI records | Partial | 0485ba7 | Requirements review + remote CI |
+| R-091–R-098C | End-to-end execution and reconciliation evidence | Maintained orchestration graph/runner tests cover weighted dependency ordering, trigger validation, bounded step/duration execution, and fail-closed budget evidence; PR #325 adds idempotent run replay/conflict handling, explicit step transitions, completion closure, and indeterminate fail-closed state; Outlook/quote runtime remains uncommissioned | Partial | 41858c2 | Remote CI + requirements review |
+| R-099–R-104 | Failure injection and recovery reports | ReliabilityController redaction, circuit-open, cooldown, and recovery tests; truthful reconciliation health projection; bounded orchestration budget failures preserve completed-step evidence; provider-neutral orchestration state preserves completed-step and indeterminate-outcome evidence; HTTP persistence probe wiring | Partial | 41858c2 | Remote CI + requirements review |
+| R-105–R-111 | CI results and populated traceability links | Test and evidence matrices plus foundation, observability, dependency-audit, and orchestration CI records | Partial | 41858c2 | Requirements review + remote CI |
 | R-112–R-116 | Release, rollback, backup and compatibility runs | Deployment/runbook controls and backup verification/restore tests; live drills remain open | Partial | 981ee36b | Connector review |
 | R-117–R-121 | Setup, backup and incident runbook exercises | Development runbooks and guarded commissioning workflows; live operational drills remain open | Partial | 981ee36b | Connector review |
-| R-122–R-124 | Roadmap-to-requirement mapping | Requirements v2.2 and priority roadmap/governance records | Partial | 0485ba7 | Requirements review |
-| R-125–R-127 | Completed feature gate records | Merged PR verification records for foundation, observability, dependency-audit, and bounded-orchestration slices | Partial | 0485ba7 | Connector review |
+| R-122–R-124 | Roadmap-to-requirement mapping | Requirements v2.2 and priority roadmap/governance records | Partial | 41858c2 | Requirements review |
+| R-125–R-127 | Completed feature gate records | Merged PR verification records for foundation, observability, dependency-audit, and bounded-orchestration slices | Partial | 41858c2 | Connector review |
 | R-128–R-131 | Concurrent mutation and conflict evidence | ToolExecution single-use concurrent-consumption test and stale eligibility checks | Partial | 5fabfae1 | Connector review |
 | R-132–R-135 | Policy-version and revalidation evidence | — | Unverified | — | — |
 | R-136–R-140 | Timezone, DST and ambiguity test evidence | Reminder parsing, explicit timezone validation, and ambiguity-preserving tests | Partial | 981ee36b | Connector review |
@@ -42,7 +42,7 @@
 
 ## Current-baseline reconciliation — 2026-08-08
 
-The historical 5fabfae1 and 981ee36b references above remain intentionally preserved as the exact revisions for the original ToolAction lifecycle and foundation verification. The current repository baseline is 0485ba750c9f08735ab784a1a3877c84d345144d. The dependency refresh and bounded orchestration merge were verified at exact heads before this reconciliation. This matrix records evidence status, not a claim that live external commissioning has occurred.
+The historical 5fabfae1 and 981ee36b references above remain intentionally preserved as the exact revisions for the original ToolAction lifecycle and foundation verification. The current repository baseline is 41858c250c9f08735ab784a1a3877c84d345144d. The dependency refresh, bounded orchestration merge, and state-contract merge were verified at exact heads before this reconciliation. This matrix records evidence status, not a claim that live external commissioning has occurred.
 
 ## Approval lifecycle reconciliation — 2026-08-04
 
