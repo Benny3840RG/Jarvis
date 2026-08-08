@@ -1,3 +1,4 @@
+npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm.
 import { HttpStatus, Inject, Injectable } from "@nestjs/common";
 
 import type { ToolExecutionService } from "../actions/toolExecution.js";
@@ -8,7 +9,11 @@ import { resolveReminderTimezone } from "../reminders/due.js";
 import { ReliabilityController } from "../reliability/reliabilityController.js";
 import { assessReconciliationHealth } from "../reliability/reliabilityHealth.js";
 import type { HttpAppConfig } from "./config.js";
-import type { IntegrationStatus, LayersStatus, SystemStatus } from "./contracts.js";
+import type {
+  IntegrationStatus,
+  LayersStatus,
+  SystemStatus,
+} from "./contracts.js";
 import { JarvisProblem } from "./problemDetails.js";
 import {
   HTTP_APP_CONFIG,
@@ -67,7 +72,8 @@ export class SystemStatusService {
 
   constructor(
     @Inject(HTTP_PERSISTENCE) private readonly persistence: PersistenceProvider,
-    @Inject(HTTP_PROVIDER_NAME) private readonly providerName: PersistenceProviderName,
+    @Inject(HTTP_PROVIDER_NAME)
+    private readonly providerName: PersistenceProviderName,
     @Inject(HTTP_APP_CONFIG) private readonly config: HttpAppConfig,
     @Inject(HTTP_RECONCILIATION_HEALTH)
     private readonly reconciliationHealth: () => RuntimeReconciliationHealth,
@@ -156,3 +162,8 @@ export class SystemStatusService {
     };
   }
 }
+npm notice
+npm notice New minor version of npm available! 11.9.0 -> 11.19.0
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.19.0
+npm notice To update run: npm install -g npm@11.19.0
+npm notice
