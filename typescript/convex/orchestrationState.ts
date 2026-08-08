@@ -17,6 +17,15 @@ import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/s
 const MAX_NODE_COUNT = 100;
 const MAX_RECOVERY_EVIDENCE = 20;
 const MAX_RETRIES = 5;
+const SAFE_RETRY_FAILURE_CODES = new Set(["execution_budget_exceeded"]);
+const ORCHESTRATION_TRIGGER_METADATA_KEYS = new Set([
+  "taskType",
+  "scheduleId",
+  "requestId",
+  "source",
+  "correlationId",
+  "triggerId",
+]);
 const MIN_LEASE_TTL_MS = 1_000;
 const MAX_LEASE_TTL_MS = 15 * 60 * 1_000;
 
@@ -30,6 +39,17 @@ function cleanRequired(value: string, label: string, maxLength = 200): string {
   if (!cleaned) throw new Error(`${label} cannot be empty.`);
   if (cleaned.length > maxLength) throw new Error(`${label} exceeds ${maxLength} characters.`);
   return cleaned;
+}
+
+function allowlistedTriggerMetadata(payload: Record<string, unknown>): Record<string, unknown> {
+  const normalised = normaliseAuditPayload(payload);
+  return Object.fromEntries(
+    Object.entries(normalised).filter(
+      ([key, value]) =>
+        ORCHESTRATION_TRIGGER_METADATA_KEYS.has(key) &&
+        (typeof value === "string" || typeof value === "number" || typeof value === "boolean"),
+    ),
+  );
 }
 
 function validRetryCount(value: number): number {
@@ -135,9 +155,59 @@ async function findReconciliation(
     .unique();
 }
 
+async function findExternalReconciliation(
+  ctx: QueryCtx | MutationCtx,
+  ownerId: string,
+  reconciliationId: string,
+) {
+  return ctx.db
+    .query("externalReconciliations")
+    .withIndex("by_owner_and_reconciliation_id", (q) =>
+      q.eq("ownerId", ownerId).eq("reconciliationId", reconciliationId),
+    )
+    .unique();
+}
+
 function requireReconciliation<T>(record: T | null): T {
   if (record === null) throw new Error("Orchestration reconciliation record not found.");
   return record;
+}
+
+function requireExternalReconciliation<T>(record: T | null): T {
+  if (record === null) {
+    throw new Error("Provider-authenticated external reconciliation record not found.");
+  }
+  return record;
+}
+
+function assertExternalBinding(
+  orchestration: {
+    reconciliationId: string;
+    operationId: string;
+    effectFingerprint: string;
+    provider: string;
+    providerRequestId?: string;
+    providerCorrelationId: string;
+  },
+  external: {
+    reconciliationId: string;
+    operation: string;
+    effectFingerprint: string;
+    provider: string;
+    providerRequestId?: string;
+    providerCorrelationId: string;
+  },
+): void {
+  if (
+    orchestration.reconciliationId !== external.reconciliationId ||
+    orchestration.operationId !== external.operation ||
+    orchestration.effectFingerprint !== external.effectFingerprint ||
+    orchestration.provider !== external.provider ||
+    orchestration.providerRequestId !== external.providerRequestId ||
+    orchestration.providerCorrelationId !== external.providerCorrelationId
+  ) {
+    throw new Error("Orchestration reconciliation is not bound to provider effect evidence.");
+  }
 }
 
 export const beginRun = mutation({
@@ -182,7 +252,7 @@ export const beginRun = mutation({
       "Orchestration request fingerprint",
     );
     const planFingerprint = cleanRequired(args.planFingerprint, "Orchestration plan fingerprint");
-    const triggerPayload = normaliseAuditPayload(args.triggerPayload);
+    const triggerPayload = allowlistedTriggerMetadata(args.triggerPayload);
     const policyVersion = cleanRequired(args.policyVersion, "Orchestration policy version");
     const policyFingerprint = cleanRequired(
       args.policyFingerprint,
@@ -423,7 +493,7 @@ export const recordStepFailure = mutation({
     await ctx.db.patch("orchestrationSteps", step._id, {
       state: "failed",
       failureCode: args.failureCode,
-      retryable: args.failureCode === "dependency_failure",
+      retryable: SAFE_RETRY_FAILURE_CODES.has(args.failureCode),
       updatedAt: now,
       completedAt: now,
       leaseOwner: undefined,
@@ -485,6 +555,18 @@ export const registerReconciliation = mutation({
     if (operationId === undefined) {
       throw new Error("Reconciliation requires an operation-bound running step.");
     }
+    const external = requireExternalReconciliation(
+      await findExternalReconciliation(ctx, ownerId, reconciliationId),
+    );
+    if (
+      external.operation !== operationId ||
+      external.effectFingerprint !== effectFingerprint ||
+      external.provider !== provider ||
+      external.providerRequestId !== providerRequestId ||
+      external.providerCorrelationId !== providerCorrelationId
+    ) {
+      throw new Error("Orchestration reconciliation is not bound to provider effect evidence.");
+    }
 
     const existing = await findReconciliation(ctx, ownerId, reconciliationId);
     if (existing) {
@@ -524,67 +606,6 @@ export const registerReconciliation = mutation({
   },
 });
 
-export const recordReconciliationOutcome = mutation({
-  args: {
-    serviceToken: v.string(),
-    reconciliationId: v.string(),
-    outcome: v.union(v.literal("succeeded"), v.literal("failed")),
-    outputDigest: v.optional(v.string()),
-    failureCode: v.optional(orchestrationFailureCodeValidator),
-    evidenceDetail: v.string(),
-    resolverId: v.string(),
-  },
-  returns: orchestrationReconciliationDocumentValidator,
-  handler: async (ctx, args) => {
-    const ownerId = requireOwner(args.serviceToken);
-    const reconciliationId = cleanRequired(
-      args.reconciliationId,
-      "Orchestration reconciliation ID",
-    );
-    const evidenceDetail = cleanRequired(
-      args.evidenceDetail,
-      "Orchestration reconciliation evidence",
-    );
-    const resolverId = cleanRequired(args.resolverId, "Orchestration resolver ID");
-    const outputDigest =
-      args.outputDigest === undefined
-        ? undefined
-        : cleanRequired(args.outputDigest, "Orchestration output digest");
-    const now = Date.now();
-    const reconciliation = requireReconciliation(
-      await findReconciliation(ctx, ownerId, reconciliationId),
-    );
-    if (reconciliation.state === "escalated" && reconciliation.providerRequestId === undefined) {
-      throw new Error("A reconciliation without a provider reference cannot be resolved.");
-    }
-    if (reconciliation.state === "succeeded" || reconciliation.state === "failed") {
-      if (reconciliation.state !== args.outcome) {
-        throw new Error("Orchestration reconciliation outcome conflicts with its terminal state.");
-      }
-      return reconciliation;
-    }
-    if (args.outcome === "failed" && args.failureCode === undefined) {
-      throw new Error("A failed reconciliation must include a failure code.");
-    }
-    const evidence = {
-      kind: "indeterminate" as const,
-      detail: "Resolved by " + resolverId + ": " + evidenceDetail,
-      occurredAt: now,
-    };
-    await ctx.db.patch("orchestrationReconciliations", reconciliation._id, {
-      state: args.outcome,
-      ...(outputDigest === undefined ? {} : { outputDigest }),
-      ...(args.outcome === "failed" ? { failureCode: args.failureCode } : {}),
-      terminalEvidence: evidence,
-      updatedAt: now,
-      resolvedAt: now,
-    });
-    const updated = await ctx.db.get("orchestrationReconciliations", reconciliation._id);
-    if (!updated) throw new Error("Orchestration reconciliation outcome update failed.");
-    return updated;
-  },
-});
-
 export const recordStepIndeterminate = mutation({
   args: {
     ...runArgs,
@@ -615,6 +636,15 @@ export const recordStepIndeterminate = mutation({
       throw new Error(`Cannot transition step ${step.state} to indeterminate.`);
     }
     requireActiveLease(step, args.workerId, args.leaseToken, now);
+    const reconciliation = requireReconciliation(
+      await findReconciliation(ctx, ownerId, reconciliationId),
+    );
+    assertExternalBinding(
+      reconciliation,
+      requireExternalReconciliation(
+        await findExternalReconciliation(ctx, ownerId, reconciliationId),
+      ),
+    );
 
     await ctx.db.patch("orchestrationSteps", step._id, {
       state: "indeterminate",
@@ -672,6 +702,10 @@ export const recoverExpiredStep = mutation({
     const reconciliation = requireReconciliation(
       await findReconciliation(ctx, ownerId, reconciliationId),
     );
+    const external = requireExternalReconciliation(
+      await findExternalReconciliation(ctx, ownerId, reconciliationId),
+    );
+    assertExternalBinding(reconciliation, external);
     if (
       reconciliation.runId !== runId ||
       reconciliation.nodeId !== nodeId ||
@@ -680,7 +714,7 @@ export const recoverExpiredStep = mutation({
     ) {
       throw new Error("Orchestration reconciliation is not bound to this step attempt.");
     }
-    if (reconciliation.state === "succeeded" || reconciliation.state === "failed") {
+    if (terminalState === "succeeded" || terminalState === "failed") {
       throw new Error("A terminal reconciliation cannot recover a running step.");
     }
     if (run.state !== "running") throw new Error(`Cannot recover a step for run ${run.state}.`);
@@ -740,7 +774,9 @@ export const retryFailedStep = mutation({
     const now = Date.now();
     const run = requireRun(await findRun(ctx, ownerId, runId));
     const step = requireStep(await findStep(ctx, ownerId, runId, nodeId));
-    if (run.state !== "failed") throw new Error(`Cannot retry a step for run ${run.state}.`);
+    if (run.state !== "failed" && run.state !== "running") {
+      throw new Error(`Cannot retry a step for run ${run.state}.`);
+    }
     if (step.state !== "failed" || !step.retryable) {
       throw new Error("Only retryable failed steps may be retried.");
     }
@@ -809,26 +845,42 @@ export const resolveIndeterminate = mutation({
     if (run.state !== "indeterminate" || step.state !== "indeterminate") {
       throw new Error("Only an indeterminate orchestration step may be resolved.");
     }
-    if (reconciliation.state !== "succeeded" && reconciliation.state !== "failed") {
-      throw new Error("Reconciliation has no verified terminal provider outcome.");
+    if (external.state !== "resolved" || external.terminalStatus === undefined) {
+      throw new Error("Provider reconciliation has no authenticated terminal outcome.");
     }
+    const terminalState = external.terminalStatus;
+    const terminalFailureCode = terminalState === "failed" ? "postcondition_failed" as const : undefined;
+    await ctx.db.patch("orchestrationReconciliations", reconciliation._id, {
+      state: terminalState,
+      ...(external.resolutionDigest === undefined
+        ? {}
+        : { outputDigest: external.resolutionDigest }),
+      ...(terminalFailureCode === undefined ? {} : { failureCode: terminalFailureCode }),
+      terminalEvidence: {
+        kind: "indeterminate",
+        detail: `Provider-authenticated reconciliation ${external.reconciliationId} resolved as ${terminalState}.`,
+        occurredAt: external.resolvedAt ?? now,
+      },
+      updatedAt: now,
+      resolvedAt: external.resolvedAt ?? now,
+    });
 
     const completedStepIds =
-      reconciliation.state === "succeeded" && !run.completedStepIds.includes(nodeId)
+      terminalState === "succeeded" && !run.completedStepIds.includes(nodeId)
         ? [...run.completedStepIds, nodeId]
         : run.completedStepIds;
     const runState =
-      reconciliation.state === "succeeded" && completedStepIds.length === run.nodeIds.length
+      terminalState === "succeeded" && completedStepIds.length === run.nodeIds.length
         ? "succeeded"
-        : reconciliation.state === "succeeded"
+        : terminalState === "succeeded"
           ? "running"
           : "failed";
     await ctx.db.patch("orchestrationSteps", step._id, {
       state: reconciliation.state,
-      ...(reconciliation.outputDigest === undefined
+      ...(external.resolutionDigest === undefined
         ? {}
-        : { outputDigest: reconciliation.outputDigest }),
-      ...(reconciliation.state === "failed"
+        : { outputDigest: external.resolutionDigest }),
+      ...(terminalState === "failed"
         ? { failureCode: reconciliation.failureCode }
         : { failureCode: undefined }),
       retryable: false,
@@ -838,8 +890,8 @@ export const resolveIndeterminate = mutation({
     });
     await ctx.db.patch("orchestrationRuns", run._id, {
       state: runState,
-      failureCode: reconciliation.state === "failed" ? reconciliation.failureCode : undefined,
-      recoveryState: reconciliation.state === "succeeded" ? "recovered" : "escalated",
+      failureCode: terminalState === "failed" ? reconciliation.failureCode : undefined,
+      recoveryState: terminalState === "succeeded" ? "recovered" : "escalated",
       recoveryReference: undefined,
       completedStepIds,
       checkpointNodeId: nodeId,
