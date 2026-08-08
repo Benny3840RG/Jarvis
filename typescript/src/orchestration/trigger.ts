@@ -27,8 +27,7 @@ function deepFreeze<T>(value: T): T {
 
 function required(value: string, name: string): string {
   const normalized = value.trim();
-  if (!normalized)
-    throw new Error(`Orchestration trigger ${name} is required.`);
+  if (!normalized) throw new Error(`Orchestration trigger ${name} is required.`);
   return normalized;
 }
 
@@ -37,9 +36,7 @@ function validatedTrigger(trigger: OrchestrationTrigger): OrchestrationTrigger {
   const kind = required(trigger.kind, "kind");
   const idempotencyKey = required(trigger.idempotencyKey, "idempotencyKey");
   if (!Number.isFinite(trigger.occurredAt) || trigger.occurredAt < 0) {
-    throw new Error(
-      "Orchestration trigger occurredAt must be a non-negative finite number.",
-    );
+    throw new Error("Orchestration trigger occurredAt must be a non-negative finite number.");
   }
   if (!["cli", "http", "mcp", "scheduler"].includes(trigger.source)) {
     throw new Error("Orchestration trigger source is invalid.");
@@ -61,9 +58,7 @@ export class OrchestrationTriggerRegistry {
   register(kind: string, builder: OrchestrationGraphBuilder): void {
     const normalizedKind = required(kind, "kind");
     if (this.builders.has(normalizedKind)) {
-      throw new Error(
-        `Orchestration trigger kind already registered: ${normalizedKind}`,
-      );
+      throw new Error(`Orchestration trigger kind already registered: ${normalizedKind}`);
     }
     this.builders.set(normalizedKind, builder);
   }
@@ -76,9 +71,7 @@ export class OrchestrationTriggerRegistry {
     }
     const graph = await builder(received);
     if (!(graph instanceof OrchestrationGraph)) {
-      throw new Error(
-        `Orchestration trigger builder returned an invalid graph: ${received.kind}`,
-      );
+      throw new Error(`Orchestration trigger builder returned an invalid graph: ${received.kind}`);
     }
     return graph;
   }
