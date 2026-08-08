@@ -379,6 +379,7 @@ export const recordStepFailure = mutation({
       updatedAt: now,
       checkpointNodeId: nodeId,
       checkpointAt: now,
+      checkpointSequence: run.checkpointSequence + 1,
     });
     const updated = await ctx.db.get("orchestrationSteps", step._id);
     if (!updated) throw new Error("Orchestration step update failed.");
