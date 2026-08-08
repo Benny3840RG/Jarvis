@@ -30,9 +30,10 @@ describe("OrchestrationTriggerRegistry", () => {
     const graph = await registry.dispatch(trigger);
 
     assert.equal(graph.orderedNodes().length, 0);
-    assert.notEqual(validated?.payload, trigger.payload);
+    assert.ok(validated);
+    assert.notEqual(validated.payload, trigger.payload);
     assert.equal(Object.isFrozen(validated), true);
-    assert.equal(Object.isFrozen(validated?.payload), true);
+    assert.equal(Object.isFrozen(validated.payload), true);
   });
 
   it("rejects duplicate handlers and unknown trigger kinds", async () => {
