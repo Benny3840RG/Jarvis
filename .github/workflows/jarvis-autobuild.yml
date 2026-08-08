@@ -591,7 +591,7 @@ jobs:
         if: always()
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
-          ISSUE_NUMBER: ${{ github.event_name == 'workflow_dispatch' && inputs.issue_number || github.event.issue.number }}
+          ISSUE_NUMBER: ${{ github.event_name == 'workflow_dispatch' && format('{0}', inputs.issue_number) || format('{0}', github.event.issue.number) }}
           CANDIDATE_SHA: ${{ needs.build.outputs.candidate-sha }}
           PR_URL: ${{ needs.build.outputs.pr-url }}
           BUILD_RESULT: ${{ needs.build.result }}
