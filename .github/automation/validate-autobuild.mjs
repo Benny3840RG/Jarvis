@@ -237,7 +237,11 @@ export function validateWorkflowContract(workflow) {
     ["workflow must define concurrency", /concurrency:/i],
     [
       "workflow concurrency must be issue-scoped",
-      /^\s{2}group:\s*jarvis-autobuild-\$\{\{\s*github\.repository\s*\}\}-issue-\$\{\{[\s\S]*issue_number[\s\S]*\}\}\s*$/im,
+      /^\s{2}group:\s*jarvis-autobuild-\$\{\{\s*github\.repository\s*\}\}-\$\{\{(?=.*github\.event_name)(?=.*inputs\.issue_number)(?=.*github\.event\.issue\.number).*?\}\}\s*$/im,
+    ],
+    [
+      "workflow concurrency must format both issue sources",
+      /^\s{2}group:\s*jarvis-autobuild-.*format\('issue-\{0\}',\s*inputs\.issue_number\).*format\('issue-\{0\}',\s*github\.event\.issue\.number\).*$/im,
     ],
     ["workflow must not cancel an in-progress build", /cancel-in-progress:\s*false/i],
     ["workflow must have a finite timeout", /timeout-minutes:\s*[1-9]\d*/i],
