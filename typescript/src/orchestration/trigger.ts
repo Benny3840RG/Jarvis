@@ -1,3 +1,4 @@
+npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm.
 import { OrchestrationGraph } from "./graph.js";
 
 export type OrchestrationTriggerSource = "cli" | "http" | "mcp" | "scheduler";
@@ -27,7 +28,8 @@ function deepFreeze<T>(value: T): T {
 
 function required(value: string, name: string): string {
   const normalized = value.trim();
-  if (!normalized) throw new Error(`Orchestration trigger ${name} is required.`);
+  if (!normalized)
+    throw new Error(`Orchestration trigger ${name} is required.`);
   return normalized;
 }
 
@@ -36,7 +38,9 @@ function validatedTrigger(trigger: OrchestrationTrigger): OrchestrationTrigger {
   const kind = required(trigger.kind, "kind");
   const idempotencyKey = required(trigger.idempotencyKey, "idempotencyKey");
   if (!Number.isFinite(trigger.occurredAt) || trigger.occurredAt < 0) {
-    throw new Error("Orchestration trigger occurredAt must be a non-negative finite number.");
+    throw new Error(
+      "Orchestration trigger occurredAt must be a non-negative finite number.",
+    );
   }
   if (!["cli", "http", "mcp", "scheduler"].includes(trigger.source)) {
     throw new Error("Orchestration trigger source is invalid.");
@@ -58,7 +62,9 @@ export class OrchestrationTriggerRegistry {
   register(kind: string, builder: OrchestrationGraphBuilder): void {
     const normalizedKind = required(kind, "kind");
     if (this.builders.has(normalizedKind)) {
-      throw new Error(`Orchestration trigger kind already registered: ${normalizedKind}`);
+      throw new Error(
+        `Orchestration trigger kind already registered: ${normalizedKind}`,
+      );
     }
     this.builders.set(normalizedKind, builder);
   }
@@ -71,7 +77,9 @@ export class OrchestrationTriggerRegistry {
     }
     const graph = await builder(received);
     if (!(graph instanceof OrchestrationGraph)) {
-      throw new Error(`Orchestration trigger builder returned an invalid graph: ${received.kind}`);
+      throw new Error(
+        `Orchestration trigger builder returned an invalid graph: ${received.kind}`,
+      );
     }
     return graph;
   }
@@ -80,3 +88,8 @@ export class OrchestrationTriggerRegistry {
     return Object.freeze([...this.builders.keys()]);
   }
 }
+npm notice
+npm notice New minor version of npm available! 11.9.0 -> 11.19.0
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.19.0
+npm notice To update run: npm install -g npm@11.19.0
+npm notice
