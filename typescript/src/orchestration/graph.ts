@@ -25,9 +25,14 @@ export class OrchestrationGraph {
     const byId = new Map<string, OrchestrationNode>();
 
     for (const node of copies) {
-      if (node.id.trim().length === 0) throw new Error("Orchestration node IDs must not be blank.");
-      if (byId.has(node.id)) throw new Error(`Duplicate orchestration node ID: ${node.id}`);
-      if (node.weight !== undefined && (!Number.isFinite(node.weight) || node.weight < 0)) {
+      if (node.id.trim().length === 0)
+        throw new Error("Orchestration node IDs must not be blank.");
+      if (byId.has(node.id))
+        throw new Error(`Duplicate orchestration node ID: ${node.id}`);
+      if (
+        node.weight !== undefined &&
+        (!Number.isFinite(node.weight) || node.weight < 0)
+      ) {
         throw new Error(`Orchestration node ${node.id} has an invalid weight.`);
       }
       byId.set(node.id, node);
@@ -36,14 +41,20 @@ export class OrchestrationGraph {
     for (const node of copies) {
       const dependencies = node.dependsOn ?? [];
       if (new Set(dependencies).size !== dependencies.length) {
-        throw new Error(`Orchestration node ${node.id} has duplicate dependencies.`);
+        throw new Error(
+          `Orchestration node ${node.id} has duplicate dependencies.`,
+        );
       }
       for (const dependencyId of dependencies) {
         if (dependencyId === node.id) {
-          throw new Error(`Orchestration node ${node.id} cannot depend on itself.`);
+          throw new Error(
+            `Orchestration node ${node.id} cannot depend on itself.`,
+          );
         }
         if (!byId.has(dependencyId)) {
-          throw new Error(`Orchestration node ${node.id} depends on unknown node ${dependencyId}.`);
+          throw new Error(
+            `Orchestration node ${node.id} depends on unknown node ${dependencyId}.`,
+          );
         }
       }
     }
@@ -66,7 +77,9 @@ export class OrchestrationGraph {
   }
 
   orderedNodes(): readonly OrchestrationNode[] {
-    const declarationOrder = new Map(this.commandNodes.map((node, index) => [node.id, index]));
+    const declarationOrder = new Map(
+      this.commandNodes.map((node, index) => [node.id, index]),
+    );
     const dependents = new Map<string, string[]>();
     const remainingDependencies = new Map<string, number>();
 
@@ -80,13 +93,19 @@ export class OrchestrationGraph {
       }
     }
 
-    const ready = this.commandNodes.filter((node) => (node.dependsOn ?? []).length === 0).map((node) => node.id);
+    const ready = this.commandNodes
+      .filter((node) => (node.dependsOn ?? []).length === 0)
+      .map((node) => node.id);
     const sortReady = (): void => {
       ready.sort((leftId, rightId) => {
         const left = this.commandNodesById.get(leftId);
         const right = this.commandNodesById.get(rightId);
         const weightDifference = (right?.weight ?? 0) - (left?.weight ?? 0);
-        return weightDifference || (declarationOrder.get(leftId) ?? 0) - (declarationOrder.get(rightId) ?? 0);
+        return (
+          weightDifference ||
+          (declarationOrder.get(leftId) ?? 0) -
+            (declarationOrder.get(rightId) ?? 0)
+        );
       });
     };
 
@@ -107,8 +126,12 @@ export class OrchestrationGraph {
     }
 
     if (ordered.length !== this.commandNodes.length) {
-      const unresolved = this.commandNodes.find((node) => !ordered.some((item) => item.id === node.id));
-      throw new Error(`Orchestration graph contains a cycle involving ${unresolved?.id ?? "unknown"}.`);
+      const unresolved = this.commandNodes.find(
+        (node) => !ordered.some((item) => item.id === node.id),
+      );
+      throw new Error(
+        `Orchestration graph contains a cycle involving ${unresolved?.id ?? "unknown"}.`,
+      );
     }
 
     return ordered;
