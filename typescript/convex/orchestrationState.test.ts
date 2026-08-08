@@ -20,7 +20,11 @@ function begin(overrides: Record<string, unknown> = {}) {
     triggerKind: "task-maintenance",
     idempotencyKey: "schedule:2026-08-08T10:00:00Z",
     requestFingerprint: "fingerprint-1",
+    planFingerprint: "plan-fingerprint-1",
+    triggerPayload: { taskType: "maintenance" },
     authority: "T1" as const,
+    policyVersion: "policy:v1",
+    policyFingerprint: "policy-fingerprint-1",
     nodeIds: ["first", "second"],
     maxRetries: 1,
     now: 100,
@@ -124,7 +128,7 @@ describe("Convex orchestration state", () => {
     expect(run?.checkpointNodeId).toBe("second");
   });
 
-  it("reopens only an expired lease and enforces a bounded restart", async () => {
+  it("turns an expired lease into indeterminate state until reconciliation resolves it", async () => {
     const t = harness();
     await t.mutation(
       api.orchestrationState.beginRun,
@@ -148,32 +152,40 @@ describe("Convex orchestration state", () => {
       recoveryOwner: "recovery-1",
       now: 1_110,
     });
-    expect(recovered.status).toBe("recovered");
-    expect(recovered.run.retryCount).toBe(1);
-    expect(recovered.run.recoveryState).toBe("retrying");
-    expect(recovered.step.state).toBe("pending");
-    expect(recovered.run.recoveryEvidence[0]?.kind).toBe("restart");
+    expect(recovered.status).toBe("indeterminate");
+    expect(recovered.run.state).toBe("indeterminate");
+    expect(recovered.run.recoveryState).toBe("required");
+    expect(recovered.step.state).toBe("indeterminate");
 
-    await t.mutation(api.orchestrationState.markStepRunning, {
+    await expect(
+      t.mutation(api.orchestrationState.markStepRunning, {
+        serviceToken: SERVICE_TOKEN,
+        runId: "run-1",
+        nodeId: "first",
+        operationId: "createTask",
+        leaseOwner: "worker-2",
+        leaseToken: "lease-2",
+        leaseTtlMs: 1_000,
+        now: 1_120,
+      }),
+    ).rejects.toThrow(/Cannot start a step for run indeterminate/);
+
+    const resolved = await t.mutation(api.orchestrationState.resolveIndeterminate, {
       serviceToken: SERVICE_TOKEN,
       runId: "run-1",
       nodeId: "first",
-      operationId: "createTask",
-      leaseOwner: "worker-2",
-      leaseToken: "lease-2",
-      leaseTtlMs: 1_000,
-      now: 1_120,
+      reconciliationId: "lease-recovery:run-1:first:1",
+      outcome: "succeeded",
+      outputDigest: "reconciled-digest",
+      now: 1_200,
     });
-    const escalated = await t.mutation(api.orchestrationState.recoverExpiredStep, {
-      serviceToken: SERVICE_TOKEN,
-      runId: "run-1",
-      nodeId: "first",
-      recoveryOwner: "recovery-2",
-      now: 2_120,
-    });
-    expect(escalated.status).toBe("escalated");
-    expect(escalated.run.state).toBe("failed");
-    expect(escalated.step.failureCode).toBe("execution_budget_exceeded");
+    expect(resolved.state).toBe("succeeded");
+    expect(
+      (await t.query(api.orchestrationState.getRun, {
+        serviceToken: SERVICE_TOKEN,
+        runId: "run-1",
+      }))?.state,
+    ).toBe("succeeded");
   });
 
   it("fails closed on an indeterminate provider result and forbids retry", async () => {
@@ -194,6 +206,8 @@ describe("Convex orchestration state", () => {
       runId: "run-1",
       nodeId: "first",
       failureCode: "dependency_failure",
+      indeterminateReason: "Provider did not confirm whether the effect committed.",
+      reconciliationId: "provider-reconciliation-1",
       now: 120,
     });
 
