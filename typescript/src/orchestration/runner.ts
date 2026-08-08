@@ -121,7 +121,7 @@ export class OrchestrationRunner {
           context,
           node,
           completedSteps,
-          failure("execution_budget_exceeded", "Orchestration execution budget exhausted."),
+          failure("execution_budget_exceeded", "Orchestration execution budget exhausted.", true),
         );
       }
       const capability = capabilityFor(node);
