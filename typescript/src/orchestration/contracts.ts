@@ -2,6 +2,7 @@ import type { TotalityReasonRequestBody } from "../http/totalityRequest.js";
 import type { Reminder, Task } from "../persistence/persistence.js";
 import type { TotalityResponse } from "../runtime/totalityContracts.js";
 import type { ToolAuthority } from "../runtime/totalityPolicy.js";
+import type { OrchestrationTrigger } from "./trigger.js";
 
 export type CreateTaskCommand = {
   operationId: "createTask";
@@ -60,6 +61,8 @@ export type DomainResult<T = OrchestrationValue> = DomainSuccess<T> | DomainFail
 export type OrchestrationContext = {
   runId: string;
   authority: ToolAuthority;
+  /** The validated trigger that created this run, when the caller has one. */
+  trigger?: OrchestrationTrigger;
 };
 
 export interface OrchestrationExecutor {
