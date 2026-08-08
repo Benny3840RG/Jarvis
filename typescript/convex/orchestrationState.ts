@@ -714,7 +714,7 @@ export const recoverExpiredStep = mutation({
     ) {
       throw new Error("Orchestration reconciliation is not bound to this step attempt.");
     }
-    if (terminalState === "succeeded" || terminalState === "failed") {
+    if (external.state === "resolved") {
       throw new Error("A terminal reconciliation cannot recover a running step.");
     }
     if (run.state !== "running") throw new Error(`Cannot recover a step for run ${run.state}.`);
@@ -834,6 +834,10 @@ export const resolveIndeterminate = mutation({
     const reconciliation = requireReconciliation(
       await findReconciliation(ctx, ownerId, reconciliationId),
     );
+    const external = requireExternalReconciliation(
+      await findExternalReconciliation(ctx, ownerId, reconciliationId),
+    );
+    assertExternalBinding(reconciliation, external);
     if (
       reconciliation.runId !== runId ||
       reconciliation.nodeId !== nodeId ||
