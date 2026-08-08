@@ -248,7 +248,7 @@ export class InMemoryOrchestrationStateStore implements DurableOrchestrationStat
     const run = this.requireRun(input.runId);
     const step = this.requireStep(input.runId, input.nodeId);
     validTimestamp(input.now);
-    this.requireRunningStep(step);
+    this.requireRunningStep(step, "succeeded");
     if (run.state !== "running") throw new Error(`cannot complete step for run ${run.state}`);
 
     step.state = "succeeded";
@@ -277,7 +277,7 @@ export class InMemoryOrchestrationStateStore implements DurableOrchestrationStat
     const run = this.requireRun(input.runId);
     const step = this.requireStep(input.runId, input.nodeId);
     validTimestamp(input.now);
-    this.requireRunningStep(step);
+    this.requireRunningStep(step, state);
     if (run.state !== "running") throw new Error(`cannot stop step for run ${run.state}`);
 
     step.state = state;
@@ -307,9 +307,12 @@ export class InMemoryOrchestrationStateStore implements DurableOrchestrationStat
     return step;
   }
 
-  private requireRunningStep(step: MutableStep): void {
+  private requireRunningStep(
+    step: MutableStep,
+    target: "succeeded" | "failed" | "indeterminate",
+  ): void {
     if (step.state !== "running") {
-      throw new Error(`cannot transition step ${step.state} to terminal state`);
+      throw new Error(`cannot transition step ${step.state} to ${target}`);
     }
   }
 }
