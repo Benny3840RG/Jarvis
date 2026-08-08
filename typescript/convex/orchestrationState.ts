@@ -101,6 +101,18 @@ function requireStep<T>(step: T | null): T {
   return step;
 }
 
+function requireActiveLease(
+  step: { leaseToken?: string; leaseExpiresAt?: number },
+  leaseToken: string,
+  now: number,
+): void {
+  const token = cleanRequired(leaseToken, "Orchestration lease token");
+  if (step.leaseToken !== token) throw new Error("Orchestration lease token does not match.");
+  if (step.leaseExpiresAt === undefined || step.leaseExpiresAt <= now) {
+    throw new Error("Orchestration step lease has expired; reconciliation is required.");
+  }
+}
+
 export const beginRun = mutation({
   args: {
     serviceToken: v.string(),
@@ -310,6 +322,7 @@ export const recordStepSuccess = mutation({
   args: {
     ...runArgs,
     nodeId: v.string(),
+    leaseToken: v.string(),
     outputDigest: v.optional(v.string()),
     now: v.number(),
   },
@@ -325,6 +338,7 @@ export const recordStepSuccess = mutation({
     if (step.state !== "running") {
       throw new Error(`Cannot transition step ${step.state} to succeeded.`);
     }
+    requireActiveLease(step, args.leaseToken, now);
     const outputDigest =
       args.outputDigest === undefined
         ? undefined
@@ -364,6 +378,7 @@ export const recordStepFailure = mutation({
   args: {
     ...runArgs,
     nodeId: v.string(),
+    leaseToken: v.string(),
     failureCode: orchestrationFailureCodeValidator,
     retryable: v.boolean(),
     now: v.number(),
@@ -380,6 +395,7 @@ export const recordStepFailure = mutation({
     if (step.state !== "running") {
       throw new Error(`Cannot transition step ${step.state} to failed.`);
     }
+    requireActiveLease(step, args.leaseToken, now);
 
     await ctx.db.patch("orchestrationSteps", step._id, {
       state: "failed",
@@ -410,6 +426,7 @@ export const recordStepIndeterminate = mutation({
   args: {
     ...runArgs,
     nodeId: v.string(),
+    leaseToken: v.string(),
     failureCode: orchestrationFailureCodeValidator,
     indeterminateReason: v.string(),
     reconciliationId: v.string(),
@@ -435,6 +452,7 @@ export const recordStepIndeterminate = mutation({
     if (step.state !== "running") {
       throw new Error(`Cannot transition step ${step.state} to indeterminate.`);
     }
+    requireActiveLease(step, args.leaseToken, now);
 
     await ctx.db.patch("orchestrationSteps", step._id, {
       state: "indeterminate",
