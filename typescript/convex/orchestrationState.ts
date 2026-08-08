@@ -9,12 +9,7 @@ import {
   orchestrationStepDocumentValidator,
   orchestrationTriggerSourceValidator,
 } from "./orchestrationValidators.js";
-import {
-  mutation,
-  query,
-  type MutationCtx,
-  type QueryCtx,
-} from "./_generated/server.js";
+import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server.js";
 
 const MAX_NODE_COUNT = 100;
 const MAX_RECOVERY_EVIDENCE = 20;
@@ -30,32 +25,24 @@ const runArgs = {
 function cleanRequired(value: string, label: string, maxLength = 200): string {
   const cleaned = value.trim();
   if (!cleaned) throw new Error(`${label} cannot be empty.`);
-  if (cleaned.length > maxLength)
-    throw new Error(`${label} exceeds ${maxLength} characters.`);
+  if (cleaned.length > maxLength) throw new Error(`${label} exceeds ${maxLength} characters.`);
   return cleaned;
 }
 
 function validTimestamp(value: number): number {
-  if (!Number.isFinite(value) || value < 0)
-    throw new Error("Orchestration timestamp is invalid.");
+  if (!Number.isFinite(value) || value < 0) throw new Error("Orchestration timestamp is invalid.");
   return value;
 }
 
 function validRetryCount(value: number): number {
   if (!Number.isInteger(value) || value < 0 || value > MAX_RETRIES) {
-    throw new Error(
-      `Orchestration maxRetries must be an integer between 0 and ${MAX_RETRIES}.`,
-    );
+    throw new Error(`Orchestration maxRetries must be an integer between 0 and ${MAX_RETRIES}.`);
   }
   return value;
 }
 
 function validLeaseTtl(value: number): number {
-  if (
-    !Number.isInteger(value) ||
-    value < MIN_LEASE_TTL_MS ||
-    value > MAX_LEASE_TTL_MS
-  ) {
+  if (!Number.isInteger(value) || value < MIN_LEASE_TTL_MS || value > MAX_LEASE_TTL_MS) {
     throw new Error(
       `Orchestration leaseTtlMs must be an integer between ${MIN_LEASE_TTL_MS} and ${MAX_LEASE_TTL_MS}.`,
     );
@@ -83,16 +70,10 @@ function evidence(
     : next;
 }
 
-async function findRun(
-  ctx: QueryCtx | MutationCtx,
-  ownerId: string,
-  runId: string,
-) {
+async function findRun(ctx: QueryCtx | MutationCtx, ownerId: string, runId: string) {
   return ctx.db
     .query("orchestrationRuns")
-    .withIndex("by_owner_and_run_id", (q) =>
-      q.eq("ownerId", ownerId).eq("runId", runId),
-    )
+    .withIndex("by_owner_and_run_id", (q) => q.eq("ownerId", ownerId).eq("runId", runId))
     .unique();
 }
 
@@ -131,12 +112,7 @@ export const beginRun = mutation({
     requestFingerprint: v.string(),
     planFingerprint: v.string(),
     triggerPayload: v.record(v.string(), v.any()),
-    authority: v.union(
-      v.literal("T0"),
-      v.literal("T1"),
-      v.literal("T2"),
-      v.literal("T3"),
-    ),
+    authority: v.union(v.literal("T0"), v.literal("T1"), v.literal("T2"), v.literal("T3")),
     policyVersion: v.string(),
     policyFingerprint: v.string(),
     nodeIds: v.array(v.string()),
@@ -161,38 +137,22 @@ export const beginRun = mutation({
     const ownerId = requireOwner(args.serviceToken);
     const runId = cleanRequired(args.runId, "Orchestration run ID");
     const triggerId = cleanRequired(args.triggerId, "Orchestration trigger ID");
-    const triggerKind = cleanRequired(
-      args.triggerKind,
-      "Orchestration trigger kind",
-    );
-    const idempotencyKey = cleanRequired(
-      args.idempotencyKey,
-      "Orchestration idempotency key",
-    );
+    const triggerKind = cleanRequired(args.triggerKind, "Orchestration trigger kind");
+    const idempotencyKey = cleanRequired(args.idempotencyKey, "Orchestration idempotency key");
     const requestFingerprint = cleanRequired(
       args.requestFingerprint,
       "Orchestration request fingerprint",
     );
-    const planFingerprint = cleanRequired(
-      args.planFingerprint,
-      "Orchestration plan fingerprint",
-    );
+    const planFingerprint = cleanRequired(args.planFingerprint, "Orchestration plan fingerprint");
     const triggerPayload = normaliseAuditPayload(args.triggerPayload);
-    const policyVersion = cleanRequired(
-      args.policyVersion,
-      "Orchestration policy version",
-    );
+    const policyVersion = cleanRequired(args.policyVersion, "Orchestration policy version");
     const policyFingerprint = cleanRequired(
       args.policyFingerprint,
       "Orchestration policy fingerprint",
     );
-    const nodeIds = args.nodeIds.map((nodeId) =>
-      cleanRequired(nodeId, "Orchestration node ID"),
-    );
+    const nodeIds = args.nodeIds.map((nodeId) => cleanRequired(nodeId, "Orchestration node ID"));
     if (nodeIds.length === 0 || nodeIds.length > MAX_NODE_COUNT) {
-      throw new Error(
-        `Orchestration node count must be between 1 and ${MAX_NODE_COUNT}.`,
-      );
+      throw new Error(`Orchestration node count must be between 1 and ${MAX_NODE_COUNT}.`);
     }
     if (new Set(nodeIds).size !== nodeIds.length) {
       throw new Error("Orchestration node IDs must be unique.");
@@ -270,11 +230,7 @@ export const getRun = query({
   returns: v.union(orchestrationRunDocumentValidator, v.null()),
   handler: async (ctx, args) => {
     const ownerId = requireOwner(args.serviceToken);
-    return findRun(
-      ctx,
-      ownerId,
-      cleanRequired(args.runId, "Orchestration run ID"),
-    );
+    return findRun(ctx, ownerId, cleanRequired(args.runId, "Orchestration run ID"));
   },
 });
 
@@ -313,18 +269,9 @@ export const markStepRunning = mutation({
     const ownerId = requireOwner(args.serviceToken);
     const runId = cleanRequired(args.runId, "Orchestration run ID");
     const nodeId = cleanRequired(args.nodeId, "Orchestration node ID");
-    const operationId = cleanRequired(
-      args.operationId,
-      "Orchestration operation ID",
-    );
-    const leaseOwner = cleanRequired(
-      args.leaseOwner,
-      "Orchestration lease owner",
-    );
-    const leaseToken = cleanRequired(
-      args.leaseToken,
-      "Orchestration lease token",
-    );
+    const operationId = cleanRequired(args.operationId, "Orchestration operation ID");
+    const leaseOwner = cleanRequired(args.leaseOwner, "Orchestration lease owner");
+    const leaseToken = cleanRequired(args.leaseToken, "Orchestration lease token");
     const now = validTimestamp(args.now);
     const leaseTtlMs = validLeaseTtl(args.leaseTtlMs);
     const run = requireRun(await findRun(ctx, ownerId, runId));
@@ -374,8 +321,7 @@ export const recordStepSuccess = mutation({
     const now = validTimestamp(args.now);
     const run = requireRun(await findRun(ctx, ownerId, runId));
     const step = requireStep(await findStep(ctx, ownerId, runId, nodeId));
-    if (run.state !== "running")
-      throw new Error(`Cannot complete step for run ${run.state}.`);
+    if (run.state !== "running") throw new Error(`Cannot complete step for run ${run.state}.`);
     if (step.state !== "running") {
       throw new Error(`Cannot transition step ${step.state} to succeeded.`);
     }
@@ -398,13 +344,9 @@ export const recordStepSuccess = mutation({
       : [...run.completedStepIds, nodeId];
     await ctx.db.patch("orchestrationRuns", run._id, {
       completedStepIds,
-      state:
-        completedStepIds.length === run.nodeIds.length
-          ? "succeeded"
-          : "running",
+      state: completedStepIds.length === run.nodeIds.length ? "succeeded" : "running",
       recoveryState:
-        completedStepIds.length === run.nodeIds.length &&
-        run.recoveryState !== "none"
+        completedStepIds.length === run.nodeIds.length && run.recoveryState !== "none"
           ? "recovered"
           : run.recoveryState,
       updatedAt: now,
@@ -434,8 +376,7 @@ export const recordStepFailure = mutation({
     const now = validTimestamp(args.now);
     const run = requireRun(await findRun(ctx, ownerId, runId));
     const step = requireStep(await findStep(ctx, ownerId, runId, nodeId));
-    if (run.state !== "running")
-      throw new Error(`Cannot stop step for run ${run.state}.`);
+    if (run.state !== "running") throw new Error(`Cannot stop step for run ${run.state}.`);
     if (step.state !== "running") {
       throw new Error(`Cannot transition step ${step.state} to failed.`);
     }
@@ -490,8 +431,7 @@ export const recordStepIndeterminate = mutation({
     );
     const run = requireRun(await findRun(ctx, ownerId, runId));
     const step = requireStep(await findStep(ctx, ownerId, runId, nodeId));
-    if (run.state !== "running")
-      throw new Error(`Cannot stop step for run ${run.state}.`);
+    if (run.state !== "running") throw new Error(`Cannot stop step for run ${run.state}.`);
     if (step.state !== "running") {
       throw new Error(`Cannot transition step ${step.state} to indeterminate.`);
     }
@@ -541,20 +481,15 @@ export const recoverExpiredStep = mutation({
     const ownerId = requireOwner(args.serviceToken);
     const runId = cleanRequired(args.runId, "Orchestration run ID");
     const nodeId = cleanRequired(args.nodeId, "Orchestration node ID");
-    const recoveryOwner = cleanRequired(
-      args.recoveryOwner,
-      "Orchestration recovery owner",
-    );
+    const recoveryOwner = cleanRequired(args.recoveryOwner, "Orchestration recovery owner");
     const now = validTimestamp(args.now);
     const run = requireRun(await findRun(ctx, ownerId, runId));
     const step = requireStep(await findStep(ctx, ownerId, runId, nodeId));
-    if (run.state !== "running")
-      throw new Error(`Cannot recover a step for run ${run.state}.`);
+    if (run.state !== "running") throw new Error(`Cannot recover a step for run ${run.state}.`);
     if (step.state !== "running" || step.leaseExpiresAt === undefined) {
       throw new Error("Orchestration step has no expired running lease.");
     }
-    if (step.leaseExpiresAt > now)
-      throw new Error("Orchestration step lease is still active.");
+    if (step.leaseExpiresAt > now) throw new Error("Orchestration step lease is still active.");
 
     const reconciliationId = `lease-recovery:${runId}:${nodeId}:${step.attempt}`;
     await ctx.db.patch("orchestrationSteps", step._id, {
@@ -586,8 +521,7 @@ export const recoverExpiredStep = mutation({
     });
     const recoveredRun = await ctx.db.get("orchestrationRuns", run._id);
     const recoveredStep = await ctx.db.get("orchestrationSteps", step._id);
-    if (!recoveredRun || !recoveredStep)
-      throw new Error("Orchestration recovery update failed.");
+    if (!recoveredRun || !recoveredStep) throw new Error("Orchestration recovery update failed.");
     return {
       status: "indeterminate" as const,
       run: recoveredRun,
@@ -610,8 +544,7 @@ export const retryFailedStep = mutation({
     const now = validTimestamp(args.now);
     const run = requireRun(await findRun(ctx, ownerId, runId));
     const step = requireStep(await findStep(ctx, ownerId, runId, nodeId));
-    if (run.state !== "failed")
-      throw new Error(`Cannot retry a step for run ${run.state}.`);
+    if (run.state !== "failed") throw new Error(`Cannot retry a step for run ${run.state}.`);
     if (step.state !== "failed" || !step.retryable) {
       throw new Error("Only retryable failed steps may be retried.");
     }
@@ -671,14 +604,9 @@ export const resolveIndeterminate = mutation({
     const run = requireRun(await findRun(ctx, ownerId, runId));
     const step = requireStep(await findStep(ctx, ownerId, runId, nodeId));
     if (run.state !== "indeterminate" || step.state !== "indeterminate") {
-      throw new Error(
-        "Only an indeterminate orchestration step may be resolved.",
-      );
+      throw new Error("Only an indeterminate orchestration step may be resolved.");
     }
-    if (
-      step.reconciliationId !== reconciliationId ||
-      run.recoveryReference !== reconciliationId
-    ) {
+    if (step.reconciliationId !== reconciliationId || run.recoveryReference !== reconciliationId) {
       throw new Error("Orchestration reconciliation reference does not match.");
     }
     if (args.outcome === "failed" && args.failureCode === undefined) {
@@ -704,8 +632,7 @@ export const resolveIndeterminate = mutation({
         ? [...run.completedStepIds, nodeId]
         : run.completedStepIds;
     const runState =
-      args.outcome === "succeeded" &&
-      completedStepIds.length === run.nodeIds.length
+      args.outcome === "succeeded" && completedStepIds.length === run.nodeIds.length
         ? "succeeded"
         : args.outcome === "succeeded"
           ? "running"
