@@ -1,7 +1,4 @@
-import {
-  IMPLEMENTED_CAPABILITIES,
-  type Capability,
-} from "../http/contracts.js";
+import { IMPLEMENTED_CAPABILITIES, type Capability } from "../http/contracts.js";
 import type {
   DomainFailure,
   DomainResult,
@@ -14,8 +11,7 @@ import type {
 import type { OrchestrationGraph, OrchestrationNode } from "./graph.js";
 
 export type SafetyDecision =
-  | { status: "ok"; reasons: readonly [] }
-  | { status: "blocked"; reasons: readonly string[] };
+  { status: "ok"; reasons: readonly [] } | { status: "blocked"; reasons: readonly string[] };
 
 export type CompletedStep = {
   nodeId: string;
@@ -63,18 +59,12 @@ function capabilityFor(node: OrchestrationNode): Capability | null {
   );
 }
 
-function failure(
-  code: DomainFailure["code"],
-  message: string,
-  retryable = false,
-): DomainFailure {
+function failure(code: DomainFailure["code"], message: string, retryable = false): DomainFailure {
   return { ok: false, code, message, retryable };
 }
 
 function decisionMessage(prefix: string, reasons: readonly string[]): string {
-  const detail = reasons
-    .filter((reason) => reason.trim().length > 0)
-    .join("; ");
+  const detail = reasons.filter((reason) => reason.trim().length > 0).join("; ");
   return detail.length === 0 ? prefix : `${prefix}: ${detail}`;
 }
 
@@ -109,14 +99,10 @@ export class OrchestrationRunner {
     this.maxDurationMs = options.maxDurationMs ?? DEFAULT_MAX_DURATION_MS;
     this.clock = options.clock ?? Date.now;
     if (!positiveSafeInteger(this.maxSteps)) {
-      throw new Error(
-        "Orchestration maxSteps must be a positive safe integer.",
-      );
+      throw new Error("Orchestration maxSteps must be a positive safe integer.");
     }
     if (!positiveSafeInteger(this.maxDurationMs)) {
-      throw new Error(
-        "Orchestration maxDurationMs must be a positive safe integer.",
-      );
+      throw new Error("Orchestration maxDurationMs must be a positive safe integer.");
     }
   }
 
@@ -130,19 +116,12 @@ export class OrchestrationRunner {
 
     for (let index = 0; index < nodes.length; index += 1) {
       const node = nodes[index];
-      if (
-        index >= this.maxSteps ||
-        this.clock() - startedAt >= this.maxDurationMs
-      ) {
+      if (index >= this.maxSteps || this.clock() - startedAt >= this.maxDurationMs) {
         return this.stop(
           context,
           node,
           completedSteps,
-          failure(
-            "execution_budget_exceeded",
-            "Orchestration execution budget exhausted.",
-            true,
-          ),
+          failure("execution_budget_exceeded", "Orchestration execution budget exhausted.", true),
         );
       }
       const capability = capabilityFor(node);
@@ -186,10 +165,7 @@ export class OrchestrationRunner {
           completedSteps,
           failure(
             "blocked",
-            decisionMessage(
-              "Preflight safety blocked execution",
-              preflight.reasons,
-            ),
+            decisionMessage("Preflight safety blocked execution", preflight.reasons),
           ),
         );
       }
@@ -236,10 +212,7 @@ export class OrchestrationRunner {
           completedSteps,
           failure(
             "postcondition_failed",
-            decisionMessage(
-              "Postflight consistency verification failed",
-              postflight.reasons,
-            ),
+            decisionMessage("Postflight consistency verification failed", postflight.reasons),
           ),
           result,
         );
