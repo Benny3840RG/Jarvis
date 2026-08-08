@@ -1,8 +1,4 @@
-import type {
-  DomainFailure,
-  DomainSuccess,
-  OrchestrationContext,
-} from "./contracts.js";
+import type { DomainFailure, DomainSuccess, OrchestrationContext } from "./contracts.js";
 import type { OrchestrationNode } from "./graph.js";
 
 export type OrchestrationStepLease = {
