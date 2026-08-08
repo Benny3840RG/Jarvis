@@ -42,7 +42,6 @@ describe("InMemoryOrchestrationStateStore", () => {
       {
         runId: "run-1",
         nodeId: "first",
-        operationId: undefined,
         state: "pending",
         attempt: 0,
         updatedAt: 100,
@@ -141,7 +140,7 @@ describe("InMemoryOrchestrationStateStore", () => {
   });
 
   it("rejects invalid step transitions and duplicate node identifiers", async () => {
-    assert.throws(
+    await assert.rejects(
       () =>
         new InMemoryOrchestrationStateStore().beginRun({
           ...beginInput,
