@@ -30,7 +30,8 @@ export class OrchestrationGraph {
       deepFreeze({
         ...node,
         command: structuredClone(node.command),
-        dependsOn: node.dependsOn === undefined ? undefined : [...node.dependsOn],
+        dependsOn:
+          node.dependsOn === undefined ? undefined : [...node.dependsOn],
       }),
     );
     const byId = new Map<string, OrchestrationNode>();
