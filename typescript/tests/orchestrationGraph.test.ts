@@ -63,7 +63,9 @@ describe("OrchestrationGraph", () => {
       operationId: "createTask" as const,
       input: { title: "Inspect mounts" },
     };
-    const graph = new OrchestrationGraph([{ id: "create", command: mutableCommand }]);
+    const graph = new OrchestrationGraph([
+      { id: "create", command: mutableCommand },
+    ]);
     const [node] = graph.orderedNodes();
 
     assert.ok(node);
@@ -71,7 +73,10 @@ describe("OrchestrationGraph", () => {
     assert.equal(Object.isFrozen(node.command), true);
     assert.equal(Object.isFrozen(node.command.input), true);
     assert.throws(() => Reflect.set(node, "weight", 1), TypeError);
-    assert.throws(() => Reflect.set(node.command.input, "title", "mutated"), TypeError);
+    assert.throws(
+      () => Reflect.set(node.command.input, "title", "mutated"),
+      TypeError,
+    );
     assert.equal(mutableCommand.input.title, "Inspect mounts");
   });
 
