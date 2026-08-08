@@ -1,4 +1,3 @@
-npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm.
 import { v } from "convex/values";
 
 import { toolAuthorityValidator } from "./toolActionValidators.js";
@@ -171,8 +170,3 @@ export const orchestrationRecoveryResultValidator = v.object({
   run: orchestrationRunDocumentValidator,
   step: orchestrationPublicStepDocumentValidator,
 });
-npm notice
-npm notice New minor version of npm available! 11.9.0 -> 11.19.0
-npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.19.0
-npm notice To update run: npm install -g npm@11.19.0
-npm notice
