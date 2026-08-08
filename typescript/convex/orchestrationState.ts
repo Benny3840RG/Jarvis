@@ -527,7 +527,6 @@ export const registerReconciliation = mutation({
 export const recordReconciliationOutcome = mutation({
   args: {
     serviceToken: v.string(),
-    runId: v.string(),
     reconciliationId: v.string(),
     outcome: v.union(v.literal("succeeded"), v.literal("failed")),
     outputDigest: v.optional(v.string()),
@@ -538,7 +537,6 @@ export const recordReconciliationOutcome = mutation({
   returns: orchestrationReconciliationDocumentValidator,
   handler: async (ctx, args) => {
     const ownerId = requireOwner(args.serviceToken);
-    const runId = cleanRequired(args.runId, "Orchestration run ID");
     const reconciliationId = cleanRequired(
       args.reconciliationId,
       "Orchestration reconciliation ID",
