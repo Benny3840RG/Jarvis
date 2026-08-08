@@ -244,7 +244,7 @@ describe("Convex orchestration state", () => {
         nodeId: "first",
         reconciliationId: "lease-reconciliation",
       }),
-    ).rejects.toThrow(/no verified terminal/);
+    ).rejects.toThrow(/authenticated terminal/);
 
     await t.run((ctx) =>
       ctx.db
