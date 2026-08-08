@@ -233,6 +233,7 @@ it("enforces a maximum step budget before a later command crosses the effect bou
   assert.equal(result.ok, false);
   if (result.ok) return;
   assert.equal(result.failure.code, "execution_budget_exceeded");
+  assert.equal(result.failure.retryable, true);
   assert.deepEqual(executed, ["createTask"]);
   assert.equal(result.completedSteps.length, 1);
   assert.equal(outcomes.at(-1)?.failureCode, "execution_budget_exceeded");
@@ -269,4 +270,27 @@ it("halts when the run deadline is exhausted and preserves completed-step recove
   assert.equal(result.failure.code, "execution_budget_exceeded");
   assert.deepEqual(executed, ["createTask"]);
   assert.equal(result.completedSteps.length, 1);
+});
+
+it("rejects non-positive execution budgets at construction", () => {
+  assert.throws(
+    () =>
+      new OrchestrationRunner(
+        { execute: async () => success },
+        gate(),
+        recorder([]),
+        { maxSteps: 0 },
+      ),
+    /maxSteps must be a positive safe integer/,
+  );
+  assert.throws(
+    () =>
+      new OrchestrationRunner(
+        { execute: async () => success },
+        gate(),
+        recorder([]),
+        { maxDurationMs: 0 },
+      ),
+    /maxDurationMs must be a positive safe integer/,
+  );
 });
