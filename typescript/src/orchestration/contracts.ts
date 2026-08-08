@@ -40,7 +40,8 @@ export type DomainFailureCode =
   | "invalid_request"
   | "dependency_failure"
   | "postcondition_failed"
-  | "audit_failure";
+  | "audit_failure"
+  | "execution_budget_exceeded";
 
 export type DomainSuccess<T = OrchestrationValue> = {
   ok: true;
