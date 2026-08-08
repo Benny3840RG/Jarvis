@@ -134,10 +134,7 @@ describe("Convex orchestration state", () => {
 
   it("turns an expired lease into indeterminate state until reconciliation resolves it", async () => {
     const t = harness();
-    await t.mutation(
-      api.orchestrationState.beginRun,
-      begin({ nodeIds: ["first"], maxRetries: 1 }),
-    );
+    await t.mutation(api.orchestrationState.beginRun, begin({ nodeIds: ["first"], maxRetries: 1 }));
     await t.mutation(api.orchestrationState.markStepRunning, {
       serviceToken: SERVICE_TOKEN,
       runId: "run-1",
@@ -149,16 +146,13 @@ describe("Convex orchestration state", () => {
       now: 110,
     });
 
-    const recovered = await t.mutation(
-      api.orchestrationState.recoverExpiredStep,
-      {
-        serviceToken: SERVICE_TOKEN,
-        runId: "run-1",
-        nodeId: "first",
-        recoveryOwner: "recovery-1",
-        now: 1_110,
-      },
-    );
+    const recovered = await t.mutation(api.orchestrationState.recoverExpiredStep, {
+      serviceToken: SERVICE_TOKEN,
+      runId: "run-1",
+      nodeId: "first",
+      recoveryOwner: "recovery-1",
+      now: 1_110,
+    });
     expect(recovered.status).toBe("indeterminate");
     expect(recovered.run.state).toBe("indeterminate");
     expect(recovered.run.recoveryState).toBe("required");
@@ -177,18 +171,15 @@ describe("Convex orchestration state", () => {
       }),
     ).rejects.toThrow(/Cannot start a step for run indeterminate/);
 
-    const resolved = await t.mutation(
-      api.orchestrationState.resolveIndeterminate,
-      {
-        serviceToken: SERVICE_TOKEN,
-        runId: "run-1",
-        nodeId: "first",
-        reconciliationId: "lease-recovery:run-1:first:1",
-        outcome: "succeeded",
-        outputDigest: "reconciled-digest",
-        now: 1_200,
-      },
-    );
+    const resolved = await t.mutation(api.orchestrationState.resolveIndeterminate, {
+      serviceToken: SERVICE_TOKEN,
+      runId: "run-1",
+      nodeId: "first",
+      reconciliationId: "lease-recovery:run-1:first:1",
+      outcome: "succeeded",
+      outputDigest: "reconciled-digest",
+      now: 1_200,
+    });
     expect(resolved.state).toBe("succeeded");
     expect(
       (
@@ -202,10 +193,7 @@ describe("Convex orchestration state", () => {
 
   it("fails closed on an indeterminate provider result and forbids retry", async () => {
     const t = harness();
-    await t.mutation(
-      api.orchestrationState.beginRun,
-      begin({ nodeIds: ["first"] }),
-    );
+    await t.mutation(api.orchestrationState.beginRun, begin({ nodeIds: ["first"] }));
     await t.mutation(api.orchestrationState.markStepRunning, {
       serviceToken: SERVICE_TOKEN,
       runId: "run-1",
@@ -221,8 +209,7 @@ describe("Convex orchestration state", () => {
       runId: "run-1",
       nodeId: "first",
       failureCode: "dependency_failure",
-      indeterminateReason:
-        "Provider did not confirm whether the effect committed.",
+      indeterminateReason: "Provider did not confirm whether the effect committed.",
       reconciliationId: "provider-reconciliation-1",
       now: 120,
     });
