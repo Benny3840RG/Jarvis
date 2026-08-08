@@ -28,7 +28,11 @@ Adding `automation-approved` starts the builder immediately. Applying the label 
 | `automation-blocked` | The last attempt stopped and needs operator attention |
 | `automation-generated` | Branch or draft PR was produced by the autonomous builder |
 
-Only one autonomous build runs in the repository at a time.
+Different approved issues may run concurrently. Attempts for the same issue remain serialised by the issue-scoped workflow concurrency group, the `automation-in-progress` lock, and existing automation-PR detection.
+
+## Parallel eligibility
+
+Concurrent execution is permitted only when approved issues have no unresolved dependency on one another and no expected overlapping write surface. Shared control-plane files, security boundaries, schemas, deployments, commissioning, and other sequential contracts remain ordered and must use normal reviewed work.
 
 ## Normal lifecycle
 
