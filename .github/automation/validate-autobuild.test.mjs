@@ -442,10 +442,15 @@ test("requires issue-scoped concurrency and preserves duplicate-issue serializat
   const issueScopedGroup =
     /^\s{2}group:\s*jarvis-autobuild-\$\{\{\s*github\.repository\s*\}\}-\$\{\{(?=.*github\.event_name)(?=.*inputs\.issue_number)(?=.*github\.event\.issue\.number).*?\}\}\s*$/im;
   assert.match(workflow, issueScopedGroup);
-  assert.match(workflow, /format\('issue-\{0\}',\s*inputs\.issue_number\)/);
-  assert.match(workflow, /format\('issue-\{0\}',\s*github\.event\.issue\.number\)/);
+  const groupLine = workflow.split("\n").find((line) => /^\s{2}group:/.test(line));
+  assert.ok(groupLine);
+  assert.match(groupLine, /format\('issue-\{0\}',\s*inputs\.issue_number\)/);
+  assert.match(
+    groupLine,
+    /format\('issue-\{0\}',\s*github\.event\.issue\.number\)/,
+  );
   assert.doesNotMatch(
-    workflow,
+    groupLine,
     /inputs\.issue_number\s*\|\|\s*github\.event\.issue\.number/,
   );
 
