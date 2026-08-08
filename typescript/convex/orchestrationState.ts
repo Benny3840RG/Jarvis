@@ -21,7 +21,6 @@ const MAX_RECOVERY_EVIDENCE = 20;
 const MAX_RETRIES = 5;
 const MIN_LEASE_TTL_MS = 1_000;
 const MAX_LEASE_TTL_MS = 15 * 60 * 1_000;
-const MAX_CLOCK_SKEW_MS = 5 * 60 * 1_000;
 
 const runArgs = {
   serviceToken: v.string(),
@@ -33,14 +32,6 @@ function cleanRequired(value: string, label: string, maxLength = 200): string {
   if (!cleaned) throw new Error(`${label} cannot be empty.`);
   if (cleaned.length > maxLength) throw new Error(`${label} exceeds ${maxLength} characters.`);
   return cleaned;
-}
-
-function validTimestamp(value: number): number {
-  if (!Number.isFinite(value) || value < 0) throw new Error("Orchestration timestamp is invalid.");
-  if (Math.abs(value - Date.now()) > MAX_CLOCK_SKEW_MS) {
-    throw new Error("Orchestration timestamp is outside the permitted clock-skew window.");
-  }
-  return value;
 }
 
 function validRetryCount(value: number): number {
@@ -167,7 +158,6 @@ export const beginRun = mutation({
     policyFingerprint: v.string(),
     nodeIds: v.array(v.string()),
     maxRetries: v.number(),
-    now: v.number(),
   },
   returns: v.union(
     v.object({
@@ -208,7 +198,7 @@ export const beginRun = mutation({
       throw new Error("Orchestration node IDs must be unique.");
     }
     const maxRetries = validRetryCount(args.maxRetries);
-    const now = validTimestamp(args.now);
+    const now = Date.now();
 
     const existing = await ctx.db
       .query("orchestrationRuns")
@@ -311,7 +301,6 @@ export const markStepRunning = mutation({
     operationId: v.string(),
     workerId: v.string(),
     leaseTtlMs: v.number(),
-    now: v.number(),
   },
   returns: orchestrationLeaseGrantValidator,
   handler: async (ctx, args) => {
@@ -320,7 +309,7 @@ export const markStepRunning = mutation({
     const nodeId = cleanRequired(args.nodeId, "Orchestration node ID");
     const operationId = cleanRequired(args.operationId, "Orchestration operation ID");
     const leaseOwner = cleanRequired(args.workerId, "Orchestration worker ID");
-    const now = validTimestamp(args.now);
+    const now = Date.now();
     const leaseTtlMs = validLeaseTtl(args.leaseTtlMs);
     const leaseToken = crypto.randomUUID();
     const run = requireRun(await findRun(ctx, ownerId, runId));
@@ -362,14 +351,13 @@ export const recordStepSuccess = mutation({
     workerId: v.string(),
     leaseToken: v.string(),
     outputDigest: v.optional(v.string()),
-    now: v.number(),
   },
   returns: orchestrationPublicStepDocumentValidator,
   handler: async (ctx, args) => {
     const ownerId = requireOwner(args.serviceToken);
     const runId = cleanRequired(args.runId, "Orchestration run ID");
     const nodeId = cleanRequired(args.nodeId, "Orchestration node ID");
-    const now = validTimestamp(args.now);
+    const now = Date.now();
     const run = requireRun(await findRun(ctx, ownerId, runId));
     const step = requireStep(await findStep(ctx, ownerId, runId, nodeId));
     if (run.state !== "running") throw new Error(`Cannot complete step for run ${run.state}.`);
@@ -416,16 +404,16 @@ export const recordStepFailure = mutation({
   args: {
     ...runArgs,
     nodeId: v.string(),
+    workerId: v.string(),
     leaseToken: v.string(),
     failureCode: orchestrationFailureCodeValidator,
-    now: v.number(),
   },
   returns: orchestrationPublicStepDocumentValidator,
   handler: async (ctx, args) => {
     const ownerId = requireOwner(args.serviceToken);
     const runId = cleanRequired(args.runId, "Orchestration run ID");
     const nodeId = cleanRequired(args.nodeId, "Orchestration node ID");
-    const now = validTimestamp(args.now);
+    const now = Date.now();
     const run = requireRun(await findRun(ctx, ownerId, runId));
     const step = requireStep(await findStep(ctx, ownerId, runId, nodeId));
     if (run.state !== "running") throw new Error(`Cannot stop step for run ${run.state}.`);
@@ -468,7 +456,6 @@ export const registerReconciliation = mutation({
     provider: v.string(),
     providerRequestId: v.optional(v.string()),
     providerCorrelationId: v.string(),
-    now: v.number(),
   },
   returns: orchestrationReconciliationDocumentValidator,
   handler: async (ctx, args) => {
@@ -492,10 +479,14 @@ export const registerReconciliation = mutation({
       args.providerCorrelationId,
       "Orchestration provider correlation ID",
     );
-    const now = validTimestamp(args.now);
+    const now = Date.now();
     requireRun(await findRun(ctx, ownerId, runId));
     const step = requireStep(await findStep(ctx, ownerId, runId, nodeId));
     if (step.state !== "running") throw new Error("Reconciliation requires a running step.");
+    const operationId = step.operationId;
+    if (operationId === undefined) {
+      throw new Error("Reconciliation requires an operation-bound running step.");
+    }
 
     const existing = await findReconciliation(ctx, ownerId, reconciliationId);
     if (existing) {
@@ -503,6 +494,7 @@ export const registerReconciliation = mutation({
         existing.runId !== runId ||
         existing.nodeId !== nodeId ||
         existing.attempt !== step.attempt ||
+        existing.operationId !== operationId ||
         existing.effectFingerprint !== effectFingerprint ||
         existing.provider !== provider ||
         existing.providerRequestId !== providerRequestId ||
@@ -519,6 +511,7 @@ export const registerReconciliation = mutation({
       runId,
       nodeId,
       attempt: step.attempt,
+      operationId,
       effectFingerprint,
       provider,
       ...(providerRequestId === undefined ? {} : { providerRequestId }),
@@ -542,7 +535,6 @@ export const recordReconciliationOutcome = mutation({
     failureCode: v.optional(orchestrationFailureCodeValidator),
     evidenceDetail: v.string(),
     resolverId: v.string(),
-    now: v.number(),
   },
   returns: orchestrationReconciliationDocumentValidator,
   handler: async (ctx, args) => {
@@ -560,7 +552,7 @@ export const recordReconciliationOutcome = mutation({
       args.outputDigest === undefined
         ? undefined
         : cleanRequired(args.outputDigest, "Orchestration output digest");
-    const now = validTimestamp(args.now);
+    const now = Date.now();
     const reconciliation = requireReconciliation(
       await findReconciliation(ctx, ownerId, reconciliationId),
     );
@@ -599,18 +591,18 @@ export const recordStepIndeterminate = mutation({
   args: {
     ...runArgs,
     nodeId: v.string(),
+    workerId: v.string(),
     leaseToken: v.string(),
     failureCode: orchestrationFailureCodeValidator,
     indeterminateReason: v.string(),
     reconciliationId: v.string(),
-    now: v.number(),
   },
   returns: orchestrationPublicStepDocumentValidator,
   handler: async (ctx, args) => {
     const ownerId = requireOwner(args.serviceToken);
     const runId = cleanRequired(args.runId, "Orchestration run ID");
     const nodeId = cleanRequired(args.nodeId, "Orchestration node ID");
-    const now = validTimestamp(args.now);
+    const now = Date.now();
     const indeterminateReason = cleanRequired(
       args.indeterminateReason,
       "Orchestration indeterminate reason",
@@ -666,7 +658,6 @@ export const recoverExpiredStep = mutation({
     nodeId: v.string(),
     recoveryOwner: v.string(),
     reconciliationId: v.string(),
-    now: v.number(),
   },
   returns: orchestrationRecoveryResultValidator,
   handler: async (ctx, args) => {
@@ -678,7 +669,7 @@ export const recoverExpiredStep = mutation({
       args.reconciliationId,
       "Orchestration reconciliation ID",
     );
-    const now = validTimestamp(args.now);
+    const now = Date.now();
     const run = requireRun(await findRun(ctx, ownerId, runId));
     const step = requireStep(await findStep(ctx, ownerId, runId, nodeId));
     const reconciliation = requireReconciliation(
@@ -687,7 +678,8 @@ export const recoverExpiredStep = mutation({
     if (
       reconciliation.runId !== runId ||
       reconciliation.nodeId !== nodeId ||
-      reconciliation.attempt !== step.attempt
+      reconciliation.attempt !== step.attempt ||
+      reconciliation.operationId !== step.operationId
     ) {
       throw new Error("Orchestration reconciliation is not bound to this step attempt.");
     }
@@ -742,14 +734,13 @@ export const retryFailedStep = mutation({
   args: {
     ...runArgs,
     nodeId: v.string(),
-    now: v.number(),
   },
   returns: orchestrationPublicStepDocumentValidator,
   handler: async (ctx, args) => {
     const ownerId = requireOwner(args.serviceToken);
     const runId = cleanRequired(args.runId, "Orchestration run ID");
     const nodeId = cleanRequired(args.nodeId, "Orchestration node ID");
-    const now = validTimestamp(args.now);
+    const now = Date.now();
     const run = requireRun(await findRun(ctx, ownerId, runId));
     const step = requireStep(await findStep(ctx, ownerId, runId, nodeId));
     if (run.state !== "failed") throw new Error(`Cannot retry a step for run ${run.state}.`);
@@ -794,7 +785,6 @@ export const resolveIndeterminate = mutation({
     ...runArgs,
     nodeId: v.string(),
     reconciliationId: v.string(),
-    now: v.number(),
   },
   returns: orchestrationPublicStepDocumentValidator,
   handler: async (ctx, args) => {
@@ -805,7 +795,7 @@ export const resolveIndeterminate = mutation({
       args.reconciliationId,
       "Orchestration reconciliation ID",
     );
-    const now = validTimestamp(args.now);
+    const now = Date.now();
     const run = requireRun(await findRun(ctx, ownerId, runId));
     const step = requireStep(await findStep(ctx, ownerId, runId, nodeId));
     const reconciliation = requireReconciliation(
