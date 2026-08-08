@@ -5,6 +5,7 @@ import {
   orchestrationFailureCodeValidator,
   orchestrationRecoveryEvidenceValidator,
   orchestrationRecoveryStateValidator,
+  orchestrationReconciliationOutcomeValidator,
   orchestrationRunStateValidator,
   orchestrationStepStateValidator,
   orchestrationTriggerSourceValidator,
@@ -396,6 +397,26 @@ export default defineSchema({
     .index("by_owner_and_reconciliation_id", ["ownerId", "reconciliationId"])
     .index("by_owner_and_run_id_and_node_id", ["ownerId", "runId", "nodeId"])
     .index("by_owner_and_state_and_updated_at", ["ownerId", "state", "updatedAt"]),
+  orchestrationReconciliations: defineTable({
+    ownerId: v.string(),
+    reconciliationId: v.string(),
+    runId: v.string(),
+    nodeId: v.string(),
+    attempt: v.number(),
+    operationId: v.string(),
+    provider: v.string(),
+    providerOperationKey: v.string(),
+    outcome: orchestrationReconciliationOutcomeValidator,
+    outputDigest: v.optional(v.string()),
+    failureCode: v.optional(orchestrationFailureCodeValidator),
+    evidenceDigest: v.string(),
+    source: v.string(),
+    observedAt: v.number(),
+    createdAt: v.number(),
+    consumedAt: v.optional(v.number()),
+  })
+    .index("by_owner_and_reconciliation_id", ["ownerId", "reconciliationId"])
+    .index("by_owner_and_run_id_and_node_id", ["ownerId", "runId", "nodeId"]),
   quotes: defineTable({
     ownerId: v.string(),
     quoteId: v.string(),
