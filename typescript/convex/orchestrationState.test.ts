@@ -44,7 +44,6 @@ async function start(
     operationId: nodeId === "first" ? "createTask" : "completeTask",
     workerId,
     leaseTtlMs: 1_000,
-
   });
   return result.leaseToken;
 }
@@ -134,7 +133,6 @@ describe("Convex orchestration state", () => {
       workerId: "worker-1",
       leaseToken: firstLease,
       outputDigest: "digest-first",
-
     });
 
     expect(
@@ -154,7 +152,6 @@ describe("Convex orchestration state", () => {
       workerId: "worker-1",
       leaseToken: secondLease,
       outputDigest: "digest-second",
-
     });
 
     const run = await t.query(api.orchestrationState.getRun, {
@@ -176,7 +173,6 @@ describe("Convex orchestration state", () => {
       operationId: "createTask",
       workerId: "worker-1",
       leaseTtlMs: 1_000,
-
     });
     await registerReconciliation(t, "lease-reconciliation");
 
@@ -190,7 +186,6 @@ describe("Convex orchestration state", () => {
         workerId: "worker-2",
         leaseToken: grant.leaseToken,
         outputDigest: "wrong-worker",
-
       }),
     ).rejects.toThrow(/not owned/);
 
@@ -202,7 +197,6 @@ describe("Convex orchestration state", () => {
         workerId: "worker-1",
         leaseToken: grant.leaseToken,
         outputDigest: "late-success",
-
       }),
     ).rejects.toThrow(/lease has expired/);
 
@@ -261,7 +255,6 @@ describe("Convex orchestration state", () => {
       leaseToken: lease,
       indeterminateReason: "Provider did not confirm whether the effect committed.",
       reconciliationId: "provider-reconciliation",
-
     });
 
     const run = await t.query(api.orchestrationState.getRun, {
@@ -291,7 +284,6 @@ describe("Convex orchestration state", () => {
       workerId: "worker-1",
       leaseToken: lease,
       failureCode: "audit_failure",
-
     });
     expect(failed.retryable).toBe(false);
     await expect(
