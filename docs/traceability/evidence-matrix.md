@@ -42,7 +42,7 @@
 
 ## Current-baseline reconciliation — 2026-08-08
 
-The historical 5fabfae1 and 981ee36b references above remain intentionally preserved as the exact revisions for the original ToolAction lifecycle and foundation verification. The current repository baseline is a08a064d876f7def00a5bb8b3ab76d66aaed4594. PR #329 was tested at its exact head in workflow run #1413 (31256419743), and PR #335 was tested at its exact head in workflow run #1432 (31257664623) with Copilot Check 31257664737 before merge; the merge commit is the current baseline. This matrix records the durable-state and maintained-runner evidence and its review limits: no live external commissioning, authenticated worker identity, provider-authenticated reconciliation, or deployed restart drill is claimed.
+The historical 5fabfae1 and 981ee36b references above remain intentionally preserved as the exact revisions for the original ToolAction lifecycle and foundation verification. The current repository baseline is a08a064d876f7def00a5bb8b3ab76d66aaed4594. PR #329 was tested at its exact head in workflow run #1413 (31256419743), PR #335 at workflow #1432 (31257664623), and PR #336 at workflow #1440 (31257990451) with Copilot Check 31257990434 before merge. PR #336 merged at 54cf2c7db92a2d5fc17d41497afa228fcbd0da49. This matrix records the durable-state, maintained-runner, and offline provider-authenticated recovery evidence; authenticated worker identity, real ingress, and deployed restart/provider drills remain unclaimed.
 
 ## Approval lifecycle reconciliation — 2026-08-04
 
