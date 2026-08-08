@@ -86,9 +86,9 @@ export class ConvexOrchestrationRunner {
     metadata: ConvexOrchestrationRunMetadata,
   ): Promise<ConvexOrchestrationRunResult> {
     const begun: ConvexOrchestrationBeginRunResult = await this.state.beginRun({
+      ...metadata,
       context,
       graph,
-      ...metadata,
       planFingerprint: orchestrationPlanFingerprint(graph),
       policyVersion: this.authority.policyVersion,
       policyFingerprint: this.authority.policyFingerprint,
