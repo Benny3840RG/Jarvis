@@ -14,13 +14,13 @@ The following changes are now on main at a08a064d876f7def00a5bb8b3ab76d66aaed459
 - PR #329 adds Convex-backed durable runs and steps, server-issued worker-bound leases, server-derived lifecycle clocks, operation-bound reconciliation records, and fail-closed recovery.
 - The exact PR #329 head tested in workflow run #1413 (31256419743) passed typecheck, lint, formatting, OpenAPI validation, Node/Convex tests, console build, and automation policy; Copilot Review Check 31256419737 also passed.
 - PR #335 composes the maintained runner with the Convex boundary: begin-run replay/conflict is handled before execution, leases are acquired before the executor, and durable terminal writes follow the existing audit record. Exact-head workflow #1432 (31257664623) and Copilot Review Check 31257664737 passed.
+- PR #336 hardens that boundary by requiring provider/effect binding to the existing external reconciliation record, removing caller-attested terminal resolution, allowlisting trigger metadata, and narrowing retryability. Exact-head workflow #1440 (31257990451) and Copilot Review Check 31257990434 passed.
 
 ## Review boundary
 
 The merged slices are maintained offline foundations, not a production commissioning claim. Runner composition is now verified, but the exact-head review still identifies blockers before live ingress or external effects are activated:
 
 - the shared service-token boundary still needs a commissioned remote worker-identity and OIDC/gateway binding;
-- local reconciliation outcomes still need to be joined to provider-authenticated `externalReconciliations` evidence;
 - trigger persistence and policy fields need authoritative server-side binding rather than caller claims;
 - retry progression and multi-failure recovery still need deployed drills; and
 - no deployed restart or provider-reconciliation drill has been completed.
@@ -37,4 +37,4 @@ Durable Convex run/step state and maintained-runner composition now exist, but p
 
 ## Next gate
 
-Issue #333 is the next P4 hardening slice. It must bind indeterminate recovery to the existing provider-authenticated reconciliation path, tighten payload and retry semantics, and add focused safety tests. The maintained runner is now composed with the Convex adapter; only after that evidence exists should real trigger ingress be enabled. Restart/recovery and provider-level evidence remain required before any CLI, scheduler, HTTP, or MCP activation. No external credential or production side effect is implied by this record.
+Issue #333 is complete as a pre-composition hardening slice. The next P4 gate is #324: bind real trigger ingress and authenticated worker identity to the maintained runner, then prove deployed restart/restore and provider-level reconciliation before any CLI, scheduler, HTTP, or MCP activation. No external credential or production side effect is implied by this record.
