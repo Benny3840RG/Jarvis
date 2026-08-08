@@ -128,10 +128,7 @@ describe("Convex orchestration state", () => {
       t.mutation(api.orchestrationState.beginRun, begin({ runId: "run-a" })),
       t.mutation(api.orchestrationState.beginRun, begin({ runId: "run-b" })),
     ]);
-    expect([first.status, second.status].sort()).toEqual([
-      "created",
-      "replayed",
-    ]);
+    expect([first.status, second.status].sort()).toEqual(["created", "replayed"]);
   });
 
   it("returns a conflict for an idempotency key with a different fingerprint", async () => {
@@ -191,10 +188,7 @@ describe("Convex orchestration state", () => {
 
   it("binds leases to the worker and requires reconciliation after expiry", async () => {
     const t = harness();
-    await t.mutation(
-      api.orchestrationState.beginRun,
-      begin({ nodeIds: ["first"], maxRetries: 1 }),
-    );
+    await t.mutation(api.orchestrationState.beginRun, begin({ nodeIds: ["first"], maxRetries: 1 }));
     const grant = await t.mutation(api.orchestrationState.markStepRunning, {
       serviceToken: SERVICE_TOKEN,
       runId: "run-1",
@@ -231,16 +225,13 @@ describe("Convex orchestration state", () => {
 
     vi.advanceTimersByTime(1_000);
 
-    const recovered = await t.mutation(
-      api.orchestrationState.recoverExpiredStep,
-      {
-        serviceToken: SERVICE_TOKEN,
-        runId: "run-1",
-        nodeId: "first",
-        recoveryOwner: "recovery-1",
-        reconciliationId: "lease-reconciliation",
-      },
-    );
+    const recovered = await t.mutation(api.orchestrationState.recoverExpiredStep, {
+      serviceToken: SERVICE_TOKEN,
+      runId: "run-1",
+      nodeId: "first",
+      recoveryOwner: "recovery-1",
+      reconciliationId: "lease-reconciliation",
+    });
     vi.advanceTimersByTime(1);
     expect(recovered.status).toBe("indeterminate");
     expect(recovered.run.state).toBe("indeterminate");
@@ -259,14 +250,11 @@ describe("Convex orchestration state", () => {
       ctx.db
         .query("externalReconciliations")
         .withIndex("by_owner_and_reconciliation_id", (q) =>
-          q
-            .eq("ownerId", "jarvis-cli")
-            .eq("reconciliationId", "lease-reconciliation"),
+          q.eq("ownerId", "jarvis-cli").eq("reconciliationId", "lease-reconciliation"),
         )
         .unique()
         .then(async (record) => {
-          if (!record)
-            throw new Error("seeded provider reconciliation missing");
+          if (!record) throw new Error("seeded provider reconciliation missing");
           await ctx.db.patch("externalReconciliations", record._id, {
             state: "resolved",
             terminalStatus: "succeeded",
@@ -276,24 +264,18 @@ describe("Convex orchestration state", () => {
           });
         }),
     );
-    const resolved = await t.mutation(
-      api.orchestrationState.resolveIndeterminate,
-      {
-        serviceToken: SERVICE_TOKEN,
-        runId: "run-1",
-        nodeId: "first",
-        reconciliationId: "lease-reconciliation",
-      },
-    );
+    const resolved = await t.mutation(api.orchestrationState.resolveIndeterminate, {
+      serviceToken: SERVICE_TOKEN,
+      runId: "run-1",
+      nodeId: "first",
+      reconciliationId: "lease-reconciliation",
+    });
     expect(resolved.state).toBe("succeeded");
   });
 
   it("fails closed on an indeterminate provider result and forbids blind retry", async () => {
     const t = harness();
-    await t.mutation(
-      api.orchestrationState.beginRun,
-      begin({ nodeIds: ["first"] }),
-    );
+    await t.mutation(api.orchestrationState.beginRun, begin({ nodeIds: ["first"] }));
     const lease = await start(t);
     await registerReconciliation(t, "provider-reconciliation");
 
@@ -303,8 +285,7 @@ describe("Convex orchestration state", () => {
       nodeId: "first",
       workerId: "worker-1",
       leaseToken: lease,
-      indeterminateReason:
-        "Provider did not confirm whether the effect committed.",
+      indeterminateReason: "Provider did not confirm whether the effect committed.",
       reconciliationId: "provider-reconciliation",
     });
 
@@ -326,10 +307,7 @@ describe("Convex orchestration state", () => {
 
   it("derives retryability from the server failure classification", async () => {
     const t = harness();
-    await t.mutation(
-      api.orchestrationState.beginRun,
-      begin({ nodeIds: ["first"] }),
-    );
+    await t.mutation(api.orchestrationState.beginRun, begin({ nodeIds: ["first"] }));
     const lease = await start(t);
     const failed = await t.mutation(api.orchestrationState.recordStepFailure, {
       serviceToken: SERVICE_TOKEN,
@@ -351,10 +329,7 @@ describe("Convex orchestration state", () => {
 
   it("does not mark dependency failures retryable without a pre-effect safety classification", async () => {
     const t = harness();
-    await t.mutation(
-      api.orchestrationState.beginRun,
-      begin({ nodeIds: ["first"] }),
-    );
+    await t.mutation(api.orchestrationState.beginRun, begin({ nodeIds: ["first"] }));
     const lease = await start(t);
     const failed = await t.mutation(api.orchestrationState.recordStepFailure, {
       serviceToken: SERVICE_TOKEN,
@@ -384,10 +359,7 @@ describe("Convex orchestration state", () => {
 
   it("clears retryability when a retry returns a failed step to pending", async () => {
     const t = harness();
-    await t.mutation(
-      api.orchestrationState.beginRun,
-      begin({ nodeIds: ["first"], maxRetries: 2 }),
-    );
+    await t.mutation(api.orchestrationState.beginRun, begin({ nodeIds: ["first"], maxRetries: 2 }));
     const lease = await start(t);
     await t.mutation(api.orchestrationState.recordStepFailure, {
       serviceToken: SERVICE_TOKEN,
