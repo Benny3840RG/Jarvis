@@ -354,4 +354,25 @@ describe("Convex orchestration state", () => {
     });
     expect(run?.triggerPayload).toEqual({ taskType: "maintenance" });
   });
+  it("clears retryability when a retry returns a failed step to pending", async () => {
+    const t = harness();
+    await t.mutation(api.orchestrationState.beginRun, begin({ nodeIds: ["first"], maxRetries: 2 }));
+    const lease = await start(t);
+    await t.mutation(api.orchestrationState.recordStepFailure, {
+      serviceToken: SERVICE_TOKEN,
+      runId: "run-1",
+      nodeId: "first",
+      workerId: "worker-1",
+      leaseToken: lease,
+      failureCode: "execution_budget_exceeded",
+    });
+    const retried = await t.mutation(api.orchestrationState.retryFailedStep, {
+      serviceToken: SERVICE_TOKEN,
+      runId: "run-1",
+      nodeId: "first",
+    });
+    expect(retried.state).toBe("pending");
+    expect(retried.retryable).toBe(false);
+  });
 });
+
