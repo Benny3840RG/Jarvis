@@ -8,11 +8,7 @@ import { resolveReminderTimezone } from "../reminders/due.js";
 import { ReliabilityController } from "../reliability/reliabilityController.js";
 import { assessReconciliationHealth } from "../reliability/reliabilityHealth.js";
 import type { HttpAppConfig } from "./config.js";
-import type {
-  IntegrationStatus,
-  LayersStatus,
-  SystemStatus,
-} from "./contracts.js";
+import type { IntegrationStatus, LayersStatus, SystemStatus } from "./contracts.js";
 import { JarvisProblem } from "./problemDetails.js";
 import {
   HTTP_APP_CONFIG,
