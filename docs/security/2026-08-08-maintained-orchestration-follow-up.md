@@ -2,7 +2,7 @@
 
 ## Verified changes
 
-The following changes are now on main at a2786e58a48cdb4cf03e5d027eb005f4c2f378bd:
+The following changes are now on main at 924bda923f540ede6b9a80eaf70ab115cff03969:
 
 - PR #321 refreshed js-yaml, nanoid, and console dompurify to audited versions.
 - The exact-head dependency repair checks passed npm audit for both TypeScript workspaces.
@@ -17,6 +17,7 @@ The following changes are now on main at a2786e58a48cdb4cf03e5d027eb005f4c2f378b
 - PR #336 hardens that boundary by requiring provider/effect binding to the existing external reconciliation record, removing caller-attested terminal resolution, allowlisting trigger metadata, and narrowing retryability. Exact-head workflow #1440 (31257990451) and Copilot Review Check 31257990434 passed.
 - PR #344 repairs the composed runner's durable failure boundary: pre-lease failures cannot create a lease from `stop()`, and leased preflight/executor failures preserve audit-before-fail ordering. Exact-head workflow #1446 (31258557727) and Copilot Review Check #725 (31258557732) passed.
 - PR #350 binds composition-owned policy identity and derives canonical graph plan fingerprints before durable `beginRun`. Exact-head workflow #1470 (31260194108) and Copilot Review Check #749 (31260194109) passed.
+- PR #352 hardens the autobuild control-plane validator and scopes concurrency regression assertions to the workflow group line. Exact-head workflow #1477 (31260896290) and Copilot Review Check #755 (31260896356) passed.
 
 ## Review boundary
 
