@@ -333,6 +333,7 @@ export const recordStepSuccess = mutation({
       updatedAt: now,
       checkpointNodeId: nodeId,
       checkpointAt: now,
+      checkpointSequence: run.checkpointSequence + 1,
     });
     const updated = await ctx.db.get("orchestrationSteps", step._id);
     if (!updated) throw new Error("Orchestration step update failed.");
@@ -501,7 +502,7 @@ export const recoverExpiredStep = mutation({
     const recoveredRun = await ctx.db.get("orchestrationRuns", run._id);
     const recoveredStep = await ctx.db.get("orchestrationSteps", step._id);
     if (!recoveredRun || !recoveredStep) throw new Error("Orchestration recovery update failed.");
-    return { status: "recovered", run: recoveredRun, step: recoveredStep };
+    return { status: "indeterminate", run: recoveredRun, step: recoveredStep };
   },
 });
 
