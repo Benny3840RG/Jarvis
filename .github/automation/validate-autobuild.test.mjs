@@ -440,13 +440,19 @@ test("requires issue-scoped concurrency and preserves duplicate-issue serializat
   );
 
   const issueScopedGroup =
-    /^\s{2}group:\s*jarvis-autobuild-\$\{\{\s*github\.repository\s*\}\}-issue-\$\{\{[\s\S]*issue_number[\s\S]*\}\}\s*$/im;
+    /^\s{2}group:\s*jarvis-autobuild-\$\{\{\s*github\.repository\s*\}\}-\$\{\{(?=.*github\.event_name)(?=.*inputs\.issue_number)(?=.*github\.event\.issue\.number).*?\}\}\s*$/im;
   assert.match(workflow, issueScopedGroup);
+  assert.match(workflow, /format\('issue-\{0\}',\s*inputs\.issue_number\)/);
+  assert.match(workflow, /format\('issue-\{0\}',\s*github\.event\.issue\.number\)/);
+  assert.doesNotMatch(
+    workflow,
+    /inputs\.issue_number\s*\|\|\s*github\.event\.issue\.number/,
+  );
 
-  const resolveGroup = (eventName, issueNumber) =>
+  const groupForIssue = (issueNumber) =>
     "jarvis-autobuild-Benny3840RG/Jarvis-issue-" + issueNumber;
-  assert.notEqual(resolveGroup("issues", 331), resolveGroup("issues", 332));
-  assert.equal(resolveGroup("issues", 331), resolveGroup("issues", 331));
+  assert.notEqual(groupForIssue(331), groupForIssue(332));
+  assert.equal(groupForIssue(331), groupForIssue(331));
 
   const repositoryWide = workflow.replace(
     /^(\s{2}group:\s*).+$/m,
