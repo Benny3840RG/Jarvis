@@ -853,7 +853,8 @@ export const resolveIndeterminate = mutation({
       throw new Error("Provider reconciliation has no authenticated terminal outcome.");
     }
     const terminalState = external.terminalStatus;
-    const terminalFailureCode = terminalState === "failed" ? "postcondition_failed" as const : undefined;
+    const terminalFailureCode =
+      terminalState === "failed" ? ("postcondition_failed" as const) : undefined;
     await ctx.db.patch("orchestrationReconciliations", reconciliation._id, {
       state: terminalState,
       ...(external.resolutionDigest === undefined
