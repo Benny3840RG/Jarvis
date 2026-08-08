@@ -554,9 +554,6 @@ export const recordReconciliationOutcome = mutation({
     const reconciliation = requireReconciliation(
       await findReconciliation(ctx, ownerId, reconciliationId),
     );
-    if (reconciliation.runId !== runId) {
-      throw new Error("Orchestration reconciliation is not bound to this run.");
-    }
     if (reconciliation.state === "escalated" && reconciliation.providerRequestId === undefined) {
       throw new Error("A reconciliation without a provider reference cannot be resolved.");
     }
