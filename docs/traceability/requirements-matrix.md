@@ -28,7 +28,7 @@
 | R-122–R-124 | Roadmap linkage | Partial | Must | Unassigned | P3/P4 roadmap | Evidence matrix: Partial |
 | R-125–R-127 | Definition of done | Partial | Must | Unassigned | P1 foundations | Evidence matrix: Partial |
 | R-128–R-131 | Concurrency and consistency | Partial | Must | Unassigned | P1 foundations | Evidence matrix: Partial |
-| R-132–R-135 | Policy versioning | Unverified | Must | Unassigned | TBD | Evidence matrix: Unverified |
+| R-132–R-135 | Policy versioning | Partial | Must | Unassigned | P4 orchestration gate | Evidence matrix: Partial |
 | R-136–R-140 | Time and timezone | Partial | Must | Unassigned | P2 runtime | Evidence matrix: Partial |
 | R-141–R-143 | Indeterminate outcomes | Partial | Must | Unassigned | P2 Outlook | Evidence matrix: Partial |
 | R-144–R-150 | Revision and freeze rules | Implemented | Must | Requirements governance | v2.2 | Evidence matrix: Verified |
