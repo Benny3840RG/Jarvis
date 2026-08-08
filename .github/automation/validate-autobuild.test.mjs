@@ -432,3 +432,25 @@ test("TypeScript CI independently enforces the automation policy", () => {
     false,
   );
 });
+
+test("requires issue-scoped concurrency and preserves duplicate-issue serialization", () => {
+  const workflow = fs.readFileSync(
+    new URL("../workflows/jarvis-autobuild.yml", import.meta.url),
+    "utf8",
+  );
+
+  const issueScopedGroup =
+    /^\s{2}group:\s*jarvis-autobuild-\$\{\{\s*github\.repository\s*\}\}-issue-\$\{\{[\s\S]*issue_number[\s\S]*\}\}\s*$/im;
+  assert.match(workflow, issueScopedGroup);
+
+  const resolveGroup = (eventName, issueNumber) =>
+    "jarvis-autobuild-Benny3840RG/Jarvis-issue-" + issueNumber;
+  assert.notEqual(resolveGroup("issues", 331), resolveGroup("issues", 332));
+  assert.equal(resolveGroup("issues", 331), resolveGroup("issues", 331));
+
+  const repositoryWide = workflow.replace(
+    /^(\s{2}group:\s*).+$/m,
+    "$1jarvis-autobuild-${{ github.repository }}",
+  );
+  assert.equal(validateWorkflowContract(repositoryWide).ok, false);
+});
