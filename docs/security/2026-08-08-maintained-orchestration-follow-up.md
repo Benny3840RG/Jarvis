@@ -23,7 +23,7 @@ The following changes are now on main at a2786e58a48cdb4cf03e5d027eb005f4c2f378b
 The merged slices are maintained offline foundations, not a production commissioning claim. Runner composition and composition-owned plan/policy binding are now verified offline, but the exact-head review still identifies blockers before live ingress or external effects are activated:
 
 - the shared service-token boundary still needs a commissioned remote worker-identity and OIDC/gateway binding;
-- trigger persistence and policy fields need authoritative server-side binding rather than caller claims;
+- trigger ingress still needs authoritative server-side binding of request identity, trigger metadata, and live policy context; PR #350 binds composition policy identity offline but does not activate ingress;
 - retry progression and multi-failure recovery still need deployed drills; and
 - no deployed restart or provider-reconciliation drill has been completed.
 
