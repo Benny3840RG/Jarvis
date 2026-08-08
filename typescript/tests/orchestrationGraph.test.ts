@@ -103,7 +103,7 @@ it("freezes validated graph nodes and clones command inputs", () => {
   assert.equal(Object.isFrozen(node.command), true);
   assert.equal(Object.isFrozen(node.command.input), true);
   assert.equal(
-    Object.isFrozen((node.command.input as { metadata: object }).metadata),
+    Object.isFrozen((node.command.input as unknown as { metadata: object }).metadata),
     true,
   );
   assert.throws(() => {
