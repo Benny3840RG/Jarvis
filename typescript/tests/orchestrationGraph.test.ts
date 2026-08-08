@@ -67,3 +67,17 @@ describe("OrchestrationGraph", () => {
     );
   });
 });
+
+
+  it("orders ready sibling nodes by descending weight while preserving dependencies", () => {
+    const graph = new OrchestrationGraph([
+      { id: "low", command: createTask, weight: 0.2 },
+      { id: "high", command: completeTask, weight: 1 },
+      { id: "dependent", command: { operationId: "createReminder", input: { title: "Later" } }, weight: 0.1, dependsOn: ["low"] },
+    ]);
+
+    assert.deepEqual(
+      graph.orderedNodes().map((node) => node.id),
+      ["high", "low", "dependent"],
+    );
+  });
