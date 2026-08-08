@@ -2,7 +2,7 @@
 
 ## Verified changes
 
-The following changes are now on main at a08a064d876f7def00a5bb8b3ab76d66aaed4594:
+The following changes are now on main at a76cd07b547d13736623c670219368be4d25ead2:
 
 - PR #321 refreshed js-yaml, nanoid, and console dompurify to audited versions.
 - The exact-head dependency repair checks passed npm audit for both TypeScript workspaces.
