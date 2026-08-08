@@ -1,4 +1,5 @@
 import type { OrchestrationExecutor, OrchestrationOutcomeRecorder } from "./contracts.js";
+import { orchestrationPlanFingerprint } from "./fingerprints.js";
 import type { OrchestrationGraph } from "./graph.js";
 import {
   ConvexOrchestrationStateBoundary,
@@ -13,17 +14,36 @@ import {
 } from "./runner.js";
 import type { OrchestrationContext } from "./contracts.js";
 
+export type ConvexOrchestrationCompositionAuthority = {
+  policyVersion: string;
+  policyFingerprint: string;
+};
+
+export type ConvexOrchestrationRunMetadata = Omit<
+  ConvexOrchestrationBeginRunInput,
+  "context" | "graph" | "planFingerprint" | "policyVersion" | "policyFingerprint"
+>;
+
 export type ConvexOrchestrationRunResult =
   | { status: "created"; result: OrchestrationRunResult }
   | { status: "replayed" | "conflict"; run: Record<string, unknown> };
+
+function required(value: string, label: string): string {
+  const normalized = value.trim();
+  if (!normalized) throw new Error(`${label} is required.`);
+  return normalized;
+}
 
 export function createConvexOrchestrationRunner(
   state: ConvexOrchestrationStateBoundary,
   executor: OrchestrationExecutor,
   safety: OrchestrationSafetyGate,
   outcomes: OrchestrationOutcomeRecorder,
+  authority: ConvexOrchestrationCompositionAuthority,
   options: OrchestrationRunnerOptions = {},
 ): OrchestrationRunner {
+  required(authority.policyVersion, "Orchestration policy version");
+  required(authority.policyFingerprint, "Orchestration policy fingerprint");
   return new OrchestrationRunner(executor, safety, outcomes, {
     ...options,
     stepState: state,
@@ -36,26 +56,42 @@ export function createConvexOrchestrationRunner(
  */
 export class ConvexOrchestrationRunner {
   private readonly runner: OrchestrationRunner;
+  private readonly authority: ConvexOrchestrationCompositionAuthority;
 
   constructor(
     private readonly state: ConvexOrchestrationStateBoundary,
     executor: OrchestrationExecutor,
     safety: OrchestrationSafetyGate,
     outcomes: OrchestrationOutcomeRecorder,
+    authority: ConvexOrchestrationCompositionAuthority,
     options: OrchestrationRunnerOptions = {},
   ) {
-    this.runner = createConvexOrchestrationRunner(state, executor, safety, outcomes, options);
+    this.authority = {
+      policyVersion: required(authority.policyVersion, "Orchestration policy version"),
+      policyFingerprint: required(authority.policyFingerprint, "Orchestration policy fingerprint"),
+    };
+    this.runner = createConvexOrchestrationRunner(
+      state,
+      executor,
+      safety,
+      outcomes,
+      this.authority,
+      options,
+    );
   }
 
   async run(
     graph: OrchestrationGraph,
     context: OrchestrationContext,
-    metadata: Omit<ConvexOrchestrationBeginRunInput, "context" | "graph">,
+    metadata: ConvexOrchestrationRunMetadata,
   ): Promise<ConvexOrchestrationRunResult> {
     const begun: ConvexOrchestrationBeginRunResult = await this.state.beginRun({
       context,
       graph,
       ...metadata,
+      planFingerprint: orchestrationPlanFingerprint(graph),
+      policyVersion: this.authority.policyVersion,
+      policyFingerprint: this.authority.policyFingerprint,
     });
     if (begun.status !== "created") {
       return { status: begun.status, run: begun.run };
