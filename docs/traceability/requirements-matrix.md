@@ -35,13 +35,15 @@
 
 ## Assessment basis
 
-Statuses above are reconciled to the implementation and evidence records on current `main` baseline `1d338026149d1452d9c83b59c19ba3f5b89ef4d6`. `Partial` means the repository contains implementation, tests, runbooks, or governance evidence, but the requirement range is not fully closed. `Unverified` means this reconciliation found no current evidence sufficient to assess the range. A `Partial` status is not a commissioning or production claim.
+Statuses above are reconciled to the implementation and evidence records on current main baseline 0485ba750c9f08735ab784a1a3877c84d345144d. Partial means the repository contains implementation, tests, runbooks, or governance evidence, but the requirement range is not fully closed. Unverified means this reconciliation found no current evidence sufficient to assess the range. A Partial status is not a commissioning or production claim.
 
-The matrix now records the current reality rather than leaving known foundation controls marked `Unverified`: loopback locality, credential handling, release/operations scaffolding, roadmap linkage, timezone handling, and indeterminate-outcome machinery have repository evidence. The maintained runtime now also has an explicit in-process integration core at the CLI seam — EventBus, ToolGateway, domain registry, memory linker, tool router, and an idempotent Convex-backed metadata event sink — plus a provider-neutral reliability controller at the HTTP status boundary. Live Convex commissioning, governed HTTP/MCP composition, downstream outbox consumers, recovery orchestration, and broader P4 intelligence remain open until separately verified. These slices are evidence of maintained foundations, not a claim that the full autonomous runtime is commissioned.
+The matrix records the current reality rather than leaving known foundation controls marked Unverified: loopback locality, credential handling, release/operations scaffolding, roadmap linkage, timezone handling, and indeterminate-outcome machinery have repository evidence. The maintained runtime now also has an explicit in-process integration core at the CLI seam — EventBus, ToolGateway, domain registry, memory linker, tool router, and an idempotent Convex-backed metadata event sink — plus a provider-neutral reliability controller at the HTTP status boundary. The maintained orchestration runner now has deterministic weighted dependency scheduling, trigger validation/registry, bounded step and duration execution, and fail-closed budget evidence. Live Convex commissioning, governed HTTP/MCP composition, downstream outbox consumers, durable orchestration state/recovery, live observability, and broader P4 intelligence remain open until separately verified. These slices are evidence of maintained foundations, not a claim that the full autonomous runtime is commissioned.
+
+The 2026-08-08 dependency refresh also resolves the previously failing audit path for js-yaml, nanoid, and console dompurify; the exact-head CI run for the orchestration branch passed audit, typecheck, lint, formatting, OpenAPI, Node/Convex tests, console build/typecheck, and automation policy before merge.
 
 ## Update rules
 
 - Split ranges into individual rows as implementation assessment proceeds.
-- An item may become `implemented` only when its test and evidence references are populated.
+- An item may become implemented only when its test and evidence references are populated.
 - Deferred and rejected items retain their IDs and reasons.
 - No row may redefine an ID from the frozen namespace.
