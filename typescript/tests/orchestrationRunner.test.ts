@@ -1,3 +1,4 @@
+npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm.
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
@@ -31,7 +32,9 @@ const success: DomainResult = {
 };
 const okDecision: SafetyDecision = { status: "ok", reasons: [] };
 
-function gate(overrides: Partial<OrchestrationSafetyGate> = {}): OrchestrationSafetyGate {
+function gate(
+  overrides: Partial<OrchestrationSafetyGate> = {},
+): OrchestrationSafetyGate {
   return {
     preflight: async () => okDecision,
     postflight: async () => okDecision,
@@ -41,7 +44,8 @@ function gate(overrides: Partial<OrchestrationSafetyGate> = {}): OrchestrationSa
 
 function recorder(outcomes: OrchestrationOutcome[]) {
   return {
-    record: async (outcome: OrchestrationOutcome) => void outcomes.push(outcome),
+    record: async (outcome: OrchestrationOutcome) =>
+      void outcomes.push(outcome),
   };
 }
 
@@ -65,7 +69,10 @@ describe("OrchestrationRunner", () => {
       recorder(outcomes),
     );
 
-    const result = await runner.run(new OrchestrationGraph([{ id: "create", command }]), context);
+    const result = await runner.run(
+      new OrchestrationGraph([{ id: "create", command }]),
+      context,
+    );
 
     assert.equal(result.ok, false);
     if (result.ok) return;
@@ -134,7 +141,10 @@ describe("OrchestrationRunner", () => {
       recorder(outcomes),
     );
 
-    const result = await runner.run(new OrchestrationGraph([{ id: "create", command }]), context);
+    const result = await runner.run(
+      new OrchestrationGraph([{ id: "create", command }]),
+      context,
+    );
 
     assert.equal(result.ok, false);
     if (result.ok) return;
@@ -152,7 +162,10 @@ describe("OrchestrationRunner", () => {
       recorder(outcomes),
     );
 
-    const result = await runner.run(new OrchestrationGraph([{ id: "create", command }]), context);
+    const result = await runner.run(
+      new OrchestrationGraph([{ id: "create", command }]),
+      context,
+    );
 
     assert.equal(result.ok, true);
     if (!result.ok) return;
@@ -169,13 +182,20 @@ describe("OrchestrationRunner", () => {
   });
 
   it("surfaces an executed result when success auditing fails", async () => {
-    const runner = new OrchestrationRunner({ execute: async () => success }, gate(), {
-      record: async () => {
-        throw new Error("journal unavailable");
+    const runner = new OrchestrationRunner(
+      { execute: async () => success },
+      gate(),
+      {
+        record: async () => {
+          throw new Error("journal unavailable");
+        },
       },
-    });
+    );
 
-    const result = await runner.run(new OrchestrationGraph([{ id: "create", command }]), context);
+    const result = await runner.run(
+      new OrchestrationGraph([{ id: "create", command }]),
+      context,
+    );
 
     assert.equal(result.ok, false);
     if (result.ok) return;
@@ -195,7 +215,10 @@ describe("OrchestrationRunner", () => {
       recorder(outcomes),
     );
 
-    const result = await runner.run(new OrchestrationGraph([{ id: "create", command }]), context);
+    const result = await runner.run(
+      new OrchestrationGraph([{ id: "create", command }]),
+      context,
+    );
 
     assert.equal(result.ok, false);
     if (result.ok) return;
@@ -272,7 +295,6 @@ it("halts when the run deadline is exhausted and preserves completed-step recove
   assert.equal(result.completedSteps.length, 1);
 });
 
-
 it("rejects non-positive orchestration budgets", () => {
   assert.throws(
     () =>
@@ -295,3 +317,8 @@ it("rejects non-positive orchestration budgets", () => {
     /maxDurationMs must be a positive safe integer/,
   );
 });
+npm notice
+npm notice New minor version of npm available! 11.9.0 -> 11.19.0
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.19.0
+npm notice To update run: npm install -g npm@11.19.0
+npm notice
