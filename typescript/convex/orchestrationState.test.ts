@@ -1,4 +1,3 @@
-npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm.
 import { convexTest } from "convex-test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -57,7 +56,6 @@ async function registerReconciliation(
   reconciliationId: string,
   runId = "run-1",
   nodeId = "first",
-  attempt = 1,
 ) {
   return t.mutation(api.orchestrationState.registerReconciliation, {
     serviceToken: SERVICE_TOKEN,
@@ -68,7 +66,6 @@ async function registerReconciliation(
     provider: "task-provider",
     providerRequestId: "provider-request-" + reconciliationId,
     providerCorrelationId: "provider-correlation-" + reconciliationId,
-    now: now(),
   });
 }
 
@@ -183,6 +180,8 @@ describe("Convex orchestration state", () => {
     });
     await registerReconciliation(t, "lease-reconciliation");
 
+    await new Promise((resolve) => setTimeout(resolve, 1_100));
+
     await expect(
       t.mutation(api.orchestrationState.recordStepSuccess, {
         serviceToken: SERVICE_TOKEN,
@@ -213,7 +212,6 @@ describe("Convex orchestration state", () => {
       nodeId: "first",
       recoveryOwner: "recovery-1",
       reconciliationId: "lease-reconciliation",
-      now: leaseStart + 1_001,
     });
     expect(recovered.status).toBe("indeterminate");
     expect(recovered.run.state).toBe("indeterminate");
@@ -225,8 +223,7 @@ describe("Convex orchestration state", () => {
         runId: "run-1",
         nodeId: "first",
         reconciliationId: "lease-reconciliation",
-        now: leaseStart + 1_002,
-      }),
+        }),
     ).rejects.toThrow(/no verified terminal/);
 
     await t.mutation(api.orchestrationState.recordReconciliationOutcome, {
@@ -236,14 +233,12 @@ describe("Convex orchestration state", () => {
       outputDigest: "reconciled-digest",
       evidenceDetail: "Provider lookup returned the committed task.",
       resolverId: "recovery-1",
-      now: leaseStart + 1_003,
     });
     const resolved = await t.mutation(api.orchestrationState.resolveIndeterminate, {
       serviceToken: SERVICE_TOKEN,
       runId: "run-1",
       nodeId: "first",
       reconciliationId: "lease-reconciliation",
-      now: leaseStart + 1_004,
     });
     expect(resolved.state).toBe("succeeded");
   });
@@ -277,7 +272,6 @@ describe("Convex orchestration state", () => {
         serviceToken: SERVICE_TOKEN,
         runId: "run-1",
         nodeId: "first",
-        now: now(),
       }),
     ).rejects.toThrow(/run indeterminate/);
   });
@@ -301,13 +295,7 @@ describe("Convex orchestration state", () => {
         serviceToken: SERVICE_TOKEN,
         runId: "run-1",
         nodeId: "first",
-        now: now(),
       }),
     ).rejects.toThrow(/Only retryable/);
   });
 });
-npm notice
-npm notice New minor version of npm available! 11.9.0 -> 11.19.0
-npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.19.0
-npm notice To update run: npm install -g npm@11.19.0
-npm notice
