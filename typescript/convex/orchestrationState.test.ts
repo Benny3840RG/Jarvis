@@ -1,3 +1,4 @@
+npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm.
 import { convexTest } from "convex-test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -305,3 +306,8 @@ describe("Convex orchestration state", () => {
     ).rejects.toThrow(/Only retryable/);
   });
 });
+npm notice
+npm notice New minor version of npm available! 11.9.0 -> 11.19.0
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.19.0
+npm notice To update run: npm install -g npm@11.19.0
+npm notice
