@@ -180,7 +180,7 @@ describe("Convex orchestration state", () => {
     });
     await registerReconciliation(t, "lease-reconciliation");
 
-    await new Promise((resolve) => setTimeout(resolve, 1_100));
+    vi.advanceTimersByTime(1_000);
 
     await expect(
       t.mutation(api.orchestrationState.recordStepSuccess, {
