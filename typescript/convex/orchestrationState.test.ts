@@ -223,7 +223,7 @@ describe("Convex orchestration state", () => {
         runId: "run-1",
         nodeId: "first",
         reconciliationId: "lease-reconciliation",
-        }),
+      }),
     ).rejects.toThrow(/no verified terminal/);
 
     await t.mutation(api.orchestrationState.recordReconciliationOutcome, {
