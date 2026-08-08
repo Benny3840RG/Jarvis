@@ -31,7 +31,9 @@ const success: DomainResult = {
 };
 const okDecision: SafetyDecision = { status: "ok", reasons: [] };
 
-function gate(overrides: Partial<OrchestrationSafetyGate> = {}): OrchestrationSafetyGate {
+function gate(
+  overrides: Partial<OrchestrationSafetyGate> = {},
+): OrchestrationSafetyGate {
   return {
     preflight: async () => okDecision,
     postflight: async () => okDecision,
@@ -41,7 +43,8 @@ function gate(overrides: Partial<OrchestrationSafetyGate> = {}): OrchestrationSa
 
 function recorder(outcomes: OrchestrationOutcome[]) {
   return {
-    record: async (outcome: OrchestrationOutcome) => void outcomes.push(outcome),
+    record: async (outcome: OrchestrationOutcome) =>
+      void outcomes.push(outcome),
   };
 }
 
@@ -65,7 +68,10 @@ describe("OrchestrationRunner", () => {
       recorder(outcomes),
     );
 
-    const result = await runner.run(new OrchestrationGraph([{ id: "create", command }]), context);
+    const result = await runner.run(
+      new OrchestrationGraph([{ id: "create", command }]),
+      context,
+    );
 
     assert.equal(result.ok, false);
     if (result.ok) return;
@@ -134,7 +140,10 @@ describe("OrchestrationRunner", () => {
       recorder(outcomes),
     );
 
-    const result = await runner.run(new OrchestrationGraph([{ id: "create", command }]), context);
+    const result = await runner.run(
+      new OrchestrationGraph([{ id: "create", command }]),
+      context,
+    );
 
     assert.equal(result.ok, false);
     if (result.ok) return;
@@ -152,7 +161,10 @@ describe("OrchestrationRunner", () => {
       recorder(outcomes),
     );
 
-    const result = await runner.run(new OrchestrationGraph([{ id: "create", command }]), context);
+    const result = await runner.run(
+      new OrchestrationGraph([{ id: "create", command }]),
+      context,
+    );
 
     assert.equal(result.ok, true);
     if (!result.ok) return;
@@ -169,13 +181,20 @@ describe("OrchestrationRunner", () => {
   });
 
   it("surfaces an executed result when success auditing fails", async () => {
-    const runner = new OrchestrationRunner({ execute: async () => success }, gate(), {
-      record: async () => {
-        throw new Error("journal unavailable");
+    const runner = new OrchestrationRunner(
+      { execute: async () => success },
+      gate(),
+      {
+        record: async () => {
+          throw new Error("journal unavailable");
+        },
       },
-    });
+    );
 
-    const result = await runner.run(new OrchestrationGraph([{ id: "create", command }]), context);
+    const result = await runner.run(
+      new OrchestrationGraph([{ id: "create", command }]),
+      context,
+    );
 
     assert.equal(result.ok, false);
     if (result.ok) return;
@@ -195,7 +214,10 @@ describe("OrchestrationRunner", () => {
       recorder(outcomes),
     );
 
-    const result = await runner.run(new OrchestrationGraph([{ id: "create", command }]), context);
+    const result = await runner.run(
+      new OrchestrationGraph([{ id: "create", command }]),
+      context,
+    );
 
     assert.equal(result.ok, false);
     if (result.ok) return;
