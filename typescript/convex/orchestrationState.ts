@@ -1,3 +1,4 @@
+npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm.
 import { v } from "convex/values";
 
 import { requireOwner } from "./authHelpers.js";
@@ -109,7 +110,9 @@ function requireStep<T>(step: T | null): T {
   return step;
 }
 
-function publicStep(step: Doc<"orchestrationSteps">): Omit<Doc<"orchestrationSteps">, "leaseToken"> {
+function publicStep(
+  step: Doc<"orchestrationSteps">,
+): Omit<Doc<"orchestrationSteps">, "leaseToken"> {
   const { leaseToken: _leaseToken, ...safe } = step;
   return safe;
 }
@@ -456,7 +459,6 @@ export const recordStepFailure = mutation({
   },
 });
 
-
 export const registerReconciliation = mutation({
   args: {
     ...runArgs,
@@ -473,8 +475,14 @@ export const registerReconciliation = mutation({
     const ownerId = requireOwner(args.serviceToken);
     const runId = cleanRequired(args.runId, "Orchestration run ID");
     const nodeId = cleanRequired(args.nodeId, "Orchestration node ID");
-    const reconciliationId = cleanRequired(args.reconciliationId, "Orchestration reconciliation ID");
-    const effectFingerprint = cleanRequired(args.effectFingerprint, "Orchestration effect fingerprint");
+    const reconciliationId = cleanRequired(
+      args.reconciliationId,
+      "Orchestration reconciliation ID",
+    );
+    const effectFingerprint = cleanRequired(
+      args.effectFingerprint,
+      "Orchestration effect fingerprint",
+    );
     const provider = cleanRequired(args.provider, "Orchestration provider");
     const providerRequestId =
       args.providerRequestId === undefined
@@ -539,8 +547,14 @@ export const recordReconciliationOutcome = mutation({
   returns: orchestrationReconciliationDocumentValidator,
   handler: async (ctx, args) => {
     const ownerId = requireOwner(args.serviceToken);
-    const reconciliationId = cleanRequired(args.reconciliationId, "Orchestration reconciliation ID");
-    const evidenceDetail = cleanRequired(args.evidenceDetail, "Orchestration reconciliation evidence");
+    const reconciliationId = cleanRequired(
+      args.reconciliationId,
+      "Orchestration reconciliation ID",
+    );
+    const evidenceDetail = cleanRequired(
+      args.evidenceDetail,
+      "Orchestration reconciliation evidence",
+    );
     const resolverId = cleanRequired(args.resolverId, "Orchestration resolver ID");
     const outputDigest =
       args.outputDigest === undefined
@@ -660,7 +674,10 @@ export const recoverExpiredStep = mutation({
     const runId = cleanRequired(args.runId, "Orchestration run ID");
     const nodeId = cleanRequired(args.nodeId, "Orchestration node ID");
     const recoveryOwner = cleanRequired(args.recoveryOwner, "Orchestration recovery owner");
-    const reconciliationId = cleanRequired(args.reconciliationId, "Orchestration reconciliation ID");
+    const reconciliationId = cleanRequired(
+      args.reconciliationId,
+      "Orchestration reconciliation ID",
+    );
     const now = validTimestamp(args.now);
     const run = requireRun(await findRun(ctx, ownerId, runId));
     const step = requireStep(await findStep(ctx, ownerId, runId, nodeId));
@@ -784,7 +801,10 @@ export const resolveIndeterminate = mutation({
     const ownerId = requireOwner(args.serviceToken);
     const runId = cleanRequired(args.runId, "Orchestration run ID");
     const nodeId = cleanRequired(args.nodeId, "Orchestration node ID");
-    const reconciliationId = cleanRequired(args.reconciliationId, "Orchestration reconciliation ID");
+    const reconciliationId = cleanRequired(
+      args.reconciliationId,
+      "Orchestration reconciliation ID",
+    );
     const now = validTimestamp(args.now);
     const run = requireRun(await findRun(ctx, ownerId, runId));
     const step = requireStep(await findStep(ctx, ownerId, runId, nodeId));
@@ -817,7 +837,9 @@ export const resolveIndeterminate = mutation({
           : "failed";
     await ctx.db.patch("orchestrationSteps", step._id, {
       state: reconciliation.state,
-      ...(reconciliation.outputDigest === undefined ? {} : { outputDigest: reconciliation.outputDigest }),
+      ...(reconciliation.outputDigest === undefined
+        ? {}
+        : { outputDigest: reconciliation.outputDigest }),
       ...(reconciliation.state === "failed"
         ? { failureCode: reconciliation.failureCode }
         : { failureCode: undefined }),
@@ -842,3 +864,8 @@ export const resolveIndeterminate = mutation({
     return publicStep(updated);
   },
 });
+npm notice
+npm notice New minor version of npm available! 11.9.0 -> 11.19.0
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.19.0
+npm notice To update run: npm install -g npm@11.19.0
+npm notice
