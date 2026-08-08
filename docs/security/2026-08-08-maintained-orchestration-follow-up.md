@@ -2,7 +2,7 @@
 
 ## Verified changes
 
-The following changes are now on main at a08a064d876f7def00a5bb8b3ab76d66aaed4594:
+The following changes are now on main at a76cd07b547d13736623c670219368be4d25ead2:
 
 - PR #321 refreshed js-yaml, nanoid, and console dompurify to audited versions.
 - The exact-head dependency repair checks passed npm audit for both TypeScript workspaces.
@@ -14,7 +14,7 @@ The following changes are now on main at a08a064d876f7def00a5bb8b3ab76d66aaed459
 - PR #329 adds Convex-backed durable runs and steps, server-issued worker-bound leases, server-derived lifecycle clocks, operation-bound reconciliation records, and fail-closed recovery.
 - The exact PR #329 head tested in workflow run #1413 (31256419743) passed typecheck, lint, formatting, OpenAPI validation, Node/Convex tests, console build, and automation policy; Copilot Review Check 31256419737 also passed.
 - PR #335 composes the maintained runner with the Convex boundary: begin-run replay/conflict is handled before execution, leases are acquired before the executor, and durable terminal writes follow the existing audit record. Exact-head workflow #1432 (31257664623) and Copilot Review Check 31257664737 passed.
-- PR #336 hardens that boundary by requiring provider/effect binding to the existing external reconciliation record, removing caller-attested terminal resolution, allowlisting trigger metadata, and narrowing retryability. Exact-head workflow #1440 (31257990451) and Copilot Review Check 31257990434 passed.
+- PR #336 hardens that boundary by requiring provider/effect binding to the existing external reconciliation record, removing caller-attested terminal resolution, allowlisting trigger metadata, and narrowing retryability. Exact-head workflow #1440 (31257990451) and Copilot Review Check 31257990434 passed.\n- PR #344 closes the durable failure-boundary defect by preventing unleased failure writes and retaining the runner-owned lease token. Exact-head TypeScript workflow #1446 (31258557727) and Copilot Review Check #725 (31258557732) passed.
 
 ## Review boundary
 
