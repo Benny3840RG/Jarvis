@@ -7,6 +7,8 @@ export type OrchestrationNode = {
   id: string;
   command: OrchestrationCommand;
   dependsOn?: readonly string[];
+  /** Higher-weight ready nodes are selected first; ties retain declaration order. */
+  weight?: number;
 };
 
 export class OrchestrationGraph {
@@ -25,6 +27,12 @@ export class OrchestrationGraph {
     for (const node of copies) {
       if (node.id.trim().length === 0) throw new Error("Orchestration node IDs must not be blank.");
       if (byId.has(node.id)) throw new Error(`Duplicate orchestration node ID: ${node.id}`);
+      if (
+        node.weight !== undefined &&
+        (!Number.isFinite(node.weight) || node.weight < 0)
+      ) {
+        throw new Error(`Orchestration node ${node.id} has an invalid weight.`);
+      }
       byId.set(node.id, node);
     }
 
@@ -61,29 +69,63 @@ export class OrchestrationGraph {
   }
 
   orderedNodes(): readonly OrchestrationNode[] {
-    const ordered: OrchestrationNode[] = [];
-    const state = new Map<string, "visiting" | "visited">();
+    const declarationOrder = new Map(
+      this.commandNodes.map((node, index) => [node.id, index]),
+    );
+    const dependents = new Map<string, string[]>();
+    const remainingDependencies = new Map<string, number>();
 
-    const visit = (node: OrchestrationNode): void => {
-      const current = state.get(node.id);
-      if (current === "visited") return;
-      if (current === "visiting") {
-        throw new Error(`Orchestration graph contains a cycle involving ${node.id}.`);
+    for (const node of this.commandNodes) {
+      const dependencies = node.dependsOn ?? [];
+      remainingDependencies.set(node.id, dependencies.length);
+      for (const dependencyId of dependencies) {
+        const dependentsForNode = dependents.get(dependencyId) ?? [];
+        dependentsForNode.push(node.id);
+        dependents.set(dependencyId, dependentsForNode);
       }
+    }
 
-      state.set(node.id, "visiting");
-      for (const dependencyId of node.dependsOn ?? []) {
-        const dependency = this.commandNodesById.get(dependencyId);
-        if (!dependency) {
-          throw new Error(`Orchestration node ${node.id} depends on unknown node ${dependencyId}.`);
-        }
-        visit(dependency);
-      }
-      state.set(node.id, "visited");
-      ordered.push(node);
+    const ready = this.commandNodes
+      .filter((node) => (node.dependsOn ?? []).length === 0)
+      .map((node) => node.id);
+    const sortReady = (): void => {
+      ready.sort((leftId, rightId) => {
+        const left = this.commandNodesById.get(leftId);
+        const right = this.commandNodesById.get(rightId);
+        const weightDifference = (right?.weight ?? 0) - (left?.weight ?? 0);
+        return (
+          weightDifference ||
+          (declarationOrder.get(leftId) ?? 0) -
+            (declarationOrder.get(rightId) ?? 0)
+        );
+      });
     };
 
-    for (const node of this.commandNodes) visit(node);
+    const ordered: OrchestrationNode[] = [];
+    while (ready.length > 0) {
+      sortReady();
+      const nodeId = ready.shift();
+      if (nodeId === undefined) continue;
+      const node = this.commandNodesById.get(nodeId);
+      if (!node) continue;
+      ordered.push(node);
+
+      for (const dependentId of dependents.get(nodeId) ?? []) {
+        const remaining = (remainingDependencies.get(dependentId) ?? 0) - 1;
+        remainingDependencies.set(dependentId, remaining);
+        if (remaining === 0) ready.push(dependentId);
+      }
+    }
+
+    if (ordered.length !== this.commandNodes.length) {
+      const unresolved = this.commandNodes.find(
+        (node) => !ordered.some((item) => item.id === node.id),
+      );
+      throw new Error(
+        `Orchestration graph contains a cycle involving ${unresolved?.id ?? "unknown"}.`,
+      );
+    }
+
     return ordered;
   }
 }
