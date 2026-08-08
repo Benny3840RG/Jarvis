@@ -8,6 +8,7 @@ import {
   orchestrationRunStateValidator,
   orchestrationStepStateValidator,
   orchestrationTriggerSourceValidator,
+  orchestrationReconciliationStateValidator,
 } from "./orchestrationValidators.js";
 import {
   externalReconciliationStateValidator,
@@ -371,6 +372,29 @@ export default defineSchema({
   })
     .index("by_owner_and_run_id_and_node_id", ["ownerId", "runId", "nodeId"])
     .index("by_owner_and_run_id_and_state", ["ownerId", "runId", "state"])
+    .index("by_owner_and_state_and_updated_at", ["ownerId", "state", "updatedAt"])
+    .index("by_owner_and_state_and_lease_expires_at", ["ownerId", "state", "leaseExpiresAt"])
+    .index("by_owner_and_state_and_next_attempt_at", ["ownerId", "state", "nextAttemptAt"]),
+  orchestrationReconciliations: defineTable({
+    ownerId: v.string(),
+    reconciliationId: v.string(),
+    runId: v.string(),
+    nodeId: v.string(),
+    attempt: v.number(),
+    effectFingerprint: v.string(),
+    provider: v.string(),
+    providerRequestId: v.optional(v.string()),
+    providerCorrelationId: v.string(),
+    state: orchestrationReconciliationStateValidator,
+    outputDigest: v.optional(v.string()),
+    failureCode: v.optional(orchestrationFailureCodeValidator),
+    terminalEvidence: v.optional(orchestrationRecoveryEvidenceValidator),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    resolvedAt: v.optional(v.number()),
+  })
+    .index("by_owner_and_reconciliation_id", ["ownerId", "reconciliationId"])
+    .index("by_owner_and_run_id_and_node_id", ["ownerId", "runId", "nodeId"])
     .index("by_owner_and_state_and_updated_at", ["ownerId", "state", "updatedAt"]),
   quotes: defineTable({
     ownerId: v.string(),
