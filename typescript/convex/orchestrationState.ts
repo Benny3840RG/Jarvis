@@ -789,6 +789,7 @@ export const retryFailedStep = mutation({
       failureCode: undefined,
       indeterminateReason: undefined,
       reconciliationId: undefined,
+      retryable: false,
       updatedAt: now,
       nextAttemptAt: now,
       completedAt: undefined,
