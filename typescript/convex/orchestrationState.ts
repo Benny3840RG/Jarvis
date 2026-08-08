@@ -880,12 +880,12 @@ export const resolveIndeterminate = mutation({
           ? "running"
           : "failed";
     await ctx.db.patch("orchestrationSteps", step._id, {
-      state: reconciliation.state,
+      state: terminalState,
       ...(external.resolutionDigest === undefined
         ? {}
         : { outputDigest: external.resolutionDigest }),
       ...(terminalState === "failed"
-        ? { failureCode: reconciliation.failureCode }
+        ? { failureCode: terminalFailureCode }
         : { failureCode: undefined }),
       retryable: false,
       indeterminateReason: undefined,
@@ -894,7 +894,7 @@ export const resolveIndeterminate = mutation({
     });
     await ctx.db.patch("orchestrationRuns", run._id, {
       state: runState,
-      failureCode: terminalState === "failed" ? reconciliation.failureCode : undefined,
+      failureCode: terminalState === "failed" ? terminalFailureCode : undefined,
       recoveryState: terminalState === "succeeded" ? "recovered" : "escalated",
       recoveryReference: undefined,
       completedStepIds,
