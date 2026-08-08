@@ -16,10 +16,9 @@ import {
   createConvexOrchestrationRunner,
   ConvexOrchestrationRunner,
 } from "../src/orchestration/convexRunner.js";
-import {
-  OrchestrationRunner,
-  type OrchestrationSafetyGate,
-  type SafetyDecision,
+import type {
+  OrchestrationSafetyGate,
+  SafetyDecision,
 } from "../src/orchestration/runner.js";
 
 const context: OrchestrationContext = {
