@@ -15,6 +15,16 @@ export type OrchestrationGraphBuilder = (
   trigger: OrchestrationTrigger,
 ) => OrchestrationGraph | Promise<OrchestrationGraph>;
 
+function deepFreeze<T>(value: T): T {
+  if (value !== null && typeof value === "object" && !Object.isFrozen(value)) {
+    for (const child of Object.values(value as Record<string, unknown>)) {
+      if (child !== null && typeof child === "object") deepFreeze(child);
+    }
+    Object.freeze(value);
+  }
+  return value;
+}
+
 function required(value: string, name: string): string {
   const normalized = value.trim();
   if (!normalized) throw new Error(`Orchestration trigger ${name} is required.`);
@@ -38,7 +48,7 @@ function validatedTrigger(trigger: OrchestrationTrigger): OrchestrationTrigger {
     source: trigger.source,
     idempotencyKey,
     occurredAt: trigger.occurredAt,
-    payload: Object.freeze({ ...trigger.payload }),
+    payload: deepFreeze(structuredClone(trigger.payload)),
   });
 }
 
