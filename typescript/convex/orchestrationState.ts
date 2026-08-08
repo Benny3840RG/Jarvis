@@ -159,7 +159,8 @@ export const beginRun = mutation({
         existing.planFingerprint === planFingerprint &&
         existing.policyVersion === policyVersion &&
         existing.policyFingerprint === policyFingerprint;
-      return { status: sameRequest ? "replayed" : "conflict", run: existing };
+      if (sameRequest) return { status: "replayed" as const, run: existing };
+      return { status: "conflict" as const, run: existing };
     }
 
     const sameRunId = await findRun(ctx, ownerId, runId);
@@ -203,7 +204,7 @@ export const beginRun = mutation({
     }
     const created = await ctx.db.get("orchestrationRuns", runDocumentId);
     if (!created) throw new Error("Orchestration run creation failed.");
-    return { status: "created", run: created };
+    return { status: "created" as const, run: created };
   },
 });
 
@@ -503,7 +504,7 @@ export const recoverExpiredStep = mutation({
     const recoveredRun = await ctx.db.get("orchestrationRuns", run._id);
     const recoveredStep = await ctx.db.get("orchestrationSteps", step._id);
     if (!recoveredRun || !recoveredStep) throw new Error("Orchestration recovery update failed.");
-    return { status: "indeterminate", run: recoveredRun, step: recoveredStep };
+    return { status: "indeterminate" as const, run: recoveredRun, step: recoveredStep };
   },
 });
 
