@@ -177,9 +177,11 @@ describe("ConvexOrchestrationRunner", () => {
 
   it("acquires a lease before execution and commits durable success after the audit record", async () => {
     const events: string[] = [];
+    let beginArgs: Record<string, unknown> | undefined;
     const boundary = new ConvexOrchestrationStateBoundary({
-      client: fakeClient((_args, _functionRef) => {
+      client: fakeClient((args, _functionRef) => {
         if (events.length === 0) {
+          beginArgs = args;
           events.push("begin");
           return { status: "created", run: { runId: "run-1" } };
         }
@@ -208,17 +210,18 @@ describe("ConvexOrchestrationRunner", () => {
           events.push("audit");
         },
       },
+      { policyVersion: "policy-v1", policyFingerprint: "policy-fp" },
     );
 
     const result = await coordinator.run(graph, context, {
       requestFingerprint: "request-fp",
-      planFingerprint: "plan-fp",
-      policyVersion: "policy-v1",
-      policyFingerprint: "policy-fp",
       maxRetries: 2,
     });
 
     assert.equal(result.status, "created");
+    assert.equal(beginArgs?.planFingerprint, orchestrationPlanFingerprint(graph));
+    assert.equal(beginArgs?.policyVersion, "policy-v1");
+    assert.equal(beginArgs?.policyFingerprint, "policy-fp");
     assert.deepEqual(events, ["begin", "start", "execute", "audit", "succeed"]);
   });
 });
