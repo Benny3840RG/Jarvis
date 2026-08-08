@@ -1,3 +1,4 @@
+npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm.
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
@@ -51,7 +52,9 @@ describe("OrchestrationGraph", () => {
   it("rejects missing dependencies", () => {
     assert.throws(
       () =>
-        new OrchestrationGraph([{ id: "complete", command: completeTask, dependsOn: ["missing"] }]),
+        new OrchestrationGraph([
+          { id: "complete", command: completeTask, dependsOn: ["missing"] },
+        ]),
       /depends on unknown node missing/,
     );
   });
@@ -86,7 +89,6 @@ it("orders ready sibling nodes by descending weight while preserving dependencie
   );
 });
 
-
 it("freezes validated graph nodes and clones command inputs", () => {
   const input = { title: "Inspect mounts", metadata: { source: "operator" } };
   const graph = new OrchestrationGraph([
@@ -101,7 +103,10 @@ it("freezes validated graph nodes and clones command inputs", () => {
   assert.equal(Object.isFrozen(node), true);
   assert.equal(Object.isFrozen(node.command), true);
   assert.equal(Object.isFrozen(node.command.input), true);
-  assert.equal(Object.isFrozen((node.command.input as { metadata: object }).metadata), true);
+  assert.equal(
+    Object.isFrozen((node.command.input as { metadata: object }).metadata),
+    true,
+  );
   assert.throws(() => {
     (node.command.input as Record<string, unknown>)["title"] = "tampered";
   }, TypeError);
@@ -117,3 +122,8 @@ it("rejects non-finite orchestration node weights", () => {
     /invalid weight/,
   );
 });
+npm notice
+npm notice New minor version of npm available! 11.9.0 -> 11.19.0
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.19.0
+npm notice To update run: npm install -g npm@11.19.0
+npm notice
