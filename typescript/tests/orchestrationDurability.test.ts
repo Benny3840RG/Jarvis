@@ -16,6 +16,7 @@ import {
   type SafetyDecision,
 } from "../src/orchestration/runner.js";
 import type { OrchestrationStepStateBoundary } from "../src/orchestration/stateBoundary.js";
+import { orchestrationPlanFingerprint } from "../src/orchestration/fingerprints.js";
 
 const context: OrchestrationContext = {
   runId: "run-1",
@@ -89,7 +90,7 @@ describe("ConvexOrchestrationStateBoundary", () => {
       context,
       graph,
       requestFingerprint: "request-fp",
-      planFingerprint: "plan-fp",
+      planFingerprint: orchestrationPlanFingerprint(graph),
       policyVersion: "policy-v1",
       policyFingerprint: "policy-fp",
       maxRetries: 2,
@@ -102,6 +103,7 @@ describe("ConvexOrchestrationStateBoundary", () => {
       result: success as Extract<DomainResult, { ok: true }>,
     });
 
+    assert.equal(calls[0]?.args.planFingerprint, orchestrationPlanFingerprint(graph));
     assert.deepEqual(calls[0]?.args, {
       serviceToken: "service-token",
       runId: "run-1",
@@ -159,13 +161,11 @@ describe("ConvexOrchestrationRunner", () => {
       },
       gate(),
       { record: async (_outcome: OrchestrationOutcome) => undefined },
+      { policyVersion: "policy-v1", policyFingerprint: "policy-fp" },
     );
 
     const result = await coordinator.run(graph, context, {
       requestFingerprint: "request-fp",
-      planFingerprint: "plan-fp",
-      policyVersion: "policy-v1",
-      policyFingerprint: "policy-fp",
       maxRetries: 2,
     });
 
@@ -345,5 +345,20 @@ describe("OrchestrationRunner durable failure boundary", () => {
 
     assert.equal(result.ok, false);
     assert.deepEqual(events, ["start", "execute", "audit", "fail:lease-1"]);
+  });
+});
+
+
+describe("orchestration composition authority", () => {
+  it("changes the plan fingerprint when graph execution semantics change", () => {
+    const changedGraph = new OrchestrationGraph([
+      {
+        id: "create",
+        command: { operationId: "createTask", input: { title: "Inspect mounts" } },
+        weight: 1,
+      },
+    ]);
+
+    assert.notEqual(orchestrationPlanFingerprint(changedGraph), orchestrationPlanFingerprint(graph));
   });
 });
