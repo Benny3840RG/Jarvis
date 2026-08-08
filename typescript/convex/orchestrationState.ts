@@ -4,11 +4,15 @@ import { requireOwner } from "./authHelpers.js";
 import { normaliseAuditPayload } from "./toolActionLogic.js";
 import {
   orchestrationFailureCodeValidator,
+  orchestrationLeaseGrantValidator,
+  orchestrationPublicStepDocumentValidator,
+  orchestrationReconciliationDocumentValidator,
   orchestrationRecoveryResultValidator,
   orchestrationRunDocumentValidator,
   orchestrationStepDocumentValidator,
   orchestrationTriggerSourceValidator,
 } from "./orchestrationValidators.js";
+import type { Doc } from "./_generated/dataModel.js";
 import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server.js";
 
 const MAX_NODE_COUNT = 100;
@@ -16,6 +20,7 @@ const MAX_RECOVERY_EVIDENCE = 20;
 const MAX_RETRIES = 5;
 const MIN_LEASE_TTL_MS = 1_000;
 const MAX_LEASE_TTL_MS = 15 * 60 * 1_000;
+const MAX_CLOCK_SKEW_MS = 5 * 60 * 1_000;
 
 const runArgs = {
   serviceToken: v.string(),
@@ -31,6 +36,9 @@ function cleanRequired(value: string, label: string, maxLength = 200): string {
 
 function validTimestamp(value: number): number {
   if (!Number.isFinite(value) || value < 0) throw new Error("Orchestration timestamp is invalid.");
+  if (Math.abs(value - Date.now()) > MAX_CLOCK_SKEW_MS) {
+    throw new Error("Orchestration timestamp is outside the permitted clock-skew window.");
+  }
   return value;
 }
 
@@ -101,16 +109,43 @@ function requireStep<T>(step: T | null): T {
   return step;
 }
 
+function publicStep(step: Doc<"orchestrationSteps">): Omit<Doc<"orchestrationSteps">, "leaseToken"> {
+  const { leaseToken: _leaseToken, ...safe } = step;
+  return safe;
+}
+
 function requireActiveLease(
-  step: { leaseToken?: string; leaseExpiresAt?: number },
+  step: { leaseOwner?: string; leaseToken?: string; leaseExpiresAt?: number },
+  workerId: string,
   leaseToken: string,
   now: number,
 ): void {
+  const owner = cleanRequired(workerId, "Orchestration worker ID");
   const token = cleanRequired(leaseToken, "Orchestration lease token");
-  if (step.leaseToken !== token) throw new Error("Orchestration lease token does not match.");
+  if (step.leaseOwner !== owner || step.leaseToken !== token) {
+    throw new Error("Orchestration lease is not owned by this worker.");
+  }
   if (step.leaseExpiresAt === undefined || step.leaseExpiresAt <= now) {
     throw new Error("Orchestration step lease has expired; reconciliation is required.");
   }
+}
+
+async function findReconciliation(
+  ctx: QueryCtx | MutationCtx,
+  ownerId: string,
+  reconciliationId: string,
+) {
+  return ctx.db
+    .query("orchestrationReconciliations")
+    .withIndex("by_owner_and_reconciliation_id", (q) =>
+      q.eq("ownerId", ownerId).eq("reconciliationId", reconciliationId),
+    )
+    .unique();
+}
+
+function requireReconciliation<T>(record: T | null): T {
+  if (record === null) throw new Error("Orchestration reconciliation record not found.");
+  return record;
 }
 
 export const beginRun = mutation({
@@ -262,7 +297,7 @@ export const listSteps = query({
       .take(MAX_NODE_COUNT + 1);
     if (rows.length > MAX_NODE_COUNT)
       throw new Error("Orchestration step list exceeded its bound.");
-    return rows;
+    return rows.map(publicStep);
   },
 });
 
@@ -271,21 +306,20 @@ export const markStepRunning = mutation({
     ...runArgs,
     nodeId: v.string(),
     operationId: v.string(),
-    leaseOwner: v.string(),
-    leaseToken: v.string(),
+    workerId: v.string(),
     leaseTtlMs: v.number(),
     now: v.number(),
   },
-  returns: orchestrationStepDocumentValidator,
+  returns: orchestrationLeaseGrantValidator,
   handler: async (ctx, args) => {
     const ownerId = requireOwner(args.serviceToken);
     const runId = cleanRequired(args.runId, "Orchestration run ID");
     const nodeId = cleanRequired(args.nodeId, "Orchestration node ID");
     const operationId = cleanRequired(args.operationId, "Orchestration operation ID");
-    const leaseOwner = cleanRequired(args.leaseOwner, "Orchestration lease owner");
-    const leaseToken = cleanRequired(args.leaseToken, "Orchestration lease token");
+    const leaseOwner = cleanRequired(args.workerId, "Orchestration worker ID");
     const now = validTimestamp(args.now);
     const leaseTtlMs = validLeaseTtl(args.leaseTtlMs);
+    const leaseToken = crypto.randomUUID();
     const run = requireRun(await findRun(ctx, ownerId, runId));
     const step = requireStep(await findStep(ctx, ownerId, runId, nodeId));
 
@@ -314,7 +348,7 @@ export const markStepRunning = mutation({
     });
     const updated = await ctx.db.get("orchestrationSteps", step._id);
     if (!updated) throw new Error("Orchestration step update failed.");
-    return updated;
+    return { step: publicStep(updated), leaseToken };
   },
 });
 
@@ -322,11 +356,12 @@ export const recordStepSuccess = mutation({
   args: {
     ...runArgs,
     nodeId: v.string(),
+    workerId: v.string(),
     leaseToken: v.string(),
     outputDigest: v.optional(v.string()),
     now: v.number(),
   },
-  returns: orchestrationStepDocumentValidator,
+  returns: orchestrationPublicStepDocumentValidator,
   handler: async (ctx, args) => {
     const ownerId = requireOwner(args.serviceToken);
     const runId = cleanRequired(args.runId, "Orchestration run ID");
@@ -338,7 +373,7 @@ export const recordStepSuccess = mutation({
     if (step.state !== "running") {
       throw new Error(`Cannot transition step ${step.state} to succeeded.`);
     }
-    requireActiveLease(step, args.leaseToken, now);
+    requireActiveLease(step, args.workerId, args.leaseToken, now);
     const outputDigest =
       args.outputDigest === undefined
         ? undefined
@@ -380,10 +415,9 @@ export const recordStepFailure = mutation({
     nodeId: v.string(),
     leaseToken: v.string(),
     failureCode: orchestrationFailureCodeValidator,
-    retryable: v.boolean(),
     now: v.number(),
   },
-  returns: orchestrationStepDocumentValidator,
+  returns: orchestrationPublicStepDocumentValidator,
   handler: async (ctx, args) => {
     const ownerId = requireOwner(args.serviceToken);
     const runId = cleanRequired(args.runId, "Orchestration run ID");
@@ -395,12 +429,12 @@ export const recordStepFailure = mutation({
     if (step.state !== "running") {
       throw new Error(`Cannot transition step ${step.state} to failed.`);
     }
-    requireActiveLease(step, args.leaseToken, now);
+    requireActiveLease(step, args.workerId, args.leaseToken, now);
 
     await ctx.db.patch("orchestrationSteps", step._id, {
       state: "failed",
       failureCode: args.failureCode,
-      retryable: args.retryable,
+      retryable: args.failureCode === "dependency_failure",
       updatedAt: now,
       completedAt: now,
       leaseOwner: undefined,
@@ -422,6 +456,131 @@ export const recordStepFailure = mutation({
   },
 });
 
+
+export const registerReconciliation = mutation({
+  args: {
+    ...runArgs,
+    nodeId: v.string(),
+    reconciliationId: v.string(),
+    effectFingerprint: v.string(),
+    provider: v.string(),
+    providerRequestId: v.optional(v.string()),
+    providerCorrelationId: v.string(),
+    now: v.number(),
+  },
+  returns: orchestrationReconciliationDocumentValidator,
+  handler: async (ctx, args) => {
+    const ownerId = requireOwner(args.serviceToken);
+    const runId = cleanRequired(args.runId, "Orchestration run ID");
+    const nodeId = cleanRequired(args.nodeId, "Orchestration node ID");
+    const reconciliationId = cleanRequired(args.reconciliationId, "Orchestration reconciliation ID");
+    const effectFingerprint = cleanRequired(args.effectFingerprint, "Orchestration effect fingerprint");
+    const provider = cleanRequired(args.provider, "Orchestration provider");
+    const providerRequestId =
+      args.providerRequestId === undefined
+        ? undefined
+        : cleanRequired(args.providerRequestId, "Orchestration provider request ID");
+    const providerCorrelationId = cleanRequired(
+      args.providerCorrelationId,
+      "Orchestration provider correlation ID",
+    );
+    const now = validTimestamp(args.now);
+    requireRun(await findRun(ctx, ownerId, runId));
+    const step = requireStep(await findStep(ctx, ownerId, runId, nodeId));
+    if (step.state !== "running") throw new Error("Reconciliation requires a running step.");
+
+    const existing = await findReconciliation(ctx, ownerId, reconciliationId);
+    if (existing) {
+      if (
+        existing.runId !== runId ||
+        existing.nodeId !== nodeId ||
+        existing.attempt !== step.attempt ||
+        existing.effectFingerprint !== effectFingerprint ||
+        existing.provider !== provider ||
+        existing.providerRequestId !== providerRequestId ||
+        existing.providerCorrelationId !== providerCorrelationId
+      ) {
+        throw new Error("Orchestration reconciliation fingerprint conflict.");
+      }
+      return existing;
+    }
+
+    const id = await ctx.db.insert("orchestrationReconciliations", {
+      ownerId,
+      reconciliationId,
+      runId,
+      nodeId,
+      attempt: step.attempt,
+      effectFingerprint,
+      provider,
+      ...(providerRequestId === undefined ? {} : { providerRequestId }),
+      providerCorrelationId,
+      state: providerRequestId === undefined ? "escalated" : "pending",
+      createdAt: now,
+      updatedAt: now,
+    });
+    const created = await ctx.db.get("orchestrationReconciliations", id);
+    if (!created) throw new Error("Orchestration reconciliation creation failed.");
+    return created;
+  },
+});
+
+export const recordReconciliationOutcome = mutation({
+  args: {
+    ...runArgs,
+    reconciliationId: v.string(),
+    outcome: v.union(v.literal("succeeded"), v.literal("failed")),
+    outputDigest: v.optional(v.string()),
+    failureCode: v.optional(orchestrationFailureCodeValidator),
+    evidenceDetail: v.string(),
+    resolverId: v.string(),
+    now: v.number(),
+  },
+  returns: orchestrationReconciliationDocumentValidator,
+  handler: async (ctx, args) => {
+    const ownerId = requireOwner(args.serviceToken);
+    const reconciliationId = cleanRequired(args.reconciliationId, "Orchestration reconciliation ID");
+    const evidenceDetail = cleanRequired(args.evidenceDetail, "Orchestration reconciliation evidence");
+    const resolverId = cleanRequired(args.resolverId, "Orchestration resolver ID");
+    const outputDigest =
+      args.outputDigest === undefined
+        ? undefined
+        : cleanRequired(args.outputDigest, "Orchestration output digest");
+    const now = validTimestamp(args.now);
+    const reconciliation = requireReconciliation(
+      await findReconciliation(ctx, ownerId, reconciliationId),
+    );
+    if (reconciliation.state === "escalated" && reconciliation.providerRequestId === undefined) {
+      throw new Error("A reconciliation without a provider reference cannot be resolved.");
+    }
+    if (reconciliation.state === "succeeded" || reconciliation.state === "failed") {
+      if (reconciliation.state !== args.outcome) {
+        throw new Error("Orchestration reconciliation outcome conflicts with its terminal state.");
+      }
+      return reconciliation;
+    }
+    if (args.outcome === "failed" && args.failureCode === undefined) {
+      throw new Error("A failed reconciliation must include a failure code.");
+    }
+    const evidence = {
+      kind: "indeterminate" as const,
+      detail: "Resolved by " + resolverId + ": " + evidenceDetail,
+      occurredAt: now,
+    };
+    await ctx.db.patch("orchestrationReconciliations", reconciliation._id, {
+      state: args.outcome,
+      ...(outputDigest === undefined ? {} : { outputDigest }),
+      ...(args.outcome === "failed" ? { failureCode: args.failureCode } : {}),
+      terminalEvidence: evidence,
+      updatedAt: now,
+      resolvedAt: now,
+    });
+    const updated = await ctx.db.get("orchestrationReconciliations", reconciliation._id);
+    if (!updated) throw new Error("Orchestration reconciliation outcome update failed.");
+    return updated;
+  },
+});
+
 export const recordStepIndeterminate = mutation({
   args: {
     ...runArgs,
@@ -432,7 +591,7 @@ export const recordStepIndeterminate = mutation({
     reconciliationId: v.string(),
     now: v.number(),
   },
-  returns: orchestrationStepDocumentValidator,
+  returns: orchestrationPublicStepDocumentValidator,
   handler: async (ctx, args) => {
     const ownerId = requireOwner(args.serviceToken);
     const runId = cleanRequired(args.runId, "Orchestration run ID");
@@ -452,7 +611,7 @@ export const recordStepIndeterminate = mutation({
     if (step.state !== "running") {
       throw new Error(`Cannot transition step ${step.state} to indeterminate.`);
     }
-    requireActiveLease(step, args.leaseToken, now);
+    requireActiveLease(step, args.workerId, args.leaseToken, now);
 
     await ctx.db.patch("orchestrationSteps", step._id, {
       state: "indeterminate",
@@ -492,6 +651,7 @@ export const recoverExpiredStep = mutation({
     ...runArgs,
     nodeId: v.string(),
     recoveryOwner: v.string(),
+    reconciliationId: v.string(),
     now: v.number(),
   },
   returns: orchestrationRecoveryResultValidator,
@@ -500,16 +660,29 @@ export const recoverExpiredStep = mutation({
     const runId = cleanRequired(args.runId, "Orchestration run ID");
     const nodeId = cleanRequired(args.nodeId, "Orchestration node ID");
     const recoveryOwner = cleanRequired(args.recoveryOwner, "Orchestration recovery owner");
+    const reconciliationId = cleanRequired(args.reconciliationId, "Orchestration reconciliation ID");
     const now = validTimestamp(args.now);
     const run = requireRun(await findRun(ctx, ownerId, runId));
     const step = requireStep(await findStep(ctx, ownerId, runId, nodeId));
+    const reconciliation = requireReconciliation(
+      await findReconciliation(ctx, ownerId, reconciliationId),
+    );
+    if (
+      reconciliation.runId !== runId ||
+      reconciliation.nodeId !== nodeId ||
+      reconciliation.attempt !== step.attempt
+    ) {
+      throw new Error("Orchestration reconciliation is not bound to this step attempt.");
+    }
+    if (reconciliation.state === "succeeded" || reconciliation.state === "failed") {
+      throw new Error("A terminal reconciliation cannot recover a running step.");
+    }
     if (run.state !== "running") throw new Error(`Cannot recover a step for run ${run.state}.`);
     if (step.state !== "running" || step.leaseExpiresAt === undefined) {
       throw new Error("Orchestration step has no expired running lease.");
     }
     if (step.leaseExpiresAt > now) throw new Error("Orchestration step lease is still active.");
 
-    const reconciliationId = `lease-recovery:${runId}:${nodeId}:${step.attempt}`;
     await ctx.db.patch("orchestrationSteps", step._id, {
       state: "indeterminate",
       failureCode: "dependency_failure",
@@ -543,7 +716,7 @@ export const recoverExpiredStep = mutation({
     return {
       status: "indeterminate" as const,
       run: recoveredRun,
-      step: recoveredStep,
+      step: publicStep(recoveredStep),
     };
   },
 });
@@ -554,7 +727,7 @@ export const retryFailedStep = mutation({
     nodeId: v.string(),
     now: v.number(),
   },
-  returns: orchestrationStepDocumentValidator,
+  returns: orchestrationPublicStepDocumentValidator,
   handler: async (ctx, args) => {
     const ownerId = requireOwner(args.serviceToken);
     const runId = cleanRequired(args.runId, "Orchestration run ID");
@@ -604,61 +777,59 @@ export const resolveIndeterminate = mutation({
     ...runArgs,
     nodeId: v.string(),
     reconciliationId: v.string(),
-    outcome: v.union(v.literal("succeeded"), v.literal("failed")),
-    outputDigest: v.optional(v.string()),
-    failureCode: v.optional(orchestrationFailureCodeValidator),
     now: v.number(),
   },
-  returns: orchestrationStepDocumentValidator,
+  returns: orchestrationPublicStepDocumentValidator,
   handler: async (ctx, args) => {
     const ownerId = requireOwner(args.serviceToken);
     const runId = cleanRequired(args.runId, "Orchestration run ID");
     const nodeId = cleanRequired(args.nodeId, "Orchestration node ID");
-    const reconciliationId = cleanRequired(
-      args.reconciliationId,
-      "Orchestration reconciliation ID",
-    );
+    const reconciliationId = cleanRequired(args.reconciliationId, "Orchestration reconciliation ID");
     const now = validTimestamp(args.now);
     const run = requireRun(await findRun(ctx, ownerId, runId));
     const step = requireStep(await findStep(ctx, ownerId, runId, nodeId));
+    const reconciliation = requireReconciliation(
+      await findReconciliation(ctx, ownerId, reconciliationId),
+    );
+    if (
+      reconciliation.runId !== runId ||
+      reconciliation.nodeId !== nodeId ||
+      reconciliation.attempt !== step.attempt
+    ) {
+      throw new Error("Orchestration reconciliation is not bound to this step attempt.");
+    }
     if (run.state !== "indeterminate" || step.state !== "indeterminate") {
       throw new Error("Only an indeterminate orchestration step may be resolved.");
     }
-    if (step.reconciliationId !== reconciliationId || run.recoveryReference !== reconciliationId) {
-      throw new Error("Orchestration reconciliation reference does not match.");
+    if (reconciliation.state !== "succeeded" && reconciliation.state !== "failed") {
+      throw new Error("Reconciliation has no verified terminal provider outcome.");
     }
-    if (args.outcome === "failed" && args.failureCode === undefined) {
-      throw new Error("A failed reconciliation must include a failure code.");
-    }
-    const outputDigest =
-      args.outputDigest === undefined
-        ? undefined
-        : cleanRequired(args.outputDigest, "Orchestration output digest");
 
+    const completedStepIds =
+      reconciliation.state === "succeeded" && !run.completedStepIds.includes(nodeId)
+        ? [...run.completedStepIds, nodeId]
+        : run.completedStepIds;
+    const runState =
+      reconciliation.state === "succeeded" && completedStepIds.length === run.nodeIds.length
+        ? "succeeded"
+        : reconciliation.state === "succeeded"
+          ? "running"
+          : "failed";
     await ctx.db.patch("orchestrationSteps", step._id, {
-      state: args.outcome,
-      ...(outputDigest === undefined ? {} : { outputDigest }),
-      ...(args.outcome === "failed"
-        ? { failureCode: args.failureCode }
+      state: reconciliation.state,
+      ...(reconciliation.outputDigest === undefined ? {} : { outputDigest: reconciliation.outputDigest }),
+      ...(reconciliation.state === "failed"
+        ? { failureCode: reconciliation.failureCode }
         : { failureCode: undefined }),
+      retryable: false,
       indeterminateReason: undefined,
       updatedAt: now,
       completedAt: now,
     });
-    const completedStepIds =
-      args.outcome === "succeeded" && !run.completedStepIds.includes(nodeId)
-        ? [...run.completedStepIds, nodeId]
-        : run.completedStepIds;
-    const runState =
-      args.outcome === "succeeded" && completedStepIds.length === run.nodeIds.length
-        ? "succeeded"
-        : args.outcome === "succeeded"
-          ? "running"
-          : "failed";
     await ctx.db.patch("orchestrationRuns", run._id, {
       state: runState,
-      failureCode: args.outcome === "failed" ? args.failureCode : undefined,
-      recoveryState: args.outcome === "succeeded" ? "recovered" : "escalated",
+      failureCode: reconciliation.state === "failed" ? reconciliation.failureCode : undefined,
+      recoveryState: reconciliation.state === "succeeded" ? "recovered" : "escalated",
       recoveryReference: undefined,
       completedStepIds,
       checkpointNodeId: nodeId,
@@ -668,6 +839,6 @@ export const resolveIndeterminate = mutation({
     });
     const updated = await ctx.db.get("orchestrationSteps", step._id);
     if (!updated) throw new Error("Orchestration resolution update failed.");
-    return updated;
+    return publicStep(updated);
   },
 });
