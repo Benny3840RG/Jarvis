@@ -266,7 +266,7 @@ export const markStepRunning = mutation({
       throw new Error(`Cannot transition step ${step.state} to running.`);
     }
 
-    await ctx.db.patch(step._id, {
+    await ctx.db.patch("orchestrationSteps", step._id, {
       operationId,
       state: "running",
       attempt: step.attempt + 1,
@@ -275,7 +275,7 @@ export const markStepRunning = mutation({
       leaseToken,
       leaseExpiresAt: now + leaseTtlMs,
     });
-    await ctx.db.patch(run._id, {
+    await ctx.db.patch("orchestrationRuns", run._id, {
       state: "running",
       checkpointNodeId: nodeId,
       checkpointAt: now,
@@ -312,7 +312,7 @@ export const recordStepSuccess = mutation({
         ? undefined
         : cleanRequired(args.outputDigest, "Orchestration output digest");
 
-    await ctx.db.patch(step._id, {
+    await ctx.db.patch("orchestrationSteps", step._id, {
       state: "succeeded",
       ...(outputDigest === undefined ? {} : { outputDigest }),
       updatedAt: now,
@@ -324,7 +324,7 @@ export const recordStepSuccess = mutation({
     const completedStepIds = run.completedStepIds.includes(nodeId)
       ? run.completedStepIds
       : [...run.completedStepIds, nodeId];
-    await ctx.db.patch(run._id, {
+    await ctx.db.patch("orchestrationRuns", run._id, {
       completedStepIds,
       state: completedStepIds.length === run.nodeIds.length ? "succeeded" : "running",
       recoveryState:
@@ -363,7 +363,7 @@ export const recordStepFailure = mutation({
       throw new Error(`Cannot transition step ${step.state} to failed.`);
     }
 
-    await ctx.db.patch(step._id, {
+    await ctx.db.patch("orchestrationSteps", step._id, {
       state: "failed",
       failureCode: args.failureCode,
       retryable: args.retryable,
@@ -373,7 +373,7 @@ export const recordStepFailure = mutation({
       leaseToken: undefined,
       leaseExpiresAt: undefined,
     });
-    await ctx.db.patch(run._id, {
+    await ctx.db.patch("orchestrationRuns", run._id, {
       state: "failed",
       failureCode: args.failureCode,
       recoveryState: run.retryCount > 0 ? "escalated" : run.recoveryState,
@@ -418,7 +418,7 @@ export const recordStepIndeterminate = mutation({
       throw new Error(`Cannot transition step ${step.state} to indeterminate.`);
     }
 
-    await ctx.db.patch(step._id, {
+    await ctx.db.patch("orchestrationSteps", step._id, {
       state: "indeterminate",
       failureCode: args.failureCode,
       retryable: false,
@@ -430,7 +430,7 @@ export const recordStepIndeterminate = mutation({
       leaseToken: undefined,
       leaseExpiresAt: undefined,
     });
-    await ctx.db.patch(run._id, {
+    await ctx.db.patch("orchestrationRuns", run._id, {
       state: "indeterminate",
       failureCode: args.failureCode,
       recoveryState: "required",
@@ -474,7 +474,7 @@ export const recoverExpiredStep = mutation({
     if (step.leaseExpiresAt > now) throw new Error("Orchestration step lease is still active.");
 
     const reconciliationId = `lease-recovery:${runId}:${nodeId}:${step.attempt}`;
-    await ctx.db.patch(step._id, {
+    await ctx.db.patch("orchestrationSteps", step._id, {
       state: "indeterminate",
       failureCode: "dependency_failure",
       retryable: false,
@@ -486,7 +486,7 @@ export const recoverExpiredStep = mutation({
       leaseToken: undefined,
       leaseExpiresAt: undefined,
     });
-    await ctx.db.patch(run._id, {
+    await ctx.db.patch("orchestrationRuns", run._id, {
       state: "indeterminate",
       failureCode: "dependency_failure",
       recoveryState: "required",
@@ -530,7 +530,7 @@ export const retryFailedStep = mutation({
       throw new Error("Orchestration retry budget exhausted.");
     }
 
-    await ctx.db.patch(step._id, {
+    await ctx.db.patch("orchestrationSteps", step._id, {
       state: "pending",
       failureCode: undefined,
       indeterminateReason: undefined,
@@ -539,7 +539,7 @@ export const retryFailedStep = mutation({
       nextAttemptAt: now,
       completedAt: undefined,
     });
-    await ctx.db.patch(run._id, {
+    await ctx.db.patch("orchestrationRuns", run._id, {
       state: "running",
       retryCount: run.retryCount + 1,
       recoveryState: "retrying",
@@ -595,7 +595,7 @@ export const resolveIndeterminate = mutation({
         ? undefined
         : cleanRequired(args.outputDigest, "Orchestration output digest");
 
-    await ctx.db.patch(step._id, {
+    await ctx.db.patch("orchestrationSteps", step._id, {
       state: args.outcome,
       ...(outputDigest === undefined ? {} : { outputDigest }),
       ...(args.outcome === "failed" ? { failureCode: args.failureCode } : { failureCode: undefined }),
@@ -613,7 +613,7 @@ export const resolveIndeterminate = mutation({
         : args.outcome === "succeeded"
           ? "running"
           : "failed";
-    await ctx.db.patch(run._id, {
+    await ctx.db.patch("orchestrationRuns", run._id, {
       state: runState,
       failureCode: args.outcome === "failed" ? args.failureCode : undefined,
       recoveryState: args.outcome === "succeeded" ? "recovered" : "escalated",
