@@ -36,7 +36,7 @@ const LAYERS: LayersStatus = {
   orchestration: {
     status: "partial",
     reason:
-      "A prototype graph exists; production triggers, weights, and evolution boundaries remain pending.",
+      "A validated trigger registry, weighted dependency graph, and bounded fail-closed runner exist; durable run state, production composition, and governed workflow evolution remain pending.",
   },
   safety: {
     status: "partial",

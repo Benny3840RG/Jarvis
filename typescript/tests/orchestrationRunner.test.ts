@@ -204,3 +204,69 @@ describe("OrchestrationRunner", () => {
     assert.equal(outcomes[0]?.failureCode, "dependency_failure");
   });
 });
+
+it("enforces a maximum step budget before a later command crosses the effect boundary", async () => {
+  const executed: string[] = [];
+  const outcomes: OrchestrationOutcome[] = [];
+  const runner = new OrchestrationRunner(
+    {
+      execute: async (current) => {
+        executed.push(current.operationId);
+        return success;
+      },
+    },
+    gate(),
+    recorder(outcomes),
+    { maxSteps: 1 },
+  );
+  const graph = new OrchestrationGraph([
+    { id: "first", command },
+    {
+      id: "second",
+      command: { operationId: "completeTask", input: { taskId: "task-1" } },
+      dependsOn: ["first"],
+    },
+  ]);
+
+  const result = await runner.run(graph, context);
+
+  assert.equal(result.ok, false);
+  if (result.ok) return;
+  assert.equal(result.failure.code, "execution_budget_exceeded");
+  assert.deepEqual(executed, ["createTask"]);
+  assert.equal(result.completedSteps.length, 1);
+  assert.equal(outcomes.at(-1)?.failureCode, "execution_budget_exceeded");
+});
+
+it("halts when the run deadline is exhausted and preserves completed-step recovery evidence", async () => {
+  let now = 100;
+  const executed: string[] = [];
+  const runner = new OrchestrationRunner(
+    {
+      execute: async (current) => {
+        executed.push(current.operationId);
+        now = 250;
+        return success;
+      },
+    },
+    gate(),
+    recorder([]),
+    { maxDurationMs: 100, clock: () => now },
+  );
+  const graph = new OrchestrationGraph([
+    { id: "first", command },
+    {
+      id: "second",
+      command: { operationId: "completeTask", input: { taskId: "task-1" } },
+      dependsOn: ["first"],
+    },
+  ]);
+
+  const result = await runner.run(graph, context);
+
+  assert.equal(result.ok, false);
+  if (result.ok) return;
+  assert.equal(result.failure.code, "execution_budget_exceeded");
+  assert.deepEqual(executed, ["createTask"]);
+  assert.equal(result.completedSteps.length, 1);
+});
