@@ -16,6 +16,7 @@ import {
   type SafetyDecision,
 } from "../src/orchestration/runner.js";
 import type { OrchestrationStepStateBoundary } from "../src/orchestration/stateBoundary.js";
+import { orchestrationPlanFingerprint } from "../src/orchestration/fingerprints.js";
 
 const context: OrchestrationContext = {
   runId: "run-1",
@@ -159,13 +160,11 @@ describe("ConvexOrchestrationRunner", () => {
       },
       gate(),
       { record: async (_outcome: OrchestrationOutcome) => undefined },
+      { policyVersion: "policy-v1", policyFingerprint: "policy-fp" },
     );
 
     const result = await coordinator.run(graph, context, {
       requestFingerprint: "request-fp",
-      planFingerprint: "plan-fp",
-      policyVersion: "policy-v1",
-      policyFingerprint: "policy-fp",
       maxRetries: 2,
     });
 
@@ -178,9 +177,11 @@ describe("ConvexOrchestrationRunner", () => {
 
   it("acquires a lease before execution and commits durable success after the audit record", async () => {
     const events: string[] = [];
+    let beginArgs: Record<string, unknown> | undefined;
     const boundary = new ConvexOrchestrationStateBoundary({
-      client: fakeClient((_args, _functionRef) => {
+      client: fakeClient((args, _functionRef) => {
         if (events.length === 0) {
+          beginArgs = args;
           events.push("begin");
           return { status: "created", run: { runId: "run-1" } };
         }
@@ -209,17 +210,18 @@ describe("ConvexOrchestrationRunner", () => {
           events.push("audit");
         },
       },
+      { policyVersion: "policy-v1", policyFingerprint: "policy-fp" },
     );
 
     const result = await coordinator.run(graph, context, {
       requestFingerprint: "request-fp",
-      planFingerprint: "plan-fp",
-      policyVersion: "policy-v1",
-      policyFingerprint: "policy-fp",
       maxRetries: 2,
     });
 
     assert.equal(result.status, "created");
+    assert.equal(beginArgs?.planFingerprint, orchestrationPlanFingerprint(graph));
+    assert.equal(beginArgs?.policyVersion, "policy-v1");
+    assert.equal(beginArgs?.policyFingerprint, "policy-fp");
     assert.deepEqual(events, ["begin", "start", "execute", "audit", "succeed"]);
   });
 });
@@ -345,5 +347,22 @@ describe("OrchestrationRunner durable failure boundary", () => {
 
     assert.equal(result.ok, false);
     assert.deepEqual(events, ["start", "execute", "audit", "fail:lease-1"]);
+  });
+});
+
+describe("orchestration composition authority", () => {
+  it("changes the plan fingerprint when graph execution semantics change", () => {
+    const changedGraph = new OrchestrationGraph([
+      {
+        id: "create",
+        command: { operationId: "createTask", input: { title: "Inspect mounts" } },
+        weight: 1,
+      },
+    ]);
+
+    assert.notEqual(
+      orchestrationPlanFingerprint(changedGraph),
+      orchestrationPlanFingerprint(graph),
+    );
   });
 });
