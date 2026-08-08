@@ -355,8 +355,7 @@ describe("orchestration composition authority", () => {
     const changedGraph = new OrchestrationGraph([
       {
         id: "create",
-        command: { operationId: "createTask", input: { title: "Inspect mounts" } },
-        weight: 1,
+        command: { operationId: "createTask", input: { title: "Inspect another mount" } },
       },
     ]);
 
