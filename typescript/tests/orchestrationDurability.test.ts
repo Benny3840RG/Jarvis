@@ -363,5 +363,40 @@ describe("orchestration composition authority", () => {
       orchestrationPlanFingerprint(changedGraph),
       orchestrationPlanFingerprint(graph),
     );
-  });
+
+
+  it("ignores dependency declaration order when execution semantics are unchanged", () => {
+    const first = new OrchestrationGraph([
+      {
+        id: "a",
+        command: { operationId: "createTask", input: { title: "A" } },
+      },
+      {
+        id: "b",
+        command: { operationId: "createTask", input: { title: "B" } },
+      },
+      {
+        id: "join",
+        command: { operationId: "createTask", input: { title: "Join" } },
+        dependsOn: ["a", "b"],
+      },
+    ]);
+    const reordered = new OrchestrationGraph([
+      {
+        id: "a",
+        command: { operationId: "createTask", input: { title: "A" } },
+      },
+      {
+        id: "b",
+        command: { operationId: "createTask", input: { title: "B" } },
+      },
+      {
+        id: "join",
+        command: { operationId: "createTask", input: { title: "Join" } },
+        dependsOn: ["b", "a"],
+      },
+    ]);
+
+    assert.equal(orchestrationPlanFingerprint(first), orchestrationPlanFingerprint(reordered));
+  });  });
 });
