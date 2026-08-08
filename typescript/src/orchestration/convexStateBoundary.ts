@@ -2,17 +2,10 @@ import { ConvexHttpClient } from "convex/browser";
 
 import { api } from "../../convex/_generated/api.js";
 import type { ConvexClientLike } from "../persistence/convexPersistence.js";
-import type {
-  DomainFailure,
-  DomainSuccess,
-  OrchestrationContext,
-} from "./contracts.js";
+import type { DomainFailure, DomainSuccess, OrchestrationContext } from "./contracts.js";
 import type { OrchestrationGraph } from "./graph.js";
 import type { OrchestrationNode } from "./graph.js";
-import type {
-  OrchestrationStepLease,
-  OrchestrationStepStateBoundary,
-} from "./stateBoundary.js";
+import type { OrchestrationStepLease, OrchestrationStepStateBoundary } from "./stateBoundary.js";
 
 export const orchestrationStateFunctions = api.orchestrationState;
 
@@ -67,10 +60,7 @@ export class ConvexOrchestrationStateBoundary implements OrchestrationStepStateB
       "JARVIS_SERVICE_TOKEN",
     );
     this.workerId = required(options.workerId, "Orchestration worker ID");
-    this.leaseTtlMs = safePositiveInteger(
-      options.leaseTtlMs,
-      "Orchestration leaseTtlMs",
-    );
+    this.leaseTtlMs = safePositiveInteger(options.leaseTtlMs, "Orchestration leaseTtlMs");
 
     if (options.client) {
       this.client = options.client;
@@ -78,8 +68,7 @@ export class ConvexOrchestrationStateBoundary implements OrchestrationStepStateB
     }
 
     const convexUrl = process.env.CONVEX_URL;
-    if (!convexUrl)
-      throw new Error("Convex orchestration requires CONVEX_URL.");
+    if (!convexUrl) throw new Error("Convex orchestration requires CONVEX_URL.");
     this.client = new ConvexHttpClient(convexUrl);
   }
 
@@ -91,31 +80,22 @@ export class ConvexOrchestrationStateBoundary implements OrchestrationStepStateB
       throw new Error("Convex orchestration runs require a validated trigger.");
     }
 
-    const result = await this.client.mutation(
-      orchestrationStateFunctions.beginRun,
-      {
-        serviceToken: this.serviceToken,
-        runId: input.context.runId,
-        triggerId: trigger.id,
-        triggerSource: trigger.source,
-        triggerKind: trigger.kind,
-        idempotencyKey: trigger.idempotencyKey,
-        requestFingerprint: required(
-          input.requestFingerprint,
-          "requestFingerprint",
-        ),
-        planFingerprint: required(input.planFingerprint, "planFingerprint"),
-        triggerPayload: { ...trigger.payload },
-        authority: input.context.authority,
-        policyVersion: required(input.policyVersion, "policyVersion"),
-        policyFingerprint: required(
-          input.policyFingerprint,
-          "policyFingerprint",
-        ),
-        nodeIds: input.graph.orderedNodes().map((node) => node.id),
-        maxRetries: input.maxRetries,
-      },
-    );
+    const result = await this.client.mutation(orchestrationStateFunctions.beginRun, {
+      serviceToken: this.serviceToken,
+      runId: input.context.runId,
+      triggerId: trigger.id,
+      triggerSource: trigger.source,
+      triggerKind: trigger.kind,
+      idempotencyKey: trigger.idempotencyKey,
+      requestFingerprint: required(input.requestFingerprint, "requestFingerprint"),
+      planFingerprint: required(input.planFingerprint, "planFingerprint"),
+      triggerPayload: { ...trigger.payload },
+      authority: input.context.authority,
+      policyVersion: required(input.policyVersion, "policyVersion"),
+      policyFingerprint: required(input.policyFingerprint, "policyFingerprint"),
+      nodeIds: input.graph.orderedNodes().map((node) => node.id),
+      maxRetries: input.maxRetries,
+    });
     return result as ConvexOrchestrationBeginRunResult;
   }
 
@@ -123,17 +103,14 @@ export class ConvexOrchestrationStateBoundary implements OrchestrationStepStateB
     context: OrchestrationContext;
     node: OrchestrationNode;
   }): Promise<OrchestrationStepLease> {
-    const result = await this.client.mutation(
-      orchestrationStateFunctions.markStepRunning,
-      {
-        serviceToken: this.serviceToken,
-        runId: input.context.runId,
-        nodeId: input.node.id,
-        operationId: input.node.command.operationId,
-        workerId: this.workerId,
-        leaseTtlMs: this.leaseTtlMs,
-      },
-    );
+    const result = await this.client.mutation(orchestrationStateFunctions.markStepRunning, {
+      serviceToken: this.serviceToken,
+      runId: input.context.runId,
+      nodeId: input.node.id,
+      operationId: input.node.command.operationId,
+      workerId: this.workerId,
+      leaseTtlMs: this.leaseTtlMs,
+    });
     return { leaseToken: (result as { leaseToken: string }).leaseToken };
   }
 
