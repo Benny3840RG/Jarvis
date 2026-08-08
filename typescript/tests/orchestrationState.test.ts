@@ -49,7 +49,6 @@ describe("InMemoryOrchestrationStateStore", () => {
       {
         runId: "run-1",
         nodeId: "second",
-        operationId: undefined,
         state: "pending",
         attempt: 0,
         updatedAt: 100,
