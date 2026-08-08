@@ -71,18 +71,11 @@ New ideas are recorded, not discarded, but do not interrupt the active Priority 
 
 Later ideas remain queued until the agreed Priority 1-4 baseline is complete.
 
-## Autonomous-build concurrency target
+## Autonomous-build concurrency
 
-The current autonomous builder uses repository-wide concurrency and therefore serialises independent approved issues. Replace that with issue-scoped concurrency only after preserving all existing controls:
+The autonomous builder uses an issue-scoped concurrency key. Different approved issue numbers may execute concurrently; duplicate attempts for one issue resolve to the same key and remain serialised. The existing issue lock, attempt-specific branches, forbidden-path controls, immutable control verification, clean-runner verification, draft-PR boundary, owner-controlled merge, and commissioning/deployment hard stops remain unchanged.
 
-- duplicate-run protection for the same issue;
-- `automation-in-progress` locking;
-- isolated attempt branches;
-- forbidden-path and diff guards;
-- clean-runner verification;
-- owner-only merge and commissioning boundaries.
-
-Concurrency must never allow two automation attempts for the same issue to execute simultaneously.
+Concurrency does not override the parallelism gate: unresolved dependencies or overlapping write surfaces require sequential reviewed delivery.
 
 ## Throughput metric
 
