@@ -1,3 +1,4 @@
+npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm.
 import type { OrchestrationCommand } from "./contracts.js";
 
 export type GraphNode = { id: string; kind: string };
@@ -32,15 +33,21 @@ export class OrchestrationGraph {
       deepFreeze({
         ...node,
         command: structuredClone(node.command),
-        dependsOn: node.dependsOn === undefined ? undefined : [...node.dependsOn],
+        dependsOn:
+          node.dependsOn === undefined ? undefined : [...node.dependsOn],
       }),
     );
     const byId = new Map<string, OrchestrationNode>();
 
     for (const node of copies) {
-      if (node.id.trim().length === 0) throw new Error("Orchestration node IDs must not be blank.");
-      if (byId.has(node.id)) throw new Error(`Duplicate orchestration node ID: ${node.id}`);
-      if (node.weight !== undefined && (!Number.isFinite(node.weight) || node.weight < 0)) {
+      if (node.id.trim().length === 0)
+        throw new Error("Orchestration node IDs must not be blank.");
+      if (byId.has(node.id))
+        throw new Error(`Duplicate orchestration node ID: ${node.id}`);
+      if (
+        node.weight !== undefined &&
+        (!Number.isFinite(node.weight) || node.weight < 0)
+      ) {
         throw new Error(`Orchestration node ${node.id} has an invalid weight.`);
       }
       byId.set(node.id, node);
@@ -49,14 +56,20 @@ export class OrchestrationGraph {
     for (const node of copies) {
       const dependencies = node.dependsOn ?? [];
       if (new Set(dependencies).size !== dependencies.length) {
-        throw new Error(`Orchestration node ${node.id} has duplicate dependencies.`);
+        throw new Error(
+          `Orchestration node ${node.id} has duplicate dependencies.`,
+        );
       }
       for (const dependencyId of dependencies) {
         if (dependencyId === node.id) {
-          throw new Error(`Orchestration node ${node.id} cannot depend on itself.`);
+          throw new Error(
+            `Orchestration node ${node.id} cannot depend on itself.`,
+          );
         }
         if (!byId.has(dependencyId)) {
-          throw new Error(`Orchestration node ${node.id} depends on unknown node ${dependencyId}.`);
+          throw new Error(
+            `Orchestration node ${node.id} depends on unknown node ${dependencyId}.`,
+          );
         }
       }
     }
@@ -79,7 +92,9 @@ export class OrchestrationGraph {
   }
 
   orderedNodes(): readonly OrchestrationNode[] {
-    const declarationOrder = new Map(this.commandNodes.map((node, index) => [node.id, index]));
+    const declarationOrder = new Map(
+      this.commandNodes.map((node, index) => [node.id, index]),
+    );
     const dependents = new Map<string, string[]>();
     const remainingDependencies = new Map<string, number>();
 
@@ -103,7 +118,8 @@ export class OrchestrationGraph {
         const weightDifference = (right?.weight ?? 0) - (left?.weight ?? 0);
         return (
           weightDifference ||
-          (declarationOrder.get(leftId) ?? 0) - (declarationOrder.get(rightId) ?? 0)
+          (declarationOrder.get(leftId) ?? 0) -
+            (declarationOrder.get(rightId) ?? 0)
         );
       });
     };
@@ -136,3 +152,8 @@ export class OrchestrationGraph {
     return ordered;
   }
 }
+npm notice
+npm notice New minor version of npm available! 11.9.0 -> 11.19.0
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.19.0
+npm notice To update run: npm install -g npm@11.19.0
+npm notice
