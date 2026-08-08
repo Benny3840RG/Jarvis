@@ -527,6 +527,7 @@ export const registerReconciliation = mutation({
 export const recordReconciliationOutcome = mutation({
   args: {
     serviceToken: v.string(),
+    runId: v.string(),
     reconciliationId: v.string(),
     outcome: v.union(v.literal("succeeded"), v.literal("failed")),
     outputDigest: v.optional(v.string()),
