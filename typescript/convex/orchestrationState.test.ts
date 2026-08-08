@@ -357,10 +357,7 @@ describe("Convex orchestration state", () => {
 
   it("clears retryability when a retry returns a failed step to pending", async () => {
     const t = harness();
-    await t.mutation(
-      api.orchestrationState.beginRun,
-      begin({ nodeIds: ["first"], maxRetries: 2 }),
-    );
+    await t.mutation(api.orchestrationState.beginRun, begin({ nodeIds: ["first"], maxRetries: 2 }));
     const lease = await start(t);
     await t.mutation(api.orchestrationState.recordStepFailure, {
       serviceToken: SERVICE_TOKEN,
