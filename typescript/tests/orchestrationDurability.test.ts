@@ -16,10 +16,7 @@ import {
   createConvexOrchestrationRunner,
   ConvexOrchestrationRunner,
 } from "../src/orchestration/convexRunner.js";
-import type {
-  OrchestrationSafetyGate,
-  SafetyDecision,
-} from "../src/orchestration/runner.js";
+import type { OrchestrationSafetyGate, SafetyDecision } from "../src/orchestration/runner.js";
 
 const context: OrchestrationContext = {
   runId: "run-1",
@@ -63,8 +60,7 @@ function fakeClient(
 ): ConvexClientLike {
   return {
     query: async () => null,
-    mutation: async (functionRef, args) =>
-      handler(args as Record<string, unknown>, functionRef),
+    mutation: async (functionRef, args) => handler(args as Record<string, unknown>, functionRef),
   } as ConvexClientLike;
 }
 
@@ -125,10 +121,7 @@ describe("ConvexOrchestrationStateBoundary", () => {
       nodeIds: ["create"],
       maxRetries: 2,
     });
-    assert.equal(
-      calls[1]?.functionRef,
-      orchestrationStateFunctions.markStepRunning,
-    );
+    assert.equal(calls[1]?.functionRef, orchestrationStateFunctions.markStepRunning);
     assert.deepEqual(calls[1]?.args, {
       serviceToken: "service-token",
       runId: "run-1",
@@ -137,10 +130,7 @@ describe("ConvexOrchestrationStateBoundary", () => {
       workerId: "worker-1",
       leaseTtlMs: 10_000,
     });
-    assert.equal(
-      calls[2]?.functionRef,
-      orchestrationStateFunctions.recordStepSuccess,
-    );
+    assert.equal(calls[2]?.functionRef, orchestrationStateFunctions.recordStepSuccess);
     assert.deepEqual(calls[2]?.args, {
       serviceToken: "service-token",
       runId: "run-1",
