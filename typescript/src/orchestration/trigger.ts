@@ -1,4 +1,3 @@
-npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm.
 import { OrchestrationGraph } from "./graph.js";
 
 export type OrchestrationTriggerSource = "cli" | "http" | "mcp" | "scheduler";
