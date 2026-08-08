@@ -85,3 +85,35 @@ it("orders ready sibling nodes by descending weight while preserving dependencie
     ["high", "low", "dependent"],
   );
 });
+
+
+it("freezes validated graph nodes and clones command inputs", () => {
+  const input = { title: "Inspect mounts", metadata: { source: "operator" } };
+  const graph = new OrchestrationGraph([
+    {
+      id: "create",
+      command: { operationId: "createTask", input },
+    },
+  ]);
+  const node = graph.orderedNodes()[0];
+  assert.ok(node);
+  assert.notEqual(node.command.input, input);
+  assert.equal(Object.isFrozen(node), true);
+  assert.equal(Object.isFrozen(node.command), true);
+  assert.equal(Object.isFrozen(node.command.input), true);
+  assert.equal(Object.isFrozen((node.command.input as { metadata: object }).metadata), true);
+  assert.throws(() => {
+    (node.command.input as Record<string, unknown>)["title"] = "tampered";
+  }, TypeError);
+  assert.equal(input.title, "Inspect mounts");
+});
+
+it("rejects non-finite orchestration node weights", () => {
+  assert.throws(
+    () =>
+      new OrchestrationGraph([
+        { id: "invalid", command: createTask, weight: Number.NaN },
+      ]),
+    /invalid weight/,
+  );
+});
