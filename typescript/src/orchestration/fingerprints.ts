@@ -21,7 +21,7 @@ export function orchestrationPlanFingerprint(graph: OrchestrationGraph): string 
   const plan = graph.orderedNodes().map((node) => ({
     id: node.id,
     command: node.command,
-    dependsOn: node.dependsOn ?? [],
+    dependsOn: [...(node.dependsOn ?? [])].sort(),
     weight: node.weight ?? 0,
   }));
   const canonicalJson = JSON.stringify(canonicalize(plan));
