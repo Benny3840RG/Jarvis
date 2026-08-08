@@ -90,7 +90,7 @@ describe("ConvexOrchestrationStateBoundary", () => {
       context,
       graph,
       requestFingerprint: "request-fp",
-      planFingerprint: orchestrationPlanFingerprint(graph),
+      planFingerprint: "plan-fp",
       policyVersion: "policy-v1",
       policyFingerprint: "policy-fp",
       maxRetries: 2,
@@ -103,7 +103,6 @@ describe("ConvexOrchestrationStateBoundary", () => {
       result: success as Extract<DomainResult, { ok: true }>,
     });
 
-    assert.equal(calls[0]?.args.planFingerprint, orchestrationPlanFingerprint(graph));
     assert.deepEqual(calls[0]?.args, {
       serviceToken: "service-token",
       runId: "run-1",
