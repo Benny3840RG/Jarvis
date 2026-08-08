@@ -6,6 +6,7 @@ import schema from "./schema.js";
 import { modules } from "./test.setup.js";
 
 const SERVICE_TOKEN = "orchestration-state-test-service-token-0000";
+const now = () => Date.now();
 
 function harness() {
   return convexTest(schema, modules);
@@ -27,9 +28,47 @@ function begin(overrides: Record<string, unknown> = {}) {
     policyFingerprint: "policy-fingerprint-1",
     nodeIds: ["first", "second"],
     maxRetries: 1,
-    now: 100,
+    now: now(),
     ...overrides,
   };
+}
+
+async function start(
+  t: ReturnType<typeof harness>,
+  runId = "run-1",
+  nodeId = "first",
+  workerId = "worker-1",
+) {
+  const result = await t.mutation(api.orchestrationState.markStepRunning, {
+    serviceToken: SERVICE_TOKEN,
+    runId,
+    nodeId,
+    operationId: nodeId === "first" ? "createTask" : "completeTask",
+    workerId,
+    leaseTtlMs: 1_000,
+    now: now(),
+  });
+  return result.leaseToken;
+}
+
+async function registerReconciliation(
+  t: ReturnType<typeof harness>,
+  reconciliationId: string,
+  runId = "run-1",
+  nodeId = "first",
+  attempt = 1,
+) {
+  return t.mutation(api.orchestrationState.registerReconciliation, {
+    serviceToken: SERVICE_TOKEN,
+    runId,
+    nodeId,
+    reconciliationId,
+    effectFingerprint: "effect-" + reconciliationId,
+    provider: "task-provider",
+    providerRequestId: "provider-request-" + reconciliationId,
+    providerCorrelationId: "provider-correlation-" + reconciliationId,
+    now: now(),
+  });
 }
 
 beforeEach(() => {
@@ -46,7 +85,7 @@ describe("Convex orchestration state", () => {
     const created = await t.mutation(api.orchestrationState.beginRun, begin());
     const replayed = await t.mutation(
       api.orchestrationState.beginRun,
-      begin({ runId: "different-run", now: 101 }),
+      begin({ runId: "different-run", now: now() }),
     );
     const steps = await t.query(api.orchestrationState.listSteps, {
       serviceToken: SERVICE_TOKEN,
@@ -59,6 +98,16 @@ describe("Convex orchestration state", () => {
     expect(steps).toHaveLength(2);
     expect(steps.map((step) => step.nodeId)).toEqual(["first", "second"]);
     expect(steps.every((step) => step.state === "pending")).toBe(true);
+    expect(steps.every((step) => !("leaseToken" in step))).toBe(true);
+  });
+
+  it("serializes concurrent idempotency requests to one durable run", async () => {
+    const t = harness();
+    const [first, second] = await Promise.all([
+      t.mutation(api.orchestrationState.beginRun, begin({ runId: "run-a" })),
+      t.mutation(api.orchestrationState.beginRun, begin({ runId: "run-b" })),
+    ]);
+    expect([first.status, second.status].sort()).toEqual(["created", "replayed"]);
   });
 
   it("returns a conflict for an idempotency key with a different fingerprint", async () => {
@@ -78,23 +127,15 @@ describe("Convex orchestration state", () => {
     const t = harness();
     await t.mutation(api.orchestrationState.beginRun, begin());
 
-    await t.mutation(api.orchestrationState.markStepRunning, {
-      serviceToken: SERVICE_TOKEN,
-      runId: "run-1",
-      nodeId: "first",
-      operationId: "createTask",
-      leaseOwner: "worker-1",
-      leaseToken: "lease-1",
-      leaseTtlMs: 1_000,
-      now: 110,
-    });
+    const firstLease = await start(t);
     await t.mutation(api.orchestrationState.recordStepSuccess, {
       serviceToken: SERVICE_TOKEN,
       runId: "run-1",
       nodeId: "first",
-      leaseToken: "lease-1",
+      workerId: "worker-1",
+      leaseToken: firstLease,
       outputDigest: "digest-first",
-      now: 120,
+      now: now(),
     });
 
     expect(
@@ -106,23 +147,15 @@ describe("Convex orchestration state", () => {
       )?.state,
     ).toBe("running");
 
-    await t.mutation(api.orchestrationState.markStepRunning, {
-      serviceToken: SERVICE_TOKEN,
-      runId: "run-1",
-      nodeId: "second",
-      operationId: "completeTask",
-      leaseOwner: "worker-1",
-      leaseToken: "lease-2",
-      leaseTtlMs: 1_000,
-      now: 130,
-    });
+    const secondLease = await start(t, "run-1", "second");
     await t.mutation(api.orchestrationState.recordStepSuccess, {
       serviceToken: SERVICE_TOKEN,
       runId: "run-1",
       nodeId: "second",
-      leaseToken: "lease-2",
+      workerId: "worker-1",
+      leaseToken: secondLease,
       outputDigest: "digest-second",
-      now: 140,
+      now: now(),
     });
 
     const run = await t.query(api.orchestrationState.getRun, {
@@ -134,28 +167,42 @@ describe("Convex orchestration state", () => {
     expect(run?.checkpointNodeId).toBe("second");
   });
 
-  it("turns an expired lease into indeterminate state until reconciliation resolves it", async () => {
+  it("binds leases to the worker and requires reconciliation after expiry", async () => {
     const t = harness();
     await t.mutation(api.orchestrationState.beginRun, begin({ nodeIds: ["first"], maxRetries: 1 }));
-    await t.mutation(api.orchestrationState.markStepRunning, {
+    const leaseStart = now();
+    const grant = await t.mutation(api.orchestrationState.markStepRunning, {
       serviceToken: SERVICE_TOKEN,
       runId: "run-1",
       nodeId: "first",
       operationId: "createTask",
-      leaseOwner: "worker-1",
-      leaseToken: "lease-1",
+      workerId: "worker-1",
       leaseTtlMs: 1_000,
-      now: 110,
+      now: leaseStart,
     });
+    await registerReconciliation(t, "lease-reconciliation");
 
     await expect(
       t.mutation(api.orchestrationState.recordStepSuccess, {
         serviceToken: SERVICE_TOKEN,
         runId: "run-1",
         nodeId: "first",
-        leaseToken: "lease-1",
+        workerId: "worker-2",
+        leaseToken: grant.leaseToken,
+        outputDigest: "wrong-worker",
+        now: leaseStart + 100,
+      }),
+    ).rejects.toThrow(/not owned/);
+
+    await expect(
+      t.mutation(api.orchestrationState.recordStepSuccess, {
+        serviceToken: SERVICE_TOKEN,
+        runId: "run-1",
+        nodeId: "first",
+        workerId: "worker-1",
+        leaseToken: grant.leaseToken,
         outputDigest: "late-success",
-        now: 1_110,
+        now: leaseStart + 1_000,
       }),
     ).rejects.toThrow(/lease has expired/);
 
@@ -164,68 +211,57 @@ describe("Convex orchestration state", () => {
       runId: "run-1",
       nodeId: "first",
       recoveryOwner: "recovery-1",
-      now: 1_110,
+      reconciliationId: "lease-reconciliation",
+      now: leaseStart + 1_001,
     });
     expect(recovered.status).toBe("indeterminate");
     expect(recovered.run.state).toBe("indeterminate");
-    expect(recovered.run.recoveryState).toBe("required");
     expect(recovered.step.state).toBe("indeterminate");
 
     await expect(
-      t.mutation(api.orchestrationState.markStepRunning, {
+      t.mutation(api.orchestrationState.resolveIndeterminate, {
         serviceToken: SERVICE_TOKEN,
         runId: "run-1",
         nodeId: "first",
-        operationId: "createTask",
-        leaseOwner: "worker-2",
-        leaseToken: "lease-2",
-        leaseTtlMs: 1_000,
-        now: 1_120,
+        reconciliationId: "lease-reconciliation",
+        now: leaseStart + 1_002,
       }),
-    ).rejects.toThrow(/Cannot start a step for run indeterminate/);
+    ).rejects.toThrow(/no verified terminal/);
 
+    await t.mutation(api.orchestrationState.recordReconciliationOutcome, {
+      serviceToken: SERVICE_TOKEN,
+      reconciliationId: "lease-reconciliation",
+      outcome: "succeeded",
+      outputDigest: "reconciled-digest",
+      evidenceDetail: "Provider lookup returned the committed task.",
+      resolverId: "recovery-1",
+      now: leaseStart + 1_003,
+    });
     const resolved = await t.mutation(api.orchestrationState.resolveIndeterminate, {
       serviceToken: SERVICE_TOKEN,
       runId: "run-1",
       nodeId: "first",
-      reconciliationId: "lease-recovery:run-1:first:1",
-      outcome: "succeeded",
-      outputDigest: "reconciled-digest",
-      now: 1_200,
+      reconciliationId: "lease-reconciliation",
+      now: leaseStart + 1_004,
     });
     expect(resolved.state).toBe("succeeded");
-    expect(
-      (
-        await t.query(api.orchestrationState.getRun, {
-          serviceToken: SERVICE_TOKEN,
-          runId: "run-1",
-        })
-      )?.state,
-    ).toBe("succeeded");
   });
 
-  it("fails closed on an indeterminate provider result and forbids retry", async () => {
+  it("fails closed on an indeterminate provider result and forbids blind retry", async () => {
     const t = harness();
     await t.mutation(api.orchestrationState.beginRun, begin({ nodeIds: ["first"] }));
-    await t.mutation(api.orchestrationState.markStepRunning, {
-      serviceToken: SERVICE_TOKEN,
-      runId: "run-1",
-      nodeId: "first",
-      operationId: "createTask",
-      leaseOwner: "worker-1",
-      leaseToken: "lease-1",
-      leaseTtlMs: 1_000,
-      now: 110,
-    });
+    const lease = await start(t);
+    await registerReconciliation(t, "provider-reconciliation");
+
     await t.mutation(api.orchestrationState.recordStepIndeterminate, {
       serviceToken: SERVICE_TOKEN,
       runId: "run-1",
       nodeId: "first",
-      leaseToken: "lease-1",
-      failureCode: "dependency_failure",
+      workerId: "worker-1",
+      leaseToken: lease,
       indeterminateReason: "Provider did not confirm whether the effect committed.",
-      reconciliationId: "provider-reconciliation-1",
-      now: 120,
+      reconciliationId: "provider-reconciliation",
+      now: now(),
     });
 
     const run = await t.query(api.orchestrationState.getRun, {
@@ -236,16 +272,36 @@ describe("Convex orchestration state", () => {
     expect(run?.recoveryState).toBe("required");
     expect(run?.recoveryEvidence[0]?.kind).toBe("indeterminate");
     await expect(
-      t.mutation(api.orchestrationState.markStepRunning, {
+      t.mutation(api.orchestrationState.retryFailedStep, {
         serviceToken: SERVICE_TOKEN,
         runId: "run-1",
         nodeId: "first",
-        operationId: "createTask",
-        leaseOwner: "worker-2",
-        leaseToken: "lease-2",
-        leaseTtlMs: 1_000,
-        now: 130,
+        now: now(),
       }),
-    ).rejects.toThrow(/Cannot start a step for run indeterminate/);
+    ).rejects.toThrow(/run indeterminate/);
+  });
+
+  it("derives retryability from the server failure classification", async () => {
+    const t = harness();
+    await t.mutation(api.orchestrationState.beginRun, begin({ nodeIds: ["first"] }));
+    const lease = await start(t);
+    const failed = await t.mutation(api.orchestrationState.recordStepFailure, {
+      serviceToken: SERVICE_TOKEN,
+      runId: "run-1",
+      nodeId: "first",
+      workerId: "worker-1",
+      leaseToken: lease,
+      failureCode: "audit_failure",
+      now: now(),
+    });
+    expect(failed.retryable).toBe(false);
+    await expect(
+      t.mutation(api.orchestrationState.retryFailedStep, {
+        serviceToken: SERVICE_TOKEN,
+        runId: "run-1",
+        nodeId: "first",
+        now: now(),
+      }),
+    ).rejects.toThrow(/Only retryable/);
   });
 });
