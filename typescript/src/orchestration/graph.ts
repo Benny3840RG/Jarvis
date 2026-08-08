@@ -3,6 +3,16 @@ import type { OrchestrationCommand } from "./contracts.js";
 export type GraphNode = { id: string; kind: string };
 export type GraphEdge = { from: string; to: string };
 
+function deepFreeze<T>(value: T): T {
+  if (value !== null && typeof value === "object" && !Object.isFrozen(value)) {
+    for (const child of Object.values(value as Record<string, unknown>)) {
+      if (child !== null && typeof child === "object") deepFreeze(child);
+    }
+    Object.freeze(value);
+  }
+  return value;
+}
+
 export type OrchestrationNode = {
   id: string;
   command: OrchestrationCommand;
@@ -18,10 +28,13 @@ export class OrchestrationGraph {
   private readonly commandNodesById: ReadonlyMap<string, OrchestrationNode>;
 
   constructor(commandNodes: readonly OrchestrationNode[] = []) {
-    const copies = commandNodes.map((node) => ({
-      ...node,
-      dependsOn: node.dependsOn === undefined ? undefined : [...node.dependsOn],
-    }));
+    const copies = commandNodes.map((node) =>
+      deepFreeze({
+        ...node,
+        command: structuredClone(node.command),
+        dependsOn: node.dependsOn === undefined ? undefined : [...node.dependsOn],
+      }),
+    );
     const byId = new Map<string, OrchestrationNode>();
 
     for (const node of copies) {
@@ -48,7 +61,7 @@ export class OrchestrationGraph {
       }
     }
 
-    this.commandNodes = copies;
+    this.commandNodes = Object.freeze(copies);
     this.commandNodesById = byId;
     void this.orderedNodes();
   }
