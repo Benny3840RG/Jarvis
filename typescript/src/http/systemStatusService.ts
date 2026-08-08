@@ -26,7 +26,7 @@ const LAYERS: LayersStatus = {
   },
   domains: {
     status: "partial",
-    reason: "Business, workshop, and home engines remain non-durable prototypes.",
+    reason: "Business, workshop, and home domain state is versioned and durable through the configured JSON or Convex persistence provider; promotion into the maintained operational surface remains pending.",
   },
   integration: {
     status: "partial",
@@ -41,7 +41,7 @@ const LAYERS: LayersStatus = {
   safety: {
     status: "partial",
     reason:
-      "The prototype envelope exists; all five immutable safety categories are not yet bound to every transition.",
+      "The six immutable safety categories are bound at reasoning and governed tool-execution boundaries; durable category evidence for every lifecycle transition remains pending.",
   },
   adaptive: {
     status: "partial",
@@ -54,8 +54,9 @@ const LAYERS: LayersStatus = {
       "Workflow generation is scaffolded; proposal simulation and safe evolution remain pending.",
   },
   reliability: {
-    status: "inactive",
-    reason: "No reliability probe evidence has been collected.",
+    status: "partial",
+    reason:
+      "Evidence-backed reliability probes and recovery controls exist at the HTTP status boundary; live provider commissioning and operational alert delivery remain pending.",
   },
 };
 
