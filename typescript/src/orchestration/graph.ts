@@ -25,8 +25,10 @@ export class OrchestrationGraph {
     const byId = new Map<string, OrchestrationNode>();
 
     for (const node of copies) {
-      if (node.id.trim().length === 0) throw new Error("Orchestration node IDs must not be blank.");
-      if (byId.has(node.id)) throw new Error(`Duplicate orchestration node ID: ${node.id}`);
+      if (node.id.trim().length === 0)
+        throw new Error("Orchestration node IDs must not be blank.");
+      if (byId.has(node.id))
+        throw new Error(`Duplicate orchestration node ID: ${node.id}`);
       if (
         node.weight !== undefined &&
         (!Number.isFinite(node.weight) || node.weight < 0)
@@ -39,14 +41,20 @@ export class OrchestrationGraph {
     for (const node of copies) {
       const dependencies = node.dependsOn ?? [];
       if (new Set(dependencies).size !== dependencies.length) {
-        throw new Error(`Orchestration node ${node.id} has duplicate dependencies.`);
+        throw new Error(
+          `Orchestration node ${node.id} has duplicate dependencies.`,
+        );
       }
       for (const dependencyId of dependencies) {
         if (dependencyId === node.id) {
-          throw new Error(`Orchestration node ${node.id} cannot depend on itself.`);
+          throw new Error(
+            `Orchestration node ${node.id} cannot depend on itself.`,
+          );
         }
         if (!byId.has(dependencyId)) {
-          throw new Error(`Orchestration node ${node.id} depends on unknown node ${dependencyId}.`);
+          throw new Error(
+            `Orchestration node ${node.id} depends on unknown node ${dependencyId}.`,
+          );
         }
       }
     }
