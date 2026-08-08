@@ -60,7 +60,8 @@ function fakeClient(
 ): ConvexClientLike {
   return {
     query: async () => null,
-    mutation: async (functionRef, args) => handler(args as Record<string, unknown>, functionRef),
+    mutation: async (functionRef, args) =>
+      handler(args as Record<string, unknown>, functionRef),
   } as ConvexClientLike;
 }
 
@@ -219,7 +220,10 @@ describe("ConvexOrchestrationRunner", () => {
     });
 
     assert.equal(result.status, "created");
-    assert.equal(beginArgs?.planFingerprint, orchestrationPlanFingerprint(graph));
+    assert.equal(
+      beginArgs?.planFingerprint,
+      orchestrationPlanFingerprint(graph),
+    );
     assert.equal(beginArgs?.policyVersion, "policy-v1");
     assert.equal(beginArgs?.policyFingerprint, "policy-fp");
     assert.deepEqual(events, ["begin", "start", "execute", "audit", "succeed"]);
@@ -283,7 +287,10 @@ describe("OrchestrationRunner durable failure boundary", () => {
       },
     };
     const blockedGate: OrchestrationSafetyGate = {
-      preflight: async () => ({ status: "blocked", reasons: ["policy denied"] }),
+      preflight: async () => ({
+        status: "blocked",
+        reasons: ["policy denied"],
+      }),
       postflight: async () => okDecision,
     };
     const runner = new OrchestrationRunner(
