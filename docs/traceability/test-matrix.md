@@ -18,17 +18,17 @@
 | R-073–R-076 | State-machine unit tests | Invalid and nondeterministic transition | `stateTransitions` | Planned |
 | R-077–R-081 | Persistence and audit | History overwrite and invalid pruning | `retentionHistory` | Planned |
 | R-082–R-090 | Workflow and policy | Unapproved external or destructive action | `safetyRules` | Planned |
-| R-091–R-098C | End-to-end workflow | Approval bypass, false success, state crossover | `executionFlow` | Planned |
+| R-091–R-098C | End-to-end workflow | Approval bypass, false success, state crossover | `executionFlow` | Partial |
 | R-099–R-104 | Failure injection and recovery | Redacted persistence failure, circuit opening, and half-open recovery | `errorRecovery`, `reliabilityController` | Partial |
-| R-105–R-111 | CI meta-tests | Missing required test or evidence linkage | `traceabilityValidation` | Planned |
+| R-105–R-111 | CI meta-tests | Missing required test or evidence linkage | `traceabilityValidation` | Partial |
 | R-112–R-116 | Deployment checks | Incompatible runtime and failed rollback | `releaseSafety` | Planned |
 | R-117–R-121 | Runbook exercises | Recovery dependent on undocumented knowledge | `operationsRunbooks` | Planned |
 | R-122–R-124 | Governance review | Roadmap item without requirement linkage | `roadmapTraceability` | Planned |
-| R-125–R-127 | Definition-of-done gate | Durable-data or safety regression | `definitionOfDone` | Planned |
-| R-128–R-131 | Concurrency integration | Stale and conflicting concurrent mutations | `concurrentMutation` | Planned |
+| R-125–R-127 | Definition-of-done gate | Durable-data or safety regression | `definitionOfDone` | Partial |
+| R-128–R-131 | Concurrency integration | Stale and conflicting concurrent mutations | `concurrentMutation` | Partial |
 | R-132–R-135 | Policy migration | Old approval widened by new policy | `policyVersioning` | Planned |
 | R-136–R-140 | Temporal unit and workflow | DST gaps, duplicate local times, unsafe ambiguity | `timezoneNormalisation` | Planned |
-| R-141–R-143 | Provider integration | Blind retry after indeterminate result | `indeterminateReconciliation` | Planned |
+| R-141–R-143 | Provider integration | Blind retry after indeterminate result | `indeterminateReconciliation` | Partial |
 | R-144–R-150 | Namespace validation | Duplicate, recycled, shifted, or lowercase ID | `requirementsNamespace` | Planned |
 
 ## Completion rule
@@ -40,10 +40,10 @@ A requirement is not implemented until at least one passing test and one immutab
 | Requirement range | Passing tests | Evidence reference | Status |
 |---|---|---|---|
 | R-082–R-090 | `safetyBinder.test.ts`, `safetyCategoryMatrix.test.ts` | `src/safety/safetyBinder.ts`, `src/runtime/validation.ts`, `src/actions/toolExecution.ts` | Partial |
-| R-091–R-098C | `safetyCategoryMatrix.test.ts` | `src/safety/safetyBinder.ts` phase coverage for reasoning, memory, and tool lifecycle | Partial |
-| R-105–R-111 | `safetyBinder.test.ts`, `safetyCategoryMatrix.test.ts`, `convex/toolActions.test.ts`, `convex/toolExecutionReceiptMetadata.test.ts`, `convex/externalReconciliations.test.ts` | `convex/safetyBindingValidators.ts`, `convex/schema.ts`, `convex/toolActions.ts`, `convex/toolExecutionReceipts.ts`, `convex/externalReconciliations.ts` | Partial |
+| R-091–R-098C | `safetyCategoryMatrix.test.ts`, `convex/orchestrationState.test.ts` | `src/safety/safetyBinder.ts`, `convex/orchestrationState.ts`, exact PR #329 workflow #1413 (31256419743) | Partial |
+| R-099–R-104 | `convex/orchestrationState.test.ts`, `convex/externalReconciliations.test.ts` | `convex/orchestrationState.ts`, `convex/externalReconciliations.ts`; provider-authenticated recovery and live restart drills remain open | Partial |
+| R-105–R-111 | `safetyBinder.test.ts`, `safetyCategoryMatrix.test.ts`, `convex/toolActions.test.ts`, `convex/toolExecutionReceiptMetadata.test.ts`, `convex/externalReconciliations.test.ts`, `convex/orchestrationState.test.ts` | `convex/safetyBindingValidators.ts`, `convex/schema.ts`, `convex/toolActions.ts`, `convex/toolExecutionReceipts.ts`, `convex/externalReconciliations.ts`, `convex/orchestrationState.ts`; workflow #1413 (31256419743) and Copilot Check (31256419737) | Partial |
+| R-125–R-127 | `convex/orchestrationState.test.ts` | Merged PR #329 at `2e04d101e09e1f8d43208cc4fe9e7f4eee086ba1`; offline foundation only, not commissioning evidence | Partial |
+| R-128–R-131 | `convex/orchestrationState.test.ts` concurrent replay coverage | `convex/schema.ts`, `convex/orchestrationState.ts` | Partial |
 
-The tests prove the six-category in-process contract, fail-closed negative
-paths, lifecycle attachment, and fresh Convex readback. The status remains
-partial until the exact change is merged and live commissioning evidence is
-available.
+The tests prove the six-category in-process contract, fail-closed negative paths, lifecycle attachment, fresh Convex readback, and the merged durable-state boundary. They do not prove authenticated worker identity, provider-authenticated terminal outcomes, deployed restart behavior, or live external commissioning. Status remains partial until those gates are separately evidenced.
