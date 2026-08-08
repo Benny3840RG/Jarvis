@@ -1,3 +1,4 @@
+npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm.
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
@@ -76,7 +77,12 @@ describe("InMemoryOrchestrationStateStore", () => {
     const store = new InMemoryOrchestrationStateStore();
     await store.beginRun(beginInput);
 
-    await store.markStepRunning({ runId: "run-1", nodeId: "first", operationId: "createTask", now: 110 });
+    await store.markStepRunning({
+      runId: "run-1",
+      nodeId: "first",
+      operationId: "createTask",
+      now: 110,
+    });
     const first = await store.recordStepSuccess({
       runId: "run-1",
       nodeId: "first",
@@ -107,7 +113,12 @@ describe("InMemoryOrchestrationStateStore", () => {
   it("fails closed on an indeterminate provider outcome and will not blindly retry it", async () => {
     const store = new InMemoryOrchestrationStateStore();
     await store.beginRun(beginInput);
-    await store.markStepRunning({ runId: "run-1", nodeId: "first", operationId: "createTask", now: 110 });
+    await store.markStepRunning({
+      runId: "run-1",
+      nodeId: "first",
+      operationId: "createTask",
+      now: 110,
+    });
 
     const step = await store.recordStepIndeterminate({
       runId: "run-1",
@@ -153,3 +164,8 @@ describe("InMemoryOrchestrationStateStore", () => {
     );
   });
 });
+npm notice
+npm notice New minor version of npm available! 11.9.0 -> 11.19.0
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.19.0
+npm notice To update run: npm install -g npm@11.19.0
+npm notice
