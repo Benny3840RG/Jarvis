@@ -801,7 +801,8 @@ export const resolveIndeterminate = mutation({
     if (
       reconciliation.runId !== runId ||
       reconciliation.nodeId !== nodeId ||
-      reconciliation.attempt !== step.attempt
+      reconciliation.attempt !== step.attempt ||
+      reconciliation.operationId !== step.operationId
     ) {
       throw new Error("Orchestration reconciliation is not bound to this step attempt.");
     }
