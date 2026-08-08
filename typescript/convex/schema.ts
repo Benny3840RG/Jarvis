@@ -2,6 +2,9 @@ import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
 import {
+  orchestrationFailureCodeValidator,
+  orchestrationRecoveryEvidenceValidator,
+  orchestrationRecoveryStateValidator,
   orchestrationRunStateValidator,
   orchestrationStepStateValidator,
   orchestrationTriggerSourceValidator,
@@ -324,28 +327,11 @@ export default defineSchema({
     nodeIds: v.array(v.string()),
     completedStepIds: v.array(v.string()),
     state: orchestrationRunStateValidator,
-    failureCode: v.optional(v.string()),
+    failureCode: v.optional(orchestrationFailureCodeValidator),
     retryCount: v.number(),
     maxRetries: v.number(),
-    recoveryState: v.union(
-      v.literal("none"),
-      v.literal("required"),
-      v.literal("retrying"),
-      v.literal("recovered"),
-      v.literal("escalated"),
-    ),
-    recoveryEvidence: v.array(
-      v.object({
-        kind: v.union(
-          v.literal("checkpoint"),
-          v.literal("restart"),
-          v.literal("retry"),
-          v.literal("indeterminate"),
-        ),
-        detail: v.string(),
-        occurredAt: v.number(),
-      }),
-    ),
+    recoveryState: orchestrationRecoveryStateValidator,
+    recoveryEvidence: v.array(orchestrationRecoveryEvidenceValidator),
     checkpointNodeId: v.optional(v.string()),
     checkpointAt: v.optional(v.number()),
     createdAt: v.number(),
@@ -366,7 +352,7 @@ export default defineSchema({
     state: orchestrationStepStateValidator,
     attempt: v.number(),
     outputDigest: v.optional(v.string()),
-    failureCode: v.optional(v.string()),
+    failureCode: v.optional(orchestrationFailureCodeValidator),
     updatedAt: v.number(),
     completedAt: v.optional(v.number()),
     leaseOwner: v.optional(v.string()),
