@@ -1,7 +1,4 @@
-import {
-  IMPLEMENTED_CAPABILITIES,
-  type Capability,
-} from "../http/contracts.js";
+import { IMPLEMENTED_CAPABILITIES, type Capability } from "../http/contracts.js";
 import type {
   DomainFailure,
   DomainResult,
@@ -15,8 +12,7 @@ import type { OrchestrationGraph, OrchestrationNode } from "./graph.js";
 import type { OrchestrationStepStateBoundary } from "./stateBoundary.js";
 
 export type SafetyDecision =
-  | { status: "ok"; reasons: readonly [] }
-  | { status: "blocked"; reasons: readonly string[] };
+  { status: "ok"; reasons: readonly [] } | { status: "blocked"; reasons: readonly string[] };
 
 export type CompletedStep = {
   nodeId: string;
@@ -64,18 +60,12 @@ function capabilityFor(node: OrchestrationNode): Capability | null {
   );
 }
 
-function failure(
-  code: DomainFailure["code"],
-  message: string,
-  retryable = false,
-): DomainFailure {
+function failure(code: DomainFailure["code"], message: string, retryable = false): DomainFailure {
   return { ok: false, code, message, retryable };
 }
 
 function decisionMessage(prefix: string, reasons: readonly string[]): string {
-  const detail = reasons
-    .filter((reason) => reason.trim().length > 0)
-    .join("; ");
+  const detail = reasons.filter((reason) => reason.trim().length > 0).join("; ");
   return detail.length === 0 ? prefix : `${prefix}: ${detail}`;
 }
 
@@ -114,14 +104,10 @@ export class OrchestrationRunner {
     this.clock = options.clock ?? Date.now;
     this.stepState = options.stepState;
     if (!positiveSafeInteger(this.maxSteps)) {
-      throw new Error(
-        "Orchestration maxSteps must be a positive safe integer.",
-      );
+      throw new Error("Orchestration maxSteps must be a positive safe integer.");
     }
     if (!positiveSafeInteger(this.maxDurationMs)) {
-      throw new Error(
-        "Orchestration maxDurationMs must be a positive safe integer.",
-      );
+      throw new Error("Orchestration maxDurationMs must be a positive safe integer.");
     }
   }
 
@@ -135,18 +121,12 @@ export class OrchestrationRunner {
 
     for (let index = 0; index < nodes.length; index += 1) {
       const node = nodes[index];
-      if (
-        index >= this.maxSteps ||
-        this.clock() - startedAt >= this.maxDurationMs
-      ) {
+      if (index >= this.maxSteps || this.clock() - startedAt >= this.maxDurationMs) {
         return this.stop(
           context,
           node,
           completedSteps,
-          failure(
-            "execution_budget_exceeded",
-            "Orchestration execution budget exhausted.",
-          ),
+          failure("execution_budget_exceeded", "Orchestration execution budget exhausted."),
         );
       }
       const capability = capabilityFor(node);
@@ -165,8 +145,7 @@ export class OrchestrationRunner {
 
       if (this.stepState) {
         try {
-          leaseToken = (await this.stepState.start({ context, node }))
-            .leaseToken;
+          leaseToken = (await this.stepState.start({ context, node })).leaseToken;
         } catch (error: unknown) {
           return this.stop(
             context,
@@ -214,10 +193,7 @@ export class OrchestrationRunner {
           completedSteps,
           failure(
             "blocked",
-            decisionMessage(
-              "Preflight safety blocked execution",
-              preflight.reasons,
-            ),
+            decisionMessage("Preflight safety blocked execution", preflight.reasons),
           ),
           undefined,
           false,
@@ -237,15 +213,7 @@ export class OrchestrationRunner {
       }
 
       if (!result.ok)
-        return this.stop(
-          context,
-          node,
-          completedSteps,
-          result,
-          undefined,
-          false,
-          leaseToken,
-        );
+        return this.stop(context, node, completedSteps, result, undefined, false, leaseToken);
 
       let postflight: SafetyDecision;
       try {
@@ -279,10 +247,7 @@ export class OrchestrationRunner {
           completedSteps,
           failure(
             "postcondition_failed",
-            decisionMessage(
-              "Postflight consistency verification failed",
-              postflight.reasons,
-            ),
+            decisionMessage("Postflight consistency verification failed", postflight.reasons),
           ),
           result,
           false,
@@ -319,11 +284,7 @@ export class OrchestrationRunner {
             runId: context.runId,
             completedSteps,
             failedNodeId: node.id,
-            failure: failure(
-              "audit_failure",
-              "Durable step success had no active lease.",
-              true,
-            ),
+            failure: failure("audit_failure", "Durable step success had no active lease.", true),
             executedResult: result,
           };
         }
@@ -390,8 +351,7 @@ export class OrchestrationRunner {
     if (this.stepState && !stateUnavailable) {
       try {
         const activeLeaseToken =
-          leaseToken ??
-          (await this.stepState.start({ context, node })).leaseToken;
+          leaseToken ?? (await this.stepState.start({ context, node })).leaseToken;
         await this.stepState.fail({
           context,
           node,
