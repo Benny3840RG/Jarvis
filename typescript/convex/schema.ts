@@ -1,3 +1,4 @@
+npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm.
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
@@ -218,7 +219,7 @@ export default defineSchema({
     updatedAt: v.number(),
     approvedAt: v.optional(v.number()),
     rejectedAt: v.optional(v.number()),
-    // Consent lifecycle (R-048/R-049/R-050): all optional — existing rows
+    // Consent lifecycle (R-048/R-049/R-050): all optional  existing rows
     // predate these fields and are treated as legacy/unenforced, never
     // retroactively expired or single-use. Stamped by approve(); consumed
     // by revoke() and by the (deferred, execute()-time) expiry/consumption
@@ -231,7 +232,7 @@ export default defineSchema({
     revokedReason: v.optional(v.string()),
     revokedAt: v.optional(v.number()),
     // Atomic single-use execution claim: set exactly once, by exactly one
-    // caller, via claimSingleUseExecution — never released. This is the
+    // caller, via claimSingleUseExecution  never released. This is the
     // authoritative consumption gate checked before the external effect;
     // a read-before-effect check alone cannot prevent two different-key
     // concurrent executions from both crossing the effect boundary.
@@ -550,7 +551,7 @@ export default defineSchema({
   })
     .index("by_owner_and_scope_key", ["ownerId", "scopeKey"])
     .index("by_owner_and_request_id", ["ownerId", "requestId"])
-    // Owner-wide, time-ordered read across all scopes — `by_owner_and_scope_key`
+    // Owner-wide, time-ordered read across all scopes  `by_owner_and_scope_key`
     // can only page through one project/global scope at a time, which cannot
     // serve a genuine cross-scope activity timeline.
     .index("by_owner_and_created_at", ["ownerId", "createdAt"]),
@@ -641,3 +642,8 @@ export default defineSchema({
     updatedAt: v.number(),
   }).index("by_owner", ["ownerId"]),
 });
+npm notice
+npm notice New minor version of npm available! 11.9.0 -> 11.19.0
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.19.0
+npm notice To update run: npm install -g npm@11.19.0
+npm notice
