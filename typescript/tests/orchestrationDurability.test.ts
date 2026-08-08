@@ -350,7 +350,6 @@ describe("OrchestrationRunner durable failure boundary", () => {
   });
 });
 
-
 describe("orchestration composition authority", () => {
   it("changes the plan fingerprint when graph execution semantics change", () => {
     const changedGraph = new OrchestrationGraph([
@@ -361,6 +360,9 @@ describe("orchestration composition authority", () => {
       },
     ]);
 
-    assert.notEqual(orchestrationPlanFingerprint(changedGraph), orchestrationPlanFingerprint(graph));
+    assert.notEqual(
+      orchestrationPlanFingerprint(changedGraph),
+      orchestrationPlanFingerprint(graph),
+    );
   });
 });
