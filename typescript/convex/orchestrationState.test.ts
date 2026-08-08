@@ -6,8 +6,6 @@ import schema from "./schema.js";
 import { modules } from "./test.setup.js";
 
 const SERVICE_TOKEN = "orchestration-state-test-service-token-0000";
-const now = () => Date.now();
-
 function harness() {
   return convexTest(schema, modules);
 }
@@ -28,7 +26,7 @@ function begin(overrides: Record<string, unknown> = {}) {
     policyFingerprint: "policy-fingerprint-1",
     nodeIds: ["first", "second"],
     maxRetries: 1,
-    now: now(),
+
     ...overrides,
   };
 }
@@ -46,7 +44,7 @@ async function start(
     operationId: nodeId === "first" ? "createTask" : "completeTask",
     workerId,
     leaseTtlMs: 1_000,
-    now: now(),
+
   });
   return result.leaseToken;
 }
@@ -70,11 +68,14 @@ async function registerReconciliation(
 }
 
 beforeEach(() => {
+  vi.useFakeTimers();
+  vi.setSystemTime(1_000_000);
   vi.stubEnv("JARVIS_SERVICE_TOKEN", SERVICE_TOKEN);
 });
 
 afterEach(() => {
   vi.unstubAllEnvs();
+  vi.useRealTimers();
 });
 
 describe("Convex orchestration state", () => {
@@ -83,7 +84,7 @@ describe("Convex orchestration state", () => {
     const created = await t.mutation(api.orchestrationState.beginRun, begin());
     const replayed = await t.mutation(
       api.orchestrationState.beginRun,
-      begin({ runId: "different-run", now: now() }),
+      begin({ runId: "different-run" }),
     );
     const steps = await t.query(api.orchestrationState.listSteps, {
       serviceToken: SERVICE_TOKEN,
@@ -133,7 +134,7 @@ describe("Convex orchestration state", () => {
       workerId: "worker-1",
       leaseToken: firstLease,
       outputDigest: "digest-first",
-      now: now(),
+
     });
 
     expect(
@@ -153,7 +154,7 @@ describe("Convex orchestration state", () => {
       workerId: "worker-1",
       leaseToken: secondLease,
       outputDigest: "digest-second",
-      now: now(),
+
     });
 
     const run = await t.query(api.orchestrationState.getRun, {
@@ -168,7 +169,6 @@ describe("Convex orchestration state", () => {
   it("binds leases to the worker and requires reconciliation after expiry", async () => {
     const t = harness();
     await t.mutation(api.orchestrationState.beginRun, begin({ nodeIds: ["first"], maxRetries: 1 }));
-    const leaseStart = now();
     const grant = await t.mutation(api.orchestrationState.markStepRunning, {
       serviceToken: SERVICE_TOKEN,
       runId: "run-1",
@@ -176,7 +176,7 @@ describe("Convex orchestration state", () => {
       operationId: "createTask",
       workerId: "worker-1",
       leaseTtlMs: 1_000,
-      now: leaseStart,
+
     });
     await registerReconciliation(t, "lease-reconciliation");
 
@@ -190,7 +190,7 @@ describe("Convex orchestration state", () => {
         workerId: "worker-2",
         leaseToken: grant.leaseToken,
         outputDigest: "wrong-worker",
-        now: leaseStart + 100,
+
       }),
     ).rejects.toThrow(/not owned/);
 
@@ -202,9 +202,11 @@ describe("Convex orchestration state", () => {
         workerId: "worker-1",
         leaseToken: grant.leaseToken,
         outputDigest: "late-success",
-        now: leaseStart + 1_000,
+
       }),
     ).rejects.toThrow(/lease has expired/);
+
+    vi.advanceTimersByTime(1_000);
 
     const recovered = await t.mutation(api.orchestrationState.recoverExpiredStep, {
       serviceToken: SERVICE_TOKEN,
@@ -213,6 +215,7 @@ describe("Convex orchestration state", () => {
       recoveryOwner: "recovery-1",
       reconciliationId: "lease-reconciliation",
     });
+    vi.advanceTimersByTime(1);
     expect(recovered.status).toBe("indeterminate");
     expect(recovered.run.state).toBe("indeterminate");
     expect(recovered.step.state).toBe("indeterminate");
@@ -257,7 +260,7 @@ describe("Convex orchestration state", () => {
       leaseToken: lease,
       indeterminateReason: "Provider did not confirm whether the effect committed.",
       reconciliationId: "provider-reconciliation",
-      now: now(),
+
     });
 
     const run = await t.query(api.orchestrationState.getRun, {
@@ -287,7 +290,7 @@ describe("Convex orchestration state", () => {
       workerId: "worker-1",
       leaseToken: lease,
       failureCode: "audit_failure",
-      now: now(),
+
     });
     expect(failed.retryable).toBe(false);
     await expect(
