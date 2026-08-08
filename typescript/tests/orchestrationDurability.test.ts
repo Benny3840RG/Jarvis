@@ -224,7 +224,6 @@ describe("ConvexOrchestrationRunner", () => {
   });
 });
 
-
 describe("OrchestrationRunner durable failure boundary", () => {
   it("does not create a durable lease when the execution budget is exhausted before start", async () => {
     const events: string[] = [];
