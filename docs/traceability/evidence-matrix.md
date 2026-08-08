@@ -42,7 +42,7 @@
 
 ## Current-baseline reconciliation — 2026-08-08
 
-The historical 5fabfae1 and 981ee36b references above remain intentionally preserved as the exact revisions for the original ToolAction lifecycle and foundation verification. The current repository baseline is 41858c250c9f08735ab784a1a3877c84d345144d. The dependency refresh, bounded orchestration merge, and state-contract merge were verified at exact heads before this reconciliation. This matrix records evidence status, not a claim that live external commissioning has occurred.
+The historical 5fabfae1 and 981ee36b references above remain intentionally preserved as the exact revisions for the original ToolAction lifecycle and foundation verification. The current repository baseline is 41858c26fd3c0aad37e5fdadfce4e54a1b8477f5. The dependency refresh, bounded orchestration merge, and state-contract merge were verified at exact heads before this reconciliation. This matrix records evidence status, not a claim that live external commissioning has occurred.
 
 ## Approval lifecycle reconciliation — 2026-08-04
 
