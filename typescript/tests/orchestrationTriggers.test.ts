@@ -47,15 +47,22 @@ describe("OrchestrationTriggerRegistry", () => {
       /Unknown orchestration trigger kind/,
     );
 
-    const received = { ...trigger, payload: { intent: "create-task" } };
+    const received = {
+      ...trigger,
+      payload: { intent: "create-task", metadata: { operator: "benny" } },
+    };
     const frozenRegistry = new OrchestrationTriggerRegistry();
     frozenRegistry.register("operator.request", (value) => {
       assert.equal(Object.isFrozen(value), true);
       assert.equal(Object.isFrozen(value.payload), true);
+      assert.equal(Object.isFrozen(value.payload.metadata), true);
+      assert.notEqual(value.payload, received.payload);
       return new OrchestrationGraph();
     });
     await frozenRegistry.dispatch(received);
     received.payload.intent = "mutated";
+    received.payload.metadata.operator = "mutated";
     assert.equal(received.payload.intent, "mutated");
+    assert.equal(received.payload.metadata.operator, "mutated");
   });
 });
