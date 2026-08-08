@@ -51,9 +51,7 @@ describe("OrchestrationGraph", () => {
   it("rejects missing dependencies", () => {
     assert.throws(
       () =>
-        new OrchestrationGraph([
-          { id: "complete", command: completeTask, dependsOn: ["missing"] },
-        ]),
+        new OrchestrationGraph([{ id: "complete", command: completeTask, dependsOn: ["missing"] }]),
       /depends on unknown node missing/,
     );
   });
@@ -103,9 +101,7 @@ it("freezes validated graph nodes and clones command inputs", () => {
   assert.equal(Object.isFrozen(node.command), true);
   assert.equal(Object.isFrozen(node.command.input), true);
   assert.equal(
-    Object.isFrozen(
-      (node.command.input as unknown as { metadata: object }).metadata,
-    ),
+    Object.isFrozen((node.command.input as unknown as { metadata: object }).metadata),
     true,
   );
   assert.throws(() => {
@@ -116,10 +112,7 @@ it("freezes validated graph nodes and clones command inputs", () => {
 
 it("rejects non-finite orchestration node weights", () => {
   assert.throws(
-    () =>
-      new OrchestrationGraph([
-        { id: "invalid", command: createTask, weight: Number.NaN },
-      ]),
+    () => new OrchestrationGraph([{ id: "invalid", command: createTask, weight: Number.NaN }]),
     /invalid weight/,
   );
 });
