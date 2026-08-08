@@ -360,7 +360,8 @@ describe("orchestration composition authority", () => {
     ]);
 
     assert.notEqual(
-      orchestrationPlanFingerprint(changedGraph), orchestrationPlanFingerprint(graph),
+      orchestrationPlanFingerprint(changedGraph),
+      orchestrationPlanFingerprint(graph),
     );
   });
 
@@ -396,6 +397,9 @@ describe("orchestration composition authority", () => {
       },
     ]);
 
-    assert.equal(orchestrationPlanFingerprint(first), orchestrationPlanFingerprint(reordered));
+    assert.equal(
+      orchestrationPlanFingerprint(first),
+      orchestrationPlanFingerprint(reordered),
+    );
   });
 });
