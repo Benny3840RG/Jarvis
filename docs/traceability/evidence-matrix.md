@@ -19,8 +19,8 @@
 | R-073–R-076 | State diagrams and transition test results | State glossary and ToolAction state-transition tests | Partial | `5fabfae1` | Connector review |
 | R-077–R-081 | Retention policy and append-only history tests | ToolAction lifecycle audit-event hooks only | Partial | `5fabfae1` | Connector review |
 | R-082–R-090 | Safety policy and blocked-action evidence | ToolAction blocked execution tests for expired, revoked, unauthorized, and consumed approvals | Partial | `5fabfae1` | Connector review |
-| R-091–R-098C | End-to-end execution and reconciliation evidence | ToolAction execution boundary tests only; Outlook/quote runtime remains uncommissioned | Partial | `981ee36b` | Connector review |
-| R-099–R-104 | Failure injection and recovery reports | ReliabilityController redaction, circuit-open, cooldown, and recovery tests; truthful reconciliation health projection; HTTP persistence probe wiring | Partial | `1d338026149d1452d9c83b59c19ba3f5b89ef4d6` | Remote CI + requirements review |
+| R-091–R-098C | End-to-end execution and reconciliation evidence | ToolAction execution boundary tests plus maintained runner weighted ordering, immutable graph state, deep-frozen trigger validation, and bounded fail-closed execution tests; durable composition and Outlook/quote runtime remain uncommissioned | Partial | `92fee4c` | Remote CI + requirements review |
+| R-099–R-104 | Failure injection and recovery reports | ReliabilityController redaction, circuit-open, cooldown, and recovery tests; truthful reconciliation health projection; HTTP persistence probe wiring; maintained runner retryable budget-stop and immutable-state negative tests; durable restart/idempotent recovery remains open | Partial | `92fee4c` | Remote CI + requirements review |
 | R-105–R-111 | CI results and populated traceability links | Test and evidence matrices plus foundation/observability CI records | Partial | `981ee36b` | Requirements review + connector review |
 | R-112–R-116 | Release, rollback, backup and compatibility runs | Deployment/runbook controls and backup verification/restore tests; live drills remain open | Partial | `981ee36b` | Connector review |
 | R-117–R-121 | Setup, backup and incident runbook exercises | Development runbooks and guarded commissioning workflows; live operational drills remain open | Partial | `981ee36b` | Connector review |
@@ -43,6 +43,8 @@
 ## Current-baseline reconciliation — 2026-08-06
 
 The historical `5fabfae1` references above remain intentionally preserved as the exact revisions for the original ToolAction lifecycle verification. The current repository baseline is `1d338026149d1452d9c83b59c19ba3f5b89ef4d6`; later rows cite historical baselines where the current implementation and merged observability/foundation controls were inspected. This matrix records evidence status, not a claim that live external commissioning has occurred.
+
+The 2026-08-08 orchestration review evidence is intentionally partial: it proves in-process trigger validation, nested payload immutability, weighted dependency ordering, graph-state immutability, and retryable bounded stopping. It does not prove durable run recovery or production trigger activation.
 
 ## Approval lifecycle reconciliation — 2026-08-04
 
