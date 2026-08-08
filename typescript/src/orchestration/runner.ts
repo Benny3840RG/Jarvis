@@ -68,20 +68,66 @@ function decisionMessage(prefix: string, reasons: readonly string[]): string {
   return detail.length === 0 ? prefix : `${prefix}: ${detail}`;
 }
 
+export type OrchestrationRunnerOptions = {
+  /** Maximum number of nodes allowed to cross the execution boundary. */
+  maxSteps?: number;
+  /** Maximum wall-clock duration for one run. */
+  maxDurationMs?: number;
+  /** Injectable clock for deterministic deadline verification. */
+  clock?: () => number;
+};
+
+const DEFAULT_MAX_STEPS = 100;
+const DEFAULT_MAX_DURATION_MS = 60_000;
+
+function positiveSafeInteger(value: number): boolean {
+  return Number.isSafeInteger(value) && value > 0;
+}
+
 export class OrchestrationRunner {
+  private readonly maxSteps: number;
+  private readonly maxDurationMs: number;
+  private readonly clock: () => number;
+
   constructor(
     private readonly executor: OrchestrationExecutor,
     private readonly safety: OrchestrationSafetyGate,
     private readonly outcomes: OrchestrationOutcomeRecorder,
-  ) {}
+    options: OrchestrationRunnerOptions = {},
+  ) {
+    this.maxSteps = options.maxSteps ?? DEFAULT_MAX_STEPS;
+    this.maxDurationMs = options.maxDurationMs ?? DEFAULT_MAX_DURATION_MS;
+    this.clock = options.clock ?? Date.now;
+    if (!positiveSafeInteger(this.maxSteps)) {
+      throw new Error("Orchestration maxSteps must be a positive safe integer.");
+    }
+    if (!positiveSafeInteger(this.maxDurationMs)) {
+      throw new Error("Orchestration maxDurationMs must be a positive safe integer.");
+    }
+  }
 
   async run(
     graph: OrchestrationGraph,
     context: OrchestrationContext,
   ): Promise<OrchestrationRunResult> {
     const completedSteps: CompletedStep[] = [];
+    const startedAt = this.clock();
+    const nodes = graph.orderedNodes();
 
-    for (const node of graph.orderedNodes()) {
+    for (let index = 0; index < nodes.length; index += 1) {
+      const node = nodes[index];
+      if (index >= this.maxSteps || this.clock() - startedAt >= this.maxDurationMs) {
+        return this.stop(
+          context,
+          node,
+          completedSteps,
+          failure(
+            "execution_budget_exceeded",
+            "Orchestration execution budget exhausted.",
+            true,
+          ),
+        );
+      }
       const capability = capabilityFor(node);
       if (!capability) {
         return this.stop(
