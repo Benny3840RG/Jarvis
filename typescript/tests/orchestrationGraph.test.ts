@@ -1,4 +1,3 @@
-npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm.
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
