@@ -9,10 +9,7 @@ import type {
 } from "../src/orchestration/contracts.js";
 import { OrchestrationGraph } from "../src/orchestration/graph.js";
 import { ConvexOrchestrationStateBoundary } from "../src/orchestration/convexStateBoundary.js";
-import {
-  createConvexOrchestrationRunner,
-  ConvexOrchestrationRunner,
-} from "../src/orchestration/convexRunner.js";
+import { ConvexOrchestrationRunner } from "../src/orchestration/convexRunner.js";
 import type { OrchestrationSafetyGate, SafetyDecision } from "../src/orchestration/runner.js";
 
 const context: OrchestrationContext = {
@@ -147,7 +144,7 @@ describe("ConvexOrchestrationRunner", () => {
       workerId: "worker-1",
       leaseTtlMs: 10_000,
     });
-    const runner = createConvexOrchestrationRunner(
+    const coordinator = new ConvexOrchestrationRunner(
       boundary,
       {
         execute: async () => {
@@ -158,7 +155,6 @@ describe("ConvexOrchestrationRunner", () => {
       gate(),
       { record: async (_outcome: OrchestrationOutcome) => undefined },
     );
-    const coordinator = new ConvexOrchestrationRunner(boundary, runner);
 
     const result = await coordinator.run(graph, context, {
       requestFingerprint: "request-fp",
@@ -194,7 +190,7 @@ describe("ConvexOrchestrationRunner", () => {
       workerId: "worker-1",
       leaseTtlMs: 10_000,
     });
-    const runner = createConvexOrchestrationRunner(
+    const coordinator = new ConvexOrchestrationRunner(
       boundary,
       {
         execute: async () => {
@@ -209,7 +205,6 @@ describe("ConvexOrchestrationRunner", () => {
         },
       },
     );
-    const coordinator = new ConvexOrchestrationRunner(boundary, runner);
 
     const result = await coordinator.run(graph, context, {
       requestFingerprint: "request-fp",
