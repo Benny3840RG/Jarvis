@@ -10,7 +10,12 @@ import type {
 import { OrchestrationGraph } from "../src/orchestration/graph.js";
 import { ConvexOrchestrationStateBoundary } from "../src/orchestration/convexStateBoundary.js";
 import { ConvexOrchestrationRunner } from "../src/orchestration/convexRunner.js";
-import type { OrchestrationSafetyGate, SafetyDecision } from "../src/orchestration/runner.js";
+import {
+  OrchestrationRunner,
+  type OrchestrationSafetyGate,
+  type SafetyDecision,
+} from "../src/orchestration/runner.js";
+import type { OrchestrationStepStateBoundary } from "../src/orchestration/stateBoundary.js";
 
 const context: OrchestrationContext = {
   runId: "run-1",
@@ -216,5 +221,129 @@ describe("ConvexOrchestrationRunner", () => {
 
     assert.equal(result.status, "created");
     assert.deepEqual(events, ["begin", "start", "execute", "audit", "succeed"]);
+  });
+});
+
+describe("OrchestrationRunner durable failure boundary", () => {
+  it("does not create a durable lease when the execution budget is exhausted before start", async () => {
+    const events: string[] = [];
+    const stepState: OrchestrationStepStateBoundary = {
+      start: async () => {
+        events.push("start");
+        return { leaseToken: "unexpected-lease" };
+      },
+      succeed: async () => {
+        events.push("succeed");
+      },
+      fail: async () => {
+        events.push("fail");
+      },
+    };
+    let now = 100;
+    const runner = new OrchestrationRunner(
+      {
+        execute: async () => {
+          events.push("execute");
+          return success;
+        },
+      },
+      gate(),
+      {
+        record: async () => {
+          events.push("audit");
+        },
+      },
+      {
+        stepState,
+        maxDurationMs: 1,
+        clock: () => now++,
+      },
+    );
+
+    const result = await runner.run(graph, context);
+
+    assert.equal(result.ok, false);
+    assert.deepEqual(events, ["audit"]);
+  });
+
+  it("records a leased preflight failure before marking the durable step failed", async () => {
+    const events: string[] = [];
+    const stepState: OrchestrationStepStateBoundary = {
+      start: async () => {
+        events.push("start");
+        return { leaseToken: "lease-1" };
+      },
+      succeed: async () => {
+        events.push("succeed");
+      },
+      fail: async ({ leaseToken }) => {
+        events.push(`fail:${leaseToken}`);
+      },
+    };
+    const blockedGate: OrchestrationSafetyGate = {
+      preflight: async () => ({ status: "blocked", reasons: ["policy denied"] }),
+      postflight: async () => okDecision,
+    };
+    const runner = new OrchestrationRunner(
+      {
+        execute: async () => {
+          events.push("execute");
+          return success;
+        },
+      },
+      blockedGate,
+      {
+        record: async () => {
+          events.push("audit");
+        },
+      },
+      { stepState },
+    );
+
+    const result = await runner.run(graph, context);
+
+    assert.equal(result.ok, false);
+    assert.deepEqual(events, ["start", "audit", "fail:lease-1"]);
+  });
+
+  it("records an executor failure before marking the durable step failed", async () => {
+    const events: string[] = [];
+    const stepState: OrchestrationStepStateBoundary = {
+      start: async () => {
+        events.push("start");
+        return { leaseToken: "lease-1" };
+      },
+      succeed: async () => {
+        events.push("succeed");
+      },
+      fail: async ({ leaseToken }) => {
+        events.push(`fail:${leaseToken}`);
+      },
+    };
+    const runner = new OrchestrationRunner(
+      {
+        execute: async () => {
+          events.push("execute");
+          return {
+            ok: false,
+            code: "dependency_failure",
+            message: "provider unavailable",
+            retryable: true,
+          };
+        },
+      },
+      gate(),
+      {
+        record: async () => {
+          events.push("audit");
+        },
+      },
+      { stepState },
+    );
+
+    const result = await runner.run(graph, context);
+
+    assert.equal(result.ok, false);
+    assert.deepEqual(events, ["start", "execute", "audit", "fail:lease-1"]);
   });
 });
