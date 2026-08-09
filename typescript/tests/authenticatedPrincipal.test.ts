@@ -58,7 +58,9 @@ describe("authenticated HTTP principal context", () => {
 
     assert.equal(await guard.canActivate(requestContext(request)), true);
 
-    const principal = getAuthenticatedPrincipal(request) as AuthenticatedPrincipal;
+    const principal = getAuthenticatedPrincipal(
+      request,
+    ) as AuthenticatedPrincipal;
     assert.deepEqual(principal, {
       kind: "oidc",
       subject: "owner-subject",
