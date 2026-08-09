@@ -8,7 +8,11 @@ import type {
   OrchestrationOutcome,
 } from "../src/orchestration/contracts.js";
 import { OrchestrationGraph } from "../src/orchestration/graph.js";
-import { ConvexOrchestrationStateBoundary } from "../src/orchestration/convexStateBoundary.js";
+import {
+  ConvexOrchestrationStateBoundary,
+  createConvexOrchestrationStateBoundaryForAuthenticatedRequest,
+} from "../src/orchestration/convexStateBoundary.js";
+import { setAuthenticatedPrincipal } from "../src/http/authenticatedPrincipal.js";
 import { ConvexOrchestrationRunner } from "../src/orchestration/convexRunner.js";
 import {
   OrchestrationRunner,
@@ -405,4 +409,41 @@ describe("orchestration composition authority", () => {
 
     assert.equal(orchestrationPlanFingerprint(first), orchestrationPlanFingerprint(reordered));
   });
+
+  it("derives the durable worker identity from the verified request principal", async () => {
+    const request = {};
+    setAuthenticatedPrincipal(request, {
+      kind: "oidc",
+      subject: "operator-subject",
+      issuer: "https://issuer.example.com/",
+      audience: "jarvis-api",
+    });
+
+    const calls: Array<Record<string, unknown>> = [];
+    const boundary = createConvexOrchestrationStateBoundaryForAuthenticatedRequest(request, {
+      client: fakeClient((args) => {
+        calls.push(args);
+        return { leaseToken: "lease-1" };
+      }),
+      serviceToken: "service-token",
+      leaseTtlMs: 10_000,
+    });
+
+    await boundary.start({ context, node: graph.orderedNodes()[0] });
+
+    assert.equal(calls[0]?.workerId, "oidc:https://issuer.example.com/:operator-subject");
+  });
+
+  it("rejects composition without a verified request principal", () => {
+    assert.throws(
+      () =>
+        createConvexOrchestrationStateBoundaryForAuthenticatedRequest({}, {
+          client: fakeClient(() => ({ leaseToken: "lease-1" })),
+          serviceToken: "service-token",
+          leaseTtlMs: 10_000,
+        }),
+      /verified authenticated principal is required/,
+    );
+  });
+
 });
