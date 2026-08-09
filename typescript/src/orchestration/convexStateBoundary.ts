@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import { ConvexHttpClient } from "convex/browser";
 
 import { api } from "../../convex/_generated/api.js";
@@ -147,6 +149,12 @@ export class ConvexOrchestrationStateBoundary implements OrchestrationStepStateB
   }
 }
 
+function authenticatedWorkerId(principal: { issuer: string; audience: string; subject: string }): string {
+  return `oidc:${createHash("sha256")
+    .update(`${principal.issuer}\\0${principal.audience}\\0${principal.subject}`, "utf8")
+    .digest("hex")}`;
+}
+
 export type AuthenticatedConvexOrchestrationStateBoundaryOptions = Omit<
   ConvexOrchestrationStateBoundaryOptions,
   "workerId"
@@ -170,6 +178,6 @@ export function createConvexOrchestrationStateBoundaryForAuthenticatedRequest(
 
   return new ConvexOrchestrationStateBoundary({
     ...options,
-    workerId: `oidc:${principal.issuer}:${principal.subject}`,
+    workerId: authenticatedWorkerId(principal),
   });
 }
