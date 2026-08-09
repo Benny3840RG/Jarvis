@@ -413,7 +413,6 @@ describe("orchestration composition authority", () => {
   it("derives the durable worker identity from the verified request principal", async () => {
     const request = {};
     setAuthenticatedPrincipal(request, {
-      kind: "oidc",
       subject: "operator-subject",
       issuer: "https://issuer.example.com/",
       audience: "jarvis-api",
