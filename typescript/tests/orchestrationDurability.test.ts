@@ -432,7 +432,7 @@ describe("orchestration composition authority", () => {
     await boundary.start({ context, node: graph.orderedNodes()[0] });
 
     const expectedWorkerId = `oidc:${createHash("sha256")
-      .update("https://issuer.example.com/\\0jarvis-api\\0operator-subject", "utf8")
+      .update("https://issuer.example.com/\0jarvis-api\0operator-subject", "utf8")
       .digest("hex")}`;
     assert.equal(calls[0]?.workerId, expectedWorkerId);
     assert.match(String(calls[0]?.workerId), /^oidc:[a-f0-9]{64}$/);
