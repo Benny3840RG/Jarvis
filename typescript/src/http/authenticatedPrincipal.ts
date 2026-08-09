@@ -9,7 +9,10 @@ export type AuthenticatedPrincipal = Readonly<{
 
 const principals = new WeakMap<object, AuthenticatedPrincipal>();
 
-export function setAuthenticatedPrincipal(request: object, identity: OidcIdentity): void {
+export function setAuthenticatedPrincipal(
+  request: object,
+  identity: OidcIdentity,
+): void {
   if (principals.has(request)) {
     throw new Error("Authenticated request principal is already set.");
   }
