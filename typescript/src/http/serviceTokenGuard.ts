@@ -7,6 +7,7 @@ import type { FastifyRequest } from "fastify";
 
 import type { HttpAppConfig } from "./config.js";
 import type { OidcIdentity, OidcVerifier } from "./oidcVerifier.js";
+import { setAuthenticatedPrincipal } from "./authenticatedPrincipal.js";
 import { JarvisProblem } from "./problemDetails.js";
 import { PUBLIC_ROUTE } from "./publicRoute.js";
 import { HTTP_APP_CONFIG, HTTP_OIDC_VERIFIER } from "./tokens.js";
@@ -82,6 +83,7 @@ export class ServiceTokenGuard implements CanActivate {
         this.logger.warn(`Rejected an authenticated OIDC subject from ${request.ip}.`);
         forbidden("The authenticated OIDC subject is not authorised for this Jarvis owner.");
       }
+      setAuthenticatedPrincipal(request, identity);
       return true;
     }
 
