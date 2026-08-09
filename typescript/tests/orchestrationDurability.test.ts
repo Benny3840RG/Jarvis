@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
@@ -8,7 +9,11 @@ import type {
   OrchestrationOutcome,
 } from "../src/orchestration/contracts.js";
 import { OrchestrationGraph } from "../src/orchestration/graph.js";
-import { ConvexOrchestrationStateBoundary } from "../src/orchestration/convexStateBoundary.js";
+import {
+  ConvexOrchestrationStateBoundary,
+  createConvexOrchestrationStateBoundaryForAuthenticatedRequest,
+} from "../src/orchestration/convexStateBoundary.js";
+import { setAuthenticatedPrincipal } from "../src/http/authenticatedPrincipal.js";
 import { ConvexOrchestrationRunner } from "../src/orchestration/convexRunner.js";
 import {
   OrchestrationRunner,
@@ -404,5 +409,47 @@ describe("orchestration composition authority", () => {
     ]);
 
     assert.equal(orchestrationPlanFingerprint(first), orchestrationPlanFingerprint(reordered));
+  });
+
+  it("derives the durable worker identity from the verified request principal", async () => {
+    const request = {};
+    setAuthenticatedPrincipal(request, {
+      subject: "operator-subject",
+      issuer: "https://issuer.example.com/",
+      audience: "jarvis-api",
+    });
+
+    const calls: Array<Record<string, unknown>> = [];
+    const boundary = createConvexOrchestrationStateBoundaryForAuthenticatedRequest(request, {
+      client: fakeClient((args) => {
+        calls.push(args);
+        return { leaseToken: "lease-1" };
+      }),
+      serviceToken: "service-token",
+      leaseTtlMs: 10_000,
+    });
+
+    await boundary.start({ context, node: graph.orderedNodes()[0] });
+
+    const expectedWorkerId = `oidc:${createHash("sha256")
+      .update("https://issuer.example.com/\0jarvis-api\0operator-subject", "utf8")
+      .digest("hex")}`;
+    assert.equal(calls[0]?.workerId, expectedWorkerId);
+    assert.match(String(calls[0]?.workerId), /^oidc:[a-f0-9]{64}$/);
+  });
+
+  it("rejects composition without a verified request principal", () => {
+    assert.throws(
+      () =>
+        createConvexOrchestrationStateBoundaryForAuthenticatedRequest(
+          {},
+          {
+            client: fakeClient(() => ({ leaseToken: "lease-1" })),
+            serviceToken: "service-token",
+            leaseTtlMs: 10_000,
+          },
+        ),
+      /verified authenticated principal is required/,
+    );
   });
 });

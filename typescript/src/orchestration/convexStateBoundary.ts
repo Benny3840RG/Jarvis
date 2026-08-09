@@ -1,8 +1,11 @@
+import { createHash } from "node:crypto";
+
 import { ConvexHttpClient } from "convex/browser";
 
 import { api } from "../../convex/_generated/api.js";
 import type { ConvexClientLike } from "../persistence/convexPersistence.js";
 import type { DomainFailure, DomainSuccess, OrchestrationContext } from "./contracts.js";
+import { getAuthenticatedPrincipal } from "../http/authenticatedPrincipal.js";
 import type { OrchestrationGraph } from "./graph.js";
 import type { OrchestrationNode } from "./graph.js";
 import type { OrchestrationStepLease, OrchestrationStepStateBoundary } from "./stateBoundary.js";
@@ -144,4 +147,41 @@ export class ConvexOrchestrationStateBoundary implements OrchestrationStepStateB
       failureCode: input.failure.code,
     });
   }
+}
+
+function authenticatedWorkerId(principal: {
+  issuer: string;
+  audience: string;
+  subject: string;
+}): string {
+  return `oidc:${createHash("sha256")
+    .update(`${principal.issuer}\0${principal.audience}\0${principal.subject}`, "utf8")
+    .digest("hex")}`;
+}
+
+export type AuthenticatedConvexOrchestrationStateBoundaryOptions = Omit<
+  ConvexOrchestrationStateBoundaryOptions,
+  "workerId"
+>;
+
+/**
+ * Creates the durable orchestration boundary for an authenticated request.
+ *
+ * The worker identity is derived from the guard-verified OIDC principal. The
+ * caller cannot provide or override the worker ID through this composition
+ * path.
+ */
+export function createConvexOrchestrationStateBoundaryForAuthenticatedRequest(
+  request: object,
+  options: AuthenticatedConvexOrchestrationStateBoundaryOptions,
+): ConvexOrchestrationStateBoundary {
+  const principal = getAuthenticatedPrincipal(request);
+  if (principal === undefined) {
+    throw new Error("A verified authenticated principal is required.");
+  }
+
+  return new ConvexOrchestrationStateBoundary({
+    ...options,
+    workerId: authenticatedWorkerId(principal),
+  });
 }
