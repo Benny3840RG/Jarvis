@@ -436,11 +436,14 @@ describe("orchestration composition authority", () => {
   it("rejects composition without a verified request principal", () => {
     assert.throws(
       () =>
-        createConvexOrchestrationStateBoundaryForAuthenticatedRequest({}, {
-          client: fakeClient(() => ({ leaseToken: "lease-1" })),
-          serviceToken: "service-token",
-          leaseTtlMs: 10_000,
-        }),
+        createConvexOrchestrationStateBoundaryForAuthenticatedRequest(
+          {},
+          {
+            client: fakeClient(() => ({ leaseToken: "lease-1" })),
+            serviceToken: "service-token",
+            leaseTtlMs: 10_000,
+          },
+        ),
       /verified authenticated principal is required/,
     );
   });
