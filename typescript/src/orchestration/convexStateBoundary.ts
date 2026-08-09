@@ -145,6 +145,7 @@ export class ConvexOrchestrationStateBoundary implements OrchestrationStepStateB
       failureCode: input.failure.code,
     });
   }
+}
 
 export type AuthenticatedConvexOrchestrationStateBoundaryOptions = Omit<
   ConvexOrchestrationStateBoundaryOptions,
@@ -171,6 +172,4 @@ export function createConvexOrchestrationStateBoundaryForAuthenticatedRequest(
     ...options,
     workerId: `oidc:${principal.issuer}:${principal.subject}`,
   });
-}
-
 }
