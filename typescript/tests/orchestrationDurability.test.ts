@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
@@ -430,7 +431,11 @@ describe("orchestration composition authority", () => {
 
     await boundary.start({ context, node: graph.orderedNodes()[0] });
 
-    assert.equal(calls[0]?.workerId, "oidc:https://issuer.example.com/:operator-subject");
+    const expectedWorkerId = `oidc:${createHash("sha256")
+      .update("https://issuer.example.com/\\0jarvis-api\\0operator-subject", "utf8")
+      .digest("hex")}`;
+    assert.equal(calls[0]?.workerId, expectedWorkerId);
+    assert.match(String(calls[0]?.workerId), /^oidc:[a-f0-9]{64}$/);
   });
 
   it("rejects composition without a verified request principal", () => {
