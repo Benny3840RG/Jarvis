@@ -62,7 +62,7 @@ describe("authenticated HTTP principal context", () => {
       audience: "jarvis-api",
     });
     assert.equal(Object.isFrozen(principal), true);
-    assert.throws(() => Reflect.set(principal as object, "subject", "attacker"), TypeError);
+    assert.equal(Reflect.set(principal as object, "subject", "attacker"), false);
     assert.equal(getAuthenticatedPrincipal(request)?.subject, "owner-subject");
   });
 
