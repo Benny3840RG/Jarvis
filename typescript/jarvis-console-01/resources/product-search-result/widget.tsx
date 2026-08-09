@@ -1,12 +1,7 @@
 import { AppsSDKUIProvider } from "@openai/apps-sdk-ui/components/AppsSDKUIProvider";
 import { Button } from "@openai/apps-sdk-ui/components/Button";
 import { Expand, PictureInPicture } from "@openai/apps-sdk-ui/components/Icon";
-import {
-  McpUseProvider,
-  useCallTool,
-  useWidget,
-  type WidgetMetadata,
-} from "mcp-use/react";
+import { McpUseProvider, useCallTool, useWidget, type WidgetMetadata } from "mcp-use/react";
 import React, { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router";
 import "../styles.css";
@@ -32,8 +27,7 @@ export const widgetMetadata: WidgetMetadata = {
   },
 };
 
-const statusClass = (state: "good" | "guarded" | "pending") =>
-  `status-chip status-${state}`;
+const statusClass = (state: "good" | "guarded" | "pending") => `status-chip status-${state}`;
 
 function formatDue(reminder: JarvisReminder) {
   if (reminder.dueAt) return new Date(reminder.dueAt).toLocaleString("en-AU");
@@ -56,39 +50,23 @@ function formatGovernedActionStatus(action: JarvisGovernedAction) {
 }
 
 const JarvisConsole: React.FC = () => {
-  const {
-    props,
-    isPending,
-    displayMode,
-    requestDisplayMode,
-    sendFollowUpMessage,
-  } = useWidget<JarvisConsoleProps>();
-  const { callTool: refreshConsole, isPending: refreshing } = useCallTool(
-    "show-jarvis-console",
-  );
-  const { callTool: createTask, isPending: creatingTask } = useCallTool(
-    "create-jarvis-task",
-  );
-  const { callTool: completeTask, isPending: completingTask } = useCallTool(
-    "complete-jarvis-task",
-  );
-  const { callTool: createReminder, isPending: creatingReminder } = useCallTool(
-    "create-jarvis-reminder",
-  );
-  const { callTool: removeReminder, isPending: removingReminder } = useCallTool(
-    "remove-jarvis-reminder",
-  );
-  const { callTool: createNote, isPending: creatingNote } = useCallTool(
-    "create-jarvis-note",
-  );
-  const { callTool: removeNote, isPending: removingNote } = useCallTool(
-    "remove-jarvis-note",
-  );
+  const { props, isPending, displayMode, requestDisplayMode, sendFollowUpMessage } =
+    useWidget<JarvisConsoleProps>();
+  const { callTool: refreshConsole, isPending: refreshing } = useCallTool("show-jarvis-console");
+  const { callTool: createTask, isPending: creatingTask } = useCallTool("create-jarvis-task");
+  const { callTool: completeTask, isPending: completingTask } = useCallTool("complete-jarvis-task");
+  const { callTool: createReminder, isPending: creatingReminder } =
+    useCallTool("create-jarvis-reminder");
+  const { callTool: removeReminder, isPending: removingReminder } =
+    useCallTool("remove-jarvis-reminder");
+  const { callTool: createNote, isPending: creatingNote } = useCallTool("create-jarvis-note");
+  const { callTool: removeNote, isPending: removingNote } = useCallTool("remove-jarvis-note");
 
   const [snapshot, setSnapshot] = useState<JarvisConsoleProps | null>(null);
   const [taskTitle, setTaskTitle] = useState("");
-  const [taskCategory, setTaskCategory] =
-    useState<"personal" | "work" | "builds" | "money" | "life">("work");
+  const [taskCategory, setTaskCategory] = useState<
+    "personal" | "work" | "builds" | "money" | "life"
+  >("work");
   const [reminderTitle, setReminderTitle] = useState("");
   const [reminderDue, setReminderDue] = useState("");
   const [noteTitle, setNoteTitle] = useState("");
@@ -134,6 +112,12 @@ const JarvisConsole: React.FC = () => {
 
   const isExpanded = displayMode === "fullscreen" || displayMode === "pip";
   const currentTask = activeTasks[0];
+  // The partial-page marker is intentionally repeated in telemetry and workflow views:
+  // formatPartialCount(snapshot.counts.reminders, snapshot.counts.remindersPartial)
+  const reminderCountLabel = formatPartialCount(
+    snapshot.counts.reminders,
+    snapshot.counts.remindersPartial,
+  );
   const busy = [
     refreshing,
     creatingTask,
@@ -209,24 +193,23 @@ const JarvisConsole: React.FC = () => {
         "— it has no deploy, infrastructure, or Convex-schema tool of any kind, so treat this as a " +
         "request for analysis and a proposed plan, not an instruction to execute anything outside that set.",
     );
-    setFeedback("Note sent to Jarvis for analysis — it cannot execute anything beyond this console's own typed tools.");
+    setFeedback(
+      "Note sent to Jarvis for analysis — it cannot execute anything beyond this console's own typed tools.",
+    );
     setCommand("");
   };
 
   return (
     <McpUseProvider>
       <AppsSDKUIProvider linkComponent={Link}>
-        <main className="jarvis-shell phase23-shell">
+        <main className="jarvis-shell phase23-shell totality-shell">
           <header className="console-header">
             <div className="brand-lockup">
-              <div className="mascot-mark" aria-hidden="true">
-                <span className="mascot-eye left" />
-                <span className="mascot-eye right" />
-                <span className="mascot-mouth" />
-              </div>
+              <img className="brand-logo" src="/beez-treez-logo.png" alt="The Beez Treez" />
               <div>
-                <p className="eyebrow">{snapshot.phase}</p>
-                <h1>{snapshot.title}</h1>
+                <p className="eyebrow">GOVERNED PROPERTY OPERATIONS</p>
+                <h1>JARVIS TOTALITY</h1>
+                <span className="console-subtitle">{snapshot.phase}</span>
               </div>
             </div>
             <div className="header-actions">
@@ -238,43 +221,141 @@ const JarvisConsole: React.FC = () => {
               </span>
               {!isExpanded ? (
                 <>
-                  <Button color="secondary" pill size="md" uniform variant="outline" onClick={() => requestDisplayMode("pip")} title="Picture in picture">
+                  <Button
+                    color="secondary"
+                    pill
+                    size="md"
+                    uniform
+                    variant="outline"
+                    onClick={() => requestDisplayMode("pip")}
+                    title="Picture in picture"
+                  >
                     <PictureInPicture />
                   </Button>
-                  <Button color="secondary" pill size="md" uniform variant="outline" onClick={() => requestDisplayMode("fullscreen")} title="Fullscreen">
+                  <Button
+                    color="secondary"
+                    pill
+                    size="md"
+                    uniform
+                    variant="outline"
+                    onClick={() => requestDisplayMode("fullscreen")}
+                    title="Fullscreen"
+                  >
                     <Expand />
                   </Button>
                 </>
               ) : (
-                <Button color="secondary" pill size="md" variant="outline" onClick={() => requestDisplayMode("inline")}>
+                <Button
+                  color="secondary"
+                  pill
+                  size="md"
+                  variant="outline"
+                  onClick={() => requestDisplayMode("inline")}
+                >
                   EXIT
                 </Button>
               )}
             </div>
           </header>
 
-          <section className="telemetry-strip phase23-telemetry">
-            <div><span>DEPLOYMENT</span><strong>{snapshot.deployment}</strong></div>
-            <div><span>ACTIVE TASKS</span><strong>{formatPartialCount(snapshot.counts.active, snapshot.counts.tasksPartial)}</strong></div>
-            <div><span>REMINDERS</span><strong>{formatPartialCount(snapshot.counts.reminders, snapshot.counts.remindersPartial)}</strong></div>
-            <div><span>NOTES</span><strong>{formatPartialCount(snapshot.counts.notes, snapshot.counts.notesPartial)}</strong></div>
-            <div><span>LAST SYNC</span><strong>{new Date(snapshot.lastUpdated).toLocaleTimeString("en-AU")}</strong></div>
+          <section className="telemetry-strip phase23-telemetry totality-status-strip">
+            <div>
+              <span>CONVEX</span>
+              <strong>
+                {snapshot.systems.find((system) => system.label === "Convex")?.value ?? "UNKNOWN"}
+              </strong>
+            </div>
+            <div>
+              <span>ACTIVE TASKS</span>
+              <strong>
+                {formatPartialCount(snapshot.counts.active, snapshot.counts.tasksPartial)}
+              </strong>
+            </div>
+            <div>
+              <span>REMINDERS</span>
+              <strong>
+                {formatPartialCount(snapshot.counts.reminders, snapshot.counts.remindersPartial)}
+              </strong>
+            </div>
+            <div>
+              <span>DURABLE STATE</span>
+              <strong>
+                {formatPartialCount(
+                  snapshot.counts.active + snapshot.counts.reminders + snapshot.counts.notes,
+                  snapshot.counts.tasksPartial ||
+                    snapshot.counts.remindersPartial ||
+                    snapshot.counts.notesPartial,
+                )}
+              </strong>
+            </div>
+            <div>
+              <span>POLICY</span>
+              <strong>{snapshot.governedActions.length ? "GOVERNED" : "READY"}</strong>
+            </div>
+            <div>
+              <span>LAST SYNC</span>
+              <strong>{new Date(snapshot.lastUpdated).toLocaleTimeString("en-AU")}</strong>
+            </div>
           </section>
 
           <section className="console-grid phase23-grid">
             <aside className="left-rail">
-              <div className="hud-panel system-core-panel">
-                <div className="panel-title">SYSTEM CORE</div>
-                <div className="mini-reactor">
-                  <div className="mini-ring ring-a" />
-                  <div className="mini-ring ring-b" />
-                  <div className="mini-core">J</div>
+              <div className="hud-panel workflow-panel">
+                <div className="panel-title">TASKS / WORKFLOW STATE</div>
+                <div className="workflow-row">
+                  <span>ACTIVE TASKS</span>
+                  <strong>
+                    {formatPartialCount(snapshot.counts.active, snapshot.counts.tasksPartial)}
+                  </strong>
+                  <i
+                    style={
+                      {
+                        "--fill": `${Math.min(snapshot.counts.active * 12, 100)}%`,
+                      } as React.CSSProperties
+                    }
+                  />
                 </div>
-                <div className="core-stats">
-                  <div><span>ACTIVE</span><strong>{formatPartialCount(snapshot.counts.active, snapshot.counts.tasksPartial)}</strong></div>
-                  <div><span>CLEARED</span><strong>{formatPartialCount(snapshot.counts.completed, snapshot.counts.tasksPartial)}</strong></div>
-                  <div><span>ALERTS</span><strong>{formatPartialCount(snapshot.counts.reminders, snapshot.counts.remindersPartial)}</strong></div>
+                <div className="workflow-row">
+                  <span>COMPLETED</span>
+                  <strong>
+                    {formatPartialCount(snapshot.counts.completed, snapshot.counts.tasksPartial)}
+                  </strong>
+                  <i style={{ "--fill": `${snapshot.progress}%` } as React.CSSProperties} />
                 </div>
+                <div className="workflow-row">
+                  <span>REMINDERS</span>
+                  <strong>{reminderCountLabel}</strong>
+                  <i
+                    style={
+                      {
+                        "--fill": `${Math.min(snapshot.counts.reminders * 12, 100)}%`,
+                      } as React.CSSProperties
+                    }
+                  />
+                </div>
+                <div className="workflow-row">
+                  <span>NOTES LOGGED</span>
+                  <strong>
+                    {formatPartialCount(snapshot.counts.notes, snapshot.counts.notesPartial)}
+                  </strong>
+                  <i
+                    style={
+                      {
+                        "--fill": `${Math.min(snapshot.counts.notes * 12, 100)}%`,
+                      } as React.CSSProperties
+                    }
+                  />
+                </div>
+              </div>
+
+              <div className="hud-panel evidence-panel">
+                <div className="panel-title">EVIDENCE / HEALTH</div>
+                {snapshot.systems.slice(0, 4).map((system) => (
+                  <div className="evidence-row" key={system.label}>
+                    <span>{system.label}</span>
+                    <strong className={`evidence-${system.state}`}>{system.value}</strong>
+                  </div>
+                ))}
               </div>
 
               <div className="hud-panel task-stack live-task-stack">
@@ -285,8 +366,13 @@ const JarvisConsole: React.FC = () => {
                   activeTasks.slice(0, 6).map((task, index) => (
                     <div className="task-row task-active interactive-row" key={task.id}>
                       <span className="task-index">{String(index + 1).padStart(2, "0")}</span>
-                      <div className="row-copy"><strong>{task.title}</strong><small>{task.category.toUpperCase()}</small></div>
-                      <button type="button" disabled={busy} onClick={() => clearTask(task)}>CLEAR</button>
+                      <div className="row-copy">
+                        <strong>{task.title}</strong>
+                        <small>{task.category.toUpperCase()}</small>
+                      </div>
+                      <button type="button" disabled={busy} onClick={() => clearTask(task)}>
+                        CLEAR
+                      </button>
                     </div>
                   ))
                 )}
@@ -294,6 +380,42 @@ const JarvisConsole: React.FC = () => {
             </aside>
 
             <section className="centre-stage phase23-centre">
+              <div className="status-deck" aria-label="Jarvis system status">
+                {[
+                  [
+                    "CORE",
+                    snapshot.status === "operational" ? "ONLINE" : "DEGRADED",
+                    snapshot.status === "operational" ? "good" : "guarded",
+                  ],
+                  [
+                    "DURABLE STATE",
+                    snapshot.systems.some(
+                      (system) => system.label === "Convex" && system.state === "good",
+                    )
+                      ? "AUTHENTICATED"
+                      : "PENDING",
+                    snapshot.systems.some(
+                      (system) => system.label === "Convex" && system.state === "good",
+                    )
+                      ? "good"
+                      : "pending",
+                  ],
+                  [
+                    "POLICY",
+                    snapshot.governedActions.some((action) => action.destructive)
+                      ? "GUARDED"
+                      : "READY",
+                    snapshot.governedActions.some((action) => action.destructive)
+                      ? "guarded"
+                      : "good",
+                  ],
+                ].map(([label, value, state]) => (
+                  <div className={`status-ring status-ring-${state}`} key={label}>
+                    <span>{label}</span>
+                    <strong>{value}</strong>
+                  </div>
+                ))}
+              </div>
               <div className="mission-copy">
                 <p className="eyebrow">PRIMARY MISSION</p>
                 <h2>{currentTask?.title || snapshot.mission}</h2>
@@ -308,7 +430,10 @@ const JarvisConsole: React.FC = () => {
                 <div className="reactor-ring outer" />
                 <div className="reactor-ring middle" />
                 <div className="reactor-ring inner" />
-                <div className="reactor-progress" style={{ "--progress": `${snapshot.progress}%` } as React.CSSProperties} />
+                <div
+                  className="reactor-progress"
+                  style={{ "--progress": `${snapshot.progress}%` } as React.CSSProperties}
+                />
                 <div className="reactor-mascot" aria-hidden="true">
                   <span className="mascot-eye left" />
                   <span className="mascot-eye right" />
@@ -323,7 +448,12 @@ const JarvisConsole: React.FC = () => {
               <form className="operator-command" onSubmit={submitCommand}>
                 <label htmlFor="operator-command-input">OPERATOR COMMAND</label>
                 <div>
-                  <input id="operator-command-input" value={command} onChange={(event) => setCommand(event.target.value)} placeholder="Ask Jarvis to inspect, plan or propose the next safe action" />
+                  <input
+                    id="operator-command-input"
+                    value={command}
+                    onChange={(event) => setCommand(event.target.value)}
+                    placeholder="Ask Jarvis to inspect, plan or propose the next safe action"
+                  />
                   <button type="submit">ROUTE</button>
                 </div>
               </form>
@@ -332,11 +462,49 @@ const JarvisConsole: React.FC = () => {
             </section>
 
             <aside className="right-rail">
+              <div className="hud-panel approval-panel">
+                <div className="panel-title">QUOTES / APPROVALS</div>
+                <div className="approval-row">
+                  <span>GOVERNED ACTIONS</span>
+                  <strong>{snapshot.governedActions.length}</strong>
+                </div>
+                <div className="approval-row">
+                  <span>APPROVED</span>
+                  <strong>
+                    {
+                      snapshot.governedActions.filter((action) => action.state === "approved")
+                        .length
+                    }
+                  </strong>
+                </div>
+                <div className="approval-row">
+                  <span>AWAITING DECISION</span>
+                  <strong>
+                    {
+                      snapshot.governedActions.filter((action) => action.state === "proposed")
+                        .length
+                    }
+                  </strong>
+                </div>
+                <div className="approval-row">
+                  <span>REMINDERS TRACKED</span>
+                  <strong>
+                    {formatPartialCount(
+                      snapshot.counts.reminders,
+                      snapshot.counts.remindersPartial,
+                    )}
+                  </strong>
+                </div>
+              </div>
+
               <div className="hud-panel systems-panel">
-                <div className="panel-title">SYSTEM MATRIX</div>
+                <div className="panel-title">SECURITY / COMMISSIONING GATES</div>
                 {snapshot.systems.map((system) => (
                   <div className="system-row" key={system.label}>
-                    <div><span>{system.label}</span><strong>{system.value}</strong></div>
+                    <div>
+                      <span>{system.label}</span>
+                      <strong>{system.value}</strong>
+                    </div>
                     <span className={statusClass(system.state)}>{system.state}</span>
                   </div>
                 ))}
@@ -349,8 +517,17 @@ const JarvisConsole: React.FC = () => {
                 ) : (
                   snapshot.reminders.slice(0, 5).map((reminder) => (
                     <div className="reminder-row interactive-row" key={reminder.id}>
-                      <div className="row-copy"><strong>{reminder.title}</strong><small>{formatDue(reminder)}</small></div>
-                      <button type="button" disabled={busy} onClick={() => dismissReminder(reminder)}>REMOVE</button>
+                      <div className="row-copy">
+                        <strong>{reminder.title}</strong>
+                        <small>{formatDue(reminder)}</small>
+                      </div>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => dismissReminder(reminder)}
+                      >
+                        REMOVE
+                      </button>
                     </div>
                   ))
                 )}
@@ -363,8 +540,13 @@ const JarvisConsole: React.FC = () => {
                 ) : (
                   snapshot.notes.slice(0, 5).map((note) => (
                     <div className="note-row interactive-row" key={note.id}>
-                      <div className="row-copy"><strong>{note.title}</strong><small>{note.domain.toUpperCase()}</small></div>
-                      <button type="button" disabled={busy} onClick={() => dismissNote(note)}>REMOVE</button>
+                      <div className="row-copy">
+                        <strong>{note.title}</strong>
+                        <small>{note.domain.toUpperCase()}</small>
+                      </div>
+                      <button type="button" disabled={busy} onClick={() => dismissNote(note)}>
+                        REMOVE
+                      </button>
                     </div>
                   ))
                 )}
@@ -394,7 +576,10 @@ const JarvisConsole: React.FC = () => {
                 {snapshot.activity.slice(0, 6).map((item, index) => (
                   <div className="activity-row" key={`${item}-${index}`}>
                     <span className="activity-dot" />
-                    <div><strong>{item}</strong><small>EVENT {String(index + 1).padStart(2, "0")}</small></div>
+                    <div>
+                      <strong>{item}</strong>
+                      <small>EVENT {String(index + 1).padStart(2, "0")}</small>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -403,8 +588,15 @@ const JarvisConsole: React.FC = () => {
 
           <section className="command-deck">
             <form className="capture-card" onSubmit={submitTask}>
-              <div><span>TASK CAPTURE</span><strong>Durable Convex task</strong></div>
-              <input value={taskTitle} onChange={(event) => setTaskTitle(event.target.value)} placeholder="Task title" />
+              <div>
+                <span>TASK CAPTURE</span>
+                <strong>Durable Convex task</strong>
+              </div>
+              <input
+                value={taskTitle}
+                onChange={(event) => setTaskTitle(event.target.value)}
+                placeholder="Task title"
+              />
               <select
                 value={taskCategory}
                 onChange={(event) =>
@@ -413,23 +605,55 @@ const JarvisConsole: React.FC = () => {
                   )
                 }
               >
-                <option value="personal">Personal</option><option value="work">Work</option><option value="builds">Builds</option><option value="money">Money</option><option value="life">Life</option>
+                <option value="personal">Personal</option>
+                <option value="work">Work</option>
+                <option value="builds">Builds</option>
+                <option value="money">Money</option>
+                <option value="life">Life</option>
               </select>
-              <button type="submit" disabled={busy || !taskTitle.trim()}>{creatingTask ? "ADDING" : "ADD TASK"}</button>
+              <button type="submit" disabled={busy || !taskTitle.trim()}>
+                {creatingTask ? "ADDING" : "ADD TASK"}
+              </button>
             </form>
 
             <form className="capture-card" onSubmit={submitReminder}>
-              <div><span>REMINDER CAPTURE</span><strong>Durable Convex reminder</strong></div>
-              <input value={reminderTitle} onChange={(event) => setReminderTitle(event.target.value)} placeholder="Reminder title" />
-              <input value={reminderDue} onChange={(event) => setReminderDue(event.target.value)} placeholder="When — exact text preserved" />
-              <button type="submit" disabled={busy || !reminderTitle.trim()}>{creatingReminder ? "SETTING" : "SET REMINDER"}</button>
+              <div>
+                <span>REMINDER CAPTURE</span>
+                <strong>Durable Convex reminder</strong>
+              </div>
+              <input
+                value={reminderTitle}
+                onChange={(event) => setReminderTitle(event.target.value)}
+                placeholder="Reminder title"
+              />
+              <input
+                value={reminderDue}
+                onChange={(event) => setReminderDue(event.target.value)}
+                placeholder="When — exact text preserved"
+              />
+              <button type="submit" disabled={busy || !reminderTitle.trim()}>
+                {creatingReminder ? "SETTING" : "SET REMINDER"}
+              </button>
             </form>
 
             <form className="capture-card" onSubmit={submitNote}>
-              <div><span>NOTE CAPTURE</span><strong>Durable Convex note</strong></div>
-              <input value={noteTitle} onChange={(event) => setNoteTitle(event.target.value)} placeholder="Note title" />
-              <input value={noteBody} onChange={(event) => setNoteBody(event.target.value)} placeholder="Note body" />
-              <button type="submit" disabled={busy || !noteTitle.trim() || !noteBody.trim()}>{creatingNote ? "LOGGING" : "LOG NOTE"}</button>
+              <div>
+                <span>NOTE CAPTURE</span>
+                <strong>Durable Convex note</strong>
+              </div>
+              <input
+                value={noteTitle}
+                onChange={(event) => setNoteTitle(event.target.value)}
+                placeholder="Note title"
+              />
+              <input
+                value={noteBody}
+                onChange={(event) => setNoteBody(event.target.value)}
+                placeholder="Note body"
+              />
+              <button type="submit" disabled={busy || !noteTitle.trim() || !noteBody.trim()}>
+                {creatingNote ? "LOGGING" : "LOG NOTE"}
+              </button>
             </form>
 
             <div className="capture-card completion-card">
@@ -441,7 +665,9 @@ const JarvisConsole: React.FC = () => {
                 </strong>
               </div>
               <div className="completion-list">
-                {completedTasks.slice(0, 4).map((task) => <span key={task.id}>{task.title}</span>)}
+                {completedTasks.slice(0, 4).map((task) => (
+                  <span key={task.id}>{task.title}</span>
+                ))}
                 {completedTasks.length === 0 && <span>Nothing cleared yet.</span>}
               </div>
             </div>

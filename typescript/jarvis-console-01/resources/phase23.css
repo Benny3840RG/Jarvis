@@ -1,5 +1,282 @@
 .phase23-shell {
-  min-height: 720px;
+  min-height: 760px;
+  --orange: #d98938;
+  --green: #a8c58b;
+  --cyan: #c8d0c1;
+  --violet: #9b8062;
+  --muted: #b1aa9b;
+  font-family: "Trebuchet MS", "Arial Narrow", sans-serif;
+  background: linear-gradient(180deg, rgba(22, 24, 22, 0.98), rgba(8, 10, 9, 0.98)), #0a0c0b;
+  border-color: #71634f;
+  border-radius: 28px;
+  box-shadow:
+    0 24px 90px rgba(0, 0, 0, 0.7),
+    inset 0 0 80px rgba(214, 137, 56, 0.06);
+}
+
+.totality-shell::after,
+.totality-shell::before {
+  height: 3px;
+  background: #c9792f;
+}
+
+.totality-shell .console-header {
+  min-height: 86px;
+  padding: 12px 22px;
+  background: linear-gradient(180deg, #262822, #0e100e);
+  border-bottom-color: #645844;
+}
+
+.brand-logo {
+  width: 48px;
+  height: 58px;
+  object-fit: contain;
+  object-position: top;
+  filter: sepia(0.3) saturate(0.8) brightness(1.15);
+}
+
+.totality-shell .brand-lockup h1 {
+  font-size: clamp(21px, 3vw, 38px);
+  letter-spacing: 0.14em;
+  color: #e3d9c7;
+}
+
+.console-subtitle {
+  display: block;
+  margin-top: 4px;
+  color: #c7833f;
+  font-size: 10px;
+  letter-spacing: 0.18em;
+}
+
+.totality-shell .telemetry-strip {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  background: rgba(11, 13, 12, 0.92);
+  border-bottom-color: #514b3e;
+}
+
+.totality-shell .telemetry-strip > div {
+  padding: 9px 16px;
+  border-right-color: #514b3e;
+}
+
+.totality-shell .telemetry-strip strong {
+  color: #d4c7b1;
+  font-size: 10px;
+  letter-spacing: 0.05em;
+}
+
+.totality-shell .console-grid {
+  grid-template-columns: minmax(230px, 0.9fr) minmax(410px, 1.55fr) minmax(270px, 1fr);
+  gap: 14px;
+  padding: 14px 18px 10px;
+  background: radial-gradient(circle at 50% 42%, rgba(139, 116, 82, 0.12), transparent 42%);
+}
+
+.totality-shell .hud-panel,
+.totality-shell .centre-stage {
+  border-color: #605542;
+  border-radius: 6px;
+  background: linear-gradient(145deg, rgba(36, 37, 31, 0.96), rgba(11, 13, 12, 0.98));
+  box-shadow: inset 0 0 25px rgba(210, 151, 73, 0.045);
+}
+
+.totality-shell .hud-panel::before {
+  border-color: rgba(213, 137, 56, 0.11);
+  border-radius: 3px;
+}
+
+.totality-shell .panel-title {
+  padding: 11px 13px;
+  color: #d4c7b1;
+  background: linear-gradient(90deg, rgba(217, 137, 56, 0.14), transparent);
+  border-bottom-color: #514b3e;
+  letter-spacing: 0.16em;
+}
+
+.workflow-panel,
+.evidence-panel,
+.approval-panel {
+  padding-bottom: 7px;
+}
+
+.workflow-row,
+.evidence-row,
+.approval-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  padding: 9px 13px;
+  border-bottom: 1px solid rgba(102, 91, 72, 0.45);
+  color: #bcb3a3;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+}
+
+.workflow-row strong,
+.evidence-row strong,
+.approval-row strong {
+  color: #df9a4c;
+}
+
+.workflow-row i {
+  grid-column: 1 / -1;
+  display: block;
+  height: 4px;
+  border: 1px solid #655b4a;
+  background: linear-gradient(90deg, #c87831 var(--fill), transparent var(--fill));
+}
+
+.evidence-row strong {
+  font-size: 8px;
+  letter-spacing: 0.06em;
+}
+
+.evidence-good {
+  color: #abc58b !important;
+}
+.evidence-pending {
+  color: #df9a4c !important;
+}
+
+.status-deck {
+  display: flex;
+  justify-content: center;
+  gap: clamp(12px, 3vw, 36px);
+  padding: 18px 14px 4px;
+}
+
+.status-ring {
+  display: grid;
+  place-items: center;
+  width: clamp(74px, 11vw, 112px);
+  aspect-ratio: 1;
+  border: 7px double #81745d;
+  border-radius: 50%;
+  background: #151714;
+  box-shadow:
+    inset 0 0 0 5px #2e3029,
+    0 0 0 1px #0b0d0c;
+  text-align: center;
+}
+
+.status-ring span {
+  max-width: 74px;
+  color: #b7ad9c;
+  font-size: 7px;
+  letter-spacing: 0.09em;
+}
+
+.status-ring strong {
+  max-width: 80px;
+  color: #d78b3c;
+  font-size: 9px;
+  letter-spacing: 0.05em;
+}
+
+.status-ring-good {
+  border-color: #c17a37;
+}
+.status-ring-guarded {
+  border-color: #a45b2a;
+}
+.status-ring-pending {
+  border-color: #756b58;
+}
+
+.totality-shell .phase23-centre {
+  border-color: #947550;
+  background: radial-gradient(
+    circle at 50% 48%,
+    rgba(208, 142, 67, 0.09),
+    rgba(10, 12, 11, 0.98) 57%
+  );
+}
+
+.totality-shell .mission-copy {
+  padding-top: 7px;
+}
+
+.totality-shell .mission-copy h2 {
+  color: #d9cbb8;
+  font-size: clamp(15px, 1.8vw, 22px);
+}
+
+.totality-shell .reactor-stage {
+  width: min(390px, 76%);
+}
+
+.totality-shell .reactor-ring.outer {
+  border-color: #726957;
+  box-shadow: 0 0 24px rgba(196, 132, 57, 0.14);
+}
+.totality-shell .reactor-ring.middle {
+  border-color: #c27d38;
+}
+.totality-shell .reactor-ring.inner {
+  border-color: #8b765d;
+  background: radial-gradient(
+    circle,
+    rgba(205, 141, 66, 0.18),
+    rgba(93, 78, 59, 0.08) 60%,
+    transparent 61%
+  );
+}
+.totality-shell .reactor-progress {
+  background: conic-gradient(#c27d38 var(--progress), rgba(255, 255, 255, 0.08) 0);
+}
+.totality-shell .reactor-mascot {
+  background: #161914;
+  border-color: #d69a51;
+  box-shadow:
+    0 0 0 3px #534633,
+    0 0 24px rgba(199, 126, 48, 0.26);
+}
+.totality-shell .mascot-eye {
+  background: #d69a51;
+}
+.totality-shell .mascot-mouth {
+  border-color: #d69a51;
+}
+
+.totality-shell .command-deck {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  padding: 0 18px 14px;
+}
+
+.totality-shell .capture-card {
+  border-color: #625644;
+  border-radius: 6px;
+  background: linear-gradient(145deg, rgba(34, 35, 29, 0.96), rgba(11, 13, 12, 0.98));
+}
+
+.totality-shell .capture-card > div:first-child span,
+.totality-shell .operator-command label {
+  color: #ca8239;
+}
+
+.totality-shell .operator-command {
+  border-color: #6f5a43;
+  background: rgba(8, 10, 9, 0.82);
+}
+
+.totality-shell .hud-refresh,
+.totality-shell .interactive-row button,
+.totality-shell .operator-command button,
+.totality-shell .capture-card button {
+  border-color: rgba(198, 126, 48, 0.65);
+  background: rgba(198, 126, 48, 0.12);
+  color: #dda05d;
+}
+
+.totality-shell .hud-refresh:hover,
+.totality-shell .interactive-row button:hover,
+.totality-shell .operator-command button:hover,
+.totality-shell .capture-card button:hover {
+  border-color: #e0a15d;
+  background: rgba(198, 126, 48, 0.24);
 }
 
 .phase23-telemetry {
