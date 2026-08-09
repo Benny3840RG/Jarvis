@@ -50,17 +50,11 @@ describe("authenticated HTTP principal context", () => {
       headers: { authorization: "Bearer verified-token" },
       ip: "127.0.0.1",
     };
-    const guard = new ServiceTokenGuard(
-      new Reflector(),
-      config(),
-      oidcVerifier("owner-subject"),
-    );
+    const guard = new ServiceTokenGuard(new Reflector(), config(), oidcVerifier("owner-subject"));
 
     assert.equal(await guard.canActivate(requestContext(request)), true);
 
-    const principal = getAuthenticatedPrincipal(
-      request,
-    ) as AuthenticatedPrincipal;
+    const principal = getAuthenticatedPrincipal(request) as AuthenticatedPrincipal;
     assert.deepEqual(principal, {
       kind: "oidc",
       subject: "owner-subject",
@@ -68,10 +62,7 @@ describe("authenticated HTTP principal context", () => {
       audience: "jarvis-api",
     });
     assert.equal(Object.isFrozen(principal), true);
-    assert.throws(
-      () => Reflect.set(principal as object, "subject", "attacker"),
-      TypeError,
-    );
+    assert.throws(() => Reflect.set(principal as object, "subject", "attacker"), TypeError);
     assert.equal(getAuthenticatedPrincipal(request)?.subject, "owner-subject");
   });
 
@@ -80,11 +71,7 @@ describe("authenticated HTTP principal context", () => {
       headers: { authorization: "Bearer verified-token" },
       ip: "127.0.0.1",
     };
-    const guard = new ServiceTokenGuard(
-      new Reflector(),
-      config(),
-      oidcVerifier("other-subject"),
-    );
+    const guard = new ServiceTokenGuard(new Reflector(), config(), oidcVerifier("other-subject"));
 
     await assert.rejects(
       () => guard.canActivate(requestContext(request)),
