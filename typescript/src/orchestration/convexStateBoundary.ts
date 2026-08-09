@@ -149,9 +149,13 @@ export class ConvexOrchestrationStateBoundary implements OrchestrationStepStateB
   }
 }
 
-function authenticatedWorkerId(principal: { issuer: string; audience: string; subject: string }): string {
+function authenticatedWorkerId(principal: {
+  issuer: string;
+  audience: string;
+  subject: string;
+}): string {
   return `oidc:${createHash("sha256")
-    .update(`${principal.issuer}\\0${principal.audience}\\0${principal.subject}`, "utf8")
+    .update(`${principal.issuer}\0${principal.audience}\0${principal.subject}`, "utf8")
     .digest("hex")}`;
 }
 
