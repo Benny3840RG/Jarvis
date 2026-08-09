@@ -444,5 +444,4 @@ describe("orchestration composition authority", () => {
       /verified authenticated principal is required/,
     );
   });
-
 });
