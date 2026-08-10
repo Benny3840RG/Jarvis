@@ -7,7 +7,8 @@ export type OmegaExecutionBlockReason =
   | "omega-contract-authority-mismatch";
 
 export type OmegaExecutionGateDecision =
-  { ok: true; contractId?: string } | { ok: false; blockReason: OmegaExecutionBlockReason };
+  | { ok: true; contractId?: string }
+  | { ok: false; blockReason: OmegaExecutionBlockReason };
 
 function missionIsExecutable(state: string): boolean {
   return state === "active" || state === "validating" || state === "recovering";
@@ -52,7 +53,11 @@ export async function checkOmegaExecutionGate(
       q.eq("ownerId", ownerId).eq("missionId", contract.missionId),
     )
     .unique();
-  if (!mission || mission.projectKey !== action.projectKey || !missionIsExecutable(mission.state)) {
+  if (
+    !mission ||
+    mission.projectKey !== action.projectKey ||
+    !missionIsExecutable(mission.state)
+  ) {
     return { ok: false, blockReason: "omega-mission-not-executable" };
   }
 
@@ -83,7 +88,9 @@ export async function markOmegaExecutionClaimed(
     )
     .unique();
   if (!action?.singleUseClaimId) {
-    throw new Error("Omega contract execution claim requires the authoritative tool-action claim ID.");
+    throw new Error(
+      "Omega contract execution claim requires the authoritative tool-action claim ID.",
+    );
   }
 
   await ctx.db.patch("omegaActionContracts", contract._id, {
