@@ -21,6 +21,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllEnvs();
 });
 
@@ -140,14 +141,29 @@ function receiptArgs() {
   };
 }
 
+async function drainScheduled(t: ReturnType<typeof harness>): Promise<unknown> {
+  vi.useFakeTimers();
+  try {
+    await t.finishAllScheduledFunctions(() => vi.runAllTimers());
+    return undefined;
+  } catch (error) {
+    return error;
+  } finally {
+    vi.useRealTimers();
+  }
+}
+
 describe("Omega receipt isolation", () => {
   it("persists Jarvis receipt when Omega reconciliation cannot advance", async () => {
     const t = harness();
     await seedAuthorizedButUnclaimedContract(t);
 
     const receipt = await t.mutation(anyApi.toolExecutionReceipts.save, receiptArgs());
-
     expect(receipt.receiptId).toBe("receipt-isolation");
+
+    const scheduledFailure = await drainScheduled(t);
+    expect(scheduledFailure).toBeUndefined();
+
     const stored = await t.query(anyApi.toolExecutionReceipts.get, {
       serviceToken: SERVICE_TOKEN,
       receiptKey: "receipt-key-isolation",
@@ -161,7 +177,7 @@ describe("Omega receipt isolation", () => {
     expect(contract?.status).toBe("authorized");
   });
 
-  it("persists Jarvis receipt even when Omega reconciliation itself hits inconsistent indexed state", async () => {
+  it("persists Jarvis receipt even when scheduled Omega reconciliation hits inconsistent indexed state", async () => {
     const t = harness();
     await seedAuthorizedButUnclaimedContract(t);
     await t.run(async (ctx) => {
@@ -186,10 +202,21 @@ describe("Omega receipt isolation", () => {
     const receipt = await t.mutation(anyApi.toolExecutionReceipts.save, receiptArgs());
     expect(receipt.receiptId).toBe("receipt-isolation");
 
-    const stored = await t.query(anyApi.toolExecutionReceipts.get, {
+    const storedBeforeReconciliation = await t.query(anyApi.toolExecutionReceipts.get, {
       serviceToken: SERVICE_TOKEN,
       receiptKey: "receipt-key-isolation",
     });
-    expect(stored?.receiptId).toBe("receipt-isolation");
+    expect(storedBeforeReconciliation?.receiptId).toBe("receipt-isolation");
+
+    const scheduledFailure = await drainScheduled(t);
+    if (scheduledFailure !== undefined) {
+      expect(String(scheduledFailure)).toMatch(/unique|more than one/i);
+    }
+
+    const storedAfterReconciliation = await t.query(anyApi.toolExecutionReceipts.get, {
+      serviceToken: SERVICE_TOKEN,
+      receiptKey: "receipt-key-isolation",
+    });
+    expect(storedAfterReconciliation?.receiptId).toBe("receipt-isolation");
   });
 });
