@@ -1,0 +1,623 @@
+import { defineSchema, defineTable } from "convex/server";
+import { v } from "convex/values";
+
+import {
+  orchestrationFailureCodeValidator,
+  orchestrationRecoveryEvidenceValidator,
+  orchestrationRecoveryStateValidator,
+  orchestrationRunStateValidator,
+  orchestrationStepStateValidator,
+  orchestrationTriggerSourceValidator,
+  orchestrationReconciliationStateValidator,
+} from "./orchestrationValidators.js";
+import {
+  externalReconciliationStateValidator,
+  externalReconciliationTerminalStatusValidator,
+} from "./externalReconciliationValidators.js";
+import {
+  internalActionFamilyValidator,
+  internalActionResultValidator,
+} from "./internalActionValidators.js";
+import {
+  memoryChangeSetActorValidator,
+  memoryChangeSetStateValidator,
+  memoryRecordValidator,
+} from "./memoryChangeSetValidators.js";
+import {
+  noteDomainValidator,
+  noteRetentionValidator,
+  noteSensitivityValidator,
+} from "./noteValidators.js";
+import {
+  quoteDeliveryChannelValidator,
+  quoteDeliveryReconciledOutcomeValidator,
+  quoteDeliveryStatusValidator,
+} from "./quoteDeliveryValidators.js";
+import { quotePdfPartyValidator } from "./quotePdfArtifactValidators.js";
+import {
+  quoteCommercialStatusValidator,
+  quoteHistoricalOutcomeValidator,
+  quoteLineItemValidator,
+  quoteRevisionStatusValidator,
+} from "./quoteValidators.js";
+import {
+  toolActionActorValidator,
+  toolActionStateValidator,
+  toolAuthorityValidator,
+} from "./toolActionValidators.js";
+import {
+  toolExecutionErrorCodeValidator,
+  toolExecutionStatusValidator,
+} from "./toolExecutionValidators.js";
+import { safetyBindingValidator } from "./safetyBindingValidators.js";
+import {
+  projectPreferencesValidator,
+  projectRecordValidator,
+  projectStatusValidator,
+  recordKindValidator,
+  validationCheckValidator,
+} from "./totalityValidators.js";
+
+export default defineSchema({
+  tasks: defineTable({
+    ownerId: v.string(),
+    title: v.string(),
+    completed: v.boolean(),
+    category: v.string(),
+    projectId: v.optional(v.string()),
+    directCreateIdempotencyKey: v.optional(v.string()),
+    directCreateFingerprint: v.optional(v.string()),
+    updatedAt: v.optional(v.number()),
+    revision: v.optional(v.number()),
+    createdAt: v.number(),
+  })
+    .index("by_owner", ["ownerId"])
+    .index("by_owner_and_project", ["ownerId", "projectId"])
+    .index("by_owner_and_direct_create_idempotency_key", ["ownerId", "directCreateIdempotencyKey"]),
+  reminders: defineTable({
+    ownerId: v.string(),
+    title: v.string(),
+    due: v.optional(v.string()),
+    dueRaw: v.optional(v.string()),
+    dueAt: v.optional(v.number()),
+    dueTimezone: v.optional(v.string()),
+    projectId: v.optional(v.string()),
+    directCreateIdempotencyKey: v.optional(v.string()),
+    directCreateFingerprint: v.optional(v.string()),
+    updatedAt: v.optional(v.number()),
+    revision: v.optional(v.number()),
+    createdAt: v.number(),
+  })
+    .index("by_owner", ["ownerId"])
+    .index("by_owner_and_project", ["ownerId", "projectId"])
+    .index("by_owner_and_direct_create_idempotency_key", ["ownerId", "directCreateIdempotencyKey"]),
+  directCreateReceipts: defineTable({
+    ownerId: v.string(),
+    entityType: v.union(v.literal("task"), v.literal("reminder")),
+    entityId: v.string(),
+    idempotencyKey: v.string(),
+    requestFingerprint: v.string(),
+    createdAt: v.number(),
+  }).index("by_owner_type_and_key", ["ownerId", "entityType", "idempotencyKey"]),
+  internalActionResults: defineTable({
+    ownerId: v.string(),
+    projectId: v.string(),
+    actionFamilyId: internalActionFamilyValidator,
+    idempotencyKey: v.string(),
+    actionFingerprint: v.string(),
+    entityType: v.union(v.literal("task"), v.literal("reminder")),
+    entityId: v.string(),
+    result: internalActionResultValidator,
+    sourceRequestId: v.string(),
+    correlationId: v.string(),
+    source: v.string(),
+    createdAt: v.number(),
+  })
+    .index("by_owner_project_family_idempotency", [
+      "ownerId",
+      "projectId",
+      "actionFamilyId",
+      "idempotencyKey",
+    ])
+    .index("by_owner_entity", ["ownerId", "entityType", "entityId"]),
+  notes: defineTable({
+    ownerId: v.string(),
+    projectId: v.string(),
+    title: v.string(),
+    body: v.string(),
+    tags: v.array(v.string()),
+    domain: noteDomainValidator,
+    sensitivity: noteSensitivityValidator,
+    retention: noteRetentionValidator,
+    idempotencyKey: v.string(),
+    actionFingerprint: v.string(),
+    sourceRequestId: v.string(),
+    correlationId: v.string(),
+    source: v.string(),
+    revision: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_owner_and_project_and_idempotency_key", ["ownerId", "projectId", "idempotencyKey"])
+    .index("by_owner_and_project_and_updated_at", ["ownerId", "projectId", "updatedAt"]),
+  assistantState: defineTable({
+    ownerId: v.string(),
+    key: v.string(),
+    state: v.any(),
+    updatedAt: v.number(),
+  }).index("by_owner_key", ["ownerId", "key"]),
+  projects: defineTable({
+    ownerId: v.string(),
+    projectKey: v.string(),
+    projectName: v.string(),
+    projectType: v.string(),
+    status: projectStatusValidator,
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    revision: v.number(),
+    domains: v.array(v.string()),
+    summary: v.string(),
+    preferences: projectPreferencesValidator,
+  })
+    .index("by_owner_and_project_key", ["ownerId", "projectKey"])
+    .index("by_owner_and_updated_at", ["ownerId", "updatedAt"]),
+  projectRecords: defineTable({
+    ownerId: v.string(),
+    projectKey: v.string(),
+    kind: recordKindValidator,
+    recordId: v.string(),
+    record: projectRecordValidator,
+    updatedAt: v.number(),
+  })
+    .index("by_owner_and_project_key_and_kind", ["ownerId", "projectKey", "kind"])
+    .index("by_owner_and_project_key_and_record_id", ["ownerId", "projectKey", "recordId"]),
+  memoryChangeSets: defineTable({
+    ownerId: v.string(),
+    changeSetId: v.string(),
+    requestId: v.string(),
+    projectKey: v.string(),
+    baseRevision: v.number(),
+    state: memoryChangeSetStateValidator,
+    records: v.array(memoryRecordValidator),
+    rationale: v.string(),
+    proposedBy: memoryChangeSetActorValidator,
+    approvedBy: v.optional(v.literal("user")),
+    rejectedBy: v.optional(v.literal("user")),
+    rejectedReason: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    approvedAt: v.optional(v.number()),
+    rejectedAt: v.optional(v.number()),
+    appliedAt: v.optional(v.number()),
+    appliedRevision: v.optional(v.number()),
+  })
+    .index("by_owner_and_change_set_id", ["ownerId", "changeSetId"])
+    .index("by_owner_and_project_key", ["ownerId", "projectKey"])
+    .index("by_owner_and_project_key_and_state", ["ownerId", "projectKey", "state"])
+    .index("by_owner_and_request_id", ["ownerId", "requestId"]),
+  toolActions: defineTable({
+    ownerId: v.string(),
+    actionId: v.string(),
+    requestId: v.string(),
+    projectKey: v.string(),
+    baseRevision: v.number(),
+    state: toolActionStateValidator,
+    tool: v.string(),
+    operation: v.string(),
+    arguments: v.record(v.string(), v.any()),
+    rationale: v.string(),
+    requiredAuthority: toolAuthorityValidator,
+    destructive: v.boolean(),
+    idempotencyKey: v.string(),
+    proposedBy: toolActionActorValidator,
+    approvedBy: v.optional(v.literal("user")),
+    rejectedBy: v.optional(v.literal("user")),
+    rejectedReason: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    approvedAt: v.optional(v.number()),
+    rejectedAt: v.optional(v.number()),
+    // Consent lifecycle (R-048/R-049/R-050): all optional — existing rows
+    // predate these fields and are treated as legacy/unenforced, never
+    // retroactively expired or single-use. Stamped by approve(); consumed
+    // by revoke() and by the (deferred, execute()-time) expiry/consumption
+    // checks. See docs/superpowers/plans/2026-07-30-tool-action-consent-lifecycle.md.
+    approvalExpiryPolicy: v.optional(v.union(v.literal("ttl"), v.literal("non-expiring"))),
+    approvalExpiresAt: v.optional(v.number()),
+    expiredObservedAt: v.optional(v.number()),
+    consumptionPolicy: v.optional(v.union(v.literal("single-use"), v.literal("reusable"))),
+    revokedBy: v.optional(v.literal("user")),
+    revokedReason: v.optional(v.string()),
+    revokedAt: v.optional(v.number()),
+    // Atomic single-use execution claim: set exactly once, by exactly one
+    // caller, via claimSingleUseExecution — never released. This is the
+    // authoritative consumption gate checked before the external effect;
+    // a read-before-effect check alone cannot prevent two different-key
+    // concurrent executions from both crossing the effect boundary.
+    singleUseClaimedAt: v.optional(v.number()),
+    singleUseClaimId: v.optional(v.string()),
+    safetyBinding: v.optional(safetyBindingValidator),
+  })
+    .index("by_owner_and_action_id", ["ownerId", "actionId"])
+    .index("by_owner_and_idempotency_key", ["ownerId", "idempotencyKey"])
+    .index("by_owner_and_project_key", ["ownerId", "projectKey"])
+    .index("by_owner_and_project_key_and_state", ["ownerId", "projectKey", "state"])
+    .index("by_owner_and_request_id", ["ownerId", "requestId"]),
+  toolExecutionReceipts: defineTable({
+    ownerId: v.string(),
+    receiptKey: v.string(),
+    receiptId: v.string(),
+    actionId: v.string(),
+    requestId: v.optional(v.string()),
+    projectId: v.string(),
+    idempotencyKey: v.string(),
+    actionFingerprint: v.string(),
+    effectFingerprint: v.optional(v.string()),
+    tool: v.string(),
+    operation: v.string(),
+    actor: v.optional(toolActionActorValidator),
+    approvalId: v.optional(v.string()),
+    policyVersion: v.optional(v.string()),
+    correlationId: v.optional(v.string()),
+    source: v.optional(v.string()),
+    provider: v.optional(v.string()),
+    providerRequestId: v.optional(v.string()),
+    providerCorrelationId: v.optional(v.string()),
+    reconciliationId: v.optional(v.string()),
+    status: toolExecutionStatusValidator,
+    outputDigest: v.optional(v.string()),
+    errorCode: v.optional(toolExecutionErrorCodeValidator),
+    providerErrorCode: v.optional(v.string()),
+    startedAt: v.number(),
+    completedAt: v.number(),
+    createdAt: v.number(),
+    safetyBinding: v.optional(safetyBindingValidator),
+  })
+    .index("by_owner_and_receipt_key", ["ownerId", "receiptKey"])
+    .index("by_owner_and_action_id", ["ownerId", "actionId"]),
+  externalReconciliations: defineTable({
+    ownerId: v.string(),
+    reconciliationId: v.string(),
+    executionKey: v.string(),
+    actionId: v.string(),
+    requestId: v.string(),
+    projectId: v.string(),
+    idempotencyKey: v.string(),
+    actionFingerprint: v.string(),
+    effectFingerprint: v.string(),
+    tool: v.string(),
+    operation: v.string(),
+    provider: v.string(),
+    providerRequestId: v.optional(v.string()),
+    providerCorrelationId: v.string(),
+    receiptKey: v.optional(v.string()),
+    receiptId: v.optional(v.string()),
+    state: externalReconciliationStateValidator,
+    attemptCount: v.number(),
+    nextAttemptAt: v.number(),
+    leaseOwner: v.optional(v.string()),
+    leaseToken: v.optional(v.string()),
+    leaseExpiresAt: v.optional(v.number()),
+    terminalStatus: v.optional(externalReconciliationTerminalStatusValidator),
+    resolutionDigest: v.optional(v.string()),
+    resolutionErrorCode: v.optional(v.string()),
+    lastErrorCode: v.optional(v.string()),
+    escalationReason: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    resolvedAt: v.optional(v.number()),
+    escalatedAt: v.optional(v.number()),
+    safetyBinding: v.optional(safetyBindingValidator),
+  })
+    .index("by_owner_and_reconciliation_id", ["ownerId", "reconciliationId"])
+    .index("by_owner_and_scope", ["ownerId", "projectId", "tool", "operation", "idempotencyKey"])
+    .index("by_owner_and_updated_at", ["ownerId", "updatedAt"])
+    .index("by_owner_and_state_and_updated_at", ["ownerId", "state", "updatedAt"])
+    .index("by_owner_and_state_and_next_attempt_at", ["ownerId", "state", "nextAttemptAt"])
+    .index("by_owner_and_state_and_lease_expires_at", ["ownerId", "state", "leaseExpiresAt"])
+    .index("by_owner_and_receipt_key", ["ownerId", "receiptKey"]),
+  orchestrationRuns: defineTable({
+    ownerId: v.string(),
+    runId: v.string(),
+    triggerId: v.string(),
+    triggerSource: orchestrationTriggerSourceValidator,
+    triggerKind: v.string(),
+    idempotencyKey: v.string(),
+    requestFingerprint: v.string(),
+    planFingerprint: v.string(),
+    triggerPayload: v.record(v.string(), v.any()),
+    authority: toolAuthorityValidator,
+    policyVersion: v.string(),
+    policyFingerprint: v.string(),
+    nodeIds: v.array(v.string()),
+    completedStepIds: v.array(v.string()),
+    checkpointSequence: v.number(),
+    state: orchestrationRunStateValidator,
+    failureCode: v.optional(orchestrationFailureCodeValidator),
+    retryCount: v.number(),
+    maxRetries: v.number(),
+    recoveryState: orchestrationRecoveryStateValidator,
+    recoveryEvidence: v.array(orchestrationRecoveryEvidenceValidator),
+    checkpointNodeId: v.optional(v.string()),
+    checkpointAt: v.optional(v.number()),
+    recoveryReference: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_owner_and_run_id", ["ownerId", "runId"])
+    .index("by_owner_and_trigger_source_and_idempotency_key", [
+      "ownerId",
+      "triggerSource",
+      "idempotencyKey",
+    ])
+    .index("by_owner_and_state_and_updated_at", ["ownerId", "state", "updatedAt"]),
+  orchestrationSteps: defineTable({
+    ownerId: v.string(),
+    runId: v.string(),
+    nodeId: v.string(),
+    operationId: v.optional(v.string()),
+    state: orchestrationStepStateValidator,
+    attempt: v.number(),
+    retryable: v.boolean(),
+    outputDigest: v.optional(v.string()),
+    failureCode: v.optional(orchestrationFailureCodeValidator),
+    indeterminateReason: v.optional(v.string()),
+    reconciliationId: v.optional(v.string()),
+    updatedAt: v.number(),
+    completedAt: v.optional(v.number()),
+    leaseOwner: v.optional(v.string()),
+    leaseToken: v.optional(v.string()),
+    leaseExpiresAt: v.optional(v.number()),
+    nextAttemptAt: v.optional(v.number()),
+  })
+    .index("by_owner_and_run_id_and_node_id", ["ownerId", "runId", "nodeId"])
+    .index("by_owner_and_run_id_and_state", ["ownerId", "runId", "state"])
+    .index("by_owner_and_state_and_updated_at", ["ownerId", "state", "updatedAt"])
+    .index("by_owner_and_state_and_lease_expires_at", ["ownerId", "state", "leaseExpiresAt"])
+    .index("by_owner_and_state_and_next_attempt_at", ["ownerId", "state", "nextAttemptAt"]),
+  orchestrationReconciliations: defineTable({
+    ownerId: v.string(),
+    reconciliationId: v.string(),
+    runId: v.string(),
+    nodeId: v.string(),
+    attempt: v.number(),
+    operationId: v.string(),
+    effectFingerprint: v.string(),
+    provider: v.string(),
+    providerRequestId: v.optional(v.string()),
+    providerCorrelationId: v.string(),
+    state: orchestrationReconciliationStateValidator,
+    outputDigest: v.optional(v.string()),
+    failureCode: v.optional(orchestrationFailureCodeValidator),
+    terminalEvidence: v.optional(orchestrationRecoveryEvidenceValidator),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    resolvedAt: v.optional(v.number()),
+  })
+    .index("by_owner_and_reconciliation_id", ["ownerId", "reconciliationId"])
+    .index("by_owner_and_run_id_and_node_id", ["ownerId", "runId", "nodeId"])
+    .index("by_owner_and_state_and_updated_at", ["ownerId", "state", "updatedAt"]),
+  quotes: defineTable({
+    ownerId: v.string(),
+    quoteId: v.string(),
+    clientId: v.string(),
+    projectId: v.optional(v.string()),
+    number: v.string(),
+    currentRevision: v.number(),
+    currentRevisionId: v.string(),
+    aggregateVersion: v.number(),
+    commercialStatus: quoteCommercialStatusValidator,
+    commercialRevision: v.optional(v.number()),
+    commercialRecordedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_owner_and_quote_id", ["ownerId", "quoteId"])
+    .index("by_owner_and_number", ["ownerId", "number"])
+    .index("by_owner_and_client_id", ["ownerId", "clientId"])
+    .index("by_owner_and_project_id", ["ownerId", "projectId"])
+    .index("by_owner_and_commercial_status", ["ownerId", "commercialStatus"]),
+  quoteRevisions: defineTable({
+    ownerId: v.string(),
+    revisionId: v.string(),
+    quoteId: v.string(),
+    revision: v.number(),
+    revisionVersion: v.number(),
+    status: quoteRevisionStatusValidator,
+    lineItems: v.array(quoteLineItemValidator),
+    subtotal: v.number(),
+    taxRate: v.optional(v.number()),
+    tax: v.number(),
+    total: v.number(),
+    currency: v.literal("AUD"),
+    validUntil: v.optional(v.string()),
+    notes: v.optional(v.string()),
+    termsIncluded: v.boolean(),
+    fingerprint: v.optional(v.string()),
+    predecessorRevisionId: v.optional(v.string()),
+    historicalOutcome: v.optional(quoteHistoricalOutcomeValidator),
+    historicalOutcomeRecordedAt: v.optional(v.number()),
+    reviewedAt: v.optional(v.number()),
+    finalizedAt: v.optional(v.number()),
+    source: v.optional(v.literal("legacy-migration")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_owner_quote_and_revision", ["ownerId", "quoteId", "revision"])
+    .index("by_owner_and_revision_id", ["ownerId", "revisionId"])
+    .index("by_owner_quote_and_status", ["ownerId", "quoteId", "status"])
+    .index("by_owner_and_fingerprint", ["ownerId", "fingerprint"]),
+  quotePdfArtifacts: defineTable({
+    ownerId: v.string(),
+    quoteId: v.string(),
+    revisionId: v.string(),
+    revision: v.number(),
+    revisionFingerprint: v.string(),
+    storageId: v.id("_storage"),
+    digest: v.string(),
+    byteLength: v.number(),
+    mediaType: v.literal("application/pdf"),
+    filename: v.string(),
+    rendererVersion: v.literal("quote-pdf:v1"),
+    generatedAt: v.string(),
+    issuer: quotePdfPartyValidator,
+    client: quotePdfPartyValidator,
+    createdAt: v.number(),
+  })
+    .index("by_owner_quote_and_revision", ["ownerId", "quoteId", "revision"])
+    .index("by_owner_and_revision_id", ["ownerId", "revisionId"]),
+  quoteDeliveryAttempts: defineTable({
+    ownerId: v.string(),
+    deliveryAttemptId: v.string(),
+    quoteId: v.string(),
+    revision: v.number(),
+    revisionId: v.string(),
+    revisionFingerprint: v.string(),
+    recipient: v.string(),
+    channel: quoteDeliveryChannelValidator,
+    sendFingerprint: v.string(),
+    idempotencyKey: v.string(),
+    approvalId: v.string(),
+    actionFingerprint: v.string(),
+    status: quoteDeliveryStatusValidator,
+    reconciledOutcome: v.optional(quoteDeliveryReconciledOutcomeValidator),
+    provider: v.string(),
+    providerRequestId: v.optional(v.string()),
+    providerCorrelationId: v.optional(v.string()),
+    reconciliationId: v.optional(v.string()),
+    providerErrorCode: v.optional(v.string()),
+    createdAt: v.number(),
+    executionStartedAt: v.optional(v.number()),
+    completedAt: v.optional(v.number()),
+    reconciledAt: v.optional(v.number()),
+    updatedAt: v.number(),
+  })
+    .index("by_owner_and_delivery_attempt_id", ["ownerId", "deliveryAttemptId"])
+    .index("by_owner_and_send_scope", ["ownerId", "quoteId", "revision", "recipient", "channel"])
+    .index("by_owner_quote_and_revision", ["ownerId", "quoteId", "revision"])
+    .index("by_owner_and_reconciliation_id", ["ownerId", "reconciliationId"])
+    .index("by_owner_and_status", ["ownerId", "status"]),
+  quoteMigrationRecords: defineTable({
+    ownerId: v.string(),
+    sourceKey: v.string(),
+    status: v.union(v.literal("imported"), v.literal("rejected")),
+    quoteId: v.optional(v.string()),
+    revisionId: v.optional(v.string()),
+    mappedState: v.optional(v.string()),
+    rejectionReason: v.optional(v.string()),
+    createdAt: v.number(),
+  }).index("by_owner_and_source_key", ["ownerId", "sourceKey"]),
+  validationReports: defineTable({
+    ownerId: v.string(),
+    requestId: v.string(),
+    scopeKey: v.string(),
+    passed: v.boolean(),
+    checks: v.array(validationCheckValidator),
+    warnings: v.array(v.string()),
+    blockingFailures: v.array(v.string()),
+    createdAt: v.number(),
+  })
+    .index("by_owner_and_request_id", ["ownerId", "requestId"])
+    .index("by_owner_and_scope_key", ["ownerId", "scopeKey"]),
+  auditEvents: defineTable({
+    ownerId: v.string(),
+    requestId: v.optional(v.string()),
+    scopeKey: v.string(),
+    eventType: v.string(),
+    actor: v.union(v.literal("user"), v.literal("agent"), v.literal("tool")),
+    payload: v.record(v.string(), v.any()),
+    createdAt: v.number(),
+  })
+    .index("by_owner_and_scope_key", ["ownerId", "scopeKey"])
+    .index("by_owner_and_request_id", ["ownerId", "requestId"])
+    // Owner-wide, time-ordered read across all scopes — `by_owner_and_scope_key`
+    // can only page through one project/global scope at a time, which cannot
+    // serve a genuine cross-scope activity timeline.
+    .index("by_owner_and_created_at", ["ownerId", "createdAt"]),
+  runtimeEvents: defineTable({
+    ownerId: v.string(),
+    eventId: v.string(),
+    sequence: v.number(),
+    eventType: v.string(),
+    correlationId: v.string(),
+    route: v.optional(v.string()),
+    metadata: v.record(v.string(), v.any()),
+    occurredAt: v.number(),
+    createdAt: v.number(),
+  })
+    .index("by_owner_and_event_id", ["ownerId", "eventId"])
+    .index("by_owner_and_correlation_id", ["ownerId", "correlationId"])
+    .index("by_owner_and_created_at", ["ownerId", "createdAt"]),
+  builds: defineTable({
+    ownerId: v.string(),
+    name: v.string(),
+    kind: v.string(),
+    status: v.union(
+      v.literal("planning"),
+      v.literal("active"),
+      v.literal("shelved"),
+      v.literal("retired"),
+    ),
+    description: v.optional(v.string()),
+    nickname: v.optional(v.string()),
+    notes: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_owner", ["ownerId"]),
+  buildLogs: defineTable({
+    ownerId: v.string(),
+    buildId: v.string(),
+    kind: v.union(
+      v.literal("origin"),
+      v.literal("milestone"),
+      v.literal("failure"),
+      v.literal("anecdote"),
+      v.literal("note"),
+    ),
+    title: v.string(),
+    body: v.optional(v.string()),
+    occurredAt: v.optional(v.number()),
+    createdAt: v.number(),
+    // Optional: existing rows predate this field. Convex requires widening
+    // with an optional field before any backfill migration narrows it.
+    updatedAt: v.optional(v.number()),
+  })
+    .index("by_owner", ["ownerId"])
+    .index("by_owner_and_build_id", ["ownerId", "buildId"]),
+  upgrades: defineTable({
+    ownerId: v.string(),
+    buildId: v.string(),
+    title: v.string(),
+    reason: v.optional(v.string()),
+    beforeState: v.optional(v.string()),
+    afterState: v.optional(v.string()),
+    outcome: v.optional(v.string()),
+    parts: v.optional(v.array(v.string())),
+    version: v.optional(v.string()),
+    occurredAt: v.optional(v.number()),
+    createdAt: v.number(),
+    // Optional: existing rows predate this field. Convex requires widening
+    // with an optional field before any backfill migration narrows it.
+    updatedAt: v.optional(v.number()),
+  })
+    .index("by_owner", ["ownerId"])
+    .index("by_owner_and_build_id", ["ownerId", "buildId"]),
+  assets: defineTable({
+    ownerId: v.string(),
+    name: v.string(),
+    kind: v.string(),
+    serviceIntervalDays: v.optional(v.number()),
+    lastServicedAt: v.optional(v.number()),
+    notes: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_owner", ["ownerId"]),
+  preferences: defineTable({
+    ownerId: v.string(),
+    key: v.string(),
+    value: v.string(),
+    category: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_owner", ["ownerId"]),
+});
