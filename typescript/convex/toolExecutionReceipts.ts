@@ -1,7 +1,10 @@
 import { v } from "convex/values";
 
 import { requireOwner } from "./authHelpers.js";
-import { reconcileOmegaContractFromReceipt } from "./omegaReconciliation.js";
+import {
+  applyOmegaContractReconciliationFromReceipt,
+  reconcileOmegaContractFromReceipt,
+} from "./omegaReconciliation.js";
 import { cleanRequiredText } from "./toolActionLogic.js";
 import { assertCanonicalSafetyBinding, safetyBindingValidator } from "./safetyBindingValidators.js";
 import {
@@ -10,7 +13,6 @@ import {
   toolExecutionReceiptDocumentValidator,
   toolExecutionStatusValidator,
 } from "./toolExecutionValidators.js";
-import { internal } from "./_generated/api.js";
 import { internalMutation, mutation, query, type MutationCtx } from "./_generated/server.js";
 
 function cleanOptionalText(value: string | undefined, field: string): string | undefined {
@@ -22,10 +24,7 @@ export async function scheduleOmegaReceiptReconciliation(
   ownerId: string,
   receiptKey: string,
 ): Promise<void> {
-  await ctx.scheduler.runAfter(0, internal.toolExecutionReceipts.reconcileOmegaReceipt, {
-    ownerId,
-    receiptKey,
-  });
+  await reconcileOmegaContractFromReceipt(ctx, ownerId, { receiptKey });
 }
 
 export const get = query({
@@ -58,7 +57,7 @@ export const reconcileOmegaReceipt = internalMutation({
       .unique();
     if (!receipt) return null;
 
-    await reconcileOmegaContractFromReceipt(ctx, args.ownerId, receipt);
+    await applyOmegaContractReconciliationFromReceipt(ctx, args.ownerId, receipt);
     return null;
   },
 });
