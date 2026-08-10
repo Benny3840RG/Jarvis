@@ -1,4 +1,5 @@
 import { normaliseAuditPayload } from "./toolActionLogic.js";
+import { internal } from "./_generated/api.js";
 import type { MutationCtx } from "./_generated/server.js";
 
 type TerminalReceiptStatus = "succeeded" | "failed" | "indeterminate";
@@ -58,7 +59,24 @@ async function appendAudit(
   });
 }
 
+/**
+ * The public receipt hook is intentionally scheduling-only. Callers may invoke
+ * it in the same transaction that commits authoritative execution truth: the
+ * scheduler registration commits atomically with that truth, while all Omega
+ * state mutation happens later in `reconcileOmegaReceipt`.
+ */
 export async function reconcileOmegaContractFromReceipt(
+  ctx: MutationCtx,
+  ownerId: string,
+  receipt: { receiptKey: string },
+): Promise<void> {
+  await ctx.scheduler.runAfter(0, internal.toolExecutionReceipts.reconcileOmegaReceipt, {
+    ownerId,
+    receiptKey: receipt.receiptKey,
+  });
+}
+
+export async function applyOmegaContractReconciliationFromReceipt(
   ctx: MutationCtx,
   ownerId: string,
   receipt: ReceiptLike,
