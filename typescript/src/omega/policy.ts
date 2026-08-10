@@ -129,7 +129,10 @@ export function evaluateOmegaCompletion(input: OmegaCompletionInput): OmegaCompl
 
       if (
         riskRequiresIndependentValidation(input.riskClass) &&
-        !passingProofs.some((proof) => proof.independent)
+        !passingProofs.some(
+          (proof) =>
+            proof.independent && proof.evidenceRefs.some((ref) => criterionEvidence.has(ref)),
+        )
       ) {
         failures.push(`criterion-missing-independent-proof:${criterion.criterionId}`);
       }
