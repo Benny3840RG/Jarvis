@@ -1,8 +1,12 @@
 import { v } from "convex/values";
 
 import { requireOwner } from "./authHelpers.js";
+import { reconcileOmegaContractFromReceipt } from "./omegaReconciliation.js";
 import { cleanRequiredText } from "./toolActionLogic.js";
-import { assertCanonicalSafetyBinding, safetyBindingValidator } from "./safetyBindingValidators.js";
+import {
+  assertCanonicalSafetyBinding,
+  safetyBindingValidator,
+} from "./safetyBindingValidators.js";
 import {
   toolExecutionActorValidator,
   toolExecutionErrorCodeValidator,
@@ -97,6 +101,7 @@ export const save = mutation({
       if (existing.actionFingerprint !== actionFingerprint) {
         throw new Error("Execution receipt fingerprint conflict.");
       }
+      await reconcileOmegaContractFromReceipt(ctx, ownerId, existing);
       return existing;
     }
 
@@ -132,6 +137,7 @@ export const save = mutation({
     });
     const created = await ctx.db.get("toolExecutionReceipts", id);
     if (!created) throw new Error("Tool execution receipt creation failed.");
+    await reconcileOmegaContractFromReceipt(ctx, ownerId, created);
     return created;
   },
 });
