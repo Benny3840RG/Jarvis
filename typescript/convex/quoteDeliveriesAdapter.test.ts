@@ -37,6 +37,15 @@ describe("ConvexQuoteDeliveryRepository against persisted Convex functions", () 
     );
   });
 
+  it("requires a delivery runtime token", () => {
+    const t = convexTest(schema, modules);
+    vi.stubEnv("JARVIS_DELIVERY_RUNTIME_TOKEN", "");
+
+    expect(() => new ConvexQuoteDeliveryRepository(clientFor(t), SERVICE_TOKEN)).toThrow(
+      /requires JARVIS_DELIVERY_RUNTIME_TOKEN/,
+    );
+  });
+
   it("round-trips a full delivery lifecycle through a fresh repository instance (restart persistence)", async () => {
     const t = convexTest(schema, modules);
     const repository = new ConvexQuoteDeliveryRepository(clientFor(t), SERVICE_TOKEN);
