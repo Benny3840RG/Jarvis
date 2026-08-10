@@ -57,6 +57,15 @@ async function requireMission(ctx: MutationCtx, ownerId: string, missionId: stri
   return mission;
 }
 
+function requireMutableMissionTruth(mission: { state: string }): void {
+  if (mission.state === "complete") {
+    throw new Error("Completed mission evidence and validation truth is immutable.");
+  }
+  if (mission.state === "retired") {
+    throw new Error("Terminal mission evidence and validation truth is immutable.");
+  }
+}
+
 async function enforceMissionRowLimit(
   ctx: MutationCtx,
   table: "omegaEvidence" | "omegaValidationProofs",
@@ -215,7 +224,7 @@ export const recordEvidence = mutation({
     const ownerId = requireOwner(args.serviceToken);
     const missionId = cleanText(args.missionId, "Mission ID");
     const evidenceId = cleanText(args.evidenceId, "Evidence ID");
-    await requireMission(ctx, ownerId, missionId);
+    const mission = await requireMission(ctx, ownerId, missionId);
 
     const claim = cleanText(args.claim, "Evidence claim");
     const sourceRef =
@@ -251,6 +260,8 @@ export const recordEvidence = mutation({
       }
       return existing;
     }
+
+    requireMutableMissionTruth(mission);
 
     for (const contradictedEvidenceId of contradicts) {
       const contradicted = await ctx.db
@@ -348,6 +359,8 @@ export const recordValidationProof = mutation({
       }
       return existing;
     }
+
+    requireMutableMissionTruth(mission);
 
     const now = Date.now();
     for (const evidenceId of evidenceRefs) {
