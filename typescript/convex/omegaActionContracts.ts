@@ -61,9 +61,7 @@ export const create = mutation({
     const intent = cleanText(args.intent, "Contract intent");
     const preconditions = uniqueStrings(args.preconditions, "Precondition");
     const rollbackPlan =
-      args.rollbackPlan === undefined
-        ? undefined
-        : cleanText(args.rollbackPlan, "Rollback plan");
+      args.rollbackPlan === undefined ? undefined : cleanText(args.rollbackPlan, "Rollback plan");
 
     const mission = await ctx.db
       .query("omegaMissions")
