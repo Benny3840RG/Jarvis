@@ -315,6 +315,7 @@ describe("Omega atomic execution gate", () => {
       toolActionId: "action-1",
     });
     expect(contract?.status).toBe("claimed");
+    expect(contract?.executionClaimId).toBe("claim-1");
   });
 });
 
@@ -350,14 +351,14 @@ describe("Omega receipt reconciliation", () => {
           q
             .eq("ownerId", OWNER_ID)
             .eq("missionId", "mission-1")
-            .eq("evidenceId", "tool-receipt:receipt-key-action-1"),
+            .eq("evidenceId", "tool-receipt:receipt-key-action-1:succeeded"),
         )
         .unique(),
     );
     expect(evidence?.claim).toMatch(/succeeded/i);
   });
 
-  it("records an indeterminate receipt as indeterminate rather than inferred success", async () => {
+  it("keeps an indeterminate receipt unresolved instead of fabricating terminal evidence", async () => {
     const t = harness();
     await t.run((ctx) => seedProject(ctx));
     await createActiveMission(t, "mission-indeterminate");
@@ -372,6 +373,14 @@ describe("Omega receipt reconciliation", () => {
     });
     await saveReceiptAndDrainScheduled(t, receiptArgs("action-indeterminate", "indeterminate"));
 
+    const contract = await t.query(anyApi.omegaActionContracts.getByToolAction, {
+      serviceToken: SERVICE_TOKEN,
+      toolActionId: "action-indeterminate",
+    });
+    expect(contract?.status).toBe("indeterminate");
+    expect(contract?.terminalOutcome).toBeUndefined();
+    expect(contract?.reconciledReceiptKey).toBeUndefined();
+
     const evidence = await t.run((ctx) =>
       ctx.db
         .query("omegaEvidence")
@@ -379,11 +388,10 @@ describe("Omega receipt reconciliation", () => {
           q
             .eq("ownerId", OWNER_ID)
             .eq("missionId", "mission-indeterminate")
-            .eq("evidenceId", "tool-receipt:receipt-key-action-indeterminate"),
+            .eq("evidenceId", "tool-receipt:receipt-key-action-indeterminate:indeterminate"),
         )
         .unique(),
     );
-    expect(evidence?.claim).toMatch(/indeterminate/i);
-    expect(evidence?.claim).not.toMatch(/succeeded/i);
+    expect(evidence).toBeNull();
   });
 });
