@@ -19,7 +19,7 @@
     "dev": "mcp-use dev",
     "start": "mcp-use start",
     "deploy": "mcp-use deploy",
-    "postinstall": "mcp-use generate-types || exit 0",
+    "postinstall": "mcp-use generate-types",
     "test": "node --import tsx --test tests/*.test.ts",
     "type-check": "tsc --noEmit",
     "audit:ci": "node scripts/check-audit.mjs"
