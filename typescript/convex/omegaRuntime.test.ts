@@ -294,7 +294,7 @@ describe("Omega atomic execution gate", () => {
     });
     expect(claim).toEqual({ claimed: true, claimId: "claim-1" });
 
-    const contract = await t.mutation(anyApi.omegaActionContracts.getByToolAction, {
+    const contract = await t.query(anyApi.omegaActionContracts.getByToolAction, {
       serviceToken: SERVICE_TOKEN,
       toolActionId: "action-1",
     });
@@ -321,7 +321,7 @@ describe("Omega receipt reconciliation", () => {
     const second = await t.mutation(anyApi.toolExecutionReceipts.save, receiptArgs());
     expect(second._id).toBe(first._id);
 
-    const contract = await t.mutation(anyApi.omegaActionContracts.getByToolAction, {
+    const contract = await t.query(anyApi.omegaActionContracts.getByToolAction, {
       serviceToken: SERVICE_TOKEN,
       toolActionId: "action-1",
     });
