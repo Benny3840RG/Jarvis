@@ -7,6 +7,7 @@ import {
   externalReconciliationStateValidator,
 } from "./externalReconciliationValidators.js";
 import { requireOwner } from "./authHelpers.js";
+import { reconcileOmegaContractFromReceipt } from "./omegaReconciliation.js";
 import { cleanRequiredText } from "./toolActionLogic.js";
 import {
   toolExecutionReceiptDocumentValidator,
@@ -231,11 +232,13 @@ async function upsertReceipt(
     await ctx.db.replace("toolExecutionReceipts", existing._id, document);
     const replaced = await ctx.db.get("toolExecutionReceipts", existing._id);
     if (!replaced) throw new Error("Execution receipt replacement failed.");
+    await reconcileOmegaContractFromReceipt(ctx, ownerId, replaced);
     return replaced;
   }
   const id = await ctx.db.insert("toolExecutionReceipts", document);
   const created = await ctx.db.get("toolExecutionReceipts", id);
   if (!created) throw new Error("Execution receipt creation failed.");
+  await reconcileOmegaContractFromReceipt(ctx, ownerId, created);
   return created;
 }
 
@@ -843,6 +846,7 @@ export const resolveClaim = mutation({
     }
     const updatedReceipt = await ctx.db.get("toolExecutionReceipts", receipt._id);
     if (!updatedReceipt) throw new Error("Authoritative receipt resolution failed.");
+    await reconcileOmegaContractFromReceipt(ctx, ownerId, updatedReceipt);
     return updatedReceipt;
   },
 });
