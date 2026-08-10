@@ -53,7 +53,11 @@ export async function checkOmegaExecutionGate(
       q.eq("ownerId", ownerId).eq("missionId", contract.missionId),
     )
     .unique();
-  if (!mission || mission.projectKey !== action.projectKey || !missionIsExecutable(mission.state)) {
+  if (
+    !mission ||
+    mission.projectKey !== action.projectKey ||
+    !missionIsExecutable(mission.state)
+  ) {
     return { ok: false, blockReason: "omega-mission-not-executable" };
   }
 
