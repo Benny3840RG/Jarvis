@@ -73,11 +73,7 @@ export function evaluateOmegaCompletion(input: OmegaCompletionInput): OmegaCompl
     failures.push("duplicate-acceptance-criterion-id");
   }
 
-  if (
-    input.criteria.some(
-      (criterion) => criterion.status !== "satisfied" && criterion.status !== "waived",
-    )
-  ) {
+  if (input.criteria.some((criterion) => criterion.status !== "satisfied")) {
     failures.push("acceptance-criteria-incomplete");
   }
 
