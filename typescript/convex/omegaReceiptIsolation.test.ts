@@ -117,31 +117,35 @@ async function seedAuthorizedButUnclaimedContract(t: ReturnType<typeof harness>)
   });
 }
 
+function receiptArgs() {
+  return {
+    serviceToken: SERVICE_TOKEN,
+    receiptKey: "receipt-key-isolation",
+    receiptId: "receipt-isolation",
+    actionId: "action-isolation",
+    requestId: "request-isolation",
+    projectId: PROJECT_KEY,
+    idempotencyKey: "execution-isolation",
+    actionFingerprint: "fingerprint-isolation",
+    tool: "quotes",
+    operation: "send",
+    actor: "tool",
+    approvalId: "approval-isolation",
+    policyVersion: "omega-sigma:v1",
+    correlationId: "correlation-isolation",
+    source: "omega-receipt-isolation-test",
+    status: "succeeded",
+    startedAt: 10_200,
+    completedAt: 10_300,
+  };
+}
+
 describe("Omega receipt isolation", () => {
   it("persists Jarvis receipt when Omega reconciliation cannot advance", async () => {
     const t = harness();
     await seedAuthorizedButUnclaimedContract(t);
 
-    const receipt = await t.mutation(anyApi.toolExecutionReceipts.save, {
-      serviceToken: SERVICE_TOKEN,
-      receiptKey: "receipt-key-isolation",
-      receiptId: "receipt-isolation",
-      actionId: "action-isolation",
-      requestId: "request-isolation",
-      projectId: PROJECT_KEY,
-      idempotencyKey: "execution-isolation",
-      actionFingerprint: "fingerprint-isolation",
-      tool: "quotes",
-      operation: "send",
-      actor: "tool",
-      approvalId: "approval-isolation",
-      policyVersion: "omega-sigma:v1",
-      correlationId: "correlation-isolation",
-      source: "omega-receipt-isolation-test",
-      status: "succeeded",
-      startedAt: 10_200,
-      completedAt: 10_300,
-    });
+    const receipt = await t.mutation(anyApi.toolExecutionReceipts.save, receiptArgs());
 
     expect(receipt.receiptId).toBe("receipt-isolation");
     const stored = await t.query(anyApi.toolExecutionReceipts.get, {
@@ -155,5 +159,37 @@ describe("Omega receipt isolation", () => {
       toolActionId: "action-isolation",
     });
     expect(contract?.status).toBe("authorized");
+  });
+
+  it("persists Jarvis receipt even when Omega reconciliation itself hits inconsistent indexed state", async () => {
+    const t = harness();
+    await seedAuthorizedButUnclaimedContract(t);
+    await t.run(async (ctx) => {
+      await ctx.db.insert("omegaActionContracts", {
+        ownerId: OWNER_ID,
+        missionId: "mission-isolation",
+        contractId: "contract-isolation-duplicate",
+        toolActionId: "action-isolation",
+        intent: "Deliberately corrupt the secondary Omega binding for isolation coverage.",
+        riskClass: "R3",
+        reversibilityClass: "REV-2",
+        requiredAuthority: "T3",
+        scope: { projectKey: PROJECT_KEY },
+        preconditions: ["underlying-action-approved"],
+        approvalRef: "approval-isolation-duplicate",
+        status: "authorized",
+        createdAt: 10_100,
+        updatedAt: 10_100,
+      });
+    });
+
+    const receipt = await t.mutation(anyApi.toolExecutionReceipts.save, receiptArgs());
+    expect(receipt.receiptId).toBe("receipt-isolation");
+
+    const stored = await t.query(anyApi.toolExecutionReceipts.get, {
+      serviceToken: SERVICE_TOKEN,
+      receiptKey: "receipt-key-isolation",
+    });
+    expect(stored?.receiptId).toBe("receipt-isolation");
   });
 });
