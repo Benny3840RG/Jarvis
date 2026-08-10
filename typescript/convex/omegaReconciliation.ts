@@ -3,6 +3,7 @@ import { normaliseAuditPayload } from "./toolActionLogic.js";
 
 type ReceiptLike = {
   actionId: string;
+  projectId: string;
   receiptId: string;
   receiptKey: string;
   status: string;
@@ -55,6 +56,51 @@ export async function reconcileOmegaContractFromReceipt(
     )
     .unique();
   if (!mission) return;
+
+  const action = await ctx.db
+    .query("toolActions")
+    .withIndex("by_owner_and_action_id", (q) =>
+      q.eq("ownerId", ownerId).eq("actionId", receipt.actionId),
+    )
+    .unique();
+  const projectMatches =
+    action !== null &&
+    action.projectKey === mission.projectKey &&
+    receipt.projectId === mission.projectKey;
+  const toolMatches = action !== null && receipt.tool === action.tool;
+  const operationMatches = action !== null && receipt.operation === action.operation;
+  const claimMatches =
+    action !== null &&
+    action.singleUseClaimId !== undefined &&
+    contract.executionClaimId !== undefined &&
+    action.singleUseClaimId === contract.executionClaimId;
+
+  if (!projectMatches || !toolMatches || !operationMatches || !claimMatches) {
+    if (contract.status !== "conflicted") {
+      await ctx.db.patch("omegaActionContracts", contract._id, {
+        status: "conflicted",
+        updatedAt: receipt.completedAt,
+      });
+      await appendAudit(ctx, {
+        ownerId,
+        missionId: contract.missionId,
+        projectKey: mission.projectKey,
+        eventType: "omega.contract.receipt-identity-conflict",
+        payload: {
+          missionId: contract.missionId,
+          contractId: contract.contractId,
+          toolActionId: receipt.actionId,
+          receiptKey: receipt.receiptKey,
+          projectMatches,
+          toolMatches,
+          operationMatches,
+          claimMatches,
+        },
+        createdAt: receipt.completedAt,
+      });
+    }
+    return;
+  }
 
   const evidenceId = `tool-receipt:${receipt.receiptKey}:${receipt.status}`;
   const existingEvidence = await ctx.db
