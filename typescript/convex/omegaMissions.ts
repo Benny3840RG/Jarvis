@@ -46,6 +46,21 @@ function uniqueStrings(values: readonly string[], label: string): string[] {
   return cleaned;
 }
 
+function mergeUniqueStrings(
+  existing: readonly string[],
+  incoming: readonly string[],
+  label: string,
+): string[] {
+  const merged = [...existing];
+  for (const value of incoming) {
+    if (!merged.includes(value)) merged.push(value);
+  }
+  if (merged.length > MAX_REFERENCES_PER_ITEM) {
+    throw new Error(`${label} cannot contain more than ${MAX_REFERENCES_PER_ITEM} values.`);
+  }
+  return merged;
+}
+
 async function requireMission(ctx: MutationCtx, ownerId: string, missionId: string) {
   const mission = await ctx.db
     .query("omegaMissions")
@@ -416,7 +431,11 @@ export const recordValidationProof = mutation({
             status: nextCriterionStatus,
             evidenceRefs:
               args.result === "pass" || args.result === "waived"
-                ? evidenceRefs
+                ? mergeUniqueStrings(
+                    criterion.evidenceRefs,
+                    evidenceRefs,
+                    "Criterion evidence reference",
+                  )
                 : criterion.evidenceRefs,
           }
         : criterion,
