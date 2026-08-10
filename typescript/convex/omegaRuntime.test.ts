@@ -125,6 +125,7 @@ async function bindAndAuthorize(
   });
   return t.mutation(anyApi.omegaActionContracts.authorize, {
     serviceToken: SERVICE_TOKEN,
+    approvalToken: APPROVAL_TOKEN,
     missionId,
     contractId: `contract-${actionId}`,
     approvalRef: `approval-${actionId}`,
