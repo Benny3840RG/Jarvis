@@ -712,13 +712,7 @@ export const claimSingleUseExecution = mutation({
       return { claimed: false, claimId: "", blockReason: revision.blockReason };
     }
 
-    const omegaDecision = await claimOmegaExecutionContract(
-      ctx,
-      ownerId,
-      action,
-      claimId,
-      now,
-    );
+    const omegaDecision = await claimOmegaExecutionContract(ctx, ownerId, action, claimId, now);
     if (!omegaDecision.ok) {
       return { claimed: false, claimId: "", blockReason: omegaDecision.blockReason };
     }

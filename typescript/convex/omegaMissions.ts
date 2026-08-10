@@ -43,11 +43,16 @@ const MUTABLE_MISSION_STATES = new Set([
 function cleanText(value: string, label: string, maxLength = MAX_ID_LENGTH): string {
   const cleaned = value.trim();
   if (!cleaned) throw new Error(`${label} cannot be empty.`);
-  if (cleaned.length > maxLength) throw new Error(`${label} cannot exceed ${maxLength} characters.`);
+  if (cleaned.length > maxLength)
+    throw new Error(`${label} cannot exceed ${maxLength} characters.`);
   return cleaned;
 }
 
-function uniqueStrings(values: readonly string[], label: string, maxItems = MAX_EVIDENCE_REFS): string[] {
+function uniqueStrings(
+  values: readonly string[],
+  label: string,
+  maxItems = MAX_EVIDENCE_REFS,
+): string[] {
   if (values.length > maxItems) throw new Error(`${label} cannot exceed ${maxItems} values.`);
   const cleaned = values.map((value) => cleanText(value, label));
   if (new Set(cleaned).size !== cleaned.length) throw new Error(`${label} values must be unique.`);
@@ -83,7 +88,9 @@ async function appendAudit(
 async function requireMission(ctx: MutationCtx, ownerId: string, missionId: string) {
   const mission = await ctx.db
     .query("omegaMissions")
-    .withIndex("by_owner_and_mission_id", (q) => q.eq("ownerId", ownerId).eq("missionId", missionId))
+    .withIndex("by_owner_and_mission_id", (q) =>
+      q.eq("ownerId", ownerId).eq("missionId", missionId),
+    )
     .unique();
   if (!mission) throw new Error("Omega mission does not exist.");
   return mission;
@@ -105,7 +112,9 @@ async function assertMissionCapacity(
 ): Promise<void> {
   const rows = await ctx.db
     .query(table)
-    .withIndex("by_owner_and_mission_id", (q) => q.eq("ownerId", ownerId).eq("missionId", missionId))
+    .withIndex("by_owner_and_mission_id", (q) =>
+      q.eq("ownerId", ownerId).eq("missionId", missionId),
+    )
     .take(max);
   if (rows.length >= max) throw new Error(`${label} limit of ${max} per mission has been reached.`);
 }
@@ -128,16 +137,27 @@ export const create = mutation({
     const missionId = cleanText(args.missionId, "Mission ID");
     const projectKey = cleanText(args.projectKey, "Project key");
     const objective = cleanText(args.objective, "Objective", MAX_OBJECTIVE_LENGTH);
-    if (!Number.isFinite(args.uncertaintyBudget) || args.uncertaintyBudget < 0 || args.uncertaintyBudget > 1) {
+    if (
+      !Number.isFinite(args.uncertaintyBudget) ||
+      args.uncertaintyBudget < 0 ||
+      args.uncertaintyBudget > 1
+    ) {
       throw new Error("Uncertainty budget must be between 0 and 1.");
     }
-    if (args.acceptanceCriteria.length < 1 || args.acceptanceCriteria.length > MAX_ACCEPTANCE_CRITERIA) {
-      throw new Error(`Acceptance criteria must contain between 1 and ${MAX_ACCEPTANCE_CRITERIA} items.`);
+    if (
+      args.acceptanceCriteria.length < 1 ||
+      args.acceptanceCriteria.length > MAX_ACCEPTANCE_CRITERIA
+    ) {
+      throw new Error(
+        `Acceptance criteria must contain between 1 and ${MAX_ACCEPTANCE_CRITERIA} items.`,
+      );
     }
 
     const project = await ctx.db
       .query("projects")
-      .withIndex("by_owner_and_project_key", (q) => q.eq("ownerId", ownerId).eq("projectKey", projectKey))
+      .withIndex("by_owner_and_project_key", (q) =>
+        q.eq("ownerId", ownerId).eq("projectKey", projectKey),
+      )
       .unique();
     if (!project) throw new Error("Omega mission project does not exist.");
 
@@ -147,16 +167,25 @@ export const create = mutation({
       status: criterion.status,
       evidenceRefs: uniqueStrings(criterion.evidenceRefs, "Criterion evidence reference"),
     }));
-    if (new Set(acceptanceCriteria.map((criterion) => criterion.criterionId)).size !== acceptanceCriteria.length) {
+    if (
+      new Set(acceptanceCriteria.map((criterion) => criterion.criterionId)).size !==
+      acceptanceCriteria.length
+    ) {
       throw new Error("Acceptance criterion IDs must be unique.");
     }
-    if (acceptanceCriteria.some((criterion) => criterion.status !== "unverified" || criterion.evidenceRefs.length !== 0)) {
+    if (
+      acceptanceCriteria.some(
+        (criterion) => criterion.status !== "unverified" || criterion.evidenceRefs.length !== 0,
+      )
+    ) {
       throw new Error("New acceptance criteria must start unverified without evidence.");
     }
 
     const duplicate = await ctx.db
       .query("omegaMissions")
-      .withIndex("by_owner_and_mission_id", (q) => q.eq("ownerId", ownerId).eq("missionId", missionId))
+      .withIndex("by_owner_and_mission_id", (q) =>
+        q.eq("ownerId", ownerId).eq("missionId", missionId),
+      )
       .unique();
     if (duplicate) {
       const same =
@@ -215,7 +244,9 @@ export const get = query({
     const ownerId = requireOwner(args.serviceToken);
     return ctx.db
       .query("omegaMissions")
-      .withIndex("by_owner_and_mission_id", (q) => q.eq("ownerId", ownerId).eq("missionId", args.missionId.trim()))
+      .withIndex("by_owner_and_mission_id", (q) =>
+        q.eq("ownerId", ownerId).eq("missionId", args.missionId.trim()),
+      )
       .unique();
   },
 });
@@ -240,12 +271,18 @@ export const recordEvidence = mutation({
     const mission = await requireMission(ctx, ownerId, missionId);
     requireMutableMission(mission.state);
     const claim = cleanText(args.claim, "Evidence claim", MAX_CLAIM_LENGTH);
-    const sourceRef = args.sourceRef === undefined ? undefined : cleanText(args.sourceRef, "Evidence source reference", MAX_SOURCE_REF_LENGTH);
+    const sourceRef =
+      args.sourceRef === undefined
+        ? undefined
+        : cleanText(args.sourceRef, "Evidence source reference", MAX_SOURCE_REF_LENGTH);
     const contradicts = uniqueStrings(args.contradicts, "Contradicting evidence reference");
     if (contradicts.includes(evidenceId)) throw new Error("Evidence cannot contradict itself.");
 
     const now = Date.now();
-    if (args.validUntil !== undefined && (!Number.isFinite(args.validUntil) || args.validUntil <= now)) {
+    if (
+      args.validUntil !== undefined &&
+      (!Number.isFinite(args.validUntil) || args.validUntil <= now)
+    ) {
       throw new Error("Evidence validity must end in the future when provided.");
     }
     const existing = await ctx.db
@@ -272,9 +309,17 @@ export const recordEvidence = mutation({
           q.eq("ownerId", ownerId).eq("missionId", missionId).eq("evidenceId", contradictedId),
         )
         .unique();
-      if (!contradicted) throw new Error(`Contradicting evidence reference does not exist: ${contradictedId}.`);
+      if (!contradicted)
+        throw new Error(`Contradicting evidence reference does not exist: ${contradictedId}.`);
     }
-    await assertMissionCapacity(ctx, ownerId, missionId, "omegaEvidence", MAX_EVIDENCE_PER_MISSION, "Omega evidence");
+    await assertMissionCapacity(
+      ctx,
+      ownerId,
+      missionId,
+      "omegaEvidence",
+      MAX_EVIDENCE_PER_MISSION,
+      "Omega evidence",
+    );
 
     const id = await ctx.db.insert("omegaEvidence", {
       ownerId,
@@ -293,7 +338,12 @@ export const recordEvidence = mutation({
       missionId,
       projectKey: mission.projectKey,
       eventType: "omega.evidence.recorded",
-      payload: { missionId, evidenceId, classification: args.classification, sourceType: args.sourceType },
+      payload: {
+        missionId,
+        evidenceId,
+        classification: args.classification,
+        sourceType: args.sourceType,
+      },
       createdAt: now,
     });
     const created = await ctx.db.get("omegaEvidence", id);
@@ -323,8 +373,11 @@ export const recordValidationProof = mutation({
     const proofId = cleanText(args.proofId, "Proof ID");
     const criterionId = cleanText(args.criterionId, "Criterion ID");
     const performedBy = cleanText(args.performedBy, "Performed by");
-    const criterionIndex = mission.acceptanceCriteria.findIndex((criterion) => criterion.criterionId === criterionId);
-    if (criterionIndex < 0) throw new Error("Validation proof references an unknown acceptance criterion.");
+    const criterionIndex = mission.acceptanceCriteria.findIndex(
+      (criterion) => criterion.criterionId === criterionId,
+    );
+    if (criterionIndex < 0)
+      throw new Error("Validation proof references an unknown acceptance criterion.");
     if ((mission.riskClass === "R3" || mission.riskClass === "R4") && args.result === "waived") {
       throw new Error("R3/R4 Omega acceptance criteria cannot be waived.");
     }
@@ -347,7 +400,8 @@ export const recordValidationProof = mutation({
         existing.independent === args.independent &&
         existing.performedBy === performedBy &&
         sameJson(existing.evidenceRefs, evidenceRefs);
-      if (!same) throw new Error("Omega validation proof ID already exists with different contents.");
+      if (!same)
+        throw new Error("Omega validation proof ID already exists with different contents.");
       return existing;
     }
 
@@ -359,12 +413,20 @@ export const recordValidationProof = mutation({
           q.eq("ownerId", ownerId).eq("missionId", missionId).eq("evidenceId", evidenceId),
         )
         .unique();
-      if (!evidence) throw new Error(`Validation proof references missing evidence: ${evidenceId}.`);
+      if (!evidence)
+        throw new Error(`Validation proof references missing evidence: ${evidenceId}.`);
       if (evidence.validUntil !== undefined && evidence.validUntil <= now) {
         throw new Error(`Validation proof references expired evidence: ${evidenceId}.`);
       }
     }
-    await assertMissionCapacity(ctx, ownerId, missionId, "omegaValidationProofs", MAX_PROOFS_PER_MISSION, "Omega validation proof");
+    await assertMissionCapacity(
+      ctx,
+      ownerId,
+      missionId,
+      "omegaValidationProofs",
+      MAX_PROOFS_PER_MISSION,
+      "Omega validation proof",
+    );
 
     const id = await ctx.db.insert("omegaValidationProofs", {
       ownerId,
@@ -379,13 +441,22 @@ export const recordValidationProof = mutation({
       performedAt: now,
     });
     const nextCriterionStatus =
-      args.result === "pass" ? "satisfied" : args.result === "fail" ? "failed" : args.result === "waived" ? "waived" : mission.acceptanceCriteria[criterionIndex].status;
+      args.result === "pass"
+        ? "satisfied"
+        : args.result === "fail"
+          ? "failed"
+          : args.result === "waived"
+            ? "waived"
+            : mission.acceptanceCriteria[criterionIndex].status;
     const acceptanceCriteria = mission.acceptanceCriteria.map((criterion, index) =>
       index === criterionIndex
         ? {
             ...criterion,
             status: nextCriterionStatus,
-            evidenceRefs: args.result === "pass" || args.result === "waived" ? evidenceRefs : criterion.evidenceRefs,
+            evidenceRefs:
+              args.result === "pass" || args.result === "waived"
+                ? evidenceRefs
+                : criterion.evidenceRefs,
           }
         : criterion,
     );
@@ -395,7 +466,13 @@ export const recordValidationProof = mutation({
       missionId,
       projectKey: mission.projectKey,
       eventType: "omega.validation.recorded",
-      payload: { missionId, proofId, criterionId, result: args.result, independent: args.independent },
+      payload: {
+        missionId,
+        proofId,
+        criterionId,
+        result: args.result,
+        independent: args.independent,
+      },
       createdAt: now,
     });
     const created = await ctx.db.get("omegaValidationProofs", id);
@@ -427,29 +504,43 @@ export const transition = mutation({
       }
       const proofs = await ctx.db
         .query("omegaValidationProofs")
-        .withIndex("by_owner_and_mission_id", (q) => q.eq("ownerId", ownerId).eq("missionId", missionId))
+        .withIndex("by_owner_and_mission_id", (q) =>
+          q.eq("ownerId", ownerId).eq("missionId", missionId),
+        )
         .take(MAX_PROOFS_PER_MISSION + 1);
       if (proofs.length > MAX_PROOFS_PER_MISSION) {
-        throw new Error("Omega completion requires proof compaction before synchronous validation.");
+        throw new Error(
+          "Omega completion requires proof compaction before synchronous validation.",
+        );
       }
       const evidence = await ctx.db
         .query("omegaEvidence")
-        .withIndex("by_owner_and_mission_id", (q) => q.eq("ownerId", ownerId).eq("missionId", missionId))
+        .withIndex("by_owner_and_mission_id", (q) =>
+          q.eq("ownerId", ownerId).eq("missionId", missionId),
+        )
         .take(MAX_EVIDENCE_PER_MISSION + 1);
       if (evidence.length > MAX_EVIDENCE_PER_MISSION) {
-        throw new Error("Omega completion requires evidence compaction before synchronous validation.");
+        throw new Error(
+          "Omega completion requires evidence compaction before synchronous validation.",
+        );
       }
       const contracts = await ctx.db
         .query("omegaActionContracts")
-        .withIndex("by_owner_and_mission_id", (q) => q.eq("ownerId", ownerId).eq("missionId", missionId))
+        .withIndex("by_owner_and_mission_id", (q) =>
+          q.eq("ownerId", ownerId).eq("missionId", missionId),
+        )
         .take(MAX_CONTRACTS_PER_MISSION + 1);
       if (contracts.length > MAX_CONTRACTS_PER_MISSION) {
-        throw new Error("Omega completion requires contract compaction before synchronous validation.");
+        throw new Error(
+          "Omega completion requires contract compaction before synchronous validation.",
+        );
       }
 
       const evidenceById = new Map(evidence.map((item) => [item.evidenceId, item]));
       const unresolvedCriticalContradictions = evidence.filter(
-        (item) => item.classification === "certain" && item.contradicts.some((evidenceId) => evidenceById.has(evidenceId)),
+        (item) =>
+          item.classification === "certain" &&
+          item.contradicts.some((evidenceId) => evidenceById.has(evidenceId)),
       ).length;
       const referencedEvidenceIds = new Set<string>();
       for (const criterion of mission.acceptanceCriteria) {
@@ -465,7 +556,8 @@ export const transition = mutation({
       let invalidEvidenceRefs = 0;
       for (const evidenceId of referencedEvidenceIds) {
         const item = evidenceById.get(evidenceId);
-        if (!item || (item.validUntil !== undefined && item.validUntil <= now)) invalidEvidenceRefs += 1;
+        if (!item || (item.validUntil !== undefined && item.validUntil <= now))
+          invalidEvidenceRefs += 1;
       }
       const unresolvedActionContracts = contracts.filter(
         (contract) => !["reconciled", "denied", "expired"].includes(contract.status),

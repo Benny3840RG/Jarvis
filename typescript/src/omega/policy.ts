@@ -27,10 +27,7 @@ const TRANSITIONS: Readonly<Record<OmegaMissionState, readonly OmegaMissionState
   retired: [],
 };
 
-export function canTransitionOmegaMission(
-  from: OmegaMissionState,
-  to: OmegaMissionState,
-): boolean {
+export function canTransitionOmegaMission(from: OmegaMissionState, to: OmegaMissionState): boolean {
   return TRANSITIONS[from].includes(to);
 }
 
@@ -105,8 +102,7 @@ export function evaluateOmegaCompletion(input: OmegaCompletionInput): OmegaCompl
   if (
     input.proofs.some(
       (proof) =>
-        (proof.result === "pass" || proof.result === "waived") &&
-        proof.evidenceRefs.length === 0,
+        (proof.result === "pass" || proof.result === "waived") && proof.evidenceRefs.length === 0,
     )
   ) {
     failures.push("terminal-proof-missing-evidence");
@@ -126,9 +122,7 @@ export function evaluateOmegaCompletion(input: OmegaCompletionInput): OmegaCompl
       }
 
       if (
-        !passingProofs.some((proof) =>
-          proof.evidenceRefs.some((ref) => criterionEvidence.has(ref)),
-        )
+        !passingProofs.some((proof) => proof.evidenceRefs.some((ref) => criterionEvidence.has(ref)))
       ) {
         failures.push(`criterion-proof-evidence-mismatch:${criterion.criterionId}`);
       }
@@ -148,9 +142,7 @@ export function evaluateOmegaCompletion(input: OmegaCompletionInput): OmegaCompl
       if (waiverProofs.length === 0) {
         failures.push(`criterion-missing-waiver-proof:${criterion.criterionId}`);
       } else if (
-        !waiverProofs.some((proof) =>
-          proof.evidenceRefs.some((ref) => criterionEvidence.has(ref)),
-        )
+        !waiverProofs.some((proof) => proof.evidenceRefs.some((ref) => criterionEvidence.has(ref)))
       ) {
         failures.push(`criterion-waiver-evidence-mismatch:${criterion.criterionId}`);
       }

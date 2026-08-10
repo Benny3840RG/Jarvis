@@ -9,8 +9,7 @@ export type OmegaExecutionBlockReason =
   | "omega-precondition-unsatisfied";
 
 export type OmegaExecutionGateDecision =
-  | { ok: true; contractId?: string }
-  | { ok: false; blockReason: OmegaExecutionBlockReason };
+  { ok: true; contractId?: string } | { ok: false; blockReason: OmegaExecutionBlockReason };
 
 export async function claimOmegaExecutionContract(
   ctx: MutationCtx,
@@ -66,10 +65,7 @@ export async function claimOmegaExecutionContract(
     const evidence = await ctx.db
       .query("omegaEvidence")
       .withIndex("by_owner_mission_and_evidence_id", (q) =>
-        q
-          .eq("ownerId", ownerId)
-          .eq("missionId", contract.missionId)
-          .eq("evidenceId", evidenceId),
+        q.eq("ownerId", ownerId).eq("missionId", contract.missionId).eq("evidenceId", evidenceId),
       )
       .unique();
     if (!evidence || (evidence.validUntil !== undefined && evidence.validUntil <= now)) {

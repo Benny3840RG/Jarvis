@@ -108,10 +108,7 @@ export const omegaActionContractStateValidator = v.union(
   v.literal("conflicted"),
 );
 
-export const omegaTerminalOutcomeValidator = v.union(
-  v.literal("succeeded"),
-  v.literal("failed"),
-);
+export const omegaTerminalOutcomeValidator = v.union(v.literal("succeeded"), v.literal("failed"));
 
 export const omegaMissionDocumentValidator = v.object({
   _id: v.id("omegaMissions"),

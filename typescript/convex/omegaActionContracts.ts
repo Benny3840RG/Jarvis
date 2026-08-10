@@ -127,7 +127,9 @@ export const create = mutation({
       throw new Error("Destructive Omega contracts require risk class R3 or R4.");
     }
     if (RISK_RANK[mission.riskClass] < RISK_RANK[args.riskClass]) {
-      throw new Error("Omega mission risk class cannot be lower than its action contract risk class.");
+      throw new Error(
+        "Omega mission risk class cannot be lower than its action contract risk class.",
+      );
     }
 
     const now = Date.now();
@@ -257,7 +259,9 @@ export const authorize = mutation({
       )
       .unique();
     if (!action || action.projectKey !== mission.projectKey || action.state !== "approved") {
-      throw new Error("Bound tool action must be approved before the Omega contract is authorized.");
+      throw new Error(
+        "Bound tool action must be approved before the Omega contract is authorized.",
+      );
     }
     if (action.consumptionPolicy !== "single-use") {
       throw new Error("Bound tool action is not governed as single-use.");
@@ -289,7 +293,9 @@ export const authorize = mutation({
         )
         .unique();
       if (!evidence || (evidence.validUntil !== undefined && evidence.validUntil <= now)) {
-        throw new Error(`Omega contract precondition evidence is not currently valid: ${evidenceId}.`);
+        throw new Error(
+          `Omega contract precondition evidence is not currently valid: ${evidenceId}.`,
+        );
       }
     }
 
