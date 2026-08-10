@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 
 import { requireOwner } from "./authHelpers.js";
+import { reconcileOmegaContractFromReceipt } from "./omegaReconciliation.js";
 import { cleanRequiredText } from "./toolActionLogic.js";
 import { assertCanonicalSafetyBinding, safetyBindingValidator } from "./safetyBindingValidators.js";
 import {
@@ -9,10 +10,22 @@ import {
   toolExecutionReceiptDocumentValidator,
   toolExecutionStatusValidator,
 } from "./toolExecutionValidators.js";
-import { mutation, query } from "./_generated/server.js";
+import { internal } from "./_generated/api.js";
+import { internalMutation, mutation, query, type MutationCtx } from "./_generated/server.js";
 
 function cleanOptionalText(value: string | undefined, field: string): string | undefined {
   return value === undefined ? undefined : cleanRequiredText(value, field);
+}
+
+async function scheduleOmegaReceiptReconciliation(
+  ctx: MutationCtx,
+  ownerId: string,
+  receiptKey: string,
+): Promise<void> {
+  await ctx.scheduler.runAfter(0, internal.toolExecutionReceipts.reconcileOmegaReceipt, {
+    ownerId,
+    receiptKey,
+  });
 }
 
 export const get = query({
@@ -27,6 +40,26 @@ export const get = query({
         q.eq("ownerId", ownerId).eq("receiptKey", receiptKey),
       )
       .unique();
+  },
+});
+
+export const reconcileOmegaReceipt = internalMutation({
+  args: {
+    ownerId: v.string(),
+    receiptKey: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const receipt = await ctx.db
+      .query("toolExecutionReceipts")
+      .withIndex("by_owner_and_receipt_key", (q) =>
+        q.eq("ownerId", args.ownerId).eq("receiptKey", args.receiptKey),
+      )
+      .unique();
+    if (!receipt) return null;
+
+    await reconcileOmegaContractFromReceipt(ctx, args.ownerId, receipt);
+    return null;
   },
 });
 
@@ -97,6 +130,7 @@ export const save = mutation({
       if (existing.actionFingerprint !== actionFingerprint) {
         throw new Error("Execution receipt fingerprint conflict.");
       }
+      await scheduleOmegaReceiptReconciliation(ctx, ownerId, receiptKey);
       return existing;
     }
 
@@ -132,6 +166,7 @@ export const save = mutation({
     });
     const created = await ctx.db.get("toolExecutionReceipts", id);
     if (!created) throw new Error("Tool execution receipt creation failed.");
+    await scheduleOmegaReceiptReconciliation(ctx, ownerId, receiptKey);
     return created;
   },
 });
