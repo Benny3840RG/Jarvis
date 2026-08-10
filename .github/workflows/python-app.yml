@@ -2,7 +2,7 @@ name: Python checks
 
 on:
   push:
-    branches: [main, feat/convex-persistence]
+    branches: [main]
     paths:
       - "src/**"
       - "tests/**"
