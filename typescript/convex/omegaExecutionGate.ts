@@ -7,8 +7,7 @@ export type OmegaExecutionBlockReason =
   | "omega-contract-authority-mismatch";
 
 export type OmegaExecutionGateDecision =
-  | { ok: true; contractId?: string }
-  | { ok: false; blockReason: OmegaExecutionBlockReason };
+  { ok: true; contractId?: string } | { ok: false; blockReason: OmegaExecutionBlockReason };
 
 function missionIsExecutable(state: string): boolean {
   return state === "active" || state === "validating" || state === "recovering";
