@@ -11,6 +11,10 @@ test("forbids blocked -> complete shortcut", () => {
   assert.equal(canTransitionOmegaMission("blocked", "complete"), false);
 });
 
+test("forbids blocked -> active through the generic transition policy", () => {
+  assert.equal(canTransitionOmegaMission("blocked", "active"), false);
+});
+
 test("requires evidence for satisfied criteria", () => {
   const decision = evaluateOmegaCompletion({
     criteria: [{ criterionId: "AC-1", status: "satisfied", evidenceRefs: [] }],
