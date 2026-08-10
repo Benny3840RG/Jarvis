@@ -111,6 +111,7 @@ async function seedAuthorizedButUnclaimedContract(t: ReturnType<typeof harness>)
   });
   await t.mutation(anyApi.omegaActionContracts.authorize, {
     serviceToken: SERVICE_TOKEN,
+    approvalToken: APPROVAL_TOKEN,
     missionId: "mission-isolation",
     contractId: "contract-isolation",
     approvalRef: "approval-isolation",
