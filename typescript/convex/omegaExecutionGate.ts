@@ -75,8 +75,20 @@ export async function markOmegaExecutionClaimed(
   if (contract.status !== "authorized") {
     throw new Error("Omega contract lost authorization before execution claim was recorded.");
   }
+
+  const action = await ctx.db
+    .query("toolActions")
+    .withIndex("by_owner_and_action_id", (q) =>
+      q.eq("ownerId", ownerId).eq("actionId", actionId),
+    )
+    .unique();
+  if (!action?.singleUseClaimId) {
+    throw new Error("Omega contract execution claim requires the authoritative tool-action claim ID.");
+  }
+
   await ctx.db.patch("omegaActionContracts", contract._id, {
     status: "claimed",
+    executionClaimId: action.singleUseClaimId,
     updatedAt: now,
   });
 }
