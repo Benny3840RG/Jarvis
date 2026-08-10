@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 
-const schemaSource = readFileSync(new URL("../convex/schema.ts", import.meta.url), "utf8");
+const schemaSource = ["../convex/schema.ts", "../convex/schemaBase.ts"]
+  .map((path) => readFileSync(new URL(path, import.meta.url), "utf8"))
+  .join("\n");
 const reconciliationSource = readFileSync(
   new URL("../convex/externalReconciliations.ts", import.meta.url),
   "utf8",
