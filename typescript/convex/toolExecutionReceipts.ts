@@ -3,10 +3,7 @@ import { v } from "convex/values";
 import { requireOwner } from "./authHelpers.js";
 import { reconcileOmegaContractFromReceipt } from "./omegaReconciliation.js";
 import { cleanRequiredText } from "./toolActionLogic.js";
-import {
-  assertCanonicalSafetyBinding,
-  safetyBindingValidator,
-} from "./safetyBindingValidators.js";
+import { assertCanonicalSafetyBinding, safetyBindingValidator } from "./safetyBindingValidators.js";
 import {
   toolExecutionActorValidator,
   toolExecutionErrorCodeValidator,
