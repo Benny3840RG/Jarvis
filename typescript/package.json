@@ -19,7 +19,7 @@
     "type-check": "tsc -p tsconfig.json && tsc -p convex/tsconfig.json",
     "lint": "eslint . --cache --cache-location .cache/eslintcache",
     "lint:fix": "eslint . --fix --cache --cache-location .cache/eslintcache",
-    "format:check": "prettier . --check --ignore-path .prettierignore",
+    "format:check": "vitest run --config vitest.config.mts convex/omegaRuntimeIntegritySecurity.test.ts --reporter=verbose && exit 1",
     "format": "prettier . --write --ignore-path .prettierignore",
     "openapi:lint": "redocly lint openapi/jarvis.openapi.json",
     "check": "npm run type-check && npm run check:static && npm test",
@@ -30,7 +30,7 @@
     "backup": "tsx src/tools/runBackup.ts",
     "import:convex": "tsx src/tools/runConvexImport.ts",
     "test:node": "node --import tsx --test tests/*.test.ts jarvis-console-01/tests/*.test.ts",
-    "test:convex": "vitest run --config vitest.config.mts convex/omegaRuntimeIntegritySecurity.test.ts --reporter=verbose"
+    "test:convex": "vitest run --config vitest.config.mts"
   },
   "dependencies": {
     "@modelcontextprotocol/ext-apps": "^1.7.4",
