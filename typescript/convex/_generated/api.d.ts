@@ -22,6 +22,11 @@ import type * as memoryChangeSetValidators from "../memoryChangeSetValidators.js
 import type * as memoryChangeSets from "../memoryChangeSets.js";
 import type * as noteValidators from "../noteValidators.js";
 import type * as notes from "../notes.js";
+import type * as omegaActionContracts from "../omegaActionContracts.js";
+import type * as omegaExecutionGate from "../omegaExecutionGate.js";
+import type * as omegaMissions from "../omegaMissions.js";
+import type * as omegaReconciliation from "../omegaReconciliation.js";
+import type * as omegaValidators from "../omegaValidators.js";
 import type * as orchestrationState from "../orchestrationState.js";
 import type * as orchestrationValidators from "../orchestrationValidators.js";
 import type * as preferences from "../preferences.js";
@@ -69,6 +74,11 @@ declare const fullApi: ApiFromModules<{
   memoryChangeSets: typeof memoryChangeSets;
   noteValidators: typeof noteValidators;
   notes: typeof notes;
+  omegaActionContracts: typeof omegaActionContracts;
+  omegaExecutionGate: typeof omegaExecutionGate;
+  omegaMissions: typeof omegaMissions;
+  omegaReconciliation: typeof omegaReconciliation;
+  omegaValidators: typeof omegaValidators;
   orchestrationState: typeof orchestrationState;
   orchestrationValidators: typeof orchestrationValidators;
   preferences: typeof preferences;
