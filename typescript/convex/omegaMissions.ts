@@ -455,7 +455,7 @@ export const recordValidationProof = mutation({
             status: nextCriterionStatus,
             evidenceRefs:
               args.result === "pass" || args.result === "waived"
-                ? evidenceRefs
+                ? [...new Set([...criterion.evidenceRefs, ...evidenceRefs])]
                 : criterion.evidenceRefs,
           }
         : criterion,
