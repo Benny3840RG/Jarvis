@@ -218,13 +218,17 @@ export const recordEvidence = mutation({
     await requireMission(ctx, ownerId, missionId);
 
     const claim = cleanText(args.claim, "Evidence claim");
-    const sourceRef = args.sourceRef === undefined ? undefined : cleanText(args.sourceRef, "Source reference");
+    const sourceRef =
+      args.sourceRef === undefined ? undefined : cleanText(args.sourceRef, "Source reference");
     const contradicts = uniqueStrings(args.contradicts, "Contradicting evidence reference");
     if (contradicts.includes(evidenceId)) {
       throw new Error("Evidence cannot contradict itself.");
     }
     const now = Date.now();
-    if (args.validUntil !== undefined && (!Number.isFinite(args.validUntil) || args.validUntil <= now)) {
+    if (
+      args.validUntil !== undefined &&
+      (!Number.isFinite(args.validUntil) || args.validUntil <= now)
+    ) {
       throw new Error("Evidence validity must end in the future.");
     }
 
