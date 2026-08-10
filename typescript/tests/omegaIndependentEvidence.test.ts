@@ -11,7 +11,13 @@ test("R3 independent proof must support the criterion evidence", () => {
     invalidEvidenceRefs: 0,
     residualUncertainty: 0.1,
     uncertaintyBudget: 0.2,
-    criteria: [{ criterionId: "AC-1", status: "satisfied", evidenceRefs: ["EV-1"] }],
+    criteria: [
+      {
+        criterionId: "AC-1",
+        status: "satisfied",
+        evidenceRefs: ["EV-1"],
+      },
+    ],
     proofs: [
       {
         criterionId: "AC-1",
