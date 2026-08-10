@@ -17,7 +17,7 @@ function cleanOptionalText(value: string | undefined, field: string): string | u
   return value === undefined ? undefined : cleanRequiredText(value, field);
 }
 
-async function scheduleOmegaReceiptReconciliation(
+export async function scheduleOmegaReceiptReconciliation(
   ctx: MutationCtx,
   ownerId: string,
   receiptKey: string,
