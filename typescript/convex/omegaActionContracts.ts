@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 
-import { requireOwner } from "./authHelpers.js";
+import { requireApprovalToken, requireOwner } from "./authHelpers.js";
 import {
   omegaActionContractDocumentValidator,
   omegaReversibilityClassValidator,
@@ -171,6 +171,7 @@ export const create = mutation({
 export const authorize = mutation({
   args: {
     serviceToken: v.string(),
+    approvalToken: v.string(),
     missionId: v.string(),
     contractId: v.string(),
     approvalRef: v.string(),
@@ -180,6 +181,7 @@ export const authorize = mutation({
   returns: omegaActionContractDocumentValidator,
   handler: async (ctx, args) => {
     const ownerId = requireOwner(args.serviceToken);
+    requireApprovalToken(args.approvalToken);
     const missionId = cleanText(args.missionId, "Mission ID");
     const contractId = cleanText(args.contractId, "Contract ID");
     const approvalRef = cleanText(args.approvalRef, "Approval reference");
@@ -194,7 +196,11 @@ export const authorize = mutation({
 
     const now = args.now ?? Date.now();
     if (contract.status === "authorized") {
-      if (contract.approvalRef !== approvalRef) {
+      if (
+        contract.approvalRef !== approvalRef ||
+        (args.authorityExpiresAt !== undefined &&
+          contract.authorityExpiresAt !== args.authorityExpiresAt)
+      ) {
         throw new Error("Omega action contract is already authorized with different authority.");
       }
       return contract;
@@ -220,9 +226,7 @@ export const authorize = mutation({
       )
       .unique();
     if (!action || action.state !== "approved") {
-      throw new Error(
-        "Bound tool action must be approved before the Omega contract is authorized.",
-      );
+      throw new Error("Bound tool action must be approved before the Omega contract is authorized.");
     }
     if (action.consumptionPolicy !== "single-use" || action.singleUseClaimId !== undefined) {
       throw new Error("Bound tool action is no longer an unconsumed single-use action.");
