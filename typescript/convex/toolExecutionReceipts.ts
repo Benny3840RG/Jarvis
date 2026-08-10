@@ -11,14 +11,14 @@ import {
   toolExecutionStatusValidator,
 } from "./toolExecutionValidators.js";
 import { internal } from "./_generated/api.js";
-import { internalMutation, mutation, query } from "./_generated/server.js";
+import { internalMutation, mutation, query, type MutationCtx } from "./_generated/server.js";
 
 function cleanOptionalText(value: string | undefined, field: string): string | undefined {
   return value === undefined ? undefined : cleanRequiredText(value, field);
 }
 
 async function scheduleOmegaReceiptReconciliation(
-  ctx: Parameters<Parameters<typeof mutation>[0]["handler"]>[0],
+  ctx: MutationCtx,
   ownerId: string,
   receiptKey: string,
 ): Promise<void> {
