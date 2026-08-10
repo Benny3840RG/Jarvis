@@ -61,7 +61,9 @@ export const create = mutation({
     const intent = cleanText(args.intent, "Contract intent");
     const preconditions = uniqueStrings(args.preconditions, "Precondition");
     const rollbackPlan =
-      args.rollbackPlan === undefined ? undefined : cleanText(args.rollbackPlan, "Rollback plan");
+      args.rollbackPlan === undefined
+        ? undefined
+        : cleanText(args.rollbackPlan, "Rollback plan");
 
     const mission = await ctx.db
       .query("omegaMissions")
@@ -70,7 +72,7 @@ export const create = mutation({
       )
       .unique();
     if (!mission) throw new Error("Omega mission does not exist.");
-    if (!['active', 'validating', 'recovering'].includes(mission.state)) {
+    if (!["active", "validating", "recovering"].includes(mission.state)) {
       throw new Error(`Omega mission is ${mission.state}; it cannot create executable contracts.`);
     }
 
@@ -194,11 +196,7 @@ export const authorize = mutation({
 
     const now = args.now ?? Date.now();
     if (contract.status === "authorized") {
-      if (
-        contract.approvalRef !== approvalRef ||
-        (args.authorityExpiresAt !== undefined &&
-          contract.authorityExpiresAt !== args.authorityExpiresAt)
-      ) {
+      if (contract.approvalRef !== approvalRef) {
         throw new Error("Omega action contract is already authorized with different authority.");
       }
       return contract;
@@ -224,7 +222,9 @@ export const authorize = mutation({
       )
       .unique();
     if (!action || action.state !== "approved") {
-      throw new Error("Bound tool action must be approved before the Omega contract is authorized.");
+      throw new Error(
+        "Bound tool action must be approved before the Omega contract is authorized.",
+      );
     }
     if (action.consumptionPolicy !== "single-use" || action.singleUseClaimId !== undefined) {
       throw new Error("Bound tool action is no longer an unconsumed single-use action.");
