@@ -20,7 +20,7 @@ const TRANSITIONS: Readonly<Record<OmegaMissionState, readonly OmegaMissionState
   validating: ["active", "partial", "complete", "blocked", "aborted"],
   degraded: ["recovering", "blocked", "aborted"],
   recovering: ["active", "degraded", "blocked", "aborted"],
-  blocked: ["active", "aborted"],
+  blocked: ["aborted"],
   partial: ["active", "validating", "aborted"],
   complete: ["retired"],
   aborted: ["initializing", "retired"],
