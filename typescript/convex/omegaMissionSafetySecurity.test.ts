@@ -79,7 +79,7 @@ async function seedBlockedMission(t: ReturnType<typeof harness>) {
 }
 
 describe("Omega mission hard-block security", () => {
-  it("rejects service-token-only reactivation of a blocked mission", async () => {
+  it("removes blocked-to-active from the generic service-token transition surface", async () => {
     const t = harness();
     await seedBlockedMission(t);
 
@@ -89,20 +89,45 @@ describe("Omega mission hard-block security", () => {
         missionId: "mission-blocked",
         nextState: "active",
       }),
-    ).rejects.toThrow(/approval token/i);
+    ).rejects.toThrow(/invalid omega mission transition/i);
   });
 
-  it("allows a blocked mission to reactivate with the dedicated human approval credential", async () => {
+  it("rejects dedicated unblock without a valid human approval credential", async () => {
     const t = harness();
     await seedBlockedMission(t);
 
-    const mission = await t.mutation(anyApi.omegaMissions.transition, {
+    await expect(
+      t.mutation(anyApi.omegaMissionControls.unblock, {
+        serviceToken: SERVICE_TOKEN,
+        approvalToken: "",
+        missionId: "mission-blocked",
+        reason: "Operator reviewed the blocking condition.",
+      }),
+    ).rejects.toThrow(/approval token/i);
+  });
+
+  it("allows dedicated unblock with the human approval credential and audits the decision", async () => {
+    const t = harness();
+    await seedBlockedMission(t);
+
+    const mission = await t.mutation(anyApi.omegaMissionControls.unblock, {
       serviceToken: SERVICE_TOKEN,
       approvalToken: APPROVAL_TOKEN,
       missionId: "mission-blocked",
-      nextState: "active",
+      reason: "Operator reviewed the blocking condition.",
     });
 
     expect(mission.state).toBe("active");
+    const audit = await t.run((ctx) =>
+      ctx.db
+        .query("auditEvents")
+        .withIndex("by_owner_and_request_id", (q) =>
+          q.eq("ownerId", OWNER_ID).eq("requestId", "omega-unblock:mission-blocked"),
+        )
+        .unique(),
+    );
+    expect(audit?.eventType).toBe("omega.mission.unblocked");
+    expect(audit?.actor).toBe("user");
+    expect(audit?.payload.reason).toBe("Operator reviewed the blocking condition.");
   });
 });
