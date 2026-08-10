@@ -52,11 +52,7 @@ export async function checkOmegaExecutionGate(
       q.eq("ownerId", ownerId).eq("missionId", contract.missionId),
     )
     .unique();
-  if (
-    !mission ||
-    mission.projectKey !== action.projectKey ||
-    !missionIsExecutable(mission.state)
-  ) {
+  if (!mission || mission.projectKey !== action.projectKey || !missionIsExecutable(mission.state)) {
     return { ok: false, blockReason: "omega-mission-not-executable" };
   }
 
@@ -82,9 +78,7 @@ export async function markOmegaExecutionClaimed(
 
   const action = await ctx.db
     .query("toolActions")
-    .withIndex("by_owner_and_action_id", (q) =>
-      q.eq("ownerId", ownerId).eq("actionId", actionId),
-    )
+    .withIndex("by_owner_and_action_id", (q) => q.eq("ownerId", ownerId).eq("actionId", actionId))
     .unique();
   if (!action?.singleUseClaimId) {
     throw new Error(
