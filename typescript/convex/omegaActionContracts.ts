@@ -196,11 +196,7 @@ export const authorize = mutation({
 
     const now = args.now ?? Date.now();
     if (contract.status === "authorized") {
-      if (
-        contract.approvalRef !== approvalRef ||
-        (args.authorityExpiresAt !== undefined &&
-          contract.authorityExpiresAt !== args.authorityExpiresAt)
-      ) {
+      if (contract.approvalRef !== approvalRef) {
         throw new Error("Omega action contract is already authorized with different authority.");
       }
       return contract;
