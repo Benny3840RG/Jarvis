@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 
 import { requireOwner } from "./authHelpers.js";
+import { claimOmegaExecutionContract } from "./omegaExecutionGate.js";
 import {
   clampApprovalTtlMs,
   cleanRequiredText,
@@ -601,6 +602,11 @@ const singleUseClaimBlockReasonValidator = v.union(
   v.literal("already-claimed"),
   v.literal("not-approved"),
   v.literal("expired"),
+  v.literal("omega-mission-not-executable"),
+  v.literal("omega-contract-not-authorized"),
+  v.literal("omega-contract-expired"),
+  v.literal("omega-contract-authority-mismatch"),
+  v.literal("omega-precondition-unsatisfied"),
 );
 
 const executionEligibilityBlockReasonValidator = v.union(
@@ -704,6 +710,17 @@ export const claimSingleUseExecution = mutation({
     );
     if (!revision.ok) {
       return { claimed: false, claimId: "", blockReason: revision.blockReason };
+    }
+
+    const omegaDecision = await claimOmegaExecutionContract(
+      ctx,
+      ownerId,
+      action,
+      claimId,
+      now,
+    );
+    if (!omegaDecision.ok) {
+      return { claimed: false, claimId: "", blockReason: omegaDecision.blockReason };
     }
 
     await ctx.db.patch("toolActions", action._id, {
