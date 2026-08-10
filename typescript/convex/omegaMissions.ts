@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 
 import { evaluateOmegaCompletion, canTransitionOmegaMission } from "../src/omega/policy.js";
-import { requireOwner } from "./authHelpers.js";
+import { requireApprovalToken, requireOwner } from "./authHelpers.js";
 import {
   omegaAcceptanceCriterionValidator,
   omegaAutonomyClassValidator,
@@ -297,6 +297,7 @@ export const recordEvidence = mutation({
 export const recordValidationProof = mutation({
   args: {
     serviceToken: v.string(),
+    approvalToken: v.optional(v.string()),
     missionId: v.string(),
     proofId: v.string(),
     criterionId: v.string(),
@@ -309,6 +310,7 @@ export const recordValidationProof = mutation({
   returns: omegaValidationProofDocumentValidator,
   handler: async (ctx, args) => {
     const ownerId = requireOwner(args.serviceToken);
+    if (args.independent) requireApprovalToken(args.approvalToken ?? "");
     const missionId = cleanText(args.missionId, "Mission ID");
     const mission = await requireMission(ctx, ownerId, missionId);
 
