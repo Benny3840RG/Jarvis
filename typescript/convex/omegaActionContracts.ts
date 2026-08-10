@@ -226,7 +226,9 @@ export const authorize = mutation({
       )
       .unique();
     if (!action || action.state !== "approved") {
-      throw new Error("Bound tool action must be approved before the Omega contract is authorized.");
+      throw new Error(
+        "Bound tool action must be approved before the Omega contract is authorized.",
+      );
     }
     if (action.consumptionPolicy !== "single-use" || action.singleUseClaimId !== undefined) {
       throw new Error("Bound tool action is no longer an unconsumed single-use action.");
