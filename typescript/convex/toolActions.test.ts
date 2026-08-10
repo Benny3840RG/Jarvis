@@ -7,6 +7,7 @@ import schema from "./schema.js";
 import { modules } from "./test.setup.js";
 
 const SERVICE_TOKEN = "tool-actions-consent-test-service-token-0000";
+const APPROVAL_TOKEN = "tool-actions-human-approval-token-0000000";
 const OWNER_ID = "jarvis-cli";
 const PROJECT_KEY = "project-1";
 
@@ -16,6 +17,7 @@ function harness() {
 
 beforeEach(() => {
   vi.stubEnv("JARVIS_SERVICE_TOKEN", SERVICE_TOKEN);
+  vi.stubEnv("JARVIS_APPROVAL_TOKEN", APPROVAL_TOKEN);
 });
 
 afterEach(() => {
@@ -69,6 +71,30 @@ async function stageAndReturn(t: ReturnType<typeof harness>, overrides = {}) {
 }
 
 describe("approve() consent-lifecycle stamping", () => {
+  it("rejects a service-token caller that bypasses the HTTP approval boundary", async () => {
+    const t = harness();
+    await stageAndReturn(t);
+
+    await expect(
+      t.mutation(api.toolActions.approve, {
+        serviceToken: SERVICE_TOKEN,
+        approvalToken: "",
+        projectKey: PROJECT_KEY,
+        actionId: "action-1",
+        expectedRevision: 1,
+      }),
+    ).rejects.toThrow(/approval token/i);
+
+    const approved = await t.mutation(api.toolActions.approve, {
+      serviceToken: SERVICE_TOKEN,
+      approvalToken: APPROVAL_TOKEN,
+      projectKey: PROJECT_KEY,
+      actionId: "action-1",
+      expectedRevision: 1,
+    });
+    expect(approved.state).toBe("approved");
+  });
+
   it("persists an immutable safety binding on each consent transition and audit record", async () => {
     const t = harness();
     const staged = await stageAndReturn(t);
@@ -76,6 +102,7 @@ describe("approve() consent-lifecycle stamping", () => {
 
     const approved = await t.mutation(api.toolActions.approve, {
       serviceToken: SERVICE_TOKEN,
+      approvalToken: APPROVAL_TOKEN,
       projectKey: PROJECT_KEY,
       actionId: "action-1",
       expectedRevision: 1,
@@ -85,6 +112,7 @@ describe("approve() consent-lifecycle stamping", () => {
 
     const revoked = await t.mutation(api.toolActions.revoke, {
       serviceToken: SERVICE_TOKEN,
+      approvalToken: APPROVAL_TOKEN,
       projectKey: PROJECT_KEY,
       actionId: "action-1",
       reason: "No longer required.",
@@ -115,6 +143,7 @@ describe("approve() consent-lifecycle stamping", () => {
     await stageAndReturn(t);
     await t.mutation(api.toolActions.approve, {
       serviceToken: SERVICE_TOKEN,
+      approvalToken: APPROVAL_TOKEN,
       projectKey: PROJECT_KEY,
       actionId: "action-1",
       expectedRevision: 1,
@@ -124,6 +153,7 @@ describe("approve() consent-lifecycle stamping", () => {
 
     const expired = await t.mutation(api.toolActions.approve, {
       serviceToken: SERVICE_TOKEN,
+      approvalToken: APPROVAL_TOKEN,
       projectKey: PROJECT_KEY,
       actionId: "action-1",
       expectedRevision: 1,
@@ -141,6 +171,7 @@ describe("approve() consent-lifecycle stamping", () => {
 
     const approved = await t.mutation(api.toolActions.approve, {
       serviceToken: SERVICE_TOKEN,
+      approvalToken: APPROVAL_TOKEN,
       projectKey: PROJECT_KEY,
       actionId: "action-1",
       expectedRevision: 1,
@@ -164,6 +195,7 @@ describe("approve() consent-lifecycle stamping", () => {
     const nonDestructiveNow = Date.now();
     const approved = await t.mutation(api.toolActions.approve, {
       serviceToken: SERVICE_TOKEN,
+      approvalToken: APPROVAL_TOKEN,
       projectKey: PROJECT_KEY,
       actionId: "action-1",
       expectedRevision: 1,
@@ -182,6 +214,7 @@ describe("approve() consent-lifecycle stamping", () => {
 
     const approved = await t.mutation(api.toolActions.approve, {
       serviceToken: SERVICE_TOKEN,
+      approvalToken: APPROVAL_TOKEN,
       projectKey: PROJECT_KEY,
       actionId: "action-1",
       expectedRevision: 1,
@@ -201,6 +234,7 @@ describe("approve() expiry observation on idempotent re-approve", () => {
     const now = Date.now();
     const first = await t.mutation(api.toolActions.approve, {
       serviceToken: SERVICE_TOKEN,
+      approvalToken: APPROVAL_TOKEN,
       projectKey: PROJECT_KEY,
       actionId: "action-1",
       expectedRevision: 1,
@@ -209,6 +243,7 @@ describe("approve() expiry observation on idempotent re-approve", () => {
 
     const second = await t.mutation(api.toolActions.approve, {
       serviceToken: SERVICE_TOKEN,
+      approvalToken: APPROVAL_TOKEN,
       projectKey: PROJECT_KEY,
       actionId: "action-1",
       expectedRevision: 1,
@@ -232,6 +267,7 @@ describe("approve() expiry observation on idempotent re-approve", () => {
     const now = Date.now();
     await t.mutation(api.toolActions.approve, {
       serviceToken: SERVICE_TOKEN,
+      approvalToken: APPROVAL_TOKEN,
       projectKey: PROJECT_KEY,
       actionId: "action-1",
       expectedRevision: 1,
@@ -241,6 +277,7 @@ describe("approve() expiry observation on idempotent re-approve", () => {
     const wayLater = now + 365 * 24 * 60 * 60 * 1000;
     const result = await t.mutation(api.toolActions.approve, {
       serviceToken: SERVICE_TOKEN,
+      approvalToken: APPROVAL_TOKEN,
       projectKey: PROJECT_KEY,
       actionId: "action-1",
       expectedRevision: 1,
@@ -264,6 +301,7 @@ describe("approve() expiry observation on idempotent re-approve", () => {
     const now = Date.now();
     const approved = await t.mutation(api.toolActions.approve, {
       serviceToken: SERVICE_TOKEN,
+      approvalToken: APPROVAL_TOKEN,
       projectKey: PROJECT_KEY,
       actionId: "action-1",
       expectedRevision: 1,
@@ -273,6 +311,7 @@ describe("approve() expiry observation on idempotent re-approve", () => {
 
     const result = await t.mutation(api.toolActions.approve, {
       serviceToken: SERVICE_TOKEN,
+      approvalToken: APPROVAL_TOKEN,
       projectKey: PROJECT_KEY,
       actionId: "action-1",
       expectedRevision: 1,
@@ -289,6 +328,7 @@ describe("get()/listRecent() expose a computed isApprovalExpired without mutatin
     const now = Date.now();
     await t.mutation(api.toolActions.approve, {
       serviceToken: SERVICE_TOKEN,
+      approvalToken: APPROVAL_TOKEN,
       projectKey: PROJECT_KEY,
       actionId: "action-1",
       expectedRevision: 1,
@@ -330,6 +370,7 @@ describe("get()/listRecent() expose a computed isApprovalExpired without mutatin
     const now = Date.now();
     await t.mutation(api.toolActions.approve, {
       serviceToken: SERVICE_TOKEN,
+      approvalToken: APPROVAL_TOKEN,
       projectKey: PROJECT_KEY,
       actionId: "action-1",
       expectedRevision: 1,
@@ -353,6 +394,7 @@ describe("revoke()", () => {
     const now = Date.now();
     await t.mutation(api.toolActions.approve, {
       serviceToken: SERVICE_TOKEN,
+      approvalToken: APPROVAL_TOKEN,
       projectKey: PROJECT_KEY,
       actionId: "action-1",
       expectedRevision: 1,
@@ -361,6 +403,7 @@ describe("revoke()", () => {
 
     const revoked = await t.mutation(api.toolActions.revoke, {
       serviceToken: SERVICE_TOKEN,
+      approvalToken: APPROVAL_TOKEN,
       projectKey: PROJECT_KEY,
       actionId: "action-1",
       reason: "Pricing changed after approval.",
@@ -379,6 +422,7 @@ describe("revoke()", () => {
     const now = Date.now();
     await t.mutation(api.toolActions.approve, {
       serviceToken: SERVICE_TOKEN,
+      approvalToken: APPROVAL_TOKEN,
       projectKey: PROJECT_KEY,
       actionId: "action-1",
       expectedRevision: 1,
@@ -386,6 +430,7 @@ describe("revoke()", () => {
     });
     const first = await t.mutation(api.toolActions.revoke, {
       serviceToken: SERVICE_TOKEN,
+      approvalToken: APPROVAL_TOKEN,
       projectKey: PROJECT_KEY,
       actionId: "action-1",
       reason: "Changed my mind.",
@@ -394,6 +439,7 @@ describe("revoke()", () => {
 
     const second = await t.mutation(api.toolActions.revoke, {
       serviceToken: SERVICE_TOKEN,
+      approvalToken: APPROVAL_TOKEN,
       projectKey: PROJECT_KEY,
       actionId: "action-1",
       reason: "Changed my mind.",
@@ -410,6 +456,7 @@ describe("revoke()", () => {
     const now = Date.now();
     await t.mutation(api.toolActions.approve, {
       serviceToken: SERVICE_TOKEN,
+      approvalToken: APPROVAL_TOKEN,
       projectKey: PROJECT_KEY,
       actionId: "action-1",
       expectedRevision: 1,
@@ -417,6 +464,7 @@ describe("revoke()", () => {
     });
     await t.mutation(api.toolActions.revoke, {
       serviceToken: SERVICE_TOKEN,
+      approvalToken: APPROVAL_TOKEN,
       projectKey: PROJECT_KEY,
       actionId: "action-1",
       reason: "First reason.",
@@ -426,6 +474,7 @@ describe("revoke()", () => {
     await expect(
       t.mutation(api.toolActions.revoke, {
         serviceToken: SERVICE_TOKEN,
+        approvalToken: APPROVAL_TOKEN,
         projectKey: PROJECT_KEY,
         actionId: "action-1",
         reason: "A different reason.",
@@ -441,6 +490,7 @@ describe("revoke()", () => {
     await expect(
       t.mutation(api.toolActions.revoke, {
         serviceToken: SERVICE_TOKEN,
+        approvalToken: APPROVAL_TOKEN,
         projectKey: PROJECT_KEY,
         actionId: "action-1",
         reason: "Too early.",
@@ -461,6 +511,7 @@ describe("revoke()", () => {
     await expect(
       t.mutation(api.toolActions.revoke, {
         serviceToken: SERVICE_TOKEN,
+        approvalToken: APPROVAL_TOKEN,
         projectKey: PROJECT_KEY,
         actionId: "action-1",
         reason: "Too late.",
@@ -481,6 +532,7 @@ describe("revoke()", () => {
     const now = Date.now();
     await t.mutation(api.toolActions.approve, {
       serviceToken: SERVICE_TOKEN,
+      approvalToken: APPROVAL_TOKEN,
       projectKey: PROJECT_KEY,
       actionId: "action-1",
       expectedRevision: 1,
@@ -508,6 +560,7 @@ describe("revoke()", () => {
     await expect(
       t.mutation(api.toolActions.revoke, {
         serviceToken: SERVICE_TOKEN,
+        approvalToken: APPROVAL_TOKEN,
         projectKey: PROJECT_KEY,
         actionId: "action-1",
         reason: "Too late — already executed.",
@@ -529,6 +582,7 @@ describe("revoke()", () => {
     const now = Date.now();
     await t.mutation(api.toolActions.approve, {
       serviceToken: SERVICE_TOKEN,
+      approvalToken: APPROVAL_TOKEN,
       projectKey: PROJECT_KEY,
       actionId: "action-1",
       expectedRevision: 1,
@@ -536,6 +590,7 @@ describe("revoke()", () => {
     });
     await t.mutation(api.toolActions.revoke, {
       serviceToken: SERVICE_TOKEN,
+      approvalToken: APPROVAL_TOKEN,
       projectKey: PROJECT_KEY,
       actionId: "action-1",
       reason: "Retracted.",
@@ -570,6 +625,7 @@ describe("revoke()", () => {
     const now = Date.now();
     await t.mutation(api.toolActions.approve, {
       serviceToken: SERVICE_TOKEN,
+      approvalToken: APPROVAL_TOKEN,
       projectKey: PROJECT_KEY,
       actionId: "action-1",
       expectedRevision: 1,
@@ -589,6 +645,7 @@ describe("revoke()", () => {
 
     const revoked = await t.mutation(api.toolActions.revoke, {
       serviceToken: SERVICE_TOKEN,
+      approvalToken: APPROVAL_TOKEN,
       projectKey: PROJECT_KEY,
       actionId: "action-1",
       reason: "Still revocable despite the revision bump.",
@@ -635,6 +692,7 @@ describe("owner isolation", () => {
     await expect(
       t.mutation(api.toolActions.revoke, {
         serviceToken: SERVICE_TOKEN,
+        approvalToken: APPROVAL_TOKEN,
         projectKey: PROJECT_KEY,
         actionId: "other-owner-action",
         reason: "Attempting cross-owner revoke.",
@@ -644,6 +702,7 @@ describe("owner isolation", () => {
     await expect(
       t.mutation(api.toolActions.approve, {
         serviceToken: SERVICE_TOKEN,
+        approvalToken: APPROVAL_TOKEN,
         projectKey: PROJECT_KEY,
         actionId: "other-owner-action",
         expectedRevision: 1,
@@ -659,6 +718,7 @@ describe("concurrency: racing mutations against the same approved action", () =>
     const now = Date.now();
     await t.mutation(api.toolActions.approve, {
       serviceToken: SERVICE_TOKEN,
+      approvalToken: APPROVAL_TOKEN,
       projectKey: PROJECT_KEY,
       actionId: "action-1",
       expectedRevision: 1,
@@ -668,6 +728,7 @@ describe("concurrency: racing mutations against the same approved action", () =>
     const results = await Promise.allSettled([
       t.mutation(api.toolActions.revoke, {
         serviceToken: SERVICE_TOKEN,
+        approvalToken: APPROVAL_TOKEN,
         projectKey: PROJECT_KEY,
         actionId: "action-1",
         reason: "Reason A",
@@ -675,6 +736,7 @@ describe("concurrency: racing mutations against the same approved action", () =>
       }),
       t.mutation(api.toolActions.revoke, {
         serviceToken: SERVICE_TOKEN,
+        approvalToken: APPROVAL_TOKEN,
         projectKey: PROJECT_KEY,
         actionId: "action-1",
         reason: "Reason B",
@@ -705,6 +767,7 @@ describe("concurrency: racing mutations against the same approved action", () =>
     const now = Date.now();
     await t.mutation(api.toolActions.approve, {
       serviceToken: SERVICE_TOKEN,
+      approvalToken: APPROVAL_TOKEN,
       projectKey: PROJECT_KEY,
       actionId: "action-1",
       expectedRevision: 1,
@@ -752,6 +815,7 @@ describe("concurrency: racing mutations against the same approved action", () =>
     const now = Date.now();
     await t.mutation(api.toolActions.approve, {
       serviceToken: SERVICE_TOKEN,
+      approvalToken: APPROVAL_TOKEN,
       projectKey: PROJECT_KEY,
       actionId: "action-1",
       expectedRevision: 1,
@@ -792,6 +856,7 @@ describe("concurrency: racing mutations against the same approved action", () =>
     const now = Date.now();
     await t.mutation(api.toolActions.approve, {
       serviceToken: SERVICE_TOKEN,
+      approvalToken: APPROVAL_TOKEN,
       projectKey: PROJECT_KEY,
       actionId: "action-1",
       expectedRevision: 1,
@@ -799,6 +864,7 @@ describe("concurrency: racing mutations against the same approved action", () =>
     });
     await t.mutation(api.toolActions.revoke, {
       serviceToken: SERVICE_TOKEN,
+      approvalToken: APPROVAL_TOKEN,
       projectKey: PROJECT_KEY,
       actionId: "action-1",
       reason: "Operator changed their mind before execution.",
@@ -830,6 +896,7 @@ describe("concurrency: racing mutations against the same approved action", () =>
     const approvedAt = Date.now();
     await t.mutation(api.toolActions.approve, {
       serviceToken: SERVICE_TOKEN,
+      approvalToken: APPROVAL_TOKEN,
       projectKey: PROJECT_KEY,
       actionId: "action-1",
       expectedRevision: 1,
@@ -867,6 +934,7 @@ describe("concurrency: racing mutations against the same approved action", () =>
     const now = Date.now();
     await t.mutation(api.toolActions.approve, {
       serviceToken: SERVICE_TOKEN,
+      approvalToken: APPROVAL_TOKEN,
       projectKey: PROJECT_KEY,
       actionId: "action-1",
       expectedRevision: 1,
@@ -895,6 +963,7 @@ describe("concurrency: racing mutations against the same approved action", () =>
     const now = Date.now();
     await t.mutation(api.toolActions.approve, {
       serviceToken: SERVICE_TOKEN,
+      approvalToken: APPROVAL_TOKEN,
       projectKey: PROJECT_KEY,
       actionId: "action-1",
       expectedRevision: 1,
@@ -902,6 +971,7 @@ describe("concurrency: racing mutations against the same approved action", () =>
     });
     await t.mutation(api.toolActions.revoke, {
       serviceToken: SERVICE_TOKEN,
+      approvalToken: APPROVAL_TOKEN,
       projectKey: PROJECT_KEY,
       actionId: "action-1",
       reason: "Operator changed their mind before execution.",
@@ -930,6 +1000,7 @@ describe("concurrency: racing mutations against the same approved action", () =>
     const approvedAt = Date.now();
     await t.mutation(api.toolActions.approve, {
       serviceToken: SERVICE_TOKEN,
+      approvalToken: APPROVAL_TOKEN,
       projectKey: PROJECT_KEY,
       actionId: "action-1",
       expectedRevision: 1,
@@ -962,6 +1033,7 @@ describe("concurrency: racing mutations against the same approved action", () =>
     const now = Date.now();
     await t.mutation(api.toolActions.approve, {
       serviceToken: SERVICE_TOKEN,
+      approvalToken: APPROVAL_TOKEN,
       projectKey: PROJECT_KEY,
       actionId: "action-1",
       expectedRevision: 1,
@@ -990,6 +1062,7 @@ describe("concurrency: racing mutations against the same approved action", () =>
     const now = Date.now();
     await t.mutation(api.toolActions.approve, {
       serviceToken: SERVICE_TOKEN,
+      approvalToken: APPROVAL_TOKEN,
       projectKey: PROJECT_KEY,
       actionId: "action-1",
       expectedRevision: 1,

@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 
-import { collectBounded, requireOwner } from "./authHelpers.js";
+import { collectBounded, requireDeliveryRuntimeToken, requireOwner } from "./authHelpers.js";
 import {
   quoteDeliveryAttemptDocumentValidator,
   quoteDeliveryChannelValidator,
@@ -79,6 +79,7 @@ function requireExpectedStatus(
 export const createPending = mutation({
   args: {
     serviceToken: v.string(),
+    deliveryRuntimeToken: v.string(),
     ...sendScopeArgs,
     revisionId: v.string(),
     revisionFingerprint: v.string(),
@@ -91,6 +92,7 @@ export const createPending = mutation({
   returns: quoteDeliveryAttemptDocumentValidator,
   handler: async (ctx, args) => {
     const ownerId = requireOwner(args.serviceToken);
+    requireDeliveryRuntimeToken(args.deliveryRuntimeToken);
     const quoteId = cleanRequiredText(args.quoteId, "Quote ID");
     const revision = validatedRevision(args.revision);
     const recipient = cleanRequiredText(args.recipient, "Recipient");
@@ -156,12 +158,14 @@ export const getBySendScope = query({
 export const markExecuting = mutation({
   args: {
     serviceToken: v.string(),
+    deliveryRuntimeToken: v.string(),
     deliveryAttemptId: v.string(),
     expectedStatus: v.literal("pending"),
   },
   returns: quoteDeliveryAttemptDocumentValidator,
   handler: async (ctx, args) => {
     const ownerId = requireOwner(args.serviceToken);
+    requireDeliveryRuntimeToken(args.deliveryRuntimeToken);
     const attempt = await requiredDeliveryAttempt(ctx, ownerId, args.deliveryAttemptId);
     requireExpectedStatus(attempt, args.expectedStatus);
     const now = Date.now();
@@ -179,6 +183,7 @@ export const markExecuting = mutation({
 export const bindProviderReference = mutation({
   args: {
     serviceToken: v.string(),
+    deliveryRuntimeToken: v.string(),
     deliveryAttemptId: v.string(),
     expectedStatus: v.literal("executing"),
     providerRequestId: v.string(),
@@ -188,6 +193,7 @@ export const bindProviderReference = mutation({
   returns: quoteDeliveryAttemptDocumentValidator,
   handler: async (ctx, args) => {
     const ownerId = requireOwner(args.serviceToken);
+    requireDeliveryRuntimeToken(args.deliveryRuntimeToken);
     const attempt = await requiredDeliveryAttempt(ctx, ownerId, args.deliveryAttemptId);
     requireExpectedStatus(attempt, args.expectedStatus);
     await ctx.db.patch("quoteDeliveryAttempts", attempt._id, {
@@ -207,6 +213,7 @@ export const bindProviderReference = mutation({
 export const complete = mutation({
   args: {
     serviceToken: v.string(),
+    deliveryRuntimeToken: v.string(),
     deliveryAttemptId: v.string(),
     expectedStatus: v.literal("executing"),
     outcome: quoteDeliveryReconciledOutcomeValidator,
@@ -215,6 +222,7 @@ export const complete = mutation({
   returns: quoteDeliveryAttemptDocumentValidator,
   handler: async (ctx, args) => {
     const ownerId = requireOwner(args.serviceToken);
+    requireDeliveryRuntimeToken(args.deliveryRuntimeToken);
     const attempt = await requiredDeliveryAttempt(ctx, ownerId, args.deliveryAttemptId);
     requireExpectedStatus(attempt, args.expectedStatus);
     const now = Date.now();
@@ -235,6 +243,7 @@ export const complete = mutation({
 export const markIndeterminate = mutation({
   args: {
     serviceToken: v.string(),
+    deliveryRuntimeToken: v.string(),
     deliveryAttemptId: v.string(),
     expectedStatus: v.literal("executing"),
     reconciliationId: v.string(),
@@ -243,6 +252,7 @@ export const markIndeterminate = mutation({
   returns: quoteDeliveryAttemptDocumentValidator,
   handler: async (ctx, args) => {
     const ownerId = requireOwner(args.serviceToken);
+    requireDeliveryRuntimeToken(args.deliveryRuntimeToken);
     const attempt = await requiredDeliveryAttempt(ctx, ownerId, args.deliveryAttemptId);
     requireExpectedStatus(attempt, args.expectedStatus);
     await ctx.db.patch("quoteDeliveryAttempts", attempt._id, {
@@ -262,6 +272,7 @@ export const markIndeterminate = mutation({
 export const reconcile = mutation({
   args: {
     serviceToken: v.string(),
+    deliveryRuntimeToken: v.string(),
     deliveryAttemptId: v.string(),
     expectedStatus: v.literal("indeterminate"),
     reconciliationId: v.string(),
@@ -271,6 +282,7 @@ export const reconcile = mutation({
   returns: quoteDeliveryAttemptDocumentValidator,
   handler: async (ctx, args) => {
     const ownerId = requireOwner(args.serviceToken);
+    requireDeliveryRuntimeToken(args.deliveryRuntimeToken);
     const attempt = await requiredDeliveryAttempt(ctx, ownerId, args.deliveryAttemptId);
     requireExpectedStatus(attempt, args.expectedStatus);
     if (attempt.reconciliationId !== args.reconciliationId) {
@@ -300,10 +312,16 @@ export const reconcile = mutation({
  * `externalReconciliations.cleanup` and `quotes.cleanup`.
  */
 export const cleanup = mutation({
-  args: { serviceToken: v.string(), quoteId: v.string(), deployment: v.string() },
+  args: {
+    serviceToken: v.string(),
+    deliveryRuntimeToken: v.string(),
+    quoteId: v.string(),
+    deployment: v.string(),
+  },
   returns: v.boolean(),
   handler: async (ctx, args) => {
     const ownerId = requireOwner(args.serviceToken);
+    requireDeliveryRuntimeToken(args.deliveryRuntimeToken);
     if (args.deployment !== "dev:outgoing-ram-798") {
       throw new Error(
         "Quote delivery cleanup is restricted to the authorised development deployment.",

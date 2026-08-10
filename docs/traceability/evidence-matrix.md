@@ -50,7 +50,8 @@ Issue #244 is stale for the core consent-lifecycle implementation target and is 
 
 - widened ToolAction states: proposed, approved, rejected, expired, revoked;
 - additive schema fields for approval expiry policy, expiry time, expiry observation, consumption policy, revocation metadata, and single-use claim metadata;
-- HTTP /approve and /revoke boundaries gated by the separate approval token;
+- HTTP and Convex /approve and /revoke boundaries gated by the separate approval token, plus a
+  separate Convex delivery-runtime token required for quote-delivery ledger mutations;
 - tests for TTL derivation, TTL clamping, expiry detection, revoked/expired blocking, single-use consumption, concurrent different-key single-use races, stale eligibility checks, and reusable approvals.
 
 The R-044–R-054 row remains Partial, not Verified, because that range also includes standing automation authorisation requirements (R-052–R-054) that still require separate policy and operational evidence.

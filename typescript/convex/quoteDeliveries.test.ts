@@ -6,6 +6,7 @@ import schema from "./schema.js";
 import { modules } from "./test.setup.js";
 
 const SERVICE_TOKEN = "quote-delivery-test-service-token-000000000";
+const DELIVERY_RUNTIME_TOKEN = "quote-delivery-runtime-token-000000000";
 
 function harness() {
   return convexTest(schema, modules);
@@ -14,6 +15,7 @@ function harness() {
 function createInput(overrides: Partial<Record<string, unknown>> = {}) {
   return {
     serviceToken: SERVICE_TOKEN,
+    deliveryRuntimeToken: DELIVERY_RUNTIME_TOKEN,
     quoteId: "quote-1",
     revision: 1,
     recipient: "client@example.com",
@@ -31,6 +33,7 @@ function createInput(overrides: Partial<Record<string, unknown>> = {}) {
 
 beforeEach(() => {
   vi.stubEnv("JARVIS_SERVICE_TOKEN", SERVICE_TOKEN);
+  vi.stubEnv("JARVIS_DELIVERY_RUNTIME_TOKEN", DELIVERY_RUNTIME_TOKEN);
 });
 
 afterEach(() => {
@@ -38,6 +41,17 @@ afterEach(() => {
 });
 
 describe("quote delivery ledger", () => {
+  it("rejects a service-token caller that tries to forge a delivery attempt", async () => {
+    const t = harness();
+
+    await expect(
+      t.mutation(
+        api.quoteDeliveries.createPending,
+        createInput({ deliveryRuntimeToken: "not-the-runtime-token" }),
+      ),
+    ).rejects.toThrow(/delivery runtime token/i);
+  });
+
   it("creates a pending attempt and replays the same row for a matching send-scope + fingerprint", async () => {
     const t = harness();
     const created = await t.mutation(api.quoteDeliveries.createPending, createInput());
@@ -71,6 +85,7 @@ describe("quote delivery ledger", () => {
 
     const executing = await t.mutation(api.quoteDeliveries.markExecuting, {
       serviceToken: SERVICE_TOKEN,
+      deliveryRuntimeToken: DELIVERY_RUNTIME_TOKEN,
       deliveryAttemptId: created.deliveryAttemptId,
       expectedStatus: "pending",
     });
@@ -80,6 +95,7 @@ describe("quote delivery ledger", () => {
     await expect(
       t.mutation(api.quoteDeliveries.markExecuting, {
         serviceToken: SERVICE_TOKEN,
+        deliveryRuntimeToken: DELIVERY_RUNTIME_TOKEN,
         deliveryAttemptId: created.deliveryAttemptId,
         expectedStatus: "pending",
       }),
@@ -87,6 +103,7 @@ describe("quote delivery ledger", () => {
 
     const bound = await t.mutation(api.quoteDeliveries.bindProviderReference, {
       serviceToken: SERVICE_TOKEN,
+      deliveryRuntimeToken: DELIVERY_RUNTIME_TOKEN,
       deliveryAttemptId: created.deliveryAttemptId,
       expectedStatus: "executing",
       providerRequestId: "provider-request-1",
@@ -97,6 +114,7 @@ describe("quote delivery ledger", () => {
 
     const completed = await t.mutation(api.quoteDeliveries.complete, {
       serviceToken: SERVICE_TOKEN,
+      deliveryRuntimeToken: DELIVERY_RUNTIME_TOKEN,
       deliveryAttemptId: created.deliveryAttemptId,
       expectedStatus: "executing",
       outcome: "succeeded",
@@ -110,12 +128,14 @@ describe("quote delivery ledger", () => {
     const created = await t.mutation(api.quoteDeliveries.createPending, createInput());
     await t.mutation(api.quoteDeliveries.markExecuting, {
       serviceToken: SERVICE_TOKEN,
+      deliveryRuntimeToken: DELIVERY_RUNTIME_TOKEN,
       deliveryAttemptId: created.deliveryAttemptId,
       expectedStatus: "pending",
     });
 
     const indeterminate = await t.mutation(api.quoteDeliveries.markIndeterminate, {
       serviceToken: SERVICE_TOKEN,
+      deliveryRuntimeToken: DELIVERY_RUNTIME_TOKEN,
       deliveryAttemptId: created.deliveryAttemptId,
       expectedStatus: "executing",
       reconciliationId: "reconciliation-abc",
@@ -126,6 +146,7 @@ describe("quote delivery ledger", () => {
     await expect(
       t.mutation(api.quoteDeliveries.reconcile, {
         serviceToken: SERVICE_TOKEN,
+        deliveryRuntimeToken: DELIVERY_RUNTIME_TOKEN,
         deliveryAttemptId: created.deliveryAttemptId,
         expectedStatus: "indeterminate",
         reconciliationId: "reconciliation-wrong",
@@ -135,6 +156,7 @@ describe("quote delivery ledger", () => {
 
     const reconciled = await t.mutation(api.quoteDeliveries.reconcile, {
       serviceToken: SERVICE_TOKEN,
+      deliveryRuntimeToken: DELIVERY_RUNTIME_TOKEN,
       deliveryAttemptId: created.deliveryAttemptId,
       expectedStatus: "indeterminate",
       reconciliationId: "reconciliation-abc",
@@ -210,6 +232,7 @@ describe("quote delivery ledger", () => {
     await expect(
       t.mutation(api.quoteDeliveries.markExecuting, {
         serviceToken: SERVICE_TOKEN,
+        deliveryRuntimeToken: DELIVERY_RUNTIME_TOKEN,
         deliveryAttemptId: "other-delivery",
         expectedStatus: "pending",
       }),
@@ -217,6 +240,7 @@ describe("quote delivery ledger", () => {
     await expect(
       t.mutation(api.quoteDeliveries.markExecuting, {
         serviceToken: SERVICE_TOKEN,
+        deliveryRuntimeToken: DELIVERY_RUNTIME_TOKEN,
         deliveryAttemptId: "missing-delivery",
         expectedStatus: "pending",
       }),
@@ -245,6 +269,7 @@ describe("quoteDeliveries.cleanup (development-only)", () => {
     await expect(
       t.mutation(api.quoteDeliveries.cleanup, {
         serviceToken: SERVICE_TOKEN,
+        deliveryRuntimeToken: DELIVERY_RUNTIME_TOKEN,
         quoteId: "quote-1",
         deployment: "prod:jarvis",
       }),
@@ -252,6 +277,7 @@ describe("quoteDeliveries.cleanup (development-only)", () => {
 
     const removed = await t.mutation(api.quoteDeliveries.cleanup, {
       serviceToken: SERVICE_TOKEN,
+      deliveryRuntimeToken: DELIVERY_RUNTIME_TOKEN,
       quoteId: "quote-1",
       deployment: "dev:outgoing-ram-798",
     });
@@ -264,6 +290,7 @@ describe("quoteDeliveries.cleanup (development-only)", () => {
 
     const again = await t.mutation(api.quoteDeliveries.cleanup, {
       serviceToken: SERVICE_TOKEN,
+      deliveryRuntimeToken: DELIVERY_RUNTIME_TOKEN,
       quoteId: "quote-1",
       deployment: "dev:outgoing-ram-798",
     });
@@ -278,6 +305,7 @@ describe("quoteDeliveries.cleanup (development-only)", () => {
 
     const result = await t.mutation(api.quoteDeliveries.cleanup, {
       serviceToken: SERVICE_TOKEN,
+      deliveryRuntimeToken: DELIVERY_RUNTIME_TOKEN,
       quoteId: "quote-1",
       deployment: "dev:outgoing-ram-798",
     });

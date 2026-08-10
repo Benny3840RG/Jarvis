@@ -7,6 +7,7 @@ import { ConvexQuoteDeliveryRepository } from "../src/persistence/convexQuoteDel
 import type { ConvexClientLike } from "../src/persistence/convexPersistence.js";
 
 const SERVICE_TOKEN = "quote-delivery-adapter-test-token-0000000000";
+const DELIVERY_RUNTIME_TOKEN = "quote-delivery-adapter-runtime-token-0000000";
 
 type Harness = ReturnType<typeof convexTest>;
 
@@ -21,6 +22,7 @@ function clientFor(t: Harness): ConvexClientLike {
 
 beforeEach(() => {
   vi.stubEnv("JARVIS_SERVICE_TOKEN", SERVICE_TOKEN);
+  vi.stubEnv("JARVIS_DELIVERY_RUNTIME_TOKEN", DELIVERY_RUNTIME_TOKEN);
 });
 
 afterEach(() => {
