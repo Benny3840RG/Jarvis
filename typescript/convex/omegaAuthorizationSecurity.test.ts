@@ -111,18 +111,36 @@ async function seedProposedContract(t: ReturnType<typeof harness>) {
 }
 
 describe("Omega contract authorization security", () => {
-  it("rejects a service-token-only caller that bypasses the human approval credential", async () => {
+  it("rejects a service-token-only caller that lacks a valid human approval credential", async () => {
     const t = harness();
     await seedProposedContract(t);
 
     await expect(
       t.mutation(anyApi.omegaActionContracts.authorize, {
         serviceToken: SERVICE_TOKEN,
+        approvalToken: "",
         missionId: "mission-authorization",
         contractId: "contract-authorization",
         approvalRef: "approval-authorization",
         now: 10_100,
       }),
     ).rejects.toThrow(/approval token/i);
+  });
+
+  it("authorizes with the dedicated human approval credential", async () => {
+    const t = harness();
+    await seedProposedContract(t);
+
+    const contract = await t.mutation(anyApi.omegaActionContracts.authorize, {
+      serviceToken: SERVICE_TOKEN,
+      approvalToken: APPROVAL_TOKEN,
+      missionId: "mission-authorization",
+      contractId: "contract-authorization",
+      approvalRef: "approval-authorization",
+      now: 10_100,
+    });
+
+    expect(contract.status).toBe("authorized");
+    expect(contract.approvalRef).toBe("approval-authorization");
   });
 });
