@@ -21,6 +21,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllEnvs();
 });
 
@@ -153,6 +154,20 @@ function receiptArgs(actionId = "action-1", status = "succeeded") {
     startedAt: 10_200,
     completedAt: 10_300,
   };
+}
+
+async function saveReceiptAndDrainScheduled(
+  t: ReturnType<typeof harness>,
+  args: ReturnType<typeof receiptArgs>,
+) {
+  vi.useFakeTimers();
+  try {
+    const receipt = await t.mutation(anyApi.toolExecutionReceipts.save, args);
+    await t.finishAllScheduledFunctions(() => vi.runAllTimers());
+    return receipt;
+  } finally {
+    vi.useRealTimers();
+  }
 }
 
 describe("Omega mission creation", () => {
@@ -317,8 +332,8 @@ describe("Omega receipt reconciliation", () => {
       now: 10_200,
     });
 
-    const first = await t.mutation(anyApi.toolExecutionReceipts.save, receiptArgs());
-    const second = await t.mutation(anyApi.toolExecutionReceipts.save, receiptArgs());
+    const first = await saveReceiptAndDrainScheduled(t, receiptArgs());
+    const second = await saveReceiptAndDrainScheduled(t, receiptArgs());
     expect(second._id).toBe(first._id);
 
     const contract = await t.query(anyApi.omegaActionContracts.getByToolAction, {
@@ -354,10 +369,7 @@ describe("Omega receipt reconciliation", () => {
       claimId: "claim-indeterminate",
       now: 10_200,
     });
-    await t.mutation(
-      anyApi.toolExecutionReceipts.save,
-      receiptArgs("action-indeterminate", "indeterminate"),
-    );
+    await saveReceiptAndDrainScheduled(t, receiptArgs("action-indeterminate", "indeterminate"));
 
     const evidence = await t.run((ctx) =>
       ctx.db
