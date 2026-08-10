@@ -54,7 +54,9 @@ export function requireOwner(serviceToken: string): string {
   return OWNER_ID;
 }
 
-type RuntimeTokenName = "JARVIS_APPROVAL_TOKEN" | "JARVIS_DELIVERY_RUNTIME_TOKEN";
+type RuntimeTokenName =
+  | "JARVIS_APPROVAL_TOKEN"
+  | "JARVIS_DELIVERY_RUNTIME_TOKEN";
 type RuntimePreviousTokenName =
   | "JARVIS_APPROVAL_TOKEN_PREVIOUS"
   | "JARVIS_DELIVERY_RUNTIME_TOKEN_PREVIOUS";
@@ -102,7 +104,8 @@ function requireIndependentRuntimeToken(
     );
   }
 
-  const ownCredentials = previous === undefined ? [current] : [current, previous];
+  const ownCredentials =
+    previous === undefined ? [current] : [current, previous];
   if (
     ownCredentials.some((credential) =>
       forbiddenCredentials.some((forbidden) => credential === forbidden),
