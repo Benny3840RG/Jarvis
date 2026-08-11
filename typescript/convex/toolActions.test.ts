@@ -8,6 +8,7 @@ import { modules } from "./test.setup.js";
 
 const SERVICE_TOKEN = "tool-actions-consent-test-service-token-0000";
 const APPROVAL_TOKEN = "tool-actions-human-approval-token-0000000";
+const DELIVERY_RUNTIME_TOKEN = "tool-actions-delivery-runtime-token-0000000";
 const OWNER_ID = "jarvis-cli";
 const PROJECT_KEY = "project-1";
 
@@ -93,6 +94,35 @@ describe("approve() consent-lifecycle stamping", () => {
       expectedRevision: 1,
     });
     expect(approved.state).toBe("approved");
+  });
+
+  it("rejects approval when current or rotation credentials collide across control-plane roles", async () => {
+    const collisionCases = [
+      ["JARVIS_DELIVERY_RUNTIME_TOKEN", APPROVAL_TOKEN],
+      ["JARVIS_DELIVERY_RUNTIME_TOKEN_PREVIOUS", APPROVAL_TOKEN],
+      ["JARVIS_APPROVAL_TOKEN_PREVIOUS", DELIVERY_RUNTIME_TOKEN],
+    ] as const;
+
+    for (const [name, value] of collisionCases) {
+      const t = harness();
+      vi.stubEnv(name, value);
+      await stageAndReturn(t);
+
+      await expect(
+        t.mutation(api.toolActions.approve, {
+          serviceToken: SERVICE_TOKEN,
+          approvalToken: APPROVAL_TOKEN,
+          projectKey: PROJECT_KEY,
+          actionId: "action-1",
+          expectedRevision: 1,
+        }),
+      ).rejects.toThrow(/distinct from service and peer runtime credentials/i);
+
+      vi.unstubAllEnvs();
+      vi.stubEnv("JARVIS_SERVICE_TOKEN", SERVICE_TOKEN);
+      vi.stubEnv("JARVIS_APPROVAL_TOKEN", APPROVAL_TOKEN);
+      vi.stubEnv("JARVIS_DELIVERY_RUNTIME_TOKEN", DELIVERY_RUNTIME_TOKEN);
+    }
   });
 
   it("persists an immutable safety binding on each consent transition and audit record", async () => {
