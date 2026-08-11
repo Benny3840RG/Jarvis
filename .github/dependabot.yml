@@ -15,6 +15,20 @@ updates:
       development-dependencies:
         dependency-type: "development"
 
+  - package-ecosystem: "npm"
+    directory: "/typescript/jarvis-console-01"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Australia/Melbourne"
+    open-pull-requests-limit: 5
+    groups:
+      production-dependencies:
+        dependency-type: "production"
+      development-dependencies:
+        dependency-type: "development"
+
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
