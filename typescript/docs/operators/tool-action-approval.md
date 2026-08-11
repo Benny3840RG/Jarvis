@@ -138,6 +138,12 @@ the service token — which an AI agent staging proposals necessarily does — i
 that a human decided to approve a specific one. If `JARVIS_APPROVAL_TOKEN` is not configured,
 `/approve` fails closed with a 503 rather than accepting any token.
 
+With Convex persistence, this check is duplicated at the Convex mutation boundary. Configure the
+same `JARVIS_APPROVAL_TOKEN` there; a direct Convex call holding only the service token fails.
+`quotes:send` also requires the separate `JARVIS_DELIVERY_RUNTIME_TOKEN` at the delivery-ledger
+mutation boundary. It is a runtime credential for the authorised delivery worker, must differ from
+the service token, and does not grant approval authority.
+
 | Method | Path                                                           | Result                                               |
 | ------ | -------------------------------------------------------------- | ---------------------------------------------------- |
 | POST   | `/api/v1/projects/{projectId}/tool-actions`                    | Stage a proposal                                     |

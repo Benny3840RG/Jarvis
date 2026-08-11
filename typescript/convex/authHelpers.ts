@@ -54,6 +54,92 @@ export function requireOwner(serviceToken: string): string {
   return OWNER_ID;
 }
 
+type RuntimeTokenName = "JARVIS_APPROVAL_TOKEN" | "JARVIS_DELIVERY_RUNTIME_TOKEN";
+type RuntimePreviousTokenName =
+  "JARVIS_APPROVAL_TOKEN_PREVIOUS" | "JARVIS_DELIVERY_RUNTIME_TOKEN_PREVIOUS";
+
+function peerRuntimeTokenNames(currentName: RuntimeTokenName): {
+  current: RuntimeTokenName;
+  previous: RuntimePreviousTokenName;
+} {
+  return currentName === "JARVIS_APPROVAL_TOKEN"
+    ? {
+        current: "JARVIS_DELIVERY_RUNTIME_TOKEN",
+        previous: "JARVIS_DELIVERY_RUNTIME_TOKEN_PREVIOUS",
+      }
+    : {
+        current: "JARVIS_APPROVAL_TOKEN",
+        previous: "JARVIS_APPROVAL_TOKEN_PREVIOUS",
+      };
+}
+
+function requireIndependentRuntimeToken(
+  candidate: string,
+  currentName: RuntimeTokenName,
+  previousName: RuntimePreviousTokenName,
+  label: string,
+): void {
+  const current = process.env[currentName];
+  const previous = process.env[previousName];
+  const peerNames = peerRuntimeTokenNames(currentName);
+  const forbiddenCredentials = [
+    process.env.JARVIS_SERVICE_TOKEN,
+    process.env.JARVIS_SERVICE_TOKEN_PREVIOUS,
+    process.env[peerNames.current],
+    process.env[peerNames.previous],
+  ].filter((value): value is string => value !== undefined);
+
+  if (!current) throw new Error(`Server misconfigured: ${currentName} is not set.`);
+  if (current.length < MIN_SERVICE_TOKEN_LENGTH) {
+    throw new Error(
+      `Server misconfigured: ${currentName} must be at least ${MIN_SERVICE_TOKEN_LENGTH} characters.`,
+    );
+  }
+  if (previous !== undefined && previous.length < MIN_SERVICE_TOKEN_LENGTH) {
+    throw new Error(
+      `Server misconfigured: ${previousName} must be at least ${MIN_SERVICE_TOKEN_LENGTH} characters.`,
+    );
+  }
+
+  const ownCredentials = previous === undefined ? [current] : [current, previous];
+  if (
+    ownCredentials.some((credential) =>
+      forbiddenCredentials.some((forbidden) => credential === forbidden),
+    )
+  ) {
+    throw new Error(
+      `${currentName} and ${previousName} must be distinct from service and peer runtime credentials.`,
+    );
+  }
+
+  const matchesCurrent = candidate.length > 0 && constantTimeEquals(candidate, current);
+  const matchesPrevious =
+    previous !== undefined && candidate.length > 0 && constantTimeEquals(candidate, previous);
+  if (!matchesCurrent && !matchesPrevious) {
+    throw new Error(`Unauthorized: invalid ${label}.`);
+  }
+}
+
+/** Proves the operator made an approval or revocation decision. */
+export function requireApprovalToken(approvalToken: string): void {
+  requireIndependentRuntimeToken(
+    approvalToken,
+    "JARVIS_APPROVAL_TOKEN",
+    "JARVIS_APPROVAL_TOKEN_PREVIOUS",
+    "approval token",
+  );
+}
+
+/** Restricts quote-delivery ledger mutations to the trusted delivery runtime. */
+export function requireDeliveryRuntimeToken(deliveryRuntimeToken: string): void {
+  requireIndependentRuntimeToken(
+    deliveryRuntimeToken,
+    "JARVIS_DELIVERY_RUNTIME_TOKEN",
+    "JARVIS_DELIVERY_RUNTIME_TOKEN_PREVIOUS",
+    "delivery runtime token",
+  );
+}
+
 /**
  * Upper bound on how many documents an owner-scoped "list everything" query may
  * return in a single call. Jarvis is single-user, so real domains sit far below

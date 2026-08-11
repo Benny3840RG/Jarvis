@@ -65,6 +65,7 @@ export interface ToolActionService {
     actionId: string;
     projectId: string;
     expectedRevision: number;
+    approvalToken: string;
   }): Promise<ToolAction>;
   reject(input: { actionId: string; projectId: string; reason: string }): Promise<ToolAction>;
   /**
@@ -74,5 +75,10 @@ export interface ToolActionService {
    * that wiring is a deferred follow-up. `ConvexToolActionService` always
    * implements it.
    */
-  revoke?(input: { actionId: string; projectId: string; reason: string }): Promise<ToolAction>;
+  revoke?(input: {
+    actionId: string;
+    projectId: string;
+    reason: string;
+    approvalToken: string;
+  }): Promise<ToolAction>;
 }

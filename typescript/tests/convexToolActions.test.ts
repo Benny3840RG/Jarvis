@@ -105,6 +105,7 @@ describe("ConvexToolActionService", () => {
       actionId: "action-1",
       projectId: "project-1",
       expectedRevision: 3,
+      approvalToken: "approval-token",
     });
     const listed = await service.list({ projectId: "project-1", state: "approved", limit: 5 });
 
@@ -138,11 +139,13 @@ describe("ConvexToolActionService", () => {
       actionId: "action-1",
       projectId: "project-1",
       reason: "Pricing changed after approval.",
+      approvalToken: "approval-token",
     });
 
     assert.equal(calls.length, 1);
     assert.deepEqual(calls[0]?.args, {
       serviceToken: "service-token",
+      approvalToken: "approval-token",
       projectKey: "project-1",
       actionId: "action-1",
       reason: "Pricing changed after approval.",

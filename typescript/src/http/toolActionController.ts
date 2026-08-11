@@ -258,6 +258,7 @@ export class ToolActionController {
         actionId,
         projectId,
         expectedRevision: parsed.expectedRevision,
+        approvalToken: parsed.approvalToken,
       });
     } catch (error: unknown) {
       if (error instanceof JarvisProblem) throw error;
@@ -319,7 +320,12 @@ export class ToolActionController {
     const service = this.requireService();
     if (!service.revoke) throw revocationUnavailable();
     try {
-      return await service.revoke({ actionId, projectId, reason: parsed.reason });
+      return await service.revoke({
+        actionId,
+        projectId,
+        reason: parsed.reason,
+        approvalToken: parsed.approvalToken,
+      });
     } catch (error: unknown) {
       if (error instanceof JarvisProblem) throw error;
       throw operationProblem(error);

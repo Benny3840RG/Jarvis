@@ -150,6 +150,7 @@ export class ConvexToolActionService implements ToolActionService {
   async approve(input: Parameters<ToolActionService["approve"]>[0]): Promise<ToolAction> {
     const row = await this.client.mutation(toolActionFunctions.approve, {
       serviceToken: this.serviceToken,
+      approvalToken: input.approvalToken,
       projectKey: input.projectId,
       actionId: input.actionId,
       expectedRevision: input.expectedRevision,
@@ -172,6 +173,7 @@ export class ConvexToolActionService implements ToolActionService {
   ): Promise<ToolAction> {
     const row = await this.client.mutation(toolActionFunctions.revoke, {
       serviceToken: this.serviceToken,
+      approvalToken: input.approvalToken,
       projectKey: input.projectId,
       actionId: input.actionId,
       reason: input.reason,

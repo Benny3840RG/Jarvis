@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 
-import { requireOwner } from "./authHelpers.js";
+import { requireApprovalToken, requireOwner } from "./authHelpers.js";
 import {
   clampApprovalTtlMs,
   cleanRequiredText,
@@ -337,6 +337,7 @@ export const listRecent = query({
 export const approve = mutation({
   args: {
     serviceToken: v.string(),
+    approvalToken: v.string(),
     projectKey: v.string(),
     actionId: v.string(),
     expectedRevision: v.number(),
@@ -351,6 +352,7 @@ export const approve = mutation({
   returns: toolActionDocumentValidator,
   handler: async (ctx, args) => {
     const ownerId = requireOwner(args.serviceToken);
+    requireApprovalToken(args.approvalToken);
     const projectKey = cleanRequiredText(args.projectKey, "Project key");
     const actionId = cleanRequiredText(args.actionId, "Tool action ID");
     const expectedRevision = requirePositiveRevision(args.expectedRevision, "Expected revision");
@@ -519,6 +521,7 @@ export const reject = mutation({
 export const revoke = mutation({
   args: {
     serviceToken: v.string(),
+    approvalToken: v.string(),
     projectKey: v.string(),
     actionId: v.string(),
     reason: v.string(),
@@ -527,6 +530,7 @@ export const revoke = mutation({
   returns: toolActionDocumentValidator,
   handler: async (ctx, args) => {
     const ownerId = requireOwner(args.serviceToken);
+    requireApprovalToken(args.approvalToken);
     const projectKey = cleanRequiredText(args.projectKey, "Project key");
     const actionId = cleanRequiredText(args.actionId, "Tool action ID");
     const reason = cleanRequiredText(args.reason, "Tool action revocation reason");

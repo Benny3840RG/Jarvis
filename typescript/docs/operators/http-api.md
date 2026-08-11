@@ -43,6 +43,14 @@ to the Bearer service token — see [tool-action-approval.md](tool-action-approv
 so that possessing the service token, which any caller staging a proposal necessarily does, is not
 by itself sufficient to approve one.
 
+When `PERSISTENCE_PROVIDER=convex`, set the same approval secret in the Convex deployment as
+`JARVIS_APPROVAL_TOKEN`. Convex independently verifies it on its public `approve` and `revoke`
+mutations, so a client holding only `JARVIS_SERVICE_TOKEN` cannot bypass the HTTP boundary.
+Quote-delivery mutations additionally require a separate `JARVIS_DELIVERY_RUNTIME_TOKEN` (and
+optional `JARVIS_DELIVERY_RUNTIME_TOKEN_PREVIOUS` while rotating) in both the delivery runtime and
+the Convex deployment. It must not equal the service token; it authorises delivery-ledger writes,
+not human approval.
+
 Optional transport values are:
 
 | Variable                                      | Default     | Meaning                                                                             |

@@ -22,6 +22,7 @@ type AttemptDoc = QuoteDeliveryAttempt & { _id: string; _creationTime: number };
 export type ConvexQuoteDeliveryRepositoryOptions = {
   client: ConvexClientLike;
   serviceToken: string;
+  deliveryRuntimeToken: string;
   deployment?: string;
 };
 
@@ -75,6 +76,7 @@ function isConvexClient(
 export class ConvexQuoteDeliveryRepository implements QuoteDeliveryRepository {
   private readonly client: ConvexClientLike;
   private readonly serviceToken: string;
+  private readonly deliveryRuntimeToken: string;
   private readonly deployment: string;
 
   constructor(options: ConvexQuoteDeliveryRepositoryOptions);
@@ -86,15 +88,18 @@ export class ConvexQuoteDeliveryRepository implements QuoteDeliveryRepository {
   ) {
     let client: ConvexClientLike | undefined;
     let serviceToken: string | undefined;
+    let deliveryRuntimeToken: string | undefined;
     let deployment: string | undefined;
 
     if (isConvexClient(optionsOrClient) || optionsOrClient === undefined) {
       client = optionsOrClient;
       serviceToken = legacyServiceToken ?? process.env.JARVIS_SERVICE_TOKEN;
+      deliveryRuntimeToken = process.env.JARVIS_DELIVERY_RUNTIME_TOKEN;
       deployment = legacyDeployment ?? process.env.CONVEX_DEPLOYMENT;
     } else {
       client = optionsOrClient.client;
       serviceToken = optionsOrClient.serviceToken;
+      deliveryRuntimeToken = optionsOrClient.deliveryRuntimeToken;
       deployment = optionsOrClient.deployment ?? process.env.CONVEX_DEPLOYMENT;
     }
 
@@ -104,6 +109,12 @@ export class ConvexQuoteDeliveryRepository implements QuoteDeliveryRepository {
       );
     }
     this.serviceToken = serviceToken;
+    if (!deliveryRuntimeToken) {
+      throw new Error(
+        "PERSISTENCE_PROVIDER=convex quote delivery requires JARVIS_DELIVERY_RUNTIME_TOKEN.",
+      );
+    }
+    this.deliveryRuntimeToken = deliveryRuntimeToken;
     this.deployment = deployment ?? "";
 
     if (client) {
@@ -134,6 +145,7 @@ export class ConvexQuoteDeliveryRepository implements QuoteDeliveryRepository {
   async createPending(input: CreateQuoteDeliveryInput): Promise<QuoteDeliveryAttempt> {
     const doc = await this.mutation<AttemptDoc>(quoteDeliveryFunctions.createPending, {
       serviceToken: this.serviceToken,
+      deliveryRuntimeToken: this.deliveryRuntimeToken,
       quoteId: input.quoteId,
       revision: input.revision,
       recipient: input.recipient,
@@ -152,6 +164,7 @@ export class ConvexQuoteDeliveryRepository implements QuoteDeliveryRepository {
   async markExecuting(input: StartQuoteDeliveryInput): Promise<QuoteDeliveryAttempt> {
     const doc = await this.mutation<AttemptDoc>(quoteDeliveryFunctions.markExecuting, {
       serviceToken: this.serviceToken,
+      deliveryRuntimeToken: this.deliveryRuntimeToken,
       deliveryAttemptId: input.deliveryAttemptId,
       expectedStatus: input.expectedStatus,
     });
@@ -163,6 +176,7 @@ export class ConvexQuoteDeliveryRepository implements QuoteDeliveryRepository {
   ): Promise<QuoteDeliveryAttempt> {
     const doc = await this.mutation<AttemptDoc>(quoteDeliveryFunctions.bindProviderReference, {
       serviceToken: this.serviceToken,
+      deliveryRuntimeToken: this.deliveryRuntimeToken,
       deliveryAttemptId: input.deliveryAttemptId,
       expectedStatus: input.expectedStatus,
       providerRequestId: input.providerRequestId,
@@ -177,6 +191,7 @@ export class ConvexQuoteDeliveryRepository implements QuoteDeliveryRepository {
   async complete(input: CompleteQuoteDeliveryInput): Promise<QuoteDeliveryAttempt> {
     const doc = await this.mutation<AttemptDoc>(quoteDeliveryFunctions.complete, {
       serviceToken: this.serviceToken,
+      deliveryRuntimeToken: this.deliveryRuntimeToken,
       deliveryAttemptId: input.deliveryAttemptId,
       expectedStatus: input.expectedStatus,
       outcome: input.outcome,
@@ -192,6 +207,7 @@ export class ConvexQuoteDeliveryRepository implements QuoteDeliveryRepository {
   ): Promise<QuoteDeliveryAttempt> {
     const doc = await this.mutation<AttemptDoc>(quoteDeliveryFunctions.markIndeterminate, {
       serviceToken: this.serviceToken,
+      deliveryRuntimeToken: this.deliveryRuntimeToken,
       deliveryAttemptId: input.deliveryAttemptId,
       expectedStatus: input.expectedStatus,
       reconciliationId: input.reconciliationId,
@@ -205,6 +221,7 @@ export class ConvexQuoteDeliveryRepository implements QuoteDeliveryRepository {
   async reconcile(input: ReconcileQuoteDeliveryInput): Promise<QuoteDeliveryAttempt> {
     const doc = await this.mutation<AttemptDoc>(quoteDeliveryFunctions.reconcile, {
       serviceToken: this.serviceToken,
+      deliveryRuntimeToken: this.deliveryRuntimeToken,
       deliveryAttemptId: input.deliveryAttemptId,
       expectedStatus: input.expectedStatus,
       reconciliationId: input.reconciliationId,
@@ -228,6 +245,7 @@ export class ConvexQuoteDeliveryRepository implements QuoteDeliveryRepository {
   async cleanup(quoteId: string): Promise<boolean> {
     return this.mutation<boolean>(quoteDeliveryFunctions.cleanup, {
       serviceToken: this.serviceToken,
+      deliveryRuntimeToken: this.deliveryRuntimeToken,
       quoteId,
       deployment: this.deployment,
     });
