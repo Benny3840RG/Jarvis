@@ -77,6 +77,18 @@ async function createActiveMission(t: ReturnType<typeof harness>) {
   });
 }
 
+async function expectSingleOmegaContract(t: ReturnType<typeof harness>, label: string) {
+  const contracts = await t.run((ctx) =>
+    ctx.db
+      .query("omegaActionContracts")
+      .withIndex("by_owner_and_tool_action_id", (q) =>
+        q.eq("ownerId", OWNER_ID).eq("toolActionId", ACTION_ID),
+      )
+      .take(10),
+  );
+  expect(contracts, label).toHaveLength(1);
+}
+
 async function setupClaimedContract(t: ReturnType<typeof harness>) {
   await createActiveMission(t);
   await t.mutation(anyApi.toolActions.stage, {
@@ -132,6 +144,7 @@ async function setupClaimedContract(t: ReturnType<typeof harness>) {
     now: 10_200,
   });
   expect(claim.claimed).toBe(true);
+  await expectSingleOmegaContract(t, "after execution claim");
 }
 
 function receiptInput(status: "succeeded" | "failed" | "indeterminate", completedAt: number) {
@@ -255,6 +268,7 @@ describe("Omega runtime integrity", () => {
     const t = harness();
     await setupClaimedContract(t);
 
+    await expectSingleOmegaContract(t, "before reconciliation registration");
     const scope = {
       projectId: PROJECT_KEY,
       tool: "outlook",
@@ -274,6 +288,7 @@ describe("Omega runtime integrity", () => {
       providerRequestId: "provider-request-integrity",
       providerCorrelationId: "provider-correlation-integrity",
     });
+    await expectSingleOmegaContract(t, "after reconciliation registration");
 
     vi.useFakeTimers();
     await t.mutation(anyApi.externalReconciliations.markIndeterminate, {
@@ -288,6 +303,7 @@ describe("Omega runtime integrity", () => {
       receiptKey: "omega-integrity-receipt-key",
       receipt: receiptInput("indeterminate", 10_300),
     });
+    await expectSingleOmegaContract(t, "after indeterminate receipt mutation");
     await drainScheduled(t);
 
     let contract = await t.query(anyApi.omegaActionContracts.getByToolAction, {
