@@ -98,19 +98,21 @@ describe("PostHog runtime telemetry", () => {
     assert.equal(recorder.calls.length, 10);
 
     for (const call of recorder.calls) {
-      assert.equal(call.input, "https://example.test/capture/");
+      assert.equal(call.input, "https://example.test/i/v0/e/");
       const body = JSON.parse(String(call.init.body)) as {
         api_key: string;
+        distinct_id: string;
         event: string;
         properties: Record<string, unknown>;
       };
       assert.equal(body.api_key, "phc_development_test_key");
+      assert.equal(body.distinct_id, "jarvis-development");
       assert.match(
         body.event,
         /^jarvis\.(operator_action|tool_outcome|boundary_latency|runtime_failure|usage)$/,
       );
       assert.equal(body.properties.environment, "development");
-      assert.equal(body.properties.distinct_id, "jarvis-development");
+      assert.equal("distinct_id" in body.properties, false);
       assert.equal("prompt" in body.properties, false);
       assert.equal("tokens" in body.properties, false);
       assert.equal("credentials" in body.properties, false);

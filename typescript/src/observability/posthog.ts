@@ -80,7 +80,6 @@ function hasControlCharacters(value: string): boolean {
 function sharedProperties(boundary: "http" | "mcp" | "reconciliation") {
   return {
     environment: "development" as const,
-    distinct_id: DISTINCT_ID,
     boundary,
   };
 }
@@ -268,7 +267,7 @@ function resolveEndpoint(
 
   const basePath = host.pathname.replace(/\/+$/, "");
   return {
-    endpoint: `${host.origin}${basePath}/capture/`,
+    endpoint: `${host.origin}${basePath}/i/v0/e/`,
     apiKey,
     timeoutMs,
   };
@@ -313,6 +312,7 @@ class EnabledPostHogTelemetry implements PostHogTelemetry {
         },
         body: JSON.stringify({
           api_key: this.apiKey,
+          distinct_id: DISTINCT_ID,
           event: event.event,
           properties: event.properties,
         }),
