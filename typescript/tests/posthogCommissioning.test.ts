@@ -13,7 +13,10 @@ import type {
   Task,
   TaskUpdate,
 } from "../src/persistence/persistence.js";
-import { runPostHogCommissioning } from "../src/tools/runPostHogCommissioning.js";
+import {
+  resolveCommissioningSourceVersion,
+  runPostHogCommissioning,
+} from "../src/tools/runPostHogCommissioning.js";
 
 function telemetry(enabled = true): PostHogTelemetry & { flushCount: number; events: string[] } {
   return {
@@ -160,5 +163,38 @@ describe("PostHog commissioning", () => {
     );
     assert.deepEqual(observed, ["closed"]);
     assert.equal(sink.flushCount, 1);
+  });
+
+  it("still flushes telemetry when closing the app fails", async () => {
+    const sink = telemetry();
+    const app = {
+      async inject() {
+        return { statusCode: 200 };
+      },
+      async close() {
+        throw new Error("close failed");
+      },
+    } as unknown as NestFastifyApplication;
+
+    await assert.rejects(
+      runPostHogCommissioning(sink, async () => app),
+      /close failed/,
+    );
+    assert.equal(sink.flushCount, 1);
+  });
+
+  it("uses an explicit source version without invoking git", () => {
+    let gitRead = false;
+
+    const sourceVersion = resolveCommissioningSourceVersion(
+      { JARVIS_SOURCE_VERSION: "deployed-version" },
+      () => {
+        gitRead = true;
+        return "git-version";
+      },
+    );
+
+    assert.equal(sourceVersion, "deployed-version");
+    assert.equal(gitRead, false);
   });
 });

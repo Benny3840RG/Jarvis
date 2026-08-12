@@ -9,11 +9,23 @@ import { createPostHogTelemetryFromEnv, type PostHogTelemetry } from "../observa
 import { applyPreviewEnvironment } from "../preview/environment.js";
 
 type HttpAppFactory = () => Promise<NestFastifyApplication>;
+type SourceVersionEnvironment = { readonly JARVIS_SOURCE_VERSION?: string };
 
 export type PostHogCommissioningReceipt = {
   statusCode: number;
   telemetryFlushed: true;
 };
+
+export function resolveCommissioningSourceVersion(
+  environment: SourceVersionEnvironment = process.env,
+  readGitHead: () => string = () =>
+    execFileSync("git", ["rev-parse", "HEAD"], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }),
+): string {
+  return environment.JARVIS_SOURCE_VERSION?.trim() || readGitHead().trim();
+}
 
 function loadLocalEnvironment(): void {
   try {
@@ -42,8 +54,11 @@ export async function runPostHogCommissioning(
       throw new Error(`Jarvis commissioning health boundary returned HTTP ${statusCode}.`);
     }
   } finally {
-    await app.close();
-    await telemetry.flush();
+    try {
+      await app.close();
+    } finally {
+      await telemetry.flush();
+    }
   }
 
   return { statusCode, telemetryFlushed: true };
@@ -52,10 +67,7 @@ export async function runPostHogCommissioning(
 async function main(): Promise<void> {
   loadLocalEnvironment();
   applyPreviewEnvironment();
-  const sourceVersion = execFileSync("git", ["rev-parse", "HEAD"], {
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "ignore"],
-  }).trim();
+  const sourceVersion = resolveCommissioningSourceVersion();
   process.env.JARVIS_SOURCE_VERSION = sourceVersion;
   const telemetry = createPostHogTelemetryFromEnv();
   const receipt = await runPostHogCommissioning(telemetry);
