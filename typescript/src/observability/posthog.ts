@@ -232,7 +232,7 @@ function parseTimeout(environment: Environment): number | null {
 
 function resolveEndpoint(
   environment: Environment,
-): { endpoint: string; apiKey: string; timeoutMs: number } | null {
+): { endpoint: string; apiKey: string; timeoutMs: number; sourceVersion: string } | null {
   if (
     environment.JARVIS_ENVIRONMENT !== "development" ||
     environment.JARVIS_POSTHOG_ENABLED !== "true"
@@ -264,12 +264,21 @@ function resolveEndpoint(
 
   const timeoutMs = parseTimeout(environment);
   if (timeoutMs === null) return null;
+  const sourceVersion = environment.JARVIS_SOURCE_VERSION?.trim() || "development";
+  if (
+    sourceVersion.length < 7 ||
+    sourceVersion.length > 64 ||
+    !/^[A-Za-z0-9][A-Za-z0-9._/+:@-]*$/.test(sourceVersion)
+  ) {
+    return null;
+  }
 
   const basePath = host.pathname.replace(/\/+$/, "");
   return {
     endpoint: `${host.origin}${basePath}/i/v0/e/`,
     apiKey,
     timeoutMs,
+    sourceVersion,
   };
 }
 
@@ -281,6 +290,7 @@ class EnabledPostHogTelemetry implements PostHogTelemetry {
     private readonly endpoint: string,
     private readonly apiKey: string,
     private readonly timeoutMs: number,
+    private readonly sourceVersion: string,
     private readonly fetchImpl: FetchLike,
   ) {}
 
@@ -314,7 +324,10 @@ class EnabledPostHogTelemetry implements PostHogTelemetry {
           api_key: this.apiKey,
           distinct_id: DISTINCT_ID,
           event: event.event,
-          properties: event.properties,
+          properties: {
+            ...event.properties,
+            source_version: this.sourceVersion,
+          },
         }),
         signal: controller.signal,
       });
@@ -333,5 +346,11 @@ export function createPostHogTelemetryFromEnv(
   const config = resolveEndpoint(environment);
   return config === null
     ? noOpTelemetry()
-    : new EnabledPostHogTelemetry(config.endpoint, config.apiKey, config.timeoutMs, fetchImpl);
+    : new EnabledPostHogTelemetry(
+        config.endpoint,
+        config.apiKey,
+        config.timeoutMs,
+        config.sourceVersion,
+        fetchImpl,
+      );
 }

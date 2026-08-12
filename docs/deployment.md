@@ -347,6 +347,12 @@ POSTHOG_PROJECT_API_KEY=phc_<development-project-key>
 
 The optional `POSTHOG_HOST` defaults to `https://us.i.posthog.com`. It must be HTTPS with no embedded credentials, query string or fragment. The adapter posts to the current `/i/v0/e/` capture endpoint with the fixed development distinct ID in the required top-level field. `POSTHOG_TIMEOUT_MS` is optional and must be 25–2000 ms; the default is 250 ms. Invalid configuration fails closed to inert telemetry. The project key is used only for the PostHog capture transport and is never included in event properties.
 
-The native adapter emits only the governed `jarvis.operator_action`, `jarvis.tool_outcome`, `jarvis.boundary_latency`, `jarvis.runtime_failure`, and bounded `jarvis.usage` events. Properties are limited to development environment, maintained boundary, operation, allowlisted outcome/method/status, bounded duration, bounded count, and failure kind. Prompts, tokens, credentials, message bodies, customer quote data and raw provider payloads are not captured. Transport is best-effort, asynchronous and timeout-bounded; a PostHog failure cannot delay or fail a business operation.
+The native adapter emits only the governed `jarvis.operator_action`, `jarvis.tool_outcome`, `jarvis.boundary_latency`, `jarvis.runtime_failure`, and bounded `jarvis.usage` events. Properties are limited to development environment, source version, maintained boundary, operation, allowlisted outcome/method/status, bounded duration, bounded count, and failure kind. Prompts, tokens, credentials, message bodies, customer quote data and raw provider payloads are not captured. Transport is best-effort, asynchronous and timeout-bounded; a PostHog failure cannot delay or fail a business operation.
 
-Later development commissioning requires an explicit authorised development credential, deliberate operator/tool/latency exercises, inspection of ingested properties and retention, and evidence that no customer content or secret entered the project. This change does not commission PostHog, add credentials, authorise production, or permit production deployment.
+With the authorised development values loaded in the current shell or `.env.local`, run:
+
+```bash
+npm run commission:posthog
+```
+
+The command uses Fastify's in-process HTTP injection to exercise Jarvis's real `/healthz` response hook, emits the three governed HTTP boundary events, waits for the bounded PostHog transport to settle, and exits. It does not bind ports `3000` or `8787`, so an existing local preview cannot block commissioning. The command stamps the exact Git commit into `source_version`; live PostHog inspection is still required to prove provider ingestion and redaction. It does not add credentials, authorise production, or permit production deployment.

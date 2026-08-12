@@ -297,10 +297,10 @@ export async function createJarvisHttpApp(
   }
   if (telemetry.enabled) {
     const requestStartedAt = new WeakMap<object, number>();
-    adapter.getInstance().addHook("onRequest", (request) => {
+    adapter.getInstance().addHook("onRequest", async (request) => {
       requestStartedAt.set(request, performance.now());
     });
-    adapter.getInstance().addHook("onResponse", (request, reply) => {
+    adapter.getInstance().addHook("onResponse", async (request, reply) => {
       const endedAt = performance.now();
       captureHttpBoundary(telemetry, {
         method: request.method,
