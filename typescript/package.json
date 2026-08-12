@@ -27,6 +27,7 @@
     "smoke:convex": "tsx src/tools/runConvexSmoke.ts",
     "smoke:mcp": "tsx src/tools/runMcpSmoke.ts",
     "smoke:gemini": "tsx src/tools/runGeminiSmoke.ts",
+    "commission:posthog": "node --import tsx src/tools/runPostHogCommissioning.ts",
     "backup": "tsx src/tools/runBackup.ts",
     "import:convex": "tsx src/tools/runConvexImport.ts",
     "test:node": "node --import tsx --test tests/*.test.ts jarvis-console-01/tests/*.test.ts",

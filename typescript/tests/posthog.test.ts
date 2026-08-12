@@ -112,6 +112,7 @@ describe("PostHog runtime telemetry", () => {
         /^jarvis\.(operator_action|tool_outcome|boundary_latency|runtime_failure|usage)$/,
       );
       assert.equal(body.properties.environment, "development");
+      assert.equal(body.properties.source_version, "development");
       assert.equal("distinct_id" in body.properties, false);
       assert.equal("prompt" in body.properties, false);
       assert.equal("tokens" in body.properties, false);
