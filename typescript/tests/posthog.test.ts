@@ -5,6 +5,7 @@ import {
   captureHttpBoundary,
   captureMcpBoundary,
   captureReconciliationCycle,
+  createPostHogCommissioningTelemetryFromEnv,
   createPostHogTelemetryFromEnv,
 } from "../src/observability/posthog.js";
 
@@ -92,10 +93,11 @@ describe("PostHog runtime telemetry", () => {
       failureCount: 0,
       durationMs: 52,
     });
-    await telemetry.flush();
+    const receipt = await telemetry.flush();
 
     assert.equal(telemetry.enabled, true);
     assert.equal(recorder.calls.length, 10);
+    assert.deepEqual(receipt, { attempted: 10, accepted: 10, failed: 0 });
 
     for (const call of recorder.calls) {
       assert.equal(call.input, "https://example.test/i/v0/e/");
@@ -199,6 +201,55 @@ describe("PostHog runtime telemetry", () => {
     assert.equal(recorder.calls.length, 3);
   });
 
+  it("keeps the ten-second timeout out of ordinary request-path telemetry", () => {
+    const recorder = createFetchRecorder();
+    const runtimeTelemetry = createPostHogTelemetryFromEnv(
+      developmentEnv({ POSTHOG_TIMEOUT_MS: "10000" }),
+      recorder.fetchImpl,
+    );
+    const commissioningTelemetry = createPostHogCommissioningTelemetryFromEnv(
+      developmentEnv({ POSTHOG_TIMEOUT_MS: "10000" }),
+      recorder.fetchImpl,
+    );
+
+    assert.equal(runtimeTelemetry.enabled, false);
+    assert.equal(commissioningTelemetry.enabled, true);
+  });
+
+  it("bounds stalled request-path telemetry and counts overflow as failed delivery", async () => {
+    const calls: FetchCall[] = [];
+    const fetchImpl: typeof fetch = async (input, init = {}) => {
+      calls.push({ input: String(input), init });
+      return new Promise<Response>((_resolve, reject) => {
+        init.signal?.addEventListener(
+          "abort",
+          () => reject(new DOMException("The operation was aborted.", "AbortError")),
+          { once: true },
+        );
+      });
+    };
+    const telemetry = createPostHogTelemetryFromEnv(developmentEnv(), fetchImpl);
+
+    for (let index = 0; index < 20; index += 1) {
+      captureHttpBoundary(telemetry, { method: "GET", statusCode: 200, durationMs: 1 });
+    }
+
+    assert.equal(calls.length, 32);
+    const receipt = await telemetry.flush();
+    assert.deepEqual(receipt, { attempted: 60, accepted: 0, failed: 60 });
+  });
+
+  it("reports provider rejection instead of treating settlement as delivery", async () => {
+    const fetchImpl: typeof fetch = async () =>
+      new Response(null, { status: 401, statusText: "Unauthorized" });
+    const telemetry = createPostHogTelemetryFromEnv(developmentEnv(), fetchImpl);
+
+    captureHttpBoundary(telemetry, { method: "GET", statusCode: 200, durationMs: 1 });
+    const receipt = await telemetry.flush();
+
+    assert.deepEqual(receipt, { attempted: 3, accepted: 0, failed: 3 });
+  });
+
   it("swallows telemetry transport failures without affecting the caller", async () => {
     const fetchImpl: typeof fetch = async () => {
       throw new Error("synthetic telemetry failure");
@@ -211,6 +262,7 @@ describe("PostHog runtime telemetry", () => {
         durationMs: 4,
       });
     });
-    await telemetry.flush();
+    const receipt = await telemetry.flush();
+    assert.deepEqual(receipt, { attempted: 3, accepted: 0, failed: 3 });
   });
 });

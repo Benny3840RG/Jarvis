@@ -18,8 +18,14 @@ type Environment = Readonly<Record<string, string | undefined>>;
 export type PostHogTelemetry = {
   readonly enabled: boolean;
   capture(event: PostHogEvent): void;
-  flush(): Promise<void>;
+  flush(): Promise<PostHogFlushReceipt>;
 };
+
+export type PostHogFlushReceipt = Readonly<{
+  attempted: number;
+  accepted: number;
+  failed: number;
+}>;
 
 type HttpBoundaryInput = {
   method: string;
@@ -44,6 +50,9 @@ type ReconciliationCycleInput = {
 const MAX_DURATION_MS = 10 * 60 * 1_000;
 const MAX_COUNT = 100;
 const DEFAULT_TIMEOUT_MS = 250;
+const MAX_RUNTIME_TIMEOUT_MS = 2_000;
+const MAX_COMMISSIONING_TIMEOUT_MS = 10_000;
+const MAX_PENDING_EVENTS = 32;
 const DEFAULT_POSTHOG_HOST = "https://us.i.posthog.com";
 const DISTINCT_ID = "jarvis-development";
 
@@ -51,7 +60,7 @@ function noOpTelemetry(): PostHogTelemetry {
   return {
     enabled: false,
     capture: () => {},
-    flush: async () => {},
+    flush: async () => Object.freeze({ attempted: 0, accepted: 0, failed: 0 }),
   };
 }
 
@@ -222,16 +231,17 @@ export function createReconciliationTelemetryObserver(
   };
 }
 
-function parseTimeout(environment: Environment): number | null {
+function parseTimeout(environment: Environment, maximumMs: number): number | null {
   const raw = environment.POSTHOG_TIMEOUT_MS;
   if (raw === undefined) return DEFAULT_TIMEOUT_MS;
   if (!/^\d+$/.test(raw.trim())) return null;
   const value = Number(raw);
-  return Number.isSafeInteger(value) && value >= 25 && value <= 2_000 ? value : null;
+  return Number.isSafeInteger(value) && value >= 25 && value <= maximumMs ? value : null;
 }
 
 function resolveEndpoint(
   environment: Environment,
+  maximumTimeoutMs: number,
 ): { endpoint: string; apiKey: string; timeoutMs: number; sourceVersion: string } | null {
   if (
     environment.JARVIS_ENVIRONMENT !== "development" ||
@@ -262,7 +272,7 @@ function resolveEndpoint(
     return null;
   }
 
-  const timeoutMs = parseTimeout(environment);
+  const timeoutMs = parseTimeout(environment, maximumTimeoutMs);
   if (timeoutMs === null) return null;
   const sourceVersion = environment.JARVIS_SOURCE_VERSION?.trim() || "development";
   if (
@@ -285,6 +295,9 @@ function resolveEndpoint(
 class EnabledPostHogTelemetry implements PostHogTelemetry {
   readonly enabled = true;
   private readonly pending = new Set<Promise<void>>();
+  private attempted = 0;
+  private accepted = 0;
+  private failed = 0;
 
   constructor(
     private readonly endpoint: string,
@@ -295,7 +308,15 @@ class EnabledPostHogTelemetry implements PostHogTelemetry {
   ) {}
 
   capture(event: PostHogEvent): void {
-    const task = this.send(event);
+    this.attempted += 1;
+    if (this.pending.size >= MAX_PENDING_EVENTS) {
+      this.failed += 1;
+      return;
+    }
+    const task = this.send(event).then((accepted) => {
+      if (accepted) this.accepted += 1;
+      else this.failed += 1;
+    });
     this.pending.add(task);
     void task
       .finally(() => {
@@ -304,17 +325,26 @@ class EnabledPostHogTelemetry implements PostHogTelemetry {
       .catch(() => {});
   }
 
-  async flush(): Promise<void> {
+  async flush(): Promise<PostHogFlushReceipt> {
     while (this.pending.size > 0) {
       await Promise.allSettled([...this.pending]);
     }
+    const receipt = Object.freeze({
+      attempted: this.attempted,
+      accepted: this.accepted,
+      failed: this.failed,
+    });
+    this.attempted = 0;
+    this.accepted = 0;
+    this.failed = 0;
+    return receipt;
   }
 
-  private async send(event: PostHogEvent): Promise<void> {
+  private async send(event: PostHogEvent): Promise<boolean> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
     try {
-      await this.fetchImpl(this.endpoint, {
+      const response = await this.fetchImpl(this.endpoint, {
         method: "POST",
         headers: {
           "content-type": "application/json",
@@ -331,8 +361,10 @@ class EnabledPostHogTelemetry implements PostHogTelemetry {
         }),
         signal: controller.signal,
       });
+      return response.ok;
     } catch {
       // Telemetry is intentionally best-effort and never affects business work.
+      return false;
     } finally {
       clearTimeout(timeout);
     }
@@ -343,7 +375,22 @@ export function createPostHogTelemetryFromEnv(
   environment: Environment = process.env,
   fetchImpl: FetchLike = fetch,
 ): PostHogTelemetry {
-  const config = resolveEndpoint(environment);
+  return createPostHogTelemetry(environment, fetchImpl, MAX_RUNTIME_TIMEOUT_MS);
+}
+
+export function createPostHogCommissioningTelemetryFromEnv(
+  environment: Environment = process.env,
+  fetchImpl: FetchLike = fetch,
+): PostHogTelemetry {
+  return createPostHogTelemetry(environment, fetchImpl, MAX_COMMISSIONING_TIMEOUT_MS);
+}
+
+function createPostHogTelemetry(
+  environment: Environment,
+  fetchImpl: FetchLike,
+  maximumTimeoutMs: number,
+): PostHogTelemetry {
+  const config = resolveEndpoint(environment, maximumTimeoutMs);
   return config === null
     ? noOpTelemetry()
     : new EnabledPostHogTelemetry(

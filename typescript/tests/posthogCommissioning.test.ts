@@ -18,7 +18,10 @@ import {
   runPostHogCommissioning,
 } from "../src/tools/runPostHogCommissioning.js";
 
-function telemetry(enabled = true): PostHogTelemetry & { flushCount: number; events: string[] } {
+function telemetry(
+  enabled = true,
+  acceptsDelivery = true,
+): PostHogTelemetry & { flushCount: number; events: string[] } {
   return {
     enabled,
     flushCount: 0,
@@ -28,6 +31,12 @@ function telemetry(enabled = true): PostHogTelemetry & { flushCount: number; eve
     },
     async flush() {
       this.flushCount += 1;
+      const attempted = this.events.length || 3;
+      return {
+        attempted,
+        accepted: acceptsDelivery ? attempted : 0,
+        failed: acceptsDelivery ? 0 : attempted,
+      };
     },
   };
 }
@@ -130,6 +139,30 @@ describe("PostHog commissioning", () => {
     ]);
   });
 
+  it("does not require business-runtime secrets for the native telemetry proof", async () => {
+    const originalProvider = process.env.PERSISTENCE_PROVIDER;
+    const originalServiceToken = process.env.JARVIS_SERVICE_TOKEN;
+    process.env.PERSISTENCE_PROVIDER = "convex";
+    delete process.env.JARVIS_SERVICE_TOKEN;
+
+    try {
+      const sink = telemetry();
+      const receipt = await runPostHogCommissioning(sink);
+
+      assert.equal(receipt.statusCode, 200);
+      assert.deepEqual(sink.events, [
+        "jarvis.operator_action",
+        "jarvis.boundary_latency",
+        "jarvis.usage",
+      ]);
+    } finally {
+      if (originalProvider === undefined) delete process.env.PERSISTENCE_PROVIDER;
+      else process.env.PERSISTENCE_PROVIDER = originalProvider;
+      if (originalServiceToken === undefined) delete process.env.JARVIS_SERVICE_TOKEN;
+      else process.env.JARVIS_SERVICE_TOKEN = originalServiceToken;
+    }
+  });
+
   it("fails closed before starting an app when telemetry is disabled", async () => {
     const sink = telemetry(false);
     let created = false;
@@ -143,6 +176,22 @@ describe("PostHog commissioning", () => {
     );
     assert.equal(created, false);
     assert.equal(sink.flushCount, 0);
+  });
+
+  it("fails commissioning when PostHog does not accept every governed event", async () => {
+    const sink = telemetry(true, false);
+    const app = {
+      async inject() {
+        return { statusCode: 200 };
+      },
+      async close() {},
+    } as unknown as NestFastifyApplication;
+
+    await assert.rejects(
+      runPostHogCommissioning(sink, async () => app),
+      /PostHog delivery failed: 0 of 3 events accepted/,
+    );
+    assert.equal(sink.flushCount, 1);
   });
 
   it("flushes telemetry and closes the app even when health is not OK", async () => {
