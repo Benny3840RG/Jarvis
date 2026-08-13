@@ -35,7 +35,7 @@
 
 | Requirement range | Passing test | Evidence reference | Status |
 |---|---|---|---|
-| R-067–R-072 | `backup.test.ts` — symbolic-link backup input is refused; export, isolated verify, restore, and ID remapping remain covered | `src/backup/backup.ts` `readBackupFile`, commit `3ea76656437efc4b78254582b2dcad34f4deb372`, `docs/security/2026-08-04-priority-1-foundation-scan.md` JARVIS-SEC-005 | Partial |
+| R-067–R-072 | `backup.test.ts` — symbolic-link backup input is refused; export, isolated verify, restore, and ID remapping remain covered | `src/backup/backup.ts` `readBackupFile`, commit `076b32a82ca47c19d0018b03037ee5831c679b4e`, `docs/security/2026-08-04-priority-1-foundation-scan.md` JARVIS-SEC-005 | Partial |
 
 ## Completion rule
 
