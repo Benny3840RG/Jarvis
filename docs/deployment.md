@@ -283,6 +283,8 @@ npm run backup -- verify "$BACKUP_FILE"
 ```
 
 Verification restores into isolated temporary JSON storage and does not mutate the configured live provider.
+Backup verification and restore refuse symbolic-link backup paths; use a regular owner-controlled file
+for backup input.
 
 ## Development function sync
 

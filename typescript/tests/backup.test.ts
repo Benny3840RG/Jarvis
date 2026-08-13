@@ -302,6 +302,19 @@ describe("Jarvis backup archives", () => {
     await assert.rejects(() => writeBackupFile(backupPath, archive), /already exists/);
   });
 
+  it("refuses to read a backup through a symbolic link", async () => {
+    if (process.platform === "win32") return;
+
+    const provider = new JSONPersistence(path.join(tempDir, "source.json"));
+    const archive = await exportBackup(provider);
+    const realPath = path.join(tempDir, "real-backup.json");
+    const linkPath = path.join(tempDir, "linked-backup.json");
+    await writeBackupFile(realPath, archive);
+    await fs.symlink(realPath, linkPath);
+
+    await assert.rejects(() => readBackupFile(linkPath), /symbolic link|symlink/i);
+  });
+
   it("refuses restore when the target contains state or records", async () => {
     const source = new JSONPersistence(path.join(tempDir, "source.json"));
     await source.addTask("Source task", "work");
