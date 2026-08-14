@@ -259,12 +259,24 @@ export async function writeBackupFile(filePath: string, archive: BackupArchive):
 
 export async function readBackupFile(filePath: string): Promise<BackupArchive> {
   const target = path.resolve(filePath);
-  const stat = await fs.stat(target);
-  if (!stat.isFile()) throw new Error(`Backup path is not a file: ${target}`);
-  if (stat.size > MAX_BACKUP_BYTES) {
-    throw new Error(`Backup exceeds the ${MAX_BACKUP_BYTES} byte safety limit.`);
+  const linkStat = await fs.lstat(target);
+  if (linkStat.isSymbolicLink()) {
+    throw new Error(`Backup path must not be a symbolic link: ${target}`);
   }
-  const raw = await fs.readFile(target, "utf8");
+
+  let handle: FileHandle | undefined;
+  let raw: string;
+  try {
+    handle = await fs.open(target, fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW ?? 0));
+    const stat = await handle.stat();
+    if (!stat.isFile()) throw new Error(`Backup path is not a file: ${target}`);
+    if (stat.size > MAX_BACKUP_BYTES) {
+      throw new Error(`Backup exceeds the ${MAX_BACKUP_BYTES} byte safety limit.`);
+    }
+    raw = await handle.readFile("utf8");
+  } finally {
+    await handle?.close().catch(() => undefined);
+  }
   try {
     return parseBackup(JSON.parse(raw) as unknown);
   } catch (error: unknown) {

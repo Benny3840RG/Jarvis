@@ -15,7 +15,7 @@
 | R-044–R-054 | Approval lifecycle and fingerprint tests | ToolAction consent lifecycle schema, state literals, approve/revoke HTTP boundary, expiry/consumption execution tests, operator approval docs | Partial | 5fabfae1 | Connector review |
 | R-055–R-062 | Tool contracts, audit records, failure tests | Tool action execution receipts and guarded execution tests | Partial | 5fabfae1 | Connector review |
 | R-063–R-066 | Secret-storage review and redaction tests | Token-file/O_NOFOLLOW controls, service-token handling, telemetry redaction tests | Partial | 981ee36b | Connector review |
-| R-067–R-072 | Schema, ownership, backup and restore evidence | ToolAction schema evidence; provider-neutral backup/restore validation | Partial | 981ee36b | Connector review |
+| R-067–R-072 | Schema, ownership, backup and restore evidence | ToolAction schema evidence; provider-neutral backup/restore validation; `backup.test.ts` refuses symbolic-link input and `readBackupFile` uses an `O_NOFOLLOW` descriptor | Partial | 076b32a82ca47c19d0018b03037ee5831c679b4e | Local verification |
 | R-073–R-076 | State diagrams and transition test results | State glossary and ToolAction state-transition tests | Partial | 5fabfae1 | Connector review |
 | R-077–R-081 | Retention policy and append-only history tests | ToolAction lifecycle audit-event hooks only | Partial | 5fabfae1 | Connector review |
 | R-082–R-090 | Safety policy and blocked-action evidence | ToolAction blocked execution tests for expired, revoked, unauthorized, and consumed approvals | Partial | 5fabfae1 | Connector review |

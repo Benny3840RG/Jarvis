@@ -31,6 +31,12 @@
 | R-141–R-143 | Provider integration | Blind retry after indeterminate result | `indeterminateReconciliation` | Partial |
 | R-144–R-150 | Namespace validation | Duplicate, recycled, shifted, or lowercase ID | `requirementsNamespace` | Planned |
 
+## Current backup input hardening evidence
+
+| Requirement range | Passing test | Evidence reference | Status |
+|---|---|---|---|
+| R-067–R-072 | `backup.test.ts` — symbolic-link backup input is refused; export, isolated verify, restore, and ID remapping remain covered | `src/backup/backup.ts` `readBackupFile`, commit `076b32a82ca47c19d0018b03037ee5831c679b4e`, `docs/security/2026-08-04-priority-1-foundation-scan.md` JARVIS-SEC-005 | Partial |
+
 ## Completion rule
 
 A requirement is not implemented until at least one passing test and one immutable evidence reference are linked in the evidence matrix.
