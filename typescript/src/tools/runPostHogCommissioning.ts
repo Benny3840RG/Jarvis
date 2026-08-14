@@ -5,7 +5,20 @@ import { execFileSync } from "node:child_process";
 import type { NestFastifyApplication } from "@nestjs/platform-fastify";
 
 import { createJarvisHttpApp } from "../http/app.js";
-import { createPostHogTelemetryFromEnv, type PostHogTelemetry } from "../observability/posthog.js";
+import { JARVIS_VERSION } from "../http/config.js";
+import {
+  createPostHogCommissioningTelemetryFromEnv,
+  type PostHogFlushReceipt,
+  type PostHogTelemetry,
+} from "../observability/posthog.js";
+import type {
+  AssistantState,
+  PersistenceProvider,
+  Reminder,
+  ReminderUpdate,
+  Task,
+  TaskUpdate,
+} from "../persistence/persistence.js";
 import { applyPreviewEnvironment } from "../preview/environment.js";
 
 type HttpAppFactory = () => Promise<NestFastifyApplication>;
@@ -27,6 +40,64 @@ export function resolveCommissioningSourceVersion(
   return environment.JARVIS_SOURCE_VERSION?.trim() || readGitHead().trim();
 }
 
+function createCommissioningPersistence(): PersistenceProvider {
+  return {
+    async loadState(): Promise<AssistantState> {
+      return {};
+    },
+    async saveState(): Promise<void> {},
+    async listTasks(): Promise<Task[]> {
+      return [];
+    },
+    async addTask(): Promise<Task> {
+      throw new Error("Task writes are unavailable during PostHog commissioning.");
+    },
+    async updateTask(_id: string, _update: TaskUpdate): Promise<Task | null> {
+      return null;
+    },
+    async completeTask(): Promise<Task | null> {
+      return null;
+    },
+    async removeTask(): Promise<Task | null> {
+      return null;
+    },
+    async listReminders(): Promise<Reminder[]> {
+      return [];
+    },
+    async addReminder(): Promise<Reminder> {
+      throw new Error("Reminder writes are unavailable during PostHog commissioning.");
+    },
+    async updateReminder(_id: string, _update: ReminderUpdate): Promise<Reminder | null> {
+      return null;
+    },
+    async removeReminder(): Promise<Reminder | null> {
+      return null;
+    },
+  };
+}
+
+function createCommissioningApp(telemetry: PostHogTelemetry): Promise<NestFastifyApplication> {
+  return createJarvisHttpApp({
+    persistence: createCommissioningPersistence(),
+    providerName: "json",
+    config: {
+      version: JARVIS_VERSION,
+      sourceVersion: process.env.JARVIS_SOURCE_VERSION?.trim() || "development",
+      deploymentVersion: null,
+    },
+    externalReconciliationReadStore: null,
+    totalityPipeline: null,
+    memoryChangeSetService: null,
+    toolActionService: null,
+    toolExecutionService: null,
+    quoteRepository: null,
+    quoteDeliveryRepository: null,
+    activityEventReader: null,
+    telemetry,
+    logger: false,
+  });
+}
+
 function loadLocalEnvironment(): void {
   try {
     loadEnvFile(".env.local");
@@ -37,7 +108,7 @@ function loadLocalEnvironment(): void {
 
 export async function runPostHogCommissioning(
   telemetry: PostHogTelemetry,
-  createApp: HttpAppFactory = () => createJarvisHttpApp({ telemetry, logger: false }),
+  createApp: HttpAppFactory = () => createCommissioningApp(telemetry),
 ): Promise<PostHogCommissioningReceipt> {
   if (!telemetry.enabled) {
     throw new Error(
@@ -47,6 +118,7 @@ export async function runPostHogCommissioning(
 
   const app = await createApp();
   let statusCode: number;
+  let deliveryReceipt: PostHogFlushReceipt | undefined;
   try {
     const response = await app.inject({ method: "GET", url: "/healthz" });
     statusCode = response.statusCode;
@@ -57,8 +129,18 @@ export async function runPostHogCommissioning(
     try {
       await app.close();
     } finally {
-      await telemetry.flush();
+      deliveryReceipt = await telemetry.flush();
     }
+  }
+
+  if (
+    deliveryReceipt.attempted !== 3 ||
+    deliveryReceipt.accepted !== 3 ||
+    deliveryReceipt.failed !== 0
+  ) {
+    throw new Error(
+      `PostHog delivery failed: ${deliveryReceipt.accepted} of ${deliveryReceipt.attempted} events accepted.`,
+    );
   }
 
   return { statusCode, telemetryFlushed: true };
@@ -69,7 +151,7 @@ async function main(): Promise<void> {
   applyPreviewEnvironment();
   const sourceVersion = resolveCommissioningSourceVersion();
   process.env.JARVIS_SOURCE_VERSION = sourceVersion;
-  const telemetry = createPostHogTelemetryFromEnv();
+  const telemetry = createPostHogCommissioningTelemetryFromEnv();
   const receipt = await runPostHogCommissioning(telemetry);
   console.log(
     `Jarvis PostHog commissioning boundary completed at ${sourceVersion} with HTTP ${receipt.statusCode}; telemetry flush completed.`,
