@@ -58,10 +58,10 @@ rules:
     message: An active workflow must not depend on a non-active action family.
     # Note: this intentionally does NOT require every workflow-referenced
     # action family to be active regardless of the workflow's own status.
-    # WF-QUOTE-001 and its steps (AM-012, AM-013) are all lifecycle_status
-    # planned today — a planned workflow composing planned families is
-    # consistent, not a violation. Existence of the referenced family is
-    # still enforced separately by the Ruby generator
+    # WF-QUOTE-001 remains planned while its steps currently mix active AM-012
+    # with planned AM-013. A planned workflow may reference that staged set;
+    # only an active workflow requires every referenced family to be active.
+    # Existence of the referenced family is still enforced by the Ruby generator
     # (scripts/generate-action-map.rb), which fails on any workflow step
     # naming an unknown action_family id.
 
