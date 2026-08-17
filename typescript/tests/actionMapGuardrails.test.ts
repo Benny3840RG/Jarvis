@@ -1,11 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import {
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
@@ -49,11 +44,7 @@ function runWithMutation(mutate: (registry: ActionRegistry) => void) {
     ) as ActionRegistry;
     mutate(registry);
     const mutatedPath = path.join(tempDir, "action-family-registry.yaml");
-    writeFileSync(
-      mutatedPath,
-      yaml.dump(registry, { lineWidth: -1 }),
-      "utf8",
-    );
+    writeFileSync(mutatedPath, yaml.dump(registry, { lineWidth: -1 }), "utf8");
 
     return spawnSync(process.execPath, ["scripts/validate-action-map.mjs"], {
       cwd: typescriptRoot,
