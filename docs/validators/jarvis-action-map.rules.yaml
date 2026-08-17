@@ -8,6 +8,8 @@ required_checks:
   - policy_overlay_required
   - approval_required_implies_fingerprint_or_idempotency
   - external_side_effect_implies_reconciliation
+  - high_consequence_effect_implies_exact_approval
+  - external_side_effect_implies_exact_approval
   - generated_view_is_not_source_of_truth
 
 reference_registries:
@@ -58,12 +60,9 @@ rules:
     message: An active workflow must not depend on a non-active action family.
     # Note: this intentionally does NOT require every workflow-referenced
     # action family to be active regardless of the workflow's own status.
-    # WF-QUOTE-001 and its steps (AM-012, AM-013) are all lifecycle_status
-    # planned today — a planned workflow composing planned families is
-    # consistent, not a violation. Existence of the referenced family is
-    # still enforced separately by the Ruby generator
-    # (scripts/generate-action-map.rb), which fails on any workflow step
-    # naming an unknown action_family id.
+    # A planned workflow composing planned families is consistent, not a
+    # violation. Existence of the referenced family is still enforced by
+    # registry-reference validation and the generator.
 
   - id: RULE-006
     when: action_family.bindings.executor_id is present
@@ -73,6 +72,23 @@ rules:
       - action_family.lifecycle_status == active implies the bound tool and state target are implemented == true
     fail: true
     message: A family cannot be marked active while bound to a tool or state target that isn't implemented.
+
+  - id: RULE-007
+    when: resolved action_family effect_class is send, execute, or destructive
+    require:
+      - resolved action_family approval.mode == always
+      - resolved action_family approval.binding == exact_action_fingerprint
+    fail: true
+    message: Send, execute, and destructive action families require exact-action approval.
+
+  - id: RULE-008
+    when: resolved action_family external_side_effects.mode == true
+    require:
+      - resolved action_family approval.mode == always
+      - resolved action_family approval.binding == exact_action_fingerprint
+      - resolved action_family reconciliation.required == true
+    fail: true
+    message: External side effects require exact-action approval and reconciliation.
 
 execution_order:
   - json_schema_validation

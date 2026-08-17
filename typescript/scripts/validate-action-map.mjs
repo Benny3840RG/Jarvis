@@ -181,21 +181,33 @@ console.log("Stage 2/3: registry-reference validation passed.");
 const semanticErrors = [];
 const overlaysByName = registry.policy_overlays;
 
+function overlayFor(family) {
+  return overlaysByName[family.policy_overlay] ?? {};
+}
+
+function resolvedEffectClass(family) {
+  return family.effect_class ?? overlayFor(family).effect_class;
+}
+
 function resolvedApprovalMode(family) {
-  return family.approval?.mode ?? overlaysByName[family.policy_overlay]?.approval?.mode;
+  return family.approval?.mode ?? overlayFor(family).approval?.mode;
+}
+
+function resolvedApprovalBinding(family) {
+  return family.approval?.binding ?? overlayFor(family).approval?.binding;
 }
 
 function resolvedExternalSideEffect(family) {
   return (
     family.execution?.external_side_effects?.mode ??
-    overlaysByName[family.policy_overlay]?.external_side_effects?.mode
+    overlayFor(family).external_side_effects?.mode
   );
 }
 
 function resolvedReconciliationRequired(family) {
   return (
     family.reconciliation?.required ??
-    overlaysByName[family.policy_overlay]?.reconciliation?.required ??
+    overlayFor(family).reconciliation?.required ??
     false
   );
 }
@@ -258,6 +270,37 @@ for (const family of registry.action_families) {
   if (tool?.implemented !== true || stateTarget?.implemented !== true) {
     semanticErrors.push(
       `RULE-006: ${family.id} is lifecycle_status active but its tool/state-target binding is not implemented`,
+    );
+  }
+}
+
+// RULE-007: high-consequence action families must use exact-action approval.
+const exactApprovalEffectClasses = new Set(["send", "execute", "destructive"]);
+for (const family of registry.action_families) {
+  const effectClass = resolvedEffectClass(family);
+  if (!exactApprovalEffectClasses.has(effectClass)) continue;
+
+  if (
+    resolvedApprovalMode(family) !== "always" ||
+    resolvedApprovalBinding(family) !== "exact_action_fingerprint"
+  ) {
+    semanticErrors.push(
+      `RULE-007: ${family.id} effect_class ${effectClass} must require always/exact_action_fingerprint approval`,
+    );
+  }
+}
+
+// RULE-008: any concrete external side effect requires exact approval plus reconciliation.
+for (const family of registry.action_families) {
+  if (resolvedExternalSideEffect(family) !== true) continue;
+
+  if (
+    resolvedApprovalMode(family) !== "always" ||
+    resolvedApprovalBinding(family) !== "exact_action_fingerprint" ||
+    resolvedReconciliationRequired(family) !== true
+  ) {
+    semanticErrors.push(
+      `RULE-008: ${family.id} external side effects require always/exact_action_fingerprint approval and reconciliation`,
     );
   }
 }
