@@ -277,11 +277,7 @@ for (const family of registry.action_families) {
 }
 
 // RULE-007: high-consequence action families must use exact-action approval.
-const exactApprovalEffectClasses = new Set([
-  "send",
-  "execute",
-  "destructive",
-]);
+const exactApprovalEffectClasses = new Set(["send", "execute", "destructive"]);
 for (const family of registry.action_families) {
   const effectClass = resolvedEffectClass(family);
   if (!exactApprovalEffectClasses.has(effectClass)) continue;
