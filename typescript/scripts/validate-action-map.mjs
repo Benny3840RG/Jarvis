@@ -14,7 +14,9 @@ import yaml from "js-yaml";
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, "..", "..");
 
-const REGISTRY_PATH = path.join(repoRoot, "docs/traceability/action-family-registry.yaml");
+const REGISTRY_PATH =
+  process.env.JARVIS_ACTION_MAP_REGISTRY_PATH ??
+  path.join(repoRoot, "docs/traceability/action-family-registry.yaml");
 const SCHEMA_PATH = path.join(repoRoot, "docs/validators/jarvis-action-map.schema.json");
 const RULES_PATH = path.join(repoRoot, "docs/validators/jarvis-action-map.rules.yaml");
 
