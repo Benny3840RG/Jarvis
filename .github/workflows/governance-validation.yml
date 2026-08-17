@@ -9,7 +9,7 @@ name: Governance validation
 on:
   pull_request:
     paths:
-      - "docs/operators/guardrails.md"
+      - "docs/governance/guardrails.md"
       - "docs/traceability/action-family-registry.yaml"
       - "docs/traceability/action-map.generated.md"
       - "docs/registries/**"
@@ -20,7 +20,7 @@ on:
   push:
     branches: [main]
     paths:
-      - "docs/operators/guardrails.md"
+      - "docs/governance/guardrails.md"
       - "docs/traceability/action-family-registry.yaml"
       - "docs/traceability/action-map.generated.md"
       - "docs/registries/**"
