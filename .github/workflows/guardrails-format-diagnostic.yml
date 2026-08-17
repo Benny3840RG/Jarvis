@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 jobs:
-  emit-prettier-output:
+  emit-prettier-diff:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -27,12 +27,14 @@ jobs:
         working-directory: typescript
         run: npm ci
 
-      - name: Emit canonical formatter output
+      - name: Emit canonical formatter diff
         working-directory: typescript
         shell: bash
         run: |
-          for file in scripts/validate-action-map.mjs tests/actionMapGuardrails.test.ts; do
-            encoded="$(npx prettier "$file" | base64 -w0)"
-            echo "::error file=$file,title=PRETTIER_FORMATTED::$encoded"
-          done
-          exit 1
+          npx prettier scripts/validate-action-map.mjs tests/actionMapGuardrails.test.ts --write
+          encoded="$(git diff -- scripts/validate-action-map.mjs tests/actionMapGuardrails.test.ts | base64 -w0)"
+          if [ -n "$encoded" ]; then
+            echo "::error title=PRETTIER_DIFF::$encoded"
+            exit 1
+          fi
+          echo "No Prettier diff remains."
