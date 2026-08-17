@@ -31,17 +31,12 @@ const yaml = require("js-yaml") as YamlModule;
 const here = path.dirname(fileURLToPath(import.meta.url));
 const typescriptRoot = path.resolve(here, "..");
 const repoRoot = path.resolve(typescriptRoot, "..");
-const registryPath = path.join(
-  repoRoot,
-  "docs/traceability/action-family-registry.yaml",
-);
+const registryPath = path.join(repoRoot, "docs/traceability/action-family-registry.yaml");
 
 function runWithMutation(mutate: (registry: ActionRegistry) => void) {
   const tempDir = mkdtempSync(path.join(os.tmpdir(), "jarvis-action-map-"));
   try {
-    const registry = yaml.load(
-      readFileSync(registryPath, "utf8"),
-    ) as ActionRegistry;
+    const registry = yaml.load(readFileSync(registryPath, "utf8")) as ActionRegistry;
     mutate(registry);
     const mutatedPath = path.join(tempDir, "action-family-registry.yaml");
     writeFileSync(mutatedPath, yaml.dump(registry, { lineWidth: -1 }), "utf8");
@@ -60,9 +55,7 @@ function runWithMutation(mutate: (registry: ActionRegistry) => void) {
 }
 
 function requireFamily(registry: ActionRegistry, id: string): ActionFamily {
-  const family = registry.action_families.find(
-    (candidate) => candidate.id === id,
-  );
+  const family = registry.action_families.find((candidate) => candidate.id === id);
   assert.ok(family, `Expected ${id} in action-family registry`);
   return family;
 }
@@ -77,11 +70,7 @@ test("RULE-007 rejects destructive actions without exact approval", () => {
     };
   });
 
-  assert.notEqual(
-    result.status,
-    0,
-    `validator unexpectedly passed:\n${result.stdout}`,
-  );
+  assert.notEqual(result.status, 0, `validator unexpectedly passed:\n${result.stdout}`);
   assert.match(result.stderr, /RULE-007: AM-007/);
 });
 
@@ -95,10 +84,6 @@ test("RULE-008 rejects external side effects without exact approval", () => {
     };
   });
 
-  assert.notEqual(
-    result.status,
-    0,
-    `validator unexpectedly passed:\n${result.stdout}`,
-  );
+  assert.notEqual(result.status, 0, `validator unexpectedly passed:\n${result.stdout}`);
   assert.match(result.stderr, /RULE-008: AM-013/);
 });
