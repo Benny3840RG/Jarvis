@@ -1,12 +1,11 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
-
-import yaml from "js-yaml";
 
 type Approval = {
   mode?: string;
@@ -22,6 +21,13 @@ type ActionRegistry = {
   action_families: ActionFamily[];
 };
 
+type YamlModule = {
+  load(input: string): unknown;
+  dump(input: unknown, options?: { lineWidth?: number }): string;
+};
+
+const require = createRequire(import.meta.url);
+const yaml = require("js-yaml") as YamlModule;
 const here = path.dirname(fileURLToPath(import.meta.url));
 const typescriptRoot = path.resolve(here, "..");
 const repoRoot = path.resolve(typescriptRoot, "..");
