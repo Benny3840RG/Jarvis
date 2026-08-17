@@ -201,17 +201,12 @@ function resolvedApprovalBinding(family) {
 
 function resolvedExternalSideEffect(family) {
   return (
-    family.execution?.external_side_effects?.mode ??
-    overlayFor(family).external_side_effects?.mode
+    family.execution?.external_side_effects?.mode ?? overlayFor(family).external_side_effects?.mode
   );
 }
 
 function resolvedReconciliationRequired(family) {
-  return (
-    family.reconciliation?.required ??
-    overlayFor(family).reconciliation?.required ??
-    false
-  );
+  return family.reconciliation?.required ?? overlayFor(family).reconciliation?.required ?? false;
 }
 
 // RULE-001
