@@ -139,7 +139,8 @@ No integration-specific prose may bypass the canonical action-family registry or
 | Guardrail | Current status | Proof / enforcement path |
 | --- | --- | --- |
 | Exact approval for send, execute, and destructive action families | **Structurally validated** | `RULE-007` in `docs/validators/jarvis-action-map.rules.yaml`, enforced by `typescript/scripts/validate-action-map.mjs` |
-| External side effects require exact approval and reconciliation | **Structurally validated** | `RULE-008` plus existing external-side-effect validation |
+| Concrete external-side-effect families (`mode: true`) require exact approval and reconciliation | **Structurally validated** | `RULE-008` plus existing external-side-effect validation; conditional side-effect branches still depend on their runtime condition policy |
+| Financial/contractual authoritative writes require approval | **Policy intent plus stricter current ToolExecution gate; not yet structurally classified as a distinct write consequence** | `AM-012` is still `internal_mutation`; keep the registry/runtime divergence visible until deliberately reconciled |
 | Approval fingerprint, expiry/revocation, and guarded execution | **Runtime-enforced where the ToolAction path is used** | Frozen requirements plus `typescript/src/actions/toolActions.ts` and `toolExecution.ts`; tests are the evidentiary authority |
 | Plaintext-secret prohibition | **Requirement/runtime-specific controls; not globally proven by this document** | Secret-handling requirements and integration-specific tests |
 | Task data does not automatically become memory | **Policy requirement; not generically enforceable from current action metadata** | Must be enforced by each persistence/integration path and evidenced by tests |
@@ -149,8 +150,9 @@ No integration-specific prose may bypass the canonical action-family registry or
 ## 8. Runtime/registry divergence rule
 
 The current ToolExecution path requires a `ToolAction` to be in an approved state before execution,
-including for some action families whose registry overlay says `approval.mode: never`. That is a
-stricter runtime behaviour than the overlay semantics describe.
+including for action families whose registry overlay says `approval.mode: never`. `AM-012` (Finalize
+quote) is the clearest current example: its registry policy is `internal_mutation`, while the actual
+ToolExecution path is stricter and requires approved state before execution.
 
 This document does not weaken that runtime gate and does not pretend the mismatch is resolved.
 Until the approval model is deliberately reconciled, the stricter runtime behaviour is the
