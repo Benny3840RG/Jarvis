@@ -357,6 +357,7 @@ class EnabledPostHogTelemetry implements PostHogTelemetry {
           properties: {
             ...event.properties,
             source_version: this.sourceVersion,
+            $geoip_disable: true,
           },
         }),
         signal: controller.signal,
