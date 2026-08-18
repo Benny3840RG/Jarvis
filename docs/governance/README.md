@@ -5,7 +5,7 @@ document:
   baseline: v2.2
   namespace: R-001–R-150
   authority: navigational_only
-  last_reviewed: "2026-07-23"
+  last_reviewed: "2026-08-19"
 ```
 
 This index is **navigational only**. It does not create requirements, redefine terms, or grant
@@ -33,7 +33,7 @@ edited to hide the divergence.
    if a glossary entry doesn't match how a term is actually used in the requirements, that's a
    glossary defect, not grounds for reinterpreting the requirement.
 
-4. **`docs/architecture/*.md`**
+4. **`typescript/docs/architecture/*.md`**
    Architecture and design specs (`totality-system-spec.md`, `ownership-and-concurrency.md`,
    `persistence-modules.md`, `reminder-due-model.md`, `scaffold-and-runtime-boundaries.md`, and
    related). Describe how the system is built to satisfy the frozen requirements above. Senior
@@ -41,7 +41,7 @@ edited to hide the divergence.
    boundary, the deliberate absence of an execute route until an allowlist exists — that operator
    docs and traceability views must not contradict.
 
-5. **`docs/operators/*.md`**
+5. **`typescript/docs/operators/*.md`**
    Operator- and API-facing contracts (`tool-action-approval.md`, `http-api.md`,
    `memory-approval.md`, `totality-http.md`, `chatgpt-preview.md`). Describe the behavior exposed
    to callers. Must conform to the architecture tier above and the requirements; these are where
@@ -81,11 +81,12 @@ edited to hide the divergence.
     and AM-007 (cancel reminder) are `lifecycle_status: active`, each bound to an implemented,
     tested tool and state target in `typescript/src/actions/toolExecutionFactory.ts`'s allowlist
     (see `docs/registries/tool-registry.yaml` and `state-target-registry.yaml` for the
-    implementation paths). AM-012/AM-013 (finalize/send quote) remain `planned` — the real Quote
-    store has no finalized/reviewed states yet — and no external-side-effect action family may
-    become active until reconciliation lands (tracked in #170/issue #154). The Status column is a
-    live record for active families and an intent record for planned ones; check it per family,
-    don't assume the whole map is one or the other.
+    implementation paths). AM-012 (finalize quote) is also `active`, bound to the commissioned
+    reviewed-to-finalized Quote store and `TOOL-QUOTE-FINALIZE` allowlist entry. AM-013 (send quote)
+    remains `planned`: no live Outlook delivery is commissioned or authorised, and its external
+    side effect remains gated by reconciliation and separate provider commissioning. The Status
+    column is a live record for active families and an intent record for planned ones; check it per
+    family, don't assume the whole map is one or the other.
 
 ### Evidentiary authority (orthogonal to the rank order above)
 
