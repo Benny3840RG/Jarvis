@@ -80,10 +80,10 @@ tests:
     verifies: finalizeRevision Convex mutation, owner-scoped lookup, stale-version rejection and fingerprint persistence
   - id: TEST-AM-012-TOOL-001
     path: typescript/tests/quoteFinalizeTool.test.ts
-    verifies: TOOL-QUOTE-FINALIZE boundary definition, authority enforcement and allowlist exclusion (planned evidence path; not yet commissioned)
+    verifies: TOOL-QUOTE-FINALIZE boundary definition, authority enforcement, idempotent replay and fail-closed repository outcomes
   - id: TEST-AM-012-SMOKE-001
     path: typescript/tests/quoteLifecycleSmoke.test.ts
-    verifies: full quote create→review→finalize→fork→delivery lifecycle against in-memory adapters and the development deployment (planned evidence path; not yet commissioned)
+    verifies: full quote create→review→finalize→fork→delivery-ledger lifecycle, development-only target enforcement and self-cleaning failure handling; guarded run 30956407980 commissioned the active finalisation boundary
 
   - id: TEST-AM-013-DELIVERY-001
     path: typescript/convex/quoteDeliveries.test.ts
