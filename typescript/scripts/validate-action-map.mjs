@@ -188,7 +188,7 @@ function overlayFor(family) {
 }
 
 function resolvedEffectClass(family) {
-  return family.effect_class ?? overlayFor(family).effect_class;
+  return family.policy_overrides?.effect_class ?? overlayFor(family).effect_class;
 }
 
 function resolvedApprovalMode(family) {
