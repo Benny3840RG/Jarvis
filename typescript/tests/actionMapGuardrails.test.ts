@@ -12,9 +12,14 @@ type Approval = {
   binding?: string;
 };
 
+type PolicyOverrides = {
+  effect_class?: string;
+};
+
 type ActionFamily = {
   id: string;
   approval?: Approval;
+  policy_overrides?: PolicyOverrides;
 };
 
 type ActionRegistry = {
@@ -72,6 +77,19 @@ test("RULE-007 rejects destructive actions without exact approval", () => {
 
   assert.notEqual(result.status, 0, `validator unexpectedly passed:\n${result.stdout}`);
   assert.match(result.stderr, /RULE-007: AM-007/);
+});
+
+test("RULE-007 honours destructive policy effect overrides", () => {
+  const result = runWithMutation((registry) => {
+    const family = requireFamily(registry, "AM-003");
+    family.policy_overrides = {
+      ...(family.policy_overrides ?? {}),
+      effect_class: "destructive",
+    };
+  });
+
+  assert.notEqual(result.status, 0, `validator unexpectedly passed:\n${result.stdout}`);
+  assert.match(result.stderr, /RULE-007: AM-003/);
 });
 
 test("RULE-008 rejects external side effects without exact approval", () => {
