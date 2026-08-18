@@ -33,8 +33,6 @@ export function canTransitionOmegaMission(from: OmegaMissionState, to: OmegaMiss
 
 export interface CompletionCriterion {
   criterionId: string;
-  status: "unverified" | "satisfied" | "failed" | "waived";
-  evidenceRefs: readonly string[];
 }
 
 export interface CompletionProof {
@@ -73,18 +71,6 @@ export function evaluateOmegaCompletion(input: OmegaCompletionInput): OmegaCompl
     failures.push("duplicate-acceptance-criterion-id");
   }
 
-  if (input.criteria.some((criterion) => criterion.status !== "satisfied")) {
-    failures.push("acceptance-criteria-incomplete");
-  }
-
-  if (
-    input.criteria.some(
-      (criterion) => criterion.status === "satisfied" && criterion.evidenceRefs.length === 0,
-    )
-  ) {
-    failures.push("satisfied-criterion-missing-evidence");
-  }
-
   if (input.proofs.some((proof) => !criterionIds.has(proof.criterionId))) {
     failures.push("validation-proof-unknown-criterion");
   }
@@ -94,8 +80,6 @@ export function evaluateOmegaCompletion(input: OmegaCompletionInput): OmegaCompl
   }
 
   for (const criterion of input.criteria) {
-    if (criterion.status !== "satisfied") continue;
-
     const passingProofs = input.proofs.filter(
       (proof) => proof.criterionId === criterion.criterionId && proof.result === "pass",
     );
@@ -105,19 +89,9 @@ export function evaluateOmegaCompletion(input: OmegaCompletionInput): OmegaCompl
       continue;
     }
 
-    const criterionEvidence = new Set(criterion.evidenceRefs);
-    if (
-      !passingProofs.some((proof) => proof.evidenceRefs.some((ref) => criterionEvidence.has(ref)))
-    ) {
-      failures.push(`criterion-proof-evidence-mismatch:${criterion.criterionId}`);
-    }
-
     if (
       riskRequiresIndependentValidation(input.riskClass) &&
-      !passingProofs.some(
-        (proof) =>
-          proof.independent && proof.evidenceRefs.some((ref) => criterionEvidence.has(ref)),
-      )
+      !passingProofs.some((proof) => proof.independent)
     ) {
       failures.push(`criterion-missing-independent-proof:${criterion.criterionId}`);
     }
