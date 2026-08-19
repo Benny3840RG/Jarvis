@@ -115,6 +115,7 @@ describe("PostHog runtime telemetry", () => {
       );
       assert.equal(body.properties.environment, "development");
       assert.equal(body.properties.source_version, "development");
+      assert.equal(body.properties.$geoip_disable, true);
       assert.equal("distinct_id" in body.properties, false);
       assert.equal("prompt" in body.properties, false);
       assert.equal("tokens" in body.properties, false);
