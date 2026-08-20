@@ -23,6 +23,7 @@ const MAX_ACCEPTANCE_CRITERIA = 64;
 const MAX_EVIDENCE_PER_MISSION = 256;
 const MAX_PROOFS_PER_MISSION = 256;
 const MAX_CONTRACTS_PER_MISSION = 128;
+const MAX_RESOLUTIONS_PER_MISSION = 256;
 const MAX_REFERENCES_PER_ITEM = 32;
 
 function cleanText(value: string, label: string): string {
@@ -504,35 +505,69 @@ export const transition = mutation({
         throw new Error("Omega mission contract set exceeds its bounded policy limit.");
       }
 
-      const validEvidenceIds = new Set(
+      const contradictionResolutions = await ctx.db
+        .query("omegaContradictionResolutions")
+        .withIndex("by_owner_and_mission_id", (q) =>
+          q.eq("ownerId", ownerId).eq("missionId", missionId),
+        )
+        .take(MAX_RESOLUTIONS_PER_MISSION + 1);
+      if (contradictionResolutions.length > MAX_RESOLUTIONS_PER_MISSION) {
+        throw new Error(
+          "Omega mission contradiction resolution set exceeds its bounded policy limit.",
+        );
+      }
+
+      const currentEvidenceIds = new Set(
         evidence
           .filter((item) => item.validUntil === undefined || item.validUntil > now)
           .map((item) => item.evidenceId),
       );
       const criteriaForCompletion = mission.acceptanceCriteria.map((criterion) => ({
         criterionId: criterion.criterionId,
-        status: criterion.status,
-        evidenceRefs: criterion.evidenceRefs.filter((ref) => validEvidenceIds.has(ref)),
       }));
-      const proofsForCompletion = proofs.map((proof) => ({
-        criterionId: proof.criterionId,
-        result: proof.result,
-        independent: proof.independent,
-        evidenceRefs: proof.evidenceRefs.filter((ref) => validEvidenceIds.has(ref)),
-      }));
-      const unresolvedCriticalContradictions = evidence.filter(
-        (item) =>
+      const currentProofs = proofs
+        .filter(
+          (proof) =>
+            proof.evidenceRefs.length > 0 &&
+            proof.evidenceRefs.every((evidenceId) => currentEvidenceIds.has(evidenceId)),
+        )
+        .map((proof) => ({
+          criterionId: proof.criterionId,
+          result: proof.result,
+          independent: proof.independent,
+          evidenceRefs: proof.evidenceRefs,
+        }));
+
+      const resolvedContradictionTargets = new Map<string, Set<string>>();
+      for (const resolution of contradictionResolutions) {
+        const resolvedTargets =
+          resolvedContradictionTargets.get(resolution.contradictionEvidenceId) ?? new Set<string>();
+        resolvedTargets.add(resolution.contradictedEvidenceId);
+        resolvedContradictionTargets.set(resolution.contradictionEvidenceId, resolvedTargets);
+      }
+
+      let unresolvedCriticalContradictions = 0;
+      for (const item of evidence) {
+        if (
           (item.validUntil === undefined || item.validUntil > now) &&
-          item.classification === "certain" &&
-          item.contradicts.length > 0,
-      ).length;
+          item.classification === "certain"
+        ) {
+          const resolvedTargets = resolvedContradictionTargets.get(item.evidenceId);
+          for (const contradictedEvidenceId of item.contradicts) {
+            if (!resolvedTargets?.has(contradictedEvidenceId)) {
+              unresolvedCriticalContradictions += 1;
+            }
+          }
+        }
+      }
+
       const unreconciledExternalEffects = contracts.filter(
         (contract) => !["reconciled", "denied", "expired", "rolled-back"].includes(contract.status),
       ).length;
 
       const completion = evaluateOmegaCompletion({
         criteria: criteriaForCompletion,
-        proofs: proofsForCompletion,
+        proofs: currentProofs,
         riskClass: mission.riskClass,
         unresolvedCriticalContradictions,
         unreconciledExternalEffects,
