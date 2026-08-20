@@ -41,5 +41,5 @@ state_targets:
   - id: STORE-QUOTES
     lifecycle_status: active
     implemented: true
-    note: Convex-backed QuoteRepository (src/quotes/convexQuoteRepository.ts) with aggregate, numbered revisions, controlled finalisation, and provider-neutral delivery ledger. AM-012 and TOOL-QUOTE-FINALIZE are active after PR #292 and guarded development commissioning run 30956407980. AM-013 and TOOL-QUOTE-SEND remain planned and unavailable pending separate Outlook delivery commissioning.
+    note: "Convex-backed QuoteRepository (typescript/src/quotes/convexQuoteRepository.ts) with aggregate, numbered revisions, controlled finalisation, and provider-neutral delivery ledger. AM-012 and TOOL-QUOTE-FINALIZE are active after PR #292 and guarded development commissioning run 30956407980. AM-013 and TOOL-QUOTE-SEND remain planned and unavailable pending separate Outlook delivery commissioning."
     bound_by: [AM-012, AM-013]
