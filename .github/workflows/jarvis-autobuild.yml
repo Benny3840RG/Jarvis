@@ -540,10 +540,6 @@ jobs:
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version-file: typescript/.nvmrc
-          cache: npm
-          cache-dependency-path: |
-            typescript/package-lock.json
-            typescript/jarvis-console-01/package-lock.json
 
       - name: Verify autonomous policy
         run: node --test .github/automation/validate-autobuild.test.mjs
