@@ -91,6 +91,27 @@ design is added. This slice does not yet implement invoice generation,
 automatic quote numbering consumption, client-ready payment documents or any
 payment reconciliation provider.
 
+## Durable enquiry intake and project conversion
+
+The business HTTP surface now includes durable enquiry intake for new Beez
+Treez work requests. Enquiry records store the customer, optional property,
+source, requested work, urgency, preferred date text, attachment references,
+site notes, safety/access notes, duplicate key, status and conversion/closure
+metadata.
+
+Duplicate enquiry submission is guarded by an explicit `duplicateKey`: replaying
+the same key returns the existing enquiry instead of creating another intake
+record. Open enquiries can be converted into the existing durable project/job
+authority as `lead` projects without creating a second work-order system. A
+converted enquiry records the created `projectId`; replaying conversion returns
+the same project instead of duplicating the job lead.
+
+The `/api/v1/enquiries` routes are authenticated, OpenAPI documented and marked
+`x-mcp-tool.exposed=false`; they are HTTP-only until a governed action design is
+added. The JSON-backed enquiry-to-project conversion is idempotent but not a
+cross-store transactional Convex mutation yet, so Convex-backed foreign-key and
+transactional migration evidence remains open.
+
 ## Verification
 
 Focused verification:
@@ -102,6 +123,7 @@ Focused verification:
 - `node --import tsx --test tests/propertyStore.test.ts tests/propertyHttp.test.ts tests/httpRouteContract.test.ts tests/httpOpenApiRouteAlignment.test.ts`
 - `node --import tsx --test tests/projectStore.test.ts tests/projectHttp.test.ts tests/httpRouteContract.test.ts tests/httpOpenApiRouteAlignment.test.ts`
 - `node --import tsx --test tests/businessSettingsStore.test.ts tests/businessSettingsHttp.test.ts tests/httpRouteContract.test.ts tests/httpOpenApiRouteAlignment.test.ts`
+- `node --import tsx --test tests/enquiryStore.test.ts tests/enquiryHttp.test.ts tests/httpRouteContract.test.ts tests/httpOpenApiRouteAlignment.test.ts`
 - `npm run openapi:lint`
 
 Full local repository gate:
@@ -112,7 +134,7 @@ Full local repository gate:
 - ESLint passed.
 - Prettier format check passed.
 - OpenAPI lint passed.
-- Node tests passed: 959 tests, 200 suites, 0 failures.
+- Node tests passed: 994 tests, 210 suites, 0 failures.
 - Convex tests passed.
 
 The full gate required execution outside the restricted sandbox because several

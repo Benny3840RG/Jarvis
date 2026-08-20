@@ -142,3 +142,30 @@ Melbourne timezone, AUD currency, metric measurements and 10% GST default
 without storing secrets. Contact/payment details are bounded business fields,
 not credential fields; secret-looking values are rejected. The route remains
 HTTP-only (`x-mcp-tool.exposed=false`) until a governed action binding exists.
+
+## Durable enquiry intake and project conversion — 2026-08-21
+
+The HTTP business surface now includes durable enquiry intake:
+`src/enquiries/enquiry.ts`, `src/enquiries/enquiryData.ts`,
+`src/enquiries/jsonEnquiryStore.ts`, `src/enquiries/inMemoryEnquiryStore.ts`,
+`src/http/enquiryRequest.ts` and `src/http/enquiryController.ts`. The route is
+wired through `src/http/app.ts`, `src/http/jarvisHttpModule.ts` and documented
+in `openapi/jarvis.openapi.json`.
+
+Verification:
+
+- `node --import tsx --test tests/enquiryStore.test.ts tests/enquiryHttp.test.ts tests/httpRouteContract.test.ts tests/httpOpenApiRouteAlignment.test.ts`
+- `npm run type-check`
+- `npm run openapi:lint`
+
+The slice records customer/property-linked enquiries, requested work, source,
+urgency, notes, safety/access details, attachment references and duplicate keys.
+Duplicate submission replays the existing enquiry, and conversion replays the
+existing project if the enquiry was already converted. Conversion deliberately
+reuses the existing durable project/job authority instead of creating a
+parallel work-order surface.
+
+The route remains HTTP-only (`x-mcp-tool.exposed=false`) until a governed action
+binding exists. JSON-backed enquiry-to-project conversion is idempotent but not
+yet a single Convex transaction, so Convex foreign-key and transaction evidence
+remain open.
