@@ -5569,6 +5569,103 @@
           }
         }
       }
+    },
+    "/api/v1/business-settings": {
+      "get": {
+        "operationId": "getBusinessSettings",
+        "summary": "Get business settings",
+        "description": "Returns the durable Beez Treez business identity, Australian locale, AUD/GST pricing defaults, and quote/invoice numbering settings. The record deliberately excludes credentials and secrets.",
+        "tags": ["Business Settings"],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Business settings.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessSettingsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      },
+      "patch": {
+        "operationId": "updateBusinessSettings",
+        "summary": "Update business settings",
+        "description": "Updates safe business configuration fields. Locale, timezone, currency, and measurement system are fixed to en-AU, Australia/Melbourne, AUD, and metric for this single-owner business boundary.",
+        "tags": ["Business Settings"],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": false
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateBusinessSettingsRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Business settings updated.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessSettingsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -10425,6 +10522,445 @@
           "reason": {
             "type": "string",
             "description": "Present when status is \"not-commissioned\" — a concrete, non-generic reason."
+          }
+        }
+      },
+      "BusinessContactDetails": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "phone": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "email": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "website": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "abn": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          }
+        }
+      },
+      "BusinessPaymentDetails": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "bankName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "accountName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "bsb": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "accountNumber": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "paymentReferenceTemplate": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          }
+        }
+      },
+      "BusinessPricingSettings": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "defaultLabourRateCents",
+          "defaultTravelRateCents",
+          "defaultEquipmentRateCents",
+          "defaultWasteRateCents",
+          "defaultMaterialsMarkupBps",
+          "defaultMarginBps",
+          "gstRateBps"
+        ],
+        "properties": {
+          "defaultLabourRateCents": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10000000
+          },
+          "defaultTravelRateCents": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10000000
+          },
+          "defaultEquipmentRateCents": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10000000
+          },
+          "defaultWasteRateCents": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10000000
+          },
+          "defaultMaterialsMarkupBps": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10000
+          },
+          "defaultMarginBps": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10000
+          },
+          "gstRateBps": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10000
+          }
+        }
+      },
+      "BusinessNumberingSettings": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["quotePrefix", "nextQuoteNumber", "invoicePrefix", "nextInvoiceNumber"],
+        "properties": {
+          "quotePrefix": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20,
+            "pattern": "^[A-Z0-9-]+$"
+          },
+          "nextQuoteNumber": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 999999999
+          },
+          "invoicePrefix": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20,
+            "pattern": "^[A-Z0-9-]+$"
+          },
+          "nextInvoiceNumber": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 999999999
+          }
+        }
+      },
+      "BusinessSettings": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "businessName",
+          "tradingName",
+          "locale",
+          "timezone",
+          "currency",
+          "measurementSystem",
+          "gstRegistered",
+          "contactDetails",
+          "paymentDetails",
+          "pricing",
+          "numbering",
+          "createdAt",
+          "updatedAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "enum": ["business-settings"]
+          },
+          "businessName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "tradingName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "locale": {
+            "type": "string",
+            "enum": ["en-AU"]
+          },
+          "timezone": {
+            "type": "string",
+            "enum": ["Australia/Melbourne"]
+          },
+          "currency": {
+            "type": "string",
+            "enum": ["AUD"]
+          },
+          "measurementSystem": {
+            "type": "string",
+            "enum": ["metric"]
+          },
+          "gstRegistered": {
+            "type": "boolean"
+          },
+          "contactDetails": {
+            "$ref": "#/components/schemas/BusinessContactDetails"
+          },
+          "paymentDetails": {
+            "$ref": "#/components/schemas/BusinessPaymentDetails"
+          },
+          "pricing": {
+            "$ref": "#/components/schemas/BusinessPricingSettings"
+          },
+          "numbering": {
+            "$ref": "#/components/schemas/BusinessNumberingSettings"
+          },
+          "createdAt": {
+            "$ref": "#/components/schemas/TimestampMs"
+          },
+          "updatedAt": {
+            "$ref": "#/components/schemas/TimestampMs"
+          }
+        }
+      },
+      "UpdateBusinessContactDetails": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "phone": {
+            "oneOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "email": {
+            "oneOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "website": {
+            "oneOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "abn": {
+            "oneOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "UpdateBusinessPaymentDetails": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "bankName": {
+            "oneOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "accountName": {
+            "oneOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "bsb": {
+            "oneOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "accountNumber": {
+            "oneOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "paymentReferenceTemplate": {
+            "oneOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "UpdateBusinessPricingSettings": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "defaultLabourRateCents": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10000000
+          },
+          "defaultTravelRateCents": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10000000
+          },
+          "defaultEquipmentRateCents": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10000000
+          },
+          "defaultWasteRateCents": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10000000
+          },
+          "defaultMaterialsMarkupBps": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10000
+          },
+          "defaultMarginBps": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10000
+          },
+          "gstRateBps": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10000
+          }
+        }
+      },
+      "UpdateBusinessNumberingSettings": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "quotePrefix": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20,
+            "pattern": "^[A-Z0-9-]+$"
+          },
+          "nextQuoteNumber": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 999999999
+          },
+          "invoicePrefix": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20,
+            "pattern": "^[A-Z0-9-]+$"
+          },
+          "nextInvoiceNumber": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 999999999
+          }
+        }
+      },
+      "UpdateBusinessSettingsRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "businessName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "tradingName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "gstRegistered": {
+            "type": "boolean"
+          },
+          "contactDetails": {
+            "$ref": "#/components/schemas/UpdateBusinessContactDetails"
+          },
+          "paymentDetails": {
+            "$ref": "#/components/schemas/UpdateBusinessPaymentDetails"
+          },
+          "pricing": {
+            "$ref": "#/components/schemas/UpdateBusinessPricingSettings"
+          },
+          "numbering": {
+            "$ref": "#/components/schemas/UpdateBusinessNumberingSettings"
+          }
+        }
+      },
+      "BusinessSettingsResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["data"],
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/BusinessSettings"
           }
         }
       }

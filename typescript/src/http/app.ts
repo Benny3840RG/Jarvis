@@ -10,6 +10,9 @@ import { createToolActionServiceFromEnv } from "../actions/toolActionFactory.js"
 import type { ToolActionService } from "../actions/toolActions.js";
 import { createToolExecutionServiceFromEnv } from "../actions/toolExecutionFactory.js";
 import type { ToolExecutionService } from "../actions/toolExecution.js";
+import type { BusinessSettingsStore } from "../businessSettings/businessSettings.js";
+import { InMemoryBusinessSettingsStore } from "../businessSettings/inMemoryBusinessSettingsStore.js";
+import { JsonBusinessSettingsStore } from "../businessSettings/jsonBusinessSettingsStore.js";
 import type { ClientStore } from "../clients/client.js";
 import { InMemoryClientStore } from "../clients/inMemoryClientStore.js";
 import { JsonClientStore } from "../clients/jsonClientStore.js";
@@ -102,6 +105,7 @@ export type CreateJarvisHttpAppOptions = (
   memoryChangeSetService?: MemoryChangeSetService | null;
   toolActionService?: ToolActionService | null;
   toolExecutionService?: ToolExecutionService | null;
+  businessSettingsStore?: BusinessSettingsStore;
   clientStore?: ClientStore;
   propertyStore?: PropertyStore;
   projectStore?: ProjectStore;
@@ -197,6 +201,9 @@ export async function createJarvisHttpApp(
       : usesEnvironment
         ? createActivityEventReaderFromEnv()
         : null;
+  const businessSettingsStore =
+    options.businessSettingsStore ??
+    (usesEnvironment ? new JsonBusinessSettingsStore() : new InMemoryBusinessSettingsStore());
   const clientStore =
     options.clientStore ?? (usesEnvironment ? new JsonClientStore() : new InMemoryClientStore());
   const propertyStore =
@@ -337,6 +344,7 @@ export async function createJarvisHttpApp(
       memoryChangeSetService,
       toolActionService,
       toolExecutionService,
+      businessSettingsStore,
       clientStore,
       propertyStore,
       projectStore,

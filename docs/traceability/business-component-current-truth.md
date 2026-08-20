@@ -70,6 +70,27 @@ optional, so existing project records remain readable.
 The HTTP `/api/v1/projects` create, read and update contract now accepts and
 returns `propertyId`, including explicit `null` clearing on update.
 
+## Business settings and pricing foundation
+
+The business HTTP surface now includes a single durable business settings
+record for typed Beez Treez configuration. It stores the business identity,
+Australian locale, Melbourne timezone, AUD currency, metric measurement system,
+GST registration flag, safe contact/payment details, default labour/travel/
+equipment/waste rates, markup/margin basis points, GST rate and quote/invoice
+numbering defaults.
+
+The settings boundary is deliberately not a credential store. It rejects
+secret-looking text such as API keys, bearer tokens, client secrets, passwords
+and refresh/access tokens. Locale, timezone, currency and measurement system are
+fixed to `en-AU`, `Australia/Melbourne`, `AUD` and `metric` for this
+single-owner business runtime.
+
+The `/api/v1/business-settings` routes are authenticated, OpenAPI documented and
+marked `x-mcp-tool.exposed=false`; they are HTTP-only until a governed action
+design is added. This slice does not yet implement invoice generation,
+automatic quote numbering consumption, client-ready payment documents or any
+payment reconciliation provider.
+
 ## Verification
 
 Focused verification:
@@ -80,6 +101,7 @@ Focused verification:
 - `node --import tsx --test tests/agent*.test.ts tests/agentDomainPersistence.test.ts tests/safetyBinder.test.ts tests/safetyCategoryMatrix.test.ts`
 - `node --import tsx --test tests/propertyStore.test.ts tests/propertyHttp.test.ts tests/httpRouteContract.test.ts tests/httpOpenApiRouteAlignment.test.ts`
 - `node --import tsx --test tests/projectStore.test.ts tests/projectHttp.test.ts tests/httpRouteContract.test.ts tests/httpOpenApiRouteAlignment.test.ts`
+- `node --import tsx --test tests/businessSettingsStore.test.ts tests/businessSettingsHttp.test.ts tests/httpRouteContract.test.ts tests/httpOpenApiRouteAlignment.test.ts`
 - `npm run openapi:lint`
 
 Full local repository gate:

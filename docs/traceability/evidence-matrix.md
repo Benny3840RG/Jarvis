@@ -119,3 +119,26 @@ Verification:
 
 The field is additive for old project records and can be cleared with
 `propertyId: null` over the HTTP update boundary.
+
+## Business settings and pricing foundation — 2026-08-21
+
+The HTTP business surface now includes one durable typed business settings
+record: `src/businessSettings/businessSettings.ts`,
+`src/businessSettings/jsonBusinessSettingsStore.ts`,
+`src/businessSettings/inMemoryBusinessSettingsStore.ts`,
+`src/http/businessSettingsRequest.ts` and
+`src/http/businessSettingsController.ts`. The route is wired through
+`src/http/app.ts`, `src/http/jarvisHttpModule.ts`, and documented in
+`openapi/jarvis.openapi.json`.
+
+Verification:
+
+- `node --import tsx --test tests/businessSettingsStore.test.ts tests/businessSettingsHttp.test.ts tests/httpRouteContract.test.ts tests/httpOpenApiRouteAlignment.test.ts`
+- `npm run type-check`
+- `npm run openapi:lint`
+
+The record fixes the business defaults to Beez Treez, Australian English,
+Melbourne timezone, AUD currency, metric measurements and 10% GST default
+without storing secrets. Contact/payment details are bounded business fields,
+not credential fields; secret-looking values are rejected. The route remains
+HTTP-only (`x-mcp-tool.exposed=false`) until a governed action binding exists.

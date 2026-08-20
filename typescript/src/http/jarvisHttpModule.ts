@@ -4,6 +4,7 @@ import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from "@nestjs/core";
 
 import type { ToolActionService } from "../actions/toolActions.js";
 import type { ToolExecutionService } from "../actions/toolExecution.js";
+import type { BusinessSettingsStore } from "../businessSettings/businessSettings.js";
 import type { ClientStore } from "../clients/client.js";
 import type { PropertyStore } from "../properties/property.js";
 import type { ProjectStore } from "../projects/project.js";
@@ -27,6 +28,7 @@ import type { ActivityEventReader } from "../operations/activityTimeline.js";
 import type { HttpAppConfig } from "./config.js";
 import type { OidcVerifier } from "./oidcVerifier.js";
 import { ActivityTimelineController } from "./activityTimelineController.js";
+import { BusinessSettingsController } from "./businessSettingsController.js";
 import { BriefController } from "./briefController.js";
 import { BuildController } from "./buildController.js";
 import { BuildLogController } from "./buildLogController.js";
@@ -54,6 +56,7 @@ import { TotalityController } from "./totalityController.js";
 import {
   HTTP_APP_CONFIG,
   HTTP_OIDC_VERIFIER,
+  HTTP_BUSINESS_SETTINGS_STORE,
   HTTP_CLIENT_STORE,
   HTTP_PROPERTY_STORE,
   HTTP_PROJECT_STORE,
@@ -89,6 +92,7 @@ export type JarvisHttpModuleOptions = {
   memoryChangeSetService: MemoryChangeSetService | null;
   toolActionService: ToolActionService | null;
   toolExecutionService: ToolExecutionService | null;
+  businessSettingsStore: BusinessSettingsStore;
   clientStore: ClientStore;
   propertyStore: PropertyStore;
   projectStore: ProjectStore;
@@ -118,6 +122,7 @@ export class JarvisHttpModule {
         TaskController,
         ReminderController,
         ToolActionController,
+        BusinessSettingsController,
         ClientController,
         PropertyController,
         ProjectController,
@@ -174,6 +179,7 @@ export class JarvisHttpModule {
           provide: HTTP_TOOL_EXECUTION,
           useValue: options.toolExecutionService,
         },
+        { provide: HTTP_BUSINESS_SETTINGS_STORE, useValue: options.businessSettingsStore },
         SystemStatusService,
         { provide: APP_GUARD, useClass: ServiceTokenGuard },
         { provide: APP_INTERCEPTOR, useClass: RequestIdInterceptor },
