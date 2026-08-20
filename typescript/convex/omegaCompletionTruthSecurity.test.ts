@@ -71,7 +71,9 @@ async function recordEvidence(
     classification: options.classification ?? "high-confidence",
     sourceType: "primary-source",
     sourceRef: "omega-completion-truth-security-test",
-    ...(options.validUntil === undefined ? {} : { validUntil: options.validUntil }),
+    ...(options.validUntil === undefined
+      ? {}
+      : { validUntil: options.validUntil }),
     contradicts: options.contradicts ?? [],
   });
 }
@@ -96,7 +98,10 @@ async function recordPassingProof(
   });
 }
 
-async function beginValidation(t: ReturnType<typeof harness>, missionId: string) {
+async function beginValidation(
+  t: ReturnType<typeof harness>,
+  missionId: string,
+) {
   await t.mutation(anyApi.omegaMissions.transition, {
     serviceToken: SERVICE_TOKEN,
     missionId,
@@ -104,7 +109,10 @@ async function beginValidation(t: ReturnType<typeof harness>, missionId: string)
   });
 }
 
-async function completeMission(t: ReturnType<typeof harness>, missionId: string) {
+async function completeMission(
+  t: ReturnType<typeof harness>,
+  missionId: string,
+) {
   return t.mutation(anyApi.omegaMissions.transition, {
     serviceToken: SERVICE_TOKEN,
     missionId,
@@ -133,7 +141,7 @@ async function resolveEdge(
 }
 
 describe("Omega completion truth security", () => {
-  it("does not let compatibility projection satisfy a criterion without a current proof", async () => {
+  it("ignores compatibility projection without a current proof", async () => {
     const t = harness();
     const missionId = "mission-projection-only";
     await createMission(t, missionId);
@@ -156,10 +164,12 @@ describe("Omega completion truth security", () => {
     });
 
     await beginValidation(t, missionId);
-    await expect(completeMission(t, missionId)).rejects.toThrow(/criterion-missing-passing-proof/i);
+    await expect(completeMission(t, missionId)).rejects.toThrow(
+      /criterion-missing-passing-proof/i,
+    );
   });
 
-  it("allows a valid proof even when the compatibility projection is stale", async () => {
+  it("completes from proof when compatibility projection is stale", async () => {
     const t = harness();
     const missionId = "mission-stale-projection";
     await createMission(t, missionId);
@@ -188,7 +198,7 @@ describe("Omega completion truth security", () => {
     expect(completed.state).toBe("complete");
   });
 
-  it("drops an entire proof when any referenced evidence is no longer current", async () => {
+  it("drops a proof when any evidence ref is not current", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(10_000);
 
@@ -196,15 +206,19 @@ describe("Omega completion truth security", () => {
     const missionId = "mission-whole-proof-currentness";
     await createMission(t, missionId);
     await recordEvidence(t, missionId, "EV-CURRENT");
-    await recordEvidence(t, missionId, "EV-EXPIRES", { validUntil: 20_000 });
+    await recordEvidence(t, missionId, "EV-EXPIRES", {
+      validUntil: 20_000,
+    });
     await recordPassingProof(t, missionId, ["EV-CURRENT", "EV-EXPIRES"]);
     await beginValidation(t, missionId);
 
     vi.setSystemTime(30_000);
-    await expect(completeMission(t, missionId)).rejects.toThrow(/criterion-missing-passing-proof/i);
+    await expect(completeMission(t, missionId)).rejects.toThrow(
+      /criterion-missing-passing-proof/i,
+    );
   });
 
-  it("keeps R3 completion dependent on a current independent passing proof", async () => {
+  it("requires a current independent proof for R3", async () => {
     const t = harness();
     const missionId = "mission-independent-proof";
     await createMission(t, missionId, "R3");
@@ -212,10 +226,12 @@ describe("Omega completion truth security", () => {
     await recordPassingProof(t, missionId, ["EV-CURRENT"], false);
     await beginValidation(t, missionId);
 
-    await expect(completeMission(t, missionId)).rejects.toThrow(/criterion-missing-independent-proof/i);
+    await expect(completeMission(t, missionId)).rejects.toThrow(
+      /criterion-missing-independent-proof/i,
+    );
   });
 
-  it("applies contradiction resolutions to exact edges only", async () => {
+  it("resolves contradiction edges exactly", async () => {
     const t = harness();
     const missionId = "mission-exact-edge-resolution";
     await createMission(t, missionId);
@@ -227,13 +243,21 @@ describe("Omega completion truth security", () => {
       contradicts: ["EV-BASE-1", "EV-BASE-2"],
     });
     await recordPassingProof(t, missionId, ["EV-PROOF"]);
-    await resolveEdge(t, missionId, "RES-EDGE-1", "EV-CONTRA", "EV-BASE-1");
+    await resolveEdge(
+      t,
+      missionId,
+      "RES-EDGE-1",
+      "EV-CONTRA",
+      "EV-BASE-1",
+    );
     await beginValidation(t, missionId);
 
-    await expect(completeMission(t, missionId)).rejects.toThrow(/critical-evidence-contradiction/i);
+    await expect(completeMission(t, missionId)).rejects.toThrow(
+      /critical-evidence-contradiction/i,
+    );
   });
 
-  it("permits completion after every current contradiction edge is durably resolved", async () => {
+  it("completes only after every current edge is resolved", async () => {
     const t = harness();
     const missionId = "mission-all-edges-resolved";
     await createMission(t, missionId);
@@ -245,15 +269,27 @@ describe("Omega completion truth security", () => {
       contradicts: ["EV-BASE-1", "EV-BASE-2"],
     });
     await recordPassingProof(t, missionId, ["EV-PROOF"]);
-    await resolveEdge(t, missionId, "RES-EDGE-1", "EV-CONTRA", "EV-BASE-1");
-    await resolveEdge(t, missionId, "RES-EDGE-2", "EV-CONTRA", "EV-BASE-2");
+    await resolveEdge(
+      t,
+      missionId,
+      "RES-EDGE-1",
+      "EV-CONTRA",
+      "EV-BASE-1",
+    );
+    await resolveEdge(
+      t,
+      missionId,
+      "RES-EDGE-2",
+      "EV-CONTRA",
+      "EV-BASE-2",
+    );
     await beginValidation(t, missionId);
 
     const completed = await completeMission(t, missionId);
     expect(completed.state).toBe("complete");
   });
 
-  it("keeps a dangling legacy contradiction blocking completion", async () => {
+  it("keeps dangling legacy contradictions blocking", async () => {
     const t = harness();
     const missionId = "mission-dangling-legacy-edge";
     await createMission(t, missionId);
@@ -275,6 +311,8 @@ describe("Omega completion truth security", () => {
     });
 
     await beginValidation(t, missionId);
-    await expect(completeMission(t, missionId)).rejects.toThrow(/critical-evidence-contradiction/i);
+    await expect(completeMission(t, missionId)).rejects.toThrow(
+      /critical-evidence-contradiction/i,
+    );
   });
 });
