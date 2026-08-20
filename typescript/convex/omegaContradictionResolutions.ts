@@ -67,7 +67,9 @@ export const record = mutation({
         existingById.resolvedBy !== resolvedBy ||
         existingById.authority !== "approval-token"
       ) {
-        throw new Error("Omega contradiction resolution ID already exists with different contents.");
+        throw new Error(
+          "Omega contradiction resolution ID already exists with different contents.",
+        );
       }
       return existingById;
     }
