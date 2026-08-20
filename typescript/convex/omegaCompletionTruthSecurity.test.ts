@@ -71,9 +71,7 @@ async function recordEvidence(
     classification: options.classification ?? "high-confidence",
     sourceType: "primary-source",
     sourceRef: "omega-completion-truth-security-test",
-    ...(options.validUntil === undefined
-      ? {}
-      : { validUntil: options.validUntil }),
+    ...(options.validUntil === undefined ? {} : { validUntil: options.validUntil }),
     contradicts: options.contradicts ?? [],
   });
 }
@@ -98,10 +96,7 @@ async function recordPassingProof(
   });
 }
 
-async function beginValidation(
-  t: ReturnType<typeof harness>,
-  missionId: string,
-) {
+async function beginValidation(t: ReturnType<typeof harness>, missionId: string) {
   await t.mutation(anyApi.omegaMissions.transition, {
     serviceToken: SERVICE_TOKEN,
     missionId,
@@ -109,10 +104,7 @@ async function beginValidation(
   });
 }
 
-async function completeMission(
-  t: ReturnType<typeof harness>,
-  missionId: string,
-) {
+async function completeMission(t: ReturnType<typeof harness>, missionId: string) {
   return t.mutation(anyApi.omegaMissions.transition, {
     serviceToken: SERVICE_TOKEN,
     missionId,
@@ -164,9 +156,7 @@ describe("Omega completion truth security", () => {
     });
 
     await beginValidation(t, missionId);
-    await expect(completeMission(t, missionId)).rejects.toThrow(
-      /criterion-missing-passing-proof/i,
-    );
+    await expect(completeMission(t, missionId)).rejects.toThrow(/criterion-missing-passing-proof/i);
   });
 
   it("completes from proof when compatibility projection is stale", async () => {
@@ -206,16 +196,12 @@ describe("Omega completion truth security", () => {
     const missionId = "mission-whole-proof-currentness";
     await createMission(t, missionId);
     await recordEvidence(t, missionId, "EV-CURRENT");
-    await recordEvidence(t, missionId, "EV-EXPIRES", {
-      validUntil: 20_000,
-    });
+    await recordEvidence(t, missionId, "EV-EXPIRES", { validUntil: 20_000 });
     await recordPassingProof(t, missionId, ["EV-CURRENT", "EV-EXPIRES"]);
     await beginValidation(t, missionId);
 
     vi.setSystemTime(30_000);
-    await expect(completeMission(t, missionId)).rejects.toThrow(
-      /criterion-missing-passing-proof/i,
-    );
+    await expect(completeMission(t, missionId)).rejects.toThrow(/criterion-missing-passing-proof/i);
   });
 
   it("requires a current independent proof for R3", async () => {
@@ -243,18 +229,10 @@ describe("Omega completion truth security", () => {
       contradicts: ["EV-BASE-1", "EV-BASE-2"],
     });
     await recordPassingProof(t, missionId, ["EV-PROOF"]);
-    await resolveEdge(
-      t,
-      missionId,
-      "RES-EDGE-1",
-      "EV-CONTRA",
-      "EV-BASE-1",
-    );
+    await resolveEdge(t, missionId, "RES-EDGE-1", "EV-CONTRA", "EV-BASE-1");
     await beginValidation(t, missionId);
 
-    await expect(completeMission(t, missionId)).rejects.toThrow(
-      /critical-evidence-contradiction/i,
-    );
+    await expect(completeMission(t, missionId)).rejects.toThrow(/critical-evidence-contradiction/i);
   });
 
   it("completes only after every current edge is resolved", async () => {
@@ -269,20 +247,8 @@ describe("Omega completion truth security", () => {
       contradicts: ["EV-BASE-1", "EV-BASE-2"],
     });
     await recordPassingProof(t, missionId, ["EV-PROOF"]);
-    await resolveEdge(
-      t,
-      missionId,
-      "RES-EDGE-1",
-      "EV-CONTRA",
-      "EV-BASE-1",
-    );
-    await resolveEdge(
-      t,
-      missionId,
-      "RES-EDGE-2",
-      "EV-CONTRA",
-      "EV-BASE-2",
-    );
+    await resolveEdge(t, missionId, "RES-EDGE-1", "EV-CONTRA", "EV-BASE-1");
+    await resolveEdge(t, missionId, "RES-EDGE-2", "EV-CONTRA", "EV-BASE-2");
     await beginValidation(t, missionId);
 
     const completed = await completeMission(t, missionId);
@@ -311,8 +277,6 @@ describe("Omega completion truth security", () => {
     });
 
     await beginValidation(t, missionId);
-    await expect(completeMission(t, missionId)).rejects.toThrow(
-      /critical-evidence-contradiction/i,
-    );
+    await expect(completeMission(t, missionId)).rejects.toThrow(/critical-evidence-contradiction/i);
   });
 });
