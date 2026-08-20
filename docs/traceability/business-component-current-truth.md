@@ -38,6 +38,28 @@ This is an additive compatibility repair. Existing persisted jobs without
 completion evidence remain readable. No customer, quote, job, invoice, evidence,
 receipt, mission or proof row is rewritten or deleted.
 
+## Durable property register slice
+
+The business HTTP surface now includes a first durable property register for
+client-owned service sites. The register stores:
+
+- the owning `clientId`;
+- the service address;
+- site hazards;
+- access notes; and
+- service notes.
+
+This follows the existing client-store pattern with JSON and in-memory stores,
+authenticated HTTP routes, request validation, route/OpenAPI alignment and
+durability tests. The property routes are deliberately documented as
+`x-mcp-tool.exposed=false`; they are not yet advertised as MCP tools or bound to
+governed autonomous actions.
+
+This is still not the full work-order, assessment, job-costing, invoice, payment
+or field-dashboard model. The JSON property register also does not yet enforce a
+transactional client foreign key; that remains a Convex-backed migration concern
+for a later slice.
+
 ## Verification
 
 Focused verification:
@@ -46,6 +68,8 @@ Focused verification:
 - `npm run type-check`
 - `npx prettier --check src/agent/businessEngine.ts src/agent/domainState.ts src/agent/safetyEnvelope.ts tests/agentDomainPersistence.test.ts tests/agentSystem.test.ts`
 - `node --import tsx --test tests/agent*.test.ts tests/agentDomainPersistence.test.ts tests/safetyBinder.test.ts tests/safetyCategoryMatrix.test.ts`
+- `node --import tsx --test tests/propertyStore.test.ts tests/propertyHttp.test.ts tests/httpRouteContract.test.ts tests/httpOpenApiRouteAlignment.test.ts`
+- `npm run openapi:lint`
 
 Full local repository gate:
 

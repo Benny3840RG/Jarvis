@@ -61,3 +61,12 @@ The tests prove the six-category in-process contract, fail-closed negative paths
 | R-073–R-076       | `agentDomainPersistence.test.ts`, `agentSystem.test.ts`           | `docs/traceability/business-component-current-truth.md`; `src/agent/businessEngine.ts`; `src/agent/domainState.ts`; `src/agent/safetyEnvelope.ts` | Partial |
 | R-082–R-090       | `agentDomainPersistence.test.ts`, `agentSystem.test.ts`           | Business job completion now requires evidence and invalid terminal jumps are rejected in the simulation-scoped business domain                    | Partial |
 | R-125–R-127       | `agentDomainPersistence.test.ts`; full `npm run check` local gate | Full local gate passed after the business-completion evidence repair and the upgrade timestamp flake repair                                       | Partial |
+
+## Business property register — 2026-08-21
+
+| Requirement range | Passing tests                                                                                                     | Evidence reference                                                                                                                   | Status  |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ------- |
+| R-025–R-033       | `propertyStore.test.ts`, `propertyHttp.test.ts`                                                                   | `src/properties/jsonPropertyStore.ts`, `src/properties/property.ts`, `src/http/propertyController.ts`                                | Partial |
+| R-067–R-072       | `propertyStore.test.ts`                                                                                           | Property records are durably stored in a versioned JSON document with generated IDs and timestamped mutation results                 | Partial |
+| R-105–R-111       | `httpRouteContract.test.ts`, `httpOpenApiRouteAlignment.test.ts`, `openapi/jarvis.openapi.json` lint              | `/api/v1/properties` and `/api/v1/properties/{propertyId}` are served by the HTTP adapter and documented in the OpenAPI contract     | Partial |
+| R-125–R-127       | `propertyStore.test.ts`, `propertyHttp.test.ts`, `httpRouteContract.test.ts`, `httpOpenApiRouteAlignment.test.ts` | First durable client-owned property register exists; MCP exposure, Convex foreign-key enforcement and work-order linkage remain open | Partial |

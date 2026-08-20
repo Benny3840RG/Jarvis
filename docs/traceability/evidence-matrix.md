@@ -84,3 +84,22 @@ Verification: focused agent-domain tests, focused upgrade Convex tests, and full
 local `npm run check` passed. This is not a production, Outlook, AM-013,
 customer-effect, remote-exposure, dashboard, invoice, payment or full business
 component completion claim.
+
+## Business property register — 2026-08-21
+
+The HTTP business surface now includes a durable client-owned property register:
+`src/properties/property.ts`, `src/properties/jsonPropertyStore.ts`,
+`src/properties/inMemoryPropertyStore.ts`, `src/http/propertyRequest.ts` and
+`src/http/propertyController.ts`. The routes are wired through
+`src/http/app.ts`, `src/http/jarvisHttpModule.ts` and documented in
+`openapi/jarvis.openapi.json`.
+
+Verification:
+
+- `node --import tsx --test tests/propertyStore.test.ts tests/propertyHttp.test.ts tests/httpRouteContract.test.ts tests/httpOpenApiRouteAlignment.test.ts`
+- `npm run type-check`
+- `npm run openapi:lint`
+
+The property routes remain HTTP-only (`x-mcp-tool.exposed=false`) until a later
+governed action design binds property mutations to the same authority and
+receipt path used by the rest of Jarvis.

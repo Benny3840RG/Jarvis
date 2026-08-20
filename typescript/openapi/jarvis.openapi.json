@@ -2402,6 +2402,266 @@
         }
       }
     },
+    "/api/v1/properties": {
+      "get": {
+        "operationId": "listProperties",
+        "summary": "List business properties",
+        "description": "Returns the authoritative property register, optionally filtered by client.",
+        "tags": ["Properties"],
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "query",
+            "required": false,
+            "description": "Optional opaque client identifier used to filter properties.",
+            "schema": {
+              "$ref": "#/components/schemas/RecordId"
+            }
+          }
+        ],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Current properties.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PropertyListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createProperty",
+        "summary": "Create a business property",
+        "description": "Creates one client-owned service property with address, access notes, service notes, and site hazards.",
+        "tags": ["Properties"],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": false
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePropertyRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Property created.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PropertyResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/properties/{propertyId}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/PropertyId"
+        }
+      ],
+      "get": {
+        "operationId": "getProperty",
+        "summary": "Get one business property",
+        "description": "Returns one property by its opaque identifier.",
+        "tags": ["Properties"],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Property found.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PropertyResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      },
+      "patch": {
+        "operationId": "updateProperty",
+        "summary": "Update a business property",
+        "description": "Updates the client link, address, hazards, access notes, or service notes of one property.",
+        "tags": ["Properties"],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdatePropertyRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Property updated.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PropertyResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteProperty",
+        "summary": "Delete a business property",
+        "description": "Permanently removes one property by its identifier.",
+        "tags": ["Properties"],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": true,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Property deleted.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PropertyResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
     "/api/v1/projects": {
       "get": {
         "operationId": "listProjects",
@@ -5370,6 +5630,15 @@
           "$ref": "#/components/schemas/RecordId"
         }
       },
+      "PropertyId": {
+        "name": "propertyId",
+        "in": "path",
+        "required": true,
+        "description": "Opaque property identifier returned by Jarvis.",
+        "schema": {
+          "$ref": "#/components/schemas/RecordId"
+        }
+      },
       "ProjectId": {
         "name": "projectId",
         "in": "path",
@@ -7493,6 +7762,148 @@
             }
           },
           "notes": {
+            "type": ["string", "null"],
+            "maxLength": 2000
+          }
+        }
+      },
+      "Property": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "clientId", "address", "hazards", "createdAt", "updatedAt"],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/RecordId"
+          },
+          "clientId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "address": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "hazards": {
+            "type": "array",
+            "maxItems": 50,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          "accessNotes": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          },
+          "serviceNotes": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          },
+          "createdAt": {
+            "$ref": "#/components/schemas/TimestampMs"
+          },
+          "updatedAt": {
+            "$ref": "#/components/schemas/TimestampMs"
+          }
+        }
+      },
+      "PropertyResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["data"],
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/Property"
+          }
+        }
+      },
+      "PropertyListResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["data", "count"],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Property"
+            }
+          },
+          "count": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "CreatePropertyRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["clientId", "address"],
+        "properties": {
+          "clientId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "address": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "hazards": {
+            "type": "array",
+            "maxItems": 50,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          "accessNotes": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          },
+          "serviceNotes": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          }
+        }
+      },
+      "UpdatePropertyRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "minProperties": 1,
+        "properties": {
+          "clientId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "address": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "hazards": {
+            "type": "array",
+            "maxItems": 50,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          "accessNotes": {
+            "type": ["string", "null"],
+            "maxLength": 2000
+          },
+          "serviceNotes": {
             "type": ["string", "null"],
             "maxLength": 2000
           }

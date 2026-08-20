@@ -13,6 +13,9 @@ import type { ToolExecutionService } from "../actions/toolExecution.js";
 import type { ClientStore } from "../clients/client.js";
 import { InMemoryClientStore } from "../clients/inMemoryClientStore.js";
 import { JsonClientStore } from "../clients/jsonClientStore.js";
+import type { PropertyStore } from "../properties/property.js";
+import { InMemoryPropertyStore } from "../properties/inMemoryPropertyStore.js";
+import { JsonPropertyStore } from "../properties/jsonPropertyStore.js";
 import type { ProjectStore } from "../projects/project.js";
 import { InMemoryProjectStore } from "../projects/inMemoryProjectStore.js";
 import { JsonProjectStore } from "../projects/jsonProjectStore.js";
@@ -100,6 +103,7 @@ export type CreateJarvisHttpAppOptions = (
   toolActionService?: ToolActionService | null;
   toolExecutionService?: ToolExecutionService | null;
   clientStore?: ClientStore;
+  propertyStore?: PropertyStore;
   projectStore?: ProjectStore;
   quoteStore?: QuoteStore;
   quoteRepository?: QuoteRepository | null;
@@ -195,6 +199,9 @@ export async function createJarvisHttpApp(
         : null;
   const clientStore =
     options.clientStore ?? (usesEnvironment ? new JsonClientStore() : new InMemoryClientStore());
+  const propertyStore =
+    options.propertyStore ??
+    (usesEnvironment ? new JsonPropertyStore() : new InMemoryPropertyStore());
   const projectStore =
     options.projectStore ?? (usesEnvironment ? new JsonProjectStore() : new InMemoryProjectStore());
   const quoteStore =
@@ -331,6 +338,7 @@ export async function createJarvisHttpApp(
       toolActionService,
       toolExecutionService,
       clientStore,
+      propertyStore,
       projectStore,
       quoteStore,
       quoteRepository,

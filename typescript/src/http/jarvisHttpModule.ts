@@ -5,6 +5,7 @@ import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from "@nestjs/core";
 import type { ToolActionService } from "../actions/toolActions.js";
 import type { ToolExecutionService } from "../actions/toolExecution.js";
 import type { ClientStore } from "../clients/client.js";
+import type { PropertyStore } from "../properties/property.js";
 import type { ProjectStore } from "../projects/project.js";
 import type { QuoteStore } from "../quotes/quote.js";
 import type { QuoteDeliveryRepository } from "../quotes/quoteDeliveryRepository.js";
@@ -38,6 +39,7 @@ import { ErrandController } from "./errandController.js";
 import { MemoryChangeSetController } from "./memoryChangeSetController.js";
 import { ProblemDetailsFilter } from "./problemDetails.js";
 import { ClientController } from "./clientController.js";
+import { PropertyController } from "./propertyController.js";
 import { ProjectController } from "./projectController.js";
 import { QuoteController } from "./quoteController.js";
 import { ReconciliationController } from "./reconciliationController.js";
@@ -53,6 +55,7 @@ import {
   HTTP_APP_CONFIG,
   HTTP_OIDC_VERIFIER,
   HTTP_CLIENT_STORE,
+  HTTP_PROPERTY_STORE,
   HTTP_PROJECT_STORE,
   HTTP_QUOTE_STORE,
   HTTP_QUOTE_REPOSITORY,
@@ -87,6 +90,7 @@ export type JarvisHttpModuleOptions = {
   toolActionService: ToolActionService | null;
   toolExecutionService: ToolExecutionService | null;
   clientStore: ClientStore;
+  propertyStore: PropertyStore;
   projectStore: ProjectStore;
   quoteStore: QuoteStore;
   quoteRepository: QuoteRepository | null;
@@ -115,6 +119,7 @@ export class JarvisHttpModule {
         ReminderController,
         ToolActionController,
         ClientController,
+        PropertyController,
         ProjectController,
         QuoteController,
         ReconciliationController,
@@ -134,6 +139,7 @@ export class JarvisHttpModule {
         { provide: HTTP_OIDC_VERIFIER, useValue: options.oidcVerifier },
         { provide: HTTP_PERSISTENCE, useValue: options.persistence },
         { provide: HTTP_CLIENT_STORE, useValue: options.clientStore },
+        { provide: HTTP_PROPERTY_STORE, useValue: options.propertyStore },
         { provide: HTTP_PROJECT_STORE, useValue: options.projectStore },
         { provide: HTTP_QUOTE_STORE, useValue: options.quoteStore },
         { provide: HTTP_QUOTE_REPOSITORY, useValue: options.quoteRepository },
