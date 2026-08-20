@@ -55,7 +55,7 @@ tools:
   - id: TOOL-QUOTE-FINALIZE
     lifecycle_status: active
     implemented: true
-    description: Transitions a reviewed quote revision to finalized via QuoteRepository.finalizeRevision, stamping an immutable fingerprint. The allowlist binding was activated by PR #292 and verified on dev:outgoing-ram-798 by guarded commissioning run 30956407980.
+    description: "Transitions a reviewed quote revision to finalized via QuoteRepository.finalizeRevision, stamping an immutable fingerprint. The allowlist binding was activated by PR #292 and verified on dev:outgoing-ram-798 by guarded commissioning run 30956407980."
     implementation: typescript/src/actions/quoteFinalizeTool.ts
     allowlist: typescript/src/actions/toolExecutionFactory.ts
     bound_by: [AM-012]
