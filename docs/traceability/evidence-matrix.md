@@ -103,3 +103,19 @@ Verification:
 The property routes remain HTTP-only (`x-mcp-tool.exposed=false`) until a later
 governed action design binds property mutations to the same authority and
 receipt path used by the rest of Jarvis.
+
+## Property-aware project/job linkage — 2026-08-21
+
+The existing durable business project/job record now has an optional
+`propertyId` in `src/projects/project.ts`, JSON/in-memory stores, request
+parsing and the `/api/v1/projects` OpenAPI schemas. This connects jobs to the
+new property register without introducing a parallel work-order authority.
+
+Verification:
+
+- `node --import tsx --test tests/projectStore.test.ts tests/projectHttp.test.ts tests/httpRouteContract.test.ts tests/httpOpenApiRouteAlignment.test.ts`
+- `npm run type-check`
+- `npm run openapi:lint`
+
+The field is additive for old project records and can be cleared with
+`propertyId: null` over the HTTP update boundary.

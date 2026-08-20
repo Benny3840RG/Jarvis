@@ -60,6 +60,16 @@ or field-dashboard model. The JSON property register also does not yet enforce a
 transactional client foreign key; that remains a Convex-backed migration concern
 for a later slice.
 
+## Property-aware project/job slice
+
+The existing durable business project/job model now carries an optional
+`propertyId`. This links a quoted or active project to the property register
+without creating a second job authority system. The field is additive and
+optional, so existing project records remain readable.
+
+The HTTP `/api/v1/projects` create, read and update contract now accepts and
+returns `propertyId`, including explicit `null` clearing on update.
+
 ## Verification
 
 Focused verification:
@@ -69,6 +79,7 @@ Focused verification:
 - `npx prettier --check src/agent/businessEngine.ts src/agent/domainState.ts src/agent/safetyEnvelope.ts tests/agentDomainPersistence.test.ts tests/agentSystem.test.ts`
 - `node --import tsx --test tests/agent*.test.ts tests/agentDomainPersistence.test.ts tests/safetyBinder.test.ts tests/safetyCategoryMatrix.test.ts`
 - `node --import tsx --test tests/propertyStore.test.ts tests/propertyHttp.test.ts tests/httpRouteContract.test.ts tests/httpOpenApiRouteAlignment.test.ts`
+- `node --import tsx --test tests/projectStore.test.ts tests/projectHttp.test.ts tests/httpRouteContract.test.ts tests/httpOpenApiRouteAlignment.test.ts`
 - `npm run openapi:lint`
 
 Full local repository gate:

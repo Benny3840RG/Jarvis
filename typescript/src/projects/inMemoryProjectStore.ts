@@ -8,6 +8,11 @@ function requiredText(value: string, field: string): string {
   return cleaned;
 }
 
+function optionalText(value: string | undefined): string | undefined {
+  const cleaned = value?.trim();
+  return cleaned ? cleaned : undefined;
+}
+
 function cloneProject(project: Project): Project {
   return { ...project };
 }
@@ -32,6 +37,9 @@ export class InMemoryProjectStore implements ProjectStore {
       project = {
         id: randomUUID(),
         clientId: requiredText(input.clientId, "Project clientId"),
+        ...(optionalText(input.propertyId) === undefined
+          ? {}
+          : { propertyId: optionalText(input.propertyId) }),
         title: requiredText(input.title, "Project title"),
         status: input.status ?? "lead",
         ...(input.notes && input.notes.trim() ? { notes: input.notes.trim() } : {}),
@@ -49,16 +57,24 @@ export class InMemoryProjectStore implements ProjectStore {
     try {
       if (
         update.clientId === undefined &&
+        update.propertyId === undefined &&
         update.title === undefined &&
         update.status === undefined &&
         update.notes === undefined
       ) {
-        throw new Error("Project update requires a clientId, title, status, or notes change.");
+        throw new Error(
+          "Project update requires a clientId, propertyId, title, status, or notes change.",
+        );
       }
       const project = this.projects.get(id);
       if (!project) return Promise.resolve(null);
       if (update.clientId !== undefined)
         project.clientId = requiredText(update.clientId, "Project clientId");
+      if (update.propertyId !== undefined) {
+        const cleaned = update.propertyId === null ? "" : update.propertyId.trim();
+        if (cleaned) project.propertyId = cleaned;
+        else delete project.propertyId;
+      }
       if (update.title !== undefined) project.title = requiredText(update.title, "Project title");
       if (update.status !== undefined) project.status = update.status;
       if (update.notes !== undefined) {

@@ -7922,6 +7922,11 @@
             "minLength": 1,
             "maxLength": 200
           },
+          "propertyId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
           "title": {
             "type": "string",
             "minLength": 1,
@@ -7981,6 +7986,11 @@
             "minLength": 1,
             "maxLength": 200
           },
+          "propertyId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
           "title": {
             "type": "string",
             "minLength": 1,
@@ -8005,6 +8015,10 @@
           "clientId": {
             "type": "string",
             "minLength": 1,
+            "maxLength": 200
+          },
+          "propertyId": {
+            "type": ["string", "null"],
             "maxLength": 200
           },
           "title": {
