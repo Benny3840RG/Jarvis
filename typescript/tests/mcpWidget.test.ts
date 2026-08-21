@@ -27,8 +27,8 @@ describe("Jarvis preview widget", () => {
     assert.match(widget, /ui\/notifications\/tool-result/);
     assert.match(widget, /tools\/call/);
     assert.match(widget, /JARVIS \/\/ OPERATOR CONSOLE/);
-    assert.match(widget, /LANDSCAPE COMMAND CENTRE/);
-    assert.match(widget, /class="hud-grid"/);
+    assert.match(widget, /class="hud /);
+    assert.match(widget, /JARVIS PRESENCE/);
   });
 
   it("keeps real Jarvis task, reminder, refresh, and system controls wired", () => {
