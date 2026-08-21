@@ -25,6 +25,7 @@
         --brand-gradient: linear-gradient(90deg, #ff7a18 0%, #b933ff 48%, #39ff88 100%);
         --focus: 0 0 0 2px var(--bg), 0 0 0 4px var(--amber);
         font-family: "IBM Plex Sans", Inter, ui-sans-serif, system-ui, sans-serif;
+        font-size: 16px;
       }
       * { box-sizing: border-box; }
       html, body { margin: 0; min-height: 100%; background: var(--bg); color: var(--text); }
@@ -36,96 +37,144 @@
       button, input, select { font: inherit; color: inherit; }
       button { cursor: pointer; }
       button:disabled { cursor: not-allowed; opacity: 0.45; }
+      #approve-action:disabled {
+        background: transparent; color: var(--muted); border-color: var(--line); opacity: 1;
+      }
       button:focus-visible, input:focus-visible, select:focus-visible { outline: none; box-shadow: var(--focus); }
-      .hud { display: grid; min-height: 100vh; grid-template-rows: auto 1fr auto auto; }
+      .hud { display: grid; min-height: 100vh; min-height: 100dvh; grid-template-rows: auto auto minmax(0, 1fr) auto; }
+      .hud-body { min-height: 0; overflow: auto; }
       .top {
-        display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 16px;
-        padding: 12px 18px; border-bottom: 1px solid var(--line); background: var(--bg-2);
+        position: sticky; top: 0; z-index: 8;
+        display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 16px;
+        padding: 10px 18px; border-bottom: 1px solid var(--line); background: var(--bg-2);
       }
       .identity { display: flex; align-items: center; gap: 12px; min-width: 0; }
       .sigil {
-        display: grid; place-items: center; width: 36px; height: 36px; border: 1px solid var(--amber);
-        border-radius: 8px; color: var(--amber); font-weight: 800; letter-spacing: 0.08em;
+        display: grid; place-items: center; width: 40px; height: 40px; border: 1px solid var(--amber);
+        border-radius: 8px; color: var(--amber); font-weight: 800; letter-spacing: 0.08em; font-size: 18px;
       }
-      .identity strong { display: block; letter-spacing: 0.22em; font-size: 13px; }
-      .identity p { margin: 2px 0 0; color: var(--muted); font-size: 11px; }
+      .identity strong { display: block; letter-spacing: 0.22em; font-size: 16px; }
+      .identity p { margin: 2px 0 0; color: var(--muted); font-size: 13px; }
+      .env-chip {
+        display: inline-flex; align-items: center; min-height: 32px; margin-top: 6px; padding: 0 10px;
+        border: 1px solid var(--warn); border-radius: 999px; color: var(--warn); font-size: 12px; font-weight: 800; letter-spacing: 0.08em;
+      }
+      .env-chip.production { border-color: var(--crit); color: var(--crit); }
       .presence-chip {
-        display: inline-flex; align-items: center; gap: 8px; min-height: 34px; padding: 0 14px;
-        border: 1px solid var(--line); border-radius: 999px; background: var(--panel); font-size: 11px; font-weight: 700; letter-spacing: 0.12em;
+        display: inline-flex; align-items: center; gap: 8px; min-height: 36px; padding: 0 14px;
+        border: 1px solid var(--line); border-radius: 999px; background: var(--panel); font-size: 14px; font-weight: 700; letter-spacing: 0.08em;
       }
       .presence-chip.ok { border-color: rgba(61, 206, 134, 0.4); color: var(--live); }
       .presence-chip.bad { border-color: rgba(226, 91, 106, 0.5); color: var(--crit); }
       .presence-chip.pending { border-color: rgba(212, 176, 74, 0.5); color: var(--warn); }
       .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; box-shadow: 0 0 10px currentColor; }
-      .top-meta { display: flex; justify-content: flex-end; align-items: center; gap: 10px; color: var(--muted); font-size: 11px; }
-      .ghost {
-        min-height: 34px; padding: 0 12px; border: 1px solid var(--line); border-radius: 8px;
-        background: transparent; color: var(--text);
+      .top-meta { display: flex; justify-content: flex-end; align-items: center; gap: 10px; color: var(--muted); font-size: 13px; }
+      .nav {
+        position: sticky; top: 61px; z-index: 7; display: flex; gap: 8px; padding: 8px 18px;
+        border-bottom: 1px solid var(--line); background: var(--bg);
       }
+      .ghost {
+        min-height: 44px; padding: 0 14px; border: 1px solid var(--line); border-radius: 8px;
+        background: transparent; color: var(--text); font-size: 15px;
+      }
+      .danger { border-color: var(--crit); color: var(--crit); }
       .stage {
-        display: grid; grid-template-columns: minmax(260px, 0.9fr) minmax(420px, 1.4fr) minmax(280px, 1fr);
-        gap: 12px; padding: 12px 18px; min-height: 0;
+        display: grid; grid-template-columns: minmax(220px, 0.62fr) minmax(420px, 1.55fr) minmax(300px, 1fr);
+        gap: 12px; padding: 12px 18px; min-height: 0; align-items: start;
       }
       .panel {
         min-width: 0; border: 1px solid var(--line); border-radius: 12px; background: var(--panel);
       }
       .panel h2, .panel h3 {
         margin: 0; padding: 10px 12px; border-bottom: 1px solid var(--line);
-        font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase;
+        font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase;
       }
-      .panel h2 span, .panel h3 span { float: right; color: var(--muted); font-weight: 600; letter-spacing: 0.08em; }
+      .panel h2 span, .panel h3 span { float: right; color: var(--muted); font-weight: 600; letter-spacing: 0.04em; font-size: 12px; }
       .scroll { max-height: 100%; overflow: auto; }
       .list { list-style: none; margin: 0; padding: 8px; display: grid; gap: 6px; }
       .row, .compact-row, .priority-row, .activity-row, .inbox-row, .board-row, .reminder-row {
         padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: rgba(7, 8, 12, 0.35);
       }
       .row button, .board-row { width: 100%; text-align: left; background: transparent; border: 1px solid var(--line); }
-      .row strong, .compact-row strong, .priority-row strong, .inbox-row strong, .board-row strong { display: block; font-size: 13px; }
-      .row small, .compact-row small, .priority-row small, .inbox-row small, .board-row small, .reminder-row small { color: var(--muted); font-size: 11px; }
-      .core { display: grid; grid-template-rows: auto auto 1fr auto; gap: 12px; min-width: 0; }
+      .row strong, .compact-row strong, .priority-row strong, .inbox-row strong, .board-row strong { display: block; font-size: 15px; }
+      .row small, .compact-row small, .priority-row small, .inbox-row small, .board-row small, .reminder-row small { color: var(--muted); font-size: 13px; }
+      .attention { align-self: start; }
+      .attention .list { padding: 8px; }
+      .core { display: grid; gap: 12px; min-width: 0; }
       .presence {
-        display: grid; grid-template-columns: 112px 1fr; gap: 16px; align-items: center;
-        padding: 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--bg-2);
+        display: grid; justify-items: center; text-align: center; gap: 12px;
+        padding: 28px 18px 22px; border: 1px solid var(--line); border-radius: 18px; background: var(--bg-2);
       }
-      .ring { position: relative; width: 112px; aspect-ratio: 1; }
+      .ring { position: relative; width: 156px; aspect-ratio: 1; }
       .ring svg { width: 100%; height: 100%; }
-      .spin { transform-origin: 60px 60px; animation: spin 16s linear infinite; }
-      .presence-copy span { color: var(--muted); font-size: 10px; letter-spacing: 0.18em; }
-      .presence-copy b { display: block; margin-top: 4px; font-size: 22px; letter-spacing: 0.04em; }
-      .presence-copy small { display: block; margin-top: 4px; color: var(--muted); }
+      .spin-arc { transform-origin: 60px 60px; stroke-dasharray: 36 240; animation: none; }
+      .presence-copy span { color: var(--muted); font-size: 13px; letter-spacing: 0.22em; }
+      .presence-copy b { display: block; margin-top: 8px; font-size: 30px; letter-spacing: 0.02em; line-height: 1.15; }
+      .presence-copy small, #jarvis-speech { display: block; margin-top: 10px; color: var(--text); font-size: 17px; line-height: 1.4; white-space: pre-line; }
+      .presence-copy .meta { color: var(--muted); font-size: 13px; }
+      body[data-presence="idle"] .ring { opacity: 0.88; }
+      body[data-presence="listening"] .ring { animation: pulse 2.8s ease-in-out infinite; }
+      body[data-presence="processing"] .spin-arc,
+      body[data-presence="planning"] .spin-arc,
+      body[data-presence="waiting_for_tool"] .spin-arc { animation: spin 8s linear infinite; }
+      body[data-presence="executing"] .spin-arc { animation: spin 2.8s linear infinite; }
+      body[data-presence="reconciling"] .spin-arc { animation: spin 5s linear infinite; }
+      body[data-presence="waiting_for_approval"] .presence { border-color: var(--amber); box-shadow: inset 0 0 48px var(--amber-dim); }
+      body[data-presence="waiting_for_approval"] .ring { animation: pulse 2.4s ease-in-out infinite; }
+      body[data-presence="waiting_for_approval"] .context { border-color: var(--amber); }
+      body[data-presence="completed"] .presence { border-color: rgba(61, 206, 134, 0.45); }
+      body[data-presence="blocked"] .presence { border-color: var(--warn); box-shadow: inset 0 0 28px rgba(212, 176, 74, 0.12); }
+      body[data-presence="degraded"] .presence { border-color: var(--warn); }
+      body[data-presence="error"] .presence,
+      body[data-presence="offline"] .presence { border-color: var(--crit); box-shadow: inset 0 0 36px rgba(226, 91, 106, 0.14); }
       .now { padding: 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
       .now h2 { border: 0; padding: 0; font-size: 22px; letter-spacing: 0; text-transform: none; }
-      .now p { margin: 8px 0 0; color: var(--muted); }
+      .now p { margin: 8px 0 0; color: var(--muted); font-size: 15px; }
       .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
-      .chip { display: inline-block; width: fit-content; padding: 4px 8px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); font-size: 10px; letter-spacing: 0.08em; }
-      .source-status-row { display: flex; justify-content: space-between; gap: 8px; padding: 6px 12px; color: var(--muted); font-size: 11px; }
+      .chip { display: inline-block; width: fit-content; padding: 4px 8px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); font-size: 12px; letter-spacing: 0.04em; }
+      .chip.warn { color: var(--warn); border-color: rgba(212, 176, 74, 0.45); }
+      .source-status-row { display: flex; justify-content: space-between; gap: 8px; padding: 6px 12px; color: var(--muted); font-size: 12px; }
       .actions { display: flex; gap: 8px; margin-top: 12px; }
-      .primary, .primary-button, .capture-submit {
-        min-height: 44px; padding: 0 16px; border: 1px solid var(--amber); border-radius: 8px;
-        background: var(--amber); color: #1a0f05; font-weight: 800;
+      .primary, .primary-button, .capture-submit, #approve-action {
+        min-height: 52px; padding: 0 18px; border: 1px solid var(--amber); border-radius: 8px;
+        background: var(--amber); color: #1a0f05; font-weight: 800; font-size: 16px;
       }
       .command {
-        padding: 12px; border: 1px solid var(--amber); border-radius: 12px; background: var(--bg-2);
+        padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--bg-2);
       }
-      .command p { margin: 0 0 8px; color: var(--muted); font-size: 12px; }
-      .capture-tabs, .modules { display: flex; gap: 6px; margin-bottom: 8px; }
+      .capture-tabs { display: flex; gap: 6px; margin-bottom: 8px; }
       .capture-tab, .module-tab {
-        min-height: 36px; padding: 0 12px; border: 1px solid var(--line); border-radius: 8px;
-        background: transparent; color: var(--muted); font-size: 11px; font-weight: 700; letter-spacing: 0.08em;
+        min-height: 40px; padding: 0 14px; border: 1px solid var(--line); border-radius: 8px;
+        background: transparent; color: var(--muted); font-size: 14px; font-weight: 700;
       }
       .capture-tab.active, .module-tab.active { border-color: var(--amber); color: var(--text); background: var(--amber-dim); }
       .capture-form { display: grid; grid-template-columns: 1fr 140px auto; gap: 8px; align-items: end; }
-      label span { display: block; margin-bottom: 4px; color: var(--muted); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; }
+      label span { display: block; margin-bottom: 4px; color: var(--muted); font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; }
+      #approval-headline { margin: 0; padding: 14px 14px 0; font-size: 20px; font-weight: 800; line-height: 1.25; }
+      #approval-detail-rationale { margin: 0; padding: 8px 14px 0; font-size: 15px; color: var(--text); }
+      #approval-block {
+        margin: 10px 14px 0; padding: 12px; border: 1px solid var(--crit); border-radius: 8px;
+        color: var(--crit); font-size: 15px; font-weight: 700;
+      }
+      .approval-actions { display: flex; justify-content: flex-end; gap: 10px; padding: 14px; }
+      #approve-action, #reject-action { min-width: 132px; }
+      .system-strip { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 10px 12px; font-size: 14px; }
+      .system-strip button { margin-left: auto; }
+      .system-dot { display: inline-block; width: 8px; height: 8px; margin-right: 6px; border-radius: 50%; background: var(--live); }
+      .system-dot.warn { background: var(--warn); }
+      .system-dot.bad { background: var(--crit); }
+      @keyframes pulse { 0%,100% { transform: scale(0.98); opacity: 0.86; } 50% { transform: scale(1.03); opacity: 1; } }
       input, select {
         width: 100%; min-height: 44px; padding: 0 12px; border: 1px solid var(--line); border-radius: 8px;
-        background: #07080c;
+        background: #07080c; font-size: 15px;
       }
       .context .quote-detail, .matrix { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 10px; }
-      .matrix-item span, .system-item span { display: block; color: var(--muted); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; }
-      .matrix-item b, .system-item b { display: block; margin-top: 3px; font-size: 12px; }
+      .matrix-item span, .system-item span { display: block; color: var(--muted); font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; }
+      .matrix-item b, .system-item b { display: block; margin-top: 3px; font-size: 15px; }
       .modules-wrap { padding: 0 18px 12px; }
       .view { display: none; }
       .view.active { display: block; }
+      #view-focus.active { display: none; }
       .work-grid, .business-view, .systems-view, .operations-view {
         display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px;
       }
@@ -134,39 +183,64 @@
       .layer.ready { color: var(--live); }
       .layer.partial, .layer.inactive { color: var(--warn); }
       .layer.blocked { color: var(--crit); }
-      .empty { padding: 16px; color: var(--muted); font-size: 12px; text-align: center; }
+      .empty { padding: 12px; color: var(--muted); font-size: 14px; text-align: left; }
       .toast {
         position: fixed; left: 50%; bottom: 18px; z-index: 20; width: min(calc(100% - 24px), 480px);
         transform: translate(-50%, 140%); padding: 12px 14px; border: 1px solid var(--line);
-        border-radius: 10px; background: var(--panel); transition: transform 0.18s ease;
+        border-radius: 10px; background: var(--panel); transition: transform 0.18s ease; font-size: 15px;
       }
       .toast.show { transform: translate(-50%, 0); }
       .toast.error { border-color: var(--crit); }
-      .sev { margin-right: 8px; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; }
+      .sev { margin-right: 8px; font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; }
+      .sev-info { color: var(--muted); }
+      .sev-attention { color: var(--amber); }
       .sev-elevated, .state.unavailable, .state.degraded { color: var(--warn); }
+      .sev-critical { color: var(--crit); }
       .footer {
         display: flex; justify-content: space-between; gap: 12px; padding: 8px 18px;
-        border-top: 1px solid var(--line); color: var(--muted); font-size: 11px;
+        border-top: 1px solid var(--line); color: var(--muted); font-size: 13px;
       }
       .live { color: var(--live); font-weight: 800; }
       .guard { color: var(--amber); }
       .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
       .chart-wrap { padding: 8px; }
-      .category-row { display: grid; grid-template-columns: 72px 1fr 24px; gap: 8px; align-items: center; padding: 6px 10px; font-size: 11px; }
+      .category-row { display: grid; grid-template-columns: 72px 1fr 24px; gap: 8px; align-items: center; padding: 6px 10px; font-size: 12px; }
       .bar-track { height: 8px; border-radius: 99px; background: #07080c; border: 1px solid var(--line); overflow: hidden; }
       .bar-fill { height: 100%; background: var(--amber); }
       @keyframes spin { to { transform: rotate(360deg); } }
-      @media (max-width: 1100px) {
+      @media (max-width: 1366px) {
+        .stage { grid-template-columns: minmax(240px, 0.72fr) minmax(340px, 1.3fr) minmax(280px, 1fr); }
+        .presence-copy b { font-size: 26px; }
+      }
+      @media (max-width: 920px) {
         .top { grid-template-columns: 1fr auto; }
-        .top-meta { grid-column: 1 / -1; justify-content: flex-start; }
-        .stage { grid-template-columns: 1fr 1fr; }
-        .core { grid-column: 1 / -1; }
+        .nav { top: 72px; overflow-x: auto; }
+        .stage { display: flex; flex-direction: column; }
+        .core { display: contents; }
+        .presence, .context, .attention, .now, .command, #system-strip-panel { width: 100%; }
+        .presence { order: 1; }
+        .context { order: 2; }
+        .attention { order: 3; }
+        .now { order: 4; }
+        .command { order: 5; }
+        #system-strip-panel { order: 6; }
       }
       @media (max-width: 780px) {
-        .stage, .work-grid, .business-view, .systems-view, .operations-view { grid-template-columns: 1fr; }
-        .capture-form { grid-template-columns: 1fr; }
-        .top { grid-template-columns: 1fr; }
-        .ghost, .primary, .module-tab, .capture-tab { min-height: 48px; }
+        .work-grid, .business-view, .systems-view, .operations-view, .matrix, .layer-grid, .system-grid { grid-template-columns: 1fr; }
+        .capture-form, .approval-actions { grid-template-columns: 1fr 1fr; display: grid; }
+        .approval-actions #approval-retry { grid-column: 1 / -1; }
+        .top { grid-template-columns: 1fr auto; }
+        .presence-chip { display: none; }
+        .top, .nav { position: sticky; }
+        .top-meta #source-pill, .top-meta #clock { display: none; }
+        .identity p { display: none; }
+        .presence { padding: 14px 12px 12px; }
+        .ring { width: 84px; }
+        .presence-copy b { font-size: 22px; }
+        .presence-copy .meta { display: none; }
+        .now h2 { font-size: 20px; }
+        .ghost, .primary, .module-tab, .capture-tab, #approve-action, #reject-action { min-height: 48px; }
+        .system-strip button { margin-left: 0; width: 100%; }
       }
       @media (prefers-reduced-motion: reduce) {
         *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
@@ -181,7 +255,8 @@
           <div class="sigil" aria-hidden="true">J</div>
           <div>
             <strong>JARVIS</strong>
-            <p><b>Beez Treez</b> Property Solutions · operator HUD</p>
+            <p><b>Beez Treez</b> Property Solutions</p>
+            <span class="env-chip" id="environment-chip">ENVIRONMENT · UNKNOWN</span>
           </div>
         </div>
         <div class="presence-chip pending" id="status-pill"><span class="dot"></span><span id="status-label">CONNECTING</span></div>
@@ -191,15 +266,26 @@
           <button class="ghost" id="refresh" type="button">Refresh</button>
         </div>
       </header>
+      <nav class="nav" aria-label="Primary">
+        <button class="module-tab active" type="button" data-view="focus">Jarvis</button>
+        <button class="module-tab" type="button" data-view="work">Work</button>
+        <button class="module-tab" type="button" data-view="operations">Brief</button>
+        <button class="module-tab" type="button" data-view="business">Business</button>
+        <button class="module-tab" type="button" data-view="systems">System</button>
+        <button class="module-tab sr" type="button" data-view="approvals" tabindex="-1">Approvals</button>
+      </nav>
 
+      <div class="hud-body">
       <section class="stage">
         <aside class="panel attention" aria-label="Attention">
           <h2>Attention <span id="inbox-summary">AWAITING SNAPSHOT</span></h2>
           <ul class="list scroll" id="inbox-item-list"></ul>
           <div id="inbox-source-list"></div>
-          <h3>Governed proposals <span id="approvals-summary">AWAITING REGISTER</span></h3>
-          <p class="empty" id="approvals-policy">Proposal, approval, execution and reconciliation stay distinct. This HUD inspects proposals; it does not auto-approve.</p>
+          <h3>Approvals <span id="approvals-summary">AWAITING REGISTER</span></h3>
           <ul class="list scroll" id="approvals-list"></ul>
+          <h3>Next <span id="queue-count">0 QUEUED</span></h3>
+          <ul class="list scroll" id="focus-queue"></ul>
+          <p class="sr" id="approvals-policy">Proposal, approval, execution and reconciliation stay distinct. This HUD inspects proposals; it does not auto-approve. The HUD never stores an approval token.</p>
         </aside>
 
         <section class="core">
@@ -208,27 +294,34 @@
               <svg viewBox="0 0 120 120">
                 <circle cx="60" cy="60" r="44" fill="none" stroke="#242833" stroke-width="6" />
                 <circle cx="60" cy="60" r="36" fill="none" stroke="#e08a2c" stroke-width="1" opacity="0.35" />
+                <circle class="spin-arc" cx="60" cy="60" r="44" fill="none" stroke="#e08a2c" stroke-width="3" opacity="0.7" />
                 <circle id="readiness-ring" cx="60" cy="60" r="44" pathLength="100" fill="none" stroke="#e08a2c" stroke-width="6" stroke-linecap="round" stroke-dasharray="0 100" transform="rotate(-90 60 60)" />
               </svg>
             </div>
             <div class="presence-copy">
-              <span>JARVIS PRESENCE</span>
+              <span class="sr">JARVIS PRESENCE</span>
+              <span>JARVIS</span>
               <b id="mission-state">CONNECTING</b>
-              <small id="presence-detail">AWAITING STATUS</small>
-              <small id="ready-layer-count">0 / 8 READY</small>
+              <small id="jarvis-speech">Connecting to Jarvis.</small>
+              <small class="meta" id="presence-detail">AWAITING STATUS</small>
+              <small class="meta" id="ready-layer-count">0 / 8 READY</small>
               <small id="readiness-percent" class="sr">0%</small>
               <small id="readiness-state" class="sr">AWAITING STATUS</small>
             </div>
           </div>
           <div class="now">
-            <div class="chip">PRIMARY WORK</div>
+            <div class="chip">CURRENT WORK</div>
             <h2 id="current-task">Waiting for Jarvis…</h2>
             <p id="current-subtitle">Live durable task state will appear here.</p>
             <div class="chips" id="current-meta"></div>
             <div class="actions" id="current-actions"></div>
           </div>
+          <div class="panel" id="system-strip-panel">
+            <h2>System</h2>
+            <div class="system-strip" id="system-strip"></div>
+          </div>
           <section class="command">
-            <p id="command-capability">There is no conversation runtime on this HUD. Task and reminder commands use the existing MCP tools. Voice is unavailable.</p>
+            <p class="sr" id="command-capability">Conversation runtime and voice are unavailable. Capability notes live in System.</p>
             <div class="capture-tabs">
               <button class="capture-tab active" type="button" data-capture="task">TASK</button>
               <button class="capture-tab" type="button" data-capture="reminder">REMINDER</button>
@@ -236,7 +329,7 @@
             <form class="capture-form" id="capture-form">
               <label>
                 <span id="capture-title-label">Task command</span>
-                <input id="capture-title" maxlength="500" autocomplete="off" required />
+                <input id="capture-title" maxlength="500" autocomplete="off" required placeholder="Add a task…" value="" />
               </label>
               <label id="capture-detail-label">
                 <span id="capture-detail-copy">Category</span>
@@ -255,8 +348,15 @@
         </section>
 
         <aside class="panel context" aria-label="Context">
-          <h2>Context <span id="approval-detail-state">SELECT A PROPOSAL OR QUOTE</span></h2>
-          <p class="empty" id="approval-detail-rationale">Select a proposal, quote or business record. Approval, rejection and execution remain on the governed HTTP path. The HUD never stores an approval token.</p>
+          <h2>Context <span id="approval-detail-state">SELECT A PROPOSAL</span></h2>
+          <p id="approval-headline"></p>
+          <p id="approval-detail-rationale">When Jarvis is waiting for approval, the proposed action appears here.</p>
+          <p id="approval-block" hidden>QUOTE COULD NOT BE VERIFIED. Approval is unavailable until the authoritative quote can be loaded.</p>
+          <div class="approval-actions">
+            <button class="ghost" id="approval-retry" type="button" hidden>RETRY</button>
+            <button class="ghost danger" id="reject-action" type="button" disabled>REJECT</button>
+            <button id="approve-action" type="button" disabled>APPROVE</button>
+          </div>
           <div class="matrix" id="approval-detail-grid"></div>
           <h3>Quote inspector <span class="quote-detail-state" id="quote-detail-state">SELECT A REGISTER QUOTE</span></h3>
           <div id="quote-detail-content">
@@ -278,19 +378,11 @@
       </section>
 
       <section class="modules-wrap">
-        <div class="modules" role="tablist">
-          <button class="module-tab active" type="button" data-view="focus">Command</button>
-          <button class="module-tab" type="button" data-view="work">Work</button>
-          <button class="module-tab" type="button" data-view="operations">Operations</button>
-          <button class="module-tab" type="button" data-view="business">Business</button>
-          <button class="module-tab" type="button" data-view="approvals">Approvals</button>
-          <button class="module-tab" type="button" data-view="systems">System</button>
-        </div>
 
         <section class="view active" id="view-focus">
-          <div class="work-grid">
-            <article class="panel"><h2>Priority stack <span id="priority-count">0 QUEUED</span></h2><ul class="list" id="left-priority-list"></ul></article>
-            <article class="panel"><h2>Next in line <span id="queue-count">0 QUEUED</span></h2><ul class="list" id="focus-queue"></ul></article>
+          <div class="sr">
+            <span id="priority-count">0 QUEUED</span>
+            <ul id="left-priority-list"></ul>
           </div>
         </section>
 
@@ -356,15 +448,16 @@
                 <div class="system-item"><span>Overall</span><b id="system-status">UNKNOWN</b></div>
                 <div class="system-item"><span>Z-State</span><b id="z-state">UNKNOWN</b></div>
                 <div class="system-item"><span>Persistence</span><b id="provider">UNKNOWN</b></div>
-                <div class="system-item"><span>Deployment</span><b id="deployment">UNKNOWN</b></div>
+                <div class="system-item"><span>Deploy version</span><b id="deployment">UNKNOWN</b></div>
                 <div class="system-item"><span>Source</span><b id="source-version">UNKNOWN</b></div>
                 <div class="system-item"><span>Timezone</span><b id="timezone">UNKNOWN</b></div>
               </div>
               <div class="layer-grid" id="layer-grid"></div>
               <h3>Integration commissioning</h3>
               <div class="system-grid" id="integration-grid"></div>
-              <h3>Diagnostics</h3>
+              <h3>Capabilities</h3>
               <div class="system-grid" id="diagnostics-grid"></div>
+              <p id="capability-notes">Conversation runtime is unavailable. Voice is unavailable. Task and reminder commands use existing MCP tools.</p>
             </article>
             <article class="panel">
               <h2>Persistence link <span id="provider-link-state">CONNECTING</span></h2>
@@ -373,18 +466,20 @@
                 <div class="matrix-item"><span>Reachability</span><b id="provider-reachability">UNKNOWN</b></div>
                 <div class="matrix-item"><span>Authentication</span><b id="provider-authentication">UNKNOWN</b></div>
                 <div class="matrix-item"><span>Schema</span><b id="provider-schema">UNKNOWN</b></div>
-                <div class="matrix-item"><span>Version</span><b id="provider-version">DEVELOPMENT</b></div>
+                <div class="matrix-item"><span>Environment</span><b id="provider-version">UNKNOWN</b></div>
               </div>
-              <h3>Layer readiness radar</h3>
-              <div class="chart-wrap"><svg viewBox="0 0 400 400" role="img" aria-label="Jarvis runtime layer readiness"><g class="radar-grid" id="radar-grid"></g><g class="radar-axes" id="radar-axes"></g><polygon id="layer-radar-polygon" points="200,200" fill="rgba(224,138,44,.18)" stroke="#e08a2c" stroke-width="3" /><g class="radar-labels" id="radar-labels"></g></svg></div>
+              <h3>System readiness</h3>
+              <div class="layer-grid" id="readiness-matrix"></div>
+              <svg class="sr" aria-hidden="true"><g id="radar-grid"></g><g id="radar-axes"></g><polygon id="layer-radar-polygon" points="200,200" /><g id="radar-labels"></g></svg>
             </article>
           </div>
         </section>
       </section>
+      </div>
 
       <footer class="footer">
         <div><span class="live">● LIVE</span> <span id="footer-status">Jarvis bridge initialising</span></div>
-        <div>PRODUCTION <span class="guard" id="telemetry-deployment">NOT AUTHORISED</span></div>
+        <div>ENVIRONMENT <span class="guard" id="telemetry-deployment">UNKNOWN</span></div>
         <span class="sr" id="active-count">0</span><span class="sr" id="done-count">0</span><span class="sr" id="reminder-count">0</span>
         <span class="sr" id="telemetry-queue">0 TASKS</span><span class="sr" id="telemetry-provider"></span><span class="sr" id="telemetry-z-state"></span>
         <span class="sr" id="focus-active">0</span><span class="sr" id="focus-done">0</span><span class="sr" id="focus-reminders">0</span>
@@ -410,7 +505,7 @@
         function activity(title, detail) { state.activities.unshift({ title, detail, at: new Date() }); state.activities = state.activities.slice(0, 7); renderActivity(); }
         function structured(result) { return result && typeof result === "object" && result.structuredContent ? result.structuredContent : result; }
         function recalc() { state.counts = { activeTasks: state.tasks.filter((task) => !task.completed).length, completedTasks: state.tasks.filter((task) => task.completed).length, reminders: state.reminders.length }; }
-        function update(result) { const data = structured(result); if (!data || typeof data !== "object") return; if (data.status && typeof data.status === "object") state.status = data.status; if (Array.isArray(data.tasks)) state.tasks = data.tasks; if (Array.isArray(data.reminders)) state.reminders = data.reminders; if (data.brief && typeof data.brief === "object") state.brief = data.brief; if (data.quoteRegister && typeof data.quoteRegister === "object") { state.quoteRegisterStatus = data.quoteRegister.status === "ready" ? "ready" : "unavailable"; state.quotes = Array.isArray(data.quoteRegister.quotes) ? data.quoteRegister.quotes : []; } if ("inbox" in data) state.inbox = data.inbox; if ("activity" in data) state.activity = data.activity; if (data.presence) state.presence = data.presence; if (data.approvals && typeof data.approvals === "object") state.approvals = data.approvals; if (data.business && typeof data.business === "object") state.business = data.business; if (data.counts && typeof data.counts === "object") state.counts = data.counts; else recalc(); render(); }
+        function update(result) { const data = structured(result); if (!data || typeof data !== "object") return; if (data.status && typeof data.status === "object") state.status = data.status; if (Array.isArray(data.tasks)) state.tasks = data.tasks; if (Array.isArray(data.reminders)) state.reminders = data.reminders; if (data.brief && typeof data.brief === "object") state.brief = data.brief; if (data.quoteRegister && typeof data.quoteRegister === "object") { state.quoteRegisterStatus = data.quoteRegister.status === "ready" ? "ready" : "unavailable"; state.quotes = Array.isArray(data.quoteRegister.quotes) ? data.quoteRegister.quotes : []; } if ("inbox" in data) state.inbox = data.inbox; if ("activity" in data) state.activity = data.activity; if (data.presence) state.presence = data.presence; if (data.approvals && typeof data.approvals === "object") state.approvals = data.approvals; if (data.business && typeof data.business === "object") state.business = data.business; if (data.counts && typeof data.counts === "object") state.counts = data.counts; else recalc(); maybeFocusApproval(); render(); }
         window.addEventListener("message", (event) => { if (event.source !== window.parent) return; const message = event.data; if (!message || message.jsonrpc !== "2.0") return; if (typeof message.id === "number") { const waiting = pending.get(message.id); if (!waiting) return; pending.delete(message.id); if (message.error) waiting.reject(message.error); else waiting.resolve(message.result); return; } if (message.method === "ui/notifications/tool-result") update(message.params); }, { passive: true });
         const bridgeReady = (async () => { await request("ui/initialize", { appInfo: { name: "jarvis-dashboard", version: "0.3.0" }, appCapabilities: {}, protocolVersion: "2026-01-26" }); notify("ui/notifications/initialized", {}); activity("HUD bridge online", "MCP Apps connection initialised"); })();
         async function callTool(name, args = {}) { await bridgeReady; const result = await request("tools/call", { name, arguments: args }); update(result); return result; }
@@ -419,23 +514,86 @@
         const subtitle = (task) => `${task.category || "personal"} · ${task.completed ? "complete" : "active"}`;
         const reminderTime = (reminder) => reminder.dueRaw || (reminder.dueAt ? new Date(reminder.dueAt).toLocaleString("en-AU") : "No due time");
         function empty(message, className = "empty") { const el = document.createElement("div"); el.className = className; text(el, message); return el; }
-        function completeButton(task, compact = false) { const button = document.createElement("button"); button.className = compact ? "ghost" : "primary-button"; button.type = "button"; text(button, compact ? "CLEAR" : "CLEAR TASK"); button.addEventListener("click", async () => { button.disabled = true; try { await callTool("complete_task", { taskId: task.id }); activity("Task cleared", task.title); toast(`Completed ${task.title}`); } catch { toast("Could not complete that task.", true); } finally { button.disabled = false; } }); return button; }
+        function completeButton(task, compact = false) { const button = document.createElement("button"); button.className = compact ? "ghost" : "primary-button"; button.type = "button"; button.title = "Marks this durable task complete in Jarvis. It does not approve quotes or invoices."; text(button, compact ? "COMPLETE" : "COMPLETE TASK"); button.addEventListener("click", async () => { button.disabled = true; try { await callTool("complete_task", { taskId: task.id }); activity("Task completed", task.title); toast(`Marked complete: ${task.title}`); } catch { toast("Could not complete that durable task.", true); } finally { button.disabled = false; } }); return button; }
         function taskRow(task, compact = false, allowComplete = true) { const row = document.createElement(compact ? "li" : "div"); row.className = compact ? "priority-row" : `board-row${task.completed ? " done" : ""}`; const copy = document.createElement("div"); const title = document.createElement("strong"); const meta = document.createElement("small"); text(title, task.title); text(meta, subtitle(task)); copy.append(title, meta); row.append(copy); if (allowComplete && !task.completed) row.append(completeButton(task, true)); return row; }
         function reminderRow(reminder) { const row = document.createElement("div"); row.className = "reminder-row"; const copy = document.createElement("div"); const title = document.createElement("strong"); const meta = document.createElement("small"); text(title, reminder.title); text(meta, reminderTime(reminder)); copy.append(title, meta); const chip = document.createElement("span"); chip.className = "chip"; text(chip, reminder.dueAt ? "TIMED" : "OPEN"); row.append(copy, chip); return row; }
         function fillList(el, items, renderer, message) { if (!el) return; el.replaceChildren(); if (!items.length) { el.append(empty(message)); return; } items.forEach((item) => el.append(renderer(item))); }
         function layerEntries() { return Object.entries(state.status?.layers || {}); }
         function layerWeight(status) { return status === "ready" ? 1 : status === "partial" ? 0.68 : status === "inactive" ? 0.34 : 0.08; }
         function presenceLabel() { return String(state.presence || "connecting").replaceAll("_", " ").toUpperCase(); }
+        function environmentLabel() {
+          const source = String(state.status?.sourceVersion || "");
+          const deploy = String(state.status?.provider?.deploymentVersion || "");
+          const blob = `${source} ${deploy}`;
+          if (/preview|local/i.test(blob)) return "LOCAL PREVIEW";
+          if (/^prod(uction)?$/i.test(deploy) || /\bproduction\b/i.test(blob) && !/dev|preview|local/i.test(blob)) return "PRODUCTION";
+          if (/dev/i.test(blob)) return "DEVELOPMENT";
+          return deploy || source || "UNKNOWN";
+        }
+        function pendingApprovals() {
+          return state.approvals && state.approvals.status === "ready" && Array.isArray(state.approvals.items)
+            ? state.approvals.items.filter((action) => action.state === "proposed")
+            : [];
+        }
+        function quoteIdFrom(action) { return action && action.arguments && action.arguments.quoteId ? String(action.arguments.quoteId) : ""; }
+        function approvalNeedsQuote(action) {
+          return Boolean(quoteIdFrom(action) || (action && (/quote/i.test(action.tool || "") || /quotes?:send/i.test(action.operation || ""))));
+        }
+        function approvalContextReady(action) {
+          if (!action) return false;
+          if (!approvalNeedsQuote(action)) return true;
+          return state.quoteDetailState === "ready" && Boolean(state.selectedQuote);
+        }
+        function clientForQuote(quoteId) {
+          const quotes = Array.isArray(state.quotes) ? state.quotes : [];
+          const summary = quotes.find((item) => item.quoteId === quoteId);
+          const fromQuote = state.selectedQuote && state.selectedQuote.aggregate ? state.selectedQuote.aggregate.clientId : "";
+          const clientId = fromQuote || (summary && summary.clientId) || "";
+          const clients = state.business && state.business.clients && state.business.clients.status === "ready" ? state.business.clients.items : [];
+          return (clientId && clients.find((item) => item.id === clientId)) || clients[0] || null;
+        }
+        function propertyForClient(client) {
+          const properties = state.business && state.business.properties && state.business.properties.status === "ready" ? state.business.properties.items : [];
+          if (!client) return properties[0] || null;
+          return properties.find((item) => item.clientId === client.id) || properties[0] || null;
+        }
+        function jarvisSpeech() {
+          const selected = state.selectedApproval;
+          const client = selected ? clientForQuote(quoteIdFrom(selected)) : (state.business && state.business.clients && state.business.clients.items && state.business.clients.items[0]);
+          const who = client && client.name ? String(client.name).split(" ")[0] : "";
+          if (state.presence === "waiting_for_approval") {
+            if (selected && /quotes?:send/i.test(selected.operation || "")) {
+              return who ? `I've prepared ${who}'s quote.\nIt needs your review.` : "I've prepared this quote.\nIt needs your review.";
+            }
+            return "I've prepared this for you.\nIt needs your review.";
+          }
+          if (state.presence === "idle") return "Standing by.";
+          if (state.presence === "blocked") return "I cannot continue until this is unblocked.";
+          if (state.presence === "degraded") return "Something in the runtime is only partial.";
+          if (state.presence === "offline" || state.presence === "error") return "I cannot reach the authoritative runtime.";
+          if (state.presence === "reconciling") return "I'm reconciling an earlier action.";
+          if (state.presence === "executing") return "I'm carrying out the approved action.";
+          if (state.presence === "processing" || state.presence === "planning") return "Working.";
+          return "Connecting.";
+        }
+        function maybeFocusApproval() {
+          if (state.selectedApproval || state.presence !== "waiting_for_approval") return;
+          const first = pendingApprovals()[0];
+          if (!first) return;
+          state.selectedApproval = first;
+          const quoteId = quoteIdFrom(first);
+          if (quoteId) openQuote({ quoteId, number: first.arguments && first.arguments.number ? String(first.arguments.number) : "" });
+        }
         function renderReadiness() { const layers = layerEntries(); const ready = layers.filter(([, value]) => value.status === "ready").length; const percent = layers.length ? Math.round((ready / layers.length) * 100) : 0; text(byId("ready-layer-count"), `${ready} / ${layers.length || 8} READY`); text(byId("readiness-percent"), `${percent}%`); text(byId("readiness-state"), state.status ? state.status.status.toUpperCase() : "AWAITING STATUS"); const ring = byId("readiness-ring"); if (ring) ring.setAttribute("stroke-dasharray", `${percent} ${100 - percent}`); text(byId("nav-system-count"), ready); }
-        function renderFocus() { const active = activeTasks(); const current = active[0]; const title = byId("current-task"); const sub = byId("current-subtitle"); const meta = byId("current-meta"); const actions = byId("current-actions"); if (meta) meta.replaceChildren(); if (actions) actions.replaceChildren(); text(byId("mission-state"), presenceLabel()); text(byId("presence-detail"), state.status ? String(state.status.status).toUpperCase() : "AWAITING STATUS"); if (!current) { text(title, "Nothing holding the queue."); text(sub, "No active task is in the durable command queue."); } else { text(title, current.title); text(sub, subtitle(current).toUpperCase()); [current.category || "personal", "DURABLE TASK"].forEach((label) => { const chip = document.createElement("span"); chip.className = "chip"; text(chip, label); if (meta) meta.append(chip); }); if (actions) actions.append(completeButton(current)); }
-          const total = state.counts.activeTasks + state.counts.completedTasks; const complete = total ? Math.round((state.counts.completedTasks / total) * 100) : 0; const missionRing = byId("mission-progress-ring"); if (missionRing) missionRing.setAttribute("stroke-dasharray", `${complete} ${100 - complete}`); fillList(byId("focus-queue"), active.slice(1, 6), (task) => taskRow(task, true), "Nothing queued."); text(byId("queue-count"), `${Math.max(0, active.length - 1)} QUEUED`); text(byId("focus-active"), state.counts.activeTasks); text(byId("focus-done"), state.counts.completedTasks); text(byId("focus-reminders"), state.counts.reminders); }
+        function renderFocus() { document.body.dataset.presence = state.presence || "connecting"; const active = activeTasks(); const current = active[0]; const title = byId("current-task"); const sub = byId("current-subtitle"); const meta = byId("current-meta"); const actions = byId("current-actions"); if (meta) meta.replaceChildren(); if (actions) actions.replaceChildren(); text(byId("mission-state"), presenceLabel()); text(byId("jarvis-speech"), jarvisSpeech()); text(byId("presence-detail"), state.status ? String(state.status.status).toUpperCase() : "AWAITING STATUS"); const selected = state.selectedApproval; const client = selected ? clientForQuote(quoteIdFrom(selected)) : (state.business && state.business.clients && state.business.clients.items && state.business.clients.items[0]); const property = propertyForClient(client); if (!current) { text(title, "Nothing holding the queue."); text(sub, "No active task is in the durable command queue."); } else { text(title, current.title); const who = client ? client.name : "Customer unknown"; const where = property ? property.address : "Site unknown"; const stage = subtitle(current).toUpperCase(); const next = active[1] ? active[1].title : (pendingApprovals().length ? "Review waiting proposal" : "Queue clear"); const blocking = state.presence === "waiting_for_approval" ? "Blocked on approval" : (state.presence === "blocked" ? "Blocked" : ""); text(sub, `For ${who} · ${where}`); [["STAGE · " + stage, ""], ["NEXT · " + next, ""], blocking ? ["BLOCKING · " + blocking, "warn"] : null].filter(Boolean).forEach(([label, kind]) => { const chip = document.createElement("span"); chip.className = kind ? `chip ${kind}` : "chip"; text(chip, label); if (meta) meta.append(chip); }); if (actions) actions.append(completeButton(current)); }
+          const total = state.counts.activeTasks + state.counts.completedTasks; const complete = total ? Math.round((state.counts.completedTasks / total) * 100) : 0; const missionRing = byId("mission-progress-ring"); if (missionRing) missionRing.setAttribute("stroke-dasharray", `${complete} ${100 - complete}`); fillList(byId("focus-queue"), active.slice(1, 6), (task) => taskRow(task, true, false), "Nothing queued."); text(byId("queue-count"), `${Math.max(0, active.length - 1)} QUEUED`); text(byId("focus-active"), state.counts.activeTasks); text(byId("focus-done"), state.counts.completedTasks); text(byId("focus-reminders"), state.counts.reminders); }
         function renderBoard() { const active = activeTasks(); const done = completedTasks(); fillList(byId("active-list"), active, (task) => taskRow(task), "No active tasks."); fillList(byId("done-list"), done, (task) => taskRow(task, false, false), "No completed tasks yet."); text(byId("board-active-count"), `${active.length} ACTIVE`); text(byId("board-done-count"), `${done.length} COMPLETE`); }
         function timingBuckets() { const now = Date.now(); const day = 86400000; const buckets = [0,0,0,0]; state.reminders.forEach((reminder) => { if (!reminder.dueAt) buckets[3] += 1; else if (reminder.dueAt <= now) buckets[0] += 1; else if (reminder.dueAt <= now + day) buckets[1] += 1; else buckets[2] += 1; }); return buckets; }
         function renderReminderChart() { const values = timingBuckets(); const max = Math.max(1, ...values); const group = byId("reminder-chart-bars"); if (!group) return; group.replaceChildren(); const xs = [75,165,255,347]; values.forEach((value, index) => { const height = Math.max(3, Math.round((value / max) * 180)); const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect"); rect.setAttribute("x", String(xs[index] - 22)); rect.setAttribute("y", String(255 - height)); rect.setAttribute("width", "44"); rect.setAttribute("height", String(height)); rect.setAttribute("rx", "6"); rect.setAttribute("fill", index % 2 ? "#3dce86" : "#e08a2c"); const label = document.createElementNS("http://www.w3.org/2000/svg", "text"); label.setAttribute("x", String(xs[index])); label.setAttribute("y", String(Math.max(35, 246 - height))); label.setAttribute("text-anchor", "middle"); label.setAttribute("fill", "var(--text)"); label.setAttribute("font-size", "13"); label.textContent = String(value); group.append(rect, label); }); }
         function renderReminders() { const reminders = state.reminders.slice().sort((a,b) => (a.dueAt || Number.MAX_SAFE_INTEGER) - (b.dueAt || Number.MAX_SAFE_INTEGER)); fillList(byId("reminder-list"), reminders, reminderRow, "No reminders set."); text(byId("reminders-total"), `${reminders.length} TOTAL`); renderReminderChart(); }
         function point(index, count, radius, centre = 200) { const angle = -Math.PI / 2 + (index * Math.PI * 2) / count; return [centre + Math.cos(angle) * radius, centre + Math.sin(angle) * radius]; }
         function renderRadar() { const entries = layerEntries(); const names = entries.length ? entries.map(([name]) => name) : ["runtime","domains","integration","orchestration","safety","adaptive","autonomy","reliability"]; const values = entries.length ? entries.map(([, value]) => layerWeight(value.status)) : names.map(() => 0.08); const count = names.length; const polygon = byId("layer-radar-polygon"); if (!polygon) return; polygon.setAttribute("points", values.map((value,index) => point(index,count,138 * value).join(",")).join(" ")); const grid = byId("radar-grid"); const axes = byId("radar-axes"); const labels = byId("radar-labels"); if (!grid || !axes || !labels) return; grid.replaceChildren(); axes.replaceChildren(); labels.replaceChildren(); [0.25,0.5,0.75,1].forEach((scale) => { const item = document.createElementNS("http://www.w3.org/2000/svg", "polygon"); item.setAttribute("points", names.map((_,index) => point(index,count,138 * scale).join(",")).join(" ")); grid.append(item); }); names.forEach((name,index) => { const [x,y] = point(index,count,138); const line = document.createElementNS("http://www.w3.org/2000/svg", "line"); line.setAttribute("x1","200"); line.setAttribute("y1","200"); line.setAttribute("x2",String(x)); line.setAttribute("y2",String(y)); axes.append(line); const [lx,ly] = point(index,count,160); const label = document.createElementNS("http://www.w3.org/2000/svg", "text"); label.setAttribute("x",String(lx)); label.setAttribute("y",String(ly)); label.setAttribute("text-anchor",lx < 190 ? "end" : lx > 210 ? "start" : "middle"); label.setAttribute("dominant-baseline","middle"); label.textContent = name.toUpperCase(); labels.append(label); }); }
-        function renderSystems() { const status = state.status; const pill = byId("status-pill"); pill.classList.remove("bad","pending","ok"); if (!status) { pill.classList.add("pending"); text(byId("status-label"),"CONNECTING"); byId("integration-grid").replaceChildren(); const diagnostics = byId("diagnostics-grid"); if (diagnostics) diagnostics.replaceChildren(); renderReadiness(); renderRadar(); return; } const healthy = status.status === "ok"; pill.classList.add(healthy ? "ok" : "bad"); text(byId("status-label"), String(state.presence || "connecting").replaceAll("_", " ").toUpperCase()); text(byId("system-status"),status.status.toUpperCase()); text(byId("z-state"),status.zState.toUpperCase()); text(byId("provider"),`${status.provider?.name || "unknown"} · ${status.provider?.reachability || "unknown"}`); text(byId("deployment"),status.provider?.deploymentVersion || "development"); text(byId("source-version"),status.sourceVersion || "unknown"); text(byId("timezone"),status.timezone || "unknown"); text(byId("checked-at"),status.checkedAt ? new Date(status.checkedAt).toLocaleTimeString("en-AU") : ""); const grid = byId("layer-grid"); grid.replaceChildren(); Object.entries(status.layers || {}).forEach(([name,value]) => { const item = document.createElement("div"); item.className = `layer ${value.status}`; const title = document.createElement("b"); const label = document.createElement("span"); text(title,name); text(label,value.status); item.append(title,label); grid.append(item); }); const integrationGrid = byId("integration-grid"); integrationGrid.replaceChildren(); (Array.isArray(status.integrations) ? status.integrations : []).forEach((integration) => { const item = document.createElement("div"); item.className = "system-item"; const label = document.createElement("span"); const value = document.createElement("b"); text(label,integration.name); text(value,integration.status.toUpperCase()); item.append(label,value); integrationGrid.append(item); }); const provider = status.provider || {}; text(byId("right-provider"),`${provider.name || "UNKNOWN"} PERSISTENCE`); text(byId("provider-reachability"),(provider.reachability || "unknown").toUpperCase()); text(byId("provider-authentication"),(provider.authentication || "unknown").toUpperCase()); text(byId("provider-schema"),(provider.schemaCompatibility || "unknown").toUpperCase()); text(byId("provider-version"),provider.deploymentVersion || "DEVELOPMENT"); text(byId("provider-link-state"),provider.reachability === "ok" ? "LINK ONLINE" : "LINK DEGRADED"); text(byId("telemetry-provider"),(provider.name || "unknown").toUpperCase()); text(byId("telemetry-deployment"),provider.deploymentVersion || "NOT AUTHORISED"); text(byId("telemetry-z-state"),status.zState.toUpperCase()); text(byId("source-pill"),`SOURCE · ${status.sourceVersion || "UNKNOWN"}`); text(byId("footer-status"),`Jarvis ${status.status} · ${provider.name || "unknown"} persistence`); const diagnostics = byId("diagnostics-grid"); if (diagnostics) { diagnostics.replaceChildren(); [["Presence", String(state.presence || "connecting").replaceAll("_", " ").toUpperCase()], ["Checked", status.checkedAt || "UNKNOWN"], ["Reconciliation", status.reconciliation?.state ? String(status.reconciliation.state).toUpperCase() : "UNKNOWN"], ["Auth", (provider.authentication || "unknown").toUpperCase()]].forEach(([name,value]) => { const item = document.createElement("div"); item.className = "system-item"; const label = document.createElement("span"); const val = document.createElement("b"); text(label,name); text(val,value); item.append(label,val); diagnostics.append(item); }); } renderReadiness(); renderRadar(); }
+        function renderSystems() { const status = state.status; const pill = byId("status-pill"); pill.classList.remove("bad","pending","ok"); if (!status) { pill.classList.add("pending"); text(byId("status-label"),"CONNECTING"); text(byId("environment-chip"), "ENVIRONMENT · UNKNOWN"); text(byId("telemetry-deployment"), "UNKNOWN"); byId("integration-grid").replaceChildren(); const diagnostics = byId("diagnostics-grid"); if (diagnostics) diagnostics.replaceChildren(); renderReadiness(); renderRadar(); return; } const healthy = status.status === "ok"; const presenceName = String(state.presence || "connecting"); if (presenceName === "waiting_for_approval" || presenceName === "blocked" || presenceName === "degraded") pill.classList.add("pending"); else if (presenceName === "error" || presenceName === "offline" || !healthy) pill.classList.add("bad"); else pill.classList.add("ok"); text(byId("status-label"), presenceName.replaceAll("_", " ").toUpperCase()); text(byId("system-status"),status.status.toUpperCase()); text(byId("z-state"),status.zState.toUpperCase()); text(byId("provider"),`${status.provider?.name || "unknown"} · ${status.provider?.reachability || "unknown"}`); text(byId("deployment"),status.provider?.deploymentVersion || "development"); text(byId("source-version"),status.sourceVersion || "unknown"); text(byId("timezone"),status.timezone || "unknown"); text(byId("checked-at"),status.checkedAt ? new Date(status.checkedAt).toLocaleTimeString("en-AU") : ""); const grid = byId("layer-grid"); grid.replaceChildren(); Object.entries(status.layers || {}).forEach(([name,value]) => { const item = document.createElement("div"); item.className = `layer ${value.status}`; const title = document.createElement("b"); const label = document.createElement("span"); text(title,name); text(label,value.status); item.append(title,label); grid.append(item); }); const integrationGrid = byId("integration-grid"); integrationGrid.replaceChildren(); (Array.isArray(status.integrations) ? status.integrations : []).forEach((integration) => { const item = document.createElement("div"); item.className = "system-item"; const label = document.createElement("span"); const value = document.createElement("b"); text(label,integration.name); text(value,integration.status.toUpperCase()); item.append(label,value); integrationGrid.append(item); }); const provider = status.provider || {}; text(byId("right-provider"),`${provider.name || "UNKNOWN"} PERSISTENCE`); text(byId("provider-reachability"),(provider.reachability || "unknown").toUpperCase()); text(byId("provider-authentication"),(provider.authentication || "unknown").toUpperCase()); text(byId("provider-schema"),(provider.schemaCompatibility || "unknown").toUpperCase()); text(byId("provider-link-state"),provider.reachability === "ok" ? "LINK ONLINE" : "LINK DEGRADED"); text(byId("telemetry-provider"),(provider.name || "unknown").toUpperCase()); const sourceVersion = String(status.sourceVersion || ""); const deployVersion = String((provider && provider.deploymentVersion) || ""); const envBlob = `${sourceVersion} ${deployVersion}`; const envName = /preview|local/i.test(envBlob) ? "LOCAL PREVIEW" : ((/^prod(uction)?$/i.test(deployVersion) || (/\bproduction\b/i.test(envBlob) && !/dev|preview|local/i.test(envBlob))) ? "PRODUCTION" : (/dev/i.test(envBlob) ? "DEVELOPMENT" : (deployVersion || sourceVersion || "UNKNOWN"))); text(byId("telemetry-deployment"), envName); const envChip = byId("environment-chip"); if (envChip) { text(envChip, `ENVIRONMENT · ${envName}`); envChip.classList.toggle("production", envName === "PRODUCTION"); } text(byId("provider-version"), envName); const matrix = byId("readiness-matrix"); if (matrix) { matrix.replaceChildren(); Object.entries(status.layers || {}).forEach(([name, value]) => { const item = document.createElement("div"); item.className = `layer ${value.status}`; const title = document.createElement("b"); const label = document.createElement("span"); text(title, name); text(label, String(value.status).toUpperCase()); item.append(title, label); matrix.append(item); }); } text(byId("telemetry-z-state"),status.zState.toUpperCase()); text(byId("source-pill"),`SOURCE · ${status.sourceVersion || "UNKNOWN"}`); text(byId("footer-status"),`Jarvis ${status.status} · ${provider.name || "unknown"} persistence`); const diagnostics = byId("diagnostics-grid"); if (diagnostics) { diagnostics.replaceChildren(); [["Presence", String(state.presence || "connecting").replaceAll("_", " ").toUpperCase()], ["Checked", status.checkedAt || "UNKNOWN"], ["Reconciliation", status.reconciliation?.state ? String(status.reconciliation.state).toUpperCase() : "UNKNOWN"], ["Auth", (provider.authentication || "unknown").toUpperCase()]].forEach(([name,value]) => { const item = document.createElement("div"); item.className = "system-item"; const label = document.createElement("span"); const val = document.createElement("b"); text(label,name); text(val,value); item.append(label,val); diagnostics.append(item); }); } renderReadiness(); renderRadar(); }
         function renderCategories() { const counts = new Map(); state.tasks.forEach((task) => { const category = task.category || "personal"; counts.set(category,(counts.get(category) || 0) + 1); }); const entries = [...counts.entries()].sort((a,b) => b[1] - a[1]).slice(0,5); const max = Math.max(1,...entries.map(([,value]) => value)); const bars = byId("category-bars"); if (!bars) return; bars.replaceChildren(); if (!entries.length) bars.append(empty("No task-domain data yet.")); else entries.forEach(([category,value]) => { const row = document.createElement("div"); row.className = "category-row"; const name = document.createElement("span"); text(name,category); const track = document.createElement("div"); track.className = "bar-track"; const fill = document.createElement("div"); fill.className = "bar-fill"; fill.style.width = `${Math.round((value / max) * 100)}%`; track.append(fill); const count = document.createElement("b"); text(count,value); row.append(name,track,count); bars.append(row); }); const total = state.counts.activeTasks + state.counts.completedTasks; const percent = total ? Math.round((state.counts.completedTasks / total) * 100) : 0; text(byId("completion-percent"),`${percent}%`); const ring = byId("completion-ring"); if (ring) ring.setAttribute("stroke-dasharray",`${percent} ${100 - percent}`); }
         function renderPriorities() { const tasks = activeTasks().slice(0,4); fillList(byId("left-priority-list"),tasks,(task) => taskRow(task,true,false),"No active priorities."); text(byId("priority-count"),`${tasks.length} QUEUED`); }
         function renderRightReminders() { const reminders = state.reminders.slice().sort((a,b) => (a.dueAt || Number.MAX_SAFE_INTEGER) - (b.dueAt || Number.MAX_SAFE_INTEGER)).slice(0,3); const list = byId("right-reminder-list"); if (!list) return; list.replaceChildren(); if (!reminders.length) list.append(empty("No reminder contacts.","compact-row empty")); else reminders.forEach((reminder) => { const row = document.createElement("li"); row.className = "compact-row"; const title = document.createElement("strong"); const meta = document.createElement("small"); text(title,reminder.title); text(meta,reminderTime(reminder)); row.append(title,meta); list.append(row); }); text(byId("right-reminder-count"),`${state.reminders.length} TRACKED`); }
@@ -449,6 +607,7 @@
           state.selectedQuote = null;
           state.quoteDetailState = "loading";
           renderQuoteDetail();
+          if (typeof renderApprovals === "function") renderApprovals();
           try {
             const result = await callTool("get_quote",{ quoteId });
             if (state.quoteRequestGeneration !== requestGeneration || state.selectedQuoteSummary?.quoteId !== quoteId) return;
@@ -466,7 +625,10 @@
             state.selectedQuote = null;
             state.quoteDetailState = error?.status === 404 ? "not-found" : "error";
           }
-          if (state.quoteRequestGeneration === requestGeneration) renderQuoteDetail();
+          if (state.quoteRequestGeneration === requestGeneration) {
+            renderQuoteDetail();
+            if (typeof renderApprovals === "function") renderApprovals();
+          }
         }
         function renderQuoteDetail() {
           const phase = state.quoteDetailState;
@@ -479,7 +641,7 @@
           }
           status?.classList?.toggle("error",phase === "error" || phase === "not-found");
           if (phase !== "ready" || !quote) {
-            const labels = { empty:"SELECT A REGISTER QUOTE",loading:"LOADING QUOTE","not-found":"QUOTE NOT FOUND",error:"QUOTE READ FAILED" };
+            const labels = { empty:"SELECT A REGISTER QUOTE",loading:"LOADING QUOTE","not-found":"QUOTE NOT FOUND",error:"QUOTE COULD NOT BE VERIFIED" };
             text(status,labels[phase] || labels.empty);
             text(byId("quote-detail-number"),"—");
             text(byId("quote-detail-revision"),"—");
@@ -489,7 +651,7 @@
             text(byId("quote-detail-tax"),aud.format(0));
             text(byId("quote-detail-total"),aud.format(0));
             text(byId("quote-detail-valid"),"—");
-            text(byId("quote-detail-notes"),phase === "error" ? "The quote could not be loaded. Retry when the connection is ready." : "");
+            text(byId("quote-detail-notes"),phase === "error" ? "QUOTE COULD NOT BE VERIFIED. Approval stays unavailable until the authoritative quote can be loaded." : "");
             fillList(byId("quote-detail-items"),[],() => empty(""),phase === "loading" ? "Loading quote details…" : phase === "not-found" ? "That quote is no longer available." : "Choose a finalised open quote above.");
             return;
           }
@@ -521,15 +683,136 @@
         function renderCounts() { recalc(); text(byId("active-count"),state.counts.activeTasks); text(byId("done-count"),state.counts.completedTasks); text(byId("reminder-count"),state.counts.reminders); text(byId("telemetry-queue"),`${state.counts.activeTasks} TASKS`); text(byId("nav-focus-count"),state.counts.activeTasks ? 1 : 0); text(byId("nav-board-count"),state.tasks.length); text(byId("nav-reminder-count"),state.counts.reminders); }
         function registerStatus(register, readyEmpty, unavailableMessage) { if (!register || register.status !== "ready") return unavailableMessage; if (!Array.isArray(register.items) || register.items.length === 0) return readyEmpty; return `${register.items.length}`; }
         function renderBusiness() { const business = state.business; const enquiryEl = byId("business-enquiry-list"); const invoiceEl = byId("business-invoice-list"); const propertyEl = byId("business-property-list"); const clientEl = byId("business-client-list"); if (!enquiryEl) return; if (!business) { text(byId("business-summary"), "AWAITING REGISTERS"); text(byId("business-headline"), "Business registers are not in this snapshot yet."); text(byId("business-enquiry-count"), "UNAVAILABLE"); text(byId("business-invoice-count"), "UNAVAILABLE"); text(byId("business-property-count"), "UNAVAILABLE"); text(byId("business-client-count"), "UNAVAILABLE"); text(byId("nav-business-count"), 0); fillList(enquiryEl, [], () => empty(""), "Enquiry register unavailable."); fillList(invoiceEl, [], () => empty(""), "Invoice register unavailable."); fillList(propertyEl, [], () => empty(""), "Property register unavailable."); fillList(clientEl, [], () => empty(""), "Customer register unavailable."); return; } const enquiries = business.enquiries && business.enquiries.status === "ready" ? business.enquiries.items : []; const invoices = business.invoices && business.invoices.status === "ready" ? business.invoices.items : []; const properties = business.properties && business.properties.status === "ready" ? business.properties.items : []; const clients = business.clients && business.clients.status === "ready" ? business.clients.items : []; const openEnquiries = enquiries.filter((item) => item.status === "open"); const outstanding = invoices.filter((item) => item.paymentStatus === "unpaid" || item.paymentStatus === "partial" || item.paymentStatus === "overpaid"); text(byId("business-summary"), `${openEnquiries.length} OPEN ENQUIRIES · ${outstanding.length} OUTSTANDING INVOICES`); text(byId("business-headline"), "Figures are projections of the durable HTTP registers. Missing registers stay UNAVAILABLE."); text(byId("business-enquiry-count"), registerStatus(business.enquiries, "0 OPEN", "UNAVAILABLE")); text(byId("business-invoice-count"), registerStatus(business.invoices, "0", "UNAVAILABLE")); text(byId("business-property-count"), registerStatus(business.properties, "0", "UNAVAILABLE")); text(byId("business-client-count"), registerStatus(business.clients, "0", "UNAVAILABLE")); text(byId("nav-business-count"), openEnquiries.length + outstanding.length); fillList(enquiryEl, enquiries, (item) => operationsRow(item.requestedWork, `${(item.status || "unknown").toUpperCase()} · ${(item.urgency || "standard").toUpperCase()} · ${item.source || "unknown"}`), business.enquiries && business.enquiries.status === "ready" ? "No enquiries." : "Enquiry register unavailable."); fillList(invoiceEl, invoices, (item) => operationsRow(`#${item.number}`, `${(item.status || "unknown").toUpperCase()} · ${(item.paymentStatus || "unknown").toUpperCase()} · due ${aud.format(item.balanceDue || 0)}`), business.invoices && business.invoices.status === "ready" ? "No invoices." : "Invoice register unavailable."); fillList(propertyEl, properties, (item) => operationsRow(item.address, `${(item.hazards && item.hazards.length) ? item.hazards.join("; ") : "No recorded hazards"}${item.accessNotes ? " · " + item.accessNotes : ""}`), business.properties && business.properties.status === "ready" ? "No properties." : "Property register unavailable."); fillList(clientEl, clients, (item) => operationsRow(item.name, Array.isArray(item.contacts) && item.contacts.length ? item.contacts.map((contact) => contact.value).join(" · ") : "No contacts"), business.clients && business.clients.status === "ready" ? "No customers." : "Customer register unavailable."); }
-        function renderApprovals() { const list = byId("approvals-list"); if (!list) return; const register = state.approvals; const grid = byId("approval-detail-grid"); if (!register || register.status !== "ready") { text(byId("approvals-summary"), "APPROVAL REGISTER UNAVAILABLE"); text(byId("nav-approvals-count"), 0); fillList(list, [], () => empty(""), "Governed proposal register unavailable."); text(byId("approval-detail-state"), "UNAVAILABLE"); return; } const actions = Array.isArray(register.items) ? register.items : []; text(byId("approvals-summary"), actions.length ? `${actions.length} PROPOSED` : "NOTHING PROPOSED"); text(byId("nav-approvals-count"), actions.length); fillList(list, actions, (action) => { const row = operationsRow(action.tool + " / " + action.operation, `${action.requiredAuthority} · ${action.destructive ? "DESTRUCTIVE" : "SAFE"} · ${action.state.toUpperCase()}`); row.addEventListener("click", () => { state.selectedApproval = action; renderApprovals(); }); return row; }, "No proposed tool actions."); const selected = state.selectedApproval && actions.find((action) => action.actionId === state.selectedApproval.actionId); if (!selected) { text(byId("approval-detail-state"), "SELECT A PROPOSAL OR QUOTE"); text(byId("approval-detail-rationale"), "Approval, rejection and execution remain on the governed HTTP operator path. The HUD never stores an approval token."); if (grid) grid.replaceChildren(); return; } text(byId("approval-detail-state"), selected.state.toUpperCase()); text(byId("approval-detail-rationale"), selected.rationale || "No rationale supplied."); if (grid) { grid.replaceChildren(); [["Tool", selected.tool], ["Operation", selected.operation], ["Authority", selected.requiredAuthority], ["Effect", selected.destructive ? "DESTRUCTIVE" : "NON-DESTRUCTIVE"], ["Expiry", selected.approvalExpiresAt || (selected.approvalExpiryPolicy === "non-expiring" ? "NON-EXPIRING" : "NOT SET")], ["Project", selected.projectId]].forEach(([name, value]) => { const item = document.createElement("div"); item.className = "matrix-item"; const label = document.createElement("span"); const val = document.createElement("b"); text(label, name); text(val, value); item.append(label, val); grid.append(item); }); } }
-        function render() { renderCounts(); renderFocus(); renderBoard(); renderReminders(); renderSystems(); renderCategories(); renderPriorities(); renderRightReminders(); renderOperations(); renderActivity(); renderInbox(); renderActivityTimeline(); renderBusiness(); renderApprovals(); }
-        function setCaptureMode(mode) { state.captureMode = mode; document.querySelectorAll("[data-capture]").forEach((button) => button.classList.toggle("active",button.dataset.capture === mode)); const category = byId("capture-category"); const due = byId("capture-due"); if (mode === "task") { text(byId("capture-title-label"),"Task command"); text(byId("capture-detail-copy"),"Category"); category.hidden = false; due.hidden = true; text(byId("capture-submit"),"ADD TASK"); } else { text(byId("capture-title-label"),"Reminder command"); text(byId("capture-detail-copy"),"When"); category.hidden = true; due.hidden = false; text(byId("capture-submit"),"SET REMINDER"); } }
+        function renderApprovals() {
+          const list = byId("approvals-list");
+          if (!list) return;
+          const register = state.approvals;
+          const grid = byId("approval-detail-grid");
+          const approve = byId("approve-action");
+          const reject = byId("reject-action");
+          const retry = byId("approval-retry");
+          const block = byId("approval-block");
+          const unverified = (action) => Boolean(action && approvalNeedsQuote(action) && !approvalContextReady(action) && state.quoteDetailState !== "loading");
+          if (!register || register.status !== "ready") {
+            text(byId("approvals-summary"), "UNAVAILABLE");
+            text(byId("nav-approvals-count"), 0);
+            fillList(list, [], () => empty(""), "Governed proposal register unavailable.");
+            text(byId("approval-detail-state"), "UNAVAILABLE");
+            if (approve) approve.disabled = true;
+            if (reject) reject.disabled = true;
+            if (retry) retry.hidden = true;
+            if (block) block.hidden = true;
+            return;
+          }
+          const actions = Array.isArray(register.items) ? register.items : [];
+          text(byId("approvals-summary"), actions.length ? `${actions.length} WAITING` : "NONE");
+          text(byId("nav-approvals-count"), actions.length);
+          fillList(list, actions, (action) => {
+            const row = operationsRow(action.operation || action.tool, `${action.requiredAuthority} · ${action.state.toUpperCase()}`);
+            row.addEventListener("click", () => {
+              state.selectedApproval = action;
+              const quoteId = quoteIdFrom(action);
+              if (quoteId) openQuote({ quoteId, number: "" });
+              renderApprovals();
+            });
+            return row;
+          }, "No proposed tool actions.");
+          const selected = state.selectedApproval && actions.find((action) => action.actionId === state.selectedApproval.actionId);
+          const quote = state.selectedQuote;
+          const ready = approvalContextReady(selected);
+          if (block) block.hidden = !unverified(selected);
+          if (retry) retry.hidden = !unverified(selected);
+          if (!selected) {
+            text(byId("approval-detail-state"), "NO DECISION");
+            text(byId("approval-headline"), "");
+            text(byId("approval-detail-rationale"), "When Jarvis needs a decision, the proposal appears here.");
+            if (grid) grid.replaceChildren();
+            if (approve) approve.disabled = true;
+            if (reject) reject.disabled = true;
+            return;
+          }
+          const client = clientForQuote(quoteIdFrom(selected));
+          const quoteNumber = quote && quote.aggregate && quote.aggregate.number ? quote.aggregate.number : (state.quotes.find((item) => item.quoteId === quoteIdFrom(selected)) || {}).number;
+          const expiry = selected.approvalExpiresAt ? new Date(selected.approvalExpiresAt).toLocaleString("en-AU") : (selected.approvalExpiryPolicy === "non-expiring" ? "NON-EXPIRING" : "NOT SET");
+          text(byId("approval-detail-state"), selected.state.toUpperCase());
+          text(byId("approval-headline"), selected.operation === "quotes:send" ? `SEND QUOTE ${quoteNumber || ""} TO ${(client && client.name) || "RECIPIENT"}`.replace(/\s+/g, " ").trim() : `${selected.operation}`);
+          text(byId("approval-detail-rationale"), selected.rationale || "No rationale supplied.");
+          if (grid) {
+            grid.replaceChildren();
+            [["Tool", selected.tool], ["Operation", selected.operation], ["Authority", selected.requiredAuthority], ["Effect", selected.destructive ? "DESTRUCTIVE" : "NON-DESTRUCTIVE"], ["Expiry", expiry], ["Quote", ready ? (quoteNumber || "—") : (approvalNeedsQuote(selected) ? "UNVERIFIED" : (quoteNumber || "—"))], ["Revision", quote && quote.revision ? String(quote.revision.revision ?? "—") : (ready ? "—" : "UNVERIFIED")], ["Total", quote && quote.revision ? aud.format(quote.revision.total || 0) : (ready ? "—" : "UNVERIFIED")], ["Recipient", client ? client.name : "UNKNOWN"]].forEach(([name, value]) => {
+              const item = document.createElement("div");
+              item.className = "matrix-item";
+              const label = document.createElement("span");
+              const val = document.createElement("b");
+              text(label, name);
+              text(val, value);
+              item.append(label, val);
+              grid.append(item);
+            });
+          }
+          if (approve) approve.disabled = !ready;
+          if (reject) reject.disabled = !selected;
+        }
+        function renderSystemStrip() {
+          const el = byId("system-strip");
+          if (!el) return;
+          el.replaceChildren();
+          const status = state.status;
+          if (!status) { el.append(empty("System status unavailable.")); return; }
+          const uncommissioned = (status.integrations || []).filter((item) => item.status === "not-commissioned").length;
+          const bits = [
+            [status.status === "ok" ? "Runtime healthy" : `Runtime ${status.status}`, status.status === "ok" ? "ok" : "bad"],
+            [uncommissioned ? `${uncommissioned} integrations uncommissioned` : "Integrations commissioned", uncommissioned ? "warn" : "ok"],
+            [status.provider && status.provider.reachability === "ok" ? "Persistence online" : "Persistence unavailable", status.provider && status.provider.reachability === "ok" ? "ok" : "bad"],
+          ];
+          bits.forEach(([bit, kind]) => {
+            const span = document.createElement("span");
+            const dot = document.createElement("span");
+            dot.className = kind === "ok" ? "system-dot" : `system-dot ${kind}`;
+            span.append(dot);
+            span.append(document.createTextNode(bit));
+            el.append(span);
+          });
+          const button = document.createElement("button"); button.className = "ghost"; button.type = "button"; text(button, "SYSTEM DETAILS");
+          button.addEventListener("click", () => document.querySelector('[data-view="systems"]')?.click());
+          el.append(button);
+        }
+        function render() { renderCounts(); renderFocus(); renderBoard(); renderReminders(); renderSystems(); renderCategories(); renderPriorities(); renderRightReminders(); renderOperations(); renderActivity(); renderInbox(); renderActivityTimeline(); renderBusiness(); renderApprovals(); renderSystemStrip(); }
+        function setCaptureMode(mode) { state.captureMode = mode; document.querySelectorAll("[data-capture]").forEach((button) => button.classList.toggle("active",button.dataset.capture === mode)); const category = byId("capture-category"); const due = byId("capture-due"); const title = byId("capture-title"); if (title && /conversation runtime|voice is unavailable|there is no conversation/i.test(title.value)) title.value = ""; if (mode === "task") { text(byId("capture-title-label"),"Task"); text(byId("capture-detail-copy"),"Category"); category.hidden = false; due.hidden = true; if (title) title.placeholder = "Add a task…"; text(byId("capture-submit"),"ADD TASK"); } else { text(byId("capture-title-label"),"Reminder"); text(byId("capture-detail-copy"),"When"); category.hidden = true; due.hidden = false; if (title) title.placeholder = "Remind me to…"; if (due) due.placeholder = "Friday 9am"; text(byId("capture-submit"),"SET REMINDER"); } }
         document.querySelectorAll("[data-view]").forEach((button) => button.addEventListener("click",() => { document.querySelectorAll("[data-view]").forEach((candidate) => candidate.classList.toggle("active",candidate === button)); document.querySelectorAll(".view").forEach((view) => view.classList.toggle("active",view.id === `view-${button.dataset.view}`)); }));
-        const requestedView = (location.hash || "").replace(/^#/, "");
+        const requestedView = (location.hash || "").replace(/^#/, "") === "approvals" ? "focus" : (location.hash || "").replace(/^#/, "");
         if (requestedView) {
           const requestedButton = document.querySelector(`[data-view="${requestedView}"]`);
           if (requestedButton) requestedButton.click();
         }
+        const approve = byId("approve-action");
+        const reject = byId("reject-action");
+        const approvalRetry = byId("approval-retry");
+        if (approvalRetry) approvalRetry.addEventListener("click", () => {
+          if (state.selectedQuoteSummary) openQuote(state.selectedQuoteSummary);
+        });
+        if (approve) approve.addEventListener("click", async () => {
+          const selected = state.selectedApproval;
+          if (!approvalContextReady(selected)) return;
+          approve.disabled = true;
+          try {
+            const result = await callTool("approve_tool_action", { projectId: selected.projectId, actionId: selected.actionId, expectedRevision: selected.baseRevision });
+            if (result && result.isError) throw new Error("not bound");
+            toast("Proposal approved. Execution remains a separate governed step.");
+          } catch { toast("Approval is not bound on this HUD. The governed HTTP path is still required.", true); }
+          finally { renderApprovals(); }
+        });
+        if (reject) reject.addEventListener("click", async () => {
+          const selected = state.selectedApproval;
+          if (!selected) return;
+          reject.disabled = true;
+          try {
+            const result = await callTool("reject_tool_action", { projectId: selected.projectId, actionId: selected.actionId, reason: "Rejected from HUD." });
+            if (result && result.isError) throw new Error("not bound");
+            toast("Proposal rejected. Nothing was executed.");
+          } catch { toast("Rejection is not bound on this HUD. The governed HTTP path is still required.", true); }
+          finally { renderApprovals(); }
+        });
         document.querySelectorAll("[data-capture]").forEach((button) => button.addEventListener("click", () => setCaptureMode(button.dataset.capture)));
         byId("refresh").addEventListener("click",async () => { const button = byId("refresh"); button.disabled = true; try { await callTool("show_jarvis_dashboard"); activity("Snapshot refreshed","Live dashboard state reloaded"); toast("Jarvis HUD refreshed."); } catch { toast("Jarvis refresh failed.",true); } finally { button.disabled = false; } });
         byId("capture-form").addEventListener("submit",async (event) => { event.preventDefault(); const input = byId("capture-title"); const title = input.value.trim(); if (!title) return; const button = byId("capture-submit"); button.disabled = true; try { if (state.captureMode === "task") { await callTool("create_task",{ title, category: byId("capture-category").value }); activity("Task captured",title); toast(`Added ${title}`); } else { const due = byId("capture-due").value.trim(); await callTool("create_reminder",{ title, ...(due ? { due: { text: due } } : {}) }); byId("capture-due").value = ""; activity("Reminder captured",title); toast(`Added reminder ${title}`); } input.value = ""; } catch { toast(state.captureMode === "task" ? "Could not add that task." : "Could not add that reminder.",true); } finally { button.disabled = false; } });

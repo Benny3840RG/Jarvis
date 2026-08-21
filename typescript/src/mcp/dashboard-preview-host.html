@@ -124,9 +124,47 @@
         },
         counts: { activeTasks: 2, completedTasks: 1, reminders: 2 },
       };
+      const QUOTE = {
+        aggregate: {
+          quoteId: "q1",
+          ownerId: "owner-1",
+          clientId: "c1",
+          projectId: "project-1",
+          number: "174",
+          currentRevision: 3,
+          currentRevisionId: "revision-3",
+          aggregateVersion: 4,
+          commercialStatus: "open",
+          createdAt: 10,
+          updatedAt: 20,
+        },
+        revision: {
+          revisionId: "revision-3",
+          ownerId: "owner-1",
+          quoteId: "q1",
+          revision: 3,
+          revisionVersion: 3,
+          status: "finalized",
+          lineItems: [
+            { description: "Hedge reduction", quantity: 1, unitPrice: 1800.25 },
+            { description: "Green waste", quantity: 1, unitPrice: 1500.25 },
+          ],
+          subtotal: 3300.5,
+          tax: 0,
+          total: 3300.5,
+          currency: "AUD",
+          validUntil: "2026-09-30",
+          notes: "Marilyn's finalised quote is ready to send.",
+          termsIncluded: true,
+          createdAt: 10,
+          updatedAt: 20,
+        },
+      };
 
       const frame = document.getElementById("hud");
-      const view = new URLSearchParams(location.search).get("view");
+      const params = new URLSearchParams(location.search);
+      const view = params.get("view");
+      const failQuote = params.get("failQuote") === "1";
       if (view) frame.src = `./dashboard-v1.html#${encodeURIComponent(view)}`;
       function pushSnapshot(target) {
         target.postMessage({ jsonrpc: "2.0", method: "ui/notifications/tool-result", params: SNAPSHOT }, "*");
@@ -144,6 +182,27 @@
           const name = event.data.params && event.data.params.name;
           if (name === "show_jarvis_dashboard" || name === "get_jarvis_status") {
             event.source.postMessage({ jsonrpc: "2.0", id, result: { structuredContent: SNAPSHOT } }, "*");
+            return;
+          }
+          if (name === "get_quote") {
+            if (failQuote) {
+              event.source.postMessage({ jsonrpc: "2.0", id, result: { isError: true, content: [{ type: "text", text: "Quote read failed." }] } }, "*");
+              return;
+            }
+            const quoteId = event.data.params && event.data.params.arguments && event.data.params.arguments.quoteId;
+            if (quoteId === "q1") {
+              event.source.postMessage({ jsonrpc: "2.0", id, result: { structuredContent: { quote: QUOTE } } }, "*");
+              return;
+            }
+            event.source.postMessage({ jsonrpc: "2.0", id, result: { isError: true, content: [{ type: "text", text: "Quote not found." }] } }, "*");
+            return;
+          }
+          if (name === "approve_tool_action" || name === "reject_tool_action") {
+            event.source.postMessage({
+              jsonrpc: "2.0",
+              id,
+              result: { isError: true, content: [{ type: "text", text: "Preview host does not execute governed approval." }] },
+            }, "*");
             return;
           }
           event.source.postMessage({
