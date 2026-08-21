@@ -367,6 +367,19 @@ describe("Jarvis preview widget", () => {
     assert.doesNotMatch(widget, /\bCPU\b|\bGPU\b|token usage|API latency/i);
   });
 
+  it("projects business registers and governed proposals without local authority", () => {
+    assert.match(widget, /data-view="business"/);
+    assert.match(widget, /data-view="approvals"/);
+    assert.match(widget, /id="view-business"/);
+    assert.match(widget, /id="view-approvals"/);
+    assert.match(widget, /state\.business/);
+    assert.match(widget, /state\.approvals/);
+    assert.match(widget, /JARVIS PRESENCE/);
+    assert.match(widget, /does not auto-approve/i);
+    assert.match(widget, /never stores an approval token/i);
+    assert.doesNotMatch(widget, /hudState\.jobCompleted/);
+  });
+
   it("does not contain Jarvis or OpenAI credential names", () => {
     assert.doesNotMatch(widget, /JARVIS_SERVICE_TOKEN/);
     assert.doesNotMatch(widget, /OPENAI_API_KEY/);

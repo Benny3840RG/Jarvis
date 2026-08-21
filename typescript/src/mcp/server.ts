@@ -440,6 +440,50 @@ const countsSchema = z.object({
   reminders: z.number().int().nonnegative(),
 });
 
+const hudRegisterStatusSchema = z.enum(["ready", "unavailable"]);
+const hudEnquirySchema = z.object({
+  id: z.string(),
+  clientId: z.string(),
+  propertyId: z.string().optional(),
+  source: z.string(),
+  requestedWork: z.string(),
+  urgency: z.enum(["standard", "urgent", "emergency"]),
+  status: z.enum(["open", "converted", "closed"]),
+  createdAt: z.number(),
+  updatedAt: z.number(),
+});
+const hudInvoiceSchema = z.object({
+  id: z.string(),
+  clientId: z.string(),
+  number: z.string(),
+  status: z.enum(["draft", "issued", "paid", "void"]),
+  paymentStatus: z.enum(["unpaid", "partial", "paid", "overpaid"]),
+  total: z.number(),
+  amountPaid: z.number(),
+  balanceDue: z.number(),
+  dueDate: z.string().optional(),
+  createdAt: z.number(),
+  updatedAt: z.number(),
+});
+const hudPropertySchema = z.object({
+  id: z.string(),
+  clientId: z.string(),
+  address: z.string(),
+  hazards: z.array(z.string()),
+  accessNotes: z.string().optional(),
+  serviceNotes: z.string().optional(),
+  createdAt: z.number(),
+  updatedAt: z.number(),
+});
+const hudClientSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  contacts: z.array(z.object({ label: z.string().optional(), value: z.string() })),
+  notes: z.string().optional(),
+  createdAt: z.number(),
+  updatedAt: z.number(),
+});
+
 const dashboardOutputSchema = {
   status: statusSchema,
   tasks: z.array(taskSchema),
@@ -454,6 +498,26 @@ const dashboardOutputSchema = {
   // "unavailable"}` — and must never be rendered as "nothing needs attention".
   inbox: operationsInboxSchema.nullable(),
   activity: activityTimelineResultSchema.nullable(),
+  approvals: z.object({
+    status: hudRegisterStatusSchema,
+    items: z.array(toolActionSchema),
+  }),
+  business: z.object({
+    clients: z.object({ status: hudRegisterStatusSchema, items: z.array(hudClientSchema) }),
+    properties: z.object({ status: hudRegisterStatusSchema, items: z.array(hudPropertySchema) }),
+    enquiries: z.object({ status: hudRegisterStatusSchema, items: z.array(hudEnquirySchema) }),
+    invoices: z.object({ status: hudRegisterStatusSchema, items: z.array(hudInvoiceSchema) }),
+  }),
+  presence: z.enum([
+    "connecting",
+    "idle",
+    "waiting_for_approval",
+    "reconciling",
+    "blocked",
+    "degraded",
+    "error",
+    "offline",
+  ]),
   counts: countsSchema,
 };
 

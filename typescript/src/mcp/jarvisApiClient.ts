@@ -2,9 +2,13 @@ import { randomUUID } from "node:crypto";
 import { performance } from "node:perf_hooks";
 
 import type { DailyBrief } from "../briefs/brief.js";
+import type { Enquiry } from "../enquiries/enquiry.js";
+import { deriveHudPresence, type HudPresence } from "../hud/hudPresence.js";
+import type { Invoice } from "../invoices/invoice.js";
 import type { ActivityTimelineResult } from "../operations/activityTimeline.js";
 import type { OperationsInbox } from "../operations/operationsInbox.js";
 import type { Client, ClientInput, ClientUpdate } from "../clients/client.js";
+import type { Property } from "../properties/property.js";
 import type { Errand, ErrandInput, ErrandUpdate } from "../errands/errand.js";
 import type { Build, BuildInput, BuildUpdate } from "../builds/build.js";
 import type { BuildLogEntry, BuildLogInput, BuildLogUpdate } from "../buildLog/buildLogEntry.js";
@@ -27,6 +31,11 @@ export type ReminderRequestUpdate = {
   due?: { text: string; timezone?: string } | null;
 };
 
+export type HudRegister<T> = {
+  status: "ready" | "unavailable";
+  items: T[];
+};
+
 export type DashboardSnapshot = {
   status: SystemStatus;
   tasks: Task[];
@@ -40,6 +49,14 @@ export type DashboardSnapshot = {
   inbox: OperationsInbox | null;
   /** `null` means the activity endpoint itself could not be reached — distinct from `{status: "unavailable"}`. */
   activity: ActivityTimelineResult | null;
+  approvals: HudRegister<ToolAction>;
+  business: {
+    clients: HudRegister<Client>;
+    properties: HudRegister<Property>;
+    enquiries: HudRegister<Enquiry>;
+    invoices: HudRegister<Invoice>;
+  };
+  presence: HudPresence;
   counts: {
     activeTasks: number;
     completedTasks: number;
@@ -581,6 +598,18 @@ export class JarvisApiClient {
     return (await this.request<ListResponse<QuoteSummary>>("GET", "/api/v1/quotes")).data;
   }
 
+  async listProperties(): Promise<Property[]> {
+    return (await this.request<ListResponse<Property>>("GET", "/api/v1/properties")).data;
+  }
+
+  async listEnquiries(): Promise<Enquiry[]> {
+    return (await this.request<ListResponse<Enquiry>>("GET", "/api/v1/enquiries")).data;
+  }
+
+  async listInvoices(): Promise<Invoice[]> {
+    return (await this.request<ListResponse<Invoice>>("GET", "/api/v1/invoices")).data;
+  }
+
   async getQuote(quoteId: string): Promise<QuoteSnapshot> {
     return (
       await this.request<DataResponse<QuoteSnapshot>>(
@@ -650,6 +679,22 @@ export class JarvisApiClient {
       (value) => value,
       () => null,
     );
+    const clients = this.listClients().then(
+      (items) => ({ status: "ready" as const, items }),
+      () => ({ status: "unavailable" as const, items: [] as Client[] }),
+    );
+    const properties = this.listProperties().then(
+      (items) => ({ status: "ready" as const, items }),
+      () => ({ status: "unavailable" as const, items: [] as Property[] }),
+    );
+    const enquiries = this.listEnquiries().then(
+      (items) => ({ status: "ready" as const, items }),
+      () => ({ status: "unavailable" as const, items: [] as Enquiry[] }),
+    );
+    const invoices = this.listInvoices().then(
+      (items) => ({ status: "ready" as const, items }),
+      () => ({ status: "unavailable" as const, items: [] as Invoice[] }),
+    );
     const [
       status,
       tasks,
@@ -658,6 +703,10 @@ export class JarvisApiClient {
       resolvedQuoteRegister,
       resolvedInbox,
       resolvedActivity,
+      resolvedClients,
+      resolvedProperties,
+      resolvedEnquiries,
+      resolvedInvoices,
     ] = await Promise.all([
       this.getStatus(),
       this.listTasks(),
@@ -666,7 +715,14 @@ export class JarvisApiClient {
       quoteRegister,
       inbox,
       activity,
+      clients,
+      properties,
+      enquiries,
+      invoices,
     ]);
+    const approvals = await this.loadApprovals(
+      brief.projects.active.slice(0, 8).map((project) => project.id),
+    );
     return {
       status,
       tasks,
@@ -675,11 +731,40 @@ export class JarvisApiClient {
       quoteRegister: resolvedQuoteRegister,
       inbox: resolvedInbox,
       activity: resolvedActivity,
+      approvals,
+      business: {
+        clients: resolvedClients,
+        properties: resolvedProperties,
+        enquiries: resolvedEnquiries,
+        invoices: resolvedInvoices,
+      },
+      presence: deriveHudPresence({
+        status,
+        proposedApprovalCount: approvals.items.filter((action) => action.state === "proposed")
+          .length,
+      }),
       counts: {
         activeTasks: tasks.filter((task) => !task.completed).length,
         completedTasks: tasks.filter((task) => task.completed).length,
         reminders: reminders.length,
       },
+    };
+  }
+
+  private async loadApprovals(projectIds: string[]): Promise<HudRegister<ToolAction>> {
+    if (projectIds.length === 0) return { status: "ready", items: [] };
+    const pages = await Promise.all(
+      projectIds.map((projectId) =>
+        this.listToolActions(projectId).then(
+          (items) => ({ ok: true as const, items }),
+          () => ({ ok: false as const, items: [] as ToolAction[] }),
+        ),
+      ),
+    );
+    if (pages.every((page) => !page.ok)) return { status: "unavailable", items: [] };
+    return {
+      status: "ready",
+      items: pages.flatMap((page) => page.items).filter((action) => action.state === "proposed"),
     };
   }
 }

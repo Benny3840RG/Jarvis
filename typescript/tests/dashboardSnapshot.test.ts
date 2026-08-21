@@ -126,6 +126,11 @@ describe("dashboard snapshot", () => {
         return Response.json({ data: [LIFECYCLE_QUOTE], count: 1 });
       if (url.pathname === "/api/v1/operations/inbox") return Response.json({ data: INBOX });
       if (url.pathname === "/api/v1/operations/activity") return Response.json({ data: ACTIVITY });
+      if (url.pathname === "/api/v1/clients") return Response.json({ data: [], count: 0 });
+      if (url.pathname === "/api/v1/properties") return Response.json({ data: [], count: 0 });
+      if (url.pathname === "/api/v1/enquiries") return Response.json({ data: [], count: 0 });
+      if (url.pathname === "/api/v1/invoices") return Response.json({ data: [], count: 0 });
+      if (url.pathname === "/api/v1/projects/project-1/tool-actions") return Response.json([]);
       return Response.json({ title: "Not Found" }, { status: 404 });
     }) as typeof fetch;
 
@@ -138,8 +143,13 @@ describe("dashboard snapshot", () => {
 
     assert.deepEqual(paths.sort(), [
       "/api/v1/brief",
+      "/api/v1/clients",
+      "/api/v1/enquiries",
+      "/api/v1/invoices",
       "/api/v1/operations/activity",
       "/api/v1/operations/inbox",
+      "/api/v1/projects/project-1/tool-actions",
+      "/api/v1/properties",
       "/api/v1/quotes",
       "/api/v1/reminders",
       "/api/v1/status",
@@ -157,6 +167,10 @@ describe("dashboard snapshot", () => {
       snapshot.brief.quotes.awaitingResponse[0]?.id,
     );
     assert.deepEqual(snapshot.counts, { activeTasks: 1, completedTasks: 0, reminders: 1 });
+    assert.equal(snapshot.presence, "idle");
+    assert.deepEqual(snapshot.approvals, { status: "ready", items: [] });
+    assert.equal(snapshot.business.enquiries.status, "ready");
+    assert.equal(snapshot.business.invoices.status, "ready");
   });
   it("degrades only the quote register when lifecycle reads are unavailable", async () => {
     const fetchImpl = (async (input: string | URL | Request) => {
