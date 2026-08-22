@@ -131,6 +131,7 @@ describe("dashboard snapshot", () => {
       if (url.pathname === "/api/v1/enquiries") return Response.json({ data: [], count: 0 });
       if (url.pathname === "/api/v1/invoices") return Response.json({ data: [], count: 0 });
       if (url.pathname === "/api/v1/projects/project-1/tool-actions") return Response.json([]);
+      if (url.pathname === "/api/v1/reconciliations") return Response.json({ data: [], count: 0 });
       return Response.json({ title: "Not Found" }, { status: 404 });
     }) as typeof fetch;
 
@@ -151,6 +152,7 @@ describe("dashboard snapshot", () => {
       "/api/v1/projects/project-1/tool-actions",
       "/api/v1/properties",
       "/api/v1/quotes",
+      "/api/v1/reconciliations",
       "/api/v1/reminders",
       "/api/v1/status",
       "/api/v1/tasks",
@@ -169,6 +171,7 @@ describe("dashboard snapshot", () => {
     assert.deepEqual(snapshot.counts, { activeTasks: 1, completedTasks: 0, reminders: 1 });
     assert.equal(snapshot.presence, "idle");
     assert.deepEqual(snapshot.approvals, { status: "ready", items: [] });
+    assert.deepEqual(snapshot.reconciliations, { status: "ready", items: [] });
     assert.equal(snapshot.business.enquiries.status, "ready");
     assert.equal(snapshot.business.invoices.status, "ready");
   });
@@ -205,5 +208,6 @@ describe("dashboard snapshot", () => {
     // that must degrade to null, never fail the whole dashboard read.
     assert.equal(snapshot.inbox, null);
     assert.equal(snapshot.activity, null);
+    assert.deepEqual(snapshot.reconciliations, { status: "unavailable", items: [] });
   });
 });

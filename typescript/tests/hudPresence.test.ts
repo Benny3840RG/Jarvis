@@ -53,5 +53,15 @@ describe("deriveHudPresence", () => {
       deriveHudPresence({ status: BASE, proposedApprovalCount: 2 }),
       "waiting_for_approval",
     );
+    const derived = [
+      deriveHudPresence({ status: BASE }),
+      deriveHudPresence({ status: { ...BASE, status: "degraded" } }),
+      deriveHudPresence({ status: BASE, proposedApprovalCount: 1 }),
+    ];
+    for (const presence of derived) {
+      assert.notEqual(presence, "listening");
+      assert.notEqual(presence, "processing");
+      assert.notEqual(presence, "executing");
+    }
   });
 });

@@ -20,7 +20,9 @@ missions, evidence or completion.
   independently to UNAVAILABLE.
 - Approvals view listing proposed tool actions for active brief projects.
   Proposal/approval/execution/reconciliation stay distinct. The HUD does not
-  auto-approve and does not store `JARVIS_APPROVAL_TOKEN`.
+  auto-approve and does not store `JARVIS_APPROVAL_TOKEN`. APPROVE/REJECT in
+  the widget inspect only; execution stays on the HTTP operator path. See
+  `typescript/docs/operators/hud-approval-contract.md`.
 - Diagnostics in System: presence, checked-at, reconciliation state and
   persistence authentication. No secrets, tokens or fake latency.
 - Field/mobile: command capture remains visible; navigation is horizontally
@@ -40,9 +42,11 @@ missions, evidence or completion.
 - `GET /api/v1/enquiries`
 - `GET /api/v1/invoices`
 - `GET /api/v1/projects/{projectId}/tool-actions`
+- `GET /api/v1/reconciliations` (fail-soft; unavailable outside Convex)
 
 Mutating HUD operations remain the existing MCP tools: `create_task`,
-`complete_task`, `create_reminder`, `get_quote`.
+`complete_task` (confirmation required; not quote approval), `create_reminder`,
+`get_quote`.
 
 ## Intentionally unavailable
 

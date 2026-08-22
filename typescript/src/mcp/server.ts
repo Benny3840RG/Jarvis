@@ -502,6 +502,17 @@ const dashboardOutputSchema = {
     status: hudRegisterStatusSchema,
     items: z.array(toolActionSchema),
   }),
+  reconciliations: z.object({
+    status: hudRegisterStatusSchema,
+    items: z.array(
+      z.object({
+        actionId: z.string(),
+        state: z.string(),
+        terminalStatus: z.enum(["succeeded", "failed"]).optional(),
+        receiptId: z.string().optional(),
+      }),
+    ),
+  }),
   business: z.object({
     clients: z.object({ status: hudRegisterStatusSchema, items: z.array(hudClientSchema) }),
     properties: z.object({ status: hudRegisterStatusSchema, items: z.array(hudPropertySchema) }),

@@ -35,6 +35,7 @@ export const MCP_TOOL_OPERATIONS: Readonly<Record<string, readonly OpenApiOperat
     { method: "GET", path: "/api/v1/enquiries" },
     { method: "GET", path: "/api/v1/invoices" },
     { method: "GET", path: "/api/v1/projects/{projectId}/tool-actions" },
+    { method: "GET", path: "/api/v1/reconciliations" },
   ],
   get_jarvis_status: [{ method: "GET", path: "/api/v1/status" }],
   list_tasks: [{ method: "GET", path: "/api/v1/tasks" }],

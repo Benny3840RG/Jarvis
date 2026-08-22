@@ -349,6 +349,48 @@ describe("Jarvis preview widget", () => {
     assert.equal(state.quoteDetailState, "ready");
   });
 
+  it("fail-closes widget approval when quote inspection fails", () => {
+    const stageSource = widget.match(
+      /(function deriveHudApprovalStage\(input\) \{[\s\S]*?\})\n\s+function approvalStageLabel/,
+    )?.[1];
+    assert.ok(stageSource, "approval stage mapper was not found");
+    const deriveHudApprovalStage = new Function(
+      `"use strict"; ${stageSource}; return deriveHudApprovalStage;`,
+    )() as (input: unknown) => string;
+    const proposed = {
+      state: "proposed",
+      tool: "quoteSendTool",
+      operation: "quotes:send",
+      approvalExpiresAt: "2026-08-22T01:00:00.000Z",
+    };
+    const now = Date.parse("2026-08-22T00:00:00.000Z");
+    assert.equal(
+      deriveHudApprovalStage({
+        action: proposed,
+        inspection: { required: true, state: "error" },
+        now,
+      }),
+      "inspection_failed",
+    );
+    assert.equal(
+      deriveHudApprovalStage({
+        action: { ...proposed, state: "approved" },
+        inspection: { required: true, state: "ready" },
+        receiptAvailable: false,
+        now,
+      }),
+      "outcome_unknown",
+    );
+    assert.equal(
+      deriveHudApprovalStage({
+        action: { ...proposed, state: "rejected" },
+        inspection: { required: true, state: "ready" },
+        now,
+      }),
+      "rejected",
+    );
+  });
+
   it("ships syntactically valid embedded dashboard JavaScript", () => {
     const source = extractStaticDashboardScript(widget);
     assert.ok(source, "dashboard script was not found");
@@ -377,6 +419,16 @@ describe("Jarvis preview widget", () => {
     assert.match(widget, /JARVIS PRESENCE/);
     assert.match(widget, /does not auto-approve/i);
     assert.match(widget, /never stores an approval token/i);
+    assert.match(widget, /QUOTE COULD NOT BE VERIFIED/);
+    assert.match(widget, /APPROVAL ACCEPTED/);
+    assert.match(widget, /EXECUTION PENDING/);
+    assert.match(widget, /OUTCOME UNKNOWN/);
+    assert.match(widget, /RECONCILIATION PENDING/);
+    assert.match(widget, /CONFIRM COMPLETE/);
+    assert.match(widget, /does not approve or send a quote/);
+    assert.match(widget, /governed HTTP operator path/);
+    assert.doesNotMatch(widget, /approve_tool_action/);
+    assert.doesNotMatch(widget, /reject_tool_action/);
     assert.doesNotMatch(widget, /hudState\.jobCompleted/);
   });
 

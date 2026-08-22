@@ -50,6 +50,16 @@ export type DashboardSnapshot = {
   /** `null` means the activity endpoint itself could not be reached — distinct from `{status: "unavailable"}`. */
   activity: ActivityTimelineResult | null;
   approvals: HudRegister<ToolAction>;
+  /**
+   * External reconciliation observations. 503/unavailable outside Convex.
+   * Missing observation is OUTCOME UNKNOWN, never FAILURE.
+   */
+  reconciliations: HudRegister<{
+    actionId: string;
+    state: string;
+    terminalStatus?: "succeeded" | "failed";
+    receiptId?: string;
+  }>;
   business: {
     clients: HudRegister<Client>;
     properties: HudRegister<Property>;
@@ -723,6 +733,13 @@ export class JarvisApiClient {
     const approvals = await this.loadApprovals(
       brief.projects.active.slice(0, 8).map((project) => project.id),
     );
+    const reconciliations = await this.listReconciliations().then(
+      (items) => ({ status: "ready" as const, items }),
+      () => ({
+        status: "unavailable" as const,
+        items: [] as DashboardSnapshot["reconciliations"]["items"],
+      }),
+    );
     return {
       status,
       tasks,
@@ -732,6 +749,7 @@ export class JarvisApiClient {
       inbox: resolvedInbox,
       activity: resolvedActivity,
       approvals,
+      reconciliations,
       business: {
         clients: resolvedClients,
         properties: resolvedProperties,
@@ -764,7 +782,15 @@ export class JarvisApiClient {
     if (pages.every((page) => !page.ok)) return { status: "unavailable", items: [] };
     return {
       status: "ready",
-      items: pages.flatMap((page) => page.items).filter((action) => action.state === "proposed"),
+      items: pages.flatMap((page) => page.items),
     };
+  }
+
+  /** Read-only: owner-scoped external reconciliation records. Cannot execute or resolve. */
+  async listReconciliations(): Promise<DashboardSnapshot["reconciliations"]["items"]> {
+    const payload = await this.request<{
+      data: DashboardSnapshot["reconciliations"]["items"];
+    }>("GET", "/api/v1/reconciliations");
+    return Array.isArray(payload.data) ? payload.data : [];
   }
 }

@@ -191,6 +191,12 @@
       }
       .toast.show { transform: translate(-50%, 0); }
       .toast.error { border-color: var(--crit); }
+      .confirm {
+        position: fixed; left: 50%; top: 50%; z-index: 30; width: min(calc(100% - 24px), 440px);
+        transform: translate(-50%, -50%); padding: 16px; border: 1px solid var(--line);
+        border-radius: 12px; background: var(--panel);
+      }
+      .confirm p { margin: 0 0 12px; font-size: 15px; line-height: 1.4; white-space: pre-line; }
       .sev { margin-right: 8px; font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; }
       .sev-info { color: var(--muted); }
       .sev-attention { color: var(--amber); }
@@ -490,10 +496,17 @@
       </footer>
     </main>
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <div class="confirm" id="confirm-dialog" hidden>
+      <p id="confirm-copy">This marks the durable Jarvis task complete. It does not approve or send a quote, and it does not execute a governed tool action.</p>
+      <div class="approval-actions">
+        <button class="ghost" id="confirm-cancel" type="button">CANCEL</button>
+        <button class="ghost" id="confirm-ok" type="button">CONFIRM COMPLETE</button>
+      </div>
+    </div>
     <script>
       (() => {
         "use strict";
-        const state = { status: null, tasks: [], reminders: [], brief: null, quotes: [], quoteRegisterStatus: "unavailable", counts: { activeTasks: 0, completedTasks: 0, reminders: 0 }, captureMode: "task", activities: [], selectedQuoteSummary: null, selectedQuote: null, quoteDetailState: "empty", quoteRequestGeneration: 0, inbox: null, activity: null, presence: "connecting", approvals: null, business: null, selectedApproval: null };
+        const state = { status: null, tasks: [], reminders: [], brief: null, quotes: [], quoteRegisterStatus: "unavailable", counts: { activeTasks: 0, completedTasks: 0, reminders: 0 }, captureMode: "task", activities: [], selectedQuoteSummary: null, selectedQuote: null, quoteDetailState: "empty", quoteRequestGeneration: 0, inbox: null, activity: null, presence: "connecting", approvals: null, reconciliations: null, business: null, selectedApproval: null, pendingCompleteTask: null };
         let rpcId = 0;
         let toastTimer = null;
         const pending = new Map();
@@ -505,7 +518,7 @@
         function activity(title, detail) { state.activities.unshift({ title, detail, at: new Date() }); state.activities = state.activities.slice(0, 7); renderActivity(); }
         function structured(result) { return result && typeof result === "object" && result.structuredContent ? result.structuredContent : result; }
         function recalc() { state.counts = { activeTasks: state.tasks.filter((task) => !task.completed).length, completedTasks: state.tasks.filter((task) => task.completed).length, reminders: state.reminders.length }; }
-        function update(result) { const data = structured(result); if (!data || typeof data !== "object") return; if (data.status && typeof data.status === "object") state.status = data.status; if (Array.isArray(data.tasks)) state.tasks = data.tasks; if (Array.isArray(data.reminders)) state.reminders = data.reminders; if (data.brief && typeof data.brief === "object") state.brief = data.brief; if (data.quoteRegister && typeof data.quoteRegister === "object") { state.quoteRegisterStatus = data.quoteRegister.status === "ready" ? "ready" : "unavailable"; state.quotes = Array.isArray(data.quoteRegister.quotes) ? data.quoteRegister.quotes : []; } if ("inbox" in data) state.inbox = data.inbox; if ("activity" in data) state.activity = data.activity; if (data.presence) state.presence = data.presence; if (data.approvals && typeof data.approvals === "object") state.approvals = data.approvals; if (data.business && typeof data.business === "object") state.business = data.business; if (data.counts && typeof data.counts === "object") state.counts = data.counts; else recalc(); maybeFocusApproval(); render(); }
+        function update(result) { const data = structured(result); if (!data || typeof data !== "object") return; if (data.status && typeof data.status === "object") state.status = data.status; if (Array.isArray(data.tasks)) state.tasks = data.tasks; if (Array.isArray(data.reminders)) state.reminders = data.reminders; if (data.brief && typeof data.brief === "object") state.brief = data.brief; if (data.quoteRegister && typeof data.quoteRegister === "object") { state.quoteRegisterStatus = data.quoteRegister.status === "ready" ? "ready" : "unavailable"; state.quotes = Array.isArray(data.quoteRegister.quotes) ? data.quoteRegister.quotes : []; } if ("inbox" in data) state.inbox = data.inbox; if ("activity" in data) state.activity = data.activity; if (data.presence) state.presence = data.presence; if (data.approvals && typeof data.approvals === "object") state.approvals = data.approvals; if (data.reconciliations && typeof data.reconciliations === "object") state.reconciliations = data.reconciliations; if (data.business && typeof data.business === "object") state.business = data.business; if (data.counts && typeof data.counts === "object") state.counts = data.counts; else recalc(); maybeFocusApproval(); render(); }
         window.addEventListener("message", (event) => { if (event.source !== window.parent) return; const message = event.data; if (!message || message.jsonrpc !== "2.0") return; if (typeof message.id === "number") { const waiting = pending.get(message.id); if (!waiting) return; pending.delete(message.id); if (message.error) waiting.reject(message.error); else waiting.resolve(message.result); return; } if (message.method === "ui/notifications/tool-result") update(message.params); }, { passive: true });
         const bridgeReady = (async () => { await request("ui/initialize", { appInfo: { name: "jarvis-dashboard", version: "0.3.0" }, appCapabilities: {}, protocolVersion: "2026-01-26" }); notify("ui/notifications/initialized", {}); activity("HUD bridge online", "MCP Apps connection initialised"); })();
         async function callTool(name, args = {}) { await bridgeReady; const result = await request("tools/call", { name, arguments: args }); update(result); return result; }
@@ -514,7 +527,25 @@
         const subtitle = (task) => `${task.category || "personal"} · ${task.completed ? "complete" : "active"}`;
         const reminderTime = (reminder) => reminder.dueRaw || (reminder.dueAt ? new Date(reminder.dueAt).toLocaleString("en-AU") : "No due time");
         function empty(message, className = "empty") { const el = document.createElement("div"); el.className = className; text(el, message); return el; }
-        function completeButton(task, compact = false) { const button = document.createElement("button"); button.className = compact ? "ghost" : "primary-button"; button.type = "button"; button.title = "Marks this durable task complete in Jarvis. It does not approve quotes or invoices."; text(button, compact ? "COMPLETE" : "COMPLETE TASK"); button.addEventListener("click", async () => { button.disabled = true; try { await callTool("complete_task", { taskId: task.id }); activity("Task completed", task.title); toast(`Marked complete: ${task.title}`); } catch { toast("Could not complete that durable task.", true); } finally { button.disabled = false; } }); return button; }
+        function completeButton(task, compact = false) { const button = document.createElement("button"); button.className = "ghost"; button.type = "button"; button.title = "Marks this durable Jarvis task complete. It does not approve or send a quote, and it does not execute a governed tool action."; text(button, compact ? "COMPLETE" : "COMPLETE TASK"); button.addEventListener("click", () => requestCompleteConfirmation(task)); return button; }
+        function requestCompleteConfirmation(task) {
+          state.pendingCompleteTask = task;
+          const dialog = byId("confirm-dialog");
+          text(byId("confirm-copy"), `Mark durable task complete?\n\n${task.title}\n\nThis marks the durable Jarvis task complete. It does not approve or send a quote, and it does not execute a governed tool action.`);
+          if (dialog) dialog.hidden = false;
+        }
+        async function confirmCompleteTask() {
+          const task = state.pendingCompleteTask;
+          const dialog = byId("confirm-dialog");
+          if (dialog) dialog.hidden = true;
+          state.pendingCompleteTask = null;
+          if (!task) return;
+          try {
+            await callTool("complete_task", { taskId: task.id });
+            activity("Task completed", task.title);
+            toast(`Marked complete: ${task.title}`);
+          } catch { toast("Could not complete that durable task.", true); }
+        }
         function taskRow(task, compact = false, allowComplete = true) { const row = document.createElement(compact ? "li" : "div"); row.className = compact ? "priority-row" : `board-row${task.completed ? " done" : ""}`; const copy = document.createElement("div"); const title = document.createElement("strong"); const meta = document.createElement("small"); text(title, task.title); text(meta, subtitle(task)); copy.append(title, meta); row.append(copy); if (allowComplete && !task.completed) row.append(completeButton(task, true)); return row; }
         function reminderRow(reminder) { const row = document.createElement("div"); row.className = "reminder-row"; const copy = document.createElement("div"); const title = document.createElement("strong"); const meta = document.createElement("small"); text(title, reminder.title); text(meta, reminderTime(reminder)); copy.append(title, meta); const chip = document.createElement("span"); chip.className = "chip"; text(chip, reminder.dueAt ? "TIMED" : "OPEN"); row.append(copy, chip); return row; }
         function fillList(el, items, renderer, message) { if (!el) return; el.replaceChildren(); if (!items.length) { el.append(empty(message)); return; } items.forEach((item) => el.append(renderer(item))); }
@@ -543,6 +574,72 @@
           if (!action) return false;
           if (!approvalNeedsQuote(action)) return true;
           return state.quoteDetailState === "ready" && Boolean(state.selectedQuote);
+        }
+        function deriveHudApprovalStage(input) {
+          const action = input.action;
+          if (!action) return "awaiting_inspection";
+          const now = input.now == null ? Date.now() : input.now;
+          const expired = action.state === "expired" || action.isApprovalExpired === true || (action.approvalExpiresAt && Date.parse(action.approvalExpiresAt) <= now);
+          if (action.state === "rejected") return "rejected";
+          if (action.state === "revoked") return "stale";
+          if (expired) return "expired";
+          if (action.state === "proposed") {
+            if (input.inspection && input.inspection.required) {
+              if (input.inspection.state === "error" || input.inspection.state === "not-found") return "inspection_failed";
+              if (input.inspection.state === "ready") return "awaiting_approval";
+              return "awaiting_inspection";
+            }
+            return "awaiting_approval";
+          }
+          if (action.state !== "approved") return "stale";
+          if (input.executionInFlight === true) return "executing";
+          const recon = input.reconciliation;
+          if (recon) {
+            if (recon.state === "resolved" && recon.terminalStatus === "succeeded") return "reconciled";
+            if (recon.terminalStatus === "failed" || recon.state === "escalated") return "execution_failed";
+            if (recon.state === "pending" || recon.state === "observing" || recon.state === "claimed") return "reconciliation_pending";
+          }
+          if (input.receipt) {
+            if (input.receipt.status === "failed" || input.receipt.status === "blocked") return "execution_failed";
+            if (input.receipt.status === "indeterminate") return "outcome_unknown";
+            if (input.receipt.status === "succeeded") return "receipt_received";
+            if (input.receipt.status === "dry-run") return "approval_accepted";
+            return "outcome_unknown";
+          }
+          if (input.receiptAvailable === true) return "execution_pending";
+          return "outcome_unknown";
+        }
+        function approvalStageLabel(stage) {
+          return ({
+            awaiting_inspection: "AWAITING INSPECTION",
+            inspection_failed: "QUOTE COULD NOT BE VERIFIED",
+            awaiting_approval: "AWAITING APPROVAL",
+            approval_accepted: "APPROVAL ACCEPTED",
+            execution_pending: "EXECUTION PENDING",
+            executing: "EXECUTING",
+            receipt_received: "RECEIPT RECEIVED",
+            reconciliation_pending: "RECONCILIATION PENDING",
+            reconciled: "RECONCILED",
+            execution_failed: "EXECUTION FAILED",
+            outcome_unknown: "OUTCOME UNKNOWN",
+            rejected: "REJECTED",
+            expired: "EXPIRED",
+            stale: "STALE PROPOSAL",
+          })[stage] || String(stage).replaceAll("_", " ").toUpperCase();
+        }
+        function lifecycleFor(action) {
+          const reconItems = state.reconciliations && state.reconciliations.status === "ready" ? state.reconciliations.items : [];
+          const recon = action && Array.isArray(reconItems) ? reconItems.find((item) => item.actionId === action.actionId) : null;
+          return deriveHudApprovalStage({
+            action,
+            inspection: { required: approvalNeedsQuote(action), state: approvalNeedsQuote(action) ? state.quoteDetailState : "not-required" },
+            receiptAvailable: false,
+            reconciliation: recon || null,
+            now: Date.now(),
+          });
+        }
+        function canSubmitApproval(action) {
+          return lifecycleFor(action) === "awaiting_approval";
         }
         function clientForQuote(quoteId) {
           const quotes = Array.isArray(state.quotes) ? state.quotes : [];
@@ -585,7 +682,7 @@
           if (quoteId) openQuote({ quoteId, number: first.arguments && first.arguments.number ? String(first.arguments.number) : "" });
         }
         function renderReadiness() { const layers = layerEntries(); const ready = layers.filter(([, value]) => value.status === "ready").length; const percent = layers.length ? Math.round((ready / layers.length) * 100) : 0; text(byId("ready-layer-count"), `${ready} / ${layers.length || 8} READY`); text(byId("readiness-percent"), `${percent}%`); text(byId("readiness-state"), state.status ? state.status.status.toUpperCase() : "AWAITING STATUS"); const ring = byId("readiness-ring"); if (ring) ring.setAttribute("stroke-dasharray", `${percent} ${100 - percent}`); text(byId("nav-system-count"), ready); }
-        function renderFocus() { document.body.dataset.presence = state.presence || "connecting"; const active = activeTasks(); const current = active[0]; const title = byId("current-task"); const sub = byId("current-subtitle"); const meta = byId("current-meta"); const actions = byId("current-actions"); if (meta) meta.replaceChildren(); if (actions) actions.replaceChildren(); text(byId("mission-state"), presenceLabel()); text(byId("jarvis-speech"), jarvisSpeech()); text(byId("presence-detail"), state.status ? String(state.status.status).toUpperCase() : "AWAITING STATUS"); const selected = state.selectedApproval; const client = selected ? clientForQuote(quoteIdFrom(selected)) : (state.business && state.business.clients && state.business.clients.items && state.business.clients.items[0]); const property = propertyForClient(client); if (!current) { text(title, "Nothing holding the queue."); text(sub, "No active task is in the durable command queue."); } else { text(title, current.title); const who = client ? client.name : "Customer unknown"; const where = property ? property.address : "Site unknown"; const stage = subtitle(current).toUpperCase(); const next = active[1] ? active[1].title : (pendingApprovals().length ? "Review waiting proposal" : "Queue clear"); const blocking = state.presence === "waiting_for_approval" ? "Blocked on approval" : (state.presence === "blocked" ? "Blocked" : ""); text(sub, `For ${who} · ${where}`); [["STAGE · " + stage, ""], ["NEXT · " + next, ""], blocking ? ["BLOCKING · " + blocking, "warn"] : null].filter(Boolean).forEach(([label, kind]) => { const chip = document.createElement("span"); chip.className = kind ? `chip ${kind}` : "chip"; text(chip, label); if (meta) meta.append(chip); }); if (actions) actions.append(completeButton(current)); }
+        function renderFocus() { document.body.dataset.presence = state.presence || "connecting"; const active = activeTasks(); const current = active[0]; const title = byId("current-task"); const sub = byId("current-subtitle"); const meta = byId("current-meta"); const actions = byId("current-actions"); if (meta) meta.replaceChildren(); if (actions) actions.replaceChildren(); text(byId("mission-state"), presenceLabel()); text(byId("jarvis-speech"), jarvisSpeech()); text(byId("presence-detail"), state.status ? String(state.status.status).toUpperCase() : "AWAITING STATUS"); const selected = state.selectedApproval; const client = selected ? clientForQuote(quoteIdFrom(selected)) : (state.business && state.business.clients && state.business.clients.items && state.business.clients.items[0]); const property = propertyForClient(client); if (!current) { text(title, "Nothing holding the queue."); text(sub, "No active task is in the durable command queue."); } else { text(title, current.title); const who = client ? client.name : "Customer unknown"; const where = property ? property.address : "Site unknown"; const stage = subtitle(current).toUpperCase(); const next = active[1] ? active[1].title : (pendingApprovals().length ? "Review waiting proposal" : "Queue clear"); const blocking = state.presence === "waiting_for_approval" ? "Blocked on approval" : (state.presence === "blocked" ? "Blocked" : ""); text(sub, `For ${who} · ${where}`); [["STAGE · " + stage, ""], ["NEXT · " + next, ""], blocking ? ["BLOCKING · " + blocking, "warn"] : null].filter(Boolean).forEach(([label, kind]) => { const chip = document.createElement("span"); chip.className = kind ? `chip ${kind}` : "chip"; text(chip, label); if (meta) meta.append(chip); }); if (actions && state.presence !== "waiting_for_approval") actions.append(completeButton(current)); }
           const total = state.counts.activeTasks + state.counts.completedTasks; const complete = total ? Math.round((state.counts.completedTasks / total) * 100) : 0; const missionRing = byId("mission-progress-ring"); if (missionRing) missionRing.setAttribute("stroke-dasharray", `${complete} ${100 - complete}`); fillList(byId("focus-queue"), active.slice(1, 6), (task) => taskRow(task, true, false), "Nothing queued."); text(byId("queue-count"), `${Math.max(0, active.length - 1)} QUEUED`); text(byId("focus-active"), state.counts.activeTasks); text(byId("focus-done"), state.counts.completedTasks); text(byId("focus-reminders"), state.counts.reminders); }
         function renderBoard() { const active = activeTasks(); const done = completedTasks(); fillList(byId("active-list"), active, (task) => taskRow(task), "No active tasks."); fillList(byId("done-list"), done, (task) => taskRow(task, false, false), "No completed tasks yet."); text(byId("board-active-count"), `${active.length} ACTIVE`); text(byId("board-done-count"), `${done.length} COMPLETE`); }
         function timingBuckets() { const now = Date.now(); const day = 86400000; const buckets = [0,0,0,0]; state.reminders.forEach((reminder) => { if (!reminder.dueAt) buckets[3] += 1; else if (reminder.dueAt <= now) buckets[0] += 1; else if (reminder.dueAt <= now + day) buckets[1] += 1; else buckets[2] += 1; }); return buckets; }
@@ -705,8 +802,9 @@
             return;
           }
           const actions = Array.isArray(register.items) ? register.items : [];
-          text(byId("approvals-summary"), actions.length ? `${actions.length} WAITING` : "NONE");
-          text(byId("nav-approvals-count"), actions.length);
+          const waiting = actions.filter((action) => action.state === "proposed");
+          text(byId("approvals-summary"), waiting.length ? `${waiting.length} WAITING` : "NONE");
+          text(byId("nav-approvals-count"), waiting.length);
           fillList(list, actions, (action) => {
             const row = operationsRow(action.operation || action.tool, `${action.requiredAuthority} · ${action.state.toUpperCase()}`);
             row.addEventListener("click", () => {
@@ -719,7 +817,8 @@
           }, "No proposed tool actions.");
           const selected = state.selectedApproval && actions.find((action) => action.actionId === state.selectedApproval.actionId);
           const quote = state.selectedQuote;
-          const ready = approvalContextReady(selected);
+          const ready = canSubmitApproval(selected);
+          const stage = selected ? lifecycleFor(selected) : "awaiting_inspection";
           if (block) block.hidden = !unverified(selected);
           if (retry) retry.hidden = !unverified(selected);
           if (!selected) {
@@ -734,7 +833,7 @@
           const client = clientForQuote(quoteIdFrom(selected));
           const quoteNumber = quote && quote.aggregate && quote.aggregate.number ? quote.aggregate.number : (state.quotes.find((item) => item.quoteId === quoteIdFrom(selected)) || {}).number;
           const expiry = selected.approvalExpiresAt ? new Date(selected.approvalExpiresAt).toLocaleString("en-AU") : (selected.approvalExpiryPolicy === "non-expiring" ? "NON-EXPIRING" : "NOT SET");
-          text(byId("approval-detail-state"), selected.state.toUpperCase());
+          text(byId("approval-detail-state"), approvalStageLabel(stage));
           text(byId("approval-headline"), selected.operation === "quotes:send" ? `SEND QUOTE ${quoteNumber || ""} TO ${(client && client.name) || "RECIPIENT"}`.replace(/\s+/g, " ").trim() : `${selected.operation}`);
           text(byId("approval-detail-rationale"), selected.rationale || "No rationale supplied.");
           if (grid) {
@@ -751,7 +850,7 @@
             });
           }
           if (approve) approve.disabled = !ready;
-          if (reject) reject.disabled = !selected;
+          if (reject) reject.disabled = selected.state !== "proposed";
         }
         function renderSystemStrip() {
           const el = byId("system-strip");
@@ -791,28 +890,21 @@
         if (approvalRetry) approvalRetry.addEventListener("click", () => {
           if (state.selectedQuoteSummary) openQuote(state.selectedQuoteSummary);
         });
-        if (approve) approve.addEventListener("click", async () => {
+        if (approve) approve.addEventListener("click", () => {
           const selected = state.selectedApproval;
-          if (!approvalContextReady(selected)) return;
-          approve.disabled = true;
-          try {
-            const result = await callTool("approve_tool_action", { projectId: selected.projectId, actionId: selected.actionId, expectedRevision: selected.baseRevision });
-            if (result && result.isError) throw new Error("not bound");
-            toast("Proposal approved. Execution remains a separate governed step.");
-          } catch { toast("Approval is not bound on this HUD. The governed HTTP path is still required.", true); }
-          finally { renderApprovals(); }
+          if (!canSubmitApproval(selected)) return;
+          toast("Approval is submitted on the governed HTTP operator path. This HUD inspects only and never stores an approval token.", true);
         });
-        if (reject) reject.addEventListener("click", async () => {
+        if (reject) reject.addEventListener("click", () => {
           const selected = state.selectedApproval;
-          if (!selected) return;
-          reject.disabled = true;
-          try {
-            const result = await callTool("reject_tool_action", { projectId: selected.projectId, actionId: selected.actionId, reason: "Rejected from HUD." });
-            if (result && result.isError) throw new Error("not bound");
-            toast("Proposal rejected. Nothing was executed.");
-          } catch { toast("Rejection is not bound on this HUD. The governed HTTP path is still required.", true); }
-          finally { renderApprovals(); }
+          if (!selected || selected.state !== "proposed") return;
+          toast("Rejection is submitted on the governed HTTP operator path. This HUD inspects only.", true);
         });
+        byId("confirm-cancel").addEventListener("click", () => {
+          state.pendingCompleteTask = null;
+          byId("confirm-dialog").hidden = true;
+        });
+        byId("confirm-ok").addEventListener("click", () => { void confirmCompleteTask(); });
         document.querySelectorAll("[data-capture]").forEach((button) => button.addEventListener("click", () => setCaptureMode(button.dataset.capture)));
         byId("refresh").addEventListener("click",async () => { const button = byId("refresh"); button.disabled = true; try { await callTool("show_jarvis_dashboard"); activity("Snapshot refreshed","Live dashboard state reloaded"); toast("Jarvis HUD refreshed."); } catch { toast("Jarvis refresh failed.",true); } finally { button.disabled = false; } });
         byId("capture-form").addEventListener("submit",async (event) => { event.preventDefault(); const input = byId("capture-title"); const title = input.value.trim(); if (!title) return; const button = byId("capture-submit"); button.disabled = true; try { if (state.captureMode === "task") { await callTool("create_task",{ title, category: byId("capture-category").value }); activity("Task captured",title); toast(`Added ${title}`); } else { const due = byId("capture-due").value.trim(); await callTool("create_reminder",{ title, ...(due ? { due: { text: due } } : {}) }); byId("capture-due").value = ""; activity("Reminder captured",title); toast(`Added reminder ${title}`); } input.value = ""; } catch { toast(state.captureMode === "task" ? "Could not add that task." : "Could not add that reminder.",true); } finally { button.disabled = false; } });

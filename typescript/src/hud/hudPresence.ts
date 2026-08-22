@@ -20,6 +20,11 @@ export function isHudPresence(value: unknown): value is HudPresence {
 /**
  * Presentation-only mapping from authoritative runtime state.
  * This is not a second status authority.
+ *
+ * listening / processing / executing / waiting_for_tool are real operator
+ * states, but they are not fields on SystemStatus today. Do not invent them
+ * here. When the runtime emits an explicit presence field, extend HUD_PRESENCES
+ * and prefer that field over this derivation.
  */
 export function deriveHudPresence(input: {
   status?: SystemStatus | null;
