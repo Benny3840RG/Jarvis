@@ -383,6 +383,16 @@ describe("Jarvis preview widget", () => {
     );
     assert.equal(
       deriveHudApprovalStage({
+        action: { ...proposed, state: "approved" },
+        inspection: { required: true, state: "ready" },
+        receiptAvailable: true,
+        receipts: [{ status: "succeeded", executionMode: "dry-run" }],
+        now,
+      }),
+      "awaiting_execution",
+    );
+    assert.equal(
+      deriveHudApprovalStage({
         action: { ...proposed, state: "rejected" },
         inspection: { required: true, state: "ready" },
         now,
@@ -421,10 +431,14 @@ describe("Jarvis preview widget", () => {
     assert.match(widget, /never stores an approval token/i);
     assert.match(widget, /QUOTE COULD NOT BE VERIFIED/);
     assert.match(widget, /APPROVAL ACCEPTED/);
-    assert.match(widget, /EXECUTION PENDING/);
+    assert.match(widget, /AWAITING EXECUTION/);
+    assert.match(widget, /EXECUTION BLOCKED/);
+    assert.match(widget, /QUOTE VERIFIED/);
+    assert.match(widget, /AWAITING COMMISSIONING/);
     assert.match(widget, /OUTCOME UNKNOWN/);
     assert.match(widget, /RECONCILIATION PENDING/);
     assert.match(widget, /CONFIRM COMPLETE/);
+    assert.match(widget, /does not constitute an authorisation boundary/);
     assert.match(widget, /does not approve or send a quote/);
     assert.match(widget, /governed HTTP operator path/);
     assert.doesNotMatch(widget, /approve_tool_action/);

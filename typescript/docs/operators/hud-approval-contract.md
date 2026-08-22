@@ -41,6 +41,8 @@ agent-callable, so a widget-initiated reject would not be a human-only signal.
 - `GET /api/v1/projects/{projectId}/tool-actions/{actionId}`
 - `GET /api/v1/quotes/{quoteId}`
 - `GET /api/v1/reconciliations` (fail-soft; 503 outside Convex)
+- `GET /api/v1/projects/{projectId}/tool-actions/{actionId}/receipts`
+  (live vs dry-run are distinct; `liveReceipt` is null when only a dry-run exists)
 
 ## Writes the HUD must not perform
 
@@ -50,8 +52,14 @@ agent-callable, so a widget-initiated reject would not be a human-only signal.
 
 Complete-task is a separate durable HTTP mutation
 (`POST /api/v1/tasks/{taskId}/complete`) already bound as MCP `complete_task`.
-It is not quote approval and not tool-action execution. The HUD requires
-confirmation and hides it beside WAITING FOR APPROVAL.
+HUD COMPLETE TASK confirmation protects against accidental interactive
+activation only. It does not constitute an authorisation boundary. The existing
+`complete_task` MCP capability retains its current authority. It is not quote
+approval and not tool-action execution.
+
+`quotes:send` remains uncommissioned until the delivery stack is registered.
+Quote inspection succeeding is **QUOTE VERIFIED / AWAITING COMMISSIONING**, not
+evidence that send is live.
 
 ## Presentation stages
 

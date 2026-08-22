@@ -513,6 +513,24 @@ const dashboardOutputSchema = {
       }),
     ),
   }),
+  receipts: z.object({
+    status: hudRegisterStatusSchema,
+    items: z.array(
+      z.object({
+        receiptId: z.string(),
+        actionId: z.string(),
+        projectId: z.string(),
+        idempotencyKey: z.string(),
+        executionMode: z.enum(["live", "dry-run"]),
+        tool: z.string(),
+        operation: z.string(),
+        status: z.enum(["dry-run", "succeeded", "failed", "indeterminate", "blocked"]),
+        errorCode: z.string().optional(),
+        startedAt: z.string(),
+        completedAt: z.string(),
+      }),
+    ),
+  }),
   business: z.object({
     clients: z.object({ status: hudRegisterStatusSchema, items: z.array(hudClientSchema) }),
     properties: z.object({ status: hudRegisterStatusSchema, items: z.array(hudPropertySchema) }),
@@ -1466,6 +1484,58 @@ export function createJarvisMcpServer(client: JarvisApiClient): McpServer {
             },
           ],
           structuredContent: { action },
+        };
+      } catch (error: unknown) {
+        return safeError(error);
+      }
+    },
+  );
+
+  const receiptInspectionSchema = z.object({
+    receiptId: z.string(),
+    actionId: z.string(),
+    projectId: z.string(),
+    idempotencyKey: z.string(),
+    executionMode: z.enum(["live", "dry-run"]),
+    tool: z.string(),
+    operation: z.string(),
+    status: z.enum(["dry-run", "succeeded", "failed", "indeterminate", "blocked"]),
+    errorCode: z.string().optional(),
+    startedAt: z.string(),
+    completedAt: z.string(),
+  });
+
+  registerAppTool(
+    server,
+    "list_tool_action_receipts",
+    {
+      title: "Inspect tool-action execution receipts",
+      description:
+        "Read-only inspection of durable execution receipts for one proposal. Live and dry-run receipts are distinct. A successful dry-run is never evidence that live execution occurred. This tool cannot approve, reject, revoke, or execute.",
+      inputSchema: { projectId: z.string().min(1), actionId: z.string().min(1) },
+      outputSchema: {
+        receipts: z.array(receiptInspectionSchema),
+        count: z.number().int().nonnegative(),
+        liveReceipt: receiptInspectionSchema.nullable(),
+      },
+      annotations: readAnnotations,
+      _meta: { ui: { visibility: ["model"] } },
+    },
+    async ({ projectId, actionId }) => {
+      try {
+        const result = await client.listToolActionReceipts(projectId, actionId);
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: `Found ${result.receipts.length} execution receipt(s) for ${actionId}. Live receipt ${result.liveReceipt ? "present" : "absent"}.`,
+            },
+          ],
+          structuredContent: {
+            receipts: result.receipts,
+            count: result.receipts.length,
+            liveReceipt: result.liveReceipt,
+          },
         };
       } catch (error: unknown) {
         return safeError(error);

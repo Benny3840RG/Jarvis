@@ -357,6 +357,7 @@
           <h2>Context <span id="approval-detail-state">SELECT A PROPOSAL</span></h2>
           <p id="approval-headline"></p>
           <p id="approval-detail-rationale">When Jarvis is waiting for approval, the proposed action appears here.</p>
+          <p id="approval-commissioning" hidden>QUOTE VERIFIED. AWAITING COMMISSIONING. Quote delivery is not live; quotes:send remains uncommissioned.</p>
           <p id="approval-block" hidden>QUOTE COULD NOT BE VERIFIED. Approval is unavailable until the authoritative quote can be loaded.</p>
           <div class="approval-actions">
             <button class="ghost" id="approval-retry" type="button" hidden>RETRY</button>
@@ -497,7 +498,7 @@
     </main>
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
     <div class="confirm" id="confirm-dialog" hidden>
-      <p id="confirm-copy">This marks the durable Jarvis task complete. It does not approve or send a quote, and it does not execute a governed tool action.</p>
+      <p id="confirm-copy">HUD COMPLETE TASK confirmation protects against accidental interactive activation only. It does not constitute an authorisation boundary. The existing complete_task MCP capability retains its current authority. This does not approve or send a quote.</p>
       <div class="approval-actions">
         <button class="ghost" id="confirm-cancel" type="button">CANCEL</button>
         <button class="ghost" id="confirm-ok" type="button">CONFIRM COMPLETE</button>
@@ -506,7 +507,7 @@
     <script>
       (() => {
         "use strict";
-        const state = { status: null, tasks: [], reminders: [], brief: null, quotes: [], quoteRegisterStatus: "unavailable", counts: { activeTasks: 0, completedTasks: 0, reminders: 0 }, captureMode: "task", activities: [], selectedQuoteSummary: null, selectedQuote: null, quoteDetailState: "empty", quoteRequestGeneration: 0, inbox: null, activity: null, presence: "connecting", approvals: null, reconciliations: null, business: null, selectedApproval: null, pendingCompleteTask: null };
+        const state = { status: null, tasks: [], reminders: [], brief: null, quotes: [], quoteRegisterStatus: "unavailable", counts: { activeTasks: 0, completedTasks: 0, reminders: 0 }, captureMode: "task", activities: [], selectedQuoteSummary: null, selectedQuote: null, quoteDetailState: "empty", quoteRequestGeneration: 0, inbox: null, activity: null, presence: "connecting", approvals: null, reconciliations: null, receipts: null, business: null, selectedApproval: null, pendingCompleteTask: null };
         let rpcId = 0;
         let toastTimer = null;
         const pending = new Map();
@@ -518,7 +519,7 @@
         function activity(title, detail) { state.activities.unshift({ title, detail, at: new Date() }); state.activities = state.activities.slice(0, 7); renderActivity(); }
         function structured(result) { return result && typeof result === "object" && result.structuredContent ? result.structuredContent : result; }
         function recalc() { state.counts = { activeTasks: state.tasks.filter((task) => !task.completed).length, completedTasks: state.tasks.filter((task) => task.completed).length, reminders: state.reminders.length }; }
-        function update(result) { const data = structured(result); if (!data || typeof data !== "object") return; if (data.status && typeof data.status === "object") state.status = data.status; if (Array.isArray(data.tasks)) state.tasks = data.tasks; if (Array.isArray(data.reminders)) state.reminders = data.reminders; if (data.brief && typeof data.brief === "object") state.brief = data.brief; if (data.quoteRegister && typeof data.quoteRegister === "object") { state.quoteRegisterStatus = data.quoteRegister.status === "ready" ? "ready" : "unavailable"; state.quotes = Array.isArray(data.quoteRegister.quotes) ? data.quoteRegister.quotes : []; } if ("inbox" in data) state.inbox = data.inbox; if ("activity" in data) state.activity = data.activity; if (data.presence) state.presence = data.presence; if (data.approvals && typeof data.approvals === "object") state.approvals = data.approvals; if (data.reconciliations && typeof data.reconciliations === "object") state.reconciliations = data.reconciliations; if (data.business && typeof data.business === "object") state.business = data.business; if (data.counts && typeof data.counts === "object") state.counts = data.counts; else recalc(); maybeFocusApproval(); render(); }
+        function update(result) { const data = structured(result); if (!data || typeof data !== "object") return; if (data.status && typeof data.status === "object") state.status = data.status; if (Array.isArray(data.tasks)) state.tasks = data.tasks; if (Array.isArray(data.reminders)) state.reminders = data.reminders; if (data.brief && typeof data.brief === "object") state.brief = data.brief; if (data.quoteRegister && typeof data.quoteRegister === "object") { state.quoteRegisterStatus = data.quoteRegister.status === "ready" ? "ready" : "unavailable"; state.quotes = Array.isArray(data.quoteRegister.quotes) ? data.quoteRegister.quotes : []; } if ("inbox" in data) state.inbox = data.inbox; if ("activity" in data) state.activity = data.activity; if (data.presence) state.presence = data.presence; if (data.approvals && typeof data.approvals === "object") state.approvals = data.approvals; if (data.reconciliations && typeof data.reconciliations === "object") state.reconciliations = data.reconciliations; if (data.receipts && typeof data.receipts === "object") state.receipts = data.receipts; if (data.business && typeof data.business === "object") state.business = data.business; if (data.counts && typeof data.counts === "object") state.counts = data.counts; else recalc(); maybeFocusApproval(); render(); }
         window.addEventListener("message", (event) => { if (event.source !== window.parent) return; const message = event.data; if (!message || message.jsonrpc !== "2.0") return; if (typeof message.id === "number") { const waiting = pending.get(message.id); if (!waiting) return; pending.delete(message.id); if (message.error) waiting.reject(message.error); else waiting.resolve(message.result); return; } if (message.method === "ui/notifications/tool-result") update(message.params); }, { passive: true });
         const bridgeReady = (async () => { await request("ui/initialize", { appInfo: { name: "jarvis-dashboard", version: "0.3.0" }, appCapabilities: {}, protocolVersion: "2026-01-26" }); notify("ui/notifications/initialized", {}); activity("HUD bridge online", "MCP Apps connection initialised"); })();
         async function callTool(name, args = {}) { await bridgeReady; const result = await request("tools/call", { name, arguments: args }); update(result); return result; }
@@ -531,7 +532,7 @@
         function requestCompleteConfirmation(task) {
           state.pendingCompleteTask = task;
           const dialog = byId("confirm-dialog");
-          text(byId("confirm-copy"), `Mark durable task complete?\n\n${task.title}\n\nThis marks the durable Jarvis task complete. It does not approve or send a quote, and it does not execute a governed tool action.`);
+          text(byId("confirm-copy"), `Mark durable task complete?\n\n${task.title}\n\nHUD COMPLETE TASK confirmation protects against accidental interactive activation only. It does not constitute an authorisation boundary. The existing complete_task MCP capability retains its current authority. This does not approve or send a quote.`);
           if (dialog) dialog.hidden = false;
         }
         async function confirmCompleteTask() {
@@ -583,10 +584,11 @@
           if (action.state === "rejected") return "rejected";
           if (action.state === "revoked") return "stale";
           if (expired) return "expired";
+          const quoteSend = /quotes?:send/i.test(action.operation || "");
           if (action.state === "proposed") {
             if (input.inspection && input.inspection.required) {
               if (input.inspection.state === "error" || input.inspection.state === "not-found") return "inspection_failed";
-              if (input.inspection.state === "ready") return "awaiting_approval";
+              if (input.inspection.state === "ready") return quoteSend && input.quoteDeliveryCommissioned !== true ? "awaiting_commissioning" : "awaiting_approval";
               return "awaiting_inspection";
             }
             return "awaiting_approval";
@@ -599,14 +601,16 @@
             if (recon.terminalStatus === "failed" || recon.state === "escalated") return "execution_failed";
             if (recon.state === "pending" || recon.state === "observing" || recon.state === "claimed") return "reconciliation_pending";
           }
-          if (input.receipt) {
-            if (input.receipt.status === "failed" || input.receipt.status === "blocked") return "execution_failed";
-            if (input.receipt.status === "indeterminate") return "outcome_unknown";
-            if (input.receipt.status === "succeeded") return "receipt_received";
-            if (input.receipt.status === "dry-run") return "approval_accepted";
+          const observed = [].concat(input.receipts || [], input.receipt ? [input.receipt] : []);
+          const live = observed.find((item) => (item.executionMode || (item.status === "dry-run" ? "dry-run" : "live")) === "live");
+          if (live) {
+            if (live.status === "blocked") return "execution_blocked";
+            if (live.status === "failed") return "execution_failed";
+            if (live.status === "indeterminate") return "outcome_unknown";
+            if (live.status === "succeeded") return "receipt_received";
             return "outcome_unknown";
           }
-          if (input.receiptAvailable === true) return "execution_pending";
+          if (input.receiptAvailable === true) return "awaiting_execution";
           return "outcome_unknown";
         }
         function approvalStageLabel(stage) {
@@ -614,32 +618,44 @@
             awaiting_inspection: "AWAITING INSPECTION",
             inspection_failed: "QUOTE COULD NOT BE VERIFIED",
             awaiting_approval: "AWAITING APPROVAL",
+            awaiting_commissioning: "AWAITING COMMISSIONING",
             approval_accepted: "APPROVAL ACCEPTED",
-            execution_pending: "EXECUTION PENDING",
+            awaiting_execution: "AWAITING EXECUTION",
             executing: "EXECUTING",
             receipt_received: "RECEIPT RECEIVED",
             reconciliation_pending: "RECONCILIATION PENDING",
             reconciled: "RECONCILED",
             execution_failed: "EXECUTION FAILED",
+            execution_blocked: "EXECUTION BLOCKED",
             outcome_unknown: "OUTCOME UNKNOWN",
             rejected: "REJECTED",
             expired: "EXPIRED",
             stale: "STALE PROPOSAL",
           })[stage] || String(stage).replaceAll("_", " ").toUpperCase();
         }
+        function quoteDeliveryCommissioned() {
+          const integrations = state.status && Array.isArray(state.status.integrations) ? state.status.integrations : [];
+          const row = integrations.find((item) => item.name === "quote-delivery");
+          return Boolean(row && (row.status === "ready" || row.status === "ok"));
+        }
         function lifecycleFor(action) {
           const reconItems = state.reconciliations && state.reconciliations.status === "ready" ? state.reconciliations.items : [];
           const recon = action && Array.isArray(reconItems) ? reconItems.find((item) => item.actionId === action.actionId) : null;
+          const receiptItems = state.receipts && state.receipts.status === "ready" ? state.receipts.items : [];
+          const receipts = action && Array.isArray(receiptItems) ? receiptItems.filter((item) => item.actionId === action.actionId) : [];
           return deriveHudApprovalStage({
             action,
             inspection: { required: approvalNeedsQuote(action), state: approvalNeedsQuote(action) ? state.quoteDetailState : "not-required" },
-            receiptAvailable: false,
+            receiptAvailable: Boolean(state.receipts && state.receipts.status === "ready"),
+            receipts,
             reconciliation: recon || null,
+            quoteDeliveryCommissioned: quoteDeliveryCommissioned(),
             now: Date.now(),
           });
         }
         function canSubmitApproval(action) {
-          return lifecycleFor(action) === "awaiting_approval";
+          const stage = lifecycleFor(action);
+          return stage === "awaiting_approval" || stage === "awaiting_commissioning";
         }
         function clientForQuote(quoteId) {
           const quotes = Array.isArray(state.quotes) ? state.quotes : [];
@@ -819,6 +835,8 @@
           const quote = state.selectedQuote;
           const ready = canSubmitApproval(selected);
           const stage = selected ? lifecycleFor(selected) : "awaiting_inspection";
+          const commissioning = byId("approval-commissioning");
+          if (commissioning) commissioning.hidden = stage !== "awaiting_commissioning";
           if (block) block.hidden = !unverified(selected);
           if (retry) retry.hidden = !unverified(selected);
           if (!selected) {

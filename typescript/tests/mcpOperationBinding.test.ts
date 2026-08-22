@@ -24,6 +24,13 @@ const DASHBOARD_READS = new Set([
   "GET /api/v1/quotes",
   "GET /api/v1/operations/inbox",
   "GET /api/v1/operations/activity",
+  "GET /api/v1/clients",
+  "GET /api/v1/properties",
+  "GET /api/v1/enquiries",
+  "GET /api/v1/invoices",
+  "GET /api/v1/reconciliations",
+  "GET /api/v1/projects/{projectId}/tool-actions",
+  "GET /api/v1/projects/{projectId}/tool-actions/{actionId}/receipts",
 ]);
 
 const STATUS: SystemStatus = {
@@ -255,6 +262,9 @@ function mockResponse(method: string, path: string): Response {
   if (/^\/api\/v1\/quotes\/[^/]+$/.test(path)) {
     return Response.json({ data: sampleQuoteSnapshot() });
   }
+  if (/^\/api\/v1\/projects\/[^/]+\/tool-actions\/[^/]+\/receipts$/.test(path)) {
+    return Response.json({ data: [], count: 0, liveReceipt: null });
+  }
   if (path === "/api/v1/brief") return Response.json({ data: sampleBrief() });
   if (path === "/api/v1/errands") {
     return method === "POST"
@@ -355,6 +365,7 @@ function classify(matchers: OpenApiOperation[], request: RecordedRequest): strin
 
 const TOOL_INVOCATIONS: Record<string, Record<string, unknown>> = {
   show_jarvis_dashboard: {},
+  list_tool_action_receipts: { projectId: "project-1", actionId: "action-1" },
   get_jarvis_status: {},
   list_tasks: {},
   get_task: { taskId: "task-1" },

@@ -20,6 +20,7 @@ import type { Project, ProjectInput, ProjectUpdate } from "../projects/project.j
 import type { QuoteSnapshot } from "../quotes/quoteLifecycle.js";
 import type { QuoteSummary } from "../quotes/quoteRepository.js";
 import type { ToolAction } from "../actions/toolActions.js";
+import type { ToolExecutionMode, ToolExecutionStatus } from "../actions/toolExecution.js";
 import type { SystemStatus } from "../http/contracts.js";
 import type { Reminder, Task } from "../persistence/persistence.js";
 import type { TaskUpdate } from "../persistence/updates.js";
@@ -34,6 +35,20 @@ export type ReminderRequestUpdate = {
 export type HudRegister<T> = {
   status: "ready" | "unavailable";
   items: T[];
+};
+
+export type HudReceiptInspection = {
+  receiptId: string;
+  actionId: string;
+  projectId: string;
+  idempotencyKey: string;
+  executionMode: ToolExecutionMode;
+  tool: string;
+  operation: string;
+  status: ToolExecutionStatus;
+  errorCode?: string;
+  startedAt: string;
+  completedAt: string;
 };
 
 export type DashboardSnapshot = {
@@ -60,6 +75,7 @@ export type DashboardSnapshot = {
     terminalStatus?: "succeeded" | "failed";
     receiptId?: string;
   }>;
+  receipts: HudRegister<HudReceiptInspection>;
   business: {
     clients: HudRegister<Client>;
     properties: HudRegister<Property>;
@@ -645,6 +661,27 @@ export class JarvisApiClient {
     );
   }
 
+  /** Read-only: lists live and dry-run execution receipts. Cannot execute. */
+  async listToolActionReceipts(
+    projectId: string,
+    actionId: string,
+  ): Promise<{
+    receipts: HudReceiptInspection[];
+    liveReceipt: HudReceiptInspection | null;
+  }> {
+    const payload = await this.request<{
+      data: HudReceiptInspection[];
+      liveReceipt: HudReceiptInspection | null;
+    }>(
+      "GET",
+      `/api/v1/projects/${encodeURIComponent(projectId)}/tool-actions/${encodeURIComponent(actionId)}/receipts`,
+    );
+    return {
+      receipts: Array.isArray(payload.data) ? payload.data : [],
+      liveReceipt: payload.liveReceipt ?? null,
+    };
+  }
+
   async getDailyBrief(): Promise<DailyBrief> {
     return (await this.request<DataResponse<DailyBrief>>("GET", "/api/v1/brief")).data;
   }
@@ -740,6 +777,7 @@ export class JarvisApiClient {
         items: [] as DashboardSnapshot["reconciliations"]["items"],
       }),
     );
+    const receipts = await this.loadReceipts(approvals.items);
     return {
       status,
       tasks,
@@ -750,6 +788,7 @@ export class JarvisApiClient {
       activity: resolvedActivity,
       approvals,
       reconciliations,
+      receipts,
       business: {
         clients: resolvedClients,
         properties: resolvedProperties,
@@ -784,6 +823,21 @@ export class JarvisApiClient {
       status: "ready",
       items: pages.flatMap((page) => page.items),
     };
+  }
+
+  private async loadReceipts(actions: ToolAction[]): Promise<HudRegister<HudReceiptInspection>> {
+    const targets = actions.slice(0, 8);
+    if (targets.length === 0) return { status: "ready", items: [] };
+    const pages = await Promise.all(
+      targets.map((action) =>
+        this.listToolActionReceipts(action.projectId, action.actionId).then(
+          (result) => ({ ok: true as const, items: result.receipts }),
+          () => ({ ok: false as const, items: [] as HudReceiptInspection[] }),
+        ),
+      ),
+    );
+    if (pages.every((page) => !page.ok)) return { status: "unavailable", items: [] };
+    return { status: "ready", items: pages.flatMap((page) => page.items) };
   }
 
   /** Read-only: owner-scoped external reconciliation records. Cannot execute or resolve. */

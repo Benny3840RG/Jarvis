@@ -42,6 +42,19 @@ export const get = query({
   },
 });
 
+export const listByActionId = query({
+  args: { serviceToken: v.string(), actionId: v.string() },
+  returns: v.array(toolExecutionReceiptDocumentValidator),
+  handler: async (ctx, args) => {
+    const ownerId = requireOwner(args.serviceToken);
+    const actionId = cleanRequiredText(args.actionId, "Tool action ID");
+    return ctx.db
+      .query("toolExecutionReceipts")
+      .withIndex("by_owner_and_action_id", (q) => q.eq("ownerId", ownerId).eq("actionId", actionId))
+      .collect();
+  },
+});
+
 export const reconcileOmegaReceipt = internalMutation({
   args: {
     ownerId: v.string(),

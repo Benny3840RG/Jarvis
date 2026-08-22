@@ -43,6 +43,8 @@ missions, evidence or completion.
 - `GET /api/v1/invoices`
 - `GET /api/v1/projects/{projectId}/tool-actions`
 - `GET /api/v1/reconciliations` (fail-soft; unavailable outside Convex)
+- `GET /api/v1/projects/{projectId}/tool-actions/{actionId}/receipts`
+  (inspect-only; dry-run is not live execution)
 
 Mutating HUD operations remain the existing MCP tools: `create_task`,
 `complete_task` (confirmation required; not quote approval), `create_reminder`,

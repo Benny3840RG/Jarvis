@@ -172,6 +172,7 @@ describe("dashboard snapshot", () => {
     assert.equal(snapshot.presence, "idle");
     assert.deepEqual(snapshot.approvals, { status: "ready", items: [] });
     assert.deepEqual(snapshot.reconciliations, { status: "ready", items: [] });
+    assert.deepEqual(snapshot.receipts, { status: "ready", items: [] });
     assert.equal(snapshot.business.enquiries.status, "ready");
     assert.equal(snapshot.business.invoices.status, "ready");
   });
@@ -209,5 +210,6 @@ describe("dashboard snapshot", () => {
     assert.equal(snapshot.inbox, null);
     assert.equal(snapshot.activity, null);
     assert.deepEqual(snapshot.reconciliations, { status: "unavailable", items: [] });
+    assert.deepEqual(snapshot.receipts, { status: "ready", items: [] });
   });
 });

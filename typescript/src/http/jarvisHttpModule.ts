@@ -3,7 +3,10 @@ import { Module } from "@nestjs/common";
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from "@nestjs/core";
 
 import type { ToolActionService } from "../actions/toolActions.js";
-import type { ToolExecutionService } from "../actions/toolExecution.js";
+import type {
+  ToolExecutionReceiptReadStore,
+  ToolExecutionService,
+} from "../actions/toolExecution.js";
 import type { BusinessSettingsStore } from "../businessSettings/businessSettings.js";
 import type { EnquiryStore } from "../enquiries/enquiry.js";
 import type { InvoiceStore } from "../invoices/invoice.js";
@@ -84,6 +87,7 @@ import {
   HTTP_EXTERNAL_RECONCILIATION_READ_STORE,
   HTTP_TOOL_ACTIONS,
   HTTP_TOOL_EXECUTION,
+  HTTP_TOOL_EXECUTION_RECEIPTS,
   HTTP_TOTALITY_PIPELINE,
 } from "./tokens.js";
 
@@ -98,6 +102,7 @@ export type JarvisHttpModuleOptions = {
   memoryChangeSetService: MemoryChangeSetService | null;
   toolActionService: ToolActionService | null;
   toolExecutionService: ToolExecutionService | null;
+  toolExecutionReceiptStore: ToolExecutionReceiptReadStore | null;
   businessSettingsStore: BusinessSettingsStore;
   enquiryStore: EnquiryStore;
   invoiceStore: InvoiceStore;
@@ -188,6 +193,10 @@ export class JarvisHttpModule {
         {
           provide: HTTP_TOOL_EXECUTION,
           useValue: options.toolExecutionService,
+        },
+        {
+          provide: HTTP_TOOL_EXECUTION_RECEIPTS,
+          useValue: options.toolExecutionReceiptStore,
         },
         { provide: HTTP_BUSINESS_SETTINGS_STORE, useValue: options.businessSettingsStore },
         { provide: HTTP_ENQUIRY_STORE, useValue: options.enquiryStore },

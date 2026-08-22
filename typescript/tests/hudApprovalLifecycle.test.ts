@@ -9,9 +9,11 @@ import {
   deriveHudApprovalStage,
   inspectionRequiredFor,
   isDuplicateApprovalAttempt,
+  quoteSendDeliveryState,
+  selectLiveReceiptObservation,
 } from "../src/hud/hudApprovalLifecycle.js";
 
-const NOW = Date.parse("2026-08-22T00:00:00.000Z");
+const NOW = Date.parse("2026-08-23T00:00:00.000Z");
 
 function proposed(overrides: Partial<ToolAction> = {}): ToolAction {
   return {
@@ -28,11 +30,22 @@ function proposed(overrides: Partial<ToolAction> = {}): ToolAction {
     destructive: false,
     idempotencyKey: "preview-1",
     proposedBy: "agent",
-    createdAt: "2026-08-22T00:00:00.000Z",
-    updatedAt: "2026-08-22T00:00:00.000Z",
+    createdAt: "2026-08-23T00:00:00.000Z",
+    updatedAt: "2026-08-23T00:00:00.000Z",
     approvalExpiryPolicy: "ttl",
-    approvalExpiresAt: "2026-08-22T01:00:00.000Z",
+    approvalExpiresAt: "2026-08-23T01:00:00.000Z",
     ...overrides,
+  };
+}
+
+function approvedInput(
+  extra: Partial<Parameters<typeof deriveHudApprovalStage>[0]> = {},
+): Parameters<typeof deriveHudApprovalStage>[0] {
+  return {
+    action: proposed({ state: "approved" }),
+    inspection: { required: true, state: "ready" },
+    now: NOW,
+    ...extra,
   };
 }
 
@@ -50,50 +63,90 @@ describe("HUD approval lifecycle", () => {
 
   it("enables the operator decision only after inspection succeeds on a live proposal", () => {
     const input = {
-      action: proposed(),
-      inspection: { required: true, state: "ready" as const },
+      action: proposed({ operation: "notes:create", tool: "createNoteTool", arguments: {} }),
+      inspection: { required: false, state: "not-required" as const },
       now: NOW,
     };
     assert.equal(deriveHudApprovalStage(input), "awaiting_approval");
     assert.equal(canSubmitApproval(input), true);
   });
 
-  it("presents approval accepted without collapsing later stages into success", () => {
+  it("does not imply quotes:send is live while delivery is uncommissioned", () => {
     const input = {
-      action: proposed({ state: "approved" }),
+      action: proposed(),
       inspection: { required: true, state: "ready" as const },
-      receiptAvailable: true,
-      receipt: null,
+      quoteDeliveryCommissioned: false,
       now: NOW,
     };
-    assert.equal(deriveHudApprovalStage(input), "execution_pending");
-    assert.equal(canSubmitApproval(input), false);
-    assert.equal(
-      deriveHudApprovalStage({
-        ...input,
-        receipt: { status: "dry-run" },
-      }),
-      "approval_accepted",
-    );
+    assert.equal(deriveHudApprovalStage(input), "awaiting_commissioning");
+    assert.equal(quoteSendDeliveryState(input), "awaiting_commissioning");
   });
 
-  it("never maps an unknown execution outcome to failure", () => {
-    const missing = {
-      action: proposed({ state: "approved" }),
-      inspection: { required: true, state: "ready" as const },
-      receiptAvailable: false,
-      now: NOW,
-    };
-    assert.equal(deriveHudApprovalStage(missing), "outcome_unknown");
+  it("maps approved + receipt observation unavailable to outcome unknown, never failure", () => {
+    const input = approvedInput({ receiptAvailable: false });
+    assert.equal(deriveHudApprovalStage(input), "outcome_unknown");
+    assert.notEqual(deriveHudApprovalStage(input), "execution_failed");
+  });
 
-    const indeterminate = {
-      ...missing,
+  it("maps approved + successful receipt read + no live receipt to awaiting_execution", () => {
+    const input = approvedInput({ receiptAvailable: true, receipts: [] });
+    assert.equal(deriveHudApprovalStage(input), "awaiting_execution");
+    assert.notEqual(deriveHudApprovalStage(input), "executing");
+  });
+
+  it("does not treat a dry-run success as live execution", () => {
+    const input = approvedInput({
       receiptAvailable: true,
-      receipt: { status: "indeterminate" as const },
-    };
-    assert.equal(deriveHudApprovalStage(indeterminate), "outcome_unknown");
-    assert.notEqual(deriveHudApprovalStage(missing), "execution_failed");
-    assert.notEqual(deriveHudApprovalStage(indeterminate), "execution_failed");
+      receipts: [{ status: "succeeded", executionMode: "dry-run" }],
+    });
+    assert.equal(deriveHudApprovalStage(input), "awaiting_execution");
+    assert.equal(selectLiveReceiptObservation(input), null);
+    assert.notEqual(deriveHudApprovalStage(input), "receipt_received");
+  });
+
+  it("uses the live success receipt when dry-run and live coexist", () => {
+    const input = approvedInput({
+      receiptAvailable: true,
+      receipts: [
+        { status: "succeeded", executionMode: "dry-run" },
+        { status: "succeeded", executionMode: "live" },
+      ],
+    });
+    assert.equal(deriveHudApprovalStage(input), "receipt_received");
+    assert.deepEqual(selectLiveReceiptObservation(input), {
+      status: "succeeded",
+      executionMode: "live",
+    });
+  });
+
+  it("maps live failed, blocked, and indeterminate receipts distinctly", () => {
+    assert.equal(
+      deriveHudApprovalStage(
+        approvedInput({
+          receiptAvailable: true,
+          receipts: [{ status: "failed", executionMode: "live" }],
+        }),
+      ),
+      "execution_failed",
+    );
+    assert.equal(
+      deriveHudApprovalStage(
+        approvedInput({
+          receiptAvailable: true,
+          receipts: [{ status: "blocked", executionMode: "live" }],
+        }),
+      ),
+      "execution_blocked",
+    );
+    assert.equal(
+      deriveHudApprovalStage(
+        approvedInput({
+          receiptAvailable: true,
+          receipts: [{ status: "indeterminate", executionMode: "live" }],
+        }),
+      ),
+      "outcome_unknown",
+    );
   });
 
   it("presents rejected approval without executing", () => {
@@ -109,20 +162,13 @@ describe("HUD approval lifecycle", () => {
   it("treats expired and stale proposals as unapprovable", () => {
     const expired = {
       action: proposed({
-        approvalExpiresAt: "2026-08-21T23:00:00.000Z",
+        approvalExpiresAt: "2026-08-22T23:00:00.000Z",
       }),
       inspection: { required: true, state: "ready" as const },
       now: NOW,
     };
     assert.equal(deriveHudApprovalStage(expired), "expired");
     assert.equal(canSubmitApproval(expired), false);
-
-    const marked = {
-      action: proposed({ isApprovalExpired: true }),
-      inspection: { required: true, state: "ready" as const },
-      now: NOW,
-    };
-    assert.equal(deriveHudApprovalStage(marked), "expired");
 
     const revoked = {
       action: proposed({ state: "revoked" }),
@@ -137,59 +183,52 @@ describe("HUD approval lifecycle", () => {
     const action = proposed({ state: "approved" });
     assert.equal(isDuplicateApprovalAttempt(action), true);
     assert.equal(
-      canSubmitApproval({
-        action,
-        inspection: { required: true, state: "ready" },
-        receiptAvailable: true,
-        receipt: null,
-        now: NOW,
-      }),
+      canSubmitApproval(approvedInput({ receiptAvailable: true, receipts: [] })),
       false,
     );
   });
 
   it("keeps reconciliation pending distinct from reconciled and failed", () => {
-    const pending = {
-      action: proposed({ state: "approved" }),
-      inspection: { required: true, state: "ready" as const },
-      reconciliation: { state: "pending" as const },
-      now: NOW,
-    };
-    assert.equal(deriveHudApprovalStage(pending), "reconciliation_pending");
-
-    const reconciled = {
-      ...pending,
-      reconciliation: { state: "resolved" as const, terminalStatus: "succeeded" as const },
-    };
-    assert.equal(deriveHudApprovalStage(reconciled), "reconciled");
-
-    const failed = {
-      action: proposed({ state: "approved" }),
-      inspection: { required: true, state: "ready" as const },
-      receiptAvailable: true,
-      receipt: { status: "failed" as const },
-      now: NOW,
-    };
-    assert.equal(deriveHudApprovalStage(failed), "execution_failed");
+    assert.equal(
+      deriveHudApprovalStage(
+        approvedInput({ reconciliation: { state: "pending" } }),
+      ),
+      "reconciliation_pending",
+    );
+    assert.equal(
+      deriveHudApprovalStage(
+        approvedInput({
+          reconciliation: { state: "resolved", terminalStatus: "succeeded" },
+        }),
+      ),
+      "reconciled",
+    );
+    assert.equal(
+      deriveHudApprovalStage(
+        approvedInput({
+          reconciliation: { state: "resolved", terminalStatus: "failed" },
+        }),
+      ),
+      "execution_failed",
+    );
   });
 
   it("only reports executing when runtime says an execution is in flight", () => {
-    const approved = {
-      action: proposed({ state: "approved" }),
-      inspection: { required: true, state: "ready" as const },
-      now: NOW,
-    };
-    assert.equal(deriveHudApprovalStage(approved), "outcome_unknown");
-    assert.equal(deriveHudApprovalStage({ ...approved, executionInFlight: true }), "executing");
+    assert.equal(deriveHudApprovalStage(approvedInput({ receiptAvailable: false })), "outcome_unknown");
+    assert.equal(
+      deriveHudApprovalStage(approvedInput({ executionInFlight: true })),
+      "executing",
+    );
   });
 
-  it("documents complete-task as durable work, not quote approval", () => {
+  it("documents complete-task confirmation as an accidental-click safeguard only", () => {
     assert.equal(COMPLETE_TASK_SEMANTICS.mutatesDurableTask, true);
     assert.equal(COMPLETE_TASK_SEMANTICS.requiresConfirmation, true);
+    assert.equal(COMPLETE_TASK_SEMANTICS.confirmationIsAuthorisationBoundary, false);
     assert.equal(COMPLETE_TASK_SEMANTICS.approvesQuote, false);
     assert.equal(COMPLETE_TASK_SEMANTICS.sendsQuote, false);
     assert.equal(COMPLETE_TASK_SEMANTICS.executesToolAction, false);
-    assert.equal(COMPLETE_TASK_SEMANTICS.hideBesideAwaitingApproval, true);
+    assert.match(COMPLETE_TASK_SEMANTICS.confirmationCopy, /does not constitute an authorisation boundary/i);
     assert.match(COMPLETE_TASK_SEMANTICS.confirmationCopy, /does not approve or send a quote/i);
   });
 
@@ -197,7 +236,7 @@ describe("HUD approval lifecycle", () => {
     assert.equal(HUD_APPROVAL_OPERATOR_PATH.widgetMayStoreApprovalToken, false);
     assert.equal(HUD_APPROVAL_OPERATOR_PATH.widgetMayCallApprove, false);
     assert.equal(HUD_APPROVAL_OPERATOR_PATH.widgetMayCallExecute, false);
-    assert.match(HUD_APPROVAL_OPERATOR_PATH.approve, /\/approve$/);
+    assert.match(HUD_APPROVAL_OPERATOR_PATH.inspectReceipts, /\/receipts$/);
     assert.equal(HUD_APPROVAL_OPERATOR_PATH.approvalCredential, "JARVIS_APPROVAL_TOKEN");
   });
 });

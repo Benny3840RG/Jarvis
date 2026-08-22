@@ -108,6 +108,16 @@ export class ConvexToolExecutionReceiptStore implements ToolExecutionReceiptStor
     return row === null ? null : receiptFromConvex(row as ToolExecutionReceiptRow);
   }
 
+  async listByActionId(actionId: string): Promise<ToolExecutionReceipt[]> {
+    const rows = await this.client.query(toolExecutionReceiptFunctions.listByActionId, {
+      serviceToken: this.serviceToken,
+      actionId,
+    });
+    return (Array.isArray(rows) ? rows : []).map((row) =>
+      receiptFromConvex(row as ToolExecutionReceiptRow),
+    );
+  }
+
   async save(key: string, receipt: ToolExecutionReceipt): Promise<void> {
     await this.client.mutation(toolExecutionReceiptFunctions.save, {
       serviceToken: this.serviceToken,
