@@ -91,6 +91,48 @@ design is added. This slice does not yet implement invoice generation,
 automatic quote numbering consumption, client-ready payment documents or any
 payment reconciliation provider.
 
+## Durable enquiry intake and project conversion
+
+The business HTTP surface now includes durable enquiry intake for new Beez
+Treez work requests. Enquiry records store the customer, optional property,
+source, requested work, urgency, preferred date text, attachment references,
+site notes, safety/access notes, duplicate key, status and conversion/closure
+metadata.
+
+Duplicate enquiry submission is guarded by an explicit `duplicateKey`: replaying
+the same key returns the existing enquiry instead of creating another intake
+record. Open enquiries can be converted into the existing durable project/job
+authority as `lead` projects without creating a second work-order system. A
+converted enquiry records the created `projectId`; replaying conversion returns
+the same project instead of duplicating the job lead.
+
+The `/api/v1/enquiries` routes are authenticated, OpenAPI documented and marked
+`x-mcp-tool.exposed=false`; they are HTTP-only until a governed action design is
+added. The JSON-backed enquiry-to-project conversion is idempotent but not a
+cross-store transactional Convex mutation yet, so Convex-backed foreign-key and
+transactional migration evidence remains open.
+
+## Durable invoice and payment-ledger foundation
+
+The business HTTP surface now includes a durable invoice foundation. Invoice
+records store customer, optional project and quote references, invoice number,
+line items, GST/tax rate, server-derived subtotal/GST/total, due date, notes,
+duplicate key, payment records, amount paid, balance due and payment status.
+
+Duplicate invoice creation is guarded by an explicit `duplicateKey`: replaying
+the same key returns the existing invoice instead of creating another invoice
+for the same source work. Draft invoices can be updated, issued invoices cannot
+be silently changed, and payments can only be recorded after issue. Partial
+payments, exact payments and overpayments are derived from stored payment
+events, not caller-supplied totals.
+
+The `/api/v1/invoices` routes are authenticated, OpenAPI documented and marked
+`x-mcp-tool.exposed=false`; they are HTTP-only until a governed action design is
+added. This slice does not yet implement client-ready invoice PDF generation,
+automatic invoice-number consumption from business settings, authoritative bank
+or payment-provider reconciliation, credits/adjustments, Convex transactional
+foreign keys or issued-invoice immutable artifact storage.
+
 ## Verification
 
 Focused verification:
@@ -102,6 +144,8 @@ Focused verification:
 - `node --import tsx --test tests/propertyStore.test.ts tests/propertyHttp.test.ts tests/httpRouteContract.test.ts tests/httpOpenApiRouteAlignment.test.ts`
 - `node --import tsx --test tests/projectStore.test.ts tests/projectHttp.test.ts tests/httpRouteContract.test.ts tests/httpOpenApiRouteAlignment.test.ts`
 - `node --import tsx --test tests/businessSettingsStore.test.ts tests/businessSettingsHttp.test.ts tests/httpRouteContract.test.ts tests/httpOpenApiRouteAlignment.test.ts`
+- `node --import tsx --test tests/enquiryStore.test.ts tests/enquiryHttp.test.ts tests/httpRouteContract.test.ts tests/httpOpenApiRouteAlignment.test.ts`
+- `node --import tsx --test tests/invoiceStore.test.ts tests/invoiceHttp.test.ts tests/httpRouteContract.test.ts tests/httpOpenApiRouteAlignment.test.ts`
 - `npm run openapi:lint`
 
 Full local repository gate:
@@ -112,7 +156,7 @@ Full local repository gate:
 - ESLint passed.
 - Prettier format check passed.
 - OpenAPI lint passed.
-- Node tests passed: 959 tests, 200 suites, 0 failures.
+- Node tests passed: 1004 tests, 214 suites, 0 failures.
 - Convex tests passed.
 
 The full gate required execution outside the restricted sandbox because several
