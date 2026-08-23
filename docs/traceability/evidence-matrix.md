@@ -169,3 +169,32 @@ The route remains HTTP-only (`x-mcp-tool.exposed=false`) until a governed action
 binding exists. JSON-backed enquiry-to-project conversion is idempotent but not
 yet a single Convex transaction, so Convex foreign-key and transaction evidence
 remain open.
+
+## Durable invoice and payment-ledger foundation — 2026-08-21
+
+The HTTP business surface now includes a durable invoice/payment-ledger
+foundation: `src/invoices/invoice.ts`, `src/invoices/invoiceData.ts`,
+`src/invoices/jsonInvoiceStore.ts`, `src/invoices/inMemoryInvoiceStore.ts`,
+`src/http/invoiceRequest.ts` and `src/http/invoiceController.ts`. The route is
+wired through `src/http/app.ts`, `src/http/jarvisHttpModule.ts` and documented
+in `openapi/jarvis.openapi.json`.
+
+Verification:
+
+- `node --import tsx --test tests/invoiceStore.test.ts tests/invoiceHttp.test.ts tests/httpRouteContract.test.ts tests/httpOpenApiRouteAlignment.test.ts`
+- `npm run type-check`
+- `npm run lint`
+- `npm run format:check`
+- `npm run openapi:lint`
+
+The slice records customer/project/quote-linked invoices, line items, tax rate,
+server-derived subtotal/GST/total, duplicate keys, issue/void state, payment
+events, amount paid, balance due and payment status. Duplicate invoice creation
+replays the existing invoice. Draft invoices can be edited; issued invoices
+cannot be silently changed; payments before issue are rejected; partial,
+complete and overpaid states are derived from stored payment records.
+
+The route remains HTTP-only (`x-mcp-tool.exposed=false`) until a governed action
+binding exists. This is not yet a client-ready invoice document generator,
+automatic invoice-number consumer, bank/payment-provider reconciliation, credit
+or adjustment ledger, Convex transaction, or issued-artifact immutability proof.

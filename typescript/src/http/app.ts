@@ -16,6 +16,9 @@ import { JsonBusinessSettingsStore } from "../businessSettings/jsonBusinessSetti
 import type { EnquiryStore } from "../enquiries/enquiry.js";
 import { InMemoryEnquiryStore } from "../enquiries/inMemoryEnquiryStore.js";
 import { JsonEnquiryStore } from "../enquiries/jsonEnquiryStore.js";
+import type { InvoiceStore } from "../invoices/invoice.js";
+import { InMemoryInvoiceStore } from "../invoices/inMemoryInvoiceStore.js";
+import { JsonInvoiceStore } from "../invoices/jsonInvoiceStore.js";
 import type { ClientStore } from "../clients/client.js";
 import { InMemoryClientStore } from "../clients/inMemoryClientStore.js";
 import { JsonClientStore } from "../clients/jsonClientStore.js";
@@ -110,6 +113,7 @@ export type CreateJarvisHttpAppOptions = (
   toolExecutionService?: ToolExecutionService | null;
   businessSettingsStore?: BusinessSettingsStore;
   enquiryStore?: EnquiryStore;
+  invoiceStore?: InvoiceStore;
   clientStore?: ClientStore;
   propertyStore?: PropertyStore;
   projectStore?: ProjectStore;
@@ -210,6 +214,8 @@ export async function createJarvisHttpApp(
     (usesEnvironment ? new JsonBusinessSettingsStore() : new InMemoryBusinessSettingsStore());
   const enquiryStore =
     options.enquiryStore ?? (usesEnvironment ? new JsonEnquiryStore() : new InMemoryEnquiryStore());
+  const invoiceStore =
+    options.invoiceStore ?? (usesEnvironment ? new JsonInvoiceStore() : new InMemoryInvoiceStore());
   const clientStore =
     options.clientStore ?? (usesEnvironment ? new JsonClientStore() : new InMemoryClientStore());
   const propertyStore =
@@ -352,6 +358,7 @@ export async function createJarvisHttpApp(
       toolExecutionService,
       businessSettingsStore,
       enquiryStore,
+      invoiceStore,
       clientStore,
       propertyStore,
       projectStore,
