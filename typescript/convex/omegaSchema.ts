@@ -85,4 +85,23 @@ export const omegaTables = {
   })
     .index("by_owner_and_mission_id", ["ownerId", "missionId"])
     .index("by_owner_mission_and_proof_id", ["ownerId", "missionId", "proofId"]),
+  omegaContradictionResolutions: defineTable({
+    ownerId: v.string(),
+    missionId: v.string(),
+    resolutionId: v.string(),
+    contradictionEvidenceId: v.string(),
+    contradictedEvidenceId: v.string(),
+    reason: v.string(),
+    resolvedBy: v.string(),
+    authority: v.literal("approval-token"),
+    resolvedAt: v.number(),
+  })
+    .index("by_owner_and_mission_id", ["ownerId", "missionId"])
+    .index("by_owner_mission_and_resolution_id", ["ownerId", "missionId", "resolutionId"])
+    .index("by_owner_mission_and_contradiction_edge", [
+      "ownerId",
+      "missionId",
+      "contradictionEvidenceId",
+      "contradictedEvidenceId",
+    ]),
 };

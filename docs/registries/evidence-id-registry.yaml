@@ -33,3 +33,7 @@ evidence:
   - id: EVD-AM-013-001
     path: docs/evidence/quote-lifecycle-commissioning.md
     description: Infrastructure commissioning evidence only (development commissioning run 30196857042); does not activate AM-013. Records runtime CI, development sync, and provider-neutral delivery/reconciliation smoke evidence — AM-013 stays lifecycle_status planned pending a separate provider-activation tranche.
+
+  - id: EVD-OS-CI-001
+    path: docs/traceability/omega-completion-integrity-tdd.md
+    description: "PR #383 / issue #378 RED-to-GREEN completion-integrity evidence covering OS-CI-001 through OS-CI-012, exact implementation-head CI runs, compatibility projection demotion, current proof/evidence authority, append-only contradiction resolution, bounded reads and repository-only scope."

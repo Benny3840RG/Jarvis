@@ -181,3 +181,17 @@ export const omegaValidationProofDocumentValidator = v.object({
   performedBy: v.string(),
   performedAt: v.number(),
 });
+
+export const omegaContradictionResolutionDocumentValidator = v.object({
+  _id: v.id("omegaContradictionResolutions"),
+  _creationTime: v.number(),
+  ownerId: v.string(),
+  missionId: v.string(),
+  resolutionId: v.string(),
+  contradictionEvidenceId: v.string(),
+  contradictedEvidenceId: v.string(),
+  reason: v.string(),
+  resolvedBy: v.string(),
+  authority: v.literal("approval-token"),
+  resolvedAt: v.number(),
+});

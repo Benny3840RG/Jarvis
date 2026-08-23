@@ -73,6 +73,6 @@ describe("Omega acceptance-criterion waiver safety", () => {
         nextState: "complete",
         residualUncertainty: 0,
       }),
-    ).rejects.toThrow(/acceptance-criteria-incomplete/i);
+    ).rejects.toThrow(/criterion-missing-passing-proof:AC-1/i);
   });
 });

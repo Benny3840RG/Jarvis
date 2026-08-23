@@ -97,3 +97,40 @@ tests:
   - id: TEST-AM-013-SMOKE-001
     path: typescript/tests/quoteLifecycleSmoke.test.ts
     verifies: delivery pending→executing→indeterminate→reconciled lifecycle and commercial-status preservation against in-memory adapters (planned evidence path; not yet commissioned)
+
+  - id: TEST-OS-CI-001-001
+    path: typescript/convex/omegaCompletionTruthSecurity.test.ts
+    verifies: compatibility criterion projections cannot authorise completion without a current passing proof
+  - id: TEST-OS-CI-002-001
+    path: typescript/convex/omegaCompletionTruthSecurity.test.ts
+    verifies: every proof reference must resolve to current same-mission evidence before completion
+  - id: TEST-OS-CI-003-001
+    path: typescript/convex/omegaValidationSecurity.test.ts
+    verifies: R3/R4 independent validation requires the dedicated approval credential
+  - id: TEST-OS-CI-004-001
+    path: typescript/tests/omegaPolicy.test.ts
+    verifies: failed, waived and inconclusive proof outcomes remain fail-closed
+  - id: TEST-OS-CI-005-001
+    path: typescript/convex/omegaCompletionTruthSecurity.test.ts
+    verifies: current certain contradiction edges and dangling legacy edges block completion
+  - id: TEST-OS-CI-006-001
+    path: typescript/convex/omegaContradictionResolutions.test.ts
+    verifies: contradiction resolution is immutable, append-only and bound to one exact edge
+  - id: TEST-OS-CI-007-001
+    path: typescript/convex/omegaContradictionResolutions.test.ts
+    verifies: resolution requires separate approval authority and a non-empty reviewer identity
+  - id: TEST-OS-CI-008-001
+    path: typescript/convex/omegaContradictionResolutions.test.ts
+    verifies: resolution replay is idempotent, changed contents conflict, duplicate edges reject and races have one durable winner
+  - id: TEST-OS-CI-009-001
+    path: typescript/convex/omegaCompletionTruthSecurity.test.ts
+    verifies: legacy mission projections remain readable while completion ignores stale or fabricated values
+  - id: TEST-OS-CI-010-001
+    path: typescript/tests/omegaPolicy.test.ts
+    verifies: unreconciled external effects deny completion through the existing policy boundary
+  - id: TEST-OS-CI-011-001
+    path: typescript/convex/omegaMissions.ts
+    verifies: completion reads are owner/mission indexed and bounded for proofs, evidence, contracts and resolutions
+  - id: TEST-OS-CI-012-001
+    path: docs/traceability/omega-completion-integrity-tdd.md
+    verifies: the increment is repository-only and records no deployment, commissioning or production-authorisation change

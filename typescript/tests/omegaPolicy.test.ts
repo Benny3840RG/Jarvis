@@ -7,6 +7,15 @@ import {
   riskRequiresIndependentValidation,
 } from "../src/omega/policy.js";
 
+function passingProof(criterionId = "AC-1", independent = false) {
+  return {
+    criterionId,
+    result: "pass" as const,
+    independent,
+    evidenceRefs: ["EV-1"],
+  };
+}
+
 test("forbids blocked -> complete shortcut", () => {
   assert.equal(canTransitionOmegaMission("blocked", "complete"), false);
 });
@@ -15,9 +24,9 @@ test("forbids blocked -> active through the generic transition policy", () => {
   assert.equal(canTransitionOmegaMission("blocked", "active"), false);
 });
 
-test("requires evidence for satisfied criteria", () => {
+test("requires at least one acceptance criterion", () => {
   const decision = evaluateOmegaCompletion({
-    criteria: [{ criterionId: "AC-1", status: "satisfied", evidenceRefs: [] }],
+    criteria: [],
     proofs: [],
     riskClass: "R1",
     unresolvedCriticalContradictions: 0,
@@ -26,12 +35,12 @@ test("requires evidence for satisfied criteria", () => {
     uncertaintyBudget: 0.2,
   });
   assert.equal(decision.allowed, false);
-  assert.ok(decision.failures.includes("satisfied-criterion-missing-evidence"));
+  assert.ok(decision.failures.includes("no-acceptance-criteria"));
 });
 
-test("requires a passing proof for every satisfied criterion", () => {
+test("requires a passing proof for every criterion", () => {
   const decision = evaluateOmegaCompletion({
-    criteria: [{ criterionId: "AC-1", status: "satisfied", evidenceRefs: ["EV-1"] }],
+    criteria: [{ criterionId: "AC-1" }],
     proofs: [],
     riskClass: "R1",
     unresolvedCriticalContradictions: 0,
@@ -45,15 +54,8 @@ test("requires a passing proof for every satisfied criterion", () => {
 
 test("rejects proofs for unknown criteria", () => {
   const decision = evaluateOmegaCompletion({
-    criteria: [{ criterionId: "AC-1", status: "waived", evidenceRefs: [] }],
-    proofs: [
-      {
-        criterionId: "AC-404",
-        result: "pass",
-        independent: true,
-        evidenceRefs: ["EV-1"],
-      },
-    ],
+    criteria: [{ criterionId: "AC-1" }],
+    proofs: [passingProof("AC-404", true)],
     riskClass: "R1",
     unresolvedCriticalContradictions: 0,
     unreconciledExternalEffects: 0,
@@ -64,15 +66,15 @@ test("rejects proofs for unknown criteria", () => {
   assert.ok(decision.failures.includes("validation-proof-unknown-criterion"));
 });
 
-test("requires proof evidence to overlap criterion evidence", () => {
+test("rejects passing proofs without evidence", () => {
   const decision = evaluateOmegaCompletion({
-    criteria: [{ criterionId: "AC-1", status: "satisfied", evidenceRefs: ["EV-1"] }],
+    criteria: [{ criterionId: "AC-1" }],
     proofs: [
       {
         criterionId: "AC-1",
         result: "pass",
         independent: false,
-        evidenceRefs: ["EV-2"],
+        evidenceRefs: [],
       },
     ],
     riskClass: "R1",
@@ -82,20 +84,49 @@ test("requires proof evidence to overlap criterion evidence", () => {
     uncertaintyBudget: 0.2,
   });
   assert.equal(decision.allowed, false);
-  assert.ok(decision.failures.includes("criterion-proof-evidence-mismatch:AC-1"));
+  assert.ok(decision.failures.includes("passing-proof-missing-evidence"));
 });
 
-test("denies completion with unreconciled external effects", () => {
+test("current failed validation remains fail-closed", () => {
   const decision = evaluateOmegaCompletion({
-    criteria: [{ criterionId: "AC-1", status: "satisfied", evidenceRefs: ["EV-1"] }],
+    criteria: [{ criterionId: "AC-1" }],
     proofs: [
+      passingProof(),
       {
         criterionId: "AC-1",
-        result: "pass",
+        result: "fail",
         independent: false,
         evidenceRefs: ["EV-1"],
       },
     ],
+    riskClass: "R1",
+    unresolvedCriticalContradictions: 0,
+    unreconciledExternalEffects: 0,
+    residualUncertainty: 0.1,
+    uncertaintyBudget: 0.2,
+  });
+  assert.equal(decision.allowed, false);
+  assert.ok(decision.failures.includes("validation-proof-failed"));
+});
+
+test("denies completion with unresolved critical contradictions", () => {
+  const decision = evaluateOmegaCompletion({
+    criteria: [{ criterionId: "AC-1" }],
+    proofs: [passingProof()],
+    riskClass: "R1",
+    unresolvedCriticalContradictions: 1,
+    unreconciledExternalEffects: 0,
+    residualUncertainty: 0.1,
+    uncertaintyBudget: 0.2,
+  });
+  assert.equal(decision.allowed, false);
+  assert.ok(decision.failures.includes("critical-evidence-contradiction"));
+});
+
+test("denies completion with unreconciled external effects", () => {
+  const decision = evaluateOmegaCompletion({
+    criteria: [{ criterionId: "AC-1" }],
+    proofs: [passingProof()],
     riskClass: "R1",
     unresolvedCriticalContradictions: 0,
     unreconciledExternalEffects: 1,
@@ -112,15 +143,8 @@ test("R3 and R4 require independent validation", () => {
   assert.equal(riskRequiresIndependentValidation("R4"), true);
 
   const decision = evaluateOmegaCompletion({
-    criteria: [{ criterionId: "AC-1", status: "satisfied", evidenceRefs: ["EV-1"] }],
-    proofs: [
-      {
-        criterionId: "AC-1",
-        result: "pass",
-        independent: false,
-        evidenceRefs: ["EV-1"],
-      },
-    ],
+    criteria: [{ criterionId: "AC-1" }],
+    proofs: [passingProof()],
     riskClass: "R3",
     unresolvedCriticalContradictions: 0,
     unreconciledExternalEffects: 0,
@@ -131,17 +155,10 @@ test("R3 and R4 require independent validation", () => {
   assert.ok(decision.failures.includes("criterion-missing-independent-proof:AC-1"));
 });
 
-test("allows a fully evidenced low-risk completion", () => {
+test("allows completion from criterion definitions plus current proof evidence", () => {
   const decision = evaluateOmegaCompletion({
-    criteria: [{ criterionId: "AC-1", status: "satisfied", evidenceRefs: ["EV-1"] }],
-    proofs: [
-      {
-        criterionId: "AC-1",
-        result: "pass",
-        independent: false,
-        evidenceRefs: ["EV-1"],
-      },
-    ],
+    criteria: [{ criterionId: "AC-1" }],
+    proofs: [passingProof()],
     riskClass: "R2",
     unresolvedCriticalContradictions: 0,
     unreconciledExternalEffects: 0,
@@ -153,8 +170,8 @@ test("allows a fully evidenced low-risk completion", () => {
 
 test("returns an immutable completion decision", () => {
   const decision = evaluateOmegaCompletion({
-    criteria: [{ criterionId: "AC-1", status: "waived", evidenceRefs: [] }],
-    proofs: [],
+    criteria: [{ criterionId: "AC-1" }],
+    proofs: [passingProof()],
     riskClass: "R0",
     unresolvedCriticalContradictions: 0,
     unreconciledExternalEffects: 0,
@@ -168,8 +185,8 @@ test("returns an immutable completion decision", () => {
 
 test("rejects invalid residual uncertainty", () => {
   const decision = evaluateOmegaCompletion({
-    criteria: [{ criterionId: "AC-1", status: "waived", evidenceRefs: [] }],
-    proofs: [],
+    criteria: [{ criterionId: "AC-1" }],
+    proofs: [passingProof()],
     riskClass: "R0",
     unresolvedCriticalContradictions: 0,
     unreconciledExternalEffects: 0,
