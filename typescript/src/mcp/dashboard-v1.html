@@ -597,9 +597,10 @@
           if (input.executionInFlight === true) return "executing";
           const recon = input.reconciliation;
           if (recon) {
+            if (recon.terminalStatus === "failed") return "execution_failed";
             if (recon.state === "resolved" && recon.terminalStatus === "succeeded") return "reconciled";
-            if (recon.terminalStatus === "failed" || recon.state === "escalated") return "execution_failed";
             if (recon.state === "pending" || recon.state === "observing" || recon.state === "claimed") return "reconciliation_pending";
+            return "outcome_unknown";
           }
           const observed = [].concat(input.receipts || [], input.receipt ? [input.receipt] : []);
           const live = observed.find((item) => (item.executionMode || (item.status === "dry-run" ? "dry-run" : "live")) === "live");
@@ -636,17 +637,21 @@
         function quoteDeliveryCommissioned() {
           const integrations = state.status && Array.isArray(state.status.integrations) ? state.status.integrations : [];
           const row = integrations.find((item) => item.name === "quote-delivery");
-          return Boolean(row && (row.status === "ready" || row.status === "ok"));
+          return Boolean(row && row.status === "commissioned");
+        }
+        function actionReceiptObservationReady(action) {
+          if (!action || !state.receipts || !Array.isArray(state.receipts.observations)) return false;
+          return state.receipts.observations.some((row) => row.actionId === action.actionId && row.status === "ready");
         }
         function lifecycleFor(action) {
           const reconItems = state.reconciliations && state.reconciliations.status === "ready" ? state.reconciliations.items : [];
           const recon = action && Array.isArray(reconItems) ? reconItems.find((item) => item.actionId === action.actionId) : null;
-          const receiptItems = state.receipts && state.receipts.status === "ready" ? state.receipts.items : [];
-          const receipts = action && Array.isArray(receiptItems) ? receiptItems.filter((item) => item.actionId === action.actionId) : [];
+          const receiptItems = Array.isArray(state.receipts && state.receipts.items) ? state.receipts.items : [];
+          const receipts = action ? receiptItems.filter((item) => item.actionId === action.actionId) : [];
           return deriveHudApprovalStage({
             action,
             inspection: { required: approvalNeedsQuote(action), state: approvalNeedsQuote(action) ? state.quoteDetailState : "not-required" },
-            receiptAvailable: Boolean(state.receipts && state.receipts.status === "ready"),
+            receiptAvailable: actionReceiptObservationReady(action),
             receipts,
             reconciliation: recon || null,
             quoteDeliveryCommissioned: quoteDeliveryCommissioned(),
@@ -654,8 +659,7 @@
           });
         }
         function canSubmitApproval(action) {
-          const stage = lifecycleFor(action);
-          return stage === "awaiting_approval" || stage === "awaiting_commissioning";
+          return lifecycleFor(action) === "awaiting_approval";
         }
         function clientForQuote(quoteId) {
           const quotes = Array.isArray(state.quotes) ? state.quotes : [];

@@ -17,11 +17,11 @@ SUCCESS state. Missing observation is **OUTCOME UNKNOWN**, never FAILURE.
 
 ## Boundary
 
-| Surface | May inspect proposals | May inspect quotes | May approve | May execute | Holds `JARVIS_APPROVAL_TOKEN` |
-| --- | --- | --- | --- | --- | --- |
-| MCP widget / HUD | yes | yes | no | no | no |
-| MCP adapter | yes (service token) | yes | no | no | no |
-| HTTP operator | yes | yes | yes | yes | operator-held, body of `/approve` and `/revoke` only |
+| Surface          | May inspect proposals | May inspect quotes | May approve | May execute | Holds `JARVIS_APPROVAL_TOKEN`                        |
+| ---------------- | --------------------- | ------------------ | ----------- | ----------- | ---------------------------------------------------- |
+| MCP widget / HUD | yes                   | yes                | no          | no          | no                                                   |
+| MCP adapter      | yes (service token)   | yes                | no          | no          | no                                                   |
+| HTTP operator    | yes                   | yes                | yes         | yes         | operator-held, body of `/approve` and `/revoke` only |
 
 The widget talks to ChatGPT Apps through `postMessage` / `tools/call`. Anything
 the widget can invoke, the model can also invoke. Therefore:
@@ -66,7 +66,13 @@ evidence that send is live.
 See `src/hud/hudApprovalLifecycle.ts`.
 
 Fail-closed: if a quote-send proposal cannot load the authoritative quote, the
-stage is `inspection_failed` and `canSubmitApproval` is false.
+stage is `inspection_failed` and `canSubmitApproval` is false. Uncommissioned
+`quotes:send` is `awaiting_commissioning` and `canSubmitApproval` is also false.
+
+Receipt observation is per action. `GET .../receipts` distinguishes
+`awaiting_execution` (the list read succeeded and no live receipt exists) from
+`outcome_unknown` (that action's receipt read failed, was unqueried, or the
+register is unavailable). A successful dry-run is not a live receipt.
 
 ## Runtime presence
 
@@ -76,7 +82,5 @@ require an explicit runtime field that does not exist on `SystemStatus` yet.
 
 ## Backend still required for full observation
 
-- GET receipt by action ID, so `execution_pending` vs `outcome_unknown` can be
-  distinguished without an external reconciliation record
 - an explicit runtime presence field for listening / processing / executing
 - no change to the dual-token approval architecture

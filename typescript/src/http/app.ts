@@ -9,7 +9,10 @@ import { FastifyAdapter, type NestFastifyApplication } from "@nestjs/platform-fa
 import { createToolActionServiceFromEnv } from "../actions/toolActionFactory.js";
 import type { ToolActionService } from "../actions/toolActions.js";
 import { createToolExecutionServiceFromEnv } from "../actions/toolExecutionFactory.js";
-import type { ToolExecutionReceiptReadStore, ToolExecutionService } from "../actions/toolExecution.js";
+import type {
+  ToolExecutionReceiptReadStore,
+  ToolExecutionService,
+} from "../actions/toolExecution.js";
 import { ConvexToolExecutionReceiptStore } from "../persistence/convexToolExecutionReceipts.js";
 import type { BusinessSettingsStore } from "../businessSettings/businessSettings.js";
 import { InMemoryBusinessSettingsStore } from "../businessSettings/inMemoryBusinessSettingsStore.js";

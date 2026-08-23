@@ -32,12 +32,7 @@ export const HUD_APPROVAL_STAGES = [
 export type HudApprovalStage = (typeof HUD_APPROVAL_STAGES)[number];
 
 export type HudInspectionState =
-  | "empty"
-  | "loading"
-  | "ready"
-  | "error"
-  | "not-found"
-  | "not-required";
+  "empty" | "loading" | "ready" | "error" | "not-found" | "not-required";
 
 export type HudApprovalActionView = Pick<
   ToolAction,
@@ -129,9 +124,7 @@ export function inspectionRequiredFor(action: HudApprovalActionView | null): boo
   if (!action) return false;
   const quoteId = action.arguments && action.arguments.quoteId;
   return Boolean(
-    quoteId ||
-      /quote/i.test(action.tool || "") ||
-      /quotes?:send/i.test(action.operation || ""),
+    quoteId || /quote/i.test(action.tool || "") || /quotes?:send/i.test(action.operation || ""),
   );
 }
 
@@ -163,10 +156,7 @@ export function executionModeOf(receipt: HudReceiptObservation): ToolExecutionMo
 export function selectLiveReceiptObservation(
   input: HudApprovalLifecycleInput,
 ): HudReceiptObservation | null {
-  const observed = [
-    ...(input.receipts ?? []),
-    ...(input.receipt ? [input.receipt] : []),
-  ];
+  const observed = [...(input.receipts ?? []), ...(input.receipt ? [input.receipt] : [])];
   const live = observed.filter((receipt) => executionModeOf(receipt) === "live");
   return live[0] ?? null;
 }
@@ -182,11 +172,11 @@ function fromLiveReceipt(status: ToolExecutionStatus): HudApprovalStage {
 
 function fromReconciliation(observation: HudReconciliationObservation): HudApprovalStage | null {
   if (!observation) return null;
+  if (observation.terminalStatus === "failed") {
+    return "execution_failed";
+  }
   if (observation.state === "resolved" && observation.terminalStatus === "succeeded") {
     return "reconciled";
-  }
-  if (observation.terminalStatus === "failed" || observation.state === "escalated") {
-    return "execution_failed";
   }
   if (
     observation.state === "pending" ||
@@ -244,8 +234,7 @@ export function deriveHudApprovalStage(input: HudApprovalLifecycleInput): HudApp
 }
 
 export function canSubmitApproval(input: HudApprovalLifecycleInput): boolean {
-  const stage = deriveHudApprovalStage(input);
-  return stage === "awaiting_approval" || stage === "awaiting_commissioning";
+  return deriveHudApprovalStage(input) === "awaiting_approval";
 }
 
 export function isDuplicateApprovalAttempt(action: { state: ToolActionState } | null): boolean {

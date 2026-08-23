@@ -30,7 +30,13 @@ const CONFIG: HttpAppConfig = {
 const openApps: NestFastifyApplication[] = [];
 
 function makePersistence(): PersistenceProvider {
-  const task: Task = { id: "task-1", title: "Task", completed: false, category: "test", createdAt: 1 };
+  const task: Task = {
+    id: "task-1",
+    title: "Task",
+    completed: false,
+    category: "test",
+    createdAt: 1,
+  };
   const reminder: Reminder = { id: "reminder-1", title: "Reminder", createdAt: 1 };
   return {
     async loadState(): Promise<AssistantState> {
@@ -187,7 +193,11 @@ describe("tool action receipt inspection HTTP", () => {
       headers: authHeaders(),
     });
     assert.equal(response.statusCode, 200);
-    const body = JSON.parse(response.body) as { count: number; liveReceipt: unknown; data: unknown[] };
+    const body = JSON.parse(response.body) as {
+      count: number;
+      liveReceipt: unknown;
+      data: unknown[];
+    };
     assert.equal(body.count, 0);
     assert.equal(body.liveReceipt, null);
     assert.deepEqual(body.data, []);

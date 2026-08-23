@@ -80,6 +80,19 @@ describe("HUD approval lifecycle", () => {
     };
     assert.equal(deriveHudApprovalStage(input), "awaiting_commissioning");
     assert.equal(quoteSendDeliveryState(input), "awaiting_commissioning");
+    assert.equal(canSubmitApproval(input), false);
+  });
+
+  it("exits awaiting_commissioning only when quote-delivery is commissioned", () => {
+    const input = {
+      action: proposed(),
+      inspection: { required: true, state: "ready" as const },
+      quoteDeliveryCommissioned: true,
+      now: NOW,
+    };
+    assert.equal(deriveHudApprovalStage(input), "awaiting_approval");
+    assert.equal(quoteSendDeliveryState(input), "commissioned");
+    assert.equal(canSubmitApproval(input), true);
   });
 
   it("maps approved + receipt observation unavailable to outcome unknown, never failure", () => {
@@ -182,17 +195,12 @@ describe("HUD approval lifecycle", () => {
   it("refuses a duplicate approval attempt against an already-approved action", () => {
     const action = proposed({ state: "approved" });
     assert.equal(isDuplicateApprovalAttempt(action), true);
-    assert.equal(
-      canSubmitApproval(approvedInput({ receiptAvailable: true, receipts: [] })),
-      false,
-    );
+    assert.equal(canSubmitApproval(approvedInput({ receiptAvailable: true, receipts: [] })), false);
   });
 
   it("keeps reconciliation pending distinct from reconciled and failed", () => {
     assert.equal(
-      deriveHudApprovalStage(
-        approvedInput({ reconciliation: { state: "pending" } }),
-      ),
+      deriveHudApprovalStage(approvedInput({ reconciliation: { state: "pending" } })),
       "reconciliation_pending",
     );
     assert.equal(
@@ -211,14 +219,54 @@ describe("HUD approval lifecycle", () => {
       ),
       "execution_failed",
     );
+    assert.equal(
+      deriveHudApprovalStage(
+        approvedInput({
+          reconciliation: { state: "escalated" },
+        }),
+      ),
+      "outcome_unknown",
+    );
+    assert.equal(
+      deriveHudApprovalStage(
+        approvedInput({
+          receiptAvailable: true,
+          receipts: [{ status: "succeeded", executionMode: "live" }],
+          reconciliation: { state: "escalated" },
+        }),
+      ),
+      "outcome_unknown",
+    );
+    assert.equal(
+      deriveHudApprovalStage(
+        approvedInput({
+          reconciliation: { state: "escalated", terminalStatus: "failed" },
+        }),
+      ),
+      "execution_failed",
+    );
+  });
+
+  it("keeps an action outcome unknown when its own receipt observation is not ready", () => {
+    const actionA = approvedInput({
+      action: proposed({ state: "approved", actionId: "act-a" }),
+      receiptAvailable: true,
+      receipts: [],
+    });
+    const actionB = approvedInput({
+      action: proposed({ state: "approved", actionId: "act-b" }),
+      receiptAvailable: false,
+    });
+    assert.equal(deriveHudApprovalStage(actionA), "awaiting_execution");
+    assert.equal(deriveHudApprovalStage(actionB), "outcome_unknown");
   });
 
   it("only reports executing when runtime says an execution is in flight", () => {
-    assert.equal(deriveHudApprovalStage(approvedInput({ receiptAvailable: false })), "outcome_unknown");
     assert.equal(
-      deriveHudApprovalStage(approvedInput({ executionInFlight: true })),
-      "executing",
+      deriveHudApprovalStage(approvedInput({ receiptAvailable: false })),
+      "outcome_unknown",
     );
+    assert.equal(deriveHudApprovalStage(approvedInput({ executionInFlight: true })), "executing");
   });
 
   it("documents complete-task confirmation as an accidental-click safeguard only", () => {
@@ -228,7 +276,10 @@ describe("HUD approval lifecycle", () => {
     assert.equal(COMPLETE_TASK_SEMANTICS.approvesQuote, false);
     assert.equal(COMPLETE_TASK_SEMANTICS.sendsQuote, false);
     assert.equal(COMPLETE_TASK_SEMANTICS.executesToolAction, false);
-    assert.match(COMPLETE_TASK_SEMANTICS.confirmationCopy, /does not constitute an authorisation boundary/i);
+    assert.match(
+      COMPLETE_TASK_SEMANTICS.confirmationCopy,
+      /does not constitute an authorisation boundary/i,
+    );
     assert.match(COMPLETE_TASK_SEMANTICS.confirmationCopy, /does not approve or send a quote/i);
   });
 

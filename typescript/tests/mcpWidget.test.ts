@@ -399,6 +399,70 @@ describe("Jarvis preview widget", () => {
       }),
       "rejected",
     );
+    assert.equal(
+      deriveHudApprovalStage({
+        action: { ...proposed, state: "approved" },
+        inspection: { required: true, state: "ready" },
+        reconciliation: { state: "escalated" },
+        now,
+      }),
+      "outcome_unknown",
+    );
+    assert.equal(
+      deriveHudApprovalStage({
+        action: { ...proposed, state: "approved" },
+        inspection: { required: true, state: "ready" },
+        reconciliation: { state: "escalated" },
+        receiptAvailable: true,
+        receipts: [{ status: "succeeded", executionMode: "live" }],
+        now,
+      }),
+      "outcome_unknown",
+    );
+    assert.notEqual(
+      deriveHudApprovalStage({
+        action: { ...proposed, state: "approved" },
+        inspection: { required: true, state: "ready" },
+        reconciliation: { state: "escalated" },
+        now,
+      }),
+      "execution_failed",
+    );
+    const uncommissioned = {
+      action: proposed,
+      inspection: { required: true, state: "ready" },
+      quoteDeliveryCommissioned: false,
+      now,
+    };
+    assert.equal(deriveHudApprovalStage(uncommissioned), "awaiting_commissioning");
+    assert.equal(deriveHudApprovalStage(uncommissioned) === "awaiting_approval", false);
+    assert.equal(
+      deriveHudApprovalStage({
+        action: proposed,
+        inspection: { required: true, state: "ready" },
+        quoteDeliveryCommissioned: true,
+        now,
+      }),
+      "awaiting_approval",
+    );
+  });
+
+  it("treats quote-delivery as commissioned only on the IntegrationStatus enum", () => {
+    const commissionedSource = widget.match(
+      /(function quoteDeliveryCommissioned\(\) \{[\s\S]*?\})\n\s+function actionReceiptObservationReady/,
+    )?.[1];
+    assert.ok(commissionedSource, "quote-delivery commissioning check was not found");
+    const run = (status: string) =>
+      new Function(
+        "state",
+        `"use strict"; ${commissionedSource}; return quoteDeliveryCommissioned();`,
+      )({
+        status: { integrations: [{ name: "quote-delivery", status }] },
+      }) as boolean;
+    assert.equal(run("commissioned"), true);
+    assert.equal(run("not-commissioned"), false);
+    assert.equal(run("ready"), false);
+    assert.equal(run("ok"), false);
   });
 
   it("ships syntactically valid embedded dashboard JavaScript", () => {
@@ -444,10 +508,14 @@ describe("Jarvis preview widget", () => {
     assert.doesNotMatch(widget, /approve_tool_action/);
     assert.doesNotMatch(widget, /reject_tool_action/);
     assert.doesNotMatch(widget, /hudState\.jobCompleted/);
+    assert.match(widget, /row\.status === "commissioned"/);
+    assert.match(widget, /return lifecycleFor\(action\) === "awaiting_approval"/);
+    assert.match(widget, /actionReceiptObservationReady/);
   });
 
   it("does not contain Jarvis or OpenAI credential names", () => {
     assert.doesNotMatch(widget, /JARVIS_SERVICE_TOKEN/);
+    assert.doesNotMatch(widget, /JARVIS_APPROVAL_TOKEN/);
     assert.doesNotMatch(widget, /OPENAI_API_KEY/);
     assert.doesNotMatch(widget, /CONVEX_DEPLOY_KEY/);
   });

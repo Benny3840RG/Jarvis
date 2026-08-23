@@ -530,6 +530,12 @@ const dashboardOutputSchema = {
         completedAt: z.string(),
       }),
     ),
+    observations: z.array(
+      z.object({
+        actionId: z.string(),
+        status: z.enum(["ready", "unavailable", "unqueried"]),
+      }),
+    ),
   }),
   business: z.object({
     clients: z.object({ status: hudRegisterStatusSchema, items: z.array(hudClientSchema) }),

@@ -5,8 +5,18 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Jarvis HUD local preview</title>
     <style>
-      html, body { margin: 0; height: 100%; background: #05060a; }
-      iframe { display: block; width: 100%; height: 100%; border: 0; }
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: #05060a;
+      }
+      iframe {
+        display: block;
+        width: 100%;
+        height: 100%;
+        border: 0;
+      }
     </style>
   </head>
   <body>
@@ -27,7 +37,11 @@
           },
           reconciliation: { state: "disabled", enabled: false },
           integrations: [
-            { name: "quote-delivery", status: "not-commissioned", reason: "Outlook OAuth not commissioned" },
+            {
+              name: "quote-delivery",
+              status: "not-commissioned",
+              reason: "Outlook OAuth not commissioned",
+            },
             { name: "posthog", status: "not-commissioned", reason: "Live ingestion not proven" },
             { name: "sentry", status: "not-commissioned", reason: "Live alerts not proven" },
           ],
@@ -46,38 +60,113 @@
           checkedAt: new Date().toISOString(),
         },
         tasks: [
-          { id: "t1", title: "Prepare Frankston hedge quote", completed: false, category: "work", createdAt: 1 },
-          { id: "t2", title: "Buy green-waste bags", completed: false, category: "work", createdAt: 2 },
+          {
+            id: "t1",
+            title: "Prepare Frankston hedge quote",
+            completed: false,
+            category: "work",
+            createdAt: 1,
+          },
+          {
+            id: "t2",
+            title: "Buy green-waste bags",
+            completed: false,
+            category: "work",
+            createdAt: 2,
+          },
           { id: "t3", title: "Service chipper", completed: true, category: "builds", createdAt: 3 },
         ],
         reminders: [
-          { id: "r1", title: "Call Marilyn about access gate", dueRaw: "Tomorrow 8am", dueAt: Date.now() + 86400000, createdAt: 1 },
-          { id: "r2", title: "Invoice 14 follow-up", dueRaw: "Friday", dueAt: Date.now() + 3 * 86400000, createdAt: 2 },
+          {
+            id: "r1",
+            title: "Call Marilyn about access gate",
+            dueRaw: "Tomorrow 8am",
+            dueAt: Date.now() + 86400000,
+            createdAt: 1,
+          },
+          {
+            id: "r2",
+            title: "Invoice 14 follow-up",
+            dueRaw: "Friday",
+            dueAt: Date.now() + 3 * 86400000,
+            createdAt: 2,
+          },
         ],
         brief: {
           generatedAt: new Date().toISOString(),
           timezone: "Australia/Melbourne",
-          headline: "PREVIEW FIXTURE · not live Jarvis data. 2 open tasks, 1 enquiry, 1 invoice outstanding.",
+          headline:
+            "PREVIEW FIXTURE · not live Jarvis data. 2 open tasks, 1 enquiry, 1 invoice outstanding.",
           reminders: { dueCount: 0, upcomingCount: 1, undatedCount: 0, due: [], upcoming: [] },
           projects: {
             activeCount: 1,
             countsByStatus: { lead: 0, quoted: 1, active: 1, on_hold: 0, done: 0 },
-            active: [{ id: "project-1", clientId: "c1", title: "Frankston garden rebuild", status: "active", createdAt: 1, updatedAt: 2 }],
+            active: [
+              {
+                id: "project-1",
+                clientId: "c1",
+                title: "Frankston garden rebuild",
+                status: "active",
+                createdAt: 1,
+                updatedAt: 2,
+              },
+            ],
           },
-          quotes: { countsByStatus: { draft: 1, sent: 1, accepted: 0, declined: 0 }, pipelineTotal: 3300.5, acceptedTotal: 0, awaitingResponse: [], drafts: [] },
-          maintenance: { dueCount: 1, dueSoonCount: 0, due: [{ name: "Chipper", kind: "equipment" }], dueSoon: [] },
+          quotes: {
+            countsByStatus: { draft: 1, sent: 1, accepted: 0, declined: 0 },
+            pipelineTotal: 3300.5,
+            acceptedTotal: 0,
+            awaitingResponse: [],
+            drafts: [],
+          },
+          maintenance: {
+            dueCount: 1,
+            dueSoonCount: 0,
+            due: [{ name: "Chipper", kind: "equipment" }],
+            dueSoon: [],
+          },
         },
         quoteRegister: {
           status: "ready",
           quotes: [
-            { quoteId: "q1", clientId: "c1", projectId: "project-1", number: "174", currentRevision: 2, aggregateVersion: 4, revisionStatus: "finalized", commercialStatus: "open", total: 3300.5, currency: "AUD", updatedAt: 3 },
-            { quoteId: "q2", clientId: "c1", projectId: "project-1", number: "175", currentRevision: 1, aggregateVersion: 1, revisionStatus: "draft", commercialStatus: "open", total: 880, currency: "AUD", updatedAt: 4 },
+            {
+              quoteId: "q1",
+              clientId: "c1",
+              projectId: "project-1",
+              number: "174",
+              currentRevision: 2,
+              aggregateVersion: 4,
+              revisionStatus: "finalized",
+              commercialStatus: "open",
+              total: 3300.5,
+              currency: "AUD",
+              updatedAt: 3,
+            },
+            {
+              quoteId: "q2",
+              clientId: "c1",
+              projectId: "project-1",
+              number: "175",
+              currentRevision: 1,
+              aggregateVersion: 1,
+              revisionStatus: "draft",
+              commercialStatus: "open",
+              total: 880,
+              currency: "AUD",
+              updatedAt: 4,
+            },
           ],
         },
         inbox: {
           generatedAt: new Date().toISOString(),
           items: [
-            { itemId: "invoice-outstanding:inv-14", kind: "invoice-outstanding", severity: "elevated", title: "Invoice 14 partial", explanation: "Balance due remains on issued invoice 14." },
+            {
+              itemId: "invoice-outstanding:inv-14",
+              kind: "invoice-outstanding",
+              severity: "elevated",
+              title: "Invoice 14 partial",
+              explanation: "Balance due remains on issued invoice 14.",
+            },
           ],
           sources: [
             { source: "reminders", status: "available", checkedAt: new Date().toISOString() },
@@ -87,7 +176,13 @@
         activity: {
           status: "available",
           events: [
-            { activityId: "a1", occurredAt: new Date().toISOString(), eventType: "tool.action.proposed", actor: "agent", summary: "Tool action proposed: send quote 174." },
+            {
+              activityId: "a1",
+              occurredAt: new Date().toISOString(),
+              eventType: "tool.action.proposed",
+              actor: "agent",
+              summary: "Tool action proposed: send quote 174.",
+            },
           ],
           cursor: "",
           isDone: true,
@@ -117,13 +212,69 @@
           ],
         },
         business: {
-          clients: { status: "ready", items: [{ id: "c1", name: "Marilyn Frankston", contacts: [{ value: "marilyn@example.test" }], createdAt: 1, updatedAt: 1 }] },
-          properties: { status: "ready", items: [{ id: "p1", clientId: "c1", address: "12 Banksia Ct, Frankston VIC", hazards: ["Steep driveway", "Power line near trees"], accessNotes: "Side gate code with owner", createdAt: 1, updatedAt: 1 }] },
-          enquiries: { status: "ready", items: [{ id: "e1", clientId: "c1", propertyId: "p1", source: "phone", requestedWork: "Remove storm-damaged limb", urgency: "urgent", status: "open", createdAt: 1, updatedAt: 1 }] },
-          invoices: { status: "ready", items: [{ id: "inv-14", clientId: "c1", number: "14", status: "issued", paymentStatus: "partial", total: 2200, amountPaid: 800, balanceDue: 1400, dueDate: "2026-08-28", createdAt: 1, updatedAt: 2 }] },
+          clients: {
+            status: "ready",
+            items: [
+              {
+                id: "c1",
+                name: "Marilyn Frankston",
+                contacts: [{ value: "marilyn@example.test" }],
+                createdAt: 1,
+                updatedAt: 1,
+              },
+            ],
+          },
+          properties: {
+            status: "ready",
+            items: [
+              {
+                id: "p1",
+                clientId: "c1",
+                address: "12 Banksia Ct, Frankston VIC",
+                hazards: ["Steep driveway", "Power line near trees"],
+                accessNotes: "Side gate code with owner",
+                createdAt: 1,
+                updatedAt: 1,
+              },
+            ],
+          },
+          enquiries: {
+            status: "ready",
+            items: [
+              {
+                id: "e1",
+                clientId: "c1",
+                propertyId: "p1",
+                source: "phone",
+                requestedWork: "Remove storm-damaged limb",
+                urgency: "urgent",
+                status: "open",
+                createdAt: 1,
+                updatedAt: 1,
+              },
+            ],
+          },
+          invoices: {
+            status: "ready",
+            items: [
+              {
+                id: "inv-14",
+                clientId: "c1",
+                number: "14",
+                status: "issued",
+                paymentStatus: "partial",
+                total: 2200,
+                amountPaid: 800,
+                balanceDue: 1400,
+                dueDate: "2026-08-28",
+                createdAt: 1,
+                updatedAt: 2,
+              },
+            ],
+          },
         },
         reconciliations: { status: "unavailable", items: [] },
-        receipts: { status: "unavailable", items: [] },
+        receipts: { status: "unavailable", items: [], observations: [] },
         counts: { activeTasks: 2, completedTasks: 1, reminders: 2 },
       };
       const QUOTE = {
@@ -169,10 +320,14 @@
       const failQuote = params.get("failQuote") === "1";
       if (view) frame.src = `./dashboard-v1.html#${encodeURIComponent(view)}`;
       function pushSnapshot(target) {
-        target.postMessage({ jsonrpc: "2.0", method: "ui/notifications/tool-result", params: SNAPSHOT }, "*");
+        target.postMessage(
+          { jsonrpc: "2.0", method: "ui/notifications/tool-result", params: SNAPSHOT },
+          "*",
+        );
       }
       window.addEventListener("message", (event) => {
-        if (event.source !== frame.contentWindow || !event.data || event.data.jsonrpc !== "2.0") return;
+        if (event.source !== frame.contentWindow || !event.data || event.data.jsonrpc !== "2.0")
+          return;
         const { id, method } = event.data;
         if (typeof id !== "number") return;
         if (method === "ui/initialize") {
@@ -183,35 +338,77 @@
         if (method === "tools/call") {
           const name = event.data.params && event.data.params.name;
           if (name === "show_jarvis_dashboard" || name === "get_jarvis_status") {
-            event.source.postMessage({ jsonrpc: "2.0", id, result: { structuredContent: SNAPSHOT } }, "*");
+            event.source.postMessage(
+              { jsonrpc: "2.0", id, result: { structuredContent: SNAPSHOT } },
+              "*",
+            );
             return;
           }
           if (name === "get_quote") {
             if (failQuote) {
-              event.source.postMessage({ jsonrpc: "2.0", id, result: { isError: true, content: [{ type: "text", text: "Quote read failed." }] } }, "*");
+              event.source.postMessage(
+                {
+                  jsonrpc: "2.0",
+                  id,
+                  result: {
+                    isError: true,
+                    content: [{ type: "text", text: "Quote read failed." }],
+                  },
+                },
+                "*",
+              );
               return;
             }
-            const quoteId = event.data.params && event.data.params.arguments && event.data.params.arguments.quoteId;
+            const quoteId =
+              event.data.params &&
+              event.data.params.arguments &&
+              event.data.params.arguments.quoteId;
             if (quoteId === "q1") {
-              event.source.postMessage({ jsonrpc: "2.0", id, result: { structuredContent: { quote: QUOTE } } }, "*");
+              event.source.postMessage(
+                { jsonrpc: "2.0", id, result: { structuredContent: { quote: QUOTE } } },
+                "*",
+              );
               return;
             }
-            event.source.postMessage({ jsonrpc: "2.0", id, result: { isError: true, content: [{ type: "text", text: "Quote not found." }] } }, "*");
+            event.source.postMessage(
+              {
+                jsonrpc: "2.0",
+                id,
+                result: { isError: true, content: [{ type: "text", text: "Quote not found." }] },
+              },
+              "*",
+            );
             return;
           }
           if (name === "approve_tool_action" || name === "reject_tool_action") {
-            event.source.postMessage({
-              jsonrpc: "2.0",
-              id,
-              result: { isError: true, content: [{ type: "text", text: "Preview host does not execute governed approval." }] },
-            }, "*");
+            event.source.postMessage(
+              {
+                jsonrpc: "2.0",
+                id,
+                result: {
+                  isError: true,
+                  content: [
+                    { type: "text", text: "Preview host does not execute governed approval." },
+                  ],
+                },
+              },
+              "*",
+            );
             return;
           }
-          event.source.postMessage({
-            jsonrpc: "2.0",
-            id,
-            result: { isError: true, content: [{ type: "text", text: "Preview host only loads the dashboard snapshot." }] },
-          }, "*");
+          event.source.postMessage(
+            {
+              jsonrpc: "2.0",
+              id,
+              result: {
+                isError: true,
+                content: [
+                  { type: "text", text: "Preview host only loads the dashboard snapshot." },
+                ],
+              },
+            },
+            "*",
+          );
         }
       });
     </script>

@@ -51,6 +51,25 @@ export type HudReceiptInspection = {
   completedAt: string;
 };
 
+export type HudReceiptActionObservation = {
+  actionId: string;
+  status: "ready" | "unavailable" | "unqueried";
+};
+
+export type HudReceiptRegister = HudRegister<HudReceiptInspection> & {
+  observations: HudReceiptActionObservation[];
+};
+
+/** True only when this action's own receipt list was read successfully. */
+export function actionReceiptObservationReady(
+  receipts: HudReceiptRegister | null | undefined,
+  actionId: string,
+): boolean {
+  return Boolean(
+    receipts?.observations?.some((row) => row.actionId === actionId && row.status === "ready"),
+  );
+}
+
 export type DashboardSnapshot = {
   status: SystemStatus;
   tasks: Task[];
@@ -75,7 +94,7 @@ export type DashboardSnapshot = {
     terminalStatus?: "succeeded" | "failed";
     receiptId?: string;
   }>;
-  receipts: HudRegister<HudReceiptInspection>;
+  receipts: HudReceiptRegister;
   business: {
     clients: HudRegister<Client>;
     properties: HudRegister<Property>;
@@ -768,7 +787,7 @@ export class JarvisApiClient {
       invoices,
     ]);
     const approvals = await this.loadApprovals(
-      brief.projects.active.slice(0, 8).map((project) => project.id),
+      (brief.projects?.active ?? []).slice(0, 8).map((project) => project.id),
     );
     const reconciliations = await this.listReconciliations().then(
       (items) => ({ status: "ready" as const, items }),
@@ -825,19 +844,38 @@ export class JarvisApiClient {
     };
   }
 
-  private async loadReceipts(actions: ToolAction[]): Promise<HudRegister<HudReceiptInspection>> {
-    const targets = actions.slice(0, 8);
-    if (targets.length === 0) return { status: "ready", items: [] };
+  private async loadReceipts(actions: ToolAction[]): Promise<HudReceiptRegister> {
+    if (actions.length === 0) return { status: "ready", items: [], observations: [] };
+    const queryCap = 16;
+    const queried = actions.slice(0, queryCap);
+    const unqueried = actions.slice(queryCap);
     const pages = await Promise.all(
-      targets.map((action) =>
+      queried.map((action) =>
         this.listToolActionReceipts(action.projectId, action.actionId).then(
-          (result) => ({ ok: true as const, items: result.receipts }),
-          () => ({ ok: false as const, items: [] as HudReceiptInspection[] }),
+          (result) => ({
+            actionId: action.actionId,
+            status: "ready" as const,
+            items: result.receipts,
+          }),
+          () => ({
+            actionId: action.actionId,
+            status: "unavailable" as const,
+            items: [] as HudReceiptInspection[],
+          }),
         ),
       ),
     );
-    if (pages.every((page) => !page.ok)) return { status: "unavailable", items: [] };
-    return { status: "ready", items: pages.flatMap((page) => page.items) };
+    const observations: HudReceiptActionObservation[] = [
+      ...pages.map((page) => ({ actionId: page.actionId, status: page.status })),
+      ...unqueried.map((action) => ({ actionId: action.actionId, status: "unqueried" as const })),
+    ];
+    const items = pages.flatMap((page) => page.items);
+    const allReady = observations.length > 0 && observations.every((row) => row.status === "ready");
+    return {
+      status: allReady ? "ready" : "unavailable",
+      items,
+      observations,
+    };
   }
 
   /** Read-only: owner-scoped external reconciliation records. Cannot execute or resolve. */

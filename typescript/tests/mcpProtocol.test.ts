@@ -210,6 +210,16 @@ describe("Jarvis MCP preview protocol", () => {
         quoteRegister: { status: "ready", quotes: [] },
         inbox: null,
         activity: null,
+        approvals: { status: "unavailable", items: [] },
+        reconciliations: { status: "unavailable", items: [] },
+        receipts: { status: "ready", items: [], observations: [] },
+        business: {
+          clients: { status: "unavailable", items: [] },
+          properties: { status: "unavailable", items: [] },
+          enquiries: { status: "unavailable", items: [] },
+          invoices: { status: "unavailable", items: [] },
+        },
+        presence: "idle",
         counts: {
           activeTasks: 1,
           completedTasks: 0,
