@@ -28,7 +28,7 @@ evidence:
 
   - id: EVD-AM-012-001
     path: docs/evidence/quote-lifecycle-commissioning.md
-    description: Infrastructure commissioning evidence only (development commissioning run 30196857042); does not activate AM-012. Records runtime CI, development sync, and self-cleaning quote-finalize lifecycle smoke evidence — AM-012 stays lifecycle_status planned pending a separate activation tranche.
+    description: "Quote lifecycle infrastructure evidence from development commissioning run 30196857042 plus the later AM-012 activation by PR #292 and guarded development commissioning run 30956407980. Supports active TOOL-QUOTE-FINALIZE only; it does not activate AM-013 or authorise Outlook delivery."
 
   - id: EVD-AM-013-001
     path: docs/evidence/quote-lifecycle-commissioning.md

@@ -60,9 +60,11 @@ rules:
     message: An active workflow must not depend on a non-active action family.
     # Note: this intentionally does NOT require every workflow-referenced
     # action family to be active regardless of the workflow's own status.
-    # A planned workflow composing planned families is consistent, not a
-    # violation. Existence of the referenced family is still enforced by
-    # registry-reference validation and the generator.
+    # WF-QUOTE-001 remains planned while its steps currently mix active AM-012
+    # with planned AM-013. A planned workflow may reference that staged set;
+    # only an active workflow requires every referenced family to be active.
+    # Existence of the referenced family is still enforced by registry-reference
+    # validation and the generator.
 
   - id: RULE-006
     when: action_family.bindings.executor_id is present
