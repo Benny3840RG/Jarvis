@@ -118,6 +118,7 @@
       "stageToolAction",
       "listToolActions",
       "getToolAction",
+      "listToolActionReceipts",
       "approveToolAction",
       "rejectToolAction",
       "executeToolAction"
@@ -1897,6 +1898,71 @@
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{projectId}/tool-actions/{actionId}/receipts": {
+      "get": {
+        "operationId": "listToolActionReceipts",
+        "summary": "Inspect execution receipts for one tool-action",
+        "description": "Read-only owner-scoped inspection of durable execution receipts for one proposal. Live and dry-run receipts are distinct execution identities. A successful dry-run is never evidence that live execution occurred. This operation cannot approve, reject, revoke, or execute.",
+        "tags": ["Tool Actions"],
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "actionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          }
+        ],
+        "x-mcp-tool": {
+          "exposed": true,
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Execution receipts for the tool action, including an explicit live-receipt selection.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ToolActionReceiptListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
@@ -8485,6 +8551,105 @@
             "minimum": 1,
             "maximum": 30000,
             "description": "Bounds how long the executed operation may run before it is aborted as timed out. Defaults to 5000ms."
+          }
+        }
+      },
+      "ToolActionReceiptInspection": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "receiptId",
+          "actionId",
+          "projectId",
+          "idempotencyKey",
+          "executionMode",
+          "tool",
+          "operation",
+          "status",
+          "startedAt",
+          "completedAt"
+        ],
+        "properties": {
+          "receiptId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "actionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "requestId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "projectId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "executionMode": {
+            "type": "string",
+            "enum": ["live", "dry-run"],
+            "description": "Live and dry-run executions are distinct identities. Dry-run success is never live execution evidence."
+          },
+          "tool": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "operation": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "status": {
+            "type": "string",
+            "enum": ["dry-run", "succeeded", "failed", "indeterminate", "blocked"]
+          },
+          "errorCode": {
+            "type": "string"
+          },
+          "startedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "completedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ToolActionReceiptListResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["data", "count", "liveReceipt"],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ToolActionReceiptInspection"
+            }
+          },
+          "count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "liveReceipt": {
+            "description": "The authoritative live execution receipt, or null when only dry-run receipts exist or none exist.",
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ToolActionReceiptInspection"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       },

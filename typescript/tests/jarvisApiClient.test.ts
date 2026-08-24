@@ -132,6 +132,30 @@ describe("Jarvis MCP REST client", () => {
           count: 2,
         });
       }
+      if (path === "/api/v1/brief") {
+        return Response.json({
+          data: {
+            generatedAt: "2026-07-18T11:00:00.000Z",
+            timezone: "Australia/Melbourne",
+            headline: "counts fixture",
+            tasks: { openCount: 1, completedCount: 1, open: [] },
+            reminders: { dueCount: 0, upcomingCount: 0, undatedCount: 1, due: [], upcoming: [] },
+            projects: {
+              activeCount: 0,
+              countsByStatus: { lead: 0, quoted: 0, active: 0, on_hold: 0, done: 0 },
+              active: [],
+            },
+            quotes: {
+              countsByStatus: { draft: 0, sent: 0, accepted: 0, declined: 0 },
+              pipelineTotal: 0,
+              acceptedTotal: 0,
+              awaitingResponse: [],
+              drafts: [],
+            },
+            maintenance: { dueCount: 0, dueSoonCount: 0, due: [], dueSoon: [] },
+          },
+        });
+      }
       return Response.json({
         data: [{ id: "r1", title: "Call Claire", dueRaw: "Friday 9am", createdAt: 1 }],
         count: 1,

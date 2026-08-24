@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
+import type { ToolAction } from "../src/actions/toolActions.js";
 import type { DailyBrief } from "../src/briefs/brief.js";
+import { deriveHudApprovalStage } from "../src/hud/hudApprovalLifecycle.js";
 import type { SystemStatus } from "../src/http/contracts.js";
-import { JarvisApiClient } from "../src/mcp/jarvisApiClient.js";
+import { actionReceiptObservationReady, JarvisApiClient } from "../src/mcp/jarvisApiClient.js";
 import type { QuoteSummary } from "../src/quotes/quoteRepository.js";
 
 const STATUS: SystemStatus = {
@@ -126,6 +128,12 @@ describe("dashboard snapshot", () => {
         return Response.json({ data: [LIFECYCLE_QUOTE], count: 1 });
       if (url.pathname === "/api/v1/operations/inbox") return Response.json({ data: INBOX });
       if (url.pathname === "/api/v1/operations/activity") return Response.json({ data: ACTIVITY });
+      if (url.pathname === "/api/v1/clients") return Response.json({ data: [], count: 0 });
+      if (url.pathname === "/api/v1/properties") return Response.json({ data: [], count: 0 });
+      if (url.pathname === "/api/v1/enquiries") return Response.json({ data: [], count: 0 });
+      if (url.pathname === "/api/v1/invoices") return Response.json({ data: [], count: 0 });
+      if (url.pathname === "/api/v1/projects/project-1/tool-actions") return Response.json([]);
+      if (url.pathname === "/api/v1/reconciliations") return Response.json({ data: [], count: 0 });
       return Response.json({ title: "Not Found" }, { status: 404 });
     }) as typeof fetch;
 
@@ -138,9 +146,15 @@ describe("dashboard snapshot", () => {
 
     assert.deepEqual(paths.sort(), [
       "/api/v1/brief",
+      "/api/v1/clients",
+      "/api/v1/enquiries",
+      "/api/v1/invoices",
       "/api/v1/operations/activity",
       "/api/v1/operations/inbox",
+      "/api/v1/projects/project-1/tool-actions",
+      "/api/v1/properties",
       "/api/v1/quotes",
+      "/api/v1/reconciliations",
       "/api/v1/reminders",
       "/api/v1/status",
       "/api/v1/tasks",
@@ -157,6 +171,13 @@ describe("dashboard snapshot", () => {
       snapshot.brief.quotes.awaitingResponse[0]?.id,
     );
     assert.deepEqual(snapshot.counts, { activeTasks: 1, completedTasks: 0, reminders: 1 });
+    assert.equal(snapshot.presence, "idle");
+    assert.deepEqual(snapshot.approvals, { status: "ready", items: [] });
+    assert.deepEqual(snapshot.reconciliations, { status: "ready", items: [] });
+    assert.deepEqual(snapshot.receipts, { status: "ready", items: [], observations: [] });
+    assert.equal(actionReceiptObservationReady(snapshot.receipts, "act-b"), false);
+    assert.equal(snapshot.business.enquiries.status, "ready");
+    assert.equal(snapshot.business.invoices.status, "ready");
   });
   it("degrades only the quote register when lifecycle reads are unavailable", async () => {
     const fetchImpl = (async (input: string | URL | Request) => {
@@ -191,5 +212,100 @@ describe("dashboard snapshot", () => {
     // that must degrade to null, never fail the whole dashboard read.
     assert.equal(snapshot.inbox, null);
     assert.equal(snapshot.activity, null);
+    assert.deepEqual(snapshot.reconciliations, { status: "unavailable", items: [] });
+    assert.deepEqual(snapshot.receipts, { status: "ready", items: [], observations: [] });
+  });
+
+  it("keeps action B outcome unknown when its receipt read fails while action A succeeds", async () => {
+    const actionA: ToolAction = {
+      actionId: "act-a",
+      requestId: "req-a",
+      projectId: "project-1",
+      baseRevision: 4,
+      state: "approved",
+      tool: "quoteSendTool",
+      operation: "quotes:send",
+      arguments: { quoteId: "q1" },
+      rationale: "Send quote 174.",
+      requiredAuthority: "T2",
+      destructive: false,
+      idempotencyKey: "preview-a",
+      proposedBy: "agent",
+      createdAt: "2026-08-23T00:00:00.000Z",
+      updatedAt: "2026-08-23T00:05:00.000Z",
+      approvedBy: "user",
+      approvedAt: "2026-08-23T00:05:00.000Z",
+    };
+    const actionB: ToolAction = {
+      ...actionA,
+      actionId: "act-b",
+      requestId: "req-b",
+      idempotencyKey: "preview-b",
+    };
+    const fetchImpl = (async (input: string | URL | Request) => {
+      const path = new URL(String(input)).pathname;
+      if (path === "/api/v1/status") return Response.json(STATUS);
+      if (path === "/api/v1/tasks") return Response.json({ data: [TASK], count: 1 });
+      if (path === "/api/v1/reminders") return Response.json({ data: [REMINDER], count: 1 });
+      if (path === "/api/v1/brief") return Response.json({ data: BRIEF });
+      if (path === "/api/v1/quotes") return Response.json({ data: [LIFECYCLE_QUOTE], count: 1 });
+      if (path === "/api/v1/operations/inbox") return Response.json({ data: INBOX });
+      if (path === "/api/v1/operations/activity") return Response.json({ data: ACTIVITY });
+      if (path === "/api/v1/clients") return Response.json({ data: [], count: 0 });
+      if (path === "/api/v1/properties") return Response.json({ data: [], count: 0 });
+      if (path === "/api/v1/enquiries") return Response.json({ data: [], count: 0 });
+      if (path === "/api/v1/invoices") return Response.json({ data: [], count: 0 });
+      if (path === "/api/v1/projects/project-1/tool-actions") {
+        return Response.json([actionA, actionB]);
+      }
+      if (path === "/api/v1/projects/project-1/tool-actions/act-a/receipts") {
+        return Response.json({ data: [], liveReceipt: null });
+      }
+      if (path === "/api/v1/projects/project-1/tool-actions/act-b/receipts") {
+        return Response.json(
+          {
+            type: "urn:jarvis:problem:receipt-store-unavailable",
+            title: "Receipt Store Unavailable",
+            status: 503,
+          },
+          { status: 503 },
+        );
+      }
+      if (path === "/api/v1/reconciliations") return Response.json({ data: [], count: 0 });
+      return Response.json({ title: "Not Found" }, { status: 404 });
+    }) as typeof fetch;
+
+    const client = new JarvisApiClient(
+      { baseUrl: new URL("http://127.0.0.1:3000/"), serviceToken: "test-token" },
+      fetchImpl,
+    );
+    const snapshot = await client.dashboard();
+    const inspection = { required: true, state: "ready" as const };
+
+    assert.equal(snapshot.receipts.status, "unavailable");
+    assert.deepEqual(snapshot.receipts.observations, [
+      { actionId: "act-a", status: "ready" },
+      { actionId: "act-b", status: "unavailable" },
+    ]);
+    assert.equal(actionReceiptObservationReady(snapshot.receipts, "act-a"), true);
+    assert.equal(actionReceiptObservationReady(snapshot.receipts, "act-b"), false);
+    assert.equal(
+      deriveHudApprovalStage({
+        action: actionA,
+        inspection,
+        receiptAvailable: actionReceiptObservationReady(snapshot.receipts, "act-a"),
+        receipts: snapshot.receipts.items.filter((item) => item.actionId === "act-a"),
+      }),
+      "awaiting_execution",
+    );
+    assert.equal(
+      deriveHudApprovalStage({
+        action: actionB,
+        inspection,
+        receiptAvailable: actionReceiptObservationReady(snapshot.receipts, "act-b"),
+        receipts: snapshot.receipts.items.filter((item) => item.actionId === "act-b"),
+      }),
+      "outcome_unknown",
+    );
   });
 });

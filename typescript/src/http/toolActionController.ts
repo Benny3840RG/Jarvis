@@ -6,6 +6,10 @@ import type { FastifyRequest } from "fastify";
 import type { ToolActionService } from "../actions/toolActions.js";
 import {
   deriveToolExecutionIdempotencyKey,
+  executionModeFromReceipt,
+  selectLiveReceipt,
+  type ToolExecutionReceipt,
+  type ToolExecutionReceiptReadStore,
   type ToolExecutionService,
 } from "../actions/toolExecution.js";
 import type { HttpAppConfig } from "./config.js";
@@ -20,7 +24,12 @@ import {
   parseToolActionRevocation,
   parseToolActionState,
 } from "./toolActionRequest.js";
-import { HTTP_APP_CONFIG, HTTP_TOOL_ACTIONS, HTTP_TOOL_EXECUTION } from "./tokens.js";
+import {
+  HTTP_APP_CONFIG,
+  HTTP_TOOL_ACTIONS,
+  HTTP_TOOL_EXECUTION,
+  HTTP_TOOL_EXECUTION_RECEIPTS,
+} from "./tokens.js";
 
 function digest(value: string): Buffer {
   return createHash("sha256").update(value, "utf8").digest();
@@ -83,6 +92,32 @@ function executionUnavailable(): JarvisProblem {
   );
 }
 
+function receiptReadUnavailable(): JarvisProblem {
+  return new JarvisProblem(
+    503,
+    "tool-action-receipt-read-unavailable",
+    "Tool Action Receipt Read Unavailable",
+    "Tool action receipt inspection requires the configured Convex persistence provider.",
+  );
+}
+
+function inspectReceipt(receipt: ToolExecutionReceipt) {
+  return {
+    receiptId: receipt.receiptId,
+    actionId: receipt.actionId,
+    requestId: receipt.requestId,
+    projectId: receipt.projectId,
+    idempotencyKey: receipt.idempotencyKey,
+    executionMode: executionModeFromReceipt(receipt),
+    tool: receipt.tool,
+    operation: receipt.operation,
+    status: receipt.status,
+    ...(receipt.errorCode === undefined ? {} : { errorCode: receipt.errorCode }),
+    startedAt: receipt.startedAt,
+    completedAt: receipt.completedAt,
+  };
+}
+
 function operationProblem(error: unknown): JarvisProblem {
   const message = error instanceof Error ? error.message : String(error);
   if (/does not exist|is missing/i.test(message)) {
@@ -128,6 +163,8 @@ export class ToolActionController {
     private readonly service: ToolActionService | null,
     @Inject(HTTP_TOOL_EXECUTION)
     private readonly executionService: ToolExecutionService | null,
+    @Inject(HTTP_TOOL_EXECUTION_RECEIPTS)
+    private readonly receiptStore: ToolExecutionReceiptReadStore | null,
     @Inject(HTTP_APP_CONFIG)
     private readonly config: HttpAppConfig,
   ) {}
@@ -216,6 +253,29 @@ export class ToolActionController {
         ...(state === undefined ? {} : { state }),
         ...(limit === undefined ? {} : { limit }),
       });
+    } catch (error: unknown) {
+      if (error instanceof JarvisProblem) throw error;
+      throw operationProblem(error);
+    }
+  }
+
+  @Get(":actionId/receipts")
+  async listReceipts(@Param("projectId") projectId: string, @Param("actionId") actionId: string) {
+    if (!this.receiptStore) throw receiptReadUnavailable();
+    try {
+      const action = await this.requireService().get({ actionId, projectId });
+      if (!action || action.projectId !== projectId) {
+        throw operationProblem(new Error("Tool action does not exist."));
+      }
+      const receipts = (await this.receiptStore.listByActionId(actionId)).filter(
+        (receipt) => receipt.actionId === actionId && receipt.projectId === projectId,
+      );
+      const live = selectLiveReceipt(receipts);
+      return {
+        data: receipts.map(inspectReceipt),
+        count: receipts.length,
+        liveReceipt: live ? inspectReceipt(live) : null,
+      };
     } catch (error: unknown) {
       if (error instanceof JarvisProblem) throw error;
       throw operationProblem(error);

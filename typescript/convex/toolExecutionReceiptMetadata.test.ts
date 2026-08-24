@@ -84,4 +84,52 @@ describe("tool execution receipt metadata", () => {
     expect(loaded?.safetyBinding?.version).toBe("jarvis-safety-binding:v1");
     expect(loaded?.safetyBinding?.phase).toBe("tool-execute");
   });
+
+  it("lists receipts by action ID without mixing other actions", async () => {
+    const t = harness();
+    const base = {
+      serviceToken: SERVICE_TOKEN,
+      requestId: "request-1",
+      projectId: "project-1",
+      actionFingerprint: "jarvis-action-fingerprint:v1:action",
+      tool: "notes",
+      operation: "create",
+      actor: "agent" as const,
+      policyVersion: "totality-policy:v2.2",
+      correlationId: "correlation-1",
+      source: "convex-receipt-list-test",
+      startedAt: 1,
+      completedAt: 2,
+    };
+    await t.mutation(api.toolExecutionReceipts.save, {
+      ...base,
+      receiptKey: "live:action-1",
+      receiptId: "live-1",
+      actionId: "action-1",
+      idempotencyKey: "tool-action-execution:v1:live:one",
+      status: "succeeded",
+    });
+    await t.mutation(api.toolExecutionReceipts.save, {
+      ...base,
+      receiptKey: "dry:action-1",
+      receiptId: "dry-1",
+      actionId: "action-1",
+      idempotencyKey: "tool-action-execution:v1:dry-run:one",
+      status: "dry-run",
+    });
+    await t.mutation(api.toolExecutionReceipts.save, {
+      ...base,
+      receiptKey: "live:action-2",
+      receiptId: "live-2",
+      actionId: "action-2",
+      idempotencyKey: "tool-action-execution:v1:live:two",
+      status: "succeeded",
+    });
+
+    const listed = await t.query(api.toolExecutionReceipts.listByActionId, {
+      serviceToken: SERVICE_TOKEN,
+      actionId: "action-1",
+    });
+    expect(listed.map((row) => row.receiptId).sort()).toEqual(["dry-1", "live-1"]);
+  });
 });

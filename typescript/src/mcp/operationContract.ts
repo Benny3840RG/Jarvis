@@ -29,6 +29,11 @@ export const MCP_TOOL_OPERATIONS: Readonly<Record<string, readonly OpenApiOperat
     { method: "GET", path: "/api/v1/quotes" },
     { method: "GET", path: "/api/v1/operations/inbox" },
     { method: "GET", path: "/api/v1/operations/activity" },
+    { method: "GET", path: "/api/v1/clients" },
+    { method: "GET", path: "/api/v1/properties" },
+    { method: "GET", path: "/api/v1/enquiries" },
+    { method: "GET", path: "/api/v1/invoices" },
+    { method: "GET", path: "/api/v1/reconciliations" },
   ],
   get_jarvis_status: [{ method: "GET", path: "/api/v1/status" }],
   list_tasks: [{ method: "GET", path: "/api/v1/tasks" }],
@@ -57,6 +62,9 @@ export const MCP_TOOL_OPERATIONS: Readonly<Record<string, readonly OpenApiOperat
   list_tool_actions: [{ method: "GET", path: "/api/v1/projects/{projectId}/tool-actions" }],
   get_tool_action: [
     { method: "GET", path: "/api/v1/projects/{projectId}/tool-actions/{actionId}" },
+  ],
+  list_tool_action_receipts: [
+    { method: "GET", path: "/api/v1/projects/{projectId}/tool-actions/{actionId}/receipts" },
   ],
   get_daily_brief: [{ method: "GET", path: "/api/v1/brief" }],
   get_operations_inbox: [{ method: "GET", path: "/api/v1/operations/inbox" }],

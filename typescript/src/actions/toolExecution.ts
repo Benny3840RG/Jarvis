@@ -89,9 +89,16 @@ export type ToolExecutionDefinition = {
 export interface ToolExecutionReceiptStore {
   get(key: string): Promise<ToolExecutionReceipt | null>;
   save(key: string, receipt: ToolExecutionReceipt): Promise<void>;
+  listByActionId?(actionId: string): Promise<ToolExecutionReceipt[]>;
 }
 
-export class InMemoryToolExecutionReceiptStore implements ToolExecutionReceiptStore {
+export interface ToolExecutionReceiptReadStore {
+  listByActionId(actionId: string): Promise<ToolExecutionReceipt[]>;
+}
+
+export class InMemoryToolExecutionReceiptStore
+  implements ToolExecutionReceiptStore, ToolExecutionReceiptReadStore
+{
   private readonly receipts = new Map<string, ToolExecutionReceipt>();
 
   async get(key: string): Promise<ToolExecutionReceipt | null> {
@@ -100,6 +107,10 @@ export class InMemoryToolExecutionReceiptStore implements ToolExecutionReceiptSt
 
   async save(key: string, receipt: ToolExecutionReceipt): Promise<void> {
     this.receipts.set(key, receipt);
+  }
+
+  async listByActionId(actionId: string): Promise<ToolExecutionReceipt[]> {
+    return [...this.receipts.values()].filter((receipt) => receipt.actionId === actionId);
   }
 }
 
@@ -203,6 +214,30 @@ export function deriveToolExecutionIdempotencyKey(
     throw new Error("Tool action ID is required for execution idempotency.");
   }
   return `tool-action-execution:v1:${mode}:${digest({ actionId: cleanActionId, mode })}`;
+}
+
+export type ToolExecutionMode = "live" | "dry-run";
+
+/**
+ * Dry-run and live executions have distinct identity. A dry-run receipt is
+ * never evidence that live execution occurred.
+ */
+export function executionModeFromReceipt(
+  receipt: Pick<ToolExecutionReceipt, "status" | "idempotencyKey">,
+): ToolExecutionMode {
+  if (receipt.status === "dry-run") return "dry-run";
+  if (receipt.idempotencyKey.includes(":dry-run:")) return "dry-run";
+  return "live";
+}
+
+export function selectLiveReceipt(
+  receipts: readonly ToolExecutionReceipt[],
+): ToolExecutionReceipt | null {
+  const live = receipts
+    .filter((receipt) => executionModeFromReceipt(receipt) === "live")
+    .slice()
+    .sort((left, right) => Date.parse(right.completedAt) - Date.parse(left.completedAt));
+  return live[0] ?? null;
 }
 
 function isEffectFingerprintConflict(error: unknown): boolean {

@@ -440,6 +440,50 @@ const countsSchema = z.object({
   reminders: z.number().int().nonnegative(),
 });
 
+const hudRegisterStatusSchema = z.enum(["ready", "unavailable"]);
+const hudEnquirySchema = z.object({
+  id: z.string(),
+  clientId: z.string(),
+  propertyId: z.string().optional(),
+  source: z.string(),
+  requestedWork: z.string(),
+  urgency: z.enum(["standard", "urgent", "emergency"]),
+  status: z.enum(["open", "converted", "closed"]),
+  createdAt: z.number(),
+  updatedAt: z.number(),
+});
+const hudInvoiceSchema = z.object({
+  id: z.string(),
+  clientId: z.string(),
+  number: z.string(),
+  status: z.enum(["draft", "issued", "paid", "void"]),
+  paymentStatus: z.enum(["unpaid", "partial", "paid", "overpaid"]),
+  total: z.number(),
+  amountPaid: z.number(),
+  balanceDue: z.number(),
+  dueDate: z.string().optional(),
+  createdAt: z.number(),
+  updatedAt: z.number(),
+});
+const hudPropertySchema = z.object({
+  id: z.string(),
+  clientId: z.string(),
+  address: z.string(),
+  hazards: z.array(z.string()),
+  accessNotes: z.string().optional(),
+  serviceNotes: z.string().optional(),
+  createdAt: z.number(),
+  updatedAt: z.number(),
+});
+const hudClientSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  contacts: z.array(z.object({ label: z.string().optional(), value: z.string() })),
+  notes: z.string().optional(),
+  createdAt: z.number(),
+  updatedAt: z.number(),
+});
+
 const dashboardOutputSchema = {
   status: statusSchema,
   tasks: z.array(taskSchema),
@@ -454,6 +498,61 @@ const dashboardOutputSchema = {
   // "unavailable"}` — and must never be rendered as "nothing needs attention".
   inbox: operationsInboxSchema.nullable(),
   activity: activityTimelineResultSchema.nullable(),
+  approvals: z.object({
+    status: hudRegisterStatusSchema,
+    items: z.array(toolActionSchema),
+  }),
+  reconciliations: z.object({
+    status: hudRegisterStatusSchema,
+    items: z.array(
+      z.object({
+        actionId: z.string(),
+        state: z.string(),
+        terminalStatus: z.enum(["succeeded", "failed"]).optional(),
+        receiptId: z.string().optional(),
+      }),
+    ),
+  }),
+  receipts: z.object({
+    status: hudRegisterStatusSchema,
+    items: z.array(
+      z.object({
+        receiptId: z.string(),
+        actionId: z.string(),
+        projectId: z.string(),
+        idempotencyKey: z.string(),
+        executionMode: z.enum(["live", "dry-run"]),
+        tool: z.string(),
+        operation: z.string(),
+        status: z.enum(["dry-run", "succeeded", "failed", "indeterminate", "blocked"]),
+        errorCode: z.string().optional(),
+        startedAt: z.string(),
+        completedAt: z.string(),
+      }),
+    ),
+    observations: z.array(
+      z.object({
+        actionId: z.string(),
+        status: z.enum(["ready", "unavailable", "unqueried"]),
+      }),
+    ),
+  }),
+  business: z.object({
+    clients: z.object({ status: hudRegisterStatusSchema, items: z.array(hudClientSchema) }),
+    properties: z.object({ status: hudRegisterStatusSchema, items: z.array(hudPropertySchema) }),
+    enquiries: z.object({ status: hudRegisterStatusSchema, items: z.array(hudEnquirySchema) }),
+    invoices: z.object({ status: hudRegisterStatusSchema, items: z.array(hudInvoiceSchema) }),
+  }),
+  presence: z.enum([
+    "connecting",
+    "idle",
+    "waiting_for_approval",
+    "reconciling",
+    "blocked",
+    "degraded",
+    "error",
+    "offline",
+  ]),
   counts: countsSchema,
 };
 
@@ -1391,6 +1490,58 @@ export function createJarvisMcpServer(client: JarvisApiClient): McpServer {
             },
           ],
           structuredContent: { action },
+        };
+      } catch (error: unknown) {
+        return safeError(error);
+      }
+    },
+  );
+
+  const receiptInspectionSchema = z.object({
+    receiptId: z.string(),
+    actionId: z.string(),
+    projectId: z.string(),
+    idempotencyKey: z.string(),
+    executionMode: z.enum(["live", "dry-run"]),
+    tool: z.string(),
+    operation: z.string(),
+    status: z.enum(["dry-run", "succeeded", "failed", "indeterminate", "blocked"]),
+    errorCode: z.string().optional(),
+    startedAt: z.string(),
+    completedAt: z.string(),
+  });
+
+  registerAppTool(
+    server,
+    "list_tool_action_receipts",
+    {
+      title: "Inspect tool-action execution receipts",
+      description:
+        "Read-only inspection of durable execution receipts for one proposal. Live and dry-run receipts are distinct. A successful dry-run is never evidence that live execution occurred. This tool cannot approve, reject, revoke, or execute.",
+      inputSchema: { projectId: z.string().min(1), actionId: z.string().min(1) },
+      outputSchema: {
+        receipts: z.array(receiptInspectionSchema),
+        count: z.number().int().nonnegative(),
+        liveReceipt: receiptInspectionSchema.nullable(),
+      },
+      annotations: readAnnotations,
+      _meta: { ui: { visibility: ["model"] } },
+    },
+    async ({ projectId, actionId }) => {
+      try {
+        const result = await client.listToolActionReceipts(projectId, actionId);
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: `Found ${result.receipts.length} execution receipt(s) for ${actionId}. Live receipt ${result.liveReceipt ? "present" : "absent"}.`,
+            },
+          ],
+          structuredContent: {
+            receipts: result.receipts,
+            count: result.receipts.length,
+            liveReceipt: result.liveReceipt,
+          },
         };
       } catch (error: unknown) {
         return safeError(error);

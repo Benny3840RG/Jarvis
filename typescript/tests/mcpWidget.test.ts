@@ -27,8 +27,8 @@ describe("Jarvis preview widget", () => {
     assert.match(widget, /ui\/notifications\/tool-result/);
     assert.match(widget, /tools\/call/);
     assert.match(widget, /JARVIS \/\/ OPERATOR CONSOLE/);
-    assert.match(widget, /LANDSCAPE COMMAND CENTRE/);
-    assert.match(widget, /class="hud-grid"/);
+    assert.match(widget, /class="hud /);
+    assert.match(widget, /JARVIS PRESENCE/);
   });
 
   it("keeps real Jarvis task, reminder, refresh, and system controls wired", () => {
@@ -349,6 +349,122 @@ describe("Jarvis preview widget", () => {
     assert.equal(state.quoteDetailState, "ready");
   });
 
+  it("fail-closes widget approval when quote inspection fails", () => {
+    const stageSource = widget.match(
+      /(function deriveHudApprovalStage\(input\) \{[\s\S]*?\})\n\s+function approvalStageLabel/,
+    )?.[1];
+    assert.ok(stageSource, "approval stage mapper was not found");
+    const deriveHudApprovalStage = new Function(
+      `"use strict"; ${stageSource}; return deriveHudApprovalStage;`,
+    )() as (input: unknown) => string;
+    const proposed = {
+      state: "proposed",
+      tool: "quoteSendTool",
+      operation: "quotes:send",
+      approvalExpiresAt: "2026-08-22T01:00:00.000Z",
+    };
+    const now = Date.parse("2026-08-22T00:00:00.000Z");
+    assert.equal(
+      deriveHudApprovalStage({
+        action: proposed,
+        inspection: { required: true, state: "error" },
+        now,
+      }),
+      "inspection_failed",
+    );
+    assert.equal(
+      deriveHudApprovalStage({
+        action: { ...proposed, state: "approved" },
+        inspection: { required: true, state: "ready" },
+        receiptAvailable: false,
+        now,
+      }),
+      "outcome_unknown",
+    );
+    assert.equal(
+      deriveHudApprovalStage({
+        action: { ...proposed, state: "approved" },
+        inspection: { required: true, state: "ready" },
+        receiptAvailable: true,
+        receipts: [{ status: "succeeded", executionMode: "dry-run" }],
+        now,
+      }),
+      "awaiting_execution",
+    );
+    assert.equal(
+      deriveHudApprovalStage({
+        action: { ...proposed, state: "rejected" },
+        inspection: { required: true, state: "ready" },
+        now,
+      }),
+      "rejected",
+    );
+    assert.equal(
+      deriveHudApprovalStage({
+        action: { ...proposed, state: "approved" },
+        inspection: { required: true, state: "ready" },
+        reconciliation: { state: "escalated" },
+        now,
+      }),
+      "outcome_unknown",
+    );
+    assert.equal(
+      deriveHudApprovalStage({
+        action: { ...proposed, state: "approved" },
+        inspection: { required: true, state: "ready" },
+        reconciliation: { state: "escalated" },
+        receiptAvailable: true,
+        receipts: [{ status: "succeeded", executionMode: "live" }],
+        now,
+      }),
+      "outcome_unknown",
+    );
+    assert.notEqual(
+      deriveHudApprovalStage({
+        action: { ...proposed, state: "approved" },
+        inspection: { required: true, state: "ready" },
+        reconciliation: { state: "escalated" },
+        now,
+      }),
+      "execution_failed",
+    );
+    const uncommissioned = {
+      action: proposed,
+      inspection: { required: true, state: "ready" },
+      quoteDeliveryCommissioned: false,
+      now,
+    };
+    assert.equal(deriveHudApprovalStage(uncommissioned), "awaiting_commissioning");
+    assert.equal(deriveHudApprovalStage(uncommissioned) === "awaiting_approval", false);
+    assert.equal(
+      deriveHudApprovalStage({
+        action: proposed,
+        inspection: { required: true, state: "ready" },
+        quoteDeliveryCommissioned: true,
+        now,
+      }),
+      "awaiting_approval",
+    );
+  });
+
+  it("treats quote-delivery as commissioned only on the IntegrationStatus enum", () => {
+    const commissionedSource = widget.match(
+      /(function quoteDeliveryCommissioned\(\) \{[\s\S]*?\})\n\s+function actionReceiptObservationReady/,
+    )?.[1];
+    assert.ok(commissionedSource, "quote-delivery commissioning check was not found");
+    const run = (status: string) =>
+      new Function(
+        "state",
+        `"use strict"; ${commissionedSource}; return quoteDeliveryCommissioned();`,
+      )({
+        status: { integrations: [{ name: "quote-delivery", status }] },
+      }) as boolean;
+    assert.equal(run("commissioned"), true);
+    assert.equal(run("not-commissioned"), false);
+    assert.equal(run("ready"), false);
+    assert.equal(run("ok"), false);
+  });
+
   it("ships syntactically valid embedded dashboard JavaScript", () => {
     const source = extractStaticDashboardScript(widget);
     assert.ok(source, "dashboard script was not found");
@@ -367,8 +483,39 @@ describe("Jarvis preview widget", () => {
     assert.doesNotMatch(widget, /\bCPU\b|\bGPU\b|token usage|API latency/i);
   });
 
+  it("projects business registers and governed proposals without local authority", () => {
+    assert.match(widget, /data-view="business"/);
+    assert.match(widget, /data-view="approvals"/);
+    assert.match(widget, /id="view-business"/);
+    assert.match(widget, /id="view-approvals"/);
+    assert.match(widget, /state\.business/);
+    assert.match(widget, /state\.approvals/);
+    assert.match(widget, /JARVIS PRESENCE/);
+    assert.match(widget, /does not auto-approve/i);
+    assert.match(widget, /never stores an approval token/i);
+    assert.match(widget, /QUOTE COULD NOT BE VERIFIED/);
+    assert.match(widget, /APPROVAL ACCEPTED/);
+    assert.match(widget, /AWAITING EXECUTION/);
+    assert.match(widget, /EXECUTION BLOCKED/);
+    assert.match(widget, /QUOTE VERIFIED/);
+    assert.match(widget, /AWAITING COMMISSIONING/);
+    assert.match(widget, /OUTCOME UNKNOWN/);
+    assert.match(widget, /RECONCILIATION PENDING/);
+    assert.match(widget, /CONFIRM COMPLETE/);
+    assert.match(widget, /does not constitute an authorisation boundary/);
+    assert.match(widget, /does not approve or send a quote/);
+    assert.match(widget, /governed HTTP operator path/);
+    assert.doesNotMatch(widget, /approve_tool_action/);
+    assert.doesNotMatch(widget, /reject_tool_action/);
+    assert.doesNotMatch(widget, /hudState\.jobCompleted/);
+    assert.match(widget, /row\.status === "commissioned"/);
+    assert.match(widget, /return lifecycleFor\(action\) === "awaiting_approval"/);
+    assert.match(widget, /actionReceiptObservationReady/);
+  });
+
   it("does not contain Jarvis or OpenAI credential names", () => {
     assert.doesNotMatch(widget, /JARVIS_SERVICE_TOKEN/);
+    assert.doesNotMatch(widget, /JARVIS_APPROVAL_TOKEN/);
     assert.doesNotMatch(widget, /OPENAI_API_KEY/);
     assert.doesNotMatch(widget, /CONVEX_DEPLOY_KEY/);
   });

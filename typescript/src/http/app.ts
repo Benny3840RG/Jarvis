@@ -9,7 +9,11 @@ import { FastifyAdapter, type NestFastifyApplication } from "@nestjs/platform-fa
 import { createToolActionServiceFromEnv } from "../actions/toolActionFactory.js";
 import type { ToolActionService } from "../actions/toolActions.js";
 import { createToolExecutionServiceFromEnv } from "../actions/toolExecutionFactory.js";
-import type { ToolExecutionService } from "../actions/toolExecution.js";
+import type {
+  ToolExecutionReceiptReadStore,
+  ToolExecutionService,
+} from "../actions/toolExecution.js";
+import { ConvexToolExecutionReceiptStore } from "../persistence/convexToolExecutionReceipts.js";
 import type { BusinessSettingsStore } from "../businessSettings/businessSettings.js";
 import { InMemoryBusinessSettingsStore } from "../businessSettings/inMemoryBusinessSettingsStore.js";
 import { JsonBusinessSettingsStore } from "../businessSettings/jsonBusinessSettingsStore.js";
@@ -111,6 +115,7 @@ export type CreateJarvisHttpAppOptions = (
   memoryChangeSetService?: MemoryChangeSetService | null;
   toolActionService?: ToolActionService | null;
   toolExecutionService?: ToolExecutionService | null;
+  toolExecutionReceiptStore?: ToolExecutionReceiptReadStore | null;
   businessSettingsStore?: BusinessSettingsStore;
   enquiryStore?: EnquiryStore;
   invoiceStore?: InvoiceStore;
@@ -202,6 +207,12 @@ export async function createJarvisHttpApp(
       ? options.toolExecutionService
       : usesEnvironment
         ? createToolExecutionServiceFromEnv()
+        : null;
+  const toolExecutionReceiptStore =
+    options.toolExecutionReceiptStore !== undefined
+      ? options.toolExecutionReceiptStore
+      : usesEnvironment && providerName === "convex"
+        ? new ConvexToolExecutionReceiptStore()
         : null;
   const activityEventReader =
     options.activityEventReader !== undefined
@@ -356,6 +367,7 @@ export async function createJarvisHttpApp(
       memoryChangeSetService,
       toolActionService,
       toolExecutionService,
+      toolExecutionReceiptStore,
       businessSettingsStore,
       enquiryStore,
       invoiceStore,

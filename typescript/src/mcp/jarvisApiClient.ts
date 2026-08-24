@@ -2,9 +2,13 @@ import { randomUUID } from "node:crypto";
 import { performance } from "node:perf_hooks";
 
 import type { DailyBrief } from "../briefs/brief.js";
+import type { Enquiry } from "../enquiries/enquiry.js";
+import { deriveHudPresence, type HudPresence } from "../hud/hudPresence.js";
+import type { Invoice } from "../invoices/invoice.js";
 import type { ActivityTimelineResult } from "../operations/activityTimeline.js";
 import type { OperationsInbox } from "../operations/operationsInbox.js";
 import type { Client, ClientInput, ClientUpdate } from "../clients/client.js";
+import type { Property } from "../properties/property.js";
 import type { Errand, ErrandInput, ErrandUpdate } from "../errands/errand.js";
 import type { Build, BuildInput, BuildUpdate } from "../builds/build.js";
 import type { BuildLogEntry, BuildLogInput, BuildLogUpdate } from "../buildLog/buildLogEntry.js";
@@ -16,6 +20,7 @@ import type { Project, ProjectInput, ProjectUpdate } from "../projects/project.j
 import type { QuoteSnapshot } from "../quotes/quoteLifecycle.js";
 import type { QuoteSummary } from "../quotes/quoteRepository.js";
 import type { ToolAction } from "../actions/toolActions.js";
+import type { ToolExecutionMode, ToolExecutionStatus } from "../actions/toolExecution.js";
 import type { SystemStatus } from "../http/contracts.js";
 import type { Reminder, Task } from "../persistence/persistence.js";
 import type { TaskUpdate } from "../persistence/updates.js";
@@ -26,6 +31,44 @@ export type ReminderRequestUpdate = {
   title?: string;
   due?: { text: string; timezone?: string } | null;
 };
+
+export type HudRegister<T> = {
+  status: "ready" | "unavailable";
+  items: T[];
+};
+
+export type HudReceiptInspection = {
+  receiptId: string;
+  actionId: string;
+  projectId: string;
+  idempotencyKey: string;
+  executionMode: ToolExecutionMode;
+  tool: string;
+  operation: string;
+  status: ToolExecutionStatus;
+  errorCode?: string;
+  startedAt: string;
+  completedAt: string;
+};
+
+export type HudReceiptActionObservation = {
+  actionId: string;
+  status: "ready" | "unavailable" | "unqueried";
+};
+
+export type HudReceiptRegister = HudRegister<HudReceiptInspection> & {
+  observations: HudReceiptActionObservation[];
+};
+
+/** True only when this action's own receipt list was read successfully. */
+export function actionReceiptObservationReady(
+  receipts: HudReceiptRegister | null | undefined,
+  actionId: string,
+): boolean {
+  return Boolean(
+    receipts?.observations?.some((row) => row.actionId === actionId && row.status === "ready"),
+  );
+}
 
 export type DashboardSnapshot = {
   status: SystemStatus;
@@ -40,6 +83,25 @@ export type DashboardSnapshot = {
   inbox: OperationsInbox | null;
   /** `null` means the activity endpoint itself could not be reached — distinct from `{status: "unavailable"}`. */
   activity: ActivityTimelineResult | null;
+  approvals: HudRegister<ToolAction>;
+  /**
+   * External reconciliation observations. 503/unavailable outside Convex.
+   * Missing observation is OUTCOME UNKNOWN, never FAILURE.
+   */
+  reconciliations: HudRegister<{
+    actionId: string;
+    state: string;
+    terminalStatus?: "succeeded" | "failed";
+    receiptId?: string;
+  }>;
+  receipts: HudReceiptRegister;
+  business: {
+    clients: HudRegister<Client>;
+    properties: HudRegister<Property>;
+    enquiries: HudRegister<Enquiry>;
+    invoices: HudRegister<Invoice>;
+  };
+  presence: HudPresence;
   counts: {
     activeTasks: number;
     completedTasks: number;
@@ -581,6 +643,18 @@ export class JarvisApiClient {
     return (await this.request<ListResponse<QuoteSummary>>("GET", "/api/v1/quotes")).data;
   }
 
+  async listProperties(): Promise<Property[]> {
+    return (await this.request<ListResponse<Property>>("GET", "/api/v1/properties")).data;
+  }
+
+  async listEnquiries(): Promise<Enquiry[]> {
+    return (await this.request<ListResponse<Enquiry>>("GET", "/api/v1/enquiries")).data;
+  }
+
+  async listInvoices(): Promise<Invoice[]> {
+    return (await this.request<ListResponse<Invoice>>("GET", "/api/v1/invoices")).data;
+  }
+
   async getQuote(quoteId: string): Promise<QuoteSnapshot> {
     return (
       await this.request<DataResponse<QuoteSnapshot>>(
@@ -604,6 +678,27 @@ export class JarvisApiClient {
       "GET",
       `/api/v1/projects/${encodeURIComponent(projectId)}/tool-actions/${encodeURIComponent(actionId)}`,
     );
+  }
+
+  /** Read-only: lists live and dry-run execution receipts. Cannot execute. */
+  async listToolActionReceipts(
+    projectId: string,
+    actionId: string,
+  ): Promise<{
+    receipts: HudReceiptInspection[];
+    liveReceipt: HudReceiptInspection | null;
+  }> {
+    const payload = await this.request<{
+      data: HudReceiptInspection[];
+      liveReceipt: HudReceiptInspection | null;
+    }>(
+      "GET",
+      `/api/v1/projects/${encodeURIComponent(projectId)}/tool-actions/${encodeURIComponent(actionId)}/receipts`,
+    );
+    return {
+      receipts: Array.isArray(payload.data) ? payload.data : [],
+      liveReceipt: payload.liveReceipt ?? null,
+    };
   }
 
   async getDailyBrief(): Promise<DailyBrief> {
@@ -650,6 +745,22 @@ export class JarvisApiClient {
       (value) => value,
       () => null,
     );
+    const clients = this.listClients().then(
+      (items) => ({ status: "ready" as const, items }),
+      () => ({ status: "unavailable" as const, items: [] as Client[] }),
+    );
+    const properties = this.listProperties().then(
+      (items) => ({ status: "ready" as const, items }),
+      () => ({ status: "unavailable" as const, items: [] as Property[] }),
+    );
+    const enquiries = this.listEnquiries().then(
+      (items) => ({ status: "ready" as const, items }),
+      () => ({ status: "unavailable" as const, items: [] as Enquiry[] }),
+    );
+    const invoices = this.listInvoices().then(
+      (items) => ({ status: "ready" as const, items }),
+      () => ({ status: "unavailable" as const, items: [] as Invoice[] }),
+    );
     const [
       status,
       tasks,
@@ -658,6 +769,10 @@ export class JarvisApiClient {
       resolvedQuoteRegister,
       resolvedInbox,
       resolvedActivity,
+      resolvedClients,
+      resolvedProperties,
+      resolvedEnquiries,
+      resolvedInvoices,
     ] = await Promise.all([
       this.getStatus(),
       this.listTasks(),
@@ -666,7 +781,22 @@ export class JarvisApiClient {
       quoteRegister,
       inbox,
       activity,
+      clients,
+      properties,
+      enquiries,
+      invoices,
     ]);
+    const approvals = await this.loadApprovals(
+      (brief.projects?.active ?? []).slice(0, 8).map((project) => project.id),
+    );
+    const reconciliations = await this.listReconciliations().then(
+      (items) => ({ status: "ready" as const, items }),
+      () => ({
+        status: "unavailable" as const,
+        items: [] as DashboardSnapshot["reconciliations"]["items"],
+      }),
+    );
+    const receipts = await this.loadReceipts(approvals.items);
     return {
       status,
       tasks,
@@ -675,11 +805,84 @@ export class JarvisApiClient {
       quoteRegister: resolvedQuoteRegister,
       inbox: resolvedInbox,
       activity: resolvedActivity,
+      approvals,
+      reconciliations,
+      receipts,
+      business: {
+        clients: resolvedClients,
+        properties: resolvedProperties,
+        enquiries: resolvedEnquiries,
+        invoices: resolvedInvoices,
+      },
+      presence: deriveHudPresence({
+        status,
+        proposedApprovalCount: approvals.items.filter((action) => action.state === "proposed")
+          .length,
+      }),
       counts: {
         activeTasks: tasks.filter((task) => !task.completed).length,
         completedTasks: tasks.filter((task) => task.completed).length,
         reminders: reminders.length,
       },
     };
+  }
+
+  private async loadApprovals(projectIds: string[]): Promise<HudRegister<ToolAction>> {
+    if (projectIds.length === 0) return { status: "ready", items: [] };
+    const pages = await Promise.all(
+      projectIds.map((projectId) =>
+        this.listToolActions(projectId).then(
+          (items) => ({ ok: true as const, items }),
+          () => ({ ok: false as const, items: [] as ToolAction[] }),
+        ),
+      ),
+    );
+    if (pages.every((page) => !page.ok)) return { status: "unavailable", items: [] };
+    return {
+      status: "ready",
+      items: pages.flatMap((page) => page.items),
+    };
+  }
+
+  private async loadReceipts(actions: ToolAction[]): Promise<HudReceiptRegister> {
+    if (actions.length === 0) return { status: "ready", items: [], observations: [] };
+    const queryCap = 16;
+    const queried = actions.slice(0, queryCap);
+    const unqueried = actions.slice(queryCap);
+    const pages = await Promise.all(
+      queried.map((action) =>
+        this.listToolActionReceipts(action.projectId, action.actionId).then(
+          (result) => ({
+            actionId: action.actionId,
+            status: "ready" as const,
+            items: result.receipts,
+          }),
+          () => ({
+            actionId: action.actionId,
+            status: "unavailable" as const,
+            items: [] as HudReceiptInspection[],
+          }),
+        ),
+      ),
+    );
+    const observations: HudReceiptActionObservation[] = [
+      ...pages.map((page) => ({ actionId: page.actionId, status: page.status })),
+      ...unqueried.map((action) => ({ actionId: action.actionId, status: "unqueried" as const })),
+    ];
+    const items = pages.flatMap((page) => page.items);
+    const allReady = observations.length > 0 && observations.every((row) => row.status === "ready");
+    return {
+      status: allReady ? "ready" : "unavailable",
+      items,
+      observations,
+    };
+  }
+
+  /** Read-only: owner-scoped external reconciliation records. Cannot execute or resolve. */
+  async listReconciliations(): Promise<DashboardSnapshot["reconciliations"]["items"]> {
+    const payload = await this.request<{
+      data: DashboardSnapshot["reconciliations"]["items"];
+    }>("GET", "/api/v1/reconciliations");
+    return Array.isArray(payload.data) ? payload.data : [];
   }
 }
