@@ -21,6 +21,29 @@ afterEach(() => {
 });
 
 describe("upgrade updatedAt", () => {
+  it("uses one creation timestamp even when the clock advances between reads", async () => {
+    const t = harness();
+    const build = await t.mutation(api.builds.create, {
+      serviceToken: SERVICE_TOKEN,
+      name: "Deterministic timestamp test build",
+      kind: "test",
+    });
+
+    let now = 1_000;
+    const nowSpy = vi.spyOn(Date, "now").mockImplementation(() => now++);
+    try {
+      const created = await t.mutation(api.upgrades.create, {
+        serviceToken: SERVICE_TOKEN,
+        buildId: build._id,
+        title: "Single creation instant",
+      });
+
+      expect(created.updatedAt).toBe(created.createdAt);
+    } finally {
+      nowSpy.mockRestore();
+    }
+  });
+
   it("stamps updatedAt on create and bumps it on update", async () => {
     const t = harness();
     const build = await t.mutation(api.builds.create, {

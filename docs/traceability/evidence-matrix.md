@@ -93,3 +93,132 @@ Verified.
 | OS-CI-010   | `TEST-OS-CI-010-001`; external-effect reconciliation denial in `omegaPolicy.test.ts` and full ΩΣ gate                                   | Verified | `23818db872b67f93feecf42d9abce6ae946c5f83` |
 | OS-CI-011   | `TEST-OS-CI-011-001`; bounded indexed completion reads in `omegaMissions.ts`, covered by the exact-head type-check and full Convex gate | Verified | `23818db872b67f93feecf42d9abce6ae946c5f83` |
 | OS-CI-012   | `TEST-OS-CI-012-001`; repository-only scope and no-deployment boundary recorded in the TDD evidence                                     | Verified | `23818db872b67f93feecf42d9abce6ae946c5f83` |
+
+## Business component safety repair — 2026-08-21
+
+`docs/traceability/business-component-current-truth.md` records the current
+business-component truth and the first safety repair from the completion
+directive. The simulation-scoped agent business domain now refuses job
+completion without durable completion evidence references, rejects invalid
+terminal jumps, and preserves existing persisted jobs through an additive state
+shape. The same slice fixes a Convex upgrade timestamp flake by stamping
+`createdAt` and `updatedAt` from one server timestamp on create.
+
+Verification: focused agent-domain tests, focused upgrade Convex tests, and full
+local `npm run check` passed. This is not a production, Outlook, AM-013,
+customer-effect, remote-exposure, dashboard, invoice, payment or full business
+component completion claim.
+
+## Business property register — 2026-08-21
+
+The HTTP business surface now includes a durable client-owned property register:
+`src/properties/property.ts`, `src/properties/jsonPropertyStore.ts`,
+`src/properties/inMemoryPropertyStore.ts`, `src/http/propertyRequest.ts` and
+`src/http/propertyController.ts`. The routes are wired through
+`src/http/app.ts`, `src/http/jarvisHttpModule.ts` and documented in
+`openapi/jarvis.openapi.json`.
+
+Verification:
+
+- `node --import tsx --test tests/propertyStore.test.ts tests/propertyHttp.test.ts tests/httpRouteContract.test.ts tests/httpOpenApiRouteAlignment.test.ts`
+- `npm run type-check`
+- `npm run openapi:lint`
+
+The property routes remain HTTP-only (`x-mcp-tool.exposed=false`) until a later
+governed action design binds property mutations to the same authority and
+receipt path used by the rest of Jarvis.
+
+## Property-aware project/job linkage — 2026-08-21
+
+The existing durable business project/job record now has an optional
+`propertyId` in `src/projects/project.ts`, JSON/in-memory stores, request
+parsing and the `/api/v1/projects` OpenAPI schemas. This connects jobs to the
+new property register without introducing a parallel work-order authority.
+
+Verification:
+
+- `node --import tsx --test tests/projectStore.test.ts tests/projectHttp.test.ts tests/httpRouteContract.test.ts tests/httpOpenApiRouteAlignment.test.ts`
+- `npm run type-check`
+- `npm run openapi:lint`
+
+The field is additive for old project records and can be cleared with
+`propertyId: null` over the HTTP update boundary.
+
+## Business settings and pricing foundation — 2026-08-21
+
+The HTTP business surface now includes one durable typed business settings
+record: `src/businessSettings/businessSettings.ts`,
+`src/businessSettings/jsonBusinessSettingsStore.ts`,
+`src/businessSettings/inMemoryBusinessSettingsStore.ts`,
+`src/http/businessSettingsRequest.ts` and
+`src/http/businessSettingsController.ts`. The route is wired through
+`src/http/app.ts`, `src/http/jarvisHttpModule.ts`, and documented in
+`openapi/jarvis.openapi.json`.
+
+Verification:
+
+- `node --import tsx --test tests/businessSettingsStore.test.ts tests/businessSettingsHttp.test.ts tests/httpRouteContract.test.ts tests/httpOpenApiRouteAlignment.test.ts`
+- `npm run type-check`
+- `npm run openapi:lint`
+
+The record fixes the business defaults to Beez Treez, Australian English,
+Melbourne timezone, AUD currency, metric measurements and 10% GST default
+without storing secrets. Contact/payment details are bounded business fields,
+not credential fields; secret-looking values are rejected. The route remains
+HTTP-only (`x-mcp-tool.exposed=false`) until a governed action binding exists.
+
+## Durable enquiry intake and project conversion — 2026-08-21
+
+The HTTP business surface now includes durable enquiry intake:
+`src/enquiries/enquiry.ts`, `src/enquiries/enquiryData.ts`,
+`src/enquiries/jsonEnquiryStore.ts`, `src/enquiries/inMemoryEnquiryStore.ts`,
+`src/http/enquiryRequest.ts` and `src/http/enquiryController.ts`. The route is
+wired through `src/http/app.ts`, `src/http/jarvisHttpModule.ts` and documented
+in `openapi/jarvis.openapi.json`.
+
+Verification:
+
+- `node --import tsx --test tests/enquiryStore.test.ts tests/enquiryHttp.test.ts tests/httpRouteContract.test.ts tests/httpOpenApiRouteAlignment.test.ts`
+- `npm run type-check`
+- `npm run openapi:lint`
+
+The slice records customer/property-linked enquiries, requested work, source,
+urgency, notes, safety/access details, attachment references and duplicate keys.
+Duplicate submission replays the existing enquiry, and conversion replays the
+existing project if the enquiry was already converted. Conversion deliberately
+reuses the existing durable project/job authority instead of creating a
+parallel work-order surface.
+
+The route remains HTTP-only (`x-mcp-tool.exposed=false`) until a governed action
+binding exists. JSON-backed enquiry-to-project conversion is idempotent but not
+yet a single Convex transaction, so Convex foreign-key and transaction evidence
+remain open.
+
+## Durable invoice and payment-ledger foundation — 2026-08-21
+
+The HTTP business surface now includes a durable invoice/payment-ledger
+foundation: `src/invoices/invoice.ts`, `src/invoices/invoiceData.ts`,
+`src/invoices/jsonInvoiceStore.ts`, `src/invoices/inMemoryInvoiceStore.ts`,
+`src/http/invoiceRequest.ts` and `src/http/invoiceController.ts`. The route is
+wired through `src/http/app.ts`, `src/http/jarvisHttpModule.ts` and documented
+in `openapi/jarvis.openapi.json`.
+
+Verification:
+
+- `node --import tsx --test tests/invoiceStore.test.ts tests/invoiceHttp.test.ts tests/httpRouteContract.test.ts tests/httpOpenApiRouteAlignment.test.ts`
+- `npm run type-check`
+- `npm run lint`
+- `npm run format:check`
+- `npm run openapi:lint`
+
+The slice records customer/project/quote-linked invoices, line items, tax rate,
+server-derived subtotal/GST/total, duplicate keys, issue/void state, payment
+events, amount paid, balance due and payment status. Duplicate invoice creation
+replays the existing invoice. Draft invoices can be edited; issued invoices
+cannot be silently changed; payments before issue are rejected; partial,
+complete and overpaid states are derived from stored payment records.
+
+The route remains HTTP-only (`x-mcp-tool.exposed=false`) until a governed action
+binding exists. This is not yet a client-ready invoice document generator,
+automatic invoice-number consumer, bank/payment-provider reconciliation, credit
+or adjustment ledger, Convex transaction, or issued-artifact immutability proof.

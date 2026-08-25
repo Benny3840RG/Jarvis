@@ -37,6 +37,10 @@ function requiredText(value: string, field: string): string {
   return cleaned;
 }
 
+function optionalText(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
 function normalizeProject(value: unknown): Project | null {
   if (!isRecord(value)) return null;
   if (
@@ -51,6 +55,9 @@ function normalizeProject(value: unknown): Project | null {
   return {
     id: value.id,
     clientId: value.clientId,
+    ...(optionalText(value.propertyId) === undefined
+      ? {}
+      : { propertyId: optionalText(value.propertyId) }),
     title: value.title,
     status,
     ...(typeof value.notes === "string" && value.notes.trim() ? { notes: value.notes } : {}),
@@ -141,6 +148,9 @@ export class JsonProjectStore implements ProjectStore {
       const project: Project = {
         id: randomUUID(),
         clientId: requiredText(input.clientId, "Project clientId"),
+        ...(optionalText(input.propertyId) === undefined
+          ? {}
+          : { propertyId: optionalText(input.propertyId) }),
         title: requiredText(input.title, "Project title"),
         status: input.status ?? "lead",
         ...(input.notes && input.notes.trim() ? { notes: input.notes.trim() } : {}),
@@ -156,11 +166,14 @@ export class JsonProjectStore implements ProjectStore {
   async update(id: string, update: ProjectUpdate): Promise<Project | null> {
     if (
       update.clientId === undefined &&
+      update.propertyId === undefined &&
       update.title === undefined &&
       update.status === undefined &&
       update.notes === undefined
     ) {
-      throw new Error("Project update requires a clientId, title, status, or notes change.");
+      throw new Error(
+        "Project update requires a clientId, propertyId, title, status, or notes change.",
+      );
     }
     return this.writeLock.run(async () => {
       const document = await this.readDocument();
@@ -168,6 +181,11 @@ export class JsonProjectStore implements ProjectStore {
       if (!project) return null;
       if (update.clientId !== undefined)
         project.clientId = requiredText(update.clientId, "Project clientId");
+      if (update.propertyId !== undefined) {
+        const cleaned = update.propertyId === null ? "" : update.propertyId.trim();
+        if (cleaned) project.propertyId = cleaned;
+        else delete project.propertyId;
+      }
       if (update.title !== undefined) project.title = requiredText(update.title, "Project title");
       if (update.status !== undefined) project.status = update.status;
       if (update.notes !== undefined) {

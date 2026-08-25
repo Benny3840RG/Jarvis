@@ -14,9 +14,9 @@
     "skipLibCheck": true,
     "incremental": true,
     "tsBuildInfoFile": "./dist/.tsbuildinfo",
-    "baseUrl": ".",
+    "types": ["node"],
     "paths": {
-      "@/*": ["src/*"]
+      "@/*": ["./src/*"]
     }
   },
   "include": ["index.ts", "src/**/*", "resources/**/*", "server.ts", ".mcp-use/**/*.d.ts"],

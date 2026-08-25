@@ -2402,6 +2402,266 @@
         }
       }
     },
+    "/api/v1/properties": {
+      "get": {
+        "operationId": "listProperties",
+        "summary": "List business properties",
+        "description": "Returns the authoritative property register, optionally filtered by client.",
+        "tags": ["Properties"],
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "query",
+            "required": false,
+            "description": "Optional opaque client identifier used to filter properties.",
+            "schema": {
+              "$ref": "#/components/schemas/RecordId"
+            }
+          }
+        ],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Current properties.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PropertyListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createProperty",
+        "summary": "Create a business property",
+        "description": "Creates one client-owned service property with address, access notes, service notes, and site hazards.",
+        "tags": ["Properties"],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": false
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePropertyRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Property created.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PropertyResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/properties/{propertyId}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/PropertyId"
+        }
+      ],
+      "get": {
+        "operationId": "getProperty",
+        "summary": "Get one business property",
+        "description": "Returns one property by its opaque identifier.",
+        "tags": ["Properties"],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Property found.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PropertyResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      },
+      "patch": {
+        "operationId": "updateProperty",
+        "summary": "Update a business property",
+        "description": "Updates the client link, address, hazards, access notes, or service notes of one property.",
+        "tags": ["Properties"],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdatePropertyRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Property updated.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PropertyResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteProperty",
+        "summary": "Delete a business property",
+        "description": "Permanently removes one property by its identifier.",
+        "tags": ["Properties"],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": true,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Property deleted.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PropertyResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
     "/api/v1/projects": {
       "get": {
         "operationId": "listProjects",
@@ -5309,6 +5569,919 @@
           }
         }
       }
+    },
+    "/api/v1/business-settings": {
+      "get": {
+        "operationId": "getBusinessSettings",
+        "summary": "Get business settings",
+        "description": "Returns the durable Beez Treez business identity, Australian locale, AUD/GST pricing defaults, and quote/invoice numbering settings. The record deliberately excludes credentials and secrets.",
+        "tags": ["Business Settings"],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Business settings.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessSettingsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      },
+      "patch": {
+        "operationId": "updateBusinessSettings",
+        "summary": "Update business settings",
+        "description": "Updates safe business configuration fields. Locale, timezone, currency, and measurement system are fixed to en-AU, Australia/Melbourne, AUD, and metric for this single-owner business boundary.",
+        "tags": ["Business Settings"],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": false
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateBusinessSettingsRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Business settings updated.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessSettingsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/enquiries": {
+      "get": {
+        "operationId": "listEnquiries",
+        "summary": "List business enquiries",
+        "description": "Returns durable business enquiries, optionally filtered by status or client.",
+        "tags": ["Enquiries"],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": ["open", "converted", "closed"]
+            }
+          },
+          {
+            "name": "clientId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current enquiries.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnquiryListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createEnquiry",
+        "summary": "Create a business enquiry",
+        "description": "Captures a new lead/intake record with duplicate-key replay protection.",
+        "tags": ["Enquiries"],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": false
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateEnquiryRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Enquiry created.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnquiryResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/enquiries/{enquiryId}": {
+      "get": {
+        "operationId": "getEnquiry",
+        "summary": "Get one business enquiry",
+        "tags": ["Enquiries"],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "parameters": [
+          {
+            "name": "enquiryId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/RecordId"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Enquiry.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnquiryResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      },
+      "patch": {
+        "operationId": "updateEnquiry",
+        "summary": "Update one business enquiry",
+        "tags": ["Enquiries"],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": false
+          }
+        },
+        "parameters": [
+          {
+            "name": "enquiryId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/RecordId"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateEnquiryRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Enquiry updated.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnquiryResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/enquiries/{enquiryId}/close": {
+      "post": {
+        "operationId": "closeEnquiry",
+        "summary": "Close one business enquiry",
+        "tags": ["Enquiries"],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": false
+          }
+        },
+        "parameters": [
+          {
+            "name": "enquiryId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/RecordId"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CloseEnquiryRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Enquiry closed.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnquiryResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/enquiries/{enquiryId}/convert-project": {
+      "post": {
+        "operationId": "convertEnquiryToProject",
+        "summary": "Convert one enquiry to a project",
+        "description": "Creates one existing project/job record from an open enquiry and records the conversion link for replay safety.",
+        "tags": ["Enquiries"],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": false
+          }
+        },
+        "parameters": [
+          {
+            "name": "enquiryId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/RecordId"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConvertEnquiryRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Enquiry converted to a project.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnquiryConversionResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/invoices": {
+      "get": {
+        "operationId": "listInvoices",
+        "summary": "List business invoices",
+        "description": "Returns durable business invoices, optionally filtered by status or client.",
+        "tags": ["Invoices"],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": ["draft", "issued", "paid", "void"]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current invoices.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvoiceListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createInvoice",
+        "summary": "Create a business invoice draft",
+        "description": "Creates a durable draft invoice with duplicate-key replay protection and server-derived totals.",
+        "tags": ["Invoices"],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": false
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateInvoiceRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Invoice created.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvoiceResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/invoices/{invoiceId}": {
+      "get": {
+        "operationId": "getInvoice",
+        "summary": "Get one business invoice",
+        "tags": ["Invoices"],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "parameters": [
+          {
+            "name": "invoiceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/RecordId"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Invoice.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvoiceResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      },
+      "patch": {
+        "operationId": "updateInvoice",
+        "summary": "Update one draft business invoice",
+        "tags": ["Invoices"],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": false
+          }
+        },
+        "parameters": [
+          {
+            "name": "invoiceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/RecordId"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateInvoiceRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Invoice updated.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvoiceResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/invoices/{invoiceId}/issue": {
+      "post": {
+        "operationId": "issueInvoice",
+        "summary": "Issue one draft invoice",
+        "tags": ["Invoices"],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": false
+          }
+        },
+        "parameters": [
+          {
+            "name": "invoiceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/RecordId"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Invoice issued.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvoiceResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/invoices/{invoiceId}/void": {
+      "post": {
+        "operationId": "voidInvoice",
+        "summary": "Void one invoice",
+        "tags": ["Invoices"],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": false
+          }
+        },
+        "parameters": [
+          {
+            "name": "invoiceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/RecordId"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VoidInvoiceRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Invoice voided.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvoiceResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/invoices/{invoiceId}/payments": {
+      "post": {
+        "operationId": "recordInvoicePayment",
+        "summary": "Record an invoice payment",
+        "description": "Records an operator-attested payment event and recomputes paid/outstanding amounts without claiming provider reconciliation.",
+        "tags": ["Invoices"],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": false
+          }
+        },
+        "parameters": [
+          {
+            "name": "invoiceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/RecordId"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecordInvoicePaymentRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Payment recorded.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvoiceResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -5366,6 +6539,15 @@
         "in": "path",
         "required": true,
         "description": "Opaque client identifier returned by Jarvis.",
+        "schema": {
+          "$ref": "#/components/schemas/RecordId"
+        }
+      },
+      "PropertyId": {
+        "name": "propertyId",
+        "in": "path",
+        "required": true,
+        "description": "Opaque property identifier returned by Jarvis.",
         "schema": {
           "$ref": "#/components/schemas/RecordId"
         }
@@ -7498,6 +8680,148 @@
           }
         }
       },
+      "Property": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "clientId", "address", "hazards", "createdAt", "updatedAt"],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/RecordId"
+          },
+          "clientId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "address": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "hazards": {
+            "type": "array",
+            "maxItems": 50,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          "accessNotes": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          },
+          "serviceNotes": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          },
+          "createdAt": {
+            "$ref": "#/components/schemas/TimestampMs"
+          },
+          "updatedAt": {
+            "$ref": "#/components/schemas/TimestampMs"
+          }
+        }
+      },
+      "PropertyResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["data"],
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/Property"
+          }
+        }
+      },
+      "PropertyListResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["data", "count"],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Property"
+            }
+          },
+          "count": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "CreatePropertyRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["clientId", "address"],
+        "properties": {
+          "clientId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "address": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "hazards": {
+            "type": "array",
+            "maxItems": 50,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          "accessNotes": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          },
+          "serviceNotes": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          }
+        }
+      },
+      "UpdatePropertyRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "minProperties": 1,
+        "properties": {
+          "clientId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "address": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "hazards": {
+            "type": "array",
+            "maxItems": 50,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          "accessNotes": {
+            "type": ["string", "null"],
+            "maxLength": 2000
+          },
+          "serviceNotes": {
+            "type": ["string", "null"],
+            "maxLength": 2000
+          }
+        }
+      },
       "Project": {
         "type": "object",
         "additionalProperties": false,
@@ -7507,6 +8831,11 @@
             "$ref": "#/components/schemas/RecordId"
           },
           "clientId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "propertyId": {
             "type": "string",
             "minLength": 1,
             "maxLength": 200
@@ -7570,6 +8899,11 @@
             "minLength": 1,
             "maxLength": 200
           },
+          "propertyId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
           "title": {
             "type": "string",
             "minLength": 1,
@@ -7594,6 +8928,10 @@
           "clientId": {
             "type": "string",
             "minLength": 1,
+            "maxLength": 200
+          },
+          "propertyId": {
+            "type": ["string", "null"],
             "maxLength": 200
           },
           "title": {
@@ -10000,6 +11338,1119 @@
           "reason": {
             "type": "string",
             "description": "Present when status is \"not-commissioned\" — a concrete, non-generic reason."
+          }
+        }
+      },
+      "BusinessContactDetails": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "phone": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "email": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "website": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "abn": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          }
+        }
+      },
+      "BusinessPaymentDetails": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "bankName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "accountName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "bsb": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "accountNumber": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "paymentReferenceTemplate": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          }
+        }
+      },
+      "BusinessPricingSettings": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "defaultLabourRateCents",
+          "defaultTravelRateCents",
+          "defaultEquipmentRateCents",
+          "defaultWasteRateCents",
+          "defaultMaterialsMarkupBps",
+          "defaultMarginBps",
+          "gstRateBps"
+        ],
+        "properties": {
+          "defaultLabourRateCents": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10000000
+          },
+          "defaultTravelRateCents": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10000000
+          },
+          "defaultEquipmentRateCents": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10000000
+          },
+          "defaultWasteRateCents": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10000000
+          },
+          "defaultMaterialsMarkupBps": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10000
+          },
+          "defaultMarginBps": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10000
+          },
+          "gstRateBps": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10000
+          }
+        }
+      },
+      "BusinessNumberingSettings": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["quotePrefix", "nextQuoteNumber", "invoicePrefix", "nextInvoiceNumber"],
+        "properties": {
+          "quotePrefix": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20,
+            "pattern": "^[A-Z0-9-]+$"
+          },
+          "nextQuoteNumber": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 999999999
+          },
+          "invoicePrefix": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20,
+            "pattern": "^[A-Z0-9-]+$"
+          },
+          "nextInvoiceNumber": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 999999999
+          }
+        }
+      },
+      "BusinessSettings": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "businessName",
+          "tradingName",
+          "locale",
+          "timezone",
+          "currency",
+          "measurementSystem",
+          "gstRegistered",
+          "contactDetails",
+          "paymentDetails",
+          "pricing",
+          "numbering",
+          "createdAt",
+          "updatedAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "enum": ["business-settings"]
+          },
+          "businessName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "tradingName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "locale": {
+            "type": "string",
+            "enum": ["en-AU"]
+          },
+          "timezone": {
+            "type": "string",
+            "enum": ["Australia/Melbourne"]
+          },
+          "currency": {
+            "type": "string",
+            "enum": ["AUD"]
+          },
+          "measurementSystem": {
+            "type": "string",
+            "enum": ["metric"]
+          },
+          "gstRegistered": {
+            "type": "boolean"
+          },
+          "contactDetails": {
+            "$ref": "#/components/schemas/BusinessContactDetails"
+          },
+          "paymentDetails": {
+            "$ref": "#/components/schemas/BusinessPaymentDetails"
+          },
+          "pricing": {
+            "$ref": "#/components/schemas/BusinessPricingSettings"
+          },
+          "numbering": {
+            "$ref": "#/components/schemas/BusinessNumberingSettings"
+          },
+          "createdAt": {
+            "$ref": "#/components/schemas/TimestampMs"
+          },
+          "updatedAt": {
+            "$ref": "#/components/schemas/TimestampMs"
+          }
+        }
+      },
+      "UpdateBusinessContactDetails": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "phone": {
+            "oneOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "email": {
+            "oneOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "website": {
+            "oneOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "abn": {
+            "oneOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "UpdateBusinessPaymentDetails": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "bankName": {
+            "oneOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "accountName": {
+            "oneOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "bsb": {
+            "oneOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "accountNumber": {
+            "oneOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "paymentReferenceTemplate": {
+            "oneOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "UpdateBusinessPricingSettings": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "defaultLabourRateCents": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10000000
+          },
+          "defaultTravelRateCents": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10000000
+          },
+          "defaultEquipmentRateCents": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10000000
+          },
+          "defaultWasteRateCents": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10000000
+          },
+          "defaultMaterialsMarkupBps": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10000
+          },
+          "defaultMarginBps": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10000
+          },
+          "gstRateBps": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10000
+          }
+        }
+      },
+      "UpdateBusinessNumberingSettings": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "quotePrefix": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20,
+            "pattern": "^[A-Z0-9-]+$"
+          },
+          "nextQuoteNumber": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 999999999
+          },
+          "invoicePrefix": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20,
+            "pattern": "^[A-Z0-9-]+$"
+          },
+          "nextInvoiceNumber": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 999999999
+          }
+        }
+      },
+      "UpdateBusinessSettingsRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "businessName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "tradingName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "gstRegistered": {
+            "type": "boolean"
+          },
+          "contactDetails": {
+            "$ref": "#/components/schemas/UpdateBusinessContactDetails"
+          },
+          "paymentDetails": {
+            "$ref": "#/components/schemas/UpdateBusinessPaymentDetails"
+          },
+          "pricing": {
+            "$ref": "#/components/schemas/UpdateBusinessPricingSettings"
+          },
+          "numbering": {
+            "$ref": "#/components/schemas/UpdateBusinessNumberingSettings"
+          }
+        }
+      },
+      "BusinessSettingsResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["data"],
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/BusinessSettings"
+          }
+        }
+      },
+      "EnquiryStatus": {
+        "type": "string",
+        "enum": ["open", "converted", "closed"]
+      },
+      "EnquiryUrgency": {
+        "type": "string",
+        "enum": ["standard", "urgent", "emergency"]
+      },
+      "Enquiry": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "clientId",
+          "source",
+          "requestedWork",
+          "urgency",
+          "attachmentRefs",
+          "status",
+          "createdAt",
+          "updatedAt"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/RecordId"
+          },
+          "clientId": {
+            "$ref": "#/components/schemas/RecordId"
+          },
+          "propertyId": {
+            "$ref": "#/components/schemas/RecordId"
+          },
+          "source": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "requestedWork": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          },
+          "urgency": {
+            "$ref": "#/components/schemas/EnquiryUrgency"
+          },
+          "preferredDateText": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "attachmentRefs": {
+            "type": "array",
+            "maxItems": 50,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 500
+            }
+          },
+          "siteNotes": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          },
+          "safetyNotes": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          },
+          "duplicateKey": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "status": {
+            "$ref": "#/components/schemas/EnquiryStatus"
+          },
+          "convertedProjectId": {
+            "$ref": "#/components/schemas/RecordId"
+          },
+          "closedReason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          },
+          "createdAt": {
+            "$ref": "#/components/schemas/TimestampMs"
+          },
+          "updatedAt": {
+            "$ref": "#/components/schemas/TimestampMs"
+          }
+        }
+      },
+      "CreateEnquiryRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["clientId", "source", "requestedWork"],
+        "properties": {
+          "clientId": {
+            "$ref": "#/components/schemas/RecordId"
+          },
+          "propertyId": {
+            "$ref": "#/components/schemas/RecordId"
+          },
+          "source": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "requestedWork": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          },
+          "urgency": {
+            "$ref": "#/components/schemas/EnquiryUrgency"
+          },
+          "preferredDateText": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "attachmentRefs": {
+            "type": "array",
+            "maxItems": 50,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 500
+            }
+          },
+          "siteNotes": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          },
+          "safetyNotes": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          },
+          "duplicateKey": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        }
+      },
+      "UpdateEnquiryRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "propertyId": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/RecordId"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "requestedWork": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          },
+          "urgency": {
+            "$ref": "#/components/schemas/EnquiryUrgency"
+          },
+          "preferredDateText": {
+            "oneOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "attachmentRefs": {
+            "type": "array",
+            "maxItems": 50,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 500
+            }
+          },
+          "siteNotes": {
+            "oneOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "safetyNotes": {
+            "oneOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "closedReason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          }
+        }
+      },
+      "CloseEnquiryRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["reason"],
+        "properties": {
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          }
+        }
+      },
+      "ConvertEnquiryRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "notes": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          }
+        }
+      },
+      "EnquiryResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["data"],
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/Enquiry"
+          }
+        }
+      },
+      "EnquiryListResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["data", "count"],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Enquiry"
+            }
+          },
+          "count": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "EnquiryConversionResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["data"],
+        "properties": {
+          "data": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["enquiry", "project", "replayed"],
+            "properties": {
+              "enquiry": {
+                "$ref": "#/components/schemas/Enquiry"
+              },
+              "project": {
+                "$ref": "#/components/schemas/Project"
+              },
+              "replayed": {
+                "type": "boolean"
+              }
+            }
+          }
+        }
+      },
+      "InvoiceLineItem": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["description", "quantity", "unitPrice"],
+        "properties": {
+          "description": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "quantity": {
+            "type": "number",
+            "minimum": 0
+          },
+          "unitPrice": {
+            "type": "number",
+            "minimum": 0
+          }
+        }
+      },
+      "InvoicePayment": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "amount", "receivedAt", "createdAt"],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/RecordId"
+          },
+          "amount": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "receivedAt": {
+            "type": "number",
+            "minimum": 0
+          },
+          "method": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "reference": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "notes": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          },
+          "createdAt": {
+            "type": "number",
+            "minimum": 0
+          }
+        }
+      },
+      "Invoice": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "clientId",
+          "number",
+          "status",
+          "lineItems",
+          "subtotal",
+          "tax",
+          "total",
+          "amountPaid",
+          "balanceDue",
+          "paymentStatus",
+          "payments",
+          "createdAt",
+          "updatedAt"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/RecordId"
+          },
+          "clientId": {
+            "$ref": "#/components/schemas/RecordId"
+          },
+          "projectId": {
+            "$ref": "#/components/schemas/RecordId"
+          },
+          "quoteId": {
+            "$ref": "#/components/schemas/RecordId"
+          },
+          "number": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "status": {
+            "type": "string",
+            "enum": ["draft", "issued", "paid", "void"]
+          },
+          "lineItems": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InvoiceLineItem"
+            },
+            "maxItems": 200
+          },
+          "subtotal": {
+            "type": "number",
+            "minimum": 0
+          },
+          "taxRate": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "tax": {
+            "type": "number",
+            "minimum": 0
+          },
+          "total": {
+            "type": "number",
+            "minimum": 0
+          },
+          "amountPaid": {
+            "type": "number",
+            "minimum": 0
+          },
+          "balanceDue": {
+            "type": "number"
+          },
+          "paymentStatus": {
+            "type": "string",
+            "enum": ["unpaid", "partial", "paid", "overpaid"]
+          },
+          "dueDate": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "notes": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          },
+          "duplicateKey": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "payments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InvoicePayment"
+            }
+          },
+          "issuedAt": {
+            "type": "number",
+            "minimum": 0
+          },
+          "voidedAt": {
+            "type": "number",
+            "minimum": 0
+          },
+          "voidReason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          },
+          "createdAt": {
+            "type": "number",
+            "minimum": 0
+          },
+          "updatedAt": {
+            "type": "number",
+            "minimum": 0
+          }
+        }
+      },
+      "CreateInvoiceRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["clientId", "number"],
+        "properties": {
+          "clientId": {
+            "$ref": "#/components/schemas/RecordId"
+          },
+          "projectId": {
+            "$ref": "#/components/schemas/RecordId"
+          },
+          "quoteId": {
+            "$ref": "#/components/schemas/RecordId"
+          },
+          "number": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "lineItems": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InvoiceLineItem"
+            },
+            "maxItems": 200
+          },
+          "taxRate": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "dueDate": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "notes": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          },
+          "duplicateKey": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        }
+      },
+      "UpdateInvoiceRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "minProperties": 1,
+        "properties": {
+          "projectId": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/RecordId"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "quoteId": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/RecordId"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "number": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "lineItems": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InvoiceLineItem"
+            },
+            "maxItems": 200
+          },
+          "taxRate": {
+            "oneOf": [
+              {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "dueDate": {
+            "oneOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "notes": {
+            "oneOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "VoidInvoiceRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["reason"],
+        "properties": {
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          }
+        }
+      },
+      "RecordInvoicePaymentRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["amount"],
+        "properties": {
+          "amount": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "receivedAt": {
+            "type": "number",
+            "minimum": 0
+          },
+          "method": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "reference": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "notes": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          }
+        }
+      },
+      "InvoiceResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["data"],
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/Invoice"
+          }
+        }
+      },
+      "InvoiceListResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["data", "count"],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Invoice"
+            }
+          },
+          "count": {
+            "type": "integer",
+            "minimum": 0
           }
         }
       }
