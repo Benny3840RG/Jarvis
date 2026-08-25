@@ -107,6 +107,7 @@ export const create = mutation({
     const outcome = cleanOptionalText(args.outcome, "Upgrade outcome");
     const version = cleanOptionalText(args.version, "Upgrade version");
     const parts = normalizeParts(args.parts);
+    const now = Date.now();
     const id = await ctx.db.insert("upgrades", {
       ownerId,
       buildId,
@@ -118,8 +119,8 @@ export const create = mutation({
       ...(parts === undefined ? {} : { parts }),
       ...(version === undefined ? {} : { version }),
       ...(args.occurredAt === undefined ? {} : { occurredAt: args.occurredAt }),
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
+      createdAt: now,
+      updatedAt: now,
     });
     const upgrade = await ctx.db.get("upgrades", id);
     if (!upgrade) throw new Error("Upgrade creation failed.");

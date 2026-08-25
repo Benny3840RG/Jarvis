@@ -82,13 +82,14 @@ describe("project HTTP boundary", () => {
 
     const created = await inject(app, "POST", "/api/v1/projects", {
       headers: AUTH,
-      payload: { clientId: "c1", title: "Deck rebuild", status: "active" },
+      payload: { clientId: "c1", propertyId: "p1", title: "Deck rebuild", status: "active" },
     });
     assert.equal(created.statusCode, 201);
     const project = created.json<{ data: Project }>().data;
     assert.equal(project.title, "Deck rebuild");
     assert.equal(project.status, "active");
     assert.equal(project.clientId, "c1");
+    assert.equal(project.propertyId, "p1");
 
     assert.equal(
       (await inject(app, "GET", "/api/v1/projects", { headers: AUTH })).json<{ count: number }>()
@@ -98,10 +99,12 @@ describe("project HTTP boundary", () => {
 
     const updated = await inject(app, "PATCH", `/api/v1/projects/${project.id}`, {
       headers: AUTH,
-      payload: { status: "done", notes: "handed over" },
+      payload: { status: "done", propertyId: null, notes: "handed over" },
     });
     assert.equal(updated.statusCode, 200);
-    assert.equal(updated.json<{ data: Project }>().data.status, "done");
+    const updatedProject = updated.json<{ data: Project }>().data;
+    assert.equal(updatedProject.status, "done");
+    assert.equal(updatedProject.propertyId, undefined);
 
     assert.equal(
       (await inject(app, "DELETE", `/api/v1/projects/${project.id}`, { headers: AUTH })).statusCode,

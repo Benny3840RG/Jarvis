@@ -11,6 +11,7 @@ export const PROJECT_STATUSES: readonly ProjectStatus[] = [
 export interface Project {
   id: string;
   clientId: string;
+  propertyId?: string;
   title: string;
   status: ProjectStatus;
   notes?: string;
@@ -20,6 +21,7 @@ export interface Project {
 
 export interface ProjectInput {
   clientId: string;
+  propertyId?: string;
   title: string;
   status?: ProjectStatus;
   notes?: string;
@@ -27,6 +29,8 @@ export interface ProjectInput {
 
 export interface ProjectUpdate {
   clientId?: string;
+  /** `string` sets the property link, `null` clears it, `undefined` leaves it unchanged. */
+  propertyId?: string | null;
   title?: string;
   status?: ProjectStatus;
   /** `string` sets notes, `null` clears them, `undefined` leaves them unchanged. */

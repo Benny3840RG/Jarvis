@@ -4,7 +4,11 @@ import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from "@nestjs/core";
 
 import type { ToolActionService } from "../actions/toolActions.js";
 import type { ToolExecutionService } from "../actions/toolExecution.js";
+import type { BusinessSettingsStore } from "../businessSettings/businessSettings.js";
+import type { EnquiryStore } from "../enquiries/enquiry.js";
+import type { InvoiceStore } from "../invoices/invoice.js";
 import type { ClientStore } from "../clients/client.js";
+import type { PropertyStore } from "../properties/property.js";
 import type { ProjectStore } from "../projects/project.js";
 import type { QuoteStore } from "../quotes/quote.js";
 import type { QuoteDeliveryRepository } from "../quotes/quoteDeliveryRepository.js";
@@ -26,6 +30,9 @@ import type { ActivityEventReader } from "../operations/activityTimeline.js";
 import type { HttpAppConfig } from "./config.js";
 import type { OidcVerifier } from "./oidcVerifier.js";
 import { ActivityTimelineController } from "./activityTimelineController.js";
+import { BusinessSettingsController } from "./businessSettingsController.js";
+import { EnquiryController } from "./enquiryController.js";
+import { InvoiceController } from "./invoiceController.js";
 import { BriefController } from "./briefController.js";
 import { BuildController } from "./buildController.js";
 import { BuildLogController } from "./buildLogController.js";
@@ -38,6 +45,7 @@ import { ErrandController } from "./errandController.js";
 import { MemoryChangeSetController } from "./memoryChangeSetController.js";
 import { ProblemDetailsFilter } from "./problemDetails.js";
 import { ClientController } from "./clientController.js";
+import { PropertyController } from "./propertyController.js";
 import { ProjectController } from "./projectController.js";
 import { QuoteController } from "./quoteController.js";
 import { ReconciliationController } from "./reconciliationController.js";
@@ -52,7 +60,11 @@ import { TotalityController } from "./totalityController.js";
 import {
   HTTP_APP_CONFIG,
   HTTP_OIDC_VERIFIER,
+  HTTP_BUSINESS_SETTINGS_STORE,
+  HTTP_ENQUIRY_STORE,
+  HTTP_INVOICE_STORE,
   HTTP_CLIENT_STORE,
+  HTTP_PROPERTY_STORE,
   HTTP_PROJECT_STORE,
   HTTP_QUOTE_STORE,
   HTTP_QUOTE_REPOSITORY,
@@ -86,7 +98,11 @@ export type JarvisHttpModuleOptions = {
   memoryChangeSetService: MemoryChangeSetService | null;
   toolActionService: ToolActionService | null;
   toolExecutionService: ToolExecutionService | null;
+  businessSettingsStore: BusinessSettingsStore;
+  enquiryStore: EnquiryStore;
+  invoiceStore: InvoiceStore;
   clientStore: ClientStore;
+  propertyStore: PropertyStore;
   projectStore: ProjectStore;
   quoteStore: QuoteStore;
   quoteRepository: QuoteRepository | null;
@@ -114,7 +130,11 @@ export class JarvisHttpModule {
         TaskController,
         ReminderController,
         ToolActionController,
+        BusinessSettingsController,
+        EnquiryController,
+        InvoiceController,
         ClientController,
+        PropertyController,
         ProjectController,
         QuoteController,
         ReconciliationController,
@@ -134,6 +154,7 @@ export class JarvisHttpModule {
         { provide: HTTP_OIDC_VERIFIER, useValue: options.oidcVerifier },
         { provide: HTTP_PERSISTENCE, useValue: options.persistence },
         { provide: HTTP_CLIENT_STORE, useValue: options.clientStore },
+        { provide: HTTP_PROPERTY_STORE, useValue: options.propertyStore },
         { provide: HTTP_PROJECT_STORE, useValue: options.projectStore },
         { provide: HTTP_QUOTE_STORE, useValue: options.quoteStore },
         { provide: HTTP_QUOTE_REPOSITORY, useValue: options.quoteRepository },
@@ -168,6 +189,9 @@ export class JarvisHttpModule {
           provide: HTTP_TOOL_EXECUTION,
           useValue: options.toolExecutionService,
         },
+        { provide: HTTP_BUSINESS_SETTINGS_STORE, useValue: options.businessSettingsStore },
+        { provide: HTTP_ENQUIRY_STORE, useValue: options.enquiryStore },
+        { provide: HTTP_INVOICE_STORE, useValue: options.invoiceStore },
         SystemStatusService,
         { provide: APP_GUARD, useClass: ServiceTokenGuard },
         { provide: APP_INTERCEPTOR, useClass: RequestIdInterceptor },

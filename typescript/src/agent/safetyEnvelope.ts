@@ -19,9 +19,9 @@ function hasStatusForJob(
   return (
     typeof value === "object" &&
     value !== null &&
-    "jobId" in value &&
     "status" in value &&
-    (value as { jobId: unknown }).jobId === jobId
+    (("jobId" in value && (value as { jobId: unknown }).jobId === jobId) ||
+      ("id" in value && (value as { id: unknown }).id === jobId))
   );
 }
 
@@ -52,6 +52,18 @@ function isCompletedJob(value: unknown): boolean {
   );
 }
 
+function hasCompletionEvidence(value: unknown): boolean {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "completionEvidenceRefs" in value &&
+    Array.isArray((value as { completionEvidenceRefs: unknown }).completionEvidenceRefs) &&
+    (value as { completionEvidenceRefs: unknown[] }).completionEvidenceRefs.some(
+      (ref) => typeof ref === "string" && ref.trim().length > 0,
+    )
+  );
+}
+
 export class SafetyEnvelope {
   evaluate(ctx: SafetyContext): SafetyResult {
     const reasons: string[] = [];
@@ -71,6 +83,9 @@ export class SafetyEnvelope {
       const job = ctx.outputs.find((output) => hasStatusForJob(output, ctx.payload.jobId));
       if (job && job.status !== "completed") {
         reasons.push("Job completion output inconsistent");
+      }
+      if (job && job.status === "completed" && !hasCompletionEvidence(job)) {
+        reasons.push("Job completion requires evidence");
       }
     }
 

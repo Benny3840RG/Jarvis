@@ -12,6 +12,8 @@ export interface DomainJob {
   clientId: string;
   description: string;
   status: JobStatus;
+  completionEvidenceRefs?: string[];
+  completedAt?: string;
 }
 
 export interface DomainTool {
@@ -135,11 +137,26 @@ function parseState(value: unknown): AgentDomainState {
     if (!isRecord(job) || !validStatuses.includes(job.status as JobStatus)) {
       throw new Error(`Persisted job ${index} is malformed.`);
     }
+    const completionEvidenceRefs = job.completionEvidenceRefs;
+    if (
+      completionEvidenceRefs !== undefined &&
+      (!Array.isArray(completionEvidenceRefs) ||
+        completionEvidenceRefs.some((ref) => typeof ref !== "string" || ref.trim().length === 0))
+    ) {
+      throw new Error(`Persisted job ${index} has invalid completion evidence.`);
+    }
+    if (job.completedAt !== undefined && typeof job.completedAt !== "string") {
+      throw new Error(`Persisted job ${index} has invalid completion timestamp.`);
+    }
     return {
       id: requiredString(job.id, `job ${index} id`),
       clientId: requiredString(job.clientId, `job ${index} clientId`),
       description: requiredString(job.description, `job ${index} description`),
       status: job.status as JobStatus,
+      ...(completionEvidenceRefs === undefined
+        ? {}
+        : { completionEvidenceRefs: completionEvidenceRefs.map((ref) => ref.trim()) }),
+      ...(job.completedAt === undefined ? {} : { completedAt: job.completedAt }),
     };
   });
   const sequence = requiredFiniteNumber(business.sequence, "business sequence");
