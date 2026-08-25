@@ -65,7 +65,8 @@
     "vitest": "4.1.10"
   },
   "allowScripts": {
-    "esbuild": false
+    "esbuild": false,
+    "fsevents": false
   },
   "overrides": {
     "find-my-way": "^9.7.0",
