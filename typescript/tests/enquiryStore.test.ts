@@ -119,4 +119,36 @@ describe("JsonEnquiryStore durability", () => {
     const reopened = new JsonEnquiryStore(file);
     assert.equal((await reopened.get(added.id))?.requestedWork, "Garden tidy");
   });
+
+  it("rolls back a newly created project when persisting the conversion fails", async () => {
+    const file = path.join(dir, "enquiries.json");
+    const store = new JsonEnquiryStore(file);
+    const projects = new InMemoryProjectStore();
+    const enquiry = await store.add({
+      clientId: "c1",
+      source: "phone",
+      requestedWork: "Repair side gate",
+    });
+    const internals = store as unknown as {
+      writeDocument(document: unknown): Promise<void>;
+    };
+    internals.writeDocument = async () => {
+      throw new Error("simulated enquiry persistence failure");
+    };
+
+    await assert.rejects(
+      () => store.convertToProject(enquiry.id, projects),
+      /simulated enquiry persistence failure/,
+    );
+    assert.equal((await projects.list()).length, 0);
+
+    const reopened = new JsonEnquiryStore(file);
+    const persisted = await reopened.get(enquiry.id);
+    assert.equal(persisted?.status, "open");
+    assert.equal(persisted?.convertedProjectId, undefined);
+
+    const converted = await reopened.convertToProject(enquiry.id, projects);
+    assert.equal(converted?.replayed, false);
+    assert.equal((await projects.list()).length, 1);
+  });
 });
