@@ -108,8 +108,13 @@ the same project instead of duplicating the job lead.
 
 The `/api/v1/enquiries` routes are authenticated, OpenAPI documented and marked
 `x-mcp-tool.exposed=false`; they are HTTP-only until a governed action design is
-added. The JSON-backed enquiry-to-project conversion is idempotent but not a
-cross-store transactional Convex mutation yet, so Convex-backed foreign-key and
+added. The JSON-backed enquiry-to-project conversion is replay-safe after the
+conversion link is persisted. If creating the project succeeds but persisting
+the enquiry conversion fails, the store now performs a compensating removal of
+the newly created project before returning the persistence error. This closes
+the duplicate-prone orphan path without claiming a cross-store transaction. If
+both persistence and compensation fail, the operation surfaces an explicit
+combined failure and requires reconciliation. Convex-backed foreign-key and
 transactional migration evidence remains open.
 
 ## Durable invoice and payment-ledger foundation
