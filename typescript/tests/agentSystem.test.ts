@@ -180,6 +180,17 @@ describe("agent safety envelope", () => {
     assert.ok(result.reasons.some((reason) => reason.includes("without a completed job")));
   });
 
+  it("blocks business job completion outputs that lack evidence", () => {
+    const result = safety.evaluate({
+      domain: "business",
+      action: "complete_job",
+      payload: { jobId: "j1" },
+      outputs: [{ id: "j1", status: "completed" }],
+    });
+    assert.equal(result.status, "blocked");
+    assert.ok(result.reasons.includes("Job completion requires evidence"));
+  });
+
   it("allows a home scene activation once a job is completed in the same plan", () => {
     const result = safety.evaluate({
       domain: "workshop",

@@ -100,6 +100,85 @@ describe("durable agent domain state", () => {
     }
   });
 
+  it("requires durable evidence before a business job can complete", async () => {
+    const directory = await mkdtemp(path.join(os.tmpdir(), "jarvis-agent-domain-"));
+
+    try {
+      const persistence = new JSONPersistence(path.join(directory, "state.json"));
+      const business = new BusinessEngine(new PersistentDomainStateStore(persistence));
+
+      await business.handle("add_client", { name: "Kirsten" });
+      await business.handle("create_job", {
+        clientId: "c2",
+        description: "Remove green waste",
+      });
+
+      assert.deepEqual(await business.handle("complete_job", { jobId: "j3" }), {
+        error: "Job completion requires at least one evidence reference",
+      });
+      assert.deepEqual(await business.handle("schedule_job", { jobId: "j3" }), {
+        id: "j3",
+        clientId: "c2",
+        description: "Remove green waste",
+        status: "scheduled",
+      });
+      assert.deepEqual(
+        await business.handle("complete_job", { jobId: "j3", completionEvidenceRefs: ["photo-1"] }),
+        {
+          error: "Job cannot transition from scheduled to completed",
+        },
+      );
+      assert.deepEqual(await business.handle("start_job", { jobId: "j3" }), {
+        id: "j3",
+        clientId: "c2",
+        description: "Remove green waste",
+        status: "in_progress",
+      });
+
+      const completed = await business.handle("complete_job", {
+        jobId: "j3",
+        completionEvidenceRefs: ["photo-1", " photo-1 ", "receipt-1"],
+      });
+      assert.equal(typeof completed, "object");
+      assert.notEqual(completed, null);
+      assert.deepEqual(
+        {
+          ...(completed as Record<string, unknown>),
+          completedAt: "dynamic",
+        },
+        {
+          id: "j3",
+          clientId: "c2",
+          description: "Remove green waste",
+          status: "completed",
+          completionEvidenceRefs: ["photo-1", "receipt-1"],
+          completedAt: "dynamic",
+        },
+      );
+
+      const restored = new BusinessEngine(new PersistentDomainStateStore(persistence));
+      const jobs = await restored.handle("list_jobs", {});
+      assert.deepEqual(
+        (jobs as Array<Record<string, unknown>>).map((job) => ({
+          ...job,
+          completedAt: "dynamic",
+        })),
+        [
+          {
+            id: "j3",
+            clientId: "c2",
+            description: "Remove green waste",
+            status: "completed",
+            completionEvidenceRefs: ["photo-1", "receipt-1"],
+            completedAt: "dynamic",
+          },
+        ],
+      );
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   it("rejects unsafe inventory mutations at the domain boundary", async () => {
     const directory = await mkdtemp(path.join(os.tmpdir(), "jarvis-agent-domain-"));
 
