@@ -11,7 +11,7 @@
 | R-015–R-021 | Requirement lifecycle | Partial | Must | Unassigned | v2.2 governance | Evidence matrix: Partial |
 | R-022–R-024F | Operational locality | Partial | Must | Unassigned | P1 foundations | Evidence matrix: Partial |
 | R-025–R-033 | Memory model | Unverified | Must | Unassigned | TBD | Evidence matrix: Unverified |
-| R-034–R-038C | Action effect and sensitivity | Partial | Must | Unassigned | TBD | Evidence matrix: Partial |
+| R-034–R-038C | Action effect and sensitivity | Unverified | Must | Unassigned | TBD | Evidence matrix: Unverified |
 | R-039–R-043 | Idempotency and correlation | Partial | Must | Unassigned | P1 foundations | Evidence matrix: Partial |
 | R-044–R-054 | Approvals | Partial | Must | Unassigned | P1 foundations | Evidence matrix: Partial |
 | R-055–R-062 | Tool architecture | Partial | Must | Unassigned | P1 foundations | Evidence matrix: Partial |
