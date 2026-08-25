@@ -45,7 +45,8 @@
     "@modelcontextprotocol/ext-apps": false,
     "@scarf/scarf": false,
     "core-js": false,
-    "esbuild": false
+    "esbuild": false,
+    "fsevents": false
   },
   "overrides": {
     "@hono/node-server": "^2.0.11",
