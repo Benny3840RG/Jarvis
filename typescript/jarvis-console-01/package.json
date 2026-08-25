@@ -41,6 +41,13 @@
     "tsx": "^4.23.12",
     "typescript": "^7.0.2"
   },
+  "allowScripts": {
+    "@modelcontextprotocol/ext-apps": false,
+    "@scarf/scarf": false,
+    "core-js": false,
+    "esbuild": false,
+    "fsevents": false
+  },
   "overrides": {
     "@hono/node-server": "^2.0.11",
     "hono": "^4.12.34",
