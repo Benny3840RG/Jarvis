@@ -190,7 +190,19 @@ export class JsonEnquiryStore implements EnquiryStore {
       enquiry.status = "converted";
       enquiry.convertedProjectId = project.id;
       enquiry.updatedAt = Date.now();
-      await this.writeDocument(document);
+      try {
+        await this.writeDocument(document);
+      } catch (error: unknown) {
+        try {
+          await projects.remove(project.id);
+        } catch (rollbackError: unknown) {
+          throw new AggregateError(
+            [error, rollbackError],
+            "Enquiry conversion persistence failed and compensating project rollback also failed.",
+          );
+        }
+        throw error;
+      }
       return { enquiry: cloneEnquiry(enquiry), project, replayed: false };
     }, "enquiry mutation");
   }
