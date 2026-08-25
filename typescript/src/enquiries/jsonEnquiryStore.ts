@@ -199,7 +199,7 @@ export class JsonEnquiryStore implements EnquiryStore {
           throw new AggregateError(
             [error, rollbackError],
             "Enquiry conversion persistence failed and compensating project rollback also failed.",
-            { cause: error },
+            { cause: rollbackError },
           );
         }
         throw error;
