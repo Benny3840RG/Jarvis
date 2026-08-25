@@ -10,9 +10,21 @@ import { createToolActionServiceFromEnv } from "../actions/toolActionFactory.js"
 import type { ToolActionService } from "../actions/toolActions.js";
 import { createToolExecutionServiceFromEnv } from "../actions/toolExecutionFactory.js";
 import type { ToolExecutionService } from "../actions/toolExecution.js";
+import type { BusinessSettingsStore } from "../businessSettings/businessSettings.js";
+import { InMemoryBusinessSettingsStore } from "../businessSettings/inMemoryBusinessSettingsStore.js";
+import { JsonBusinessSettingsStore } from "../businessSettings/jsonBusinessSettingsStore.js";
+import type { EnquiryStore } from "../enquiries/enquiry.js";
+import { InMemoryEnquiryStore } from "../enquiries/inMemoryEnquiryStore.js";
+import { JsonEnquiryStore } from "../enquiries/jsonEnquiryStore.js";
+import type { InvoiceStore } from "../invoices/invoice.js";
+import { InMemoryInvoiceStore } from "../invoices/inMemoryInvoiceStore.js";
+import { JsonInvoiceStore } from "../invoices/jsonInvoiceStore.js";
 import type { ClientStore } from "../clients/client.js";
 import { InMemoryClientStore } from "../clients/inMemoryClientStore.js";
 import { JsonClientStore } from "../clients/jsonClientStore.js";
+import type { PropertyStore } from "../properties/property.js";
+import { InMemoryPropertyStore } from "../properties/inMemoryPropertyStore.js";
+import { JsonPropertyStore } from "../properties/jsonPropertyStore.js";
 import type { ProjectStore } from "../projects/project.js";
 import { InMemoryProjectStore } from "../projects/inMemoryProjectStore.js";
 import { JsonProjectStore } from "../projects/jsonProjectStore.js";
@@ -99,7 +111,11 @@ export type CreateJarvisHttpAppOptions = (
   memoryChangeSetService?: MemoryChangeSetService | null;
   toolActionService?: ToolActionService | null;
   toolExecutionService?: ToolExecutionService | null;
+  businessSettingsStore?: BusinessSettingsStore;
+  enquiryStore?: EnquiryStore;
+  invoiceStore?: InvoiceStore;
   clientStore?: ClientStore;
+  propertyStore?: PropertyStore;
   projectStore?: ProjectStore;
   quoteStore?: QuoteStore;
   quoteRepository?: QuoteRepository | null;
@@ -193,8 +209,18 @@ export async function createJarvisHttpApp(
       : usesEnvironment
         ? createActivityEventReaderFromEnv()
         : null;
+  const businessSettingsStore =
+    options.businessSettingsStore ??
+    (usesEnvironment ? new JsonBusinessSettingsStore() : new InMemoryBusinessSettingsStore());
+  const enquiryStore =
+    options.enquiryStore ?? (usesEnvironment ? new JsonEnquiryStore() : new InMemoryEnquiryStore());
+  const invoiceStore =
+    options.invoiceStore ?? (usesEnvironment ? new JsonInvoiceStore() : new InMemoryInvoiceStore());
   const clientStore =
     options.clientStore ?? (usesEnvironment ? new JsonClientStore() : new InMemoryClientStore());
+  const propertyStore =
+    options.propertyStore ??
+    (usesEnvironment ? new JsonPropertyStore() : new InMemoryPropertyStore());
   const projectStore =
     options.projectStore ?? (usesEnvironment ? new JsonProjectStore() : new InMemoryProjectStore());
   const quoteStore =
@@ -330,7 +356,11 @@ export async function createJarvisHttpApp(
       memoryChangeSetService,
       toolActionService,
       toolExecutionService,
+      businessSettingsStore,
+      enquiryStore,
+      invoiceStore,
       clientStore,
+      propertyStore,
       projectStore,
       quoteStore,
       quoteRepository,

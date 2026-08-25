@@ -29,8 +29,13 @@ for (const { name, make } of stores()) {
   describe(name, () => {
     it("adds a project with defaults and required fields", async () => {
       const store = make();
-      const project = await store.add({ clientId: "c1", title: "  Deck rebuild  " });
+      const project = await store.add({
+        clientId: "c1",
+        propertyId: " p1 ",
+        title: "  Deck rebuild  ",
+      });
       assert.equal(project.clientId, "c1");
+      assert.equal(project.propertyId, "p1");
       assert.equal(project.title, "Deck rebuild");
       assert.equal(project.status, "lead");
       assert.ok(project.id.length > 0);
@@ -49,15 +54,25 @@ for (const { name, make } of stores()) {
       );
     });
 
-    it("updates status and notes, clears notes with null, requires a change", async () => {
+    it("updates status, property link and notes, clears fields with null, requires a change", async () => {
       const store = make();
-      const project = await store.add({ clientId: "c1", title: "Fence", notes: "quote sent" });
-      const updated = await store.update(project.id, { status: "active", notes: null });
+      const project = await store.add({
+        clientId: "c1",
+        propertyId: "p1",
+        title: "Fence",
+        notes: "quote sent",
+      });
+      const updated = await store.update(project.id, {
+        status: "active",
+        propertyId: null,
+        notes: null,
+      });
       assert.equal(updated?.status, "active");
+      assert.equal(updated?.propertyId, undefined);
       assert.equal(updated?.notes, undefined);
       await assert.rejects(
         () => store.update(project.id, {}),
-        /requires a clientId, title, status/,
+        /requires a clientId, propertyId, title, status/,
       );
     });
 
@@ -76,11 +91,17 @@ for (const { name, make } of stores()) {
 describe("JsonProjectStore durability", () => {
   it("reads back through a fresh instance", async () => {
     const first = new JsonProjectStore(path.join(dir, "projects.json"));
-    const added = await first.add({ clientId: "c1", title: "Retaining wall", status: "quoted" });
+    const added = await first.add({
+      clientId: "c1",
+      propertyId: "p1",
+      title: "Retaining wall",
+      status: "quoted",
+    });
     const reopened = new JsonProjectStore(path.join(dir, "projects.json"));
     const list = await reopened.list();
     assert.equal(list.length, 1);
     assert.equal(list[0].id, added.id);
+    assert.equal(list[0].propertyId, "p1");
     assert.equal(list[0].status, "quoted");
   });
 });

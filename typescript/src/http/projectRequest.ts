@@ -35,13 +35,16 @@ function rejectUnknownKeys(body: Record<string, unknown>, allowed: readonly stri
   }
 }
 
-const ALLOWED = ["clientId", "title", "status", "notes"] as const;
+const ALLOWED = ["clientId", "propertyId", "title", "status", "notes"] as const;
 
 export function parseCreateProject(body: unknown): ProjectInput {
   if (!isRecord(body)) throw new Error("Request body must be a JSON object.");
   rejectUnknownKeys(body, ALLOWED);
   return {
     clientId: requiredString(body.clientId, "Project clientId", MAX_ID_LENGTH),
+    ...(body.propertyId === undefined
+      ? {}
+      : { propertyId: requiredString(body.propertyId, "Project propertyId", MAX_ID_LENGTH) }),
     title: requiredString(body.title, "Project title", MAX_TITLE_LENGTH),
     ...(body.status === undefined ? {} : { status: parseStatus(body.status) }),
     ...(body.notes === undefined
@@ -55,15 +58,24 @@ export function parseUpdateProject(body: unknown): ProjectUpdate {
   rejectUnknownKeys(body, ALLOWED);
   if (
     body.clientId === undefined &&
+    body.propertyId === undefined &&
     body.title === undefined &&
     body.status === undefined &&
     body.notes === undefined
   ) {
-    throw new Error("Project update requires a clientId, title, status, or notes change.");
+    throw new Error(
+      "Project update requires a clientId, propertyId, title, status, or notes change.",
+    );
   }
   const update: ProjectUpdate = {};
   if (body.clientId !== undefined)
     update.clientId = requiredString(body.clientId, "Project clientId", MAX_ID_LENGTH);
+  if (body.propertyId !== undefined) {
+    update.propertyId =
+      body.propertyId === null
+        ? null
+        : requiredString(body.propertyId, "Project propertyId", MAX_ID_LENGTH);
+  }
   if (body.title !== undefined)
     update.title = requiredString(body.title, "Project title", MAX_TITLE_LENGTH);
   if (body.status !== undefined) update.status = parseStatus(body.status);
