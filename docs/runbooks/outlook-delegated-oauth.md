@@ -28,6 +28,8 @@ Outlook composition requires all of the following:
 
 Background reconciliation is independently disabled unless `JARVIS_RECONCILIATION_ENABLED=true` and its existing Convex/service-token configuration is complete. Enabling reconciliation without an Outlook adapter fails startup before the listener is ready.
 
+**Pairing rule:** `JARVIS_OUTLOOK_ENABLED=true` requires `JARVIS_RECONCILIATION_ENABLED=true`. Maintained HTTP and preview entrypoints fail closed if Outlook is enabled while reconciliation is not, so quote sends cannot register without a worker that can resolve Graph `202 Accepted` outcomes.
+
 ## Secret-file requirements
 
 The refresh token is a runtime secret, never repository configuration.

@@ -2,6 +2,7 @@ import { loadEnvFile } from "node:process";
 
 import { createToolExecutionServiceFromEnv } from "../actions/toolExecutionFactory.js";
 import { createMicrosoftOutlookRuntimeFromEnv } from "../auth/microsoftOutlookRuntime.js";
+import { assertOutlookReconciliationPairing } from "../auth/outlookReconciliationGuard.js";
 import { createJarvisHttpApp } from "../http/app.js";
 import { resolveHttpListenConfig } from "../http/config.js";
 import { resolveJarvisMcpConfig } from "../mcp/config.js";
@@ -28,6 +29,7 @@ async function main(): Promise<void> {
   applyPreviewEnvironment();
   const paddock = resolvePaddockConfig(process.env);
   Object.assign(process.env, paddock.environment);
+  assertOutlookReconciliationPairing();
   const httpListen = resolveHttpListenConfig(process.env);
   const outlookRuntime = createMicrosoftOutlookRuntimeFromEnv();
   const telemetry = createPostHogTelemetryFromEnv();
