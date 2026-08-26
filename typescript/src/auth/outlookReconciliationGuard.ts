@@ -5,9 +5,7 @@ type Environment = Readonly<Record<string, string | undefined>>;
  * worker observes the Graph message. Enabling Outlook without reconciliation
  * would register quotes:send while no worker can resolve outcomes.
  */
-export function assertOutlookReconciliationPairing(
-  environment: Environment = process.env,
-): void {
+export function assertOutlookReconciliationPairing(environment: Environment = process.env): void {
   if (environment.JARVIS_OUTLOOK_ENABLED !== "true") {
     return;
   }
