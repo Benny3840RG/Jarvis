@@ -62,18 +62,31 @@ The current baseline at that reconciliation was `dc61999f1c21f9a3a2935213f45e959
 
 ## Current main reconciliation — 2026-08-24
 
-The current baseline is `0e7ed2999f1ad14f27623d749f6bdf4d3a6177f9`.
+The baseline at that reconciliation was `0e7ed2999f1ad14f27623d749f6bdf4d3a6177f9`.
 
 - Priority 1 health-evidence immutability is landed in PR #278: validated health metrics are defensively copied, metric objects and arrays are frozen, readonly evidence is exposed, and mutation regressions pass. This is the actual immutability repair; PR #275 alone was only the earlier missing-evidence honesty fix.
 - The unsafe/broader regex proposal in PR #276 was correctly closed without merge. PR #279 supplied the safer deterministic script-extraction repair and passed its exact-head TypeScript and Copilot gates.
 - Workflow/control-plane hardening is landed through PRs #283 and #298: discovered Actions are pinned to full commit SHAs, checkout credentials are disabled except where an authenticated push is intentional, control-plane CODEOWNERS coverage exists, and root `SECURITY.md` exists.
-- Code-scanning alert #6 is remediated on current main by merged PR #393. The repair removes npm caching only from the untrusted autonomous `verify-candidate` job while preserving its pinned Node version and validation/build steps.
+- Code-scanning alert #6 is partially addressed on main by merged PR #393. The repair removes npm caching only from the untrusted autonomous `verify-candidate` job while preserving its pinned Node version and validation/build steps. Residual CodeQL alerts #2–#6 remain open for the structural default-branch untrusted-verify pattern (see 2026-08-26 reconciliation).
 - The dependency/optional queue decisions are closed rather than merged blindly: #273 and the TypeScript-7-heavy #274 are closed; optional CLI-polish PR #277 is closed.
 - Issue #244 is closed for the implemented core consent-expiry/revocation/consumption lifecycle. The broad R-044–R-054 row remains `Partial` because standing automation-authorisation requirements within that range still require separate policy/operational evidence.
 - PR #383 merged the ΩΣ completion-integrity model. `acceptanceCriteria[].status/evidenceRefs` remains compatibility-only; current proofs plus current evidence are authoritative; contradiction resolution is append-only and immutable. Issue #378 is closed as completed. This evidence does not promote unrelated v2.2 requirement ranges to Verified.
 - AM-012 development commissioning and registry truth are complete: the authorised Convex development paddock evidence remains recorded against `dev:outgoing-ram-798`, and PR #381/issue #375 reconciled the action-family registry to the commissioned runtime. This is development evidence, not production authorisation.
 - PostHog is no longer at a zero-ingestion state. Live inspection on 2026-08-24 confirmed Jarvis development event names and events from 2026-08-13, but those events predate the later `$geoip_disable` hardening. Issue #302 therefore remains open for fresh current-release hardened telemetry proof; no broader observability claim is made.
 - Priority 1 repository cleanup is landed in PR #394. It removes the reintroduced tracked `typescript/dist` output and adds a `git ls-files` hygiene gate so tracked generated/scaffold/PR-body artefacts fail CI. Exact head `cfc184e6f0beeb4929fff2e8183a1191d4597a04` passed TypeScript checks `32724822072` and Copilot Review Check `32724886933`; it merged as `0151d901393963dd12d851874e151f65eac91b49` after explicit per-PR approval.
-- PR #395 then landed this Priority 1 requirements-matrix reconciliation as merge commit `0e7ed2999f1ad14f27623d749f6bdf4d3a6177f9` after exact-head TypeScript checks `32725202253` and Copilot Review Check `32725202138` passed. This follow-up records the resulting landing truth without promoting any broad requirement range.
-- The connector-backed Priority 1 security findings are triaged/remediated or explicitly deferred to the remote identity/gateway boundary. An exhaustive local whole-repository scanner claim remains unavailable in this ChatGPT sandbox because a fresh 2026-08-24 checkout attempt could not resolve `github.com`.
+- PR #395 then landed the Priority 1 requirements-matrix reconciliation as merge commit `0e7ed2999f1ad14f27623d749f6bdf4d3a6177f9` after exact-head TypeScript checks `32725202253` and Copilot Review Check `32725202138` passed. This follow-up records the resulting landing truth without promoting any broad requirement range.
+- The connector-backed Priority 1 security findings are triaged/remediated or explicitly deferred to the remote identity/gateway boundary. The prior claim that local checkout was impossible is superseded by the 2026-08-26 local assessment below.
 - Remaining commissioning/production gates are still #293 (delegated Outlook OAuth), #294 (AM-013 quote delivery), #297 (Outlook reconciliation), #302 (current-release PostHog), #303 (Sentry), #306 (remote OIDC/gateway), and #307 (production operations/recovery/deployment). Production deployment remains unauthorised pending the explicit human deployment gate.
+
+## Current main reconciliation — 2026-08-26
+
+Exact main HEAD assessed: `b11dc07bf1dbcce5446f08489122e4df76c205be` (merge of PR #402).
+
+- Local shallow clone of `Benny3840RG/Jarvis` succeeded in the current execution environment. The prior DNS/`github.com` checkout blocker is obsolete for this environment.
+- Local verification on that tree: `npm ci` and `npm run type-check` in `typescript/` both passed under Node 24.
+- Dependabot alerts: none open. Secret scanning alerts: none open. Repository security advisories: none.
+- CodeQL alerts **#2–#6 remain open** on exact HEAD for the `actions/cache-poisoning/poisonable-step` family in `.github/workflows/jarvis-autobuild.yml` `verify-candidate` after checkout of `needs.build.outputs.candidate-sha` under `workflow_dispatch`. PR #393 already removed npm caching from that job; residual risk is structural (untrusted tree execution in default-branch cache scope). Documented mitigations: writer-only trigger, issue lock/eligibility, `persist-credentials: false`, no npm cache on `verify-candidate`, immutable control-plane install under `/opt/jarvis-autobuild`. Full CodeQL closure requires redesign so untrusted verification runs only in PR-branch scope.
+- Evidence draft: `docs/security/2026-08-26-priority-1-local-scan.md` (this PR). Issue #399 awaits owner acceptance of residual disposition or redesign follow-up.
+- Branch protection on `main` remains unenforced (issue #398); cannot be applied from the current tool surface — owner GitHub UI required.
+- Open Dependabot PRs reviewed, not merged: #379 (prod deps) needs fresh exact-head proof + human land; #391 (Action pins) eligible after human land confirmation.
+- No requirement range is promoted to Verified by this reconciliation. No commissioning, remote exposure, customer effect, or production deployment was performed.
