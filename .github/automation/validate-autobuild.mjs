@@ -207,6 +207,17 @@ function requirePatterns(text, requirements) {
   return result(reasons);
 }
 
+function topLevelJobBody(text, jobName) {
+  const startPattern = new RegExp(`^  ${jobName}:\\s*$`, "m");
+  const match = startPattern.exec(text);
+  if (!match) return "";
+  const bodyStart = text.indexOf("\n", match.index + match[0].length);
+  if (bodyStart < 0) return "";
+  const remainder = text.slice(bodyStart + 1);
+  const nextJob = /^  [A-Za-z0-9_-]+:\s*$/m.exec(remainder);
+  return nextJob ? remainder.slice(0, nextJob.index) : remainder;
+}
+
 export function validatePromptContract(prompt) {
   return requirePatterns(String(prompt ?? ""), [
     ["prompt must classify issue content as untrusted", /issue content.*untrusted/i],
@@ -279,7 +290,9 @@ export function validateWorkflowContract(workflow) {
     ],
     ["guard must use an immutable validator", /\/opt\/jarvis-autobuild\/validate-autobuild\.mjs/i],
     ["guard must reject hidden index entries", /evaluateIndexFlags/i],
-    ["workflow must run clean candidate verification", /^\s{2}verify-candidate:\s*$/m],
+    ["workflow must define candidate verification", /^\s{2}verify-candidate:\s*$/m],
+    ["candidate verification must read check runs", /checks:\s*read/i],
+    ["candidate verification must query the exact ref", /github\.rest\.checks\.listForRef/i],
     ["workflow must publish candidate commit statuses", /createCommitStatus/i],
     [
       "verification status must use its own namespace",
@@ -306,6 +319,29 @@ export function validateWorkflowContract(workflow) {
 
   const checked = requirePatterns(text, requirements);
   const reasons = [...checked.reasons];
+  const verifyCandidate = topLevelJobBody(text, "verify-candidate");
+  if (verifyCandidate) {
+    if (/actions\/checkout@/i.test(verifyCandidate)) {
+      reasons.push("candidate verification must not check out candidate content");
+    }
+    if (/actions\/setup-node@/i.test(verifyCandidate)) {
+      reasons.push("candidate verification must not set up a candidate runtime");
+    }
+    if (/\bnpm(?:\s|$)/im.test(verifyCandidate)) {
+      reasons.push("candidate verification must not execute npm from candidate content");
+    }
+    for (const requiredCheck of [
+      "automation-policy",
+      "typecheck-lint-format-test",
+      "jarvis-console-01-build",
+      "copilot-review-section",
+      "CodeQL",
+    ]) {
+      if (!verifyCandidate.includes(`"${requiredCheck}"`)) {
+        reasons.push(`candidate verification must require the ${requiredCheck} check`);
+      }
+    }
+  }
   if (/\b(?:merge|deploy|commission)\b.*(?:--|run|create|execute)/i.test(text)) {
     reasons.push("workflow contains a prohibited merge, deploy, or commission command");
   }
@@ -315,6 +351,7 @@ export function validateWorkflowContract(workflow) {
     "typecheck-lint-format-test",
     "jarvis-console-01-build",
     "copilot-review-section",
+    "CodeQL",
   ]) {
     const statusContext = new RegExp(
       `createCommitStatus[\\s\\S]{0,1200}[\"']${reserved}[\"']`,
