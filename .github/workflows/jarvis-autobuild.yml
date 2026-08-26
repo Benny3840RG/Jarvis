@@ -1,1 +1,46 @@
-PLACEHOLDER
+name: Jarvis autonomous build
+
+# Temporary restore of main content after a failed push.
+# PR-scoped verify redesign will be re-applied in a follow-up commit.
+
+on:
+  issues:
+    types: [labeled]
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: Open issue number carrying automation-approved
+        required: true
+        type: number
+
+permissions: {}
+
+concurrency:
+  group: jarvis-autobuild-${{ github.repository }}-${{ github.event_name == 'workflow_dispatch' && format('issue-{0}', inputs.issue_number) || format('issue-{0}', github.event.issue.number) }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.label.name == 'automation-approved'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    outputs:
+      candidate-sha: ${{ steps.publish.outputs.candidate_sha }}
+      issue-number: ${{ steps.publish.outputs.issue_number }}
+      lock-acquired: ${{ steps.eligibility.outputs.lock_acquired }}
+      pr-url: ${{ steps.publish.outputs.pr_url }}
+    env:
+      ISSUE_NUMBER: ${{ github.event_name == 'workflow_dispatch' && format('{0}', inputs.issue_number) || format('{0}', github.event.issue.number) }}
+      BRANCH_NAME: automation/${{ github.event_name == 'workflow_dispatch' && format('issue-{0}', inputs.issue_number) || format('issue-{0}', github.event.issue.number) }}/run-${{ github.run_id }}
+
+    steps:
+      - name: Placeholder restore notice
+        run: |
+          echo "Branch under repair — do not use for autonomous builds until PR-scoped verify is landed."
+          exit 1
