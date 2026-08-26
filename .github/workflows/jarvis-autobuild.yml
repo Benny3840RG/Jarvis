@@ -528,46 +528,76 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
-      contents: read
+      checks: read
     steps:
-      - name: Check out the guarded candidate exactly
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Wait for required PR-scoped checks
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          CANDIDATE_SHA: ${{ needs.build.outputs.candidate-sha }}
         with:
-          ref: ${{ needs.build.outputs.candidate-sha }}
-          persist-credentials: false
+          script: |
+            const candidateSha = process.env.CANDIDATE_SHA;
+            if (!/^[0-9a-f]{40}$/.test(candidateSha || "")) {
+              core.setFailed("Candidate SHA is missing or invalid.");
+              return;
+            }
 
-      - name: Set up Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
-        with:
-          node-version-file: typescript/.nvmrc
+            const requiredChecks = new Set([
+              "automation-policy",
+              "typecheck-lint-format-test",
+              "jarvis-console-01-build",
+              "copilot-review-section",
+              "CodeQL",
+            ]);
+            const deadline = Date.now() + 25 * 60 * 1000;
 
-      - name: Verify autonomous policy
-        run: node --test .github/automation/validate-autobuild.test.mjs
+            while (Date.now() < deadline) {
+              const checks = await github.paginate(
+                github.rest.checks.listForRef,
+                {
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  ref: candidateSha,
+                  filter: "latest",
+                  per_page: 100,
+                },
+              );
+              const latestByName = new Map();
+              for (const check of checks) {
+                if (!requiredChecks.has(check.name)) continue;
+                const previous = latestByName.get(check.name);
+                if (!previous || Number(check.id) > Number(previous.id)) {
+                  latestByName.set(check.name, check);
+                }
+              }
 
-      - name: Install locked TypeScript dependencies
-        run: npm ci --prefix typescript
+              const failed = [];
+              const pending = [];
+              for (const checkName of requiredChecks) {
+                const check = latestByName.get(checkName);
+                if (!check || check.status !== "completed") {
+                  pending.push(checkName);
+                  continue;
+                }
+                if (check.conclusion !== "success") {
+                  failed.push(`${checkName}:${check.conclusion || "unknown"}`);
+                }
+              }
 
-      - name: Audit TypeScript dependencies
-        working-directory: typescript
-        run: npm audit --audit-level=moderate
+              if (failed.length > 0) {
+                core.setFailed(`Required PR checks failed: ${failed.join(", ")}`);
+                return;
+              }
+              if (pending.length === 0) {
+                core.info(`All required PR checks passed for ${candidateSha}.`);
+                return;
+              }
 
-      - name: Run TypeScript, lint, format, OpenAPI, and coverage gates
-        working-directory: typescript
-        run: |
-          npm run type-check
-          npm run lint
-          npm run format:check
-          npm run openapi:lint
-          npm run test:coverage
+              core.info(`Waiting for required PR checks: ${pending.join(", ")}`);
+              await new Promise((resolve) => setTimeout(resolve, 15_000));
+            }
 
-      - name: Install locked Jarvis Console dependencies
-        run: npm ci --prefix typescript/jarvis-console-01
-
-      - name: Audit and build Jarvis Console
-        working-directory: typescript/jarvis-console-01
-        run: |
-          npm run audit:ci
-          npm run build
+            core.setFailed("Timed out waiting for required PR-scoped checks.");
 
   finalize:
     needs: [build, verify-candidate]
@@ -610,8 +640,8 @@ jobs:
             if (candidateSha) {
               const state = succeeded ? "success" : "failure";
               const description = succeeded
-                ? "Guarded candidate passed clean-runner verification"
-                : "Guarded candidate failed clean-runner verification";
+                ? "Guarded candidate passed PR-scoped CI verification"
+                : "Guarded candidate failed PR-scoped CI verification";
               await github.rest.repos.createCommitStatus({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
@@ -666,7 +696,7 @@ jobs:
                 issue_number: issueNumber,
                 body:
                   `Autonomous build opened draft PR ${process.env.PR_URL} and ` +
-                  `passed clean-runner verification. Owner review is still required.`,
+                  `passed PR-scoped CI verification. Owner review is still required.`,
               });
             } else {
               await github.rest.issues.addLabels({
