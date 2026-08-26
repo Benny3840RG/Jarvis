@@ -415,6 +415,49 @@ test("workflow contract requires safe triggers, isolation, draft output, and cle
   );
 });
 
+test("candidate verification waits on exact-head PR checks without executing candidate content", () => {
+  const workflow = fs.readFileSync(
+    new URL("../workflows/jarvis-autobuild.yml", import.meta.url),
+    "utf8",
+  );
+  const verifyStart = workflow.indexOf("\n  verify-candidate:");
+  const finalizeStart = workflow.indexOf("\n  finalize:", verifyStart);
+  const verifyJob = workflow.slice(verifyStart, finalizeStart);
+
+  assert.match(verifyJob, /github\.rest\.checks\.listForRef/);
+  assert.match(verifyJob, /CANDIDATE_SHA/);
+  assert.doesNotMatch(verifyJob, /actions\/checkout@/);
+  assert.doesNotMatch(verifyJob, /actions\/setup-node@/);
+  assert.doesNotMatch(verifyJob, /\bnpm(?:\s|$)/m);
+  for (const requiredCheck of [
+    "automation-policy",
+    "typecheck-lint-format-test",
+    "jarvis-console-01-build",
+    "copilot-review-section",
+    "CodeQL",
+  ]) {
+    assert.ok(verifyJob.includes(`"${requiredCheck}"`), requiredCheck);
+  }
+
+  assert.equal(
+    validateWorkflowContract(
+      workflow.replace("github.rest.checks.listForRef", "github.rest.checks.listSuitesForRef"),
+    ).ok,
+    false,
+    "verification must query check runs for the candidate SHA",
+  );
+  assert.equal(
+    validateWorkflowContract(
+      workflow.replace(
+        "      - name: Wait for required PR-scoped checks",
+        "      - name: Unsafe candidate execution\n        run: npm ci\n\n      - name: Wait for required PR-scoped checks",
+      ),
+    ).ok,
+    false,
+    "verification must reject candidate npm execution",
+  );
+});
+
 test("TypeScript CI independently enforces the automation policy", () => {
   const workflow = fs.readFileSync(
     new URL("../workflows/typescript.yml", import.meta.url),
