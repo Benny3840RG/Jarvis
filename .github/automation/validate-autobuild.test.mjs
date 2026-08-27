@@ -32,25 +32,47 @@ test("rejects closed, unapproved, locked, duplicate, or underspecified issues", 
     [{ ...eligibleIssue, state: "closed" }, "issue is not open"],
     [{ ...eligibleIssue, labels: [] }, "automation-approved label is missing"],
     [
-      { ...eligibleIssue, labels: ["automation-approved", "automation-in-progress"] },
+      {
+        ...eligibleIssue,
+        labels: ["automation-approved", "automation-in-progress"],
+      },
       "automation-in-progress lock is already present",
     ],
-    [{ ...eligibleIssue, hasExistingAutomationPr: true }, "automation pull request already exists"],
-    [{ ...eligibleIssue, body: "Please fix it." }, "testable acceptance criteria are missing"],
+    [
+      { ...eligibleIssue, hasExistingAutomationPr: true },
+      "automation pull request already exists",
+    ],
+    [
+      { ...eligibleIssue, body: "Please fix it." },
+      "testable acceptance criteria are missing",
+    ],
   ];
 
   for (const [input, reason] of cases) {
     const result = evaluateIssue(input);
     assert.equal(result.ok, false);
-    assert.ok(result.reasons.includes(reason), `${reason}: ${result.reasons.join(", ")}`);
+    assert.ok(
+      result.reasons.includes(reason),
+      `${reason}: ${result.reasons.join(", ")}`,
+    );
   }
 });
 
 test("accepts bounded source and test changes", () => {
   const result = evaluateDiff({
     files: [
-      { path: "typescript/src/example.ts", status: "M", additions: 10, deletions: 2 },
-      { path: "typescript/tests/example.test.ts", status: "A", additions: 24, deletions: 0 },
+      {
+        path: "typescript/src/example.ts",
+        status: "M",
+        additions: 10,
+        deletions: 2,
+      },
+      {
+        path: "typescript/tests/example.test.ts",
+        status: "A",
+        additions: 24,
+        deletions: 0,
+      },
     ],
   });
 
@@ -59,11 +81,22 @@ test("accepts bounded source and test changes", () => {
 
 test("requires a test change when source changes", () => {
   const result = evaluateDiff({
-    files: [{ path: "typescript/src/example.ts", status: "M", additions: 10, deletions: 2 }],
+    files: [
+      {
+        path: "typescript/src/example.ts",
+        status: "M",
+        additions: 10,
+        deletions: 2,
+      },
+    ],
   });
 
   assert.equal(result.ok, false);
-  assert.ok(result.reasons.includes("source changes require a matching node test change"));
+  assert.ok(
+    result.reasons.includes(
+      "source changes require a matching node test change",
+    ),
+  );
 });
 
 test("rejects forbidden control, dependency, schema, deployment, binary, and symlink changes", () => {
@@ -104,12 +137,27 @@ test("rejects forbidden control, dependency, schema, deployment, binary, and sym
       files: [{ path, status: "M", additions: 1, deletions: 0 }],
     });
     assert.equal(result.ok, false, path);
-    assert.ok(result.reasons.some((reason) => reason.includes(path)), path);
+    assert.ok(
+      result.reasons.some((reason) => reason.includes(path)),
+      path,
+    );
   }
 
   for (const file of [
-    { path: "typescript/src/link.ts", status: "A", additions: 1, deletions: 0, symlink: true },
-    { path: "typescript/src/blob.bin", status: "A", additions: 1, deletions: 0, binary: true },
+    {
+      path: "typescript/src/link.ts",
+      status: "A",
+      additions: 1,
+      deletions: 0,
+      symlink: true,
+    },
+    {
+      path: "typescript/src/blob.bin",
+      status: "A",
+      additions: 1,
+      deletions: 0,
+      binary: true,
+    },
   ]) {
     assert.equal(evaluateDiff({ files: [file] }).ok, false, file.path);
   }
@@ -118,13 +166,27 @@ test("rejects forbidden control, dependency, schema, deployment, binary, and sym
 test("requires tests in each affected source area", () => {
   const result = evaluateDiff({
     files: [
-      { path: "typescript/convex/example.ts", status: "M", additions: 5, deletions: 1 },
-      { path: "typescript/tests/example.test.ts", status: "M", additions: 5, deletions: 1 },
+      {
+        path: "typescript/convex/example.ts",
+        status: "M",
+        additions: 5,
+        deletions: 1,
+      },
+      {
+        path: "typescript/tests/example.test.ts",
+        status: "M",
+        additions: 5,
+        deletions: 1,
+      },
     ],
   });
 
   assert.equal(result.ok, false);
-  assert.ok(result.reasons.includes("source changes require a matching convex test change"));
+  assert.ok(
+    result.reasons.includes(
+      "source changes require a matching convex test change",
+    ),
+  );
 });
 
 test("rejects assume-unchanged and skip-worktree index flags", () => {
@@ -138,20 +200,30 @@ test("rejects assume-unchanged and skip-worktree index flags", () => {
 });
 
 test("detects the reproduced assume-unchanged validator bypass", () => {
-  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "jarvis-index-guard-"));
+  const directory = fs.mkdtempSync(
+    path.join(os.tmpdir(), "jarvis-index-guard-"),
+  );
   const git = (...args) =>
     execFileSync("git", args, { cwd: directory, encoding: "utf8" }).trimEnd();
   try {
     git("init", "--quiet");
     git("config", "user.name", "Jarvis Test");
     git("config", "user.email", "jarvis@example.invalid");
-    fs.mkdirSync(path.join(directory, ".github", "automation"), { recursive: true });
+    fs.mkdirSync(path.join(directory, ".github", "automation"), {
+      recursive: true,
+    });
     const validatorPath = ".github/automation/validate-autobuild.mjs";
-    fs.writeFileSync(path.join(directory, validatorPath), "export const safe = true;\n");
+    fs.writeFileSync(
+      path.join(directory, validatorPath),
+      "export const safe = true;\n",
+    );
     git("add", validatorPath);
     git("commit", "--quiet", "-m", "fixture");
     git("update-index", "--assume-unchanged", validatorPath);
-    fs.writeFileSync(path.join(directory, validatorPath), "export const safe = false;\n");
+    fs.writeFileSync(
+      path.join(directory, validatorPath),
+      "export const safe = false;\n",
+    );
 
     assert.equal(git("diff", "--quiet", "HEAD", "--", validatorPath), "");
     const entries = git("ls-files", "-v", "-z")
@@ -179,7 +251,9 @@ test("rejects authority, credential, commissioning, and payment changes by conte
   );
 
   assert.equal(result.ok, false);
-  assert.ok(result.reasons.some((reason) => reason.includes("authority-sensitive")));
+  assert.ok(
+    result.reasons.some((reason) => reason.includes("authority-sensitive")),
+  );
 });
 
 test("allows authority-boundary prose in operational Markdown", () => {
@@ -240,7 +314,9 @@ test("scans executable removals when a file is renamed into operational docs", (
   );
 
   assert.equal(result.ok, false);
-  assert.ok(result.reasons.some((reason) => reason.includes("authority-sensitive")));
+  assert.ok(
+    result.reasons.some((reason) => reason.includes("authority-sensitive")),
+  );
 });
 
 test("does not treat header-shaped hunk content as path metadata", () => {
@@ -283,10 +359,15 @@ test("allows ordinary implementation patches", () => {
 });
 
 test("rejects authority-sensitive content in a newly added file", () => {
-  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "jarvis-untracked-guard-"));
+  const directory = fs.mkdtempSync(
+    path.join(os.tmpdir(), "jarvis-untracked-guard-"),
+  );
   try {
     const newPath = path.join(directory, "harmless-name.ts");
-    fs.writeFileSync(newPath, "export const allowed = requireApprovalBeforeExecution;\n");
+    fs.writeFileSync(
+      newPath,
+      "export const allowed = requireApprovalBeforeExecution;\n",
+    );
     const added = fs
       .readFileSync(newPath, "utf8")
       .split("\n")
@@ -308,23 +389,49 @@ test("rejects empty and excessive diffs", () => {
     additions: 1,
     deletions: 0,
   }));
-  assert.ok(evaluateDiff({ files: tooManyFiles }).reasons.includes("changed file limit exceeded"));
+  assert.ok(
+    evaluateDiff({ files: tooManyFiles }).reasons.includes(
+      "changed file limit exceeded",
+    ),
+  );
 
   assert.ok(
     evaluateDiff({
-      files: [{ path: "docs/large.md", status: "M", additions: 2_001, deletions: 0 }],
+      files: [
+        { path: "docs/large.md", status: "M", additions: 2_001, deletions: 0 },
+      ],
     }).reasons.includes("diff line limit exceeded"),
   );
   assert.ok(
     evaluateDiff({
-      files: [{ path: "docs/large.md", status: "M", additions: 1, deletions: 0, bytes: 524_289 }],
+      files: [
+        {
+          path: "docs/large.md",
+          status: "M",
+          additions: 1,
+          deletions: 0,
+          bytes: 524_289,
+        },
+      ],
     }).reasons.includes("changed file byte limit exceeded: docs/large.md"),
   );
   assert.ok(
     evaluateDiff({
       files: [
-        { path: "docs/a.md", status: "M", additions: 1, deletions: 0, bytes: 1_100_000 },
-        { path: "docs/b.md", status: "M", additions: 1, deletions: 0, bytes: 1_100_000 },
+        {
+          path: "docs/a.md",
+          status: "M",
+          additions: 1,
+          deletions: 0,
+          bytes: 1_100_000,
+        },
+        {
+          path: "docs/b.md",
+          status: "M",
+          additions: 1,
+          deletions: 0,
+          bytes: 1_100_000,
+        },
       ],
     }).reasons.includes("total changed byte limit exceeded"),
   );
@@ -358,7 +465,10 @@ test("workflow contract requires safe triggers, isolation, draft output, and cle
     "utf8",
   );
 
-  assert.deepEqual(validateWorkflowContract(workflow), { ok: true, reasons: [] });
+  assert.deepEqual(validateWorkflowContract(workflow), {
+    ok: true,
+    reasons: [],
+  });
   assert.match(workflow, /command -v node/);
   assert.match(
     workflow,
@@ -441,7 +551,10 @@ test("candidate verification waits on exact-head PR checks without executing can
 
   assert.equal(
     validateWorkflowContract(
-      workflow.replace("github.rest.checks.listForRef", "github.rest.checks.listSuitesForRef"),
+      workflow.replace(
+        "github.rest.checks.listForRef",
+        "github.rest.checks.listSuitesForRef",
+      ),
     ).ok,
     false,
     "verification must query check runs for the candidate SHA",
@@ -485,7 +598,9 @@ test("requires issue-scoped concurrency and preserves duplicate-issue serializat
   const issueScopedGroup =
     /^\s{2}group:\s*jarvis-autobuild-\$\{\{\s*github\.repository\s*\}\}-\$\{\{(?=.*github\.event_name)(?=.*inputs\.issue_number)(?=.*github\.event\.issue\.number).*?\}\}\s*$/im;
   assert.match(workflow, issueScopedGroup);
-  const groupLine = workflow.split("\n").find((line) => /^\s{2}group:/.test(line));
+  const groupLine = workflow
+    .split("\n")
+    .find((line) => /^\s{2}group:/.test(line));
   assert.ok(groupLine);
   assert.match(groupLine, /format\('issue-\{0\}',\s*inputs\.issue_number\)/);
   assert.match(
