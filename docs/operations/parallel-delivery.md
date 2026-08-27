@@ -73,7 +73,7 @@ Later ideas remain queued until the agreed Priority 1-4 baseline is complete.
 
 ## Autonomous-build concurrency
 
-The autonomous builder uses an issue-scoped concurrency key. Different approved issue numbers may execute concurrently; duplicate attempts for one issue resolve to the same key and remain serialised. The existing issue lock, attempt-specific branches, forbidden-path controls, immutable control verification, clean-runner verification, draft-PR boundary, owner-controlled merge, and commissioning/deployment hard stops remain unchanged.
+The autonomous builder uses an issue-scoped concurrency key. Different approved issue numbers may execute concurrently; duplicate attempts for one issue resolve to the same key and remain serialised. The existing issue lock, attempt-specific branches, forbidden-path controls, immutable control verification, PR-scoped candidate verification, draft-PR boundary, owner-controlled merge, and commissioning/deployment hard stops remain unchanged.
 
 Concurrency does not override the parallelism gate: unresolved dependencies or overlapping write surfaces require sequential reviewed delivery.
 
