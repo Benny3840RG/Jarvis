@@ -339,8 +339,20 @@ export function validateWorkflowContract(workflow) {
     ],
     ["candidate verification must read check runs", /checks:\s*read/i],
     [
+      "candidate verification must approve waiting PR workflows",
+      /actions:\s*write/i,
+    ],
+    [
       "candidate verification must query the exact ref",
       /github\.rest\.checks\.listForRef/i,
+    ],
+    [
+      "candidate verification must list candidate workflow runs",
+      /github\.rest\.actions\.listWorkflowRunsForRepo/i,
+    ],
+    [
+      "candidate verification must approve waiting GITHUB_TOKEN runs",
+      /github\.rest\.actions\.approveWorkflowRun/i,
     ],
     ["workflow must publish candidate commit statuses", /createCommitStatus/i],
     [
