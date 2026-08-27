@@ -61,11 +61,13 @@ export function evaluateIssue(issue) {
   const hasChecklistItem = /^\s*-\s*\[[ xX]\]\s+\S+/m.test(body);
 
   if (issue.state !== "open") reasons.push("issue is not open");
-  if (!labels.has("automation-approved")) reasons.push("automation-approved label is missing");
+  if (!labels.has("automation-approved"))
+    reasons.push("automation-approved label is missing");
   if (labels.has("automation-in-progress")) {
     reasons.push("automation-in-progress lock is already present");
   }
-  if (issue.hasExistingAutomationPr) reasons.push("automation pull request already exists");
+  if (issue.hasExistingAutomationPr)
+    reasons.push("automation pull request already exists");
   if (!hasAcceptanceHeading || !hasChecklistItem) {
     reasons.push("testable acceptance criteria are missing");
   }
@@ -83,15 +85,21 @@ export function evaluateDiff({ files = [] } = {}) {
   const reasons = [];
 
   if (files.length === 0) reasons.push("no repository changes were produced");
-  if (files.length > MAX_CHANGED_FILES) reasons.push("changed file limit exceeded");
+  if (files.length > MAX_CHANGED_FILES)
+    reasons.push("changed file limit exceeded");
 
   const changedLines = files.reduce(
-    (total, file) => total + Number(file.additions ?? 0) + Number(file.deletions ?? 0),
+    (total, file) =>
+      total + Number(file.additions ?? 0) + Number(file.deletions ?? 0),
     0,
   );
   if (changedLines > MAX_DIFF_LINES) reasons.push("diff line limit exceeded");
-  const totalBytes = files.reduce((total, file) => total + Number(file.bytes ?? 0), 0);
-  if (totalBytes > MAX_TOTAL_BYTES) reasons.push("total changed byte limit exceeded");
+  const totalBytes = files.reduce(
+    (total, file) => total + Number(file.bytes ?? 0),
+    0,
+  );
+  if (totalBytes > MAX_TOTAL_BYTES)
+    reasons.push("total changed byte limit exceeded");
 
   for (const file of files) {
     const path = String(file.path ?? "");
@@ -183,7 +191,9 @@ export function evaluatePatch(patch) {
     const currentPath = line.startsWith("+") ? newPath : oldPath;
     if (/^docs\/operations\/.+\.md$/.test(currentPath)) continue;
     if (sensitive.test(line.slice(1))) {
-      reasons.push(`authority-sensitive patch content at diff line ${index + 1}`);
+      reasons.push(
+        `authority-sensitive patch content at diff line ${index + 1}`,
+      );
     }
   }
   return result(reasons);
@@ -220,12 +230,24 @@ function topLevelJobBody(text, jobName) {
 
 export function validatePromptContract(prompt) {
   return requirePatterns(String(prompt ?? ""), [
-    ["prompt must classify issue content as untrusted", /issue content.*untrusted/i],
-    ["prompt must limit work to one approved issue", /one approved issue only/i],
+    [
+      "prompt must classify issue content as untrusted",
+      /issue content.*untrusted/i,
+    ],
+    [
+      "prompt must limit work to one approved issue",
+      /one approved issue only/i,
+    ],
     ["prompt must forbid workflow changes", /do not change[\s\S]*workflows/i],
     ["prompt must forbid secret changes", /do not change[\s\S]*secrets/i],
-    ["prompt must forbid permission changes", /do not change[\s\S]*permissions/i],
-    ["prompt must forbid dependency changes", /do not change[\s\S]*dependencies/i],
+    [
+      "prompt must forbid permission changes",
+      /do not change[\s\S]*permissions/i,
+    ],
+    [
+      "prompt must forbid dependency changes",
+      /do not change[\s\S]*dependencies/i,
+    ],
     ["prompt must forbid schema changes", /do not change[\s\S]*schema/i],
     ["prompt must forbid commissioning", /do not change[\s\S]*commissioning/i],
     ["prompt must forbid merging", /do not change[\s\S]*merging/i],
@@ -233,8 +255,14 @@ export function validatePromptContract(prompt) {
     ["prompt must require tests first", /tests before implementation/i],
     ["prompt must require the Jarvis checks", /npm run check/i],
     ["prompt must cover the console build", /build Jarvis Console/i],
-    ["prompt must stop on ambiguity or scope expansion", /stop.*ambiguous.*broader scope/i],
-    ["prompt must forbid git publication", /do not commit, push, create pull requests/i],
+    [
+      "prompt must stop on ambiguity or scope expansion",
+      /stop.*ambiguous.*broader scope/i,
+    ],
+    [
+      "prompt must forbid git publication",
+      /do not commit, push, create pull requests/i,
+    ],
     ["prompt must forbid external actions", /external actions/i],
   ]);
 }
@@ -242,7 +270,10 @@ export function validatePromptContract(prompt) {
 export function validateWorkflowContract(workflow) {
   const text = String(workflow ?? "");
   const requirements = [
-    ["workflow must trigger on labelled issues", /issues:[\s\S]*types:\s*\[labeled\]/i],
+    [
+      "workflow must trigger on labelled issues",
+      /issues:[\s\S]*types:\s*\[labeled\]/i,
+    ],
     ["workflow must support manual dispatch", /workflow_dispatch:/i],
     ["workflow must require automation-approved", /automation-approved/i],
     ["workflow must define concurrency", /concurrency:/i],
@@ -254,7 +285,10 @@ export function validateWorkflowContract(workflow) {
       "workflow concurrency must format both issue sources",
       /^\s{2}group:\s*jarvis-autobuild-.*format\('issue-\{0\}',\s*inputs\.issue_number\).*format\('issue-\{0\}',\s*github\.event\.issue\.number\).*$/im,
     ],
-    ["workflow must not cancel an in-progress build", /cancel-in-progress:\s*false/i],
+    [
+      "workflow must not cancel an in-progress build",
+      /cancel-in-progress:\s*false/i,
+    ],
     ["workflow must have a finite timeout", /timeout-minutes:\s*[1-9]\d*/i],
     ["workflow must declare permissions", /permissions:/i],
     ["workflow must allow branch writes", /contents:\s*write/i],
@@ -268,11 +302,17 @@ export function validateWorkflowContract(workflow) {
       "OpenAI key must come from Actions secrets",
       /openai-api-key:\s*\$\{\{\s*secrets\.OPENAI_API_KEY\s*\}\}/i,
     ],
-    ["Codex must use workspace permissions", /permission-profile:\s*[\"']?:workspace[\"']?/i],
+    [
+      "Codex must use workspace permissions",
+      /permission-profile:\s*[\"']?:workspace[\"']?/i,
+    ],
     ["Codex must drop sudo", /safety-strategy:\s*drop-sudo/i],
     ["workflow must create a draft PR", /(?:draft:\s*true|--draft\b)/i],
     ["workflow must always clean up", /if:\s*always\(\)/i],
-    ["guard must verify the original HEAD", /\/opt\/jarvis-autobuild\/base\.sha/i],
+    [
+      "guard must verify the original HEAD",
+      /\/opt\/jarvis-autobuild\/base\.sha/i,
+    ],
     ["guard must include staged changes", /diff[\s\S]*HEAD/i],
     ["guard must parse hostile filenames safely", /--porcelain=v1[\s\S]*-z/i],
     ["publication must disable git hooks", /core\.hooksPath=\/dev\/null/i],
@@ -288,11 +328,20 @@ export function validateWorkflowContract(workflow) {
       "candidate outputs must precede optional metadata operations",
       /candidate_sha="[\s\S]{0,500}echo "pr_url=\$pr_url" >>"\$GITHUB_OUTPUT"[\s\S]{0,800}if ! gh pr edit "\$pr_url" --add-label automation-generated/i,
     ],
-    ["guard must use an immutable validator", /\/opt\/jarvis-autobuild\/validate-autobuild\.mjs/i],
+    [
+      "guard must use an immutable validator",
+      /\/opt\/jarvis-autobuild\/validate-autobuild\.mjs/i,
+    ],
     ["guard must reject hidden index entries", /evaluateIndexFlags/i],
-    ["workflow must define candidate verification", /^\s{2}verify-candidate:\s*$/m],
+    [
+      "workflow must define candidate verification",
+      /^\s{2}verify-candidate:\s*$/m,
+    ],
     ["candidate verification must read check runs", /checks:\s*read/i],
-    ["candidate verification must query the exact ref", /github\.rest\.checks\.listForRef/i],
+    [
+      "candidate verification must query the exact ref",
+      /github\.rest\.checks\.listForRef/i,
+    ],
     ["workflow must publish candidate commit statuses", /createCommitStatus/i],
     [
       "verification status must use its own namespace",
@@ -302,10 +351,7 @@ export function validateWorkflowContract(workflow) {
       "guard must install a root-owned Node runtime",
       /install -o root -g root -m 0555[\s\\]*"\$trusted_node"[\s\\]*\/opt\/jarvis-autobuild\/node/i,
     ],
-    [
-      "guard must verify the immutable Node runtime metadata",
-      /root:root:555/i,
-    ],
+    ["guard must verify the immutable Node runtime metadata", /root:root:555/i],
     [
       "cleanup must persist authenticated lock ownership",
       /jarvis-autobuild-lock:[\s\S]*github\.paginate[\s\S]*github-actions\[bot\]/i,
@@ -314,7 +360,10 @@ export function validateWorkflowContract(workflow) {
       "finalize must require the approved trigger",
       /finalize:[\s\S]*if:[\s\S]{0,160}always\(\)[\s\S]{0,240}automation-approved/i,
     ],
-    ["automation branches must be attempt-specific", /run-\$\{\{\s*github\.run_id\s*\}\}/i],
+    [
+      "automation branches must be attempt-specific",
+      /run-\$\{\{\s*github\.run_id\s*\}\}/i,
+    ],
   ];
 
   const checked = requirePatterns(text, requirements);
@@ -322,13 +371,19 @@ export function validateWorkflowContract(workflow) {
   const verifyCandidate = topLevelJobBody(text, "verify-candidate");
   if (verifyCandidate) {
     if (/actions\/checkout@/i.test(verifyCandidate)) {
-      reasons.push("candidate verification must not check out candidate content");
+      reasons.push(
+        "candidate verification must not check out candidate content",
+      );
     }
     if (/actions\/setup-node@/i.test(verifyCandidate)) {
-      reasons.push("candidate verification must not set up a candidate runtime");
+      reasons.push(
+        "candidate verification must not set up a candidate runtime",
+      );
     }
     if (/\bnpm(?:\s|$)/im.test(verifyCandidate)) {
-      reasons.push("candidate verification must not execute npm from candidate content");
+      reasons.push(
+        "candidate verification must not execute npm from candidate content",
+      );
     }
     for (const requiredCheck of [
       "automation-policy",
@@ -338,14 +393,21 @@ export function validateWorkflowContract(workflow) {
       "CodeQL",
     ]) {
       if (!verifyCandidate.includes(`"${requiredCheck}"`)) {
-        reasons.push(`candidate verification must require the ${requiredCheck} check`);
+        reasons.push(
+          `candidate verification must require the ${requiredCheck} check`,
+        );
       }
     }
   }
-  if (/\b(?:merge|deploy|commission)\b.*(?:--|run|create|execute)/i.test(text)) {
-    reasons.push("workflow contains a prohibited merge, deploy, or commission command");
+  if (
+    /\b(?:merge|deploy|commission)\b.*(?:--|run|create|execute)/i.test(text)
+  ) {
+    reasons.push(
+      "workflow contains a prohibited merge, deploy, or commission command",
+    );
   }
-  if (/^\s*environment:\s*/m.test(text)) reasons.push("workflow must not target an environment");
+  if (/^\s*environment:\s*/m.test(text))
+    reasons.push("workflow must not target an environment");
   for (const reserved of [
     "automation-policy",
     "typecheck-lint-format-test",
@@ -376,12 +438,18 @@ export function validateCiContract(workflow) {
       "CI must trigger for automation policy changes",
       /\.github\/automation\/\*\*/i,
     ],
-    ["CI must define the automation-policy job", /^\s{2}automation-policy:\s*$/m],
+    [
+      "CI must define the automation-policy job",
+      /^\s{2}automation-policy:\s*$/m,
+    ],
     [
       "CI must run the automation policy tests",
       /node --test \.github\/automation\/validate-autobuild\.test\.mjs/i,
     ],
-    ["automation-policy must use Node.js 24", /node-version:\s*[\"']?24[\"']?/i],
+    [
+      "automation-policy must use Node.js 24",
+      /node-version:\s*[\"']?24[\"']?/i,
+    ],
   ]);
   const reasons = [...checked.reasons];
   const pullRequestSection = text.match(
