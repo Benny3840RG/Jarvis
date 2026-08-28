@@ -14,7 +14,7 @@ Quote send remains uncommissioned and is not exposed through MCP or the HUD.
 ```text
 proposed -> approved
          -> rejected
-approved -> revoked    (owner-initiated, before consumption)
+approved -> revoked    (owner-initiated; single-use actions only before consumption)
 approved -> expired    (server-observed, lazily, on next mutation touch)
 ```
 
@@ -74,11 +74,15 @@ as the single-use path above, and expiry is durably observed the same way. Neith
 provider.
 
 Revocation (`POST .../revoke`, see below) is owner-scoped, idempotent for a repeated identical reason, and
-prospective-only: it stops a future execution attempt and never claims to undo one already in flight. It
-refuses to revoke an action that has already produced a completed execution receipt — whichever terminal
-fact (execution completing, or revocation) is recorded first is authoritative; the loser gets a clear,
-non-destructive rejection, never a silent no-op. Neither `expired` nor `revoked` deletes the action or any
-audit evidence; both are recorded exactly like `approved`/`rejected` today.
+prospective-only: it stops a future execution attempt and never claims to undo one already in flight. **This
+consumed-conflict refusal applies only to single-use actions** — the only ones with a single, atomic attempt
+whose outcome can meaningfully race a revocation: it refuses to revoke a single-use action that has already
+produced a completed execution receipt — whichever terminal fact (execution completing, or revocation) is
+recorded first is authoritative; the loser gets a clear, non-destructive rejection, never a silent no-op. A
+**reusable** action has no such single-attempt invariant to protect: it may be revoked at any time after
+approval regardless of how many completed execution receipts already exist — revocation there only ever
+stops the _next_ attempt (see "Operator recovery" below). Neither `expired` nor `revoked` deletes the action
+or any audit evidence; both are recorded exactly like `approved`/`rejected` today.
 
 ## Proposal requirements
 
@@ -144,21 +148,22 @@ same `JARVIS_APPROVAL_TOKEN` there; a direct Convex call holding only the servic
 mutation boundary. It is a runtime credential for the authorised delivery worker, must differ from
 the service token, and does not grant approval authority.
 
-| Method | Path                                                           | Result                                               |
-| ------ | -------------------------------------------------------------- | ---------------------------------------------------- |
-| POST   | `/api/v1/projects/{projectId}/tool-actions`                    | Stage a proposal                                     |
-| GET    | `/api/v1/projects/{projectId}/tool-actions`                    | List recent proposals                                |
-| GET    | `/api/v1/projects/{projectId}/tool-actions/{actionId}`         | Inspect one proposal                                 |
-| POST   | `/api/v1/projects/{projectId}/tool-actions/{actionId}/approve` | Approve after review (requires `approvalToken`)      |
-| POST   | `/api/v1/projects/{projectId}/tool-actions/{actionId}/reject`  | Reject with a reason                                 |
-| POST   | `/api/v1/projects/{projectId}/tool-actions/{actionId}/revoke`  | Revoke before consumption (requires `approvalToken`) |
-| POST   | `/api/v1/projects/{projectId}/tool-actions/{actionId}/execute` | Attempt execution (see below)                        |
+| Method | Path                                                           | Result                                                                  |
+| ------ | -------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| POST   | `/api/v1/projects/{projectId}/tool-actions`                    | Stage a proposal                                                        |
+| GET    | `/api/v1/projects/{projectId}/tool-actions`                    | List recent proposals                                                   |
+| GET    | `/api/v1/projects/{projectId}/tool-actions/{actionId}`         | Inspect one proposal                                                    |
+| POST   | `/api/v1/projects/{projectId}/tool-actions/{actionId}/approve` | Approve after review (requires `approvalToken`)                         |
+| POST   | `/api/v1/projects/{projectId}/tool-actions/{actionId}/reject`  | Reject with a reason                                                    |
+| POST   | `/api/v1/projects/{projectId}/tool-actions/{actionId}/revoke`  | Revoke (single-use: only before consumption) (requires `approvalToken`) |
+| POST   | `/api/v1/projects/{projectId}/tool-actions/{actionId}/execute` | Attempt execution (see below)                                           |
 
 `POST .../revoke` requires the same `approvalToken` as `/approve` — the same human-only credential, not
 just the shared Bearer token. It is valid only from `approved`; repeating it with the same `reason` is a
-no-op, repeating it with a different `reason` fails. It rejects an action that has already produced a
-completed execution receipt with a state-conflict response, since the external effect (if any) may already
-have happened and revocation cannot retract it.
+no-op, repeating it with a different `reason` fails. For a **single-use** action only, it rejects a request
+once a completed execution receipt already exists, with a state-conflict response, since that action's one
+external effect may already have happened and revocation cannot retract it. A **reusable** action carries no
+such conflict: it remains revocable after any number of completed receipts, stopping only future attempts.
 
 ## Execution
 
