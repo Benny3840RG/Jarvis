@@ -2,6 +2,7 @@ import { loadEnvFile } from "node:process";
 
 import { createToolExecutionServiceFromEnv } from "../actions/toolExecutionFactory.js";
 import { createMicrosoftOutlookRuntimeFromEnv } from "../auth/microsoftOutlookRuntime.js";
+import { assertOutlookReconciliationPairing } from "../auth/outlookReconciliationGuard.js";
 import { createOutlookRuntimeReconciliationFactories } from "../reconciliation/outlookRuntimeReconciliation.js";
 import { createRuntimeReconciliationHost } from "../reconciliation/runtimeReconciliationHost.js";
 import {
@@ -21,6 +22,7 @@ function loadLocalEnvironment(): void {
 
 async function main(): Promise<void> {
   loadLocalEnvironment();
+  assertOutlookReconciliationPairing();
   const listen = resolveHttpListenConfig();
   const outlookRuntime = createMicrosoftOutlookRuntimeFromEnv();
   const telemetry = createPostHogTelemetryFromEnv();

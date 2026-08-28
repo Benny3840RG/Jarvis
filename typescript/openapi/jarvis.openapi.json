@@ -5383,8 +5383,8 @@
     "/api/v1/projects/{projectId}/tool-actions/{actionId}/revoke": {
       "post": {
         "operationId": "revokeToolAction",
-        "summary": "Revoke an approved tool-action proposal before consumption",
-        "description": "Owner-scoped revocation of a pending or approved proposal, gated by the same approvalToken as /approve. Idempotent when repeated with the same reason. Refuses to revoke an action that has already produced a completed execution receipt (already consumed). Never deletes the action or its audit trail.",
+        "summary": "Revoke an approved tool-action proposal",
+        "description": "Owner-scoped revocation of a pending or approved proposal, gated by the same approvalToken as /approve. Idempotent when repeated with the same reason. For a single-use action only, refuses to revoke one that has already produced a completed execution receipt (already consumed); a reusable action remains revocable regardless of prior completed receipts, stopping only future attempts. Never deletes the action or its audit trail.",
         "tags": ["Tool Actions"],
         "parameters": [
           {

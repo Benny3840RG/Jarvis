@@ -21,12 +21,12 @@ Adding `automation-approved` starts the builder immediately. Applying the label 
 
 ## Labels
 
-| Label | Meaning |
-| --- | --- |
-| `automation-approved` | Owner or repository writer authorises one bounded attempt |
-| `automation-in-progress` | A build currently owns the issue |
-| `automation-blocked` | The last attempt stopped and needs operator attention |
-| `automation-generated` | Branch or draft PR was produced by the autonomous builder |
+| Label                    | Meaning                                                   |
+| ------------------------ | --------------------------------------------------------- |
+| `automation-approved`    | Owner or repository writer authorises one bounded attempt |
+| `automation-in-progress` | A build currently owns the issue                          |
+| `automation-blocked`     | The last attempt stopped and needs operator attention     |
+| `automation-generated`   | Branch or draft PR was produced by the autonomous builder |
 
 Different approved issues may run concurrently. Attempts for the same issue remain serialised by the issue-scoped workflow concurrency group, the `automation-in-progress` lock, and existing automation-PR detection.
 
@@ -42,9 +42,9 @@ Concurrent execution is permitted only when approved issues have no unresolved d
 4. Codex edits the isolated checkout under the repository policy.
 5. A trusted guard rejects forbidden or excessive changes.
 6. The workflow pushes an attempt-specific `automation/issue-<number>/run-<run-id>` branch and opens one draft PR.
-7. A separate secret-free job checks out the exact guarded commit on a fresh runner and repeats the automation, TypeScript, coverage, audit and Console gates.
-8. The workflow publishes one namespaced `jarvis-autobuild/verify-candidate` status on the draft PR and blocks the issue if verification fails.
-9. Ordinary TypeScript and Copilot checks keep their own names and remain authoritative. The autonomous verifier never impersonates or satisfies them.
+7. A separate secret-free job waits on the exact candidate SHA for the PR-scoped `automation-policy`, TypeScript, Console, Copilot Review, and CodeQL checks. It does not check out or execute the candidate tree in the default-branch workflow. `GITHUB_TOKEN`-created draft PRs often leave those workflows waiting for approval; the verifier attempts to approve them so verification stays PR-scoped.
+8. The workflow publishes one namespaced `jarvis-autobuild/verify-candidate` status on the draft PR and blocks the issue if those required checks fail or time out.
+9. Ordinary TypeScript, Console, Copilot, and CodeQL checks keep their own names and remain authoritative. The autonomous verifier never impersonates or satisfies them.
 10. The owner reviews the diff, Copilot Review, checks, and remaining risk.
 11. Only the owner may change draft state or merge.
 
@@ -52,7 +52,7 @@ Concurrent execution is permitted only when approved issues have no unresolved d
 
 Use **Actions → Jarvis autonomous build → Run workflow** and enter the issue number only after correcting the recorded blocker. Remove a stale `automation-in-progress` label only after confirming no run is active.
 
-The workflow does not retry automatically. This prevents repeated API spend and repeated unsafe edits. Agent-reported checks are advisory; a separate clean-runner verification job is machine-enforced before the build is reported successful.
+The workflow does not retry automatically. This prevents repeated API spend and repeated unsafe edits. Agent-reported checks are advisory; PR-scoped CI on the exact candidate SHA is machine-enforced before the build is reported successful.
 
 ## Hard stops
 
@@ -94,4 +94,4 @@ Autonomous builds never commission or deploy. Jarvis development commissioning r
 
 ## Repository setting
 
-GitHub Actions must be allowed to create pull requests: **Settings → Actions → General → Workflow permissions → Allow GitHub Actions to create and approve pull requests**. This permits draft PR creation only; the workflow contains no approval or merge operation.
+GitHub Actions must be allowed to create pull requests: **Settings → Actions → General → Workflow permissions → Allow GitHub Actions to create and approve pull requests**. This permits draft PR creation and approval of the exact candidate's held CI workflow runs only; the workflow cannot approve a pull request or merge it.
