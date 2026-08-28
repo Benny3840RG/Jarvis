@@ -30,7 +30,7 @@
     "mcp-use": "1.34.5",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
-    "react-router": "^7.13.0",
+    "react-router": "^7.18.2",
     "tailwindcss": "^4.2.0",
     "zod": "4.4.3"
   },
@@ -49,6 +49,7 @@
     "fsevents": false
   },
   "overrides": {
+    "react-router-dom": "^7.18.2",
     "@hono/node-server": "^2.0.11",
     "hono": "^4.12.34",
     "lodash": "^4.18.1",
