@@ -525,7 +525,7 @@ test("workflow contract requires safe triggers, isolation, draft output, and cle
   );
 });
 
-test("candidate verification waits on exact-head PR checks without executing candidate content", () => {
+test("candidate verification approves exact-head PR runs without executing candidate content", () => {
   const workflow = fs.readFileSync(
     new URL("../workflows/jarvis-autobuild.yml", import.meta.url),
     "utf8",
@@ -534,6 +534,12 @@ test("candidate verification waits on exact-head PR checks without executing can
   const finalizeStart = workflow.indexOf("\n  finalize:", verifyStart);
   const verifyJob = workflow.slice(verifyStart, finalizeStart);
 
+  assert.match(verifyJob, /actions:\s*write/);
+  assert.match(verifyJob, /github\.rest\.actions\.listWorkflowRunsForRepo/);
+  assert.match(verifyJob, /head_sha:\s*candidateSha/);
+  assert.match(verifyJob, /event:\s*"pull_request"/);
+  assert.match(verifyJob, /run\.status !== "action_required"/);
+  assert.match(verifyJob, /github\.rest\.actions\.approveWorkflowRun/);
   assert.match(verifyJob, /github\.rest\.checks\.listForRef/);
   assert.match(verifyJob, /CANDIDATE_SHA/);
   assert.doesNotMatch(verifyJob, /actions\/checkout@/);
@@ -558,6 +564,33 @@ test("candidate verification waits on exact-head PR checks without executing can
     ).ok,
     false,
     "verification must query check runs for the candidate SHA",
+  );
+  assert.equal(
+    validateWorkflowContract(
+      workflow.replace("actions: write", "actions: read"),
+    ).ok,
+    false,
+    "verification must have permission to approve held PR runs",
+  );
+  assert.equal(
+    validateWorkflowContract(
+      workflow.replace(
+        "github.rest.actions.listWorkflowRunsForRepo",
+        "github.rest.actions.getWorkflowRun",
+      ),
+    ).ok,
+    false,
+    "verification must discover held runs for the candidate SHA",
+  );
+  assert.equal(
+    validateWorkflowContract(
+      workflow.replace(
+        "github.rest.actions.approveWorkflowRun",
+        "github.rest.actions.getWorkflowRun",
+      ),
+    ).ok,
+    false,
+    "verification must approve held candidate PR runs",
   );
   assert.equal(
     validateWorkflowContract(

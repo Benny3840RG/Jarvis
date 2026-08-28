@@ -370,6 +370,19 @@ export function validateWorkflowContract(workflow) {
   const reasons = [...checked.reasons];
   const verifyCandidate = topLevelJobBody(text, "verify-candidate");
   if (verifyCandidate) {
+    if (!/actions:\s*write/i.test(verifyCandidate)) {
+      reasons.push("candidate verification must approve held PR workflows");
+    }
+    if (
+      !/github\.rest\.actions\.listWorkflowRunsForRepo/i.test(verifyCandidate)
+    ) {
+      reasons.push("candidate verification must list candidate workflow runs");
+    }
+    if (!/github\.rest\.actions\.approveWorkflowRun/i.test(verifyCandidate)) {
+      reasons.push(
+        "candidate verification must approve held candidate PR runs",
+      );
+    }
     if (/actions\/checkout@/i.test(verifyCandidate)) {
       reasons.push(
         "candidate verification must not check out candidate content",
