@@ -606,6 +606,59 @@ describe("revoke()", () => {
     expect(stillApproved?.state).toBe("approved");
   });
 
+  it("allows revoking a reusable action that already has a completed execution receipt", async () => {
+    // Independent review finding: the operator doc's blanket "refuses to
+    // revoke an action that has already produced a completed execution
+    // receipt" claim, read without qualification, contradicts this
+    // repository's own design — revoke()'s completed-receipt refusal above
+    // only ever applies to single-use actions (see the `consumptionPolicy
+    // === "single-use"` guard on the check). A reusable action has no
+    // single-attempt invariant to protect, so it must remain revocable
+    // (stopping only the *next* attempt) no matter how many completed
+    // receipts already exist. This pins that contract to real behavior.
+    const t = harness();
+    const action = await stageAndReturn(t, { destructive: false });
+    expect(action.consumptionPolicy).toBeUndefined();
+    const now = Date.now();
+    await t.mutation(api.toolActions.approve, {
+      serviceToken: SERVICE_TOKEN,
+      approvalToken: APPROVAL_TOKEN,
+      projectKey: PROJECT_KEY,
+      actionId: "action-1",
+      expectedRevision: 1,
+      now,
+    });
+    await t.run((ctx) =>
+      ctx.db.insert("toolExecutionReceipts", {
+        ownerId: OWNER_ID,
+        receiptKey: `${PROJECT_KEY}:action-1:live`,
+        receiptId: "receipt-1",
+        actionId: "action-1",
+        requestId: "request-1",
+        projectId: PROJECT_KEY,
+        idempotencyKey: "tool-action-execution:v1:live:already-executed-reusable",
+        actionFingerprint: "jarvis-action-fingerprint:v1:test",
+        tool: "notes",
+        operation: "create",
+        status: "succeeded",
+        startedAt: now,
+        completedAt: now,
+        createdAt: now,
+      }),
+    );
+
+    const revoked = await t.mutation(api.toolActions.revoke, {
+      serviceToken: SERVICE_TOKEN,
+      approvalToken: APPROVAL_TOKEN,
+      projectKey: PROJECT_KEY,
+      actionId: "action-1",
+      reason: "Stop further sends; the one that already ran is fine.",
+      now,
+    });
+
+    expect(revoked.state).toBe("revoked");
+  });
+
   it("never deletes the action or its audit evidence", async () => {
     const t = harness();
     await stageAndReturn(t);
