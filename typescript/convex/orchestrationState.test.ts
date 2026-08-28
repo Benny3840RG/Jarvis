@@ -131,6 +131,60 @@ describe("Convex orchestration state", () => {
     expect([first.status, second.status].sort()).toEqual(["created", "replayed"]);
   });
 
+  it("serializes concurrent step-lease requests to exactly one worker", async () => {
+    // Trigger-delivery races don't stop at run creation (#324): if two
+    // workers -- or one worker retrying after a slow response under
+    // at-least-once dispatch -- both observe the same step as "pending" and
+    // race to call markStepRunning, only one may win the lease, or the same
+    // step's external effect could be attempted twice. Convex's OCC on the
+    // single orchestrationSteps document must serialize this, exactly as it
+    // already does for beginRun's idempotency-key race (tested above).
+    const t = harness();
+    await t.mutation(api.orchestrationState.beginRun, begin({ nodeIds: ["first"] }));
+
+    const results = await Promise.allSettled([
+      t.mutation(api.orchestrationState.markStepRunning, {
+        serviceToken: SERVICE_TOKEN,
+        runId: "run-1",
+        nodeId: "first",
+        operationId: "createTask",
+        workerId: "worker-1",
+        leaseTtlMs: 1_000,
+      }),
+      t.mutation(api.orchestrationState.markStepRunning, {
+        serviceToken: SERVICE_TOKEN,
+        runId: "run-1",
+        nodeId: "first",
+        operationId: "createTask",
+        workerId: "worker-2",
+        leaseTtlMs: 1_000,
+      }),
+    ]);
+
+    const fulfilled = results.filter(
+      (result) => result.status === "fulfilled",
+    ) as PromiseFulfilledResult<{ step: { leaseOwner?: string }; leaseToken: string }>[];
+    const rejected = results.filter(
+      (result) => result.status === "rejected",
+    ) as PromiseRejectedResult[];
+    expect(fulfilled).toHaveLength(1);
+    expect(rejected).toHaveLength(1);
+    expect((rejected[0].reason as Error).message).toMatch(
+      /Cannot transition step running to running/,
+    );
+
+    const steps = await t.query(api.orchestrationState.listSteps, {
+      serviceToken: SERVICE_TOKEN,
+      runId: "run-1",
+    });
+    const first = steps.find((step) => step.nodeId === "first");
+    expect(first?.state).toBe("running");
+    // Exactly one worker actually holds the durable lease, and it is the
+    // same worker whose markStepRunning call resolved -- never a second,
+    // silently-overwritten grant from the loser.
+    expect(first?.leaseOwner).toBe(fulfilled[0].value.step.leaseOwner);
+  });
+
   it("returns a conflict for an idempotency key with a different fingerprint", async () => {
     const t = harness();
     await t.mutation(api.orchestrationState.beginRun, begin());
