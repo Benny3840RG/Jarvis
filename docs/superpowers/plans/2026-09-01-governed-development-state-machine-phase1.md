@@ -90,12 +90,12 @@
 - `applyDevelopmentEvent(projection, event)` is deterministic/idempotent.
 - commit API accepts expected projection version for optimistic concurrency.
 
-- [ ] RED: event-envelope/schema compatibility validation.
-- [ ] RED: duplicate event replay produces no second projection change.
-- [ ] RED: conflicting expected-version commits cannot both win.
-- [ ] RED: rejected requests create audit events but no domain-state transition.
-- [ ] GREEN: implement minimal event validator/reducer/commit contract.
-- [ ] Confirm projection records latest event ID, projection version, reducer version.
+- [x] RED: event-envelope/schema compatibility validation. (unsupported `eventSchemaVersion`; unknown/incompatible `reducerVersion`)
+- [x] RED: duplicate event replay produces no second projection change.
+- [x] RED: conflicting expected-version commits cannot both win. (`InMemoryDevelopmentProjectionStore.commit` always re-reads its own current projection, never a caller-supplied one)
+- [x] RED: rejected requests create audit events but no domain-state transition. (`DEV_TRANSITION_REJECTED` event emitted, projection unchanged)
+- [x] GREEN: implement minimal event validator/reducer/commit contract. (`events.ts`, `reducer.ts`; 6/6 new tests green, `npm run check` green)
+- [x] Confirm projection records latest event ID, projection version, reducer version. (`DevelopmentProjection.lastEventId`/`projectionVersion`/`reducerVersion`, asserted directly in the first new test)
 
 ### Task 5: Reconciliation semantics for indeterminate operations
 
