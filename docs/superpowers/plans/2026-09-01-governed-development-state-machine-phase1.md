@@ -42,9 +42,9 @@
 
 - [x] Create `JARVIS_TRANSITIONS.yaml` first as machine source of truth.
 - [x] Write the human governance artefacts around that registry.
-- [ ] Add automated alignment test: YAML transition IDs/from/to/side-effect/committer must match the TypeScript registry; Markdown must reference every YAML transition ID exactly once as a transition section.
-- [ ] Confirm `MERGED -> COMPLETE` is ΩΣ-only.
-- [ ] Confirm operation retry semantics do not mutate state transitions blindly.
+- [x] Add automated alignment test: YAML transition IDs/from/to/side-effect/committer must match the TypeScript registry; Markdown must reference every YAML transition ID exactly once as a transition section. (`typescript/tests/developmentTransitionRegistryAlignment.test.ts`)
+- [x] Confirm `MERGED -> COMPLETE` is ΩΣ-only. (alignment test: "MERGED -> COMPLETE is the sole Omega-committed transition in the registry"; kernel tests: `OMEGA_COMMITTER_REQUIRED`, `OMEGA_TRUSTED_CAPABILITY_REQUIRED`)
+- [x] Confirm operation retry semantics do not mutate state transitions blindly. (alignment test: "retry targets never blindly alias an authoritative transition ID" — every `retry_target` is `none` or an `*_operation` name, never a transition ID; full retry/resume behavior is Task 8)
 
 ### Task 2: Development transition kernel — RED
 
@@ -56,12 +56,12 @@
 - Produces expected public API: `DEVELOPMENT_TRANSITIONS`, `evaluateDevelopmentTransition`, `DevelopmentState`, `TransitionRequest`.
 
 - [x] Write initial failing tests for legal transition lookup, illegal-transition rejection, stale lease rejection, authority-envelope rejection, approval requirements, and ΩΣ-only completion.
-- [ ] Add failing test proving a rejected transition produces a durable rejection-event description and no projection mutation.
-- [ ] Add failing test proving caller-supplied `actorType: omega` is insufficient without trusted ΩΣ commit capability.
-- [ ] Add failing test proving two workers racing from the same projection version cannot both commit conflicting transitions.
-- [ ] Add failing test proving a duplicated event ID is idempotent on projection replay.
-- [ ] Add failing test proving unsupported event-schema/reducer compatibility fails closed.
-- [ ] Confirm the RED failure is specifically due to the missing implementation rather than malformed tests.
+- [x] Add failing test proving a rejected transition produces a durable rejection-event description and no projection mutation. ("a rejected transition describes a durable rejection without mutating the request")
+- [x] Add failing test proving caller-supplied `actorType: omega` is insufficient without trusted ΩΣ commit capability. ("caller-supplied actorType 'omega' alone does not grant Omega completion authority")
+- [x] Add failing test proving two workers racing from the same projection version cannot both commit conflicting transitions, at the kernel level via `expectedSubjectVersion`/`currentSubjectVersion`. ("stale subject version loses a claim race to an already-advanced worker") Full OCC-backed concurrent-commit proof against a real projection/store belongs to Task 4's event/reducer/commit-boundary tests, not this pure evaluator.
+- [ ] ~~Add failing test proving a duplicated event ID is idempotent on projection replay.~~ Moved to Task 4 — this kernel has no event/projection concept yet (Task 2's own Interfaces list is `DEVELOPMENT_TRANSITIONS`/`evaluateDevelopmentTransition`/`DevelopmentState`/`TransitionRequest` only); Task 4 owns `events.ts`/`reducer.ts` and already lists this exact case in its own checklist.
+- [ ] ~~Add failing test proving unsupported event-schema/reducer compatibility fails closed.~~ Moved to Task 4 for the same reason — event schema/reducer compatibility doesn't exist until `events.ts`/`reducer.ts` do.
+- [x] Confirm the RED failure is specifically due to the missing implementation rather than malformed tests. (`ERR_MODULE_NOT_FOUND: .../src/development/stateMachine.js` before Task 3's implementation)
 
 ### Task 3: Development transition kernel — GREEN
 
@@ -73,10 +73,10 @@
 - `evaluateDevelopmentTransition(request): TransitionEvaluation`
 - Runtime transition registry is loaded/generated from `JARVIS_TRANSITIONS.yaml` and validated at startup/test time.
 
-- [ ] Implement the minimum deterministic transition definitions required by the RED tests.
-- [ ] Encode side-effect class, reversibility, approval rule, retry target, authoritative committer, and failure classification.
-- [ ] Do not treat role strings as credentials; evaluation accepts trusted authority context separately.
-- [ ] Run targeted tests and confirm GREEN.
+- [x] Implement the minimum deterministic transition definitions required by the RED tests. (`transitionRegistry.ts` mirrors `JARVIS_TRANSITIONS.yaml` exactly, verified by the Task 1 alignment test; `stateMachine.ts#evaluateDevelopmentTransition`)
+- [x] Encode side-effect class, reversibility, approval rule, retry target, authoritative committer, and failure classification.
+- [x] Do not treat role strings as credentials; evaluation accepts trusted authority context separately. (`omegaAuthority.verified` is a distinct trusted-context field never derived from `committedBy.actorType`)
+- [x] Run targeted tests and confirm GREEN. (17/17 across both test files; full `npm run check` — 1025 node + 186 Convex tests, type-check/lint/format/OpenAPI-lint — also green)
 
 ### Task 4: Trusted commit boundary, events, reducers — RED then GREEN
 

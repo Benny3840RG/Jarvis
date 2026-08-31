@@ -176,6 +176,7 @@ test("Omega completion requires a complete evaluation with no blocking reconcili
       evaluatedBy: { actorType: "omega", actorId: "omega-sigma" },
       authorisedBy: { actorType: "omega", actorId: "omega-sigma" },
       committedBy: { actorType: "omega", actorId: "omega-sigma" },
+      omegaAuthority: { verified: true, source: "omega-runtime-credential" },
       completionEvidence: {
         evaluationId: "omega-eval-2",
         decision: "COMPLETE",
@@ -188,3 +189,76 @@ test("Omega completion requires a complete evaluation with no blocking reconcili
   assert.equal(result.allowed, false);
   assert.ok(result.reasons.includes("OMEGA_EVIDENCE_NOT_COMPLETE"));
 });
+
+test("caller-supplied actorType 'omega' alone does not grant Omega completion authority", () => {
+  // JARVIS-002 / JARVIS_EVENTS.md: "A caller-supplied string such as
+  // actorType: 'omega' never grants Omega authority... requires a trusted
+  // Omega execution context/credential." committedBy self-reports omega
+  // correctly (passing the earlier OMEGA_COMMITTER_REQUIRED gate) but no
+  // trusted omegaAuthority capability is attached.
+  const result = evaluateDevelopmentTransition(
+    baseRequest({
+      transitionId: "DEV_TRANSITION_MERGED_TO_COMPLETE",
+      from: "MERGED",
+      to: "COMPLETE",
+      requestedBy: { actorType: "controller", actorId: "mission-engine" },
+      evaluatedBy: { actorType: "omega", actorId: "omega-sigma" },
+      authorisedBy: { actorType: "omega", actorId: "omega-sigma" },
+      committedBy: { actorType: "omega", actorId: "omega-sigma" },
+      completionEvidence: {
+        evaluationId: "omega-eval-3",
+        decision: "COMPLETE",
+        blockingContradictions: 0,
+        reconciliationOpen: false,
+      },
+    }),
+  );
+
+  assert.equal(result.allowed, false);
+  assert.ok(result.reasons.includes("OMEGA_TRUSTED_CAPABILITY_REQUIRED"));
+});
+
+test("a rejected transition describes a durable rejection without mutating the request", () => {
+  const request = baseRequest({ from: "READY" });
+  const frozen = deepFreeze(structuredClone(request));
+
+  const result = evaluateDevelopmentTransition(frozen);
+
+  assert.equal(result.allowed, false);
+  assert.equal(result.outcome, "REJECTED");
+  assert.ok(result.rejection);
+  assert.equal(result.rejection?.transitionId, "DEV_TRANSITION_CLAIMED_TO_BUILDING");
+  assert.equal(result.rejection?.sourceState, "READY");
+  assert.deepEqual(result.rejection?.reasonCodes, result.reasons);
+  assert.deepEqual(result.rejection?.requestedBy, request.requestedBy);
+  // structuredClone + Object.freeze above already proves the evaluator
+  // cannot have mutated `frozen` (a write would throw in strict mode); the
+  // deep-equal below is a second, explicit proof against the pre-call clone.
+  assert.deepEqual(frozen, structuredClone(request));
+});
+
+test("stale subject version loses a claim race to an already-advanced worker", () => {
+  const winner = evaluateDevelopmentTransition(
+    baseRequest({ expectedSubjectVersion: 1, currentSubjectVersion: 1 }),
+  );
+  assert.equal(winner.allowed, true);
+
+  // Simulates a second worker whose request was formed against version 1
+  // but is evaluated after the first worker's commit already advanced the
+  // authoritative subject to version 2 — the classic same-version race.
+  const loser = evaluateDevelopmentTransition(
+    baseRequest({ expectedSubjectVersion: 1, currentSubjectVersion: 2 }),
+  );
+  assert.equal(loser.allowed, false);
+  assert.ok(loser.reasons.includes("STALE_SUBJECT_VERSION"));
+});
+
+function deepFreeze<T>(value: T): T {
+  if (value !== null && typeof value === "object" && !Object.isFrozen(value)) {
+    for (const key of Object.keys(value as object)) {
+      deepFreeze((value as Record<string, unknown>)[key]);
+    }
+    Object.freeze(value);
+  }
+  return value;
+}
