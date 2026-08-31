@@ -64,10 +64,34 @@ export type ApprovalRef = {
   readonly maxRiskClass: number;
 };
 
+export type MergeOperationOutcome = "MERGED" | "REJECTED" | "FAILED" | "INDETERMINATE";
+
 export type MergeEvidence = {
   readonly reviewedHeadSha: string;
   readonly currentHeadSha: string;
   readonly reconciledMergedCommitSha?: string;
+  /**
+   * The provider-observed outcome of the merge operation itself, distinct
+   * from head-integrity. Per JARVIS-005/JARVIS-015, an INDETERMINATE
+   * outcome must never be coerced into MERGED (nor into a distinct FAILED
+   * state — Development has no such state; ambiguity must instead route
+   * through RECONCILIATION_OPEN). Omitted/`"MERGED"` proceeds to the
+   * ordinary head-integrity check below.
+   */
+  readonly operationOutcome?: MergeOperationOutcome;
+};
+
+/**
+ * Authoritative external observation gathered during reconciliation
+ * (JARVIS_EVENTS.md "INDETERMINATE resolution contract"). Elapsed time is
+ * never itself an observation — `externallyObserved` must be true and
+ * `observedOutcome` must actually establish `"MERGED"` before
+ * RECONCILIATION_OPEN -> MERGED is admissible.
+ */
+export type ReconciliationEvidence = {
+  readonly externallyObserved: boolean;
+  readonly observedOutcome: "MERGED" | "NOT_MERGED" | "STILL_UNKNOWN";
+  readonly observationSource: string;
 };
 
 export type CompletionEvidence = {
@@ -107,6 +131,7 @@ export type TransitionRequest = {
   readonly riskClass?: number;
   readonly approval?: ApprovalRef;
   readonly mergeEvidence?: MergeEvidence;
+  readonly reconciliationEvidence?: ReconciliationEvidence;
   readonly completionEvidence?: CompletionEvidence;
   readonly omegaAuthority?: OmegaAuthority;
   readonly expectedSubjectVersion?: number;
@@ -176,6 +201,36 @@ function riskGateReason(
   return undefined;
 }
 
+function mergeOperationOutcomeGateReason(mergeEvidence: MergeEvidence): string | undefined {
+  switch (mergeEvidence.operationOutcome) {
+    case undefined:
+    case "MERGED":
+      return undefined;
+    case "INDETERMINATE":
+      return "MERGE_OPERATION_INDETERMINATE";
+    case "FAILED":
+      return "MERGE_OPERATION_FAILED";
+    case "REJECTED":
+      return "MERGE_OPERATION_REJECTED";
+  }
+}
+
+function reconciliationGateReason(
+  definition: TransitionDefinition,
+  request: TransitionRequest,
+): string | undefined {
+  if (definition.evaluator !== "reconciliation_proof_gate") return undefined;
+
+  const evidence = request.reconciliationEvidence;
+  if (!evidence || !evidence.externallyObserved) {
+    return "RECONCILIATION_EXTERNAL_OBSERVATION_REQUIRED";
+  }
+  if (evidence.observedOutcome !== "MERGED") {
+    return "RECONCILIATION_OUTCOME_NOT_PROVEN_MERGED";
+  }
+  return undefined;
+}
+
 function omegaGateReason(
   definition: TransitionDefinition,
   request: TransitionRequest,
@@ -241,10 +296,16 @@ export function evaluateDevelopmentTransition(request: TransitionRequest): Trans
   }
 
   if (request.mergeEvidence) {
+    const mergeOutcomeReason = mergeOperationOutcomeGateReason(request.mergeEvidence);
+    if (mergeOutcomeReason) return rejected(request, mergeOutcomeReason);
+
     if (request.mergeEvidence.reviewedHeadSha !== request.mergeEvidence.currentHeadSha) {
       return rejected(request, "HEAD_NOT_CURRENT");
     }
   }
+
+  const reconciliationReason = reconciliationGateReason(definition, request);
+  if (reconciliationReason) return rejected(request, reconciliationReason);
 
   const omegaReason = omegaGateReason(definition, request);
   if (omegaReason) return rejected(request, omegaReason);

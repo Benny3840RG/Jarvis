@@ -102,10 +102,12 @@
 **Files:**
 - Extend focused Development tests/implementation only.
 
-- [ ] RED: an indeterminate merge attempt cannot transition directly to MERGED or FAILED.
-- [ ] RED: reconciliation requires authoritative external observation before resolving ambiguous merge outcome.
-- [ ] RED: timeout alone leaves reconciliation open.
-- [ ] GREEN: implement the minimum reconciliation state/evaluation contract.
+- [x] RED: an indeterminate merge attempt cannot transition directly to MERGED or FAILED. (`MergeEvidence.operationOutcome`; `MERGE_OPERATION_INDETERMINATE`/`FAILED`/`REJECTED` are three distinct reason codes per JARVIS-015 — Development has no separate "FAILED" state, so "not FAILED" is proven by the operation staying rejected/at READY_TO_MERGE rather than being coerced into a state transition)
+- [x] RED: reconciliation requires authoritative external observation before resolving ambiguous merge outcome. (`RECONCILIATION_OPEN_TO_MERGED`'s `reconciliation_proof_gate` requires `reconciliationEvidence.externallyObserved === true` and `observedOutcome === "MERGED"`)
+- [x] RED: timeout alone leaves reconciliation open. (elapsed time with `externallyObserved: false` is rejected identically to no evidence at all; a real observation of `"NOT_MERGED"` is also rejected, not silently treated as license to proceed)
+- [x] GREEN: implement the minimum reconciliation state/evaluation contract. (5/5 new tests green, no regressions across the other 3 development test files — 28/28 total)
+
+Not built in this task, on purpose: `MERGED_TO_RECONCILIATION_OPEN`'s `evidence_conflict_gate` has no bespoke gate yet (falls through to the generic checks only, same as other `approval: policy` transitions elsewhere in the registry that also have no dedicated gate today) — opening reconciliation was not one of the three RED cases this task's checklist asked for. Flagging as a known non-goal rather than silently leaving it unmentioned.
 
 ### Task 6: PR evidence package
 
