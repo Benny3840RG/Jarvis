@@ -1,0 +1,186 @@
+version: 1
+status: canonical
+updated_at: 2026-09-01
+
+vision:
+  name: Governed Cognitive Operating System
+  objective: >-
+    Build Jarvis as a persistent, evidence-driven, self-monitoring, governable
+    intelligence system that can observe, reason, plan, act, verify, reconcile,
+    learn and recover while remaining subordinate to explicit authority.
+
+invariants:
+  constitution: JARVIS_CONSTITUTION.md
+  transitions: JARVIS_TRANSITIONS.md
+  events: JARVIS_EVENTS.md
+
+phases:
+  - id: phase-1-governed-development
+    name: Governed autonomous development proving slice
+    status: active
+    autonomy_level: 0
+    objective: >-
+      Convert one machine-readable GitHub issue into a tested, independently
+      reviewed pull request under explicit transition, evidence and ΩΣ rules.
+    domains:
+      - development
+    success_criteria:
+      - illegal transitions fail closed
+      - workers cannot expand authority
+      - expired leases cannot authorise transitions
+      - verification failure routes to repair rather than readiness
+      - review failure routes to repair rather than merge readiness
+      - ambiguous merge outcomes remain indeterminate until reconciled
+      - merge success does not imply mission completion
+      - only Omega commits COMPLETE
+      - material transitions have durable causal events
+      - projections are derivable from authoritative history
+    workstreams:
+      - id: p1-canonical-contract
+        priority: 100
+        status: in_progress
+        outputs:
+          - JARVIS_ARCHITECTURE.md
+          - JARVIS_CONSTITUTION.md
+          - JARVIS_TRANSITIONS.md
+          - JARVIS_EVENTS.md
+          - JARVIS_ROADMAP.yaml
+      - id: p1-transition-kernel
+        priority: 95
+        status: ready
+        depends_on:
+          - p1-canonical-contract
+        outputs:
+          - typescript/src/development/stateMachine.ts
+          - typescript/tests/developmentStateMachine.test.ts
+      - id: p1-event-contract
+        priority: 90
+        status: blocked
+        depends_on:
+          - p1-transition-kernel
+        outputs:
+          - development event validation/types
+          - deterministic reducer boundary
+      - id: p1-github-adapter
+        priority: 85
+        status: blocked
+        depends_on:
+          - p1-transition-kernel
+        outputs:
+          - governed issue validation
+          - branch/PR capability adapter
+          - merge attempt receipts
+          - reconciliation hooks
+      - id: p1-omega-development-completion
+        priority: 80
+        status: blocked
+        depends_on:
+          - p1-event-contract
+          - p1-github-adapter
+        outputs:
+          - development completion context adapter
+          - Omega-only completion commit path
+      - id: p1-stress-suite
+        priority: 75
+        status: blocked
+        depends_on:
+          - p1-omega-development-completion
+        scenarios:
+          - expired lease
+          - invalid authority envelope
+          - worker crash
+          - test failure
+          - review rejection
+          - repair exhaustion
+          - GitHub timeout
+          - merge conflict
+          - post-merge CI failure
+          - ambiguous provider result
+          - constitutional violation
+
+  - id: phase-2-development-queue
+    name: Governed queue of development missions
+    status: planned
+    autonomy_level: 1
+    depends_on:
+      - phase-1-governed-development
+    objective: Process several READY development missions with bounded parallelism and independent review.
+
+  - id: phase-3-repair-rereview
+    name: Automated repair and re-review
+    status: planned
+    autonomy_level: 2
+    depends_on:
+      - phase-2-development-queue
+
+  - id: phase-4-low-risk-automerge
+    name: Evidence-gated low-risk autonomous merge
+    status: planned
+    autonomy_level: 3
+    depends_on:
+      - phase-3-repair-rereview
+    constraint: Risk 2 and Risk 3 remain operator-gated.
+
+  - id: phase-5-continuous-backlog
+    name: Continuous governed backlog consumption
+    status: planned
+    autonomy_level: 4
+    depends_on:
+      - phase-4-low-risk-automerge
+
+  - id: phase-6-self-proposed-development
+    name: Jarvis-proposed development missions
+    status: planned
+    autonomy_level: 5
+    depends_on:
+      - phase-5-continuous-backlog
+    constraint: Proposals do not self-authorise implementation or constitutional change.
+
+  - id: phase-7-governed-self-improvement
+    name: Evidence-driven operational self-improvement
+    status: planned
+    autonomy_level: 6
+    depends_on:
+      - phase-6-self-proposed-development
+    objective: Detect recurrent operational weaknesses and propose validated system improvements under normal governance.
+
+expansion_domains:
+  - world_model
+  - operational_missions
+  - opportunity_engine
+  - metacognition
+  - governed_learning
+  - capability_topology
+  - physical_world_interfaces
+
+risk_classes:
+  0:
+    label: autonomous
+    examples:
+      - documentation
+      - additional tests
+      - telemetry
+      - proven non-behavioural refactor
+  1:
+    label: guarded_autonomous
+    examples:
+      - isolated UI
+      - read models
+      - internal utilities
+  2:
+    label: approval_required
+    examples:
+      - execution semantics
+      - schema changes
+      - mission engine
+      - permissions
+      - memory
+      - reconciliation
+  3:
+    label: operator_required
+    examples:
+      - Omega authority
+      - constitutional policy
+      - production credentials
+      - irreversible migrations
+      - autonomous authority expansion
