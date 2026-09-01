@@ -11,12 +11,23 @@
  *
  * Per JARVIS-002/JARVIS_EVENTS.md's commit-time authority rule, actor-role
  * fields on a request (e.g. `committedBy.actorType === "omega"`) are
- * self-reported evidence, not authentication. `omegaAuthority.verified` is
- * meant to be populated only by a trusted Omega execution context/credential
- * upstream of this evaluator — this module does not verify it, it only
- * refuses to proceed without it being explicitly asserted true.
+ * self-reported evidence, not authentication — `OMEGA_COMMITTER_REQUIRED`
+ * below is a labelling/audit check, not authentication.
+ *
+ * Real ΩΣ completion authority already exists (`../omega/policy.js` +
+ * `convex/omegaMissions.ts#transition`, gated by `requireOwner`). Per
+ * JARVIS-018 this kernel must not invent a parallel completion-authority
+ * concept, so `MERGED -> COMPLETE` admissibility is decided by calling the
+ * *real*, reused `evaluateOmegaCompletion` (pure, zero-dependency) rather
+ * than trusting a caller-supplied "verified" flag. This module cannot and
+ * does not authenticate the caller as Omega — the trusted commit boundary
+ * that will eventually back this domain (Task 7's Convex integration, per
+ * Task 13 "ΩΣ completion integration") must route the actual COMPLETE
+ * commit through `omegaMissions.transition` itself; this kernel's job ends
+ * at "is the supplied Omega completion input itself satisfied."
  */
 
+import { evaluateOmegaCompletion, type OmegaCompletionInput } from "../omega/policy.js";
 import {
   DEVELOPMENT_TRANSITIONS,
   type ApprovalRule,
@@ -94,25 +105,6 @@ export type ReconciliationEvidence = {
   readonly observationSource: string;
 };
 
-export type CompletionEvidence = {
-  readonly evaluationId: string;
-  readonly decision: "COMPLETE" | "DEFER" | "REJECT";
-  readonly blockingContradictions: number;
-  readonly reconciliationOpen: boolean;
-};
-
-/**
- * A trusted Omega execution context/credential. `verified` must be set by
- * server-side infrastructure that has actually authenticated the caller as
- * the Omega runtime — never derived from a caller-supplied actor-role
- * string. This evaluator treats a missing/false value as "not Omega",
- * regardless of what `committedBy.actorType` claims.
- */
-export type OmegaAuthority = {
-  readonly verified: boolean;
-  readonly source: string;
-};
-
 export type TransitionRequest = {
   readonly transitionId: DevelopmentTransitionId;
   readonly from: DevelopmentState;
@@ -132,8 +124,13 @@ export type TransitionRequest = {
   readonly approval?: ApprovalRef;
   readonly mergeEvidence?: MergeEvidence;
   readonly reconciliationEvidence?: ReconciliationEvidence;
-  readonly completionEvidence?: CompletionEvidence;
-  readonly omegaAuthority?: OmegaAuthority;
+  /**
+   * Real input to the reused `evaluateOmegaCompletion` policy — criteria,
+   * proofs, risk class, unresolved contradictions/external effects, and
+   * residual uncertainty, exactly as `convex/omegaMissions.ts#transition`
+   * derives them from durable rows before calling the same function.
+   */
+  readonly omegaCompletionInput?: OmegaCompletionInput;
   readonly expectedSubjectVersion?: number;
   readonly currentSubjectVersion?: number;
 };
@@ -158,8 +155,13 @@ function allowed(): TransitionEvaluation {
   return Object.freeze({ allowed: true, outcome: "ALLOWED", reasons: Object.freeze([]) });
 }
 
-function rejected(request: TransitionRequest, reasonCode: string): TransitionEvaluation {
-  const reasons = Object.freeze([reasonCode]);
+function rejected(
+  request: TransitionRequest,
+  reasonCodes: string | readonly string[],
+): TransitionEvaluation {
+  const reasons = Object.freeze(
+    Array.isArray(reasonCodes) ? [...reasonCodes] : [reasonCodes as string],
+  );
   return Object.freeze({
     allowed: false,
     outcome: "REJECTED",
@@ -231,26 +233,22 @@ function reconciliationGateReason(
   return undefined;
 }
 
-function omegaGateReason(
+function omegaGateReasons(
   definition: TransitionDefinition,
   request: TransitionRequest,
-): string | undefined {
+): readonly string[] | undefined {
   if (definition.authoritativeCommitter !== ("omega" satisfies AuthoritativeCommitter)) {
     return undefined;
   }
-  if (request.committedBy.actorType !== "omega") return "OMEGA_COMMITTER_REQUIRED";
-  if (!request.omegaAuthority?.verified) return "OMEGA_TRUSTED_CAPABILITY_REQUIRED";
+  if (request.committedBy.actorType !== "omega") return ["OMEGA_COMMITTER_REQUIRED"];
+  if (!request.omegaCompletionInput) return ["OMEGA_COMPLETION_INPUT_REQUIRED"];
 
-  const evidence = request.completionEvidence;
-  if (
-    !evidence ||
-    evidence.decision !== "COMPLETE" ||
-    evidence.blockingContradictions !== 0 ||
-    evidence.reconciliationOpen
-  ) {
-    return "OMEGA_EVIDENCE_NOT_COMPLETE";
-  }
-  return undefined;
+  // Delegate to the real, already-governed completion policy rather than
+  // re-deciding completion locally — its failure vocabulary is surfaced
+  // verbatim (not collapsed into one generic code) since it is itself the
+  // authoritative multi-reason output of an existing deterministic gate.
+  const decision = evaluateOmegaCompletion(request.omegaCompletionInput);
+  return decision.allowed ? undefined : decision.failures;
 }
 
 /**
@@ -307,8 +305,8 @@ export function evaluateDevelopmentTransition(request: TransitionRequest): Trans
   const reconciliationReason = reconciliationGateReason(definition, request);
   if (reconciliationReason) return rejected(request, reconciliationReason);
 
-  const omegaReason = omegaGateReason(definition, request);
-  if (omegaReason) return rejected(request, omegaReason);
+  const omegaReasons = omegaGateReasons(definition, request);
+  if (omegaReasons) return rejected(request, omegaReasons);
 
   return allowed();
 }

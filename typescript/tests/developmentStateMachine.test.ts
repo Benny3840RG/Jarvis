@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import type { OmegaCompletionInput } from "../src/omega/policy.js";
 import {
   DEVELOPMENT_TRANSITIONS,
   evaluateDevelopmentTransition,
@@ -143,7 +144,19 @@ test("risk class 2 merge is admitted with matching explicit operator approval", 
   assert.equal(result.allowed, true);
 });
 
-test("completion transition rejects any non-Omega committer", () => {
+const passingOmegaCompletionInput: OmegaCompletionInput = {
+  criteria: [{ criterionId: "crit-1" }],
+  proofs: [
+    { criterionId: "crit-1", result: "pass", independent: false, evidenceRefs: ["evidence-1"] },
+  ],
+  riskClass: "R0",
+  unresolvedCriticalContradictions: 0,
+  unreconciledExternalEffects: 0,
+  residualUncertainty: 0,
+  uncertaintyBudget: 0.1,
+};
+
+test("completion transition rejects any non-Omega committer, even with otherwise-passing completion input", () => {
   const result = evaluateDevelopmentTransition(
     baseRequest({
       transitionId: "DEV_TRANSITION_MERGED_TO_COMPLETE",
@@ -153,12 +166,7 @@ test("completion transition rejects any non-Omega committer", () => {
       evaluatedBy: { actorType: "omega", actorId: "omega-sigma" },
       authorisedBy: { actorType: "omega", actorId: "omega-sigma" },
       committedBy: { actorType: "controller", actorId: "development-controller" },
-      completionEvidence: {
-        evaluationId: "omega-eval-1",
-        decision: "COMPLETE",
-        blockingContradictions: 0,
-        reconciliationOpen: false,
-      },
+      omegaCompletionInput: passingOmegaCompletionInput,
     }),
   );
 
@@ -166,7 +174,11 @@ test("completion transition rejects any non-Omega committer", () => {
   assert.ok(result.reasons.includes("OMEGA_COMMITTER_REQUIRED"));
 });
 
-test("Omega completion requires a complete evaluation with no blocking reconciliation or contradiction", () => {
+test("Omega completion delegates to the real evaluateOmegaCompletion policy and surfaces its exact failure codes", () => {
+  // JARVIS-018: this kernel must not re-decide completion with its own
+  // invented rule -- it reuses ../omega/policy.js's evaluateOmegaCompletion
+  // verbatim and surfaces its real, multi-reason failure vocabulary rather
+  // than collapsing it into a generic code.
   const result = evaluateDevelopmentTransition(
     baseRequest({
       transitionId: "DEV_TRANSITION_MERGED_TO_COMPLETE",
@@ -176,26 +188,23 @@ test("Omega completion requires a complete evaluation with no blocking reconcili
       evaluatedBy: { actorType: "omega", actorId: "omega-sigma" },
       authorisedBy: { actorType: "omega", actorId: "omega-sigma" },
       committedBy: { actorType: "omega", actorId: "omega-sigma" },
-      omegaAuthority: { verified: true, source: "omega-runtime-credential" },
-      completionEvidence: {
-        evaluationId: "omega-eval-2",
-        decision: "COMPLETE",
-        blockingContradictions: 1,
-        reconciliationOpen: false,
+      omegaCompletionInput: {
+        ...passingOmegaCompletionInput,
+        unresolvedCriticalContradictions: 1,
       },
     }),
   );
 
   assert.equal(result.allowed, false);
-  assert.ok(result.reasons.includes("OMEGA_EVIDENCE_NOT_COMPLETE"));
+  // Exact code from evaluateOmegaCompletion, not a kernel-invented one.
+  assert.ok(result.reasons.includes("critical-evidence-contradiction"));
 });
 
-test("caller-supplied actorType 'omega' alone does not grant Omega completion authority", () => {
-  // JARVIS-002 / JARVIS_EVENTS.md: "A caller-supplied string such as
-  // actorType: 'omega' never grants Omega authority... requires a trusted
-  // Omega execution context/credential." committedBy self-reports omega
-  // correctly (passing the earlier OMEGA_COMMITTER_REQUIRED gate) but no
-  // trusted omegaAuthority capability is attached.
+test("a self-reported Omega committer with real passing completion input is admitted at the kernel level", () => {
+  // This proves delegation to the real policy succeeds end to end -- it
+  // does NOT prove authentication. Actual Omega identity is enforced by
+  // the trusted commit boundary (convex/omegaMissions.ts#transition, gated
+  // by requireOwner), which this pure kernel neither performs nor fakes.
   const result = evaluateDevelopmentTransition(
     baseRequest({
       transitionId: "DEV_TRANSITION_MERGED_TO_COMPLETE",
@@ -205,17 +214,28 @@ test("caller-supplied actorType 'omega' alone does not grant Omega completion au
       evaluatedBy: { actorType: "omega", actorId: "omega-sigma" },
       authorisedBy: { actorType: "omega", actorId: "omega-sigma" },
       committedBy: { actorType: "omega", actorId: "omega-sigma" },
-      completionEvidence: {
-        evaluationId: "omega-eval-3",
-        decision: "COMPLETE",
-        blockingContradictions: 0,
-        reconciliationOpen: false,
-      },
+      omegaCompletionInput: passingOmegaCompletionInput,
+    }),
+  );
+
+  assert.equal(result.allowed, true);
+});
+
+test("a missing Omega completion input is rejected distinctly from a failing one", () => {
+  const result = evaluateDevelopmentTransition(
+    baseRequest({
+      transitionId: "DEV_TRANSITION_MERGED_TO_COMPLETE",
+      from: "MERGED",
+      to: "COMPLETE",
+      requestedBy: { actorType: "controller", actorId: "mission-engine" },
+      evaluatedBy: { actorType: "omega", actorId: "omega-sigma" },
+      authorisedBy: { actorType: "omega", actorId: "omega-sigma" },
+      committedBy: { actorType: "omega", actorId: "omega-sigma" },
     }),
   );
 
   assert.equal(result.allowed, false);
-  assert.ok(result.reasons.includes("OMEGA_TRUSTED_CAPABILITY_REQUIRED"));
+  assert.ok(result.reasons.includes("OMEGA_COMPLETION_INPUT_REQUIRED"));
 });
 
 test("a rejected transition describes a durable rejection without mutating the request", () => {
