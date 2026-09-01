@@ -181,11 +181,13 @@ export class InMemoryDevelopmentProjectionStore {
       ? buildEvent("DEV_TRANSITION_COMMITTED", request, context, {
           from: request.from,
           to: request.to,
+          ...(request.approval ? { approvalId: request.approval.approvalId } : {}),
         })
       : buildEvent("DEV_TRANSITION_REJECTED", request, context, {
           from: request.from,
           to: request.to,
           reasonCodes: evaluation.reasons,
+          ...(evaluation.retryDisposition ? { retryDisposition: evaluation.retryDisposition } : {}),
         });
 
     const applyResult = applyDevelopmentEvent(

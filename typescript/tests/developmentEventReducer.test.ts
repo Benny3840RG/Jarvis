@@ -9,7 +9,14 @@ import {
   type DevelopmentProjection,
   type JarvisEvent,
 } from "../src/development/reducer.js";
-import type { CapabilityEnvelope, TransitionRequest } from "../src/development/stateMachine.js";
+import {
+  DEVELOPMENT_TRANSITIONS,
+  computeAuthorityEnvelopeHash,
+  computeEffectHash,
+  computePolicyDecisionFingerprint,
+  type CapabilityEnvelope,
+  type TransitionRequest,
+} from "../src/development/stateMachine.js";
 
 const missionAuthority: CapabilityEnvelope = {
   repositories: ["Benny3840RG/Jarvis"],
@@ -180,4 +187,61 @@ test("an event whose reducer version cannot read its schema version fails closed
   assert.equal(result.applied, false);
   assert.ok(result.violations.includes("UNKNOWN_REDUCER_VERSION"));
   assert.deepEqual(result.projection, projection);
+});
+
+test("a committed transition's event durably records which approval authorised it", () => {
+  const store = new InMemoryDevelopmentProjectionStore();
+  const subjectId = "mission-merge-1";
+  store.seed(initialProjection(subjectId, "READY_TO_MERGE"));
+
+  const effectPayload = { reviewedHeadSha: "abc123" };
+  const mergeDefinition = DEVELOPMENT_TRANSITIONS.DEV_TRANSITION_READY_TO_MERGE_TO_MERGED;
+  const request: TransitionRequest = {
+    transitionId: "DEV_TRANSITION_READY_TO_MERGE_TO_MERGED",
+    from: "READY_TO_MERGE",
+    to: "MERGED",
+    now: "2026-09-01T00:00:00.000Z",
+    requestedBy: { actorType: "controller", actorId: "merge-executor" },
+    committedBy: { actorType: "controller", actorId: "development-controller" },
+    subjectId,
+    missionAuthority,
+    workerAuthority: missionAuthority,
+    effectPayload,
+    riskClass: 2,
+    mergeEvidence: {
+      reviewedHeadSha: "abc123",
+      currentHeadSha: "abc123",
+      operationOutcome: "MERGED",
+      reconciledMergedCommitSha: "def456",
+    },
+    approval: {
+      approvalId: "approval-audit-1",
+      actorType: "operator",
+      actorId: "benny",
+      maxRiskClass: 2,
+      subjectId,
+      transitionId: "DEV_TRANSITION_READY_TO_MERGE_TO_MERGED",
+      proposalHash: "proposal-hash-opaque",
+      approvedSha: "abc123",
+      effectHash: computeEffectHash({
+        transitionId: "DEV_TRANSITION_READY_TO_MERGE_TO_MERGED",
+        subjectId,
+        from: "READY_TO_MERGE",
+        to: "MERGED",
+        effectPayload,
+      }),
+      authorityEnvelopeHash: computeAuthorityEnvelopeHash(missionAuthority),
+      effectiveRisk: 2,
+      policyDecisionFingerprint: computePolicyDecisionFingerprint(mergeDefinition),
+    },
+  };
+
+  const outcome = store.commit(request, {
+    subjectId,
+    eventId: "event-merge-1",
+    correlationId: "correlation-merge-1",
+  });
+
+  assert.equal(outcome.kind, "COMMITTED");
+  assert.equal(outcome.event.payload.approvalId, "approval-audit-1");
 });
