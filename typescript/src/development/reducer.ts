@@ -37,6 +37,13 @@ export type DevelopmentProjection = {
   readonly projectionVersion: number;
   readonly reducerVersion: string;
   readonly lastEventId?: string;
+  /**
+   * The subject's latest known lease fencing token. Advances whenever a
+   * commit is accepted with a lease attached, so a subsequent stale token
+   * loses even on a legitimate re-entrant transition (e.g. a repair-cycle
+   * retry) where `state` itself hasn't moved.
+   */
+  readonly fencingToken?: number;
 };
 
 export function initialProjection(
@@ -88,6 +95,7 @@ export function applyDevelopmentEvent(
   }
 
   const to = event.payload.to as DevelopmentState;
+  const leaseFencingToken = event.payload.leaseFencingToken as number | undefined;
   return {
     projection: {
       subjectId: projection.subjectId,
@@ -96,6 +104,7 @@ export function applyDevelopmentEvent(
       projectionVersion: projection.projectionVersion + 1,
       reducerVersion: DEVELOPMENT_REDUCER_VERSION,
       lastEventId: event.eventId,
+      fencingToken: leaseFencingToken ?? projection.fencingToken,
     },
     applied: true,
     violations: [],
@@ -175,6 +184,7 @@ export class InMemoryDevelopmentProjectionStore {
     const evaluation = evaluateDevelopmentTransition({
       ...request,
       currentSubjectVersion: current.subjectVersion,
+      currentFencingToken: current.fencingToken,
     });
 
     const event = evaluation.allowed
@@ -182,6 +192,7 @@ export class InMemoryDevelopmentProjectionStore {
           from: request.from,
           to: request.to,
           ...(request.approval ? { approvalId: request.approval.approvalId } : {}),
+          ...(request.lease ? { leaseFencingToken: request.lease.fencingToken } : {}),
         })
       : buildEvent("DEV_TRANSITION_REJECTED", request, context, {
           from: request.from,

@@ -149,6 +149,10 @@ The specific cost/latency/context-window figures in `MODEL_PROFILES` are explici
 
 9 new tests in `developmentModelResourceGovernance.test.ts`, covering all 8 of the handover's explicitly required model-resource test cases plus the trusted-registry structural check. 57/57 across all eight development test files, full `npm run check` green.
 
+### Fix before starting real persistence: fencing token was never actually enforced end to end
+
+While preparing the Convex integration, found that `DevelopmentProjection` never tracked a `fencingToken` field — `InMemoryDevelopmentProjectionStore.commit()` never passed `currentFencingToken` into `evaluateDevelopmentTransition`, so the fencing gate built in the earlier lease-fencing extension only ever ran with `currentFencingToken: undefined`, meaning it could never actually reject anything through the commit boundary — only the pure evaluator's own unit tests exercised it directly. Fixed: `DevelopmentProjection` gained `fencingToken?: number`; a committed event's payload now carries `leaseFencingToken` when the request had a lease; `applyDevelopmentEvent` advances the projection's known fencing token from that payload (so replay reconstructs it correctly, the same "derive from durable history" principle used elsewhere); `commit()` now passes `currentFencingToken: current.fencingToken`. 2 new tests proving this through the real store (not just the pure evaluator): a lease's fencing token is recorded and advances on commit, and a stale token loses even on a re-entrant transition where `state` hasn't moved. 59/59 across all eight development test files, full `npm run check` green.
+
 ### Task 6: PR evidence package
 
 **Files:**

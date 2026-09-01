@@ -117,6 +117,54 @@ test("two workers racing from the same subject version cannot both commit", () =
   assert.equal(store.get("mission-1")?.subjectVersion, 1);
 });
 
+test("committing with a lease records and advances the subject's known fencing token", () => {
+  const store = new InMemoryDevelopmentProjectionStore();
+  store.seed(freshProjection());
+
+  const outcome = store.commit(
+    claimedToBuildingRequest({
+      lease: {
+        leaseToken: "lease-token-5",
+        leaseOwner: "worker-1",
+        leaseExpiresAt: "2026-09-01T01:00:00.000Z",
+        fencingToken: 5,
+      },
+    }),
+    { subjectId: "mission-1", eventId: "event-1", correlationId: "correlation-1" },
+  );
+
+  assert.equal(outcome.kind, "COMMITTED");
+  assert.equal(outcome.projection.fencingToken, 5);
+  assert.equal(store.get("mission-1")?.fencingToken, 5);
+});
+
+test("a stale fencing token is rejected through the real commit boundary, not only the pure evaluator", () => {
+  const store = new InMemoryDevelopmentProjectionStore();
+  // Worker A already won the claim with fencingToken 5 (e.g. after worker B's
+  // earlier lease expired and A re-claimed) -- the store now knows 5 is
+  // current, even though the projection is still sitting at CLAIMED.
+  store.seed({ ...freshProjection(), fencingToken: 5 });
+
+  // Worker B's stale request still carries the older token 3.
+  const outcome = store.commit(
+    claimedToBuildingRequest({
+      workerId: "worker-b",
+      lease: {
+        leaseToken: "lease-token-3",
+        leaseOwner: "worker-b",
+        leaseExpiresAt: "2026-09-01T01:00:00.000Z",
+        fencingToken: 3,
+      },
+    }),
+    { subjectId: "mission-1", eventId: "event-worker-b", correlationId: "correlation-b" },
+  );
+
+  assert.equal(outcome.kind, "REJECTED");
+  assert.ok(outcome.reasons.includes("STALE_FENCING_TOKEN"));
+  // Zero authoritative state change from the rejected attempt.
+  assert.equal(store.get("mission-1")?.state, "CLAIMED");
+});
+
 test("duplicate event ID application is idempotent on replay", () => {
   const store = new InMemoryDevelopmentProjectionStore();
   store.seed(freshProjection());
