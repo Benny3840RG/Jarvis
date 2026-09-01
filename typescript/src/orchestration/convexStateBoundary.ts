@@ -114,13 +114,24 @@ export class ConvexOrchestrationStateBoundary implements OrchestrationStepStateB
       workerId: this.workerId,
       leaseTtlMs: this.leaseTtlMs,
     });
-    return { leaseToken: (result as { leaseToken: string }).leaseToken };
+    const grant = result as { leaseToken?: unknown; fencingToken?: unknown };
+    if (typeof grant.leaseToken !== "string" || !grant.leaseToken.trim()) {
+      throw new Error("Convex did not issue an orchestration lease token.");
+    }
+    return {
+      leaseToken: grant.leaseToken,
+      fencingToken: safePositiveInteger(
+        typeof grant.fencingToken === "number" ? grant.fencingToken : Number.NaN,
+        "Convex orchestration fencingToken",
+      ),
+    };
   }
 
   async succeed(input: {
     context: OrchestrationContext;
     node: OrchestrationNode;
     leaseToken: string;
+    fencingToken: number;
     result: DomainSuccess;
   }): Promise<void> {
     await this.client.mutation(orchestrationStateFunctions.recordStepSuccess, {
@@ -129,6 +140,7 @@ export class ConvexOrchestrationStateBoundary implements OrchestrationStepStateB
       nodeId: input.node.id,
       workerId: this.workerId,
       leaseToken: input.leaseToken,
+      fencingToken: input.fencingToken,
     });
   }
 
@@ -136,6 +148,7 @@ export class ConvexOrchestrationStateBoundary implements OrchestrationStepStateB
     context: OrchestrationContext;
     node: OrchestrationNode;
     leaseToken: string;
+    fencingToken: number;
     failure: DomainFailure;
   }): Promise<void> {
     await this.client.mutation(orchestrationStateFunctions.recordStepFailure, {
@@ -144,6 +157,7 @@ export class ConvexOrchestrationStateBoundary implements OrchestrationStepStateB
       nodeId: input.node.id,
       workerId: this.workerId,
       leaseToken: input.leaseToken,
+      fencingToken: input.fencingToken,
       failureCode: input.failure.code,
     });
   }

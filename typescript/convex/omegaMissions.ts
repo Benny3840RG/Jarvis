@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 
 import { evaluateOmegaCompletion, canTransitionOmegaMission } from "../src/omega/policy.js";
+import { projectOmegaDevelopmentCompletion } from "./developmentState.js";
 import { requireApprovalToken, requireOwner } from "./authHelpers.js";
 import {
   omegaAcceptanceCriterionValidator,
@@ -578,6 +579,28 @@ export const transition = mutation({
       if (!completion.allowed) {
         throw new Error(`Omega completion denied: ${completion.failures.join(", ")}.`);
       }
+
+      await projectOmegaDevelopmentCompletion(ctx, {
+        ownerId,
+        missionId,
+        evidenceIds: [
+          ...new Set(
+            currentProofs
+              .filter((proof) => proof.result === "pass")
+              .flatMap((proof) => proof.evidenceRefs),
+          ),
+        ],
+        completionInput: {
+          criteria: criteriaForCompletion,
+          proofs: currentProofs,
+          riskClass: mission.riskClass,
+          unresolvedCriticalContradictions,
+          unreconciledExternalEffects,
+          residualUncertainty: args.residualUncertainty,
+          uncertaintyBudget: mission.uncertaintyBudget,
+        },
+        now,
+      });
     }
 
     await ctx.db.patch("omegaMissions", mission._id, {

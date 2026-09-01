@@ -3,6 +3,7 @@ import type { OrchestrationNode } from "./graph.js";
 
 export type OrchestrationStepLease = {
   leaseToken: string;
+  fencingToken: number;
 };
 
 /**
@@ -21,6 +22,7 @@ export interface OrchestrationStepStateBoundary {
     context: OrchestrationContext;
     node: OrchestrationNode;
     leaseToken: string;
+    fencingToken: number;
     result: DomainSuccess;
   }): Promise<void>;
 
@@ -28,6 +30,7 @@ export interface OrchestrationStepStateBoundary {
     context: OrchestrationContext;
     node: OrchestrationNode;
     leaseToken: string;
+    fencingToken: number;
     failure: DomainFailure;
   }): Promise<void>;
 }

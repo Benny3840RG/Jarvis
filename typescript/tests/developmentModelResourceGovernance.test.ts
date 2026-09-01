@@ -93,6 +93,62 @@ test("routing rejects a candidate profile that isn't in the trusted registry", (
   assert.equal(result.reason, "UNTRUSTED_CANDIDATE");
 });
 
+test("routing ignores a known model identity's caller-forged capabilities", () => {
+  // This would pass if routeModelForRequirement trusted caller-supplied
+  // ModelProfile fields after checking only provider/model identity.
+  const forgedMiniProfile = {
+    provider: "openai",
+    model: "gpt-5.6-mini",
+    capabilityClasses: ["DEEP_REASONING"] as const,
+    estimatedInputCostPerMToken: 0,
+    typicalLatencyMs: 1,
+    supportsTools: true,
+  };
+
+  const result = routeModelForRequirement(deepReasoningRequired, {
+    candidates: [forgedMiniProfile],
+  });
+
+  assert.deepEqual(result, {
+    routed: false,
+    reason: "NO_CANDIDATE_SATISFIES_REQUIREMENT",
+  });
+});
+
+test("routing ignores a known model identity's caller-forged lower price", () => {
+  // This would select gpt-5.6 if a caller could replace the trusted
+  // registry price with zero. The registry says the mini profile is cheaper.
+  const forgedFullProfile = {
+    provider: "openai",
+    model: "gpt-5.6",
+    capabilityClasses: ["FAST_GENERAL"] as const,
+    estimatedInputCostPerMToken: 0,
+  };
+
+  const result = routeModelForRequirement(fastGeneralOnly, {
+    candidates: [forgedFullProfile, MODEL_PROFILES[0]],
+  });
+
+  assert.equal(result.routed, true);
+  if (result.routed) {
+    assert.equal(result.profile.model, "gpt-5.6-mini");
+  }
+});
+
+test("a routing cost ceiling does not treat illustrative registry pricing as verified spend", () => {
+  // This would route the mini profile while silently treating its
+  // illustrative price as verified provider billing data.
+  const result = routeModelForRequirement(
+    { minimumCapability: "FAST_GENERAL", maximumEstimatedCost: 1 },
+    { candidates: [MODEL_PROFILES[0]] },
+  );
+
+  assert.deepEqual(result, {
+    routed: false,
+    reason: "COST_PROVENANCE_INSUFFICIENT",
+  });
+});
+
 test("budget exhaustion is architecturally independent of transition/verification authority", () => {
   const budget: CognitiveBudget = { maxEstimatedSpend: 1, maxModelCalls: 1 };
   const usageSoFar: readonly ModelInvocationRecord[] = [
@@ -104,6 +160,7 @@ test("budget exhaustion is architecturally independent of transition/verificatio
       inputTokens: 1000,
       outputTokens: 500,
       estimatedCost: 5,
+      costProvenance: "VERIFIED_PROVIDER",
       latencyMs: 1200,
       retryCount: 0,
       occurredAt: "2026-09-01T00:00:00.000Z",
@@ -121,6 +178,32 @@ test("budget exhaustion is architecturally independent of transition/verificatio
   // evaluateDevelopmentTransition's own gates.
   assert.equal(Object.hasOwn(check, "allowed"), false);
   assert.equal(Object.hasOwn(check, "outcome"), false);
+});
+
+test("a spend ceiling fails safely when its usage price is only estimated", () => {
+  // This would pass incorrectly if an illustrative price were treated as a
+  // verified provider charge when deciding that a mission is within budget.
+  const usageWithEstimatedPrice = [
+    {
+      provider: "openai",
+      model: "gpt-5.6",
+      workUnitId: "mission-1:build",
+      purpose: "implementation",
+      inputTokens: 100,
+      outputTokens: 20,
+      estimatedCost: 0.1,
+      costProvenance: "ESTIMATED" as const,
+      latencyMs: 200,
+      retryCount: 0,
+      occurredAt: "2026-09-01T00:00:00.000Z",
+      correlationId: "correlation-1",
+    },
+  ];
+
+  const check = checkCognitiveBudget({ maxEstimatedSpend: 1 }, usageWithEstimatedPrice);
+
+  assert.equal(check.withinBudget, false);
+  assert.ok(check.reasons.includes("COST_PROVENANCE_INSUFFICIENT"));
 });
 
 test("expensive-model escalation is bounded and every escalation is recorded with a reason", () => {
@@ -152,6 +235,7 @@ test("repeated failed model calls do not loop forever", () => {
       inputTokens: 100,
       outputTokens: 0,
       estimatedCost: 0.1,
+      costProvenance: "VERIFIED_PROVIDER",
       latencyMs: 500,
       retryCount: 2,
       occurredAt: "2026-09-01T00:00:00.000Z",
@@ -175,6 +259,7 @@ test("mission usage totals are derived from invocation records, not a running co
       inputTokens: 2000,
       outputTokens: 400,
       estimatedCost: 1.5,
+      costProvenance: "VERIFIED_PROVIDER",
       latencyMs: 800,
       retryCount: 0,
       occurredAt: "2026-09-01T00:00:00.000Z",
@@ -188,6 +273,7 @@ test("mission usage totals are derived from invocation records, not a running co
       inputTokens: 5000,
       outputTokens: 1200,
       estimatedCost: 3.25,
+      costProvenance: "VERIFIED_PROVIDER",
       latencyMs: 2000,
       retryCount: 1,
       occurredAt: "2026-09-01T00:05:00.000Z",
@@ -202,6 +288,9 @@ test("mission usage totals are derived from invocation records, not a running co
   assert.equal(summary.totalOutputTokens, 1600);
   assert.equal(summary.totalEstimatedCost, 4.75);
   assert.equal(summary.totalRetries, 1);
+  assert.equal(summary.totalLatencyMs, 2800);
+  assert.equal(summary.totalEscalations, 0);
+  assert.equal(summary.unnecessaryRepeatCalls, 0);
   assert.deepEqual([...summary.modelDistribution].sort(), ["openai/gpt-5.6"]);
 
   // Idempotent/pure: recomputing from the same records yields the same

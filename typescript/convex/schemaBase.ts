@@ -367,6 +367,10 @@ export default defineSchema({
     completedAt: v.optional(v.number()),
     leaseOwner: v.optional(v.string()),
     leaseToken: v.optional(v.string()),
+    // Monotonic durable fencing authority. Optional only to permit a safe
+    // rollout over pre-fencing step records; every issued lease persists a
+    // positive value and the value is never cleared.
+    leaseFencingToken: v.optional(v.number()),
     leaseExpiresAt: v.optional(v.number()),
     nextAttemptAt: v.optional(v.number()),
   })

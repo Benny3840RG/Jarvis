@@ -892,7 +892,7 @@ describe("concurrency: racing mutations against the same approved action", () =>
     expect(stored?.singleUseClaimId).toBe(winnerClaimId);
   });
 
-  it("repeating the same claim ID is idempotent, not a second winner", async () => {
+  it("repeating a claim resumes only after reconciliation proves no external effect", async () => {
     const t = harness();
     await stageAndReturn(t, { destructive: true, requiredAuthority: "T3" });
     const now = Date.now();
@@ -926,6 +926,41 @@ describe("concurrency: racing mutations against the same approved action", () =>
       claimId: "claim-a",
       blockReason: "already-claimed",
     });
+
+    await t.run((ctx) =>
+      ctx.db.insert("externalReconciliations", {
+        ownerId: "jarvis-cli",
+        reconciliationId: "reconciliation-resume",
+        executionKey: "external:claim-a",
+        actionId: "action-1",
+        requestId: "request-1",
+        projectId: PROJECT_KEY,
+        idempotencyKey: "claim-a",
+        actionFingerprint: "action-fingerprint",
+        effectFingerprint: "effect-fingerprint",
+        tool: "notes",
+        operation: "create",
+        provider: "test-provider",
+        providerRequestId: "provider-request",
+        providerCorrelationId: "provider-correlation",
+        state: "resolved",
+        terminalStatus: "no-effect",
+        resolutionDigest: "provider-proved-no-effect",
+        attemptCount: 1,
+        nextAttemptAt: now,
+        createdAt: now,
+        updatedAt: now,
+        resolvedAt: now,
+      }),
+    );
+    const resumed = await t.mutation(api.toolActions.claimSingleUseExecution, {
+      serviceToken: SERVICE_TOKEN,
+      projectKey: PROJECT_KEY,
+      actionId: "action-1",
+      claimId: "claim-a",
+      now,
+    });
+    expect(resumed).toEqual({ claimed: true, claimId: "claim-a" });
   });
 
   it("refuses to claim single-use execution once the action was revoked between the caller's read and the claim", async () => {

@@ -45,7 +45,7 @@ async function start(
     workerId,
     leaseTtlMs: 1_000,
   });
-  return result.leaseToken;
+  return result;
 }
 
 async function registerReconciliation(
@@ -53,6 +53,7 @@ async function registerReconciliation(
   reconciliationId: string,
   runId = "run-1",
   nodeId = "first",
+  lease: { leaseToken: string; fencingToken: number },
 ) {
   await t.run((ctx) =>
     ctx.db.insert("externalReconciliations", {
@@ -81,6 +82,9 @@ async function registerReconciliation(
     serviceToken: SERVICE_TOKEN,
     runId,
     nodeId,
+    workerId: "worker-1",
+    leaseToken: lease.leaseToken,
+    fencingToken: lease.fencingToken,
     reconciliationId,
     effectFingerprint: "effect-" + reconciliationId,
     provider: "task-provider",
@@ -163,7 +167,11 @@ describe("Convex orchestration state", () => {
 
     const fulfilled = results.filter(
       (result) => result.status === "fulfilled",
-    ) as PromiseFulfilledResult<{ step: { leaseOwner?: string }; leaseToken: string }>[];
+    ) as PromiseFulfilledResult<{
+      step: { leaseOwner?: string };
+      leaseToken: string;
+      fencingToken: number;
+    }>[];
     const rejected = results.filter(
       (result) => result.status === "rejected",
     ) as PromiseRejectedResult[];
@@ -183,6 +191,70 @@ describe("Convex orchestration state", () => {
     // same worker whose markStepRunning call resolved -- never a second,
     // silently-overwritten grant from the loser.
     expect(first?.leaseOwner).toBe(fulfilled[0].value.step.leaseOwner);
+    expect(fulfilled[0].value.fencingToken).toBe(1);
+  });
+
+  it("issues a strictly increasing fencing token that rejects a stale claimant after retry", async () => {
+    // An opaque lease ID alone only rejects stale workers accidentally. The
+    // monotonic token must reject an old claimant even when it holds the
+    // current opaque ID (for example after a delayed or replayed message).
+    const t = harness();
+    await t.mutation(api.orchestrationState.beginRun, begin({ nodeIds: ["first"], maxRetries: 2 }));
+
+    const first = await t.mutation(api.orchestrationState.markStepRunning, {
+      serviceToken: SERVICE_TOKEN,
+      runId: "run-1",
+      nodeId: "first",
+      operationId: "createTask",
+      workerId: "worker-1",
+      leaseTtlMs: 1_000,
+    });
+    expect(first.fencingToken).toBe(1);
+
+    const failed = await t.mutation(api.orchestrationState.recordStepFailure, {
+      serviceToken: SERVICE_TOKEN,
+      runId: "run-1",
+      nodeId: "first",
+      workerId: "worker-1",
+      leaseToken: first.leaseToken,
+      fencingToken: first.fencingToken,
+      failureCode: "execution_budget_exceeded",
+    });
+    expect(failed.leaseFencingToken).toBe(1);
+    expect("leaseToken" in failed).toBe(false);
+    await t.mutation(api.orchestrationState.retryFailedStep, {
+      serviceToken: SERVICE_TOKEN,
+      runId: "run-1",
+      nodeId: "first",
+    });
+
+    const reclaimed = await t.mutation(api.orchestrationState.markStepRunning, {
+      serviceToken: SERVICE_TOKEN,
+      runId: "run-1",
+      nodeId: "first",
+      operationId: "createTask",
+      workerId: "worker-2",
+      leaseTtlMs: 1_000,
+    });
+    expect(reclaimed.fencingToken).toBe(2);
+
+    await expect(
+      t.mutation(api.orchestrationState.recordStepSuccess, {
+        serviceToken: SERVICE_TOKEN,
+        runId: "run-1",
+        nodeId: "first",
+        workerId: "worker-2",
+        leaseToken: reclaimed.leaseToken,
+        fencingToken: first.fencingToken,
+        outputDigest: "stale-fence",
+      }),
+    ).rejects.toThrow(/fencing token/i);
+
+    const steps = await t.query(api.orchestrationState.listSteps, {
+      serviceToken: SERVICE_TOKEN,
+      runId: "run-1",
+    });
+    expect(steps[0]?.leaseFencingToken).toBe(2);
   });
 
   it("returns a conflict for an idempotency key with a different fingerprint", async () => {
@@ -208,7 +280,8 @@ describe("Convex orchestration state", () => {
       runId: "run-1",
       nodeId: "first",
       workerId: "worker-1",
-      leaseToken: firstLease,
+      leaseToken: firstLease.leaseToken,
+      fencingToken: firstLease.fencingToken,
       outputDigest: "digest-first",
     });
 
@@ -227,7 +300,8 @@ describe("Convex orchestration state", () => {
       runId: "run-1",
       nodeId: "second",
       workerId: "worker-1",
-      leaseToken: secondLease,
+      leaseToken: secondLease.leaseToken,
+      fencingToken: secondLease.fencingToken,
       outputDigest: "digest-second",
     });
 
@@ -251,7 +325,7 @@ describe("Convex orchestration state", () => {
       workerId: "worker-1",
       leaseTtlMs: 1_000,
     });
-    await registerReconciliation(t, "lease-reconciliation");
+    await registerReconciliation(t, "lease-reconciliation", "run-1", "first", grant);
 
     vi.advanceTimersByTime(1_000);
 
@@ -262,6 +336,7 @@ describe("Convex orchestration state", () => {
         nodeId: "first",
         workerId: "worker-2",
         leaseToken: grant.leaseToken,
+        fencingToken: grant.fencingToken,
         outputDigest: "wrong-worker",
       }),
     ).rejects.toThrow(/not owned/);
@@ -273,6 +348,7 @@ describe("Convex orchestration state", () => {
         nodeId: "first",
         workerId: "worker-1",
         leaseToken: grant.leaseToken,
+        fencingToken: grant.fencingToken,
         outputDigest: "late-success",
       }),
     ).rejects.toThrow(/lease has expired/);
@@ -331,14 +407,15 @@ describe("Convex orchestration state", () => {
     const t = harness();
     await t.mutation(api.orchestrationState.beginRun, begin({ nodeIds: ["first"] }));
     const lease = await start(t);
-    await registerReconciliation(t, "provider-reconciliation");
+    await registerReconciliation(t, "provider-reconciliation", "run-1", "first", lease);
 
     await t.mutation(api.orchestrationState.recordStepIndeterminate, {
       serviceToken: SERVICE_TOKEN,
       runId: "run-1",
       nodeId: "first",
       workerId: "worker-1",
-      leaseToken: lease,
+      leaseToken: lease.leaseToken,
+      fencingToken: lease.fencingToken,
       indeterminateReason: "Provider did not confirm whether the effect committed.",
       reconciliationId: "provider-reconciliation",
     });
@@ -359,6 +436,72 @@ describe("Convex orchestration state", () => {
     ).rejects.toThrow(/run indeterminate/);
   });
 
+  it("reopens the same operation after provider-authenticated no-effect evidence", async () => {
+    const t = harness();
+    await t.mutation(api.orchestrationState.beginRun, begin({ nodeIds: ["first"] }));
+    const lease = await start(t);
+    await registerReconciliation(t, "no-effect-reconciliation", "run-1", "first", lease);
+    await t.mutation(api.orchestrationState.recordStepIndeterminate, {
+      serviceToken: SERVICE_TOKEN,
+      runId: "run-1",
+      nodeId: "first",
+      workerId: "worker-1",
+      leaseToken: lease.leaseToken,
+      fencingToken: lease.fencingToken,
+      indeterminateReason: "Provider outcome was ambiguous.",
+      reconciliationId: "no-effect-reconciliation",
+    });
+    await t.run((ctx) =>
+      ctx.db
+        .query("externalReconciliations")
+        .withIndex("by_owner_and_reconciliation_id", (q) =>
+          q.eq("ownerId", "jarvis-cli").eq("reconciliationId", "no-effect-reconciliation"),
+        )
+        .unique()
+        .then(async (record) => {
+          if (!record) throw new Error("seeded provider reconciliation missing");
+          await ctx.db.patch("externalReconciliations", record._id, {
+            state: "resolved",
+            terminalStatus: "no-effect",
+            resolutionDigest: "provider-no-effect-evidence",
+            resolvedAt: Date.now(),
+            updatedAt: Date.now(),
+          });
+        }),
+    );
+
+    const resolved = await t.mutation(api.orchestrationState.resolveIndeterminate, {
+      serviceToken: SERVICE_TOKEN,
+      runId: "run-1",
+      nodeId: "first",
+      reconciliationId: "no-effect-reconciliation",
+    });
+    expect(resolved.state).toBe("pending");
+    expect(resolved.retryable).toBe(true);
+    expect(resolved.operationId).toBe("createTask");
+
+    await expect(
+      t.mutation(api.orchestrationState.markStepRunning, {
+        serviceToken: SERVICE_TOKEN,
+        runId: "run-1",
+        nodeId: "first",
+        operationId: "completeTask",
+        workerId: "worker-2",
+        leaseTtlMs: 1_000,
+      }),
+    ).rejects.toThrow(/cannot change its operation ID/);
+
+    const resumed = await t.mutation(api.orchestrationState.markStepRunning, {
+      serviceToken: SERVICE_TOKEN,
+      runId: "run-1",
+      nodeId: "first",
+      operationId: "createTask",
+      workerId: "worker-2",
+      leaseTtlMs: 1_000,
+    });
+    expect(resumed.fencingToken).toBe(lease.fencingToken + 1);
+  });
+
   it("derives retryability from the server failure classification", async () => {
     const t = harness();
     await t.mutation(api.orchestrationState.beginRun, begin({ nodeIds: ["first"] }));
@@ -368,7 +511,8 @@ describe("Convex orchestration state", () => {
       runId: "run-1",
       nodeId: "first",
       workerId: "worker-1",
-      leaseToken: lease,
+      leaseToken: lease.leaseToken,
+      fencingToken: lease.fencingToken,
       failureCode: "audit_failure",
     });
     expect(failed.retryable).toBe(false);
@@ -390,7 +534,8 @@ describe("Convex orchestration state", () => {
       runId: "run-1",
       nodeId: "first",
       workerId: "worker-1",
-      leaseToken: lease,
+      leaseToken: lease.leaseToken,
+      fencingToken: lease.fencingToken,
       failureCode: "dependency_failure",
     });
     expect(failed.retryable).toBe(false);
@@ -420,7 +565,8 @@ describe("Convex orchestration state", () => {
       runId: "run-1",
       nodeId: "first",
       workerId: "worker-1",
-      leaseToken: lease,
+      leaseToken: lease.leaseToken,
+      fencingToken: lease.fencingToken,
       failureCode: "execution_budget_exceeded",
     });
     const retried = await t.mutation(api.orchestrationState.retryFailedStep, {

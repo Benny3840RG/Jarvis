@@ -12,7 +12,7 @@ export type ReconciliationRunResult =
   | {
       status: "resolved";
       reconciliationId: string;
-      terminalStatus: "succeeded" | "failed";
+      terminalStatus: "succeeded" | "failed" | "no-effect";
     }
   | {
       status: "released";
@@ -155,7 +155,11 @@ export class ReconciliationWorker {
     }
 
     const completionNow = this.now();
-    if (providerResult.status === "succeeded" || providerResult.status === "failed") {
+    if (
+      providerResult.status === "succeeded" ||
+      providerResult.status === "failed" ||
+      providerResult.status === "no-effect"
+    ) {
       await this.store.resolveClaim({
         reconciliationId,
         workerId: input.workerId,

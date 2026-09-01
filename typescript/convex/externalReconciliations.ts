@@ -143,6 +143,7 @@ function receiptDocument(
       | "reconciliation-unavailable"
       | "approval-expired"
       | "approval-consumed"
+      | "precondition-failed"
       | "safety-blocked";
     providerErrorCode?: string;
     startedAt: number;
@@ -364,16 +365,41 @@ export const registerAttempt = mutation({
       ) {
         throw new Error("External execution scope has a conflicting provider attempt reference.");
       }
-      if (existing.safetyBinding === undefined && args.safetyBinding !== undefined) {
+      if (existing.state === "resolved" && existing.terminalStatus === "no-effect") {
+        const resumedAt = Date.now();
         await ctx.db.patch("externalReconciliations", existing._id, {
-          safetyBinding: args.safetyBinding,
-          updatedAt: Date.now(),
+          state: "observing",
+          receiptKey: undefined,
+          receiptId: undefined,
+          terminalStatus: undefined,
+          resolutionDigest: undefined,
+          resolutionErrorCode: undefined,
+          resolvedAt: undefined,
+          updatedAt: resumedAt,
+          ...(args.safetyBinding === undefined ? {} : { safetyBinding: args.safetyBinding }),
         });
-        const updated = await ctx.db.get("externalReconciliations", existing._id);
-        if (!updated) throw new Error("External reconciliation evidence update failed.");
-        return updated;
+        await ctx.db.insert("auditEvents", {
+          ownerId,
+          requestId,
+          scopeKey: scope.projectId,
+          eventType: "external.reconciliation.same-operation-resumed",
+          actor: "tool",
+          payload: {
+            reconciliationId: existing.reconciliationId,
+            actionId,
+            effectFingerprint: scope.effectFingerprint,
+            provider,
+            providerRequestId,
+          },
+          createdAt: resumedAt,
+        });
+        const resumed = await ctx.db.get("externalReconciliations", existing._id);
+        if (!resumed) throw new Error("External reconciliation resume failed.");
+        return resumed;
       }
-      return existing;
+      throw new Error(
+        "External execution operation already has an attempt in progress or resolved.",
+      );
     }
 
     const duplicateId = await findByReconciliationId(ctx, ownerId, reconciliationId);
@@ -742,6 +768,7 @@ export const resolveClaim = mutation({
         outputDigest: v.optional(v.string()),
       }),
       v.object({ status: v.literal("failed"), errorCode: v.string() }),
+      v.object({ status: v.literal("no-effect"), evidenceDigest: v.string() }),
     ),
   },
   returns: toolExecutionReceiptDocumentValidator,
@@ -759,13 +786,18 @@ export const resolveClaim = mutation({
     const providerErrorCode =
       args.result.status === "failed"
         ? cleanRequiredText(args.result.errorCode, "Provider reconciliation error code")
-        : undefined;
+        : args.result.status === "no-effect"
+          ? "provider-proved-no-effect"
+          : undefined;
     const quoteDelivery = await ctx.db
       .query("quoteDeliveryAttempts")
       .withIndex("by_owner_and_reconciliation_id", (q) =>
         q.eq("ownerId", ownerId).eq("reconciliationId", reconciliationId),
       )
       .unique();
+    if (quoteDelivery && args.result.status === "no-effect") {
+      throw new Error("No-effect resume is not enabled for quote delivery operations.");
+    }
     if (quoteDelivery?.status === "reconciled") {
       const outcomeConflicts = quoteDelivery.reconciledOutcome !== args.result.status;
       const providerErrorConflicts = quoteDelivery.providerErrorCode !== providerErrorCode;
@@ -802,16 +834,19 @@ export const resolveClaim = mutation({
         providerRequestId: reconciliation.providerRequestId,
         providerCorrelationId: reconciliation.providerCorrelationId,
         reconciliationId: reconciliation.reconciliationId,
-        status: args.result.status,
+        status: args.result.status === "succeeded" ? "succeeded" : "failed",
         ...(args.result.status === "succeeded" && args.result.outputDigest !== undefined
           ? {
               outputDigest: cleanRequiredText(args.result.outputDigest, "Output digest"),
             }
           : {}),
-        ...(args.result.status === "failed"
+        ...(args.result.status === "failed" || args.result.status === "no-effect"
           ? {
               errorCode: "provider-failed" as const,
-              providerErrorCode: cleanRequiredText(args.result.errorCode, "Provider error code"),
+              providerErrorCode:
+                args.result.status === "failed"
+                  ? cleanRequiredText(args.result.errorCode, "Provider error code")
+                  : "provider-proved-no-effect",
             }
           : {}),
         startedAt: receipt.startedAt,
@@ -827,14 +862,47 @@ export const resolveClaim = mutation({
       ...(args.result.status === "succeeded" && args.result.outputDigest !== undefined
         ? { resolutionDigest: args.result.outputDigest }
         : {}),
-      ...(args.result.status === "failed" ? { resolutionErrorCode: args.result.errorCode } : {}),
+      ...(args.result.status === "failed"
+        ? { resolutionErrorCode: args.result.errorCode }
+        : args.result.status === "no-effect"
+          ? {
+              resolutionDigest: cleanRequiredText(
+                args.result.evidenceDigest,
+                "No-effect evidence digest",
+              ),
+              resolutionErrorCode: "provider-proved-no-effect",
+            }
+          : {}),
       updatedAt: args.now,
       resolvedAt: args.now,
+    });
+    await ctx.db.insert("auditEvents", {
+      ownerId,
+      requestId: reconciliation.requestId,
+      scopeKey: reconciliation.projectId,
+      eventType: "external.reconciliation.resolved",
+      actor: "tool",
+      payload: {
+        reconciliationId,
+        actionId: reconciliation.actionId,
+        effectFingerprint: reconciliation.effectFingerprint,
+        provider: reconciliation.provider,
+        providerRequestId: reconciliation.providerRequestId ?? null,
+        terminalStatus: args.result.status,
+        ...(args.result.status === "succeeded" && args.result.outputDigest !== undefined
+          ? { outputDigest: args.result.outputDigest }
+          : {}),
+        ...(args.result.status === "failed" ? { errorCode: args.result.errorCode } : {}),
+        ...(args.result.status === "no-effect"
+          ? { evidenceDigest: args.result.evidenceDigest }
+          : {}),
+      },
+      createdAt: args.now,
     });
     if (quoteDelivery?.status === "indeterminate") {
       await ctx.db.patch("quoteDeliveryAttempts", quoteDelivery._id, {
         status: "reconciled",
-        reconciledOutcome: args.result.status,
+        reconciledOutcome: args.result.status === "succeeded" ? "succeeded" : "failed",
         ...(args.result.status === "failed"
           ? {
               providerErrorCode: providerErrorCode!,

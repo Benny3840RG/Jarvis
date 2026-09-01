@@ -10,13 +10,16 @@ export const developmentStateValidator = v.union(
   v.literal("REPAIR_REQUIRED"),
   v.literal("REVIEW"),
   v.literal("READY_TO_MERGE"),
+  v.literal("INDETERMINATE"),
   v.literal("MERGED"),
-  v.literal("RECONCILIATION_OPEN"),
+  v.literal("CONTRADICTED"),
+  v.literal("FAILED"),
   v.literal("ABORTED"),
   v.literal("COMPLETE"),
 );
 
 export const developmentTransitionIdValidator = v.union(
+  v.literal("DEV_TRANSITION_IDEA_TO_SPECIFIED"),
   v.literal("DEV_TRANSITION_SPECIFIED_TO_READY"),
   v.literal("DEV_TRANSITION_READY_TO_CLAIMED"),
   v.literal("DEV_TRANSITION_CLAIMED_TO_BUILDING"),
@@ -27,10 +30,14 @@ export const developmentTransitionIdValidator = v.union(
   v.literal("DEV_TRANSITION_REVIEW_TO_REPAIR_REQUIRED"),
   v.literal("DEV_TRANSITION_REVIEW_TO_READY_TO_MERGE"),
   v.literal("DEV_TRANSITION_READY_TO_MERGE_TO_MERGED"),
-  v.literal("DEV_TRANSITION_MERGED_TO_RECONCILIATION_OPEN"),
-  v.literal("DEV_TRANSITION_RECONCILIATION_OPEN_TO_MERGED"),
+  v.literal("DEV_TRANSITION_READY_TO_MERGE_TO_INDETERMINATE"),
+  v.literal("DEV_TRANSITION_INDETERMINATE_TO_MERGED"),
+  v.literal("DEV_TRANSITION_INDETERMINATE_TO_READY_TO_MERGE"),
+  v.literal("DEV_TRANSITION_INDETERMINATE_TO_CONTRADICTED"),
+  v.literal("DEV_TRANSITION_INDETERMINATE_TO_FAILED"),
   v.literal("DEV_TRANSITION_MERGED_TO_COMPLETE"),
-  v.literal("DEV_TRANSITION_BUILDING_TO_ABORTED"),
+  v.literal("DEV_TRANSITION_REPAIR_REQUIRED_TO_FAILED"),
+  v.literal("DEV_TRANSITION_ANY_ACTIVE_TO_ABORTED"),
 );
 
 export const developmentActorTypeValidator = v.union(
@@ -114,6 +121,11 @@ export const developmentSubjectDocumentValidator = v.object({
   reducerVersion: v.string(),
   lastEventId: v.optional(v.string()),
   fencingToken: v.optional(v.number()),
+  orchestrationRunId: v.optional(v.string()),
+  orchestrationNodeId: v.optional(v.string()),
+  omegaMissionId: v.optional(v.string()),
+  repository: v.optional(v.string()),
+  branch: v.optional(v.string()),
   createdAt: v.number(),
   updatedAt: v.number(),
 });
@@ -136,6 +148,7 @@ export const developmentEventTypeValidator = v.union(
   v.literal("DEV_RECONCILIATION_RESOLVED"),
   v.literal("DEV_POST_MERGE_OBSERVATION_RECORDED"),
   v.literal("DEV_OMEGA_EVALUATION_RECORDED"),
+  v.literal("DEV_MODEL_INVOCATION_RECORDED"),
 );
 
 export const developmentEventDocumentValidator = v.object({
@@ -144,6 +157,9 @@ export const developmentEventDocumentValidator = v.object({
   ownerId: v.string(),
   subjectId: v.string(),
   eventId: v.string(),
+  requestId: v.string(),
+  canonicalRequestFingerprint: v.string(),
+  canonicalEventFingerprint: v.string(),
   eventType: developmentEventTypeValidator,
   eventSchemaVersion: v.number(),
   transitionId: v.optional(v.string()),

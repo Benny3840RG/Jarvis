@@ -14,6 +14,7 @@ export const externalReconciliationStateValidator = v.union(
 export const externalReconciliationTerminalStatusValidator = v.union(
   v.literal("succeeded"),
   v.literal("failed"),
+  v.literal("no-effect"),
 );
 
 export const externalReconciliationDocumentValidator = v.object({

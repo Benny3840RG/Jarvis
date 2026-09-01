@@ -1,7 +1,10 @@
 # JARVIS_EVENTS
 
-Status: canonical event contract
+Status: explanatory event contract
 Initial domain: Development
+
+EVENTS.yaml is the sole machine-readable event authority. This document
+explains that contract; it does not define a competing event schema.
 
 ## Purpose
 
@@ -69,7 +72,7 @@ Version of the payload/envelope contract consumed by compatible reducer versions
 Stable ID of the mission/action/entity whose history contains the event.
 
 ### transitionId
-Required for a committed or rejected governed transition attempt. Must reference a stable ID in `JARVIS_TRANSITIONS.yaml`.
+Required for a committed or rejected governed transition attempt. Must reference a stable ID in `TRANSITIONS.yaml`.
 
 ### requestedBy / evaluatedBy / authorisedBy / committedBy
 Roles are recorded separately. Missing roles are allowed only when the event type legitimately does not use that role. A committed transition must record the authoritative committer required by its transition definition.
@@ -118,7 +121,7 @@ Authority is enforced inside the trusted transition commit boundary, not inside 
 The commit boundary must:
 
 1. authenticate the caller/claim using trusted server-side identity material;
-2. load the transition definition from `JARVIS_TRANSITIONS.yaml`;
+2. load the transition definition from `TRANSITIONS.yaml`;
 3. verify current persisted state/version;
 4. verify required evaluator/authoriser outputs;
 5. verify capability envelope is sufficient and non-expanded;
@@ -219,6 +222,15 @@ A consumer must not translate `INDETERMINATE` to `FAILED` merely to simplify UI 
 - `DEV_RECONCILIATION_RESOLVED`
 - `DEV_POST_MERGE_OBSERVATION_RECORDED`
 - `DEV_OMEGA_EVALUATION_RECORDED`
+- `DEV_MODEL_INVOCATION_RECORDED`
+
+## Model invocation receipts
+
+Model identity and consumption facts come from trusted runtime or provider
+metadata, never from a model's own text. A model receipt is associated with
+its mission, worker and correlation ID, and marks each usage value as actual,
+estimated or unavailable. It supports routing and budget evidence; it is not
+provider billing truth unless provider billing confirms it.
 
 ## Audit questions the event model must answer
 

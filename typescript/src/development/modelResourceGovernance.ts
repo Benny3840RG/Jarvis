@@ -29,6 +29,12 @@
 export type ModelCapabilityClass =
   "FAST_GENERAL" | "DEEP_REASONING" | "CODING" | "VISION" | "LONG_CONTEXT";
 
+/**
+ * The source for a monetary figure. Estimated figures may guide an
+ * optimisation, but they never prove a spend ceiling has been respected.
+ */
+export type CostProvenance = "VERIFIED_PROVIDER" | "ESTIMATED" | "UNAVAILABLE";
+
 export type ModelIdentity = {
   readonly provider: string;
   readonly model: string;
@@ -39,6 +45,7 @@ export type ModelProfile = ModelIdentity & {
   readonly contextWindow?: number;
   readonly estimatedInputCostPerMToken?: number;
   readonly estimatedOutputCostPerMToken?: number;
+  readonly costProvenance: CostProvenance;
   readonly typicalLatencyMs?: number;
   readonly supportsTools?: boolean;
   readonly supportsVision?: boolean;
@@ -68,6 +75,7 @@ export const MODEL_PROFILES: readonly ModelProfile[] = Object.freeze([
     contextWindow: 128_000,
     estimatedInputCostPerMToken: 0.5,
     estimatedOutputCostPerMToken: 1.5,
+    costProvenance: "ESTIMATED",
     typicalLatencyMs: 600,
     supportsTools: true,
     supportsStructuredOutput: true,
@@ -79,6 +87,7 @@ export const MODEL_PROFILES: readonly ModelProfile[] = Object.freeze([
     contextWindow: 256_000,
     estimatedInputCostPerMToken: 3,
     estimatedOutputCostPerMToken: 12,
+    costProvenance: "ESTIMATED",
     typicalLatencyMs: 2200,
     supportsTools: true,
     supportsVision: true,
@@ -91,6 +100,7 @@ export const MODEL_PROFILES: readonly ModelProfile[] = Object.freeze([
     contextWindow: 1_000_000,
     estimatedInputCostPerMToken: 0.3,
     estimatedOutputCostPerMToken: 1.2,
+    costProvenance: "ESTIMATED",
     typicalLatencyMs: 700,
     supportsTools: true,
     supportsVision: true,
@@ -113,18 +123,25 @@ export type CognitiveRequirement = {
 };
 
 export type RoutingOptions = {
-  readonly candidates: readonly ModelProfile[];
+  /**
+   * Identities are only registry lookup keys. Candidate-supplied capability,
+   * cost, latency, and support fields are deliberately ignored.
+   */
+  readonly candidates: readonly ModelIdentity[];
 };
 
 export type RoutingResult =
   | { readonly routed: true; readonly profile: ModelProfile }
   | {
       readonly routed: false;
-      readonly reason: "NO_CANDIDATE_SATISFIES_REQUIREMENT" | "UNTRUSTED_CANDIDATE";
+      readonly reason:
+        | "NO_CANDIDATE_SATISFIES_REQUIREMENT"
+        | "UNTRUSTED_CANDIDATE"
+        | "COST_PROVENANCE_INSUFFICIENT";
     };
 
-function isTrustedProfile(candidate: ModelProfile): boolean {
-  return MODEL_PROFILES.some(
+export function resolveTrustedModelProfile(candidate: ModelIdentity): ModelProfile | undefined {
+  return MODEL_PROFILES.find(
     (trusted) => trusted.provider === candidate.provider && trusted.model === candidate.model,
   );
 }
@@ -138,30 +155,41 @@ export function routeModelForRequirement(
   requirement: CognitiveRequirement,
   options: RoutingOptions,
 ): RoutingResult {
-  if (options.candidates.some((candidate) => !isTrustedProfile(candidate))) {
+  const trustedCandidates = options.candidates.map(resolveTrustedModelProfile);
+  if (trustedCandidates.some((candidate) => candidate === undefined)) {
     return { routed: false, reason: "UNTRUSTED_CANDIDATE" };
   }
 
-  const qualifying = options.candidates.filter((candidate) => {
-    if (!candidate.capabilityClasses.includes(requirement.minimumCapability)) return false;
-    if (
-      requirement.expectedContextTokens !== undefined &&
-      candidate.contextWindow !== undefined &&
-      candidate.contextWindow < requirement.expectedContextTokens
-    ) {
-      return false;
-    }
-    if (
-      requirement.maximumEstimatedCost !== undefined &&
+  const capabilityQualifying = trustedCandidates
+    .filter((candidate): candidate is ModelProfile => candidate !== undefined)
+    .filter((candidate) => {
+      if (!candidate.capabilityClasses.includes(requirement.minimumCapability)) return false;
+      if (
+        requirement.expectedContextTokens !== undefined &&
+        candidate.contextWindow !== undefined &&
+        candidate.contextWindow < requirement.expectedContextTokens
+      ) {
+        return false;
+      }
+      return true;
+    });
+
+  const qualifying = capabilityQualifying.filter((candidate) => {
+    if (requirement.maximumEstimatedCost === undefined) return true;
+    return (
+      candidate.costProvenance === "VERIFIED_PROVIDER" &&
       candidate.estimatedInputCostPerMToken !== undefined &&
-      candidate.estimatedInputCostPerMToken > requirement.maximumEstimatedCost
-    ) {
-      return false;
-    }
-    return true;
+      candidate.estimatedInputCostPerMToken <= requirement.maximumEstimatedCost
+    );
   });
 
   if (qualifying.length === 0) {
+    if (
+      requirement.maximumEstimatedCost !== undefined &&
+      capabilityQualifying.some((candidate) => candidate.costProvenance !== "VERIFIED_PROVIDER")
+    ) {
+      return { routed: false, reason: "COST_PROVENANCE_INSUFFICIENT" };
+    }
     return { routed: false, reason: "NO_CANDIDATE_SATISFIES_REQUIREMENT" };
   }
 
@@ -181,9 +209,17 @@ export type ModelInvocationRecord = {
   readonly purpose: string;
   readonly inputTokens: number;
   readonly outputTokens: number;
+  readonly cachedInputTokens?: number;
+  readonly contextSize?: number;
   readonly estimatedCost: number;
+  readonly costProvenance: CostProvenance;
   readonly latencyMs: number;
   readonly retryCount: number;
+  readonly failureReason?: string;
+  readonly escalationDecision?: "none" | "escalated" | "downgraded";
+  readonly escalationReason?: EscalationReason;
+  readonly missionId?: string;
+  readonly workerId?: string;
   readonly occurredAt: string;
   readonly correlationId: string;
 };
@@ -194,6 +230,9 @@ export type MissionUsageSummary = {
   readonly totalOutputTokens: number;
   readonly totalEstimatedCost: number;
   readonly totalRetries: number;
+  readonly totalLatencyMs: number;
+  readonly totalEscalations: number;
+  readonly unnecessaryRepeatCalls: number;
   readonly modelDistribution: readonly string[];
 };
 
@@ -211,6 +250,10 @@ export function aggregateModelUsage(
   let totalOutputTokens = 0;
   let totalEstimatedCost = 0;
   let totalRetries = 0;
+  let totalLatencyMs = 0;
+  let totalEscalations = 0;
+  let unnecessaryRepeatCalls = 0;
+  const workUnitsSeen = new Set<string>();
 
   for (const record of records) {
     modelDistribution.add(`${record.provider}/${record.model}`);
@@ -218,6 +261,11 @@ export function aggregateModelUsage(
     totalOutputTokens += record.outputTokens;
     totalEstimatedCost += record.estimatedCost;
     totalRetries += record.retryCount;
+    totalLatencyMs += record.latencyMs;
+    if (record.escalationDecision === "escalated") totalEscalations += 1;
+    const repeatKey = `${record.workUnitId}\u0000${record.purpose}`;
+    if (workUnitsSeen.has(repeatKey) && record.retryCount > 0) unnecessaryRepeatCalls += 1;
+    workUnitsSeen.add(repeatKey);
   }
 
   return Object.freeze({
@@ -226,6 +274,9 @@ export function aggregateModelUsage(
     totalOutputTokens,
     totalEstimatedCost,
     totalRetries,
+    totalLatencyMs,
+    totalEscalations,
+    unnecessaryRepeatCalls,
     modelDistribution: Object.freeze([...modelDistribution]),
   });
 }
@@ -242,7 +293,8 @@ export type BudgetCheckReason =
   | "MAX_ESTIMATED_SPEND_EXCEEDED"
   | "MAX_MODEL_CALLS_EXCEEDED"
   | "MAX_RETRY_ATTEMPTS_EXCEEDED"
-  | "MAX_CONTEXT_TOKENS_EXCEEDED";
+  | "MAX_CONTEXT_TOKENS_EXCEEDED"
+  | "COST_PROVENANCE_INSUFFICIENT";
 
 /**
  * Deliberately has no field resembling transition/execution admissibility
@@ -263,6 +315,11 @@ export function checkCognitiveBudget(
   const reasons: BudgetCheckReason[] = [];
 
   if (
+    budget.maxEstimatedSpend !== undefined &&
+    usageSoFar.some((record) => record.costProvenance !== "VERIFIED_PROVIDER")
+  ) {
+    reasons.push("COST_PROVENANCE_INSUFFICIENT");
+  } else if (
     budget.maxEstimatedSpend !== undefined &&
     summary.totalEstimatedCost > budget.maxEstimatedSpend
   ) {

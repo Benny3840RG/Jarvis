@@ -88,9 +88,32 @@ test("a rejected commit produces a DEV_TRANSITION_REJECTED audit event but no do
 
   assert.equal(outcome.kind, "REJECTED");
   assert.equal(outcome.event.eventType, "DEV_TRANSITION_REJECTED");
-  assert.ok(outcome.reasons.includes("STATE_MISMATCH"));
+  assert.ok(outcome.reasons.includes("STATE_MISMATCH_CURRENT_PROJECTION"));
   // Zero authoritative state change: still READY, still version 0.
   assert.equal(outcome.projection.state, "READY");
+  assert.equal(outcome.projection.subjectVersion, 0);
+});
+
+test("commit records an unknown runtime-cast transition as a durable UNKNOWN_TRANSITION rejection", () => {
+  const store = new InMemoryDevelopmentProjectionStore();
+  store.seed(freshProjection());
+
+  const outcome = store.commit(
+    claimedToBuildingRequest({
+      transitionId: "DEV_TRANSITION_NOT_DECLARED" as never,
+    }),
+    {
+      subjectId: "mission-1",
+      eventId: "event-unknown-transition",
+      correlationId: "correlation-unknown-transition",
+    },
+  );
+
+  assert.equal(outcome.kind, "REJECTED");
+  assert.equal(outcome.event.eventType, "DEV_TRANSITION_REJECTED");
+  assert.deepEqual(outcome.reasons, ["UNKNOWN_TRANSITION"]);
+  assert.deepEqual(outcome.event.payload.reasonCodes, ["UNKNOWN_TRANSITION"]);
+  assert.equal(outcome.projection.state, "CLAIMED");
   assert.equal(outcome.projection.subjectVersion, 0);
 });
 
@@ -116,7 +139,7 @@ test("two workers racing from the same subject version cannot both commit", () =
 
   assert.equal(first.kind, "COMMITTED");
   assert.equal(second.kind, "REJECTED");
-  assert.ok(second.reasons.includes("STALE_SUBJECT_VERSION"));
+  assert.ok(second.reasons.includes("STATE_MISMATCH_CURRENT_PROJECTION"));
   assert.equal(store.get("mission-1")?.subjectVersion, 1);
 });
 
@@ -168,28 +191,20 @@ test("a stale fencing token is rejected through the real commit boundary, not on
   assert.equal(store.get("mission-1")?.state, "CLAIMED");
 });
 
-test("the commit boundary derives `from` from the persisted subject state, never trusting a caller's claimed `from`", () => {
-  // The subject is really at READY, not CLAIMED -- but the request's `from`
-  // correctly matches DEV_TRANSITION_CLAIMED_TO_BUILDING's own registered
-  // shape (CLAIMED -> BUILDING). A caller-supplied `from` that merely
-  // matches the transition's own definition must not be trusted as proof
-  // of the subject's actual current state; that state comes only from the
-  // store's own persisted projection, exactly as the real ΩΣ
-  // (`omegaMissions.transition`) derives its from-state from the mission
-  // document rather than a caller-supplied field.
+test("commit rejects a request whose declared source differs from the persisted projection", () => {
   const store = new InMemoryDevelopmentProjectionStore();
-  store.seed(initialProjection("mission-1", "READY"));
+  store.seed(initialProjection("mission-1", "IDEA"));
 
   const outcome = store.commit(claimedToBuildingRequest(), {
     subjectId: "mission-1",
-    eventId: "event-1",
-    correlationId: "correlation-1",
+    eventId: "event-stale-source",
+    correlationId: "correlation-stale-source",
   });
 
   assert.equal(outcome.kind, "REJECTED");
-  assert.ok(outcome.reasons.includes("STATE_MISMATCH"));
-  assert.equal(outcome.projection.state, "READY");
-  assert.equal(outcome.projection.subjectVersion, 0);
+  assert.deepEqual(outcome.reasons, ["STATE_MISMATCH_CURRENT_PROJECTION"]);
+  assert.equal(store.get("mission-1")?.state, "IDEA");
+  assert.equal(store.get("mission-1")?.subjectVersion, 0);
 });
 
 test("duplicate event ID application is idempotent on replay", () => {
@@ -211,9 +226,88 @@ test("duplicate event ID application is idempotent on replay", () => {
   assert.equal(replay.projection.projectionVersion, 1);
 });
 
+test("replay rejects a crafted completion event rather than letting it bypass the trusted Omega path", () => {
+  const store = new InMemoryDevelopmentProjectionStore();
+  store.seed(initialProjection("mission-1", "MERGED"));
+
+  const crafted: JarvisEvent = {
+    eventId: "event-forged-complete",
+    eventType: "DEV_TRANSITION_COMMITTED",
+    eventSchemaVersion: 1,
+    subjectId: "mission-1",
+    transitionId: "DEV_TRANSITION_MERGED_TO_COMPLETE",
+    committedBy: { actorType: "omega", actorId: "omega-sigma" },
+    occurredAt: "2026-09-01T00:00:00.000Z",
+    recordedAt: "2026-09-01T00:00:00.000Z",
+    evidenceIds: [],
+    correlationId: "correlation-forged-complete",
+    reducerVersion: DEVELOPMENT_REDUCER_VERSION,
+    payload: { from: "MERGED", to: "COMPLETE" },
+  };
+
+  const result = store.replay("mission-1", crafted);
+
+  assert.equal(result.applied, false);
+  assert.ok(result.violations.includes("UNTRUSTED_EVENT_REPLAY"));
+  assert.equal(store.get("mission-1")?.state, "MERGED");
+});
+
+test("replay rejects a transition event whose subject or source does not match the current projection", () => {
+  const store = new InMemoryDevelopmentProjectionStore();
+  store.seed(freshProjection());
+
+  const crafted: JarvisEvent = {
+    eventId: "event-mismatched-projection",
+    eventType: "DEV_TRANSITION_COMMITTED",
+    eventSchemaVersion: 1,
+    subjectId: "another-mission",
+    transitionId: "DEV_TRANSITION_CLAIMED_TO_BUILDING",
+    committedBy: { actorType: "controller", actorId: "development-controller" },
+    occurredAt: "2026-09-01T00:00:00.000Z",
+    recordedAt: "2026-09-01T00:00:00.000Z",
+    evidenceIds: [],
+    correlationId: "correlation-mismatched-projection",
+    reducerVersion: DEVELOPMENT_REDUCER_VERSION,
+    payload: { from: "IDEA", to: "BUILDING" },
+  };
+
+  const result = applyDevelopmentEvent(freshProjection(), crafted, new Map());
+
+  assert.equal(result.applied, false);
+  assert.ok(result.violations.includes("EVENT_SUBJECT_MISMATCH"));
+  assert.equal(store.get("mission-1")?.state, "CLAIMED");
+});
+
+test("replay rejects a changed payload for an already-seen event ID while the exact event stays idempotent", () => {
+  const store = new InMemoryDevelopmentProjectionStore();
+  store.seed(freshProjection());
+
+  const outcome = store.commit(claimedToBuildingRequest(), {
+    subjectId: "mission-1",
+    eventId: "event-id-payload-binding",
+    correlationId: "correlation-id-payload-binding",
+  });
+  assert.equal(outcome.kind, "COMMITTED");
+
+  const exactReplay = store.replay("mission-1", outcome.event);
+  assert.equal(exactReplay.applied, false);
+  assert.deepEqual(exactReplay.violations, []);
+
+  const changedPayload = {
+    ...outcome.event,
+    payload: { ...outcome.event.payload, auditNote: "changed after commit" },
+  };
+  const changedReplay = store.replay("mission-1", changedPayload);
+
+  assert.equal(changedReplay.applied, false);
+  assert.ok(changedReplay.violations.includes("EVENT_ID_PAYLOAD_MISMATCH"));
+  assert.equal(store.get("mission-1")?.state, "BUILDING");
+  assert.equal(store.get("mission-1")?.subjectVersion, 1);
+});
+
 test("an event with an unsupported schema version fails closed without mutating the projection", () => {
   const projection = freshProjection();
-  const appliedEventIds = new Set<string>();
+  const appliedEventIds = new Map<string, string>();
 
   const malformed: JarvisEvent = {
     eventId: "event-bad-schema",
@@ -240,7 +334,7 @@ test("an event with an unsupported schema version fails closed without mutating 
 
 test("an event whose reducer version cannot read its schema version fails closed", () => {
   const projection = freshProjection();
-  const appliedEventIds = new Set<string>();
+  const appliedEventIds = new Map<string, string>();
 
   const malformed: JarvisEvent = {
     eventId: "event-bad-reducer",

@@ -1,6 +1,11 @@
 import { ConvexHttpClient } from "convex/browser";
 
 import type { MicrosoftOutlookRuntime } from "../auth/microsoftOutlookRuntime.js";
+import {
+  createGitHubDevelopmentClientFromEnv,
+  GitHubMergeReconciliationAdapter,
+  type GitHubDevelopmentClient,
+} from "../development/githubDevelopment.js";
 import { ConvexExternalReconciliationStore } from "../persistence/convexExternalReconciliations.js";
 import type { ExternalReconciliationStore } from "./externalReconciliation.js";
 import {
@@ -16,13 +21,18 @@ import type {
 export type OutlookRuntimeReconciliationDependencies = {
   createStore?: (config: EnabledRuntimeReconciliationConfig) => ExternalReconciliationStore;
   observeCycle?: (observation: ReconciliationCycleObservation) => void;
+  githubDevelopmentClient?: GitHubDevelopmentClient | null;
 };
 
 export function createOutlookRuntimeReconciliationFactories(
   outlookRuntime: MicrosoftOutlookRuntime | null,
   dependencies: OutlookRuntimeReconciliationDependencies = {},
 ): RuntimeReconciliationFactories | undefined {
-  if (outlookRuntime === null) return undefined;
+  const githubDevelopmentClient =
+    dependencies.githubDevelopmentClient === undefined
+      ? createGitHubDevelopmentClientFromEnv()
+      : dependencies.githubDevelopmentClient;
+  if (outlookRuntime === null && githubDevelopmentClient === null) return undefined;
 
   return {
     createEnabledRuntime(config, observeCycle) {
@@ -35,7 +45,12 @@ export function createOutlookRuntimeReconciliationFactories(
         );
       const worker = new ReconciliationWorker({
         store,
-        adapters: [outlookRuntime.reconciliationAdapter],
+        adapters: [
+          ...(outlookRuntime === null ? [] : [outlookRuntime.reconciliationAdapter]),
+          ...(githubDevelopmentClient === null
+            ? []
+            : [new GitHubMergeReconciliationAdapter(githubDevelopmentClient)]),
+        ],
         maxAttempts: config.maxAttempts,
         baseRetryMs: config.baseRetryMs,
         maxRetryMs: config.maxRetryMs,

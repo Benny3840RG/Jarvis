@@ -26,6 +26,8 @@ import {
   type DevelopmentState,
   type TransitionRequest,
 } from "./stateMachine.js";
+import { canonicalJson } from "../actions/canonicalJson.js";
+import { DEVELOPMENT_TRANSITIONS } from "./transitionRegistry.js";
 
 export { DEVELOPMENT_REDUCER_VERSION };
 export type { DevelopmentEventType, JarvisEvent };
@@ -59,11 +61,97 @@ export function initialProjection(
   });
 }
 
+export type DevelopmentEventViolation =
+  | EventEnvelopeViolation
+  | "EVENT_ID_PAYLOAD_MISMATCH"
+  | "EVENT_SUBJECT_MISMATCH"
+  | "EVENT_TRANSITION_ID_REQUIRED"
+  | "UNKNOWN_EVENT_TRANSITION"
+  | "EVENT_TRANSITION_PAYLOAD_MISMATCH"
+  | "EVENT_SOURCE_STATE_MISMATCH"
+  | "EVENT_SOURCE_VERSION_MISMATCH"
+  | "EVENT_RESULTING_VERSION_MISMATCH"
+  | "OMEGA_COMPLETION_REQUIRES_AUTHORITY_PATH"
+  | "UNTRUSTED_EVENT_REPLAY";
+
 export type ApplyResult = {
   readonly projection: DevelopmentProjection;
   readonly applied: boolean;
-  readonly violations: readonly EventEnvelopeViolation[];
+  readonly violations: readonly DevelopmentEventViolation[];
 };
+
+type AppliedEventFingerprints = Map<string, string>;
+
+function eventFingerprint(event: JarvisEvent): string {
+  // The repository's canonical encoder makes duplicate detection independent
+  // of JavaScript object-key insertion order. The event ID is only an
+  // idempotency key when it remains bound to this exact durable envelope.
+  return canonicalJson({
+    eventId: event.eventId,
+    eventType: event.eventType,
+    eventSchemaVersion: event.eventSchemaVersion,
+    subjectId: event.subjectId,
+    ...(event.transitionId !== undefined ? { transitionId: event.transitionId } : {}),
+    ...(event.requestedBy !== undefined ? { requestedBy: event.requestedBy } : {}),
+    ...(event.evaluatedBy !== undefined ? { evaluatedBy: event.evaluatedBy } : {}),
+    ...(event.authorisedBy !== undefined ? { authorisedBy: event.authorisedBy } : {}),
+    ...(event.committedBy !== undefined ? { committedBy: event.committedBy } : {}),
+    occurredAt: event.occurredAt,
+    recordedAt: event.recordedAt,
+    evidenceIds: event.evidenceIds,
+    correlationId: event.correlationId,
+    ...(event.causationId !== undefined ? { causationId: event.causationId } : {}),
+    reducerVersion: event.reducerVersion,
+    payload: event.payload,
+  });
+}
+
+function validateCommittedTransitionEvent(
+  projection: DevelopmentProjection,
+  event: JarvisEvent,
+  authorityPath: "generic" | "omega",
+): readonly DevelopmentEventViolation[] {
+  if (event.subjectId !== projection.subjectId) return ["EVENT_SUBJECT_MISMATCH"];
+  if (!event.transitionId) return ["EVENT_TRANSITION_ID_REQUIRED"];
+
+  const definition = DEVELOPMENT_TRANSITIONS[event.transitionId];
+  if (!definition) return ["UNKNOWN_EVENT_TRANSITION"];
+
+  const from = event.payload.from;
+  const to = event.payload.to;
+  if (!definition.sources.includes(from as DevelopmentState) || to !== definition.target) {
+    return ["EVENT_TRANSITION_PAYLOAD_MISMATCH"];
+  }
+  if (from !== projection.state) return ["EVENT_SOURCE_STATE_MISMATCH"];
+
+  const sourceSubjectVersion = event.payload.sourceSubjectVersion;
+  const resultingSubjectVersion = event.payload.resultingSubjectVersion;
+  if (sourceSubjectVersion !== projection.subjectVersion) {
+    return ["EVENT_SOURCE_VERSION_MISMATCH"];
+  }
+  if (resultingSubjectVersion !== projection.subjectVersion + 1) {
+    return ["EVENT_RESULTING_VERSION_MISMATCH"];
+  }
+
+  // ΩΣ owns completion. This generic reducer must never be turned into a
+  // second completion authority by replaying an event-shaped object; real
+  // completion stays on omegaMissions.transition's trusted path.
+  if (definition.authoritativeCommitter === "omega") {
+    const omegaActor = { actorType: "omega", actorId: "omega-sigma" } as const;
+    const hasOmegaAuthority =
+      event.evaluatedBy?.actorType === omegaActor.actorType &&
+      event.evaluatedBy.actorId === omegaActor.actorId &&
+      event.authorisedBy?.actorType === omegaActor.actorType &&
+      event.authorisedBy.actorId === omegaActor.actorId &&
+      event.committedBy?.actorType === omegaActor.actorType &&
+      event.committedBy.actorId === omegaActor.actorId;
+    if (authorityPath !== "omega" || !hasOmegaAuthority) {
+      return ["OMEGA_COMPLETION_REQUIRES_AUTHORITY_PATH"];
+    }
+  }
+
+  return [];
+}
 
 /**
  * Deterministic, idempotent projection reducer. Applying an event whose ID
@@ -76,17 +164,30 @@ export type ApplyResult = {
 export function applyDevelopmentEvent(
   projection: DevelopmentProjection,
   event: JarvisEvent,
-  appliedEventIds: Set<string>,
+  appliedEventFingerprints: AppliedEventFingerprints,
 ): ApplyResult {
   const violations = validateEventEnvelope(event);
   if (violations.length > 0) {
     return { projection, applied: false, violations };
   }
 
-  if (appliedEventIds.has(event.eventId)) {
+  const eventFingerprintValue = eventFingerprint(event);
+  const priorFingerprint = appliedEventFingerprints.get(event.eventId);
+  if (priorFingerprint !== undefined && priorFingerprint !== eventFingerprintValue) {
+    return { projection, applied: false, violations: ["EVENT_ID_PAYLOAD_MISMATCH"] };
+  }
+  if (priorFingerprint !== undefined) {
     return { projection, applied: false, violations: [] };
   }
-  appliedEventIds.add(event.eventId);
+
+  if (event.eventType === "DEV_TRANSITION_COMMITTED") {
+    const semanticViolations = validateCommittedTransitionEvent(projection, event, "generic");
+    if (semanticViolations.length > 0) {
+      return { projection, applied: false, violations: semanticViolations };
+    }
+  }
+
+  appliedEventFingerprints.set(event.eventId, eventFingerprintValue);
 
   if (event.eventType !== "DEV_TRANSITION_COMMITTED") {
     // Audit-only events (e.g. DEV_TRANSITION_REJECTED) are durably recorded
@@ -105,6 +206,58 @@ export function applyDevelopmentEvent(
       reducerVersion: DEVELOPMENT_REDUCER_VERSION,
       lastEventId: event.eventId,
       fencingToken: leaseFencingToken ?? projection.fencingToken,
+    },
+    applied: true,
+    violations: [],
+  };
+}
+
+/**
+ * Reducer entry point reserved for the existing trusted ΩΣ mutation. It
+ * admits only the canonical Omega-owned completion transition and still
+ * applies every ordinary envelope, version, source-state, and actor check.
+ * Possessing an event-shaped object is therefore insufficient; the durable
+ * caller remains `omegaMissions.transition` inside one Convex transaction.
+ */
+export function applyOmegaDevelopmentCompletionEvent(
+  projection: DevelopmentProjection,
+  event: JarvisEvent,
+  appliedEventFingerprints: AppliedEventFingerprints,
+): ApplyResult {
+  const violations = validateEventEnvelope(event);
+  if (violations.length > 0) return { projection, applied: false, violations };
+  if (event.transitionId !== "DEV_TRANSITION_MERGED_TO_COMPLETE") {
+    return {
+      projection,
+      applied: false,
+      violations: ["OMEGA_COMPLETION_REQUIRES_AUTHORITY_PATH"],
+    };
+  }
+
+  const eventFingerprintValue = eventFingerprint(event);
+  const priorFingerprint = appliedEventFingerprints.get(event.eventId);
+  if (priorFingerprint !== undefined && priorFingerprint !== eventFingerprintValue) {
+    return { projection, applied: false, violations: ["EVENT_ID_PAYLOAD_MISMATCH"] };
+  }
+  if (priorFingerprint !== undefined) {
+    return { projection, applied: false, violations: [] };
+  }
+
+  const semanticViolations = validateCommittedTransitionEvent(projection, event, "omega");
+  if (semanticViolations.length > 0) {
+    return { projection, applied: false, violations: semanticViolations };
+  }
+
+  appliedEventFingerprints.set(event.eventId, eventFingerprintValue);
+  return {
+    projection: {
+      subjectId: projection.subjectId,
+      state: "COMPLETE",
+      subjectVersion: projection.subjectVersion + 1,
+      projectionVersion: projection.projectionVersion + 1,
+      reducerVersion: DEVELOPMENT_REDUCER_VERSION,
+      lastEventId: event.eventId,
+      fencingToken: projection.fencingToken,
     },
     applied: true,
     violations: [],
@@ -170,11 +323,18 @@ export function buildEvent(
  */
 export class InMemoryDevelopmentProjectionStore {
   private readonly projections = new Map<string, DevelopmentProjection>();
-  private readonly appliedEventIds = new Map<string, Set<string>>();
+  private readonly appliedEventFingerprints = new Map<string, AppliedEventFingerprints>();
+  /**
+   * An in-memory analogue of an authoritative event log. `replay` is only a
+   * duplicate-delivery path for events already emitted by `commit`; it is not
+   * an alternate command endpoint that accepts caller-crafted history.
+   */
+  private readonly committedEventFingerprints = new Map<string, AppliedEventFingerprints>();
 
   seed(projection: DevelopmentProjection): void {
     this.projections.set(projection.subjectId, projection);
-    this.appliedEventIds.set(projection.subjectId, new Set());
+    this.appliedEventFingerprints.set(projection.subjectId, new Map());
+    this.committedEventFingerprints.set(projection.subjectId, new Map());
   }
 
   get(subjectId: string): DevelopmentProjection | undefined {
@@ -187,49 +347,68 @@ export class InMemoryDevelopmentProjectionStore {
       throw new Error(`Unknown Development subject: ${context.subjectId}`);
     }
 
-    // The subject's persisted state is the only trustworthy source of
-    // "from" -- a caller-supplied `from` that merely matches the requested
-    // transition's own registered shape is not proof of the subject's
-    // actual current state, exactly as the real omegaMissions.transition
-    // derives its from-state from the mission document, never a caller
-    // field. `to` stays caller-supplied: it is what's being proposed.
-    const groundedRequest: TransitionRequest = {
-      ...request,
-      from: current.state,
-      currentSubjectVersion: current.subjectVersion,
-      currentFencingToken: current.fencingToken,
-    };
+    // The public TypeScript type prevents unknown IDs at ordinary call sites,
+    // but command payloads are runtime data. Let the deterministic evaluator
+    // reject an unknown cast/deserialised ID and emit its audit event rather
+    // than dereferencing a missing registry entry first.
+    const definition = (
+      DEVELOPMENT_TRANSITIONS as Record<
+        string,
+        (typeof DEVELOPMENT_TRANSITIONS)[keyof typeof DEVELOPMENT_TRANSITIONS] | undefined
+      >
+    )[request.transitionId];
+    const preconditionReason =
+      definition !== undefined &&
+      (!definition.sources.includes(current.state) || current.state !== request.from)
+        ? "STATE_MISMATCH_CURRENT_PROJECTION"
+        : request.transitionId === "DEV_TRANSITION_MERGED_TO_COMPLETE"
+          ? "OMEGA_COMPLETION_REQUIRES_AUTHORITY_PATH"
+          : undefined;
+    const evaluation = preconditionReason
+      ? undefined
+      : evaluateDevelopmentTransition({
+          ...request,
+          currentSubjectVersion: current.subjectVersion,
+          currentFencingToken: current.fencingToken,
+        });
+    const allowed = evaluation?.allowed ?? false;
+    const reasons = preconditionReason ? [preconditionReason] : evaluation!.reasons;
 
-    const evaluation = evaluateDevelopmentTransition(groundedRequest);
-
-    const event = evaluation.allowed
-      ? buildEvent("DEV_TRANSITION_COMMITTED", groundedRequest, context, {
-          from: groundedRequest.from,
-          to: groundedRequest.to,
-          ...(groundedRequest.approval ? { approvalId: groundedRequest.approval.approvalId } : {}),
-          ...(groundedRequest.lease
-            ? { leaseFencingToken: groundedRequest.lease.fencingToken }
-            : {}),
+    const event = allowed
+      ? buildEvent("DEV_TRANSITION_COMMITTED", request, context, {
+          from: current.state,
+          to: request.to,
+          sourceSubjectVersion: current.subjectVersion,
+          resultingSubjectVersion: current.subjectVersion + 1,
+          ...(request.approval ? { approvalId: request.approval.approvalId } : {}),
+          ...(request.lease ? { leaseFencingToken: request.lease.fencingToken } : {}),
         })
-      : buildEvent("DEV_TRANSITION_REJECTED", groundedRequest, context, {
-          from: groundedRequest.from,
-          to: groundedRequest.to,
-          reasonCodes: evaluation.reasons,
-          ...(evaluation.retryDisposition ? { retryDisposition: evaluation.retryDisposition } : {}),
+      : buildEvent("DEV_TRANSITION_REJECTED", request, context, {
+          from: request.from,
+          to: request.to,
+          reasonCodes: reasons,
+          ...(evaluation?.retryDisposition
+            ? { retryDisposition: evaluation.retryDisposition }
+            : {}),
         });
 
     const applyResult = applyDevelopmentEvent(
       current,
       event,
-      this.appliedEventIds.get(context.subjectId)!,
+      this.appliedEventFingerprints.get(context.subjectId)!,
     );
     this.projections.set(context.subjectId, applyResult.projection);
+    if (applyResult.applied) {
+      this.committedEventFingerprints
+        .get(context.subjectId)!
+        .set(event.eventId, eventFingerprint(event));
+    }
 
     return {
-      kind: evaluation.allowed ? "COMMITTED" : "REJECTED",
+      kind: allowed ? "COMMITTED" : "REJECTED",
       event,
       projection: applyResult.projection,
-      reasons: evaluation.reasons,
+      reasons,
     };
   }
 
@@ -238,12 +417,28 @@ export class InMemoryDevelopmentProjectionStore {
     if (!current) {
       throw new Error(`Unknown Development subject: ${subjectId}`);
     }
-    let appliedEventIds = this.appliedEventIds.get(subjectId);
-    if (!appliedEventIds) {
-      appliedEventIds = new Set();
-      this.appliedEventIds.set(subjectId, appliedEventIds);
+    let appliedEventFingerprints = this.appliedEventFingerprints.get(subjectId);
+    if (!appliedEventFingerprints) {
+      appliedEventFingerprints = new Map();
+      this.appliedEventFingerprints.set(subjectId, appliedEventFingerprints);
     }
-    const result = applyDevelopmentEvent(current, event, appliedEventIds);
+    const committedEventFingerprints = this.committedEventFingerprints.get(subjectId);
+    const committedFingerprint = committedEventFingerprints?.get(event.eventId);
+    if (committedFingerprint === undefined) {
+      return {
+        projection: current,
+        applied: false,
+        violations: ["UNTRUSTED_EVENT_REPLAY"],
+      };
+    }
+    if (committedFingerprint !== eventFingerprint(event)) {
+      return {
+        projection: current,
+        applied: false,
+        violations: ["EVENT_ID_PAYLOAD_MISMATCH"],
+      };
+    }
+    const result = applyDevelopmentEvent(current, event, appliedEventFingerprints);
     this.projections.set(subjectId, result.projection);
     return result;
   }

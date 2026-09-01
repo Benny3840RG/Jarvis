@@ -11,8 +11,8 @@ vision:
 
 invariants:
   constitution: JARVIS_CONSTITUTION.md
-  transitions: JARVIS_TRANSITIONS.md
-  events: JARVIS_EVENTS.md
+  transitions: TRANSITIONS.yaml
+  events: EVENTS.yaml
 
 phases:
   - id: phase-1-governed-development
@@ -42,8 +42,8 @@ phases:
         outputs:
           - JARVIS_ARCHITECTURE.md
           - JARVIS_CONSTITUTION.md
-          - JARVIS_TRANSITIONS.md
-          - JARVIS_EVENTS.md
+          - TRANSITIONS.yaml
+          - EVENTS.yaml
           - JARVIS_ROADMAP.yaml
       - id: p1-transition-kernel
         priority: 95

@@ -24,6 +24,11 @@ import type { QuoteRepository } from "../quotes/quoteRepository.js";
 import type { ControlledReminderStore } from "../reminders/controlledReminder.js";
 import type { ControlledTaskStore } from "../tasks/controlledTask.js";
 import { createNoteToolDefinition } from "./createNoteTool.js";
+import {
+  createGitHubDevelopmentClientFromEnv,
+  createGitHubMergeToolDefinition,
+  type GitHubDevelopmentClient,
+} from "../development/githubDevelopment.js";
 import { createQuoteFinalizeToolDefinition } from "./quoteFinalizeTool.js";
 import { createQuoteSendToolDefinition } from "./quoteSendTool.js";
 import { createTaskReminderToolDefinitions } from "./taskReminderTools.js";
@@ -37,6 +42,7 @@ export function createToolExecutionDefinitions(
   quoteEmailProvider?: QuoteEmailProvider,
   quoteDeliveryRepository?: QuoteDeliveryRepository,
   quotePdfArtifactRepository?: QuotePdfArtifactRepository,
+  githubDevelopmentClient?: GitHubDevelopmentClient,
 ): ToolExecutionDefinition[] {
   if ((taskStore === undefined) !== (reminderStore === undefined)) {
     throw new Error("Task and reminder tool stores must be registered together.");
@@ -61,6 +67,9 @@ export function createToolExecutionDefinitions(
             quotePdfArtifactRepository,
           ),
         ]),
+    ...(githubDevelopmentClient === undefined
+      ? []
+      : [createGitHubMergeToolDefinition(githubDevelopmentClient)]),
   ];
 }
 
@@ -74,6 +83,7 @@ export function createToolExecutionDefinitions(
  */
 export function createToolExecutionServiceFromEnv(
   quoteEmailProvider: QuoteEmailProvider | null = createQuoteEmailProviderFromEnv(),
+  githubDevelopmentClient: GitHubDevelopmentClient | null = createGitHubDevelopmentClientFromEnv(),
 ): ToolExecutionService | null {
   if (resolvePersistenceProviderName() !== "convex") return null;
   return new ToolExecutionService(
@@ -85,6 +95,7 @@ export function createToolExecutionServiceFromEnv(
       quoteEmailProvider ?? undefined,
       createQuoteDeliveryRepositoryFromEnv() ?? undefined,
       createQuotePdfArtifactRepositoryFromEnv() ?? undefined,
+      githubDevelopmentClient ?? undefined,
     ),
     new ConvexToolExecutionReceiptStore(),
     new ConvexExternalReconciliationStore(),

@@ -2,7 +2,8 @@
  * Development transition kernel (JARVIS Phase 1, Task 3).
  *
  * Pure, deterministic admissibility evaluation for the Development domain
- * transition grammar defined in JARVIS_TRANSITIONS.yaml/.md. This module
+ * transition grammar defined in TRANSITIONS.yaml and explained in
+ * JARVIS_TRANSITIONS.md. This module
  * decides whether a requested transition is legally admissible; it never
  * persists state, calls a provider, or commits an event. The trusted commit
  * boundary (Task 4: events.ts/reducer.ts) is the only place authoritative
@@ -27,9 +28,8 @@
  * at "is the supplied Omega completion input itself satisfied."
  */
 
-import { createHash } from "node:crypto";
-
 import { canonicalJson } from "../actions/canonicalJson.js";
+import { sha256Hex } from "../actions/sha256.js";
 import { evaluateOmegaCompletion, type OmegaCompletionInput } from "../omega/policy.js";
 import {
   DEVELOPMENT_TRANSITIONS,
@@ -145,7 +145,7 @@ export type MergeEvidence = {
    * from head-integrity. Per JARVIS-005/JARVIS-015, an INDETERMINATE
    * outcome must never be coerced into MERGED (nor into a distinct FAILED
    * state — Development has no such state; ambiguity must instead route
-   * through RECONCILIATION_OPEN). Omitted/`"MERGED"` proceeds to the
+   * through INDETERMINATE). Omitted/`"MERGED"` proceeds to the
    * ordinary head-integrity check below.
    */
   readonly operationOutcome?: MergeOperationOutcome;
@@ -158,7 +158,7 @@ export type MergeEvidence = {
  * (JARVIS_EVENTS.md "INDETERMINATE resolution contract"). Elapsed time is
  * never itself an observation — `externallyObserved` must be true and
  * `observedOutcome` must actually establish `"MERGED"` before
- * RECONCILIATION_OPEN -> MERGED is admissible.
+ * INDETERMINATE -> MERGED is admissible.
  */
 export type ReconciliationEvidence = {
   readonly externallyObserved: boolean;
@@ -270,7 +270,6 @@ function authorityExpanded(mission: CapabilityEnvelope, worker: CapabilityEnvelo
   );
 }
 
-const HASH_ALGORITHM = "sha256";
 const EFFECT_HASH_VERSION = "development-effect-hash:v1";
 const AUTHORITY_ENVELOPE_HASH_VERSION = "development-authority-envelope-hash:v1";
 const POLICY_FINGERPRINT_VERSION = "development-policy-fingerprint:v1";
@@ -279,7 +278,7 @@ const POLICY_FINGERPRINT_VERSION = "development-policy-fingerprint:v1";
 // toolExecution.ts/quoteSendTool.ts) rather than inventing another one, per
 // the handover's "one canonical encoder" rule.
 function digest(prefix: string, value: unknown): string {
-  return `${prefix}:${createHash(HASH_ALGORITHM).update(canonicalJson(value), "utf8").digest("hex")}`;
+  return `${prefix}:${sha256Hex(canonicalJson(value))}`;
 }
 
 export function computeEffectHash(input: {
@@ -423,7 +422,7 @@ function reconciliationGateReason(
   definition: TransitionDefinition,
   request: TransitionRequest,
 ): string | undefined {
-  if (definition.evaluator !== "reconciliation_proof_gate") return undefined;
+  if (definition.evaluator !== "deterministic_reconciliation_success_gate") return undefined;
 
   const evidence = request.reconciliationEvidence;
   if (!evidence || !evidence.externallyObserved) {
@@ -465,25 +464,7 @@ export function evaluateDevelopmentTransition(request: TransitionRequest): Trans
     TransitionDefinition | undefined;
   if (!definition) return rejected(request, "UNKNOWN_TRANSITION");
 
-  // Checked before the state-shape gate below, deliberately deviating from
-  // the generic illustrative gate order: once a trusted commit boundary
-  // grounds `from` in the subject's real persisted state (rather than
-  // trusting a caller-supplied value), a version-stale racer's `from` has
-  // *also* necessarily moved by the time it's evaluated -- state and
-  // version change together under this kernel's model. Checking state
-  // first would make STALE_SUBJECT_VERSION practically unreachable through
-  // the real commit boundary, masking the more specific, more actionable
-  // "your view was stale, refresh and retry" diagnostic behind a generic
-  // "this transition doesn't apply here" one.
-  if (
-    request.expectedSubjectVersion !== undefined &&
-    request.currentSubjectVersion !== undefined &&
-    request.expectedSubjectVersion !== request.currentSubjectVersion
-  ) {
-    return rejected(request, "STALE_SUBJECT_VERSION");
-  }
-
-  if (definition.from !== request.from || definition.to !== request.to) {
+  if (!definition.sources.includes(request.from) || definition.target !== request.to) {
     return rejected(request, "STATE_MISMATCH");
   }
 
@@ -512,6 +493,14 @@ export function evaluateDevelopmentTransition(request: TransitionRequest): Trans
 
   const approvalReason = approvalGateReason(definition, request);
   if (approvalReason) return rejected(request, approvalReason);
+
+  if (
+    request.expectedSubjectVersion !== undefined &&
+    request.currentSubjectVersion !== undefined &&
+    request.expectedSubjectVersion !== request.currentSubjectVersion
+  ) {
+    return rejected(request, "STALE_SUBJECT_VERSION");
+  }
 
   if (request.mergeEvidence) {
     const mergeOutcomeReason = mergeOperationOutcomeGateReason(request.mergeEvidence);

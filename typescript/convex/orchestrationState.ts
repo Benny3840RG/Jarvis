@@ -68,6 +68,24 @@ function validLeaseTtl(value: number): number {
   return value;
 }
 
+function nextLeaseFencingToken(previous: number | undefined): number {
+  if (previous === undefined) return 1;
+  if (!Number.isSafeInteger(previous) || previous <= 0) {
+    throw new Error("Orchestration step has an invalid persisted fencing token.");
+  }
+  if (previous === Number.MAX_SAFE_INTEGER) {
+    throw new Error("Orchestration fencing token space is exhausted.");
+  }
+  return previous + 1;
+}
+
+function requireFencingToken(value: number): number {
+  if (!Number.isSafeInteger(value) || value <= 0) {
+    throw new Error("Orchestration fencing token must be a positive safe integer.");
+  }
+  return value;
+}
+
 function evidence(
   run: {
     recoveryEvidence: Array<{
@@ -127,15 +145,25 @@ function publicStep(
 }
 
 function requireActiveLease(
-  step: { leaseOwner?: string; leaseToken?: string; leaseExpiresAt?: number },
+  step: {
+    leaseOwner?: string;
+    leaseToken?: string;
+    leaseFencingToken?: number;
+    leaseExpiresAt?: number;
+  },
   workerId: string,
   leaseToken: string,
+  fencingToken: number,
   now: number,
 ): void {
   const owner = cleanRequired(workerId, "Orchestration worker ID");
   const token = cleanRequired(leaseToken, "Orchestration lease token");
   if (step.leaseOwner !== owner || step.leaseToken !== token) {
     throw new Error("Orchestration lease is not owned by this worker.");
+  }
+  const requestedFencingToken = requireFencingToken(fencingToken);
+  if (step.leaseFencingToken !== requestedFencingToken) {
+    throw new Error("Orchestration lease fencing token is stale or invalid.");
   }
   if (step.leaseExpiresAt === undefined || step.leaseExpiresAt <= now) {
     throw new Error("Orchestration step lease has expired; reconciliation is required.");
@@ -379,7 +407,6 @@ export const markStepRunning = mutation({
     const leaseOwner = cleanRequired(args.workerId, "Orchestration worker ID");
     const now = Date.now();
     const leaseTtlMs = validLeaseTtl(args.leaseTtlMs);
-    const leaseToken = crypto.randomUUID();
     const run = requireRun(await findRun(ctx, ownerId, runId));
     const step = requireStep(await findStep(ctx, ownerId, runId, nodeId));
 
@@ -389,6 +416,11 @@ export const markStepRunning = mutation({
     if (step.state !== "pending") {
       throw new Error(`Cannot transition step ${step.state} to running.`);
     }
+    if (step.operationId !== undefined && step.operationId !== operationId) {
+      throw new Error("A resumed orchestration step cannot change its operation ID.");
+    }
+    const leaseToken = crypto.randomUUID();
+    const fencingToken = nextLeaseFencingToken(step.leaseFencingToken);
 
     await ctx.db.patch("orchestrationSteps", step._id, {
       operationId,
@@ -397,6 +429,7 @@ export const markStepRunning = mutation({
       updatedAt: now,
       leaseOwner,
       leaseToken,
+      leaseFencingToken: fencingToken,
       leaseExpiresAt: now + leaseTtlMs,
     });
     await ctx.db.patch("orchestrationRuns", run._id, {
@@ -408,7 +441,7 @@ export const markStepRunning = mutation({
     });
     const updated = await ctx.db.get("orchestrationSteps", step._id);
     if (!updated) throw new Error("Orchestration step update failed.");
-    return { step: publicStep(updated), leaseToken };
+    return { step: publicStep(updated), leaseToken, fencingToken };
   },
 });
 
@@ -418,6 +451,7 @@ export const recordStepSuccess = mutation({
     nodeId: v.string(),
     workerId: v.string(),
     leaseToken: v.string(),
+    fencingToken: v.number(),
     outputDigest: v.optional(v.string()),
   },
   returns: orchestrationPublicStepDocumentValidator,
@@ -432,7 +466,7 @@ export const recordStepSuccess = mutation({
     if (step.state !== "running") {
       throw new Error(`Cannot transition step ${step.state} to succeeded.`);
     }
-    requireActiveLease(step, args.workerId, args.leaseToken, now);
+    requireActiveLease(step, args.workerId, args.leaseToken, args.fencingToken, now);
     const outputDigest =
       args.outputDigest === undefined
         ? undefined
@@ -474,6 +508,7 @@ export const recordStepFailure = mutation({
     nodeId: v.string(),
     workerId: v.string(),
     leaseToken: v.string(),
+    fencingToken: v.number(),
     failureCode: orchestrationFailureCodeValidator,
   },
   returns: orchestrationPublicStepDocumentValidator,
@@ -488,7 +523,7 @@ export const recordStepFailure = mutation({
     if (step.state !== "running") {
       throw new Error(`Cannot transition step ${step.state} to failed.`);
     }
-    requireActiveLease(step, args.workerId, args.leaseToken, now);
+    requireActiveLease(step, args.workerId, args.leaseToken, args.fencingToken, now);
 
     await ctx.db.patch("orchestrationSteps", step._id, {
       state: "failed",
@@ -519,6 +554,9 @@ export const registerReconciliation = mutation({
   args: {
     ...runArgs,
     nodeId: v.string(),
+    workerId: v.string(),
+    leaseToken: v.string(),
+    fencingToken: v.number(),
     reconciliationId: v.string(),
     effectFingerprint: v.string(),
     provider: v.string(),
@@ -551,6 +589,7 @@ export const registerReconciliation = mutation({
     requireRun(await findRun(ctx, ownerId, runId));
     const step = requireStep(await findStep(ctx, ownerId, runId, nodeId));
     if (step.state !== "running") throw new Error("Reconciliation requires a running step.");
+    requireActiveLease(step, args.workerId, args.leaseToken, args.fencingToken, now);
     const operationId = step.operationId;
     if (operationId === undefined) {
       throw new Error("Reconciliation requires an operation-bound running step.");
@@ -612,6 +651,7 @@ export const recordStepIndeterminate = mutation({
     nodeId: v.string(),
     workerId: v.string(),
     leaseToken: v.string(),
+    fencingToken: v.number(),
     indeterminateReason: v.string(),
     reconciliationId: v.string(),
   },
@@ -635,7 +675,7 @@ export const recordStepIndeterminate = mutation({
     if (step.state !== "running") {
       throw new Error(`Cannot transition step ${step.state} to indeterminate.`);
     }
-    requireActiveLease(step, args.workerId, args.leaseToken, now);
+    requireActiveLease(step, args.workerId, args.leaseToken, args.fencingToken, now);
     const reconciliation = requireReconciliation(
       await findReconciliation(ctx, ownerId, reconciliationId),
     );
@@ -854,10 +894,11 @@ export const resolveIndeterminate = mutation({
       throw new Error("Provider reconciliation has no authenticated terminal outcome.");
     }
     const terminalState = external.terminalStatus;
+    const reconciliationState = terminalState === "no-effect" ? "succeeded" : terminalState;
     const terminalFailureCode =
       terminalState === "failed" ? ("postcondition_failed" as const) : undefined;
     await ctx.db.patch("orchestrationReconciliations", reconciliation._id, {
-      state: terminalState,
+      state: reconciliationState,
       ...(external.resolutionDigest === undefined
         ? {}
         : { outputDigest: external.resolutionDigest }),
@@ -882,22 +923,27 @@ export const resolveIndeterminate = mutation({
           ? "running"
           : "failed";
     await ctx.db.patch("orchestrationSteps", step._id, {
-      state: terminalState,
+      state: terminalState === "no-effect" ? "pending" : terminalState,
       ...(external.resolutionDigest === undefined
         ? {}
         : { outputDigest: external.resolutionDigest }),
       ...(terminalState === "failed"
         ? { failureCode: terminalFailureCode }
         : { failureCode: undefined }),
-      retryable: false,
+      retryable: terminalState === "no-effect",
       indeterminateReason: undefined,
+      leaseOwner: undefined,
+      leaseToken: undefined,
+      leaseExpiresAt: undefined,
+      ...(terminalState === "no-effect" ? { nextAttemptAt: now } : {}),
       updatedAt: now,
-      completedAt: now,
+      completedAt: terminalState === "no-effect" ? undefined : now,
     });
     await ctx.db.patch("orchestrationRuns", run._id, {
-      state: runState,
+      state: terminalState === "no-effect" ? "running" : runState,
       failureCode: terminalState === "failed" ? terminalFailureCode : undefined,
-      recoveryState: terminalState === "succeeded" ? "recovered" : "escalated",
+      recoveryState:
+        terminalState === "succeeded" || terminalState === "no-effect" ? "recovered" : "escalated",
       recoveryReference: undefined,
       completedStepIds,
       checkpointNodeId: nodeId,

@@ -158,7 +158,7 @@ class SharedFakeReconciliationStore implements ExternalReconciliationStore {
     this.backend.resolveCalls += 1;
     const terminalReceipt: ToolExecutionReceipt = {
       ...receipt,
-      status: input.result.status,
+      status: input.result.status === "succeeded" ? "succeeded" : "failed",
       ...(input.result.status === "succeeded" && input.result.outputDigest
         ? { outputDigest: input.result.outputDigest }
         : {}),

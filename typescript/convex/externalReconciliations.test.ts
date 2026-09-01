@@ -184,6 +184,79 @@ describe("claimNext lease-expiry reclaim (worker-crash recovery)", () => {
   });
 });
 
+describe("same-operation resume after proven non-effect", () => {
+  it("records immutable no-effect evidence and reopens only the same execution scope", async () => {
+    const t = harness();
+    const now = Date.now();
+    await t.run((ctx) =>
+      seedClaimedReconciliation(ctx, {
+        leaseExpiresAt: now + 30_000,
+        leaseOwner: "worker-A",
+        leaseToken: "lease-token-A",
+      }),
+    );
+
+    const receipt = await t.mutation(api.externalReconciliations.resolveClaim, {
+      serviceToken: SERVICE_TOKEN,
+      reconciliationId: "reconciliation-1",
+      workerId: "worker-A",
+      leaseToken: "lease-token-A",
+      now,
+      result: { status: "no-effect", evidenceDigest: "github-no-effect-evidence" },
+    });
+    expect(receipt.status).toBe("failed");
+    expect(receipt.providerErrorCode).toBe("provider-proved-no-effect");
+
+    const resolved = await t.query(api.externalReconciliations.getByScope, {
+      serviceToken: SERVICE_TOKEN,
+      projectId: "project-1",
+      tool: "quotes",
+      operation: "send",
+      idempotencyKey: "idempotency-1",
+      effectFingerprint: "effect-fingerprint-1",
+    });
+    expect(resolved?.reconciliation.terminalStatus).toBe("no-effect");
+
+    const reopened = await t.mutation(api.externalReconciliations.registerAttempt, {
+      serviceToken: SERVICE_TOKEN,
+      projectId: "project-1",
+      tool: "quotes",
+      operation: "send",
+      idempotencyKey: "idempotency-1",
+      effectFingerprint: "effect-fingerprint-1",
+      reconciliationId: "reconciliation-1",
+      executionKey: "execution-1",
+      actionId: "action-1",
+      requestId: "request-1",
+      actionFingerprint: "fingerprint-1",
+      provider: "test-provider",
+      providerRequestId: "provider-request-1",
+      providerCorrelationId: "provider-correlation-1",
+      safetyBinding,
+    });
+    expect(reopened.state).toBe("observing");
+    expect(reopened.terminalStatus).toBeUndefined();
+    expect(reopened.receiptKey).toBeUndefined();
+
+    const audit = await t.run((ctx) =>
+      ctx.db
+        .query("auditEvents")
+        .withIndex("by_owner_and_request_id", (q) =>
+          q.eq("ownerId", OWNER_ID).eq("requestId", "request-1"),
+        )
+        .take(20),
+    );
+    expect(audit.map((event) => event.eventType)).toEqual([
+      "external.reconciliation.resolved",
+      "external.reconciliation.same-operation-resumed",
+    ]);
+    expect(audit[0]?.payload).toMatchObject({
+      terminalStatus: "no-effect",
+      evidenceDigest: "github-no-effect-evidence",
+    });
+  });
+});
+
 async function seedQuoteDelivery(ctx: MutationCtx, reconciliationId = "reconciliation-1") {
   return ctx.db.insert("quoteDeliveryAttempts", {
     ownerId: OWNER_ID,

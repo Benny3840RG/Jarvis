@@ -46,6 +46,11 @@ function makeContext(): TotalityReasoningContext {
 function successfulPayload(memoryProposals: unknown[] = []) {
   return {
     id: "resp_test",
+    usage: {
+      input_tokens: 120,
+      output_tokens: 45,
+      input_tokens_details: { cached_tokens: 20 },
+    },
     output: [
       {
         type: "message",
@@ -106,6 +111,13 @@ describe("OpenAI Totality reasoner", () => {
     assert.deepEqual(input.projectContext, makeContext().project);
     assert.equal(input.proposalTimestamp, makeContext().proposedAt);
     assert.equal(result.responseId, "resp_test");
+    assert.deepEqual(result.modelUsage, {
+      provider: "openai",
+      model: "gpt-5.6",
+      inputTokens: 120,
+      outputTokens: 45,
+      cachedInputTokens: 20,
+    });
     assert.match(result.draft.answer, /gusseted bracket/);
     assert.deepEqual(result.draft.memoryProposals, []);
   });

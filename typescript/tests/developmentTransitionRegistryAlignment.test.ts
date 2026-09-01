@@ -1,166 +1,121 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 
 import { DEVELOPMENT_TRANSITIONS } from "../src/development/transitionRegistry.js";
 
-type YamlModule = {
-  load(input: string): unknown;
-};
+type YamlModule = { load(input: string): unknown };
 
 const require = createRequire(import.meta.url);
 const yaml = require("js-yaml") as YamlModule;
 const repoRoot = fileURLToPath(new URL("../../", import.meta.url));
 
-type YamlTransition = {
+type CanonicalTransition = {
   id: string;
-  domain: string;
-  from: string;
+  from: string | string[];
   to: string;
   side_effect_class: string;
-  authoritative_committer: string;
+  requested_by: string[];
+  evaluated_by: string[];
+  authorised_by: string[];
+  committed_by: string;
   evaluator: string;
-  approval: string;
-  reversible: boolean;
-  retry_target: string;
-  invariants: string[];
-  gates?: string[];
-  indeterminate_resolution?: {
-    opens_state: string;
-    permitted_resolvers: string[];
-    terminal_by_timeout: boolean;
-    resolution_requires_external_observation: boolean;
-  };
+  gates: string[];
+  evidence_required: string[];
+  operation_retry: Record<string, unknown>;
+  reconciliation?: Record<string, unknown>;
+  constitutional_invariants?: string[];
 };
 
-type YamlRegistry = {
-  version: number;
+type CanonicalTransitionContract = {
   schema_version: number;
-  transitions: YamlTransition[];
+  contract_id: string;
+  transitions: CanonicalTransition[];
 };
 
-function loadYamlRegistry(): YamlRegistry {
-  const raw = readFileSync(`${repoRoot}JARVIS_TRANSITIONS.yaml`, "utf8");
-  return yaml.load(raw) as YamlRegistry;
+function canonicalTransitions(): CanonicalTransitionContract {
+  return yaml.load(
+    readFileSync(`${repoRoot}TRANSITIONS.yaml`, "utf8"),
+  ) as CanonicalTransitionContract;
 }
 
-test("every YAML transition ID has exactly one TypeScript registry entry with matching fields", () => {
-  const registry = loadYamlRegistry();
+function runtimeFields(id: string): Record<string, unknown> {
+  const entry = (DEVELOPMENT_TRANSITIONS as Record<string, unknown>)[id];
+  assert.ok(entry, `runtime registry is missing ${id}`);
+  return entry as Record<string, unknown>;
+}
 
-  assert.equal(registry.transitions.length, Object.keys(DEVELOPMENT_TRANSITIONS).length);
-
-  for (const yamlTransition of registry.transitions) {
-    const tsTransition = (
-      DEVELOPMENT_TRANSITIONS as Record<
-        string,
-        (typeof DEVELOPMENT_TRANSITIONS)[keyof typeof DEVELOPMENT_TRANSITIONS]
-      >
-    )[yamlTransition.id];
-    assert.ok(tsTransition, `missing TypeScript registry entry for ${yamlTransition.id}`);
-
-    assert.equal(tsTransition.domain, yamlTransition.domain, yamlTransition.id);
-    assert.equal(tsTransition.from, yamlTransition.from, yamlTransition.id);
-    assert.equal(tsTransition.to, yamlTransition.to, yamlTransition.id);
-    assert.equal(tsTransition.sideEffectClass, yamlTransition.side_effect_class, yamlTransition.id);
-    assert.equal(
-      tsTransition.authoritativeCommitter,
-      yamlTransition.authoritative_committer,
-      yamlTransition.id,
-    );
-    assert.equal(tsTransition.evaluator, yamlTransition.evaluator, yamlTransition.id);
-    assert.equal(tsTransition.approval, yamlTransition.approval, yamlTransition.id);
-    assert.equal(tsTransition.reversible, yamlTransition.reversible, yamlTransition.id);
-    assert.equal(tsTransition.retryTarget, yamlTransition.retry_target, yamlTransition.id);
-    assert.deepEqual([...tsTransition.invariants], yamlTransition.invariants, yamlTransition.id);
-    assert.deepEqual(
-      tsTransition.gates ? [...tsTransition.gates] : undefined,
-      yamlTransition.gates,
-      yamlTransition.id,
-    );
-
-    if (yamlTransition.indeterminate_resolution) {
-      assert.ok(tsTransition.indeterminateResolution, yamlTransition.id);
-      assert.equal(
-        tsTransition.indeterminateResolution?.opensState,
-        yamlTransition.indeterminate_resolution.opens_state,
-        yamlTransition.id,
-      );
-      assert.deepEqual(
-        tsTransition.indeterminateResolution
-          ? [...tsTransition.indeterminateResolution.permittedResolvers]
-          : undefined,
-        yamlTransition.indeterminate_resolution.permitted_resolvers,
-        yamlTransition.id,
-      );
-      assert.equal(
-        tsTransition.indeterminateResolution?.terminalByTimeout,
-        yamlTransition.indeterminate_resolution.terminal_by_timeout,
-        yamlTransition.id,
-      );
-      assert.equal(
-        tsTransition.indeterminateResolution?.resolutionRequiresExternalObservation,
-        yamlTransition.indeterminate_resolution.resolution_requires_external_observation,
-        yamlTransition.id,
-      );
-    } else {
-      assert.equal(tsTransition.indeterminateResolution, undefined, yamlTransition.id);
-    }
-  }
-});
-
-test("no TypeScript registry entry exists without a corresponding YAML transition", () => {
-  const registry = loadYamlRegistry();
-  const yamlIds = new Set(registry.transitions.map((transition) => transition.id));
-
-  for (const id of Object.keys(DEVELOPMENT_TRANSITIONS)) {
-    assert.ok(yamlIds.has(id), `TypeScript registry has ${id} with no YAML source entry`);
-  }
-});
-
-test("JARVIS_TRANSITIONS.md documents every YAML transition ID exactly once as a section heading", () => {
-  const registry = loadYamlRegistry();
-  const markdown = readFileSync(`${repoRoot}JARVIS_TRANSITIONS.md`, "utf8");
-
-  for (const yamlTransition of registry.transitions) {
-    const heading = `## ${yamlTransition.id}`;
-    const occurrences = markdown.split("\n").filter((line) => line.trim() === heading).length;
-    assert.equal(
-      occurrences,
-      1,
-      `expected exactly one "${heading}" heading in JARVIS_TRANSITIONS.md, found ${occurrences}`,
-    );
-  }
-});
-
-test("MERGED -> COMPLETE is the sole Omega-committed transition in the registry", () => {
-  const omegaCommitted = Object.values(DEVELOPMENT_TRANSITIONS).filter(
-    (transition) => transition.authoritativeCommitter === "omega",
+test("root TRANSITIONS.yaml is the sole machine-readable transition authority", () => {
+  const rootTransitionFiles = readdirSync(repoRoot).filter((file) =>
+    file.endsWith("TRANSITIONS.yaml"),
   );
 
-  assert.equal(omegaCommitted.length, 1);
-  assert.equal(omegaCommitted[0]?.id, "DEV_TRANSITION_MERGED_TO_COMPLETE");
-  assert.equal(omegaCommitted[0]?.from, "MERGED");
-  assert.equal(omegaCommitted[0]?.to, "COMPLETE");
-  assert.equal(omegaCommitted[0]?.approval, "omega_only");
+  assert.deepEqual(rootTransitionFiles, ["TRANSITIONS.yaml"]);
+  assert.equal(existsSync(`${repoRoot}JARVIS_TRANSITIONS.yaml`), false);
 });
 
-test("retry targets never blindly alias an authoritative transition ID (retry governs operations, not history)", () => {
-  // JARVIS-016 / handover "Retry/resume": retry re-attempts the underlying
-  // operation, never the authoritative state transition itself. A
-  // retry_target equal to a transition ID (or literally "transition")
-  // would conflate the two.
-  const transitionIds = new Set(Object.keys(DEVELOPMENT_TRANSITIONS));
+test("all 19 canonical transitions map exactly once to the runtime registry", () => {
+  const contract = canonicalTransitions();
+  assert.equal(contract.schema_version, 1);
+  assert.equal(contract.contract_id, "JARVIS_DEVELOPMENT_TRANSITIONS_V1");
+  assert.equal(contract.transitions.length, 19);
+  assert.equal(Object.keys(DEVELOPMENT_TRANSITIONS).length, 19);
 
-  for (const transition of Object.values(DEVELOPMENT_TRANSITIONS)) {
-    assert.ok(
-      !transitionIds.has(transition.retryTarget),
-      `${transition.id}'s retryTarget "${transition.retryTarget}" aliases a transition ID`,
+  for (const transition of contract.transitions) {
+    const runtime = runtimeFields(transition.id);
+    assert.deepEqual(
+      runtime.sources,
+      Array.isArray(transition.from) ? transition.from : [transition.from],
+      transition.id,
     );
-    assert.ok(
-      transition.retryTarget === "none" || transition.retryTarget.endsWith("_operation"),
-      `${transition.id}'s retryTarget "${transition.retryTarget}" is neither "none" nor an "*_operation" name`,
+    assert.equal(runtime.target, transition.to, transition.id);
+    assert.equal(runtime.sideEffectClass, transition.side_effect_class, transition.id);
+    assert.deepEqual(runtime.requestedBy, transition.requested_by, transition.id);
+    assert.deepEqual(runtime.evaluatedBy, transition.evaluated_by, transition.id);
+    assert.deepEqual(runtime.authorisedBy, transition.authorised_by, transition.id);
+    assert.equal(runtime.committedBy, transition.committed_by, transition.id);
+    assert.equal(runtime.evaluator, transition.evaluator, transition.id);
+    assert.deepEqual(runtime.gates, transition.gates, transition.id);
+    assert.deepEqual(runtime.evidenceRequired, transition.evidence_required, transition.id);
+    assert.deepEqual(runtime.operationRetry, transition.operation_retry, transition.id);
+    assert.deepEqual(runtime.reconciliation, transition.reconciliation, transition.id);
+    assert.deepEqual(
+      runtime.constitutionalInvariants,
+      transition.constitutional_invariants ?? [],
+      transition.id,
     );
   }
+});
+
+test("runtime registry has no transition absent from TRANSITIONS.yaml", () => {
+  const canonicalIds = new Set(
+    canonicalTransitions().transitions.map((transition) => transition.id),
+  );
+  for (const id of Object.keys(DEVELOPMENT_TRANSITIONS)) {
+    assert.ok(canonicalIds.has(id), `runtime registry has ${id} with no canonical source`);
+  }
+});
+
+test("explanatory transition documentation has one section for every canonical ID", () => {
+  const markdown = readFileSync(`${repoRoot}JARVIS_TRANSITIONS.md`, "utf8");
+  for (const transition of canonicalTransitions().transitions) {
+    const heading = `## ${transition.id}`;
+    const count = markdown.split("\n").filter((line) => line.trim() === heading).length;
+    assert.equal(count, 1, `${heading} must occur exactly once`);
+  }
+});
+
+test("obsolete RECONCILIATION_OPEN topology is absent and canonical indeterminate routes remain", () => {
+  const contract = canonicalTransitions();
+  const ids = new Set(contract.transitions.map((transition) => transition.id));
+  const serialized = JSON.stringify(contract);
+
+  assert.equal(serialized.includes("RECONCILIATION_OPEN"), false);
+  assert.ok(ids.has("DEV_TRANSITION_READY_TO_MERGE_TO_INDETERMINATE"));
+  assert.ok(ids.has("DEV_TRANSITION_INDETERMINATE_TO_MERGED"));
+  assert.ok(ids.has("DEV_TRANSITION_INDETERMINATE_TO_READY_TO_MERGE"));
+  assert.ok(ids.has("DEV_TRANSITION_INDETERMINATE_TO_CONTRADICTED"));
+  assert.ok(ids.has("DEV_TRANSITION_INDETERMINATE_TO_FAILED"));
 });

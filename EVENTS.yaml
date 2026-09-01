@@ -1,0 +1,89 @@
+schema_version: 1
+contract_id: JARVIS_DEVELOPMENT_EVENTS_V1
+domain: development
+status: phase1-canonical
+
+event_types:
+  - DEV_SPEC_VALIDATED
+  - DEV_TRANSITION_COMMITTED
+  - DEV_TRANSITION_REJECTED
+  - DEV_WORKER_CLAIM_CREATED
+  - DEV_LEASE_EXPIRED
+  - DEV_BUILD_RESULT_RECORDED
+  - DEV_VERIFICATION_RESULT_RECORDED
+  - DEV_REVIEW_RESULT_RECORDED
+  - DEV_REPAIR_REQUIRED
+  - DEV_MERGE_ATTEMPT_STARTED
+  - DEV_MERGE_ATTEMPT_FAILED
+  - DEV_MERGE_ATTEMPT_INDETERMINATE
+  - DEV_MERGE_RECEIPT_RECORDED
+  - DEV_RECONCILIATION_OPENED
+  - DEV_RECONCILIATION_RESOLVED
+  - DEV_POST_MERGE_OBSERVATION_RECORDED
+  - DEV_OMEGA_EVALUATION_RECORDED
+  - DEV_MODEL_INVOCATION_RECORDED
+
+envelope:
+  required_fields:
+    - event_id
+    - event_type
+    - event_schema_version
+    - subject_id
+    - correlation_id
+    - occurred_at
+    - recorded_at
+    - reducer_version
+    - payload
+  actor_separation:
+    - requested_by
+    - evaluated_by
+    - authorised_by
+    - committed_by
+
+reducer_compatibility:
+  DevelopmentReducer/v1:
+    readable_event_schema_versions: [1]
+  unsupported_schema_or_reducer: REJECTED
+
+idempotency:
+  key: event_id
+  same_event_id_same_payload: NO_OP_SUCCESS
+  same_event_id_different_payload: REJECTED
+  duplicate_event_application: NO_OP_SUCCESS
+
+causation:
+  correlation_id_required: true
+  causation_id_optional: true
+  prevent_self_causation: true
+  prevent_future_or_nonexistent_parent: true
+  prevent_cycles: true
+
+transition_binding:
+  event_types_requiring_transition_id:
+    - DEV_TRANSITION_COMMITTED
+    - DEV_TRANSITION_REJECTED
+  governing_transition_source: TRANSITIONS.yaml
+  unknown_governing_id: REJECTED
+  committed_event_requires_actor_separation: true
+
+model_invocation_receipt:
+  event_type: DEV_MODEL_INVOCATION_RECORDED
+  model_identity_authority: trusted_runtime_or_provider_metadata
+  required_associations:
+    - mission_id
+    - worker_id
+    - correlation_id
+  usage_metrics:
+    - provider
+    - model
+    - purpose
+    - input_tokens
+    - output_tokens
+    - cached_input_tokens
+    - context_tokens
+    - latency_ms
+    - retries
+    - estimated_cost
+    - routing_decision
+  usage_provenance: [actual, estimated, unavailable]
+  model_text_is_authoritative_telemetry: false
