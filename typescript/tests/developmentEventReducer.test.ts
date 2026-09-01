@@ -75,9 +75,12 @@ test("committing a legal transition advances state and records latest event/proj
 
 test("a rejected commit produces a DEV_TRANSITION_REJECTED audit event but no domain-state transition", () => {
   const store = new InMemoryDevelopmentProjectionStore();
-  store.seed(freshProjection());
+  // The subject is really at READY -- CLAIMED_TO_BUILDING's registered
+  // `from` is CLAIMED, so this is a genuine mismatch against the grounded
+  // (persisted) state, not merely the request's own (now-ignored) `from`.
+  store.seed(initialProjection("mission-1", "READY"));
 
-  const outcome = store.commit(claimedToBuildingRequest({ from: "READY" }), {
+  const outcome = store.commit(claimedToBuildingRequest(), {
     subjectId: "mission-1",
     eventId: "event-1",
     correlationId: "correlation-1",
@@ -86,8 +89,8 @@ test("a rejected commit produces a DEV_TRANSITION_REJECTED audit event but no do
   assert.equal(outcome.kind, "REJECTED");
   assert.equal(outcome.event.eventType, "DEV_TRANSITION_REJECTED");
   assert.ok(outcome.reasons.includes("STATE_MISMATCH"));
-  // Zero authoritative state change: still CLAIMED, still version 0.
-  assert.equal(outcome.projection.state, "CLAIMED");
+  // Zero authoritative state change: still READY, still version 0.
+  assert.equal(outcome.projection.state, "READY");
   assert.equal(outcome.projection.subjectVersion, 0);
 });
 
@@ -163,6 +166,30 @@ test("a stale fencing token is rejected through the real commit boundary, not on
   assert.ok(outcome.reasons.includes("STALE_FENCING_TOKEN"));
   // Zero authoritative state change from the rejected attempt.
   assert.equal(store.get("mission-1")?.state, "CLAIMED");
+});
+
+test("the commit boundary derives `from` from the persisted subject state, never trusting a caller's claimed `from`", () => {
+  // The subject is really at READY, not CLAIMED -- but the request's `from`
+  // correctly matches DEV_TRANSITION_CLAIMED_TO_BUILDING's own registered
+  // shape (CLAIMED -> BUILDING). A caller-supplied `from` that merely
+  // matches the transition's own definition must not be trusted as proof
+  // of the subject's actual current state; that state comes only from the
+  // store's own persisted projection, exactly as the real ΩΣ
+  // (`omegaMissions.transition`) derives its from-state from the mission
+  // document rather than a caller-supplied field.
+  const store = new InMemoryDevelopmentProjectionStore();
+  store.seed(initialProjection("mission-1", "READY"));
+
+  const outcome = store.commit(claimedToBuildingRequest(), {
+    subjectId: "mission-1",
+    eventId: "event-1",
+    correlationId: "correlation-1",
+  });
+
+  assert.equal(outcome.kind, "REJECTED");
+  assert.ok(outcome.reasons.includes("STATE_MISMATCH"));
+  assert.equal(outcome.projection.state, "READY");
+  assert.equal(outcome.projection.subjectVersion, 0);
 });
 
 test("duplicate event ID application is idempotent on replay", () => {

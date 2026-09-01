@@ -465,6 +465,24 @@ export function evaluateDevelopmentTransition(request: TransitionRequest): Trans
     TransitionDefinition | undefined;
   if (!definition) return rejected(request, "UNKNOWN_TRANSITION");
 
+  // Checked before the state-shape gate below, deliberately deviating from
+  // the generic illustrative gate order: once a trusted commit boundary
+  // grounds `from` in the subject's real persisted state (rather than
+  // trusting a caller-supplied value), a version-stale racer's `from` has
+  // *also* necessarily moved by the time it's evaluated -- state and
+  // version change together under this kernel's model. Checking state
+  // first would make STALE_SUBJECT_VERSION practically unreachable through
+  // the real commit boundary, masking the more specific, more actionable
+  // "your view was stale, refresh and retry" diagnostic behind a generic
+  // "this transition doesn't apply here" one.
+  if (
+    request.expectedSubjectVersion !== undefined &&
+    request.currentSubjectVersion !== undefined &&
+    request.expectedSubjectVersion !== request.currentSubjectVersion
+  ) {
+    return rejected(request, "STALE_SUBJECT_VERSION");
+  }
+
   if (definition.from !== request.from || definition.to !== request.to) {
     return rejected(request, "STATE_MISMATCH");
   }
@@ -494,14 +512,6 @@ export function evaluateDevelopmentTransition(request: TransitionRequest): Trans
 
   const approvalReason = approvalGateReason(definition, request);
   if (approvalReason) return rejected(request, approvalReason);
-
-  if (
-    request.expectedSubjectVersion !== undefined &&
-    request.currentSubjectVersion !== undefined &&
-    request.expectedSubjectVersion !== request.currentSubjectVersion
-  ) {
-    return rejected(request, "STALE_SUBJECT_VERSION");
-  }
 
   if (request.mergeEvidence) {
     const mergeOutcomeReason = mergeOperationOutcomeGateReason(request.mergeEvidence);

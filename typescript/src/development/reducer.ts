@@ -28,7 +28,7 @@ import {
 } from "./stateMachine.js";
 
 export { DEVELOPMENT_REDUCER_VERSION };
-export type { JarvisEvent };
+export type { DevelopmentEventType, JarvisEvent };
 
 export type DevelopmentProjection = {
   readonly subjectId: string;
@@ -127,7 +127,13 @@ export type CommitOutcome = {
   readonly reasons: readonly string[];
 };
 
-function buildEvent(
+/**
+ * Exported so any real commit boundary (e.g. a future Convex mutation)
+ * builds the identical event shape this in-memory store does, rather than
+ * re-deriving event construction — the trusted commit boundary must funnel
+ * through this same evaluator/reducer pair, never reimplement it.
+ */
+export function buildEvent(
   eventType: DevelopmentEventType,
   request: TransitionRequest,
   context: CommitContext,
@@ -181,22 +187,33 @@ export class InMemoryDevelopmentProjectionStore {
       throw new Error(`Unknown Development subject: ${context.subjectId}`);
     }
 
-    const evaluation = evaluateDevelopmentTransition({
+    // The subject's persisted state is the only trustworthy source of
+    // "from" -- a caller-supplied `from` that merely matches the requested
+    // transition's own registered shape is not proof of the subject's
+    // actual current state, exactly as the real omegaMissions.transition
+    // derives its from-state from the mission document, never a caller
+    // field. `to` stays caller-supplied: it is what's being proposed.
+    const groundedRequest: TransitionRequest = {
       ...request,
+      from: current.state,
       currentSubjectVersion: current.subjectVersion,
       currentFencingToken: current.fencingToken,
-    });
+    };
+
+    const evaluation = evaluateDevelopmentTransition(groundedRequest);
 
     const event = evaluation.allowed
-      ? buildEvent("DEV_TRANSITION_COMMITTED", request, context, {
-          from: request.from,
-          to: request.to,
-          ...(request.approval ? { approvalId: request.approval.approvalId } : {}),
-          ...(request.lease ? { leaseFencingToken: request.lease.fencingToken } : {}),
+      ? buildEvent("DEV_TRANSITION_COMMITTED", groundedRequest, context, {
+          from: groundedRequest.from,
+          to: groundedRequest.to,
+          ...(groundedRequest.approval ? { approvalId: groundedRequest.approval.approvalId } : {}),
+          ...(groundedRequest.lease
+            ? { leaseFencingToken: groundedRequest.lease.fencingToken }
+            : {}),
         })
-      : buildEvent("DEV_TRANSITION_REJECTED", request, context, {
-          from: request.from,
-          to: request.to,
+      : buildEvent("DEV_TRANSITION_REJECTED", groundedRequest, context, {
+          from: groundedRequest.from,
+          to: groundedRequest.to,
           reasonCodes: evaluation.reasons,
           ...(evaluation.retryDisposition ? { retryDisposition: evaluation.retryDisposition } : {}),
         });
