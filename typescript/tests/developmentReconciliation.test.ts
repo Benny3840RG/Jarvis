@@ -2,6 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  DEVELOPMENT_TRANSITIONS,
+  computeAuthorityEnvelopeHash,
+  computePolicyDecisionFingerprint,
   evaluateDevelopmentTransition,
   type CapabilityEnvelope,
 } from "../src/development/stateMachine.js";
@@ -28,6 +31,15 @@ const approvedMergeRequestBase = {
     actorType: "operator" as const,
     actorId: "benny",
     maxRiskClass: 2,
+    subjectId: "mission-1",
+    transitionId: "DEV_TRANSITION_READY_TO_MERGE_TO_MERGED" as const,
+    proposalHash: "proposal-hash-opaque",
+    effectHash: "effect-hash-not-checked-without-effectPayload",
+    authorityEnvelopeHash: computeAuthorityEnvelopeHash(missionAuthority),
+    effectiveRisk: 2,
+    policyDecisionFingerprint: computePolicyDecisionFingerprint(
+      DEVELOPMENT_TRANSITIONS.DEV_TRANSITION_READY_TO_MERGE_TO_MERGED,
+    ),
   },
 };
 

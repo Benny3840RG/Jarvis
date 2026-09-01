@@ -27,6 +27,9 @@
  * at "is the supplied Omega completion input itself satisfied."
  */
 
+import { createHash } from "node:crypto";
+
+import { canonicalJson } from "../actions/canonicalJson.js";
 import { evaluateOmegaCompletion, type OmegaCompletionInput } from "../omega/policy.js";
 import {
   DEVELOPMENT_TRANSITIONS,
@@ -81,11 +84,54 @@ export type LeaseInfo = {
   readonly fencingToken: number;
 };
 
+/**
+ * Approval records remain immutable — no `consumed`/`exercised` flag is
+ * carried here by design (handover "Approval use"). `EXERCISED` is derived
+ * elsewhere from durable execution-intent history, not stored on the
+ * approval itself. Binds to an exact subject/transition/effect/authority
+ * envelope/policy context so a valid-looking approval can't be replayed
+ * against a materially different proposal.
+ */
 export type ApprovalRef = {
   readonly approvalId: string;
   readonly actorType: ActorType;
   readonly actorId: string;
   readonly maxRiskClass: number;
+  readonly subjectId: string;
+  readonly transitionId: DevelopmentTransitionId;
+  /** Opaque hash of the proposal content; recorded for audit, not independently re-verified by this kernel (it has no visibility into proposal/diff content). */
+  readonly proposalHash: string;
+  readonly approvedSha?: string;
+  readonly effectHash: string;
+  readonly authorityEnvelopeHash: string;
+  readonly effectiveRisk: number;
+  readonly policyDecisionFingerprint: string;
+};
+
+/** Semantic policy version, kept independent of the aggregate/subject sequence number. */
+export type PolicyVersion = {
+  readonly version: string;
+  readonly validFrom: string;
+  readonly validUntil?: string;
+  readonly retroactiveInvalidation?: RetroactiveInvalidation;
+};
+
+export type VersionedPolicy = {
+  readonly subjectVersion: number;
+  readonly policy: PolicyVersion;
+};
+
+/**
+ * Preserved per the handover verbatim — scoped invalidation, never silently
+ * replaced by a global one. Not yet consumed by a gate in this kernel; the
+ * shape exists so a future policy-versioning integration doesn't have to
+ * invent it under time pressure.
+ */
+export type RetroactiveInvalidation = {
+  readonly transitionIds: readonly string[];
+  readonly affectedApprovals: "ALL" | { readonly approvalIds: readonly string[] };
+  readonly scope: "PENDING_ONLY" | "ALL";
+  readonly reason: string;
 };
 
 export type MergeOperationOutcome = "MERGED" | "REJECTED" | "FAILED" | "INDETERMINATE";
@@ -128,13 +174,20 @@ export type TransitionRequest = {
   readonly authorisedBy?: ActorRef;
   readonly committedBy: ActorRef;
   readonly workerId?: string;
+  readonly subjectId?: string;
   readonly lease?: LeaseInfo;
   readonly missionAuthority?: CapabilityEnvelope;
   readonly workerAuthority?: CapabilityEnvelope;
   readonly branch?: string;
   readonly repository?: string;
   readonly riskClass?: number;
+  /** A model's own risk assessment. May only raise effective risk, never lower the deterministic floor. */
+  readonly modelSuggestedRisk?: number;
+  /** Risk derived from evidence (e.g. diff size, blast radius). Same one-directional rule as modelSuggestedRisk. */
+  readonly evidenceDerivedRisk?: number;
   readonly approval?: ApprovalRef;
+  /** The concrete effect currently being proposed/executed, hashed and compared against approval.effectHash when supplied. */
+  readonly effectPayload?: Readonly<Record<string, unknown>>;
   readonly mergeEvidence?: MergeEvidence;
   readonly reconciliationEvidence?: ReconciliationEvidence;
   /**
@@ -204,17 +257,110 @@ function authorityExpanded(mission: CapabilityEnvelope, worker: CapabilityEnvelo
   );
 }
 
-function riskGateReason(
-  approvalRule: ApprovalRule,
+const HASH_ALGORITHM = "sha256";
+const EFFECT_HASH_VERSION = "development-effect-hash:v1";
+const AUTHORITY_ENVELOPE_HASH_VERSION = "development-authority-envelope-hash:v1";
+const POLICY_FINGERPRINT_VERSION = "development-policy-fingerprint:v1";
+
+// Reuses the repository's existing canonical-JSON encoder (already shared by
+// toolExecution.ts/quoteSendTool.ts) rather than inventing another one, per
+// the handover's "one canonical encoder" rule.
+function digest(prefix: string, value: unknown): string {
+  return `${prefix}:${createHash(HASH_ALGORITHM).update(canonicalJson(value), "utf8").digest("hex")}`;
+}
+
+export function computeEffectHash(input: {
+  readonly transitionId: DevelopmentTransitionId;
+  readonly subjectId: string;
+  readonly from: DevelopmentState;
+  readonly to: DevelopmentState;
+  readonly effectPayload: Readonly<Record<string, unknown>>;
+}): string {
+  return digest(EFFECT_HASH_VERSION, input);
+}
+
+export function computeAuthorityEnvelopeHash(envelope: CapabilityEnvelope): string {
+  return digest(AUTHORITY_ENVELOPE_HASH_VERSION, envelope);
+}
+
+/**
+ * Fingerprints only the decision-relevant fields of a transition
+ * definition, so an unrelated registry change doesn't invalidate an
+ * existing approval (handover "Policy fingerprint": "Unrelated policy
+ * changes should not necessarily invalidate the approval").
+ */
+export function computePolicyDecisionFingerprint(definition: TransitionDefinition): string {
+  return digest(POLICY_FINGERPRINT_VERSION, {
+    id: definition.id,
+    approval: definition.approval,
+    sideEffectClass: definition.sideEffectClass,
+    authoritativeCommitter: definition.authoritativeCommitter,
+    invariants: definition.invariants,
+  });
+}
+
+const RISK_FLOOR_BY_SIDE_EFFECT_CLASS: Record<TransitionDefinition["sideEffectClass"], number> = {
+  S0: 0,
+  S1: 0,
+  S2: 1,
+  S3: 1,
+  S4: 2,
+  S5: 3,
+};
+
+/**
+ * effectiveRisk = max(deterministic floor, riskClass, modelSuggestedRisk,
+ * evidenceDerivedRisk) — a caller/model may raise risk, never lower the
+ * floor below what the transition's own side-effect class demands.
+ */
+function computeEffectiveRisk(
+  definition: TransitionDefinition,
+  request: TransitionRequest,
+): number {
+  const floor = RISK_FLOOR_BY_SIDE_EFFECT_CLASS[definition.sideEffectClass];
+  return Math.max(
+    floor,
+    request.riskClass ?? 0,
+    request.modelSuggestedRisk ?? 0,
+    request.evidenceDerivedRisk ?? 0,
+  );
+}
+
+function approvalGateReason(
+  definition: TransitionDefinition,
   request: TransitionRequest,
 ): string | undefined {
-  if (approvalRule !== "risk_dependent") return undefined;
-  const riskClass = request.riskClass ?? 0;
-  if (riskClass < MIN_APPROVAL_REQUIRED_RISK_CLASS) return undefined;
+  if (definition.approval !== ("risk_dependent" satisfies ApprovalRule)) return undefined;
+
+  const effectiveRisk = computeEffectiveRisk(definition, request);
+  if (effectiveRisk < MIN_APPROVAL_REQUIRED_RISK_CLASS) return undefined;
 
   const approval = request.approval;
   if (!approval) return "OPERATOR_APPROVAL_REQUIRED";
-  if (approval.maxRiskClass < riskClass) return "OPERATOR_APPROVAL_REQUIRED";
+  if (approval.maxRiskClass < effectiveRisk) return "OPERATOR_APPROVAL_REQUIRED";
+  if (approval.transitionId !== request.transitionId) return "APPROVAL_TRANSITION_MISMATCH";
+  if (request.subjectId !== undefined && approval.subjectId !== request.subjectId) {
+    return "APPROVAL_SUBJECT_MISMATCH";
+  }
+  if (request.effectPayload !== undefined) {
+    const liveEffectHash = computeEffectHash({
+      transitionId: request.transitionId,
+      subjectId: request.subjectId ?? approval.subjectId,
+      from: request.from,
+      to: request.to,
+      effectPayload: request.effectPayload,
+    });
+    if (approval.effectHash !== liveEffectHash) return "APPROVAL_EFFECT_MISMATCH";
+  }
+  if (request.workerAuthority !== undefined) {
+    const liveAuthorityHash = computeAuthorityEnvelopeHash(request.workerAuthority);
+    if (approval.authorityEnvelopeHash !== liveAuthorityHash) {
+      return "APPROVAL_AUTHORITY_ENVELOPE_MISMATCH";
+    }
+  }
+  if (approval.policyDecisionFingerprint !== computePolicyDecisionFingerprint(definition)) {
+    return "APPROVAL_STALE_POLICY_CONTEXT";
+  }
   return undefined;
 }
 
@@ -305,8 +451,8 @@ export function evaluateDevelopmentTransition(request: TransitionRequest): Trans
     }
   }
 
-  const riskReason = riskGateReason(definition.approval, request);
-  if (riskReason) return rejected(request, riskReason);
+  const approvalReason = approvalGateReason(definition, request);
+  if (approvalReason) return rejected(request, approvalReason);
 
   if (
     request.expectedSubjectVersion !== undefined &&

@@ -4,6 +4,8 @@ import test from "node:test";
 import type { OmegaCompletionInput } from "../src/omega/policy.js";
 import {
   DEVELOPMENT_TRANSITIONS,
+  computeAuthorityEnvelopeHash,
+  computePolicyDecisionFingerprint,
   evaluateDevelopmentTransition,
   type CapabilityEnvelope,
   type TransitionRequest,
@@ -138,6 +140,15 @@ test("risk class 2 merge is admitted with matching explicit operator approval", 
         actorType: "operator",
         actorId: "benny",
         maxRiskClass: 2,
+        subjectId: "mission-1",
+        transitionId: "DEV_TRANSITION_READY_TO_MERGE_TO_MERGED",
+        proposalHash: "proposal-hash-opaque",
+        effectHash: "effect-hash-not-checked-without-effectPayload",
+        authorityEnvelopeHash: computeAuthorityEnvelopeHash(missionAuthority),
+        effectiveRisk: 2,
+        policyDecisionFingerprint: computePolicyDecisionFingerprint(
+          DEVELOPMENT_TRANSITIONS.DEV_TRANSITION_READY_TO_MERGE_TO_MERGED,
+        ),
       },
     }),
   );
