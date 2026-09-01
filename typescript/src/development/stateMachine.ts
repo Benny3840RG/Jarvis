@@ -62,10 +62,23 @@ export type CapabilityEnvelope = {
   readonly maxRiskClass: number;
 };
 
+/**
+ * Field names deliberately mirror the real lease shape already in use on
+ * `orchestrationSteps` (`convex/orchestrationState.ts`: `leaseOwner`,
+ * `leaseToken`, `leaseExpiresAt`) for vocabulary consistency across
+ * domains, even though Development leases are a distinct subject.
+ * `fencingToken` is a genuine extension: the real orchestration lease
+ * reissues a random UUID per lease with no monotonic ordering, so it
+ * cannot yet tell an old lease-holder it has been superseded. This kernel
+ * adds that as a strictly-increasing counter the caller must supply
+ * alongside `currentFencingToken` (the subject's latest known token,
+ * analogous to `currentSubjectVersion`).
+ */
 export type LeaseInfo = {
-  readonly leaseId: string;
-  readonly workerId: string;
-  readonly expiresAt: string;
+  readonly leaseToken: string;
+  readonly leaseOwner: string;
+  readonly leaseExpiresAt: string;
+  readonly fencingToken: number;
 };
 
 export type ApprovalRef = {
@@ -133,6 +146,8 @@ export type TransitionRequest = {
   readonly omegaCompletionInput?: OmegaCompletionInput;
   readonly expectedSubjectVersion?: number;
   readonly currentSubjectVersion?: number;
+  /** The subject's latest known fencing token, analogous to currentSubjectVersion. */
+  readonly currentFencingToken?: number;
 };
 
 export type RejectionDescriptor = {
@@ -268,11 +283,19 @@ export function evaluateDevelopmentTransition(request: TransitionRequest): Trans
   }
 
   if (request.lease) {
-    if (Date.parse(request.lease.expiresAt) <= Date.parse(request.now)) {
+    if (Date.parse(request.lease.leaseExpiresAt) <= Date.parse(request.now)) {
       return rejected(request, "LEASE_EXPIRED");
     }
-    if (request.workerId && request.lease.workerId !== request.workerId) {
+    if (request.workerId && request.lease.leaseOwner !== request.workerId) {
       return rejected(request, "LEASE_WORKER_MISMATCH");
+    }
+    if (
+      request.currentFencingToken !== undefined &&
+      request.lease.fencingToken < request.currentFencingToken
+    ) {
+      // A superseding lease has already been issued for this subject; an
+      // old fencing token must lose authority even if it hasn't expired.
+      return rejected(request, "STALE_FENCING_TOKEN");
     }
   }
 

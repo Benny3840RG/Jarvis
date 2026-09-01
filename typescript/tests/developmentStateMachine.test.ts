@@ -28,9 +28,10 @@ function baseRequest(overrides: Partial<TransitionRequest> = {}): TransitionRequ
     committedBy: { actorType: "controller", actorId: "development-controller" },
     workerId: "worker-1",
     lease: {
-      leaseId: "lease-1",
-      workerId: "worker-1",
-      expiresAt: "2026-09-01T01:00:00.000Z",
+      leaseToken: "lease-token-1",
+      leaseOwner: "worker-1",
+      leaseExpiresAt: "2026-09-01T01:00:00.000Z",
+      fencingToken: 1,
     },
     missionAuthority,
     workerAuthority: missionAuthority,
