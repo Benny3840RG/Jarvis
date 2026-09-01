@@ -149,6 +149,8 @@ export type MergeEvidence = {
    * ordinary head-integrity check below.
    */
   readonly operationOutcome?: MergeOperationOutcome;
+  /** Explicit unrecoverable-failure signal (e.g. a rejected/closed PR). Defaults to retryable when omitted. */
+  readonly retryable?: boolean;
 };
 
 /**
@@ -210,11 +212,20 @@ export type RejectionDescriptor = {
   readonly reasonCodes: readonly string[];
 };
 
+/**
+ * handover "Failure semantics": FAILED derives a retry disposition rather
+ * than being treated as automatically retriable. Only ever set alongside
+ * `MERGE_OPERATION_FAILED` — REJECTED/INDETERMINATE outcomes, and ALLOWED
+ * evaluations, never carry one.
+ */
+export type RetryDisposition = "RESUME_SAME_OPERATION" | "NEW_EXECUTION_REQUIRED" | "NO_RETRY";
+
 export type TransitionEvaluation = {
   readonly allowed: boolean;
   readonly outcome: "ALLOWED" | "REJECTED";
   readonly reasons: readonly string[];
   readonly rejection?: RejectionDescriptor;
+  readonly retryDisposition?: RetryDisposition;
 };
 
 const MIN_APPROVAL_REQUIRED_RISK_CLASS = 2;
@@ -226,6 +237,7 @@ function allowed(): TransitionEvaluation {
 function rejected(
   request: TransitionRequest,
   reasonCodes: string | readonly string[],
+  retryDisposition?: RetryDisposition,
 ): TransitionEvaluation {
   const reasons = Object.freeze(
     Array.isArray(reasonCodes) ? [...reasonCodes] : [reasonCodes as string],
@@ -240,6 +252,7 @@ function rejected(
       requestedBy: request.requestedBy,
       reasonCodes: reasons,
     }),
+    ...(retryDisposition ? { retryDisposition } : {}),
   });
 }
 
@@ -378,6 +391,34 @@ function mergeOperationOutcomeGateReason(mergeEvidence: MergeEvidence): string |
   }
 }
 
+/**
+ * handover "Retry/resume": retry re-attempts the same operation only when
+ * its effect hasn't changed underneath it; a changed effect needs a new
+ * proposal/execution, never a blind resume.
+ *
+ * Deliberately compares against `approval.approvedSha` rather than
+ * recomputing the generic effect hash: a mismatched effect hash is already
+ * its own earlier, harder failure (`APPROVAL_EFFECT_MISMATCH`) that rejects
+ * before this gate is ever reached, so duplicating that check here would be
+ * dead code. `approvedSha` is a distinct, narrower signal — specifically
+ * "did the reviewed head move" — that can differ independently.
+ */
+function deriveFailedMergeRetryDisposition(
+  mergeEvidence: MergeEvidence,
+  request: TransitionRequest,
+): RetryDisposition {
+  if (mergeEvidence.retryable === false) return "NO_RETRY";
+
+  if (
+    request.approval?.approvedSha !== undefined &&
+    mergeEvidence.reviewedHeadSha !== request.approval.approvedSha
+  ) {
+    return "NEW_EXECUTION_REQUIRED";
+  }
+
+  return "RESUME_SAME_OPERATION";
+}
+
 function reconciliationGateReason(
   definition: TransitionDefinition,
   request: TransitionRequest,
@@ -464,7 +505,13 @@ export function evaluateDevelopmentTransition(request: TransitionRequest): Trans
 
   if (request.mergeEvidence) {
     const mergeOutcomeReason = mergeOperationOutcomeGateReason(request.mergeEvidence);
-    if (mergeOutcomeReason) return rejected(request, mergeOutcomeReason);
+    if (mergeOutcomeReason) {
+      const retryDisposition =
+        mergeOutcomeReason === "MERGE_OPERATION_FAILED"
+          ? deriveFailedMergeRetryDisposition(request.mergeEvidence, request)
+          : undefined;
+      return rejected(request, mergeOutcomeReason, retryDisposition);
+    }
 
     if (request.mergeEvidence.reviewedHeadSha !== request.mergeEvidence.currentHeadSha) {
       return rejected(request, "HEAD_NOT_CURRENT");
