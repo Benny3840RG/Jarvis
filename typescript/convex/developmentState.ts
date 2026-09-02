@@ -30,6 +30,8 @@ import {
   developmentLeaseValidator,
   developmentMergeEvidenceValidator,
   developmentReconciliationEvidenceValidator,
+  developmentReviewEvidenceValidator,
+  developmentVerificationEvidenceValidator,
   developmentStateValidator,
   developmentSubjectDocumentValidator,
   developmentTransitionIdValidator,
@@ -155,6 +157,8 @@ function requestFingerprint(input: {
   effectPayload?: unknown;
   mergeEvidence?: unknown;
   reconciliationEvidence?: unknown;
+  verificationEvidence?: unknown;
+  reviewEvidence?: unknown;
   mergeReceiptKey?: string;
   expectedSubjectVersion?: number;
 }): string {
@@ -182,6 +186,8 @@ function requestFingerprint(input: {
     ...optionalField("effectPayload", input.effectPayload),
     ...optionalField("mergeEvidence", input.mergeEvidence),
     ...optionalField("reconciliationEvidence", input.reconciliationEvidence),
+    ...optionalField("verificationEvidence", input.verificationEvidence),
+    ...optionalField("reviewEvidence", input.reviewEvidence),
     ...optionalField("mergeReceiptKey", input.mergeReceiptKey),
     ...optionalField("expectedSubjectVersion", input.expectedSubjectVersion),
   });
@@ -626,6 +632,8 @@ export const commit = mutation({
     effectPayload: v.optional(v.record(v.string(), v.any())),
     mergeEvidence: v.optional(developmentMergeEvidenceValidator),
     reconciliationEvidence: v.optional(developmentReconciliationEvidenceValidator),
+    verificationEvidence: v.optional(developmentVerificationEvidenceValidator),
+    reviewEvidence: v.optional(developmentReviewEvidenceValidator),
     mergeReceiptKey: v.optional(v.string()),
     expectedSubjectVersion: v.optional(v.number()),
   },
@@ -883,6 +891,7 @@ export const commit = mutation({
                                       orchestrationRun.policyFingerprint
                                   ? "APPROVAL_STALE_POLICY_CONTEXT"
                                   : typeof mergeArguments?.effectiveRisk !== "number" ||
+                                      !Number.isFinite(mergeArguments.effectiveRisk) ||
                                       mergeArguments.effectiveRisk < 4
                                     ? "MERGE_RISK_BINDING_INVALID"
                                     : undefined;
@@ -976,6 +985,8 @@ export const commit = mutation({
             }
           : args.mergeEvidence,
       reconciliationEvidence: args.reconciliationEvidence,
+      verificationEvidence: args.verificationEvidence,
+      reviewEvidence: args.reviewEvidence,
       expectedSubjectVersion: args.expectedSubjectVersion,
       currentSubjectVersion: subject.subjectVersion,
       currentFencingToken: orchestrationFencingToken ?? currentFencingToken,
@@ -992,7 +1003,19 @@ export const commit = mutation({
     // A rejected command may name a self/nonexistent causal parent. That is
     // evidence about the rejected *attempt*, not a valid causal edge in
     // authoritative event history, so only a verified prior parent is kept.
-    const commitContext = { subjectId, eventId, correlationId, causationId: validCausationId };
+    const evidenceIds = [
+      ...(mergeReceiptKey ? [mergeReceiptKey] : []),
+      ...(request.verificationEvidence ? [request.verificationEvidence.receiptId] : []),
+      ...(request.reviewEvidence ? [request.reviewEvidence.receiptId] : []),
+      ...(request.reconciliationEvidence ? [request.reconciliationEvidence.observationSource] : []),
+    ];
+    const commitContext = {
+      subjectId,
+      eventId,
+      correlationId,
+      causationId: validCausationId,
+      evidenceIds,
+    };
 
     const event = evaluation.allowed
       ? buildEvent("DEV_TRANSITION_COMMITTED", request, commitContext, {

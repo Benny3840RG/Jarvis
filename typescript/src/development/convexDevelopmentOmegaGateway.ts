@@ -68,6 +68,10 @@ export class ConvexDevelopmentOmegaGateway implements DevelopmentOmegaGateway {
       missionId: input.missionId,
     })) as { state: string } | null;
     if (!mission) throw new Error("Omega mission does not exist.");
+    // A retried/duplicate call landing after a prior call already completed
+    // the mission is a legitimate idempotent no-op, not an error -- mirrors
+    // recordPostMergeObservation's own idempotent evidence/proof writes.
+    if (mission.state === "complete") return;
     if (mission.state === "active" || mission.state === "partial") {
       await this.client.mutation(transitionMission, {
         serviceToken: this.serviceToken,

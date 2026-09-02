@@ -110,6 +110,18 @@ export const developmentReconciliationEvidenceValidator = v.object({
   observationSource: v.string(),
 });
 
+export const developmentVerificationEvidenceValidator = v.object({
+  checksPassed: v.boolean(),
+  hasBlockingFindings: v.boolean(),
+  receiptId: v.string(),
+});
+
+export const developmentReviewEvidenceValidator = v.object({
+  reviewComplete: v.boolean(),
+  hasBlockingFindings: v.boolean(),
+  receiptId: v.string(),
+});
+
 export const developmentSubjectDocumentValidator = v.object({
   _id: v.id("developmentSubjects"),
   _creationTime: v.number(),

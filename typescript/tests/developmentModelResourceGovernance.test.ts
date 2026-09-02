@@ -206,22 +206,57 @@ test("a spend ceiling fails safely when its usage price is only estimated", () =
   assert.ok(check.reasons.includes("COST_PROVENANCE_INSUFFICIENT"));
 });
 
+function invocationRecord(overrides: Partial<ModelInvocationRecord> = {}): ModelInvocationRecord {
+  return {
+    provider: "openai",
+    model: "gpt-5.6",
+    workUnitId: "mission-1:build",
+    purpose: "implementation",
+    inputTokens: 100,
+    outputTokens: 50,
+    estimatedCost: 0.01,
+    costProvenance: "VERIFIED_PROVIDER",
+    latencyMs: 400,
+    retryCount: 0,
+    occurredAt: "2026-09-01T00:00:00.000Z",
+    correlationId: "correlation-1",
+    ...overrides,
+  };
+}
+
 test("expensive-model escalation is bounded and every escalation is recorded with a reason", () => {
   const budget: CognitiveBudget = { maxExpensiveEscalations: 1 };
 
-  const first = deriveEscalationDisposition(budget, {
-    priorEscalationCount: 0,
+  const first = deriveEscalationDisposition(budget, [], {
     reason: "repeated_verification_failure",
   });
   assert.equal(first.permitted, true);
   assert.equal(first.reason, "repeated_verification_failure");
 
-  const second = deriveEscalationDisposition(budget, {
-    priorEscalationCount: 1,
+  const oneEscalationSoFar = [invocationRecord({ escalationDecision: "escalated" })];
+  const second = deriveEscalationDisposition(budget, oneEscalationSoFar, {
     reason: "unresolved_contradiction",
   });
   assert.equal(second.permitted, false);
   assert.equal(second.disallowedReason, "ESCALATION_LIMIT_EXCEEDED");
+});
+
+test("escalation disposition derives its count from durable usage history, not a caller-supplied number", () => {
+  // A caller cannot defeat the bounded-escalation guarantee by passing a
+  // miscounted or reset local variable -- there is no such parameter any
+  // more; the count is always re-derived from the records themselves.
+  const budget: CognitiveBudget = { maxExpensiveEscalations: 2 };
+  const twoEscalationsSoFar = [
+    invocationRecord({ workUnitId: "mission-1:build-1", escalationDecision: "escalated" }),
+    invocationRecord({ workUnitId: "mission-1:build-2", escalationDecision: "escalated" }),
+  ];
+
+  const result = deriveEscalationDisposition(budget, twoEscalationsSoFar, {
+    reason: "low_confidence_high_consequence",
+  });
+
+  assert.equal(result.permitted, false);
+  assert.equal(result.disallowedReason, "ESCALATION_LIMIT_EXCEEDED");
 });
 
 test("repeated failed model calls do not loop forever", () => {

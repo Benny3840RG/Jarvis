@@ -358,7 +358,6 @@ export type EscalationReason =
   | "low_confidence_high_consequence";
 
 export type EscalationRequest = {
-  readonly priorEscalationCount: number;
   readonly reason: EscalationReason;
 };
 
@@ -370,14 +369,22 @@ export type EscalationDisposition =
  * Every escalation must carry a reason (handover: "Every escalation should
  * carry a reason") and is bounded by the mission's cognitive budget so a
  * model cannot escalate indefinitely chasing a better answer.
+ *
+ * The escalation count is derived from `usageSoFar` via `aggregateModelUsage`
+ * rather than accepted as a caller-supplied number, matching
+ * `checkCognitiveBudget`'s own signature: a caller that miscounts or resets
+ * a local counter between calls must not be able to defeat the bounded-
+ * escalation guarantee this function exists to enforce.
  */
 export function deriveEscalationDisposition(
   budget: CognitiveBudget,
+  usageSoFar: readonly ModelInvocationRecord[],
   request: EscalationRequest,
 ): EscalationDisposition {
+  const priorEscalationCount = aggregateModelUsage(usageSoFar).totalEscalations;
   if (
     budget.maxExpensiveEscalations !== undefined &&
-    request.priorEscalationCount >= budget.maxExpensiveEscalations
+    priorEscalationCount >= budget.maxExpensiveEscalations
   ) {
     return { permitted: false, disallowedReason: "ESCALATION_LIMIT_EXCEEDED" };
   }

@@ -58,7 +58,7 @@ async function seedSubject(
   t: ReturnType<typeof harness>,
   input: {
     subjectId?: string;
-    state?: "CLAIMED" | "READY" | "READY_TO_MERGE" | "MERGED";
+    state?: "CLAIMED" | "READY" | "VERIFYING" | "REVIEW" | "READY_TO_MERGE" | "MERGED";
     fencingToken?: number;
     orchestrationRunId?: string;
     orchestrationNodeId?: string;
@@ -188,7 +188,10 @@ async function seedBoundClaimedSubject(t: ReturnType<typeof harness>) {
   return grant;
 }
 
-async function seedAuthoritativeGitHubMerge(t: ReturnType<typeof harness>) {
+async function seedAuthoritativeGitHubMerge(
+  t: ReturnType<typeof harness>,
+  overrides: { effectiveRisk?: number } = {},
+) {
   const reviewedHeadSha = "a".repeat(40);
   const mergeCommitSha = "b".repeat(40);
   const actionId = "github-merge-action-1";
@@ -220,7 +223,7 @@ async function seedAuthoritativeGitHubMerge(t: ReturnType<typeof harness>) {
       mergeMethod: "squash",
       authorityEnvelopeHash,
       policyDecisionFingerprint: policyFingerprint,
-      effectiveRisk: 4,
+      effectiveRisk: overrides.effectiveRisk ?? 4,
     },
     rationale: "Merge the approved and independently reviewed pull request.",
     requiredAuthority: "T3",
@@ -947,6 +950,23 @@ describe("developmentState.commit", () => {
     expect(outcome.reasons).toContain("APPROVAL_STALE_POLICY_CONTEXT");
   });
 
+  it("never admits a merge whose action arguments carry a non-finite effectiveRisk", async () => {
+    // A NaN effectiveRisk can never even reach the trusted risk-floor check
+    // in practice: canonicalJson (shared by every fingerprint in this
+    // boundary) already refuses to hash a non-finite number, so
+    // re-fingerprinting the stored ToolAction fails closed first, before
+    // the explicit `Number.isFinite` guard added to the risk check itself
+    // would even run. This proves the outer guard; the inner one is
+    // defense-in-depth for a path that isn't reachable without it, in case
+    // the fingerprint check is ever reordered or bypassed.
+    const t = harness();
+    await seedSubject(t, { state: "READY_TO_MERGE", fencingToken: 1 });
+
+    await expect(seedAuthoritativeGitHubMerge(t, { effectiveRisk: Number.NaN })).rejects.toThrow(
+      /Canonical JSON rejects non-finite numbers/,
+    );
+  });
+
   it("records a direct COMPLETE attempt as a rejection -- real Omega completion must go through omegaMissions.transition", async () => {
     const t = harness();
     await seedSubject(t, { state: "MERGED" });
@@ -967,5 +987,100 @@ describe("developmentState.commit", () => {
     expect(outcome.reasons).toContain("OMEGA_COMPLETION_REQUIRES_AUTHORITY_PATH");
     expect(outcome.subject.state).toBe("MERGED");
     expect(await auditEventsFor(t, "request-1")).toHaveLength(1);
+  });
+});
+
+describe("developmentState.commit -- verification/review evidence gates", () => {
+  it("rejects VERIFYING -> REVIEW through the real commit boundary when no verification evidence is supplied", async () => {
+    const t = harness();
+    await seedSubject(t, { state: "VERIFYING" });
+
+    const outcome = await t.mutation(api.developmentState.commit, {
+      serviceToken: SERVICE_TOKEN,
+      subjectId: "mission-1",
+      eventId: "event-1",
+      requestId: "request-1",
+      correlationId: "correlation-1",
+      transitionId: "DEV_TRANSITION_VERIFYING_TO_REVIEW",
+      to: "REVIEW",
+      requestedBy: { actorType: "worker", actorId: "verifier-1" },
+      committedBy: { actorType: "controller", actorId: "development-controller" },
+    });
+
+    expect(outcome.kind).toBe("REJECTED");
+    expect(outcome.reasons).toContain("VERIFICATION_EVIDENCE_REQUIRED");
+    expect(outcome.subject.state).toBe("VERIFYING");
+  });
+
+  it("commits VERIFYING -> REVIEW through the real commit boundary once clean verification evidence is supplied", async () => {
+    const t = harness();
+    await seedSubject(t, { state: "VERIFYING" });
+
+    const outcome = await t.mutation(api.developmentState.commit, {
+      serviceToken: SERVICE_TOKEN,
+      subjectId: "mission-1",
+      eventId: "event-1",
+      requestId: "request-1",
+      correlationId: "correlation-1",
+      transitionId: "DEV_TRANSITION_VERIFYING_TO_REVIEW",
+      to: "REVIEW",
+      requestedBy: { actorType: "worker", actorId: "verifier-1" },
+      committedBy: { actorType: "controller", actorId: "development-controller" },
+      verificationEvidence: {
+        checksPassed: true,
+        hasBlockingFindings: false,
+        receiptId: "verification-receipt-1",
+      },
+    });
+
+    expect(outcome.kind).toBe("COMMITTED");
+    expect(outcome.subject.state).toBe("REVIEW");
+    expect(outcome.event.evidenceIds).toContain("verification-receipt-1");
+  });
+
+  it("rejects REVIEW -> READY_TO_MERGE through the real commit boundary when no review evidence is supplied", async () => {
+    const t = harness();
+    await seedSubject(t, { state: "REVIEW" });
+
+    const outcome = await t.mutation(api.developmentState.commit, {
+      serviceToken: SERVICE_TOKEN,
+      subjectId: "mission-1",
+      eventId: "event-1",
+      requestId: "request-1",
+      correlationId: "correlation-1",
+      transitionId: "DEV_TRANSITION_REVIEW_TO_READY_TO_MERGE",
+      to: "READY_TO_MERGE",
+      requestedBy: { actorType: "worker", actorId: "reviewer-1" },
+      committedBy: { actorType: "controller", actorId: "development-controller" },
+    });
+
+    expect(outcome.kind).toBe("REJECTED");
+    expect(outcome.reasons).toContain("REVIEW_EVIDENCE_REQUIRED");
+    expect(outcome.subject.state).toBe("REVIEW");
+  });
+
+  it("commits REVIEW -> READY_TO_MERGE through the real commit boundary once a clean completed review is supplied", async () => {
+    const t = harness();
+    await seedSubject(t, { state: "REVIEW" });
+
+    const outcome = await t.mutation(api.developmentState.commit, {
+      serviceToken: SERVICE_TOKEN,
+      subjectId: "mission-1",
+      eventId: "event-1",
+      requestId: "request-1",
+      correlationId: "correlation-1",
+      transitionId: "DEV_TRANSITION_REVIEW_TO_READY_TO_MERGE",
+      to: "READY_TO_MERGE",
+      requestedBy: { actorType: "worker", actorId: "reviewer-1" },
+      committedBy: { actorType: "controller", actorId: "development-controller" },
+      reviewEvidence: {
+        reviewComplete: true,
+        hasBlockingFindings: false,
+        receiptId: "review-receipt-1",
+      },
+    });
+
+    expect(outcome.kind).toBe("COMMITTED");
+    expect(outcome.subject.state).toBe("READY_TO_MERGE");
   });
 });

@@ -64,3 +64,25 @@ test("Convex Omega gateway reuses evidence, proof, and completion mutations in o
     ],
   );
 });
+
+test("requestCompletion no-ops when the mission is already complete, instead of throwing", async () => {
+  // A retried post-merge observation (transient failure, duplicate webhook
+  // delivery) can land after a prior call already completed the mission.
+  // recordPostMergeObservation's evidence/proof writes are idempotent; this
+  // must be too, matching every other commit/idempotency path in this PR.
+  const mutationCalls: Array<{ name: string; args: Record<string, unknown> }> = [];
+  const client = {
+    async mutation(reference: unknown, args: Record<string, unknown>) {
+      mutationCalls.push({ name: String(reference), args });
+      return {};
+    },
+    async query() {
+      return { state: "complete" };
+    },
+  };
+  const gateway = new ConvexDevelopmentOmegaGateway(client, "service-token", "approval-token");
+
+  await gateway.requestCompletion({ missionId: "mission-1", residualUncertainty: 0 });
+
+  assert.deepEqual(mutationCalls, []);
+});

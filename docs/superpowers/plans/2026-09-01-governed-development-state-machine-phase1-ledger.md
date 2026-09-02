@@ -128,6 +128,100 @@ to this ledger, so none is fabricated. Repository runtime adapters now record
 provider-returned token/cache counts when available; costs remain explicitly
 estimated unless provider billing marks them verified.
 
+## Second independent review of the full diff (Claude, exhaustive pass)
+
+A follow-up max-effort review covered the remainder of the diff not already
+read in the earlier targeted pass (`developmentState.ts` in full,
+`stateMachine.ts`, `transitionRegistry.ts`, `reducer.ts`, `events.ts`,
+`omegaMissions.ts`, `convexDevelopmentOmegaGateway.ts`,
+`developmentCompletion.ts`, `modelResourceGovernance.ts`, `toolActions.ts`,
+`externalReconciliations.ts`, the reconciliation adapters, the non-fencing
+`orchestrationState.ts` changes, and the alignment tests). One initial
+candidate finding (`INDETERMINATE_TO_MERGED` accepting forged reconciliation
+evidence) was re-traced and found to be a false positive -- `trustedMergeReason`
+is gated on `args.to === "MERGED"` regardless of transition ID, so that path
+is genuinely closed. Six real findings survived verification, all fixed:
+
+- **Critical: `gates`/`evidenceRequired` were pure documentation, never
+  enforced.** `evaluateDevelopmentTransition` never read those two registry
+  fields; only `approval === "risk_dependent"` (merge only) triggered any
+  real check. A caller with the shared service token could walk
+  `VERIFYING -> REVIEW -> READY_TO_MERGE` -- the states a human reads as
+  "verified" and "reviewed" -- with zero verification/review evidence,
+  because nothing in the kernel or the Convex boundary checked for it
+  (confirmed: no durable verification/review receipt concept exists
+  anywhere in this codebase yet, and no test exercised these two
+  transitions at all). Fixed by adding real `VerificationEvidence`/
+  `ReviewEvidence` types and gates to the pure kernel (`stateMachine.ts`),
+  keyed off each transition's own `evaluator` string
+  (`deterministic_verification_success_gate`,
+  `deterministic_review_findings_gate`, `deterministic_review_readiness_gate`)
+  -- evidence *presence* is itself required, not just checked when supplied
+  (unlike `mergeEvidence`, which can rely on the Convex boundary's separate
+  `trustedMergeReason` derivation; no such derivation exists yet for
+  verification/review, so the kernel is the only line of defense).
+  Threaded through `developmentState.ts`'s `commit` mutation args, request
+  fingerprint, and validators, the same way `mergeEvidence`/
+  `reconciliationEvidence` already are. This does not yet durably derive
+  verification/review evidence from trusted rows the way merge evidence
+  is derived from ToolAction/reconciliation records -- that is real,
+  deferred pipeline work (Task 11's remaining execution/verification/review
+  steps) -- but a caller can no longer skip it silently. 10 new pure-kernel
+  tests (`developmentVerificationReviewGates.test.ts`) + 4 new Convex tests
+  proving the real commit boundary enforces it too.
+- **`omegaMissions.ts`: `residualUncertainty` remains caller-supplied, now
+  with wider blast radius.** Every other completion input (criteria, proofs,
+  contradictions, external effects) is derived from durable rows;
+  `residualUncertainty` only ever gets a bounds check
+  (`evaluateOmegaCompletion`: finite, `[0,1]`, `<= uncertaintyBudget`), and
+  it predates this PR as an established part of the real ΩΣ contract. Since
+  this PR wires `projectOmegaDevelopmentCompletion` into the same
+  transition, a wrong value now also flips the linked Development subject
+  to `COMPLETE`. Judged out of scope to redesign here -- it is pre-existing,
+  reused ΩΣ authority, and it can only be reached after every other,
+  fully row-derived completion check has already passed (a passing proof
+  per criterion, independent proof for R3/R4, no unresolved contradictions,
+  no unreconciled external effects) -- so it narrows an already-evidenced
+  completion rather than substituting for evidence. Documented in place
+  with an explicit code comment rather than silently left unremarked or
+  redesigned unilaterally.
+- **`convexDevelopmentOmegaGateway.ts`: `requestCompletion` broke idempotent
+  retry.** Threw when a mission was already `complete` instead of no-oping,
+  unlike every other commit/idempotency path in this PR. Fixed: returns
+  early on `mission.state === "complete"`. 1 new test.
+- **`developmentState.ts`: committed/rejected events never recorded
+  `evidenceIds`**, including verified merges -- `commitContext` never
+  populated it. Fixed: now includes the merge receipt key, verification/
+  review receipt IDs, and reconciliation observation source when present on
+  the request. 1 new assertion (existing verification-gate test extended).
+- **`modelResourceGovernance.ts`: `deriveEscalationDisposition` trusted a
+  caller-supplied `priorEscalationCount`** instead of deriving it from
+  `aggregateModelUsage`, unlike `checkCognitiveBudget` in the same file.
+  No caller existed yet, so unreachable in practice, but the API invited
+  misuse. Fixed: now takes `usageSoFar` and derives the count internally,
+  matching `checkCognitiveBudget`'s own signature. Existing test updated,
+  1 new test added proving derivation instead of trust.
+- **`developmentState.ts`: the merge risk-floor check didn't reject `NaN`**
+  independently (`NaN < 4` is `false`). Investigating this revealed it is
+  even less reachable than initially assessed: `canonicalJson` (shared by
+  every fingerprint in this boundary) already refuses to hash a non-finite
+  number, so re-fingerprinting the stored ToolAction fails closed *before*
+  the risk check would ever run -- proven by a test that a NaN
+  `effectiveRisk` throws during fixture construction itself, not merely at
+  commit time. Added the explicit `Number.isFinite` check anyway as
+  defense-in-depth for a path that already has an outer guard, in case the
+  fingerprint check is ever reordered.
+
+Two lower-severity, quality-only findings from the same review (a ~60-line
+15-deep nested ternary computing merge rejection reasons in
+`developmentState.ts`, and two independent DB reads awaited sequentially
+instead of in parallel in the same file) were reported but not fixed --
+maintainability/performance, not correctness or security, and out of scope
+for this pass.
+
+Full `npm run check` green after all fixes: 1,117 node tests (was 1,105),
+224 Convex tests (was 219), type-check/lint/format/openapi all clean.
+
 ## Independent review of the GitHub mission slice (Claude, post-integration)
 
 This branch is shared between two agents (ChatGPT and Claude); the commit
