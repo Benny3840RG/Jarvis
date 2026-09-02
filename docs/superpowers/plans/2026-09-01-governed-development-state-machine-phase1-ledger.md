@@ -5,8 +5,8 @@ contracts and durable Jarvis records; checklist state here grants no authority.
 
 ## Current task
 
-Verify the governed GitHub vertical slice, perform duplicate-authority review,
-and assemble the pull-request evidence package.
+Hand off the published governed GitHub vertical slice for independent review
+and merge-authority evaluation in pull request #415.
 
 ## Completed in this work sequence
 
@@ -50,10 +50,10 @@ and assemble the pull-request evidence package.
 - A test fixture initially used unsupported trigger source `webhook`; corrected
   to the existing canonical `http` source before evaluating the intended RED
   failures.
-- Direct Git push is blocked because this environment has no HTTPS Git
-  credential. Local commits remain intact; an installed GitHub connector will
-  be evaluated for safe branch/PR publication after the implementation is
-  verified.
+- Direct Git push was blocked because this environment has no HTTPS Git
+  credential. Publication used the authenticated GitHub object/ref path with a
+  non-forced fast-forward; the assembled remote tree was required to equal the
+  locally verified tree before the branch ref moved.
 - Convex-shared hashing initially imported Node-only crypto. Replaced with a
   standard-vector-tested isomorphic SHA-256 primitive.
 - ΩΣ completion initially inferred its Development subject from ID equality.
@@ -91,13 +91,28 @@ and assemble the pull-request evidence package.
 - A real external mission run requires configured GitHub, Convex service and
   independent-proof approval credentials. No production credentials were
   requested or used during deterministic implementation/tests.
-- Branch publication via ordinary Git is credential-blocked in this runtime.
+- Pull request #415 remains draft because the installed ready-for-review
+  mutation requests a GitHub GraphQL field that no longer exists
+  (`Repository.fullDatabaseId`). The evidence package is complete and both
+  repository checks pass; independent review and merge remain intentionally
+  unexercised.
 
 ## Next task
 
-Publish the integrated branch and assemble the pull-request evidence summary;
-the remote deterministic specification validator has been merged and the full
-post-merge test gate is green.
+An authorised collaborator must clear the draft flag and provide independent
+review. Merge may proceed only after that review establishes authority and the
+required checks remain green.
+
+## Publication evidence
+
+- Remote branch: `agent/governed-dev-state-machine-phase1`.
+- Pull request: #415, `feat: complete governed development mission Phase 1`.
+- Published implementation commit: `57db34ab4491514cfa2cb9836761c22688c47511`.
+- Verified local and remote tree:
+  `11e34d77d14bbcf151704fb1e839431d492cdee0`.
+- GitHub TypeScript checks: passed.
+- GitHub Copilot Review template check: passed after replacing the inherited
+  placeholder with concrete scope findings.
 
 ## Model/resource usage
 
