@@ -21,6 +21,13 @@ export type GeminiTotalityDraft = TotalityDraft;
 export interface GeminiTotalityResult {
   responseId: string | null;
   draft: GeminiTotalityDraft;
+  modelUsage?: {
+    provider: "gemini";
+    model: string;
+    inputTokens: number;
+    outputTokens: number;
+    cachedInputTokens?: number;
+  };
 }
 
 export interface GeminiTotalityConfig {
@@ -53,7 +60,27 @@ type GeminiResponsePayload = {
   candidates?: unknown;
   promptFeedback?: { blockReason?: unknown };
   error?: { message?: unknown; status?: unknown };
+  usageMetadata?: unknown;
 };
+
+function nonNegativeInteger(value: unknown): number | undefined {
+  return Number.isSafeInteger(value) && (value as number) >= 0 ? (value as number) : undefined;
+}
+
+function extractUsage(payload: GeminiResponsePayload, model: string) {
+  if (!isRecord(payload.usageMetadata)) return undefined;
+  const inputTokens = nonNegativeInteger(payload.usageMetadata.promptTokenCount);
+  const outputTokens = nonNegativeInteger(payload.usageMetadata.candidatesTokenCount);
+  if (inputTokens === undefined || outputTokens === undefined) return undefined;
+  const cachedInputTokens = nonNegativeInteger(payload.usageMetadata.cachedContentTokenCount);
+  return {
+    provider: "gemini" as const,
+    model,
+    inputTokens,
+    outputTokens,
+    ...(cachedInputTokens === undefined ? {} : { cachedInputTokens }),
+  };
+}
 
 function cleanRequiredSecret(value: string | undefined, field: string): string {
   if (value === undefined || value.trim().length === 0) {
@@ -225,9 +252,11 @@ export class GeminiTotalityReasoner {
 
       const outputText = extractOutputText(payload);
       const parsed = parseTotalityDraft(JSON.parse(outputText) as unknown);
+      const usage = extractUsage(payload, this.config.model);
       return {
         responseId: typeof payload.responseId === "string" ? payload.responseId : null,
         draft: parsed,
+        ...(usage ? { modelUsage: usage } : {}),
       };
     } catch (error: unknown) {
       if (error instanceof GeminiRequestError) throw error;

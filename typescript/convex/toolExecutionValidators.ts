@@ -23,6 +23,7 @@ export const toolExecutionErrorCodeValidator = v.union(
   v.literal("reconciliation-unavailable"),
   v.literal("approval-expired"),
   v.literal("approval-consumed"),
+  v.literal("precondition-failed"),
   v.literal("safety-blocked"),
 );
 

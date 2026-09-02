@@ -110,8 +110,8 @@ test("a failed merge operation is rejected with a distinct reason from indetermi
 
 test("reconciliation to MERGED requires authoritative external observation, not mere assertion", () => {
   const withoutObservation = evaluateDevelopmentTransition({
-    transitionId: "DEV_TRANSITION_RECONCILIATION_OPEN_TO_MERGED",
-    from: "RECONCILIATION_OPEN",
+    transitionId: "DEV_TRANSITION_INDETERMINATE_TO_MERGED",
+    from: "INDETERMINATE",
     to: "MERGED",
     now: "2026-09-01T00:00:00.000Z",
     requestedBy: { actorType: "reconciler", actorId: "reconciler-1" },
@@ -122,8 +122,8 @@ test("reconciliation to MERGED requires authoritative external observation, not 
   assert.ok(withoutObservation.reasons.includes("RECONCILIATION_EXTERNAL_OBSERVATION_REQUIRED"));
 
   const withObservation = evaluateDevelopmentTransition({
-    transitionId: "DEV_TRANSITION_RECONCILIATION_OPEN_TO_MERGED",
-    from: "RECONCILIATION_OPEN",
+    transitionId: "DEV_TRANSITION_INDETERMINATE_TO_MERGED",
+    from: "INDETERMINATE",
     to: "MERGED",
     now: "2026-09-01T00:00:00.000Z",
     requestedBy: { actorType: "reconciler", actorId: "reconciler-1" },
@@ -143,8 +143,8 @@ test("elapsed time alone (a timeout) leaves reconciliation open rather than reso
   // observation attempt, but must not automatically promote INDETERMINATE
   // to FAILED" -- and symmetrically must not promote it to MERGED either.
   const timeoutOnly = evaluateDevelopmentTransition({
-    transitionId: "DEV_TRANSITION_RECONCILIATION_OPEN_TO_MERGED",
-    from: "RECONCILIATION_OPEN",
+    transitionId: "DEV_TRANSITION_INDETERMINATE_TO_MERGED",
+    from: "INDETERMINATE",
     to: "MERGED",
     now: "2026-09-05T00:00:00.000Z",
     requestedBy: { actorType: "reconciler", actorId: "reconciler-1" },
@@ -160,8 +160,8 @@ test("elapsed time alone (a timeout) leaves reconciliation open rather than reso
   assert.ok(timeoutOnly.reasons.includes("RECONCILIATION_EXTERNAL_OBSERVATION_REQUIRED"));
 
   const observedNotMerged = evaluateDevelopmentTransition({
-    transitionId: "DEV_TRANSITION_RECONCILIATION_OPEN_TO_MERGED",
-    from: "RECONCILIATION_OPEN",
+    transitionId: "DEV_TRANSITION_INDETERMINATE_TO_MERGED",
+    from: "INDETERMINATE",
     to: "MERGED",
     now: "2026-09-05T00:00:00.000Z",
     requestedBy: { actorType: "reconciler", actorId: "reconciler-1" },

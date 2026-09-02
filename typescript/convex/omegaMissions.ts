@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 
 import { evaluateOmegaCompletion, canTransitionOmegaMission } from "../src/omega/policy.js";
+import { projectOmegaDevelopmentCompletion } from "./developmentState.js";
 import { requireApprovalToken, requireOwner } from "./authHelpers.js";
 import {
   omegaAcceptanceCriterionValidator,
@@ -457,6 +458,22 @@ export const transition = mutation({
     serviceToken: v.string(),
     missionId: v.string(),
     nextState: omegaMissionStateValidator,
+    /**
+     * Unlike every other completion input below (criteria, proofs,
+     * contradictions, external effects — all derived from durable rows),
+     * this is the caller's own judgment and is bounded ([0,1], <=
+     * uncertaintyBudget) but not independently re-derived: there is no
+     * mechanical row to check it against. It can only ever be reached
+     * after every other, fully row-derived completion check has already
+     * passed (evaluateOmegaCompletion requires a passing proof per
+     * criterion, no unresolved contradictions, no unreconciled external
+     * effects), so it narrows an already-evidenced completion rather than
+     * substituting for evidence. Since this mutation now also atomically
+     * projects a bound Development subject to COMPLETE
+     * (projectOmegaDevelopmentCompletion below), a wrong value here has a
+     * wider blast radius than before that projection existed -- flagged
+     * here rather than silently accepted.
+     */
     residualUncertainty: v.optional(v.number()),
   },
   returns: omegaMissionDocumentValidator,
@@ -578,6 +595,28 @@ export const transition = mutation({
       if (!completion.allowed) {
         throw new Error(`Omega completion denied: ${completion.failures.join(", ")}.`);
       }
+
+      await projectOmegaDevelopmentCompletion(ctx, {
+        ownerId,
+        missionId,
+        evidenceIds: [
+          ...new Set(
+            currentProofs
+              .filter((proof) => proof.result === "pass")
+              .flatMap((proof) => proof.evidenceRefs),
+          ),
+        ],
+        completionInput: {
+          criteria: criteriaForCompletion,
+          proofs: currentProofs,
+          riskClass: mission.riskClass,
+          unresolvedCriticalContradictions,
+          unreconciledExternalEffects,
+          residualUncertainty: args.residualUncertainty,
+          uncertaintyBudget: mission.uncertaintyBudget,
+        },
+        now,
+      });
     }
 
     await ctx.db.patch("omegaMissions", mission._id, {

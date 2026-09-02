@@ -80,7 +80,7 @@ describe("ConvexOrchestrationStateBoundary", () => {
         return { status: "created", run: { runId: "run-1" } };
       }
       if (callIndex === 1) {
-        return { step: {}, leaseToken: "server-lease" };
+        return { step: {}, leaseToken: "server-lease", fencingToken: 7 };
       }
       return {};
     });
@@ -105,6 +105,7 @@ describe("ConvexOrchestrationStateBoundary", () => {
       context,
       node: graph.orderedNodes()[0],
       leaseToken: lease.leaseToken,
+      fencingToken: lease.fencingToken,
       result: success as Extract<DomainResult, { ok: true }>,
     });
 
@@ -138,6 +139,7 @@ describe("ConvexOrchestrationStateBoundary", () => {
       nodeId: "create",
       workerId: "worker-1",
       leaseToken: "server-lease",
+      fencingToken: 7,
     });
     assert.equal("now" in (calls[0]?.args ?? {}), false);
   });
@@ -192,7 +194,7 @@ describe("ConvexOrchestrationRunner", () => {
         }
         if (events.length === 1) {
           events.push("start");
-          return { step: {}, leaseToken: "server-lease" };
+          return { step: {}, leaseToken: "server-lease", fencingToken: 7 };
         }
         events.push("succeed");
         return {};
@@ -237,7 +239,7 @@ describe("OrchestrationRunner durable failure boundary", () => {
     const stepState: OrchestrationStepStateBoundary = {
       start: async () => {
         events.push("start");
-        return { leaseToken: "unexpected-lease" };
+        return { leaseToken: "unexpected-lease", fencingToken: 1 };
       },
       succeed: async () => {
         events.push("succeed");
@@ -278,13 +280,13 @@ describe("OrchestrationRunner durable failure boundary", () => {
     const stepState: OrchestrationStepStateBoundary = {
       start: async () => {
         events.push("start");
-        return { leaseToken: "lease-1" };
+        return { leaseToken: "lease-1", fencingToken: 1 };
       },
       succeed: async () => {
         events.push("succeed");
       },
-      fail: async ({ leaseToken }) => {
-        events.push(`fail:${leaseToken}`);
+      fail: async ({ leaseToken, fencingToken }) => {
+        events.push(`fail:${leaseToken}:${fencingToken}`);
       },
     };
     const blockedGate: OrchestrationSafetyGate = {
@@ -313,7 +315,7 @@ describe("OrchestrationRunner durable failure boundary", () => {
     const result = await runner.run(graph, context);
 
     assert.equal(result.ok, false);
-    assert.deepEqual(events, ["start", "audit", "fail:lease-1"]);
+    assert.deepEqual(events, ["start", "audit", "fail:lease-1:1"]);
   });
 
   it("records an executor failure before marking the durable step failed", async () => {
@@ -321,13 +323,13 @@ describe("OrchestrationRunner durable failure boundary", () => {
     const stepState: OrchestrationStepStateBoundary = {
       start: async () => {
         events.push("start");
-        return { leaseToken: "lease-1" };
+        return { leaseToken: "lease-1", fencingToken: 1 };
       },
       succeed: async () => {
         events.push("succeed");
       },
-      fail: async ({ leaseToken }) => {
-        events.push(`fail:${leaseToken}`);
+      fail: async ({ leaseToken, fencingToken }) => {
+        events.push(`fail:${leaseToken}:${fencingToken}`);
       },
     };
     const runner = new OrchestrationRunner(
@@ -354,7 +356,7 @@ describe("OrchestrationRunner durable failure boundary", () => {
     const result = await runner.run(graph, context);
 
     assert.equal(result.ok, false);
-    assert.deepEqual(events, ["start", "execute", "audit", "fail:lease-1"]);
+    assert.deepEqual(events, ["start", "execute", "audit", "fail:lease-1:1"]);
   });
 });
 
@@ -423,7 +425,7 @@ describe("orchestration composition authority", () => {
     const boundary = createConvexOrchestrationStateBoundaryForAuthenticatedRequest(request, {
       client: fakeClient((args) => {
         calls.push(args);
-        return { leaseToken: "lease-1" };
+        return { leaseToken: "lease-1", fencingToken: 1 };
       }),
       serviceToken: "service-token",
       leaseTtlMs: 10_000,

@@ -14,6 +14,7 @@ import type * as auditEvents from "../auditEvents.js";
 import type * as authHelpers from "../authHelpers.js";
 import type * as buildLogs from "../buildLogs.js";
 import type * as builds from "../builds.js";
+import type * as developmentState from "../developmentState.js";
 import type * as externalReconciliationValidators from "../externalReconciliationValidators.js";
 import type * as externalReconciliations from "../externalReconciliations.js";
 import type * as internalActionValidators from "../internalActionValidators.js";
@@ -61,6 +62,7 @@ declare const fullApi: ApiFromModules<{
   authHelpers: typeof authHelpers;
   buildLogs: typeof buildLogs;
   builds: typeof builds;
+  developmentState: typeof developmentState;
   externalReconciliationValidators: typeof externalReconciliationValidators;
   externalReconciliations: typeof externalReconciliations;
   internalActionValidators: typeof internalActionValidators;

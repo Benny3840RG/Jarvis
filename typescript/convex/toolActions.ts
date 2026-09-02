@@ -73,6 +73,30 @@ async function hasCompletedExecutionReceipt(
   return receipts.some((receipt) => COMPLETED_RECEIPT_STATUSES.has(receipt.status));
 }
 
+async function canResumeProvenNoEffect(
+  ctx: ReadCtx,
+  ownerId: string,
+  action: Doc<"toolActions">,
+  claimId: string,
+): Promise<boolean> {
+  const reconciliation = await ctx.db
+    .query("externalReconciliations")
+    .withIndex("by_owner_and_scope", (q) =>
+      q
+        .eq("ownerId", ownerId)
+        .eq("projectId", action.projectKey)
+        .eq("tool", action.tool)
+        .eq("operation", action.operation)
+        .eq("idempotencyKey", claimId),
+    )
+    .unique();
+  return (
+    reconciliation?.actionId === action.actionId &&
+    reconciliation.state === "resolved" &&
+    reconciliation.terminalStatus === "no-effect"
+  );
+}
+
 function boundedLimit(limit: number | undefined): number {
   const resolved = limit ?? DEFAULT_LIST_LIMIT;
   if (!Number.isInteger(resolved) || resolved < 1 || resolved > MAX_LIST_LIMIT) {
@@ -695,11 +719,16 @@ export const claimSingleUseExecution = mutation({
       throw new Error("Only single-use actions require an execution claim.");
     }
     if (action.singleUseClaimId !== undefined) {
-      return {
-        claimed: false,
-        claimId: action.singleUseClaimId,
-        blockReason: "already-claimed" as const,
-      };
+      if (
+        action.singleUseClaimId !== claimId ||
+        !(await canResumeProvenNoEffect(ctx, ownerId, action, claimId))
+      ) {
+        return {
+          claimed: false,
+          claimId: action.singleUseClaimId,
+          blockReason: "already-claimed" as const,
+        };
+      }
     }
 
     const now = args.now ?? Date.now();
@@ -720,21 +749,23 @@ export const claimSingleUseExecution = mutation({
       return { claimed: false, claimId: "", blockReason: omegaGate.blockReason };
     }
 
-    await ctx.db.patch("toolActions", action._id, {
-      singleUseClaimedAt: now,
-      singleUseClaimId: claimId,
-      updatedAt: now,
-    });
-    await markOmegaExecutionClaimed(ctx, ownerId, actionId, now);
-    await appendAudit(ctx, {
-      ownerId,
-      requestId: action.requestId,
-      projectKey,
-      eventType: "tool.action.execution-claimed",
-      actor: "tool",
-      payload: { actionId, claimId },
-      createdAt: now,
-    });
+    if (action.singleUseClaimId === undefined) {
+      await ctx.db.patch("toolActions", action._id, {
+        singleUseClaimedAt: now,
+        singleUseClaimId: claimId,
+        updatedAt: now,
+      });
+      await markOmegaExecutionClaimed(ctx, ownerId, actionId, now);
+      await appendAudit(ctx, {
+        ownerId,
+        requestId: action.requestId,
+        projectKey,
+        eventType: "tool.action.execution-claimed",
+        actor: "tool",
+        payload: { actionId, claimId },
+        createdAt: now,
+      });
+    }
     return { claimed: true, claimId };
   },
 });

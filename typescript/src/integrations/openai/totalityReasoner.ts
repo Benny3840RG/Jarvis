@@ -101,6 +101,13 @@ export type OpenAITotalityDraft = TotalityDraft;
 export interface OpenAITotalityResult {
   responseId: string | null;
   draft: OpenAITotalityDraft;
+  modelUsage?: {
+    provider: "openai";
+    model: string;
+    inputTokens: number;
+    outputTokens: number;
+    cachedInputTokens?: number;
+  };
 }
 
 export interface OpenAITotalityConfig {
@@ -127,7 +134,30 @@ type OpenAIResponsePayload = {
   id?: unknown;
   output?: unknown;
   error?: unknown;
+  usage?: unknown;
 };
+
+function nonNegativeInteger(value: unknown): number | undefined {
+  return Number.isSafeInteger(value) && (value as number) >= 0 ? (value as number) : undefined;
+}
+
+function extractUsage(payload: OpenAIResponsePayload, model: string) {
+  if (!isRecord(payload.usage)) return undefined;
+  const inputTokens = nonNegativeInteger(payload.usage.input_tokens);
+  const outputTokens = nonNegativeInteger(payload.usage.output_tokens);
+  if (inputTokens === undefined || outputTokens === undefined) return undefined;
+  const details = isRecord(payload.usage.input_tokens_details)
+    ? payload.usage.input_tokens_details
+    : undefined;
+  const cachedInputTokens = nonNegativeInteger(details?.cached_tokens);
+  return {
+    provider: "openai" as const,
+    model,
+    inputTokens,
+    outputTokens,
+    ...(cachedInputTokens === undefined ? {} : { cachedInputTokens }),
+  };
+}
 
 function cleanRequiredSecret(value: string | undefined, field: string): string {
   if (value === undefined || value.trim().length === 0) {
@@ -282,9 +312,11 @@ export class OpenAITotalityReasoner {
 
       const outputText = extractOutputText(payload);
       const parsed = parseTotalityDraft(JSON.parse(outputText) as unknown);
+      const usage = extractUsage(payload, this.config.model);
       return {
         responseId: typeof payload.id === "string" ? payload.id : null,
         draft: parsed,
+        ...(usage ? { modelUsage: usage } : {}),
       };
     } catch (error: unknown) {
       if (error instanceof OpenAIRequestError) throw error;

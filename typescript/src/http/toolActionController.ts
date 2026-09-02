@@ -375,6 +375,13 @@ export class ToolActionController {
         action.actionId,
         parsed.dryRun === true ? "dry-run" : "live",
       ),
+      approvalId: action.actionId,
+      policyVersion:
+        typeof action.arguments.policyDecisionFingerprint === "string"
+          ? action.arguments.policyDecisionFingerprint
+          : "totality-policy:v1",
+      correlationId: action.requestId,
+      source: "tool-action-http-controller",
       ...(parsed.dryRun === undefined ? {} : { dryRun: parsed.dryRun }),
       ...(parsed.timeoutMs === undefined ? {} : { timeoutMs: parsed.timeoutMs }),
     });

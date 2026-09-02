@@ -41,7 +41,7 @@ export type ExternalReconciliationRecord = ExternalExecutionScope & {
   leaseOwner?: string;
   leaseToken?: string;
   leaseExpiresAt?: number;
-  terminalStatus?: "succeeded" | "failed";
+  terminalStatus?: "succeeded" | "failed" | "no-effect";
   resolutionDigest?: string;
   resolutionErrorCode?: string;
   lastErrorCode?: string;
@@ -76,6 +76,10 @@ export type ProviderReconciliationResult =
   | {
       status: "failed";
       errorCode: string;
+    }
+  | {
+      status: "no-effect";
+      evidenceDigest: string;
     }
   | {
       status: "unresolved";

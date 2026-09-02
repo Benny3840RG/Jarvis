@@ -121,6 +121,7 @@ transition_defaults:
     commit_domain_state: false
   authority_check_location: authoritative_commit_path
   actor_identity_source: server_context_not_request_payload
+  deterministic_evaluator: development_transition_gate_v1
   transition_retry: none
 
 transitions:
@@ -133,6 +134,7 @@ transitions:
     evaluated_by: [development_controller]
     authorised_by: [development_controller]
     committed_by: development_controller
+    evaluator: deterministic_issue_spec_validator
     gates:
       - issue_exists
       - objective_non_empty
@@ -140,6 +142,7 @@ transitions:
       - invariant_ids_valid
     evidence_required:
       - validated_issue_spec
+    constitutional_invariants: [JARVIS-011, JARVIS-012, JARVIS-014]
     operation_retry:
       allowed: false
 
@@ -152,6 +155,7 @@ transitions:
     evaluated_by: [development_controller]
     authorised_by: [development_controller]
     committed_by: development_controller
+    evaluator: deterministic_readiness_gate
     gates:
       - dependencies_satisfied
       - risk_class_assigned
@@ -160,6 +164,7 @@ transitions:
     evidence_required:
       - dependency_evaluation
       - authority_envelope
+    constitutional_invariants: [JARVIS-011, JARVIS-012, JARVIS-014]
     operation_retry:
       allowed: false
 
@@ -172,6 +177,7 @@ transitions:
     evaluated_by: [development_controller]
     authorised_by: [development_controller]
     committed_by: development_controller
+    evaluator: deterministic_claim_lease_gate
     gates:
       - no_active_claim_exists
       - worker_is_eligible
@@ -179,6 +185,7 @@ transitions:
     evidence_required:
       - execution_claim
       - lease_record
+    constitutional_invariants: [JARVIS-007, JARVIS-013, JARVIS-017]
     operation_retry:
       allowed: true
       max_attempts: 3
@@ -194,6 +201,7 @@ transitions:
     evaluated_by: [development_controller]
     authorised_by: [development_controller]
     committed_by: development_controller
+    evaluator: deterministic_lease_authority_branch_gate
     gates:
       - execution_claim_valid
       - lease_active
@@ -204,6 +212,7 @@ transitions:
       - execution_claim
       - lease_record
       - branch_metadata
+    constitutional_invariants: [JARVIS-007, JARVIS-013, JARVIS-016, JARVIS-017]
     operation_retry:
       allowed: false
 
@@ -216,6 +225,7 @@ transitions:
     evaluated_by: [development_controller]
     authorised_by: [development_controller]
     committed_by: development_controller
+    evaluator: deterministic_build_artifact_gate
     gates:
       - execution_claim_valid
       - lease_active
@@ -224,6 +234,7 @@ transitions:
     evidence_required:
       - implementation_commit
       - build_receipt
+    constitutional_invariants: [JARVIS-004, JARVIS-012, JARVIS-017]
     operation_retry:
       allowed: false
 
@@ -236,12 +247,14 @@ transitions:
     evaluated_by: [development_controller]
     authorised_by: [development_controller]
     committed_by: development_controller
+    evaluator: deterministic_verification_failure_gate
     gates:
       - verification_run_complete
       - verification_failed_conclusively
     evidence_required:
       - verification_receipt
       - failure_findings
+    constitutional_invariants: [JARVIS-004, JARVIS-015]
     operation_retry:
       allowed: false
 
@@ -254,12 +267,14 @@ transitions:
     evaluated_by: [development_controller]
     authorised_by: [development_controller]
     committed_by: development_controller
+    evaluator: deterministic_repair_authority_gate
     gates:
       - repair_attempt_budget_remaining
       - valid_worker_claim_available
     evidence_required:
       - repair_work_package
       - execution_claim
+    constitutional_invariants: [JARVIS-007, JARVIS-016, JARVIS-017]
     operation_retry:
       allowed: false
 
@@ -272,11 +287,13 @@ transitions:
     evaluated_by: [development_controller]
     authorised_by: [development_controller]
     committed_by: development_controller
+    evaluator: deterministic_verification_success_gate
     gates:
       - required_verification_checks_passed
       - no_blocking_verification_findings
     evidence_required:
       - verification_receipts
+    constitutional_invariants: [JARVIS-004, JARVIS-011]
     operation_retry:
       allowed: false
 
@@ -289,12 +306,14 @@ transitions:
     evaluated_by: [development_controller]
     authorised_by: [development_controller]
     committed_by: development_controller
+    evaluator: deterministic_review_findings_gate
     gates:
       - independent_review_complete
       - blocking_review_findings_present
     evidence_required:
       - review_receipt
       - review_findings
+    constitutional_invariants: [JARVIS-004, JARVIS-015]
     operation_retry:
       allowed: false
 
@@ -307,6 +326,7 @@ transitions:
     evaluated_by: [development_controller]
     authorised_by: [development_controller]
     committed_by: development_controller
+    evaluator: deterministic_review_readiness_gate
     gates:
       - independent_review_passed
       - constitutional_invariants_passed
@@ -316,6 +336,7 @@ transitions:
       - review_receipt
       - invariant_check_receipt
       - risk_evaluation
+    constitutional_invariants: [JARVIS-001, JARVIS-011, JARVIS-018]
     operation_retry:
       allowed: false
 
@@ -328,6 +349,7 @@ transitions:
     evaluated_by: [development_controller]
     authorised_by: [development_controller, operator]
     committed_by: development_controller
+    evaluator: deterministic_merge_authority_gate
     gates:
       - merge_execution_claim_valid
       - branch_head_matches_approved_sha
@@ -338,6 +360,7 @@ transitions:
       - merge_execution_claim
       - approval_record_if_required
       - provider_merge_receipt
+    constitutional_invariants: [JARVIS-003, JARVIS-005, JARVIS-015, JARVIS-016]
     operation_retry:
       allowed: true
       max_attempts: 2
@@ -357,11 +380,13 @@ transitions:
     evaluated_by: [development_controller]
     authorised_by: [development_controller]
     committed_by: development_controller
+    evaluator: deterministic_indeterminate_outcome_gate
     gates:
       - merge_operation_was_attempted
       - outcome_not_provable_from_current_evidence
     evidence_required:
       - ambiguous_execution_receipt
+    constitutional_invariants: [JARVIS-004, JARVIS-005, JARVIS-015]
     operation_retry:
       allowed: false
     reconciliation:
@@ -378,12 +403,14 @@ transitions:
     evaluated_by: [development_controller]
     authorised_by: [development_controller]
     committed_by: development_controller
+    evaluator: deterministic_reconciliation_success_gate
     gates:
       - reconciliation_complete
       - external_effect_proven
     evidence_required:
       - reconciliation_receipt
       - provider_merge_evidence
+    constitutional_invariants: [JARVIS-004, JARVIS-005, JARVIS-008]
     operation_retry:
       allowed: false
 
@@ -396,6 +423,7 @@ transitions:
     evaluated_by: [development_controller]
     authorised_by: [development_controller]
     committed_by: development_controller
+    evaluator: deterministic_reconciliation_non_effect_gate
     gates:
       - reconciliation_complete
       - external_effect_proven_not_to_have_occurred
@@ -404,6 +432,7 @@ transitions:
     evidence_required:
       - reconciliation_receipt
       - provider_non_merge_evidence
+    constitutional_invariants: [JARVIS-005, JARVIS-015, JARVIS-016]
     operation_retry:
       allowed: false
 
@@ -416,12 +445,14 @@ transitions:
     evaluated_by: [development_controller]
     authorised_by: [development_controller]
     committed_by: development_controller
+    evaluator: deterministic_contradiction_gate
     gates:
       - reconciliation_window_exhausted_or_conflicting_authoritative_evidence_present
       - contradiction_record_created
     evidence_required:
       - contradiction_record
       - reconciliation_attempts
+    constitutional_invariants: [JARVIS-004, JARVIS-005, JARVIS-008]
     operation_retry:
       allowed: false
 
@@ -434,6 +465,7 @@ transitions:
     evaluated_by: [development_controller]
     authorised_by: [development_controller]
     committed_by: development_controller
+    evaluator: deterministic_failure_gate
     gates:
       - reconciliation_complete
       - external_effect_conclusively_failed
@@ -441,6 +473,7 @@ transitions:
     evidence_required:
       - reconciliation_receipt
       - conclusive_failure_evidence
+    constitutional_invariants: [JARVIS-005, JARVIS-015]
     operation_retry:
       allowed: false
 
@@ -453,6 +486,7 @@ transitions:
     evaluated_by: [omega_completion_authority]
     authorised_by: [omega_completion_authority]
     committed_by: omega_completion_authority
+    evaluator: omega_completion_policy
     gates:
       - post_merge_observation_complete
       - required_acceptance_evidence_current
@@ -464,6 +498,7 @@ transitions:
       - post_merge_ci_receipt
       - acceptance_validation_proofs
       - contradiction_resolution_state
+    constitutional_invariants: [JARVIS-001, JARVIS-004, JARVIS-008, JARVIS-018]
     operation_retry:
       allowed: false
     completion_transition: true
@@ -477,12 +512,14 @@ transitions:
     evaluated_by: [development_controller]
     authorised_by: [development_controller]
     committed_by: development_controller
+    evaluator: deterministic_repair_exhaustion_gate
     gates:
       - repair_attempt_budget_exhausted
       - failure_is_conclusive
     evidence_required:
       - repair_attempt_history
       - conclusive_failure_evidence
+    constitutional_invariants: [JARVIS-004, JARVIS-015]
     operation_retry:
       allowed: false
 
@@ -505,12 +542,14 @@ transitions:
     evaluated_by: [development_controller]
     authorised_by: [development_controller, operator]
     committed_by: development_controller
+    evaluator: deterministic_abort_safety_gate
     gates:
       - abort_authority_present
       - no_unreconciled_external_effect_can_be_hidden_by_abort
     evidence_required:
       - abort_reason
       - reconciliation_state_if_external_effect_attempted
+    constitutional_invariants: [JARVIS-005, JARVIS-012, JARVIS-017]
     operation_retry:
       allowed: false
 

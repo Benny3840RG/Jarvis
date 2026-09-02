@@ -38,6 +38,13 @@ export type TotalityReasoningContext = {
 
 export interface TotalityReasoningDraft {
   responseId: string | null;
+  modelUsage?: {
+    provider: string;
+    model: string;
+    inputTokens: number;
+    outputTokens: number;
+    cachedInputTokens?: number;
+  };
   draft: {
     answer: string;
     assumptions: string[];
@@ -218,6 +225,7 @@ export class TotalityPipeline {
           validationPassed: validation.passed,
           blockingFailureCount: validation.blockingFailures.length,
           memoryProposalCount: reasoning.draft.memoryProposals.length,
+          ...(reasoning.modelUsage ? { modelUsage: reasoning.modelUsage } : {}),
         },
         ...(validation.passed && project !== null && memoryProposal.records.length > 0
           ? {

@@ -1,5 +1,3 @@
-import { createHash } from "node:crypto";
-
 import type { z } from "zod";
 
 import type {
@@ -14,6 +12,7 @@ import {
 import { bindSafety, type SafetyBinding } from "../safety/safetyBinder.js";
 import type { ToolAuthority } from "../runtime/totalityPolicy.js";
 import { canonicalJson } from "./canonicalJson.js";
+import { sha256Hex } from "./sha256.js";
 import type { ToolAction } from "./toolActions.js";
 
 export type ToolExecutionStatus = "dry-run" | "succeeded" | "failed" | "indeterminate" | "blocked";
@@ -32,6 +31,7 @@ export type ToolExecutionErrorCode =
   | "reconciliation-unavailable"
   | "approval-expired"
   | "approval-consumed"
+  | "precondition-failed"
   | "safety-blocked";
 
 export type ToolExecutionReceipt = {
@@ -79,12 +79,25 @@ export type ToolExecutionDefinition = {
   operation: string;
   schema: z.ZodType<Record<string, unknown>>;
   externalProvider?: string;
+  /**
+   * Read-only deterministic/provider observation gates that must pass before
+   * the durable execution intent is claimed. A rejection here therefore does
+   * not exercise a single-use approval.
+   */
+  preflight?: (argumentsValue: Record<string, unknown>, signal: AbortSignal) => Promise<void>;
   execute: (
     argumentsValue: Record<string, unknown>,
     signal: AbortSignal,
     context: ToolExecutionContext,
   ) => Promise<unknown>;
 };
+
+export class ToolExecutionPreconditionError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ToolExecutionPreconditionError";
+  }
+}
 
 export interface ToolExecutionReceiptStore {
   get(key: string): Promise<ToolExecutionReceipt | null>;
@@ -138,7 +151,11 @@ export class InMemorySingleUseConsumptionClaimStore implements SingleUseConsumpt
   // equivalent transactional check-and-set.
   async claim(action: ToolAction, claimId: string): Promise<SingleUseExecutionClaimResult> {
     const existing = this.claims.get(action.actionId);
-    if (existing !== undefined) return { claimed: false, claimId: existing };
+    if (existing !== undefined) {
+      return existing === claimId
+        ? { claimed: true, claimId: existing }
+        : { claimed: false, claimId: existing, blockReason: "already-claimed" };
+    }
     this.claims.set(action.actionId, claimId);
     return { claimed: true, claimId };
   }
@@ -191,7 +208,7 @@ const ACTION_FINGERPRINT_VERSION = "jarvis-action-fingerprint:v1";
 const EFFECT_FINGERPRINT_VERSION = "jarvis-effect-fingerprint:v1";
 
 function digest(value: unknown): string {
-  return createHash("sha256").update(canonicalJson(value), "utf8").digest("hex");
+  return sha256Hex(canonicalJson(value));
 }
 
 export function deriveToolExecutionIdempotencyKey(
@@ -210,6 +227,13 @@ function isEffectFingerprintConflict(error: unknown): boolean {
   return (
     error.message.includes("another effect fingerprint") ||
     error.message.includes("effect fingerprint collision")
+  );
+}
+
+function isAttemptAlreadyInProgress(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    error.message.includes("already has an attempt in progress or resolved")
   );
 }
 export function fingerprintToolAction(action: ToolAction): string {
@@ -435,6 +459,7 @@ export class ToolExecutionService {
       : internalExecutionKey(input.action, input.idempotencyKey);
     const expectedFingerprint = external ? effectFingerprint : fingerprintToolAction(input.action);
 
+    let resumeSameOperation = false;
     if (scope && definition?.externalProvider) {
       const replay = await this.replayExternal(
         enrichedInput,
@@ -442,10 +467,11 @@ export class ToolExecutionService {
         scope,
         key,
       );
-      if (replay) return replay;
+      if (replay === "RESUME_SAME_OPERATION") resumeSameOperation = true;
+      else if (replay) return replay;
     }
 
-    const existing = await this.receipts.get(key);
+    const existing = resumeSameOperation ? null : await this.receipts.get(key);
     if (existing) {
       const existingFingerprint = external
         ? existing.effectFingerprint
@@ -507,7 +533,7 @@ export class ToolExecutionService {
     provider: string,
     scope: ExternalExecutionScope,
     key: string,
-  ): Promise<ToolExecutionReceipt | null> {
+  ): Promise<ToolExecutionReceipt | "RESUME_SAME_OPERATION" | null> {
     if (!this.reconciliations) throw new Error("External reconciliation store is unavailable.");
     let envelope;
     try {
@@ -529,6 +555,17 @@ export class ToolExecutionService {
       );
     }
     if (!envelope) return null;
+    // Reconciliation has conclusively proved the original operation caused
+    // no external effect. Resume is therefore permitted with the same scope,
+    // effect fingerprint, operation ID and already-exercised approval. The
+    // claim store below only accepts the original claim ID; any changed
+    // operation/effect remains blocked by the existing fingerprint gates.
+    if (
+      envelope.reconciliation.state === "resolved" &&
+      envelope.reconciliation.terminalStatus === "no-effect"
+    ) {
+      return "RESUME_SAME_OPERATION";
+    }
     if (envelope.receipt) return envelope.receipt;
 
     const startedAt = new Date().toISOString();
@@ -709,6 +746,37 @@ export class ToolExecutionService {
       throw new Error(`timeoutMs must be an integer between 1 and ${MAX_TIMEOUT_MS}.`);
     }
 
+    if (definition.preflight) {
+      const preflightController = new AbortController();
+      const preflightTimeout = setTimeout(() => preflightController.abort(), timeoutMs);
+      try {
+        await Promise.race([
+          definition.preflight(parsed.data, preflightController.signal),
+          new Promise<never>((_, reject) =>
+            preflightController.signal.addEventListener(
+              "abort",
+              () => reject(new ToolExecutionPreconditionError("preflight-timeout")),
+              { once: true },
+            ),
+          ),
+        ]);
+      } catch {
+        return this.persistDecision(
+          key,
+          receipt(
+            input.action,
+            input.idempotencyKey,
+            "blocked",
+            "precondition-failed",
+            startedAt,
+            input,
+          ),
+        );
+      } finally {
+        clearTimeout(preflightTimeout);
+      }
+    }
+
     // Authoritative, execute-time re-check — placed as close as possible to
     // the actual external-effect call below, after every deterministic
     // pre-check (authority, expiry, allowlist, argument validation, dry-run,
@@ -886,6 +954,19 @@ export class ToolExecutionService {
       return result;
     } catch (error: unknown) {
       const timedOut = error instanceof Error && error.message === "timeout";
+      if (isAttemptAlreadyInProgress(error)) {
+        return this.persistDecision(
+          key,
+          receipt(
+            input.action,
+            input.idempotencyKey,
+            "blocked",
+            "retry-blocked-pending-reconciliation",
+            startedAt,
+            input,
+          ),
+        );
+      }
       if (scope && externalProvider && externalReconciliationId && this.reconciliations) {
         if (timedOut || registeredReference) {
           const unresolved = receipt(

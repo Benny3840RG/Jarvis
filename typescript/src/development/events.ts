@@ -24,7 +24,30 @@ export type DevelopmentEventType =
   | "DEV_RECONCILIATION_OPENED"
   | "DEV_RECONCILIATION_RESOLVED"
   | "DEV_POST_MERGE_OBSERVATION_RECORDED"
-  | "DEV_OMEGA_EVALUATION_RECORDED";
+  | "DEV_OMEGA_EVALUATION_RECORDED"
+  | "DEV_MODEL_INVOCATION_RECORDED";
+
+/** Ordered to match EVENTS.yaml exactly. */
+export const DEVELOPMENT_EVENT_TYPES: readonly DevelopmentEventType[] = Object.freeze([
+  "DEV_SPEC_VALIDATED",
+  "DEV_TRANSITION_COMMITTED",
+  "DEV_TRANSITION_REJECTED",
+  "DEV_WORKER_CLAIM_CREATED",
+  "DEV_LEASE_EXPIRED",
+  "DEV_BUILD_RESULT_RECORDED",
+  "DEV_VERIFICATION_RESULT_RECORDED",
+  "DEV_REVIEW_RESULT_RECORDED",
+  "DEV_REPAIR_REQUIRED",
+  "DEV_MERGE_ATTEMPT_STARTED",
+  "DEV_MERGE_ATTEMPT_FAILED",
+  "DEV_MERGE_ATTEMPT_INDETERMINATE",
+  "DEV_MERGE_RECEIPT_RECORDED",
+  "DEV_RECONCILIATION_OPENED",
+  "DEV_RECONCILIATION_RESOLVED",
+  "DEV_POST_MERGE_OBSERVATION_RECORDED",
+  "DEV_OMEGA_EVALUATION_RECORDED",
+  "DEV_MODEL_INVOCATION_RECORDED",
+]);
 
 export type JarvisEvent = {
   readonly eventId: string;
@@ -61,6 +84,14 @@ const REDUCER_SCHEMA_COMPATIBILITY: Readonly<Record<string, readonly number[]>> 
 });
 
 export type EventEnvelopeViolation =
+  | "EVENT_ID_REQUIRED"
+  | "EVENT_TYPE_REQUIRED"
+  | "SUBJECT_ID_REQUIRED"
+  | "CORRELATION_ID_REQUIRED"
+  | "OCCURRED_AT_REQUIRED"
+  | "RECORDED_AT_REQUIRED"
+  | "PAYLOAD_REQUIRED"
+  | "SELF_CAUSATION"
   | "UNSUPPORTED_EVENT_SCHEMA_VERSION"
   | "UNKNOWN_REDUCER_VERSION"
   | "REDUCER_CANNOT_READ_EVENT_SCHEMA_VERSION";
@@ -72,6 +103,15 @@ export type EventEnvelopeViolation =
  */
 export function validateEventEnvelope(event: JarvisEvent): EventEnvelopeViolation[] {
   const violations: EventEnvelopeViolation[] = [];
+
+  if (event.eventId.length === 0) violations.push("EVENT_ID_REQUIRED");
+  if (!DEVELOPMENT_EVENT_TYPES.includes(event.eventType)) violations.push("EVENT_TYPE_REQUIRED");
+  if (event.subjectId.length === 0) violations.push("SUBJECT_ID_REQUIRED");
+  if (event.correlationId.length === 0) violations.push("CORRELATION_ID_REQUIRED");
+  if (event.occurredAt.length === 0) violations.push("OCCURRED_AT_REQUIRED");
+  if (event.recordedAt.length === 0) violations.push("RECORDED_AT_REQUIRED");
+  if (!event.payload) violations.push("PAYLOAD_REQUIRED");
+  if (event.causationId === event.eventId) violations.push("SELF_CAUSATION");
 
   if (!SUPPORTED_EVENT_SCHEMA_VERSIONS.includes(event.eventSchemaVersion)) {
     violations.push("UNSUPPORTED_EVENT_SCHEMA_VERSION");

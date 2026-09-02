@@ -131,6 +131,7 @@ export class OrchestrationRunner {
       }
       const capability = capabilityFor(node);
       let leaseToken: string | undefined;
+      let fencingToken: number | undefined;
       if (!capability) {
         return this.stop(
           context,
@@ -145,7 +146,9 @@ export class OrchestrationRunner {
 
       if (this.stepState) {
         try {
-          leaseToken = (await this.stepState.start({ context, node })).leaseToken;
+          const lease = await this.stepState.start({ context, node });
+          leaseToken = lease.leaseToken;
+          fencingToken = lease.fencingToken;
         } catch (error: unknown) {
           return this.stop(
             context,
@@ -183,6 +186,7 @@ export class OrchestrationRunner {
           undefined,
           false,
           leaseToken,
+          fencingToken,
         );
       }
 
@@ -198,6 +202,7 @@ export class OrchestrationRunner {
           undefined,
           false,
           leaseToken,
+          fencingToken,
         );
       }
 
@@ -213,7 +218,16 @@ export class OrchestrationRunner {
       }
 
       if (!result.ok)
-        return this.stop(context, node, completedSteps, result, undefined, false, leaseToken);
+        return this.stop(
+          context,
+          node,
+          completedSteps,
+          result,
+          undefined,
+          false,
+          leaseToken,
+          fencingToken,
+        );
 
       let postflight: SafetyDecision;
       try {
@@ -237,6 +251,7 @@ export class OrchestrationRunner {
           undefined,
           false,
           leaseToken,
+          fencingToken,
         );
       }
 
@@ -252,6 +267,7 @@ export class OrchestrationRunner {
           result,
           false,
           leaseToken,
+          fencingToken,
         );
       }
 
@@ -278,7 +294,7 @@ export class OrchestrationRunner {
       }
 
       if (this.stepState) {
-        if (!leaseToken) {
+        if (!leaseToken || fencingToken === undefined) {
           return {
             ok: false,
             runId: context.runId,
@@ -289,7 +305,7 @@ export class OrchestrationRunner {
           };
         }
         try {
-          await this.stepState.succeed({ context, node, leaseToken, result });
+          await this.stepState.succeed({ context, node, leaseToken, fencingToken, result });
         } catch (error: unknown) {
           return {
             ok: false,
@@ -324,6 +340,7 @@ export class OrchestrationRunner {
     executedResult?: DomainSuccess,
     stateUnavailable = false,
     leaseToken?: string,
+    fencingToken?: number,
   ): Promise<OrchestrationRunResult> {
     try {
       await this.outcomes.record({
@@ -348,13 +365,20 @@ export class OrchestrationRunner {
       };
     }
 
-    if (this.stepState && !stateUnavailable && leaseToken !== undefined) {
+    if (
+      this.stepState &&
+      !stateUnavailable &&
+      leaseToken !== undefined &&
+      fencingToken !== undefined
+    ) {
       try {
         const activeLeaseToken = leaseToken;
+        const activeFencingToken = fencingToken;
         await this.stepState.fail({
           context,
           node,
           leaseToken: activeLeaseToken,
+          fencingToken: activeFencingToken,
           failure: stoppedBy,
         });
       } catch (error: unknown) {

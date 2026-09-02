@@ -487,7 +487,7 @@ test("workflow contract requires safe triggers, isolation, draft output, and cle
     validateWorkflowContract(
       workflow.replace(
         'context: "jarvis-autobuild/verify-candidate"',
-        'context: "copilot-review-section"',
+        'context: "pr-evidence"',
       ),
     ).ok,
     false,
@@ -549,7 +549,7 @@ test("candidate verification approves exact-head PR runs without executing candi
     "automation-policy",
     "typecheck-lint-format-test",
     "jarvis-console-01-build",
-    "copilot-review-section",
+    "pr-evidence",
     "CodeQL",
   ]) {
     assert.ok(verifyJob.includes(`"${requiredCheck}"`), requiredCheck);

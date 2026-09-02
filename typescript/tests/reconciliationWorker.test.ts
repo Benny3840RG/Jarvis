@@ -165,7 +165,7 @@ class FakeStore implements ExternalReconciliationStore {
     result: Exclude<ProviderReconciliationResult, { status: "unresolved" }>;
   }): Promise<ToolExecutionReceipt> {
     this.resolveCalls.push(input);
-    return receipt(input.result.status);
+    return receipt(input.result.status === "succeeded" ? "succeeded" : "failed");
   }
 
   async releaseClaim(input: {

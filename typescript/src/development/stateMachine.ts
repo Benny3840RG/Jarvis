@@ -2,7 +2,8 @@
  * Development transition kernel (JARVIS Phase 1, Task 3).
  *
  * Pure, deterministic admissibility evaluation for the Development domain
- * transition grammar defined in JARVIS_TRANSITIONS.yaml/.md. This module
+ * transition grammar defined in TRANSITIONS.yaml and explained in
+ * JARVIS_TRANSITIONS.md. This module
  * decides whether a requested transition is legally admissible; it never
  * persists state, calls a provider, or commits an event. The trusted commit
  * boundary (Task 4: events.ts/reducer.ts) is the only place authoritative
@@ -27,9 +28,8 @@
  * at "is the supplied Omega completion input itself satisfied."
  */
 
-import { createHash } from "node:crypto";
-
 import { canonicalJson } from "../actions/canonicalJson.js";
+import { sha256Hex } from "../actions/sha256.js";
 import { evaluateOmegaCompletion, type OmegaCompletionInput } from "../omega/policy.js";
 import {
   DEVELOPMENT_TRANSITIONS,
@@ -145,10 +145,12 @@ export type MergeEvidence = {
    * from head-integrity. Per JARVIS-005/JARVIS-015, an INDETERMINATE
    * outcome must never be coerced into MERGED (nor into a distinct FAILED
    * state — Development has no such state; ambiguity must instead route
-   * through RECONCILIATION_OPEN). Omitted/`"MERGED"` proceeds to the
+   * through INDETERMINATE). Omitted/`"MERGED"` proceeds to the
    * ordinary head-integrity check below.
    */
   readonly operationOutcome?: MergeOperationOutcome;
+  /** Explicit unrecoverable-failure signal (e.g. a rejected/closed PR). Defaults to retryable when omitted. */
+  readonly retryable?: boolean;
 };
 
 /**
@@ -156,12 +158,39 @@ export type MergeEvidence = {
  * (JARVIS_EVENTS.md "INDETERMINATE resolution contract"). Elapsed time is
  * never itself an observation — `externallyObserved` must be true and
  * `observedOutcome` must actually establish `"MERGED"` before
- * RECONCILIATION_OPEN -> MERGED is admissible.
+ * INDETERMINATE -> MERGED is admissible.
  */
 export type ReconciliationEvidence = {
   readonly externallyObserved: boolean;
   readonly observedOutcome: "MERGED" | "NOT_MERGED" | "STILL_UNKNOWN";
   readonly observationSource: string;
+};
+
+/**
+ * Evidence for `deterministic_verification_success_gate`
+ * (`DEV_TRANSITION_VERIFYING_TO_REVIEW`). Unlike `mergeEvidence`, presence
+ * of this evidence is itself required, not merely checked when supplied —
+ * there is no separate trusted-derivation boundary for it yet (that is
+ * later Task 11 pipeline work), so the kernel is this gate's only line of
+ * defense against a caller reaching REVIEW with no proof any check ran.
+ */
+export type VerificationEvidence = {
+  readonly checksPassed: boolean;
+  readonly hasBlockingFindings: boolean;
+  readonly receiptId: string;
+};
+
+/**
+ * Evidence for `deterministic_review_findings_gate`
+ * (`DEV_TRANSITION_REVIEW_TO_REPAIR_REQUIRED`) and
+ * `deterministic_review_readiness_gate`
+ * (`DEV_TRANSITION_REVIEW_TO_READY_TO_MERGE`). Same "presence itself is
+ * required" rule as `VerificationEvidence`, for the same reason.
+ */
+export type ReviewEvidence = {
+  readonly reviewComplete: boolean;
+  readonly hasBlockingFindings: boolean;
+  readonly receiptId: string;
 };
 
 export type TransitionRequest = {
@@ -190,6 +219,8 @@ export type TransitionRequest = {
   readonly effectPayload?: Readonly<Record<string, unknown>>;
   readonly mergeEvidence?: MergeEvidence;
   readonly reconciliationEvidence?: ReconciliationEvidence;
+  readonly verificationEvidence?: VerificationEvidence;
+  readonly reviewEvidence?: ReviewEvidence;
   /**
    * Real input to the reused `evaluateOmegaCompletion` policy — criteria,
    * proofs, risk class, unresolved contradictions/external effects, and
@@ -210,11 +241,20 @@ export type RejectionDescriptor = {
   readonly reasonCodes: readonly string[];
 };
 
+/**
+ * handover "Failure semantics": FAILED derives a retry disposition rather
+ * than being treated as automatically retriable. Only ever set alongside
+ * `MERGE_OPERATION_FAILED` — REJECTED/INDETERMINATE outcomes, and ALLOWED
+ * evaluations, never carry one.
+ */
+export type RetryDisposition = "RESUME_SAME_OPERATION" | "NEW_EXECUTION_REQUIRED" | "NO_RETRY";
+
 export type TransitionEvaluation = {
   readonly allowed: boolean;
   readonly outcome: "ALLOWED" | "REJECTED";
   readonly reasons: readonly string[];
   readonly rejection?: RejectionDescriptor;
+  readonly retryDisposition?: RetryDisposition;
 };
 
 const MIN_APPROVAL_REQUIRED_RISK_CLASS = 2;
@@ -226,6 +266,7 @@ function allowed(): TransitionEvaluation {
 function rejected(
   request: TransitionRequest,
   reasonCodes: string | readonly string[],
+  retryDisposition?: RetryDisposition,
 ): TransitionEvaluation {
   const reasons = Object.freeze(
     Array.isArray(reasonCodes) ? [...reasonCodes] : [reasonCodes as string],
@@ -240,6 +281,7 @@ function rejected(
       requestedBy: request.requestedBy,
       reasonCodes: reasons,
     }),
+    ...(retryDisposition ? { retryDisposition } : {}),
   });
 }
 
@@ -257,7 +299,6 @@ function authorityExpanded(mission: CapabilityEnvelope, worker: CapabilityEnvelo
   );
 }
 
-const HASH_ALGORITHM = "sha256";
 const EFFECT_HASH_VERSION = "development-effect-hash:v1";
 const AUTHORITY_ENVELOPE_HASH_VERSION = "development-authority-envelope-hash:v1";
 const POLICY_FINGERPRINT_VERSION = "development-policy-fingerprint:v1";
@@ -266,7 +307,7 @@ const POLICY_FINGERPRINT_VERSION = "development-policy-fingerprint:v1";
 // toolExecution.ts/quoteSendTool.ts) rather than inventing another one, per
 // the handover's "one canonical encoder" rule.
 function digest(prefix: string, value: unknown): string {
-  return `${prefix}:${createHash(HASH_ALGORITHM).update(canonicalJson(value), "utf8").digest("hex")}`;
+  return `${prefix}:${sha256Hex(canonicalJson(value))}`;
 }
 
 export function computeEffectHash(input: {
@@ -378,11 +419,77 @@ function mergeOperationOutcomeGateReason(mergeEvidence: MergeEvidence): string |
   }
 }
 
+/**
+ * handover "Retry/resume": retry re-attempts the same operation only when
+ * its effect hasn't changed underneath it; a changed effect needs a new
+ * proposal/execution, never a blind resume.
+ *
+ * Deliberately compares against `approval.approvedSha` rather than
+ * recomputing the generic effect hash: a mismatched effect hash is already
+ * its own earlier, harder failure (`APPROVAL_EFFECT_MISMATCH`) that rejects
+ * before this gate is ever reached, so duplicating that check here would be
+ * dead code. `approvedSha` is a distinct, narrower signal — specifically
+ * "did the reviewed head move" — that can differ independently.
+ */
+function deriveFailedMergeRetryDisposition(
+  mergeEvidence: MergeEvidence,
+  request: TransitionRequest,
+): RetryDisposition {
+  if (mergeEvidence.retryable === false) return "NO_RETRY";
+
+  if (
+    request.approval?.approvedSha !== undefined &&
+    mergeEvidence.reviewedHeadSha !== request.approval.approvedSha
+  ) {
+    return "NEW_EXECUTION_REQUIRED";
+  }
+
+  return "RESUME_SAME_OPERATION";
+}
+
+function verificationGateReason(
+  definition: TransitionDefinition,
+  request: TransitionRequest,
+): string | undefined {
+  if (definition.evaluator !== "deterministic_verification_success_gate") return undefined;
+
+  const evidence = request.verificationEvidence;
+  if (!evidence) return "VERIFICATION_EVIDENCE_REQUIRED";
+  if (!evidence.checksPassed) return "VERIFICATION_CHECKS_NOT_PASSED";
+  if (evidence.hasBlockingFindings) return "BLOCKING_VERIFICATION_FINDINGS_PRESENT";
+  return undefined;
+}
+
+/**
+ * Covers both review evaluators, which share `ReviewEvidence` but expect
+ * opposite `hasBlockingFindings` polarity: readiness requires a clean
+ * review, while REVIEW_TO_REPAIR_REQUIRED exists specifically to record
+ * that a completed review *found* blocking issues, so it must not be
+ * reachable without evidence proving that either.
+ */
+function reviewGateReason(
+  definition: TransitionDefinition,
+  request: TransitionRequest,
+): string | undefined {
+  const isFindingsGate = definition.evaluator === "deterministic_review_findings_gate";
+  const isReadinessGate = definition.evaluator === "deterministic_review_readiness_gate";
+  if (!isFindingsGate && !isReadinessGate) return undefined;
+
+  const evidence = request.reviewEvidence;
+  if (!evidence) return "REVIEW_EVIDENCE_REQUIRED";
+  if (!evidence.reviewComplete) return "INDEPENDENT_REVIEW_NOT_COMPLETE";
+
+  if (isFindingsGate) {
+    return evidence.hasBlockingFindings ? undefined : "NO_BLOCKING_REVIEW_FINDINGS";
+  }
+  return evidence.hasBlockingFindings ? "BLOCKING_REVIEW_FINDINGS_PRESENT" : undefined;
+}
+
 function reconciliationGateReason(
   definition: TransitionDefinition,
   request: TransitionRequest,
 ): string | undefined {
-  if (definition.evaluator !== "reconciliation_proof_gate") return undefined;
+  if (definition.evaluator !== "deterministic_reconciliation_success_gate") return undefined;
 
   const evidence = request.reconciliationEvidence;
   if (!evidence || !evidence.externallyObserved) {
@@ -424,7 +531,7 @@ export function evaluateDevelopmentTransition(request: TransitionRequest): Trans
     TransitionDefinition | undefined;
   if (!definition) return rejected(request, "UNKNOWN_TRANSITION");
 
-  if (definition.from !== request.from || definition.to !== request.to) {
+  if (!definition.sources.includes(request.from) || definition.target !== request.to) {
     return rejected(request, "STATE_MISMATCH");
   }
 
@@ -464,12 +571,24 @@ export function evaluateDevelopmentTransition(request: TransitionRequest): Trans
 
   if (request.mergeEvidence) {
     const mergeOutcomeReason = mergeOperationOutcomeGateReason(request.mergeEvidence);
-    if (mergeOutcomeReason) return rejected(request, mergeOutcomeReason);
+    if (mergeOutcomeReason) {
+      const retryDisposition =
+        mergeOutcomeReason === "MERGE_OPERATION_FAILED"
+          ? deriveFailedMergeRetryDisposition(request.mergeEvidence, request)
+          : undefined;
+      return rejected(request, mergeOutcomeReason, retryDisposition);
+    }
 
     if (request.mergeEvidence.reviewedHeadSha !== request.mergeEvidence.currentHeadSha) {
       return rejected(request, "HEAD_NOT_CURRENT");
     }
   }
+
+  const verificationReason = verificationGateReason(definition, request);
+  if (verificationReason) return rejected(request, verificationReason);
+
+  const reviewReason = reviewGateReason(definition, request);
+  if (reviewReason) return rejected(request, reviewReason);
 
   const reconciliationReason = reconciliationGateReason(definition, request);
   if (reconciliationReason) return rejected(request, reconciliationReason);

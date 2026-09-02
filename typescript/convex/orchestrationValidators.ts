@@ -113,6 +113,7 @@ export const orchestrationStepDocumentValidator = v.object({
   completedAt: v.optional(v.number()),
   leaseOwner: v.optional(v.string()),
   leaseToken: v.optional(v.string()),
+  leaseFencingToken: v.optional(v.number()),
   leaseExpiresAt: v.optional(v.number()),
   nextAttemptAt: v.optional(v.number()),
 });
@@ -134,6 +135,7 @@ export const orchestrationPublicStepDocumentValidator = v.object({
   updatedAt: v.number(),
   completedAt: v.optional(v.number()),
   leaseOwner: v.optional(v.string()),
+  leaseFencingToken: v.optional(v.number()),
   leaseExpiresAt: v.optional(v.number()),
   nextAttemptAt: v.optional(v.number()),
 });
@@ -141,6 +143,7 @@ export const orchestrationPublicStepDocumentValidator = v.object({
 export const orchestrationLeaseGrantValidator = v.object({
   step: orchestrationPublicStepDocumentValidator,
   leaseToken: v.string(),
+  fencingToken: v.number(),
 });
 
 export const orchestrationReconciliationDocumentValidator = v.object({

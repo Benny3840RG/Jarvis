@@ -46,6 +46,11 @@ function makeContext(): TotalityReasoningContext {
 function successfulPayload(memoryProposals: unknown[] = []) {
   return {
     responseId: "resp_test",
+    usageMetadata: {
+      promptTokenCount: 110,
+      candidatesTokenCount: 40,
+      cachedContentTokenCount: 10,
+    },
     candidates: [
       {
         finishReason: "STOP",
@@ -124,6 +129,13 @@ describe("Gemini Totality reasoner", () => {
     assert.deepEqual(input.projectContext, makeContext().project);
     assert.equal(input.proposalTimestamp, makeContext().proposedAt);
     assert.equal(result.responseId, "resp_test");
+    assert.deepEqual(result.modelUsage, {
+      provider: "gemini",
+      model: "gemini-2.5-flash",
+      inputTokens: 110,
+      outputTokens: 40,
+      cachedInputTokens: 10,
+    });
     assert.match(result.draft.answer, /gusseted bracket/);
     assert.deepEqual(result.draft.memoryProposals, []);
   });
