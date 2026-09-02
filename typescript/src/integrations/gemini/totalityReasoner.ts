@@ -252,12 +252,11 @@ export class GeminiTotalityReasoner {
 
       const outputText = extractOutputText(payload);
       const parsed = parseTotalityDraft(JSON.parse(outputText) as unknown);
+      const usage = extractUsage(payload, this.config.model);
       return {
         responseId: typeof payload.responseId === "string" ? payload.responseId : null,
         draft: parsed,
-        ...(extractUsage(payload, this.config.model)
-          ? { modelUsage: extractUsage(payload, this.config.model) }
-          : {}),
+        ...(usage ? { modelUsage: usage } : {}),
       };
     } catch (error: unknown) {
       if (error instanceof GeminiRequestError) throw error;

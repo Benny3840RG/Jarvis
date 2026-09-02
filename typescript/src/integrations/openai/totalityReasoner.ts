@@ -312,12 +312,11 @@ export class OpenAITotalityReasoner {
 
       const outputText = extractOutputText(payload);
       const parsed = parseTotalityDraft(JSON.parse(outputText) as unknown);
+      const usage = extractUsage(payload, this.config.model);
       return {
         responseId: typeof payload.id === "string" ? payload.id : null,
         draft: parsed,
-        ...(extractUsage(payload, this.config.model)
-          ? { modelUsage: extractUsage(payload, this.config.model) }
-          : {}),
+        ...(usage ? { modelUsage: usage } : {}),
       };
     } catch (error: unknown) {
       if (error instanceof OpenAIRequestError) throw error;

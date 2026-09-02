@@ -105,3 +105,55 @@ The current coding runtime does not expose authoritative token/cost telemetry
 to this ledger, so none is fabricated. Repository runtime adapters now record
 provider-returned token/cache counts when available; costs remain explicitly
 estimated unless provider billing marks them verified.
+
+## Independent review of the GitHub mission slice (Claude, post-integration)
+
+This branch is shared between two agents (ChatGPT and Claude); the commit
+above ("complete governed GitHub mission slice") landed while Claude's own
+session was mid-task. Before building further on it, Claude independently
+re-ran the full check (matched the claimed 1,102 node / 219 Convex tests,
+all green) and ran a high-effort code review targeted at the
+security-sensitive paths: `githubDevelopment.ts`'s live merge client,
+`toolExecutionFactory.ts`'s wiring, the Development/Omega/ToolAction/
+orchestration authority boundaries, the new isomorphic SHA-256 primitive,
+and the `TRANSITIONS.yaml`/`EVENTS.yaml` restructure.
+
+Findings and disposition:
+
+- **Fixed — `FetchGitHubDevelopmentClient.getCommitChecks` silently dropped
+  check runs past the first 100.** `observeAndRequestCompletion` feeds this
+  straight into ΩΣ completion evidence, so a commit with >100 check runs
+  where a real failure lived past #100 would have been reported as fully
+  passed — exactly the kind of truncated-evidence-as-proof gap this module's
+  own docstring says it must not allow. Fixed by paginating on `total_count`
+  (bounded to 20 pages). This class also had zero test coverage against
+  mocked HTTP at all (only fakes of the interface were tested elsewhere), so
+  the client's constructor was also given an injectable `fetch` option,
+  mirroring the existing `MicrosoftGraphMessageStatusClient` pattern in this
+  repo, and a new `typescript/tests/fetchGitHubDevelopmentClient.test.ts`
+  proves pagination now works (RED-confirmed against the pre-fix code, then
+  GREEN).
+- **Fixed — duplicate `extractUsage` computation** in both
+  `integrations/gemini/totalityReasoner.ts` and
+  `integrations/openai/totalityReasoner.ts`: the same pure call was made
+  twice (once in a condition, once in the object literal it gated) instead
+  of once and reused, as the same class already does correctly for its
+  other optional fields. No behavior change; pure simplification.
+- **Reviewed, not changed — `orchestrationState.ts#requireActiveLease` and
+  the newly-required `fencingToken` argument.** A step already `running`
+  under pre-fencing-token code would fail this check after this PR deploys,
+  since `leaseFencingToken` is undefined on it and can never match a
+  caller-supplied token. This is a real deploy-time migration edge case, but
+  it is self-healing, not a stuck state: `recoverExpiredStep` reclaims any
+  `running` step once its `leaseExpiresAt` passes regardless of fencing
+  state, so the effect is a bounded one-time delay (one lease TTL window) for
+  whatever steps happen to be in flight at the moment this deploys, not
+  starting today (no live Convex deployment exists yet in this Phase 1
+  build). Writing migration-compat code for this now would be untestable in
+  this sandbox and risks quietly weakening the fencing guarantee itself to
+  accommodate a case that doesn't currently exist. Flagged here instead so
+  it isn't lost: worth a deliberate look immediately before this PR is ever
+  deployed live, not before.
+
+Full check re-verified green after the two fixes above (node test count now
+1,105 — the three new pagination tests — Convex unchanged at 219).

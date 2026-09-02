@@ -13,6 +13,9 @@ import type {
 const GITHUB_PROVIDER = "github-rest-v1";
 const GITHUB_API_VERSION = "2026-03-10";
 const SHA_PATTERN = /^[0-9a-f]{40}$/i;
+// 100 check runs/page; bounds worst-case pagination for a commit with an
+// unreasonable number of check runs rather than looping unboundedly.
+const MAX_CHECK_RUN_PAGES = 20;
 
 export type GitHubIssueObservation = {
   number: number;
@@ -108,16 +111,26 @@ export class GitHubRestError extends Error {
   }
 }
 
+export type FetchGitHubDevelopmentClientOptions = {
+  baseUrl?: string;
+  fetch?: typeof globalThis.fetch;
+};
+
 export class FetchGitHubDevelopmentClient implements GitHubDevelopmentClient {
+  private readonly baseUrl: string;
+  private readonly fetch: typeof globalThis.fetch;
+
   constructor(
     private readonly token: string,
-    private readonly baseUrl = "https://api.github.com",
+    options: FetchGitHubDevelopmentClientOptions = {},
   ) {
     if (!token.trim()) throw new Error("A GitHub token is required.");
+    this.baseUrl = options.baseUrl ?? "https://api.github.com";
+    this.fetch = options.fetch ?? globalThis.fetch;
   }
 
   private async request(path: string, init: RequestInit): Promise<unknown> {
-    const response = await fetch(`${this.baseUrl}${path}`, {
+    const response = await this.fetch(`${this.baseUrl}${path}`, {
       ...init,
       headers: {
         Accept: "application/vnd.github+json",
@@ -251,21 +264,28 @@ export class FetchGitHubDevelopmentClient implements GitHubDevelopmentClient {
     signal: AbortSignal;
   }): Promise<GitHubCommitCheckObservation[]> {
     const { owner, repo } = repositoryParts(input.repository);
-    const body = (await this.request(
-      `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/commits/${requiredSha(input.sha, "Commit SHA")}/check-runs?per_page=100`,
-      { method: "GET", signal: input.signal },
-    )) as {
-      check_runs: Array<{
-        name: string;
-        status: "queued" | "in_progress" | "completed";
-        conclusion: string | null;
-      }>;
-    };
-    return body.check_runs.map((check) => ({
-      name: check.name,
-      status: check.status,
-      conclusion: check.conclusion,
-    }));
+    const sha = requiredSha(input.sha, "Commit SHA");
+    const checks: GitHubCommitCheckObservation[] = [];
+    let totalCount = Number.POSITIVE_INFINITY;
+    for (let page = 1; checks.length < totalCount && page <= MAX_CHECK_RUN_PAGES; page++) {
+      const body = (await this.request(
+        `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/commits/${sha}/check-runs?per_page=100&page=${page}`,
+        { method: "GET", signal: input.signal },
+      )) as {
+        total_count: number;
+        check_runs: Array<{
+          name: string;
+          status: "queued" | "in_progress" | "completed";
+          conclusion: string | null;
+        }>;
+      };
+      totalCount = body.total_count;
+      if (body.check_runs.length === 0) break;
+      for (const check of body.check_runs) {
+        checks.push({ name: check.name, status: check.status, conclusion: check.conclusion });
+      }
+    }
+    return checks;
   }
 }
 
