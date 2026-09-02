@@ -23,6 +23,24 @@ const ALLOWLIST = new Map([
       "mcp-use pins the 7.x line transitively, so it cannot be overridden. Remove " +
       "this entry once mcp-use ships a react-router >= 8.3.0 dependency.",
   ],
+  [
+    "GHSA-X5FP-WJ9C-MXMX",
+    "qs array-limit bypass via bracket-key comma parsing (low-severity DoS-class, " +
+      "CVSS 3.7). qs is a transitive dependency of mcp-use's own Express layer " +
+      "(mcp-use@1.34.5 -> express@5.2.1 -> qs), not code this project depends on " +
+      "directly. `npm audit fix` (unforced) resolves qs only by pulling in an " +
+      "unrelated ~140-package churn across this project's esbuild/vite toolchain " +
+      "-- disproportionate, unvalidated risk for a low-severity transitive advisory. " +
+      "Remove this entry once mcp-use ships a qs >= 6.16.0 dependency.",
+  ],
+  [
+    "GHSA-4MJR-XMP4-GH2G",
+    "qs: Denial of Service via attacker-controlled isBuffer (moderate, CVSS 5.3). " +
+      "Same transitive dependency (mcp-use -> express -> qs) and same reasoning as " +
+      "GHSA-X5FP-WJ9C-MXMX above -- no fixed qs is resolvable here without the same " +
+      "unrelated toolchain churn. Remove this entry once mcp-use ships a qs >= " +
+      "6.16.0 dependency.",
+  ],
 ]);
 
 const BLOCKING_SEVERITIES = new Set(["moderate", "high", "critical"]);
