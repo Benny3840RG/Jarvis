@@ -8,6 +8,7 @@ import "../styles.css";
 import "../phase23.css";
 import type {
   JarvisConsoleProps,
+  JarvisDevelopmentMission,
   JarvisGovernedAction,
   JarvisNote,
   JarvisReminder,
@@ -47,6 +48,17 @@ function formatGovernedActionStatus(action: JarvisGovernedAction) {
     return "APPROVED — UNAVAILABLE expiry";
   }
   return action.state.toUpperCase();
+}
+
+const TERMINAL_DEVELOPMENT_STATES = new Set(["COMPLETE", "FAILED", "ABORTED", "CONTRADICTED"]);
+const BLOCKED_DEVELOPMENT_STATES = new Set(["REPAIR_REQUIRED", "INDETERMINATE"]);
+
+function developmentMissionStatusClass(mission: JarvisDevelopmentMission) {
+  if (TERMINAL_DEVELOPMENT_STATES.has(mission.state)) {
+    return statusClass(mission.state === "COMPLETE" ? "good" : "guarded");
+  }
+  if (BLOCKED_DEVELOPMENT_STATES.has(mission.state)) return statusClass("guarded");
+  return statusClass("pending");
 }
 
 const JarvisConsole: React.FC = () => {
@@ -565,6 +577,25 @@ const JarvisConsole: React.FC = () => {
                       </div>
                       <span className={statusClass(action.destructive ? "guarded" : "good")}>
                         {action.requiredAuthority}
+                      </span>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              <div className="hud-panel development-mission-panel">
+                <div className="panel-title">DEVELOPMENT MISSIONS</div>
+                {snapshot.developmentMissions.length === 0 ? (
+                  <div className="console-empty">No Development missions tracked.</div>
+                ) : (
+                  snapshot.developmentMissions.slice(0, 5).map((mission) => (
+                    <div className="development-mission-row" key={mission.id}>
+                      <div className="row-copy">
+                        <strong>{mission.repository ?? mission.id}</strong>
+                        <small>{mission.branch ?? "no branch bound yet"}</small>
+                      </div>
+                      <span className={developmentMissionStatusClass(mission)}>
+                        {mission.state}
                       </span>
                     </div>
                   ))

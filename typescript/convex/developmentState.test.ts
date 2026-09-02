@@ -338,6 +338,51 @@ async function auditEventsFor(t: ReturnType<typeof harness>, requestId: string) 
   );
 }
 
+describe("developmentState.listRecent", () => {
+  it("returns this owner's subjects most-recently-updated first", async () => {
+    const t = harness();
+    await seedSubject(t, { subjectId: "mission-older", state: "CLAIMED" });
+    await seedSubject(t, { subjectId: "mission-newer", state: "READY" });
+    await t.run(async (ctx) => {
+      const older = await ctx.db
+        .query("developmentSubjects")
+        .withIndex("by_owner_and_subject_id", (q) =>
+          q.eq("ownerId", "jarvis-cli").eq("subjectId", "mission-older"),
+        )
+        .unique();
+      if (older) await ctx.db.patch("developmentSubjects", older._id, { updatedAt: 1 });
+      const newer = await ctx.db
+        .query("developmentSubjects")
+        .withIndex("by_owner_and_subject_id", (q) =>
+          q.eq("ownerId", "jarvis-cli").eq("subjectId", "mission-newer"),
+        )
+        .unique();
+      if (newer) await ctx.db.patch("developmentSubjects", newer._id, { updatedAt: 2 });
+    });
+
+    const subjects = await t.query(api.developmentState.listRecent, {
+      serviceToken: SERVICE_TOKEN,
+      limit: 10,
+    });
+
+    expect(subjects.map((subject) => subject.subjectId)).toEqual([
+      "mission-newer",
+      "mission-older",
+    ]);
+  });
+
+  it("rejects a limit outside the bounded range", async () => {
+    const t = harness();
+
+    await expect(
+      t.query(api.developmentState.listRecent, { serviceToken: SERVICE_TOKEN, limit: 0 }),
+    ).rejects.toThrow(/Limit must be an integer between 1 and 100/);
+    await expect(
+      t.query(api.developmentState.listRecent, { serviceToken: SERVICE_TOKEN, limit: 101 }),
+    ).rejects.toThrow(/Limit must be an integer between 1 and 100/);
+  });
+});
+
 describe("developmentState.create", () => {
   it("creates every new subject at IDEA with an immutable existing orchestration binding", async () => {
     const t = harness();

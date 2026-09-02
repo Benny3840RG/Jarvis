@@ -273,3 +273,66 @@ Findings and disposition:
 
 Full check re-verified green after the two fixes above (node test count now
 1,105 — the three new pagination tests — Convex unchanged at 219).
+
+## Post-merge: wiring Console 01's HUD to the Development pipeline
+
+PR #415 merged (`e60f62e`). Follow-on work, branched fresh from `main` per
+the "already merged, don't stack on it" rule: the live HUD (Jarvis Console
+01, a Manufact-deployed mcp-use app) had no visibility into Development
+missions at all -- its `show-jarvis-console` widget showed tasks,
+reminders, notes, and governed ToolActions, but nothing from the pipeline
+this whole Phase 1 build exists to govern.
+
+**Convex**: added `developmentSubjects.by_owner_and_updated_at` index and
+`developmentState.listRecent` (owner-scoped, bounded, most-recently-updated
+first) -- mirrors `toolActions.listRecent`'s existing bounded
+recent-snapshot shape rather than real cursor pagination, since this is
+operator inspection, not an exhaustive register. 2 new Convex tests.
+
+**Console**: `index.ts` now calls `developmentState.listRecent` alongside
+its existing task/reminder/note/tool-action reads, maps rows into a new
+read-only `developmentMissions` field, and renders them in a new
+"DEVELOPMENT MISSIONS" HUD panel (`widget.tsx`/`types.ts`/`phase23.css`),
+styled exactly like the existing read-only governed-actions panel. Console
+01 still exposes no way to advance, approve, or commit a Development
+transition through the HUD -- inspection only, consistent with its
+existing stance on governed ToolActions.
+
+**A real architectural fork in the road, decided and documented rather than
+silently picked**: Console 01's own `httpParity.test.ts` requires every
+Convex call it makes to map to a documented OpenAPI/NestJS HTTP route --
+enforced today for tasks/reminders/notes/toolActions, all of which already
+have a route because the main HTTP app (`jarvisHttpModule.ts`, its
+`PersistenceProvider`-abstracted store layer) predates them. Development
+state has never been part of that layer -- it has been Convex-native by
+design throughout this entire multi-session build, authenticated only by
+the shared service token, with no NestJS controller, no
+`PersistenceProvider` binding, nothing. Retrofitting a full parallel HTTP
+surface (controller, DI token, OpenAPI doc, its own tests) onto an
+architecture this domain was deliberately never built into, purely to
+satisfy one console-side test, would have been a disproportionate detour
+for what's actually being asked (read-only HUD inspection) and risked
+exactly the kind of second-system sprawl this project's own REUSE
+discipline warns against.
+
+Chose instead to keep `httpParity.test.ts`'s invariant meaningful rather
+than either silently breaking it or forcing a fake mapping: added an
+explicit `noHttpRouteYet` field to its coverage-entry shape, requiring a
+real, non-empty documented reason (not a free pass) for exactly this one
+call, plus a new scoped test (`developmentState.*` calls) mirroring the
+existing per-namespace enforcement pattern for notes/toolActions, so a
+future undocumented Development Convex call still can't slip in silently.
+Should get a real HTTP route (and this exception removed) once Development
+state gets an HTTP surface of its own -- flagged in the test's own header
+comment for whoever does that.
+
+**Deployment note**: Console 01's Manufact deployment auto-deploys from
+`main` on changes under `typescript/jarvis-console-01/**` (`waitForCi:
+true`). The active production deployment before this change was from
+2026-07-29, over a month stale and unaware of any of Phase 1 -- merging
+this branch is what will actually put the new HUD panel live, not the
+Phase 1 merge itself (which never touched the console's own package path).
+
+Full `npm run check` green (main workspace: 1,118 node tests, 226 Convex
+tests); Console 01's own `npm test` green (22 tests, up from 21) and
+`npx tsc --noEmit` clean.
