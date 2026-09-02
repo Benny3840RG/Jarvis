@@ -36,9 +36,9 @@ ChatGPT produces:
 
 Output: a proposed patch or PR-ready diff.
 
-## 4. Copilot (Contract Enforcement)
+## 4. Independent Review
 
-Copilot checks:
+Copilot or another capable model may advise on:
 
 - CLI explicitness
 - Reminder parsing invariants
@@ -47,7 +47,8 @@ Copilot checks:
 - HTTP/MCP contract alignment
 - Documentation consistency
 
-Output: a review summary using `copilot-review-template.md`.
+Output: advisory findings. Record relevant facts using
+`pr-evidence-template.md`; model output does not grant approval.
 
 ## 5. Operator (Execution)
 
@@ -57,7 +58,8 @@ Run:
 - `npm run test:coverage`
 - Convex smoke test (dev deployments only)
 
-Commit only after all gates pass.
+Commit only after all deterministic gates pass. An authorised independent
+reviewer, not a model role string, controls merge approval.
 
 ## 6. Repeat
 

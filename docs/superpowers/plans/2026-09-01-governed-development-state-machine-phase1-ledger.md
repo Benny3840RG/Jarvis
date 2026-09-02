@@ -23,6 +23,7 @@ and merge-authority evaluation in pull request #415.
 | Model routing and telemetry           | EXTEND         | Trusted registry, least-cost capable routing, bounded budgets/escalation, durable mission invocation events, aggregate latency/retry/waste metrics, and OpenAI/Gemini provider usage capture.                                |
 | Omega completion                      | EXTEND         | Existing ΩΣ evidence/proof/mutation remains sole completion authority and atomically projects an explicitly bound Development mission to `COMPLETE`.                                                                         |
 | Canonical hashing                     | HARDEN         | One canonical JSON encoder plus one isomorphic SHA-256 primitive now serves Phase 1 fingerprints without importing Node crypto into Convex mutations.                                                                        |
+| Pull-request evidence gate            | HARDEN         | The former Copilot-named template check is now path-aware, requires companion tests for TypeScript source, obtains test truth from CI and treats every model review as advisory evidence rather than authority.              |
 
 ## Files changed in the current task
 
@@ -65,6 +66,10 @@ and merge-authority evaluation in pull request #415.
 - Caller-supplied merge evidence could previously resemble success without a
   durable effect. The commit boundary now requires the approved ToolAction,
   execution claim, succeeded receipt and resolved provider reconciliation.
+- The PR check was named as though it performed an independent Copilot review,
+  but it only validated six manually written template lines. Repaired by
+  renaming it `PR Evidence Check`, requiring only path-relevant findings and
+  keeping test results in authoritative CI.
 
 ## Architectural decisions and assumptions
 
@@ -113,6 +118,8 @@ required checks remain green.
 - GitHub TypeScript checks: passed.
 - GitHub Copilot Review template check: passed after replacing the inherited
   placeholder with concrete scope findings.
+- Follow-up PR evidence policy tests: 29 passed across the path-aware evidence
+  rules and autonomous-builder contract.
 
 ## Model/resource usage
 

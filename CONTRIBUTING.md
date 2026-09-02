@@ -1,98 +1,75 @@
 # Contributing to Jarvis
 
-## 🧩 Copilot's Seat at the Table
+## Development authority
 
-### Copilot as a First-Class Agent
+Jarvis may use Claude, ChatGPT, Copilot or another suitable model to reason,
+implement or critique a change. Model output is advisory evidence. A model does
+not create authority, approve its own work, satisfy deterministic gates or
+authorise a merge.
 
-Jarvis uses a three-agent development model:
+The permanent boundary is:
 
-- **Claude** — architecture, reasoning, failure modes
-- **ChatGPT** — TypeScript + Convex implementation
-- **Copilot** — invariants, contracts, operator UX, architectural consistency
+> MODEL THINKS → JARVIS GOVERNS → EXECUTION ACTS → EVIDENCE OBSERVES → ΩΣ COMPLETES
 
-Copilot is not an optional reviewer.
-Copilot is a **required participant** in every change.
-No slice, PR, or lifecycle modification is complete until Copilot has performed a contract review using [/docs/copilot/copilot-review-template.md](/docs/copilot/copilot-review-template.md).
+Repository contracts, tests, CI, current approvals and trusted reviewer identity
+remain authoritative.
 
-Copilot's role is authoritative:
+## Contribution workflow
 
-- Copilot enforces CLI explicitness
-- Copilot guards reminder invariants (`dueRaw`, flag correctness)
-- Copilot ensures JSON and Convex semantics remain identical
-- Copilot protects backup/restore correctness
-- Copilot validates HTTP/MCP operator contract alignment
-- Copilot prevents drift from owner goals
-- Copilot ensures UX wording is correct, consistent, and operator-safe
+1. The operator or approved issue defines a bounded slice.
+2. A capable model may analyse architecture, failure modes and contract impact.
+3. Implementation follows test-first development and preserves existing
+   authority paths.
+4. Required CI checks the exact candidate SHA.
+5. The PR records evidence relevant to the changed files.
+6. An independent authorised reviewer evaluates the diff and evidence.
+7. Merge proceeds only after repository policy grants authority.
 
-Copilot does **not** modify code directly.
-Copilot does **not** handle tokens.
-Copilot does **not** allow fuzzy commands or inferred timestamps.
-Copilot does **not** weaken single-user semantics.
+No particular model is mandatory for every change. Use the lowest-cost capable
+model, escalating for architecture, security, contradiction or repeated
+verification failure.
 
-Copilot is a **governance agent**, not an implementation agent.
+## PR evidence
 
----
+The [PR Evidence template](/docs/copilot/pr-evidence-template.md) covers:
 
-### Multi-Agent Workflow (Copilot Included at the Table)
+- CLI Contract
+- Persistence Providers
+- Backup / Restore
+- HTTP / MCP
+- Documentation
 
-All contributions follow this pipeline:
+Include only headings relevant to the changed paths. A concrete finding or
+`N/A — <reason>` is acceptable. Required CI supplies test and check results
+automatically, so do not manually copy test counts into the PR description.
 
-1. **Operator** defines the slice
-2. **Claude** performs reasoning
-3. **ChatGPT** produces implementation
-4. **Copilot** performs contract enforcement
-5. **Operator** executes checks and merges
+The [PR Evidence Check](.github/workflows/copilot-check.yml) enforces applicable
+evidence lines and companion tests for TypeScript source changes. It does not
+pretend that filling in a template is an independent code review.
 
-Copilot's review is a **hard gate**. A PR cannot be merged without a Copilot Review section — the [`copilot-check`](.github/workflows/copilot-check.yml) workflow fails any pull request whose description omits it, and the [pull request template](.github/PULL_REQUEST_TEMPLATE.md) scaffolds it for every change.
+## Model review
 
-To perform a review, work through [/docs/copilot/copilot-review-template.md](/docs/copilot/copilot-review-template.md) and record the result in the PR's **Copilot Review** section.
+Copilot or another model may review:
 
----
+- CLI explicitness and operator behaviour;
+- JSON/Convex and persistence semantics;
+- backup and restore behaviour;
+- HTTP/MCP contract alignment;
+- documentation consistency;
+- concurrency, security and failure modes.
 
-### Philosophy
+Useful findings belong in the PR discussion or evidence package. Model approval
+never replaces independent reviewer authority.
 
-Jarvis follows:
+## Autonomous builder
 
-> **"Keep it boring first. Boring is what works."**
+The Jarvis autonomous builder is an implementation participant, not a governance
+authority. It may act only on an open issue carrying `automation-approved` and
+may produce only an isolated branch and draft pull request.
 
-Copilot is the agent responsible for ensuring Jarvis stays boring — explicit, deterministic, predictable, and operator-safe.
+It cannot approve its own work, mark a pull request ready, merge, commission,
+deploy, change secrets or broaden the approved issue. Independent CI, relevant
+PR evidence and an authorised reviewer remain required.
 
----
-
-### Where Copilot Lives in the Repo
-
-```
-/docs/copilot/
-  copilot-collaboration.md
-  copilot-review-template.md
-  copilot-owner-goals.md
-  copilot-workflow.md
-  copilot-repo-structure.md
-```
-
-These documents define Copilot's authority, responsibilities, and invariants.
-
----
-
-### Copilot Is a Required Participant
-
-Copilot is not a reviewer you "add."
-Copilot is a **governance seat** in the Jarvis development table.
-
-Every slice.
-Every PR.
-Every lifecycle change.
-Every operator-facing behaviour.
-
-Copilot is always present.
-
-
----
-
-## Autonomous Builder
-
-The Jarvis autonomous builder is an implementation participant, not a governance authority. It may act only on an open issue carrying `automation-approved`, and it may produce only an isolated branch and draft pull request.
-
-It cannot approve its own work, satisfy the Copilot gate by assertion, mark a pull request ready, merge, commission, deploy, change secrets, or broaden the approved issue. Independent CI, Copilot review, and the operator remain required.
-
-See [Autonomous builds](/docs/operations/autonomous-builds.md) for issue format, labels, recovery, and credential controls.
+See [Autonomous builds](/docs/operations/autonomous-builds.md) for issue format,
+labels, recovery and credential controls.

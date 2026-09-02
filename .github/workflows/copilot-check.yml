@@ -1,4 +1,4 @@
-name: Copilot Review Check
+name: PR Evidence Check
 
 on:
   pull_request:
@@ -9,25 +9,16 @@ permissions:
   pull-requests: read
 
 jobs:
-  copilot-review-section:
+  pr-evidence:
     runs-on: ubuntu-latest
     steps:
-      - name: Verify the Copilot Review section is filled in and tests accompany source changes
+      - name: Verify relevant PR evidence and companion tests
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const body = context.payload.pull_request.body || "";
+            const visibleBody = body.replace(/<!--[\s\S]*?-->/g, "");
             const failures = [];
-
-            const requiredHeadings = [
-              "CLI Contract",
-              "Persistence Providers",
-              "Backup / Restore",
-              "HTTP / MCP",
-              "Tests & Checks",
-              "Documentation",
-            ];
-
             const MIN_CONTENT_LENGTH = 12;
             const fillerPatterns = [
               /^n\/?a$/i,
@@ -38,53 +29,7 @@ jobs:
             ];
             const naWithReason = /^n\/a\s*[—-]\s*(.+)/i;
 
-            if (!body.includes("Copilot Review")) {
-              failures.push(
-                "PR description must include a '# Copilot Review' section (see .github/PULL_REQUEST_TEMPLATE.md).",
-              );
-            } else {
-              for (const heading of requiredHeadings) {
-                const escaped = heading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-                const pattern = new RegExp(`-\\s*${escaped}\\s*:\\s*(.+)`);
-                const match = body.match(pattern);
-                if (!match) {
-                  failures.push(`Copilot Review is missing the "${heading}" line.`);
-                  continue;
-                }
-                const content = match[1].trim();
-                if (content.length === 0 || content === "[...]") {
-                  failures.push(
-                    `Copilot Review's "${heading}" line is still a placeholder — fill it in with an actual finding (or "N/A — <reason>").`,
-                  );
-                  continue;
-                }
-
-                const naMatch = content.match(naWithReason);
-                if (naMatch) {
-                  if (naMatch[1].trim().length < MIN_CONTENT_LENGTH) {
-                    failures.push(
-                      `Copilot Review's "${heading}" line gives "N/A" without a real reason — say why it doesn't apply.`,
-                    );
-                  }
-                  continue;
-                }
-
-                if (fillerPatterns.some((rx) => rx.test(content))) {
-                  failures.push(
-                    `Copilot Review's "${heading}" line looks like filler ("${content}") — give a concrete finding tied to the code change, or "N/A — <reason>".`,
-                  );
-                  continue;
-                }
-
-                if (content.length < MIN_CONTENT_LENGTH) {
-                  failures.push(
-                    `Copilot Review's "${heading}" line is too short ("${content}") — give a concrete finding, or "N/A — <reason>".`,
-                  );
-                }
-              }
-            }
-
-            const { data: files } = await github.rest.pulls.listFiles({
+            const files = await github.paginate(github.rest.pulls.listFiles, {
               owner: context.repo.owner,
               repo: context.repo.repo,
               pull_number: context.payload.pull_request.number,
@@ -93,17 +38,107 @@ jobs:
             const paths = files.map((file) => file.filename);
             const sourceChanged = paths.some(
               (path) =>
-                (path.startsWith("typescript/src/") || path.startsWith("typescript/convex/")) &&
+                (path.startsWith("typescript/src/") ||
+                  path.startsWith("typescript/convex/") ||
+                  path.startsWith("typescript/jarvis-console-01/src/")) &&
                 !path.endsWith(".test.ts"),
             );
             const testsChanged = paths.some(
               (path) =>
                 path.startsWith("typescript/tests/") ||
-                (path.startsWith("typescript/convex/") && path.endsWith(".test.ts")),
+                (path.startsWith("typescript/convex/") && path.endsWith(".test.ts")) ||
+                path.startsWith("typescript/jarvis-console-01/tests/"),
             );
+
+            const evidenceRules = [
+              {
+                heading: "CLI Contract",
+                applies: (path) =>
+                  path === "typescript/package.json" ||
+                  path === "typescript/src/index.ts" ||
+                  path.startsWith("typescript/src/tools/"),
+              },
+              {
+                heading: "Persistence Providers",
+                applies: (path) =>
+                  path.startsWith("typescript/convex/") ||
+                  /^typescript\/src\/(persistence|state|memory|knowledge)\//.test(path),
+              },
+              {
+                heading: "Backup / Restore",
+                applies: (path) =>
+                  /(^|\/)(backup|restore)(\/|\.|-)/i.test(path) ||
+                  /typescript\/src\/tools\/runConvexImport\.ts$/.test(path),
+              },
+              {
+                heading: "HTTP / MCP",
+                applies: (path) =>
+                  path.startsWith("typescript/src/http/") ||
+                  path.startsWith("typescript/src/mcp/") ||
+                  path.startsWith("typescript/openapi/"),
+              },
+              {
+                heading: "Documentation",
+                applies: (path) =>
+                  path.startsWith(".github/workflows/") ||
+                  /^(JARVIS_|TRANSITIONS|EVENTS).*\.(md|ya?ml)$/.test(path),
+              },
+            ];
+            const requiredHeadings = evidenceRules
+              .filter((rule) => paths.some(rule.applies))
+              .map((rule) => rule.heading);
+
+            if (requiredHeadings.length > 0) {
+              if (!/^# PR Evidence\s*$/im.test(visibleBody)) {
+                failures.push(
+                  "PR description must include a '# PR Evidence' section for the affected areas (see .github/PULL_REQUEST_TEMPLATE.md).",
+                );
+              }
+
+              for (const heading of requiredHeadings) {
+                const escaped = heading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+                const pattern = new RegExp(`^\\s*-\\s*${escaped}\\s*:\\s*(.+)$`, "im");
+                const match = visibleBody.match(pattern);
+                if (!match) {
+                  failures.push(`PR Evidence is missing the relevant "${heading}" line.`);
+                  continue;
+                }
+                const content = match[1].trim();
+                if (content.length === 0 || content === "[...]") {
+                  failures.push(
+                    `PR Evidence's "${heading}" line is still a placeholder — add a concrete finding or "N/A — <reason>".`,
+                  );
+                  continue;
+                }
+
+                const naMatch = content.match(naWithReason);
+                if (naMatch) {
+                  if (naMatch[1].trim().length < MIN_CONTENT_LENGTH) {
+                    failures.push(
+                      `PR Evidence's "${heading}" line gives "N/A" without a real reason — say why it doesn't apply.`,
+                    );
+                  }
+                  continue;
+                }
+
+                if (fillerPatterns.some((rx) => rx.test(content))) {
+                  failures.push(
+                    `PR Evidence's "${heading}" line looks like filler ("${content}") — give a concrete finding or "N/A — <reason>".`,
+                  );
+                  continue;
+                }
+
+                if (content.length < MIN_CONTENT_LENGTH) {
+                  failures.push(
+                    `PR Evidence's "${heading}" line is too short ("${content}") — give a concrete finding or "N/A — <reason>".`,
+                  );
+                }
+              }
+            }
+
             if (sourceChanged && !testsChanged) {
               failures.push(
-                "This PR changes files under typescript/src/ or typescript/convex/ but touches no test file. Add coverage, or explain in Copilot Review's \"Tests & Checks\" line why none is needed.",
+                "This PR changes TypeScript source but touches no test file. Add companion coverage; required CI reports the result automatically.",
               );
             }
 
