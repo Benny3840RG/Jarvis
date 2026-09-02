@@ -42,10 +42,10 @@ Concurrent execution is permitted only when approved issues have no unresolved d
 4. Codex edits the isolated checkout under the repository policy.
 5. A trusted guard rejects forbidden or excessive changes.
 6. The workflow pushes an attempt-specific `automation/issue-<number>/run-<run-id>` branch and opens one draft PR.
-7. A separate secret-free job waits on the exact candidate SHA for the PR-scoped `automation-policy`, TypeScript, Console, Copilot Review, and CodeQL checks. It does not check out or execute the candidate tree in the default-branch workflow. `GITHUB_TOKEN`-created draft PRs often leave those workflows waiting for approval; the verifier attempts to approve them so verification stays PR-scoped.
+7. A separate secret-free job waits on the exact candidate SHA for the PR-scoped `automation-policy`, TypeScript, Console, PR Evidence, and CodeQL checks. It does not check out or execute the candidate tree in the default-branch workflow. `GITHUB_TOKEN`-created draft PRs often leave those workflows waiting for approval; the verifier attempts to approve them so verification stays PR-scoped.
 8. The workflow publishes one namespaced `jarvis-autobuild/verify-candidate` status on the draft PR and blocks the issue if those required checks fail or time out.
-9. Ordinary TypeScript, Console, Copilot, and CodeQL checks keep their own names and remain authoritative. The autonomous verifier never impersonates or satisfies them.
-10. The owner reviews the diff, Copilot Review, checks, and remaining risk.
+9. Ordinary TypeScript, Console, PR Evidence, and CodeQL checks keep their own names and remain authoritative. The autonomous verifier never impersonates or satisfies them.
+10. The owner reviews the diff, independent findings, checks, and remaining risk.
 11. Only the owner may change draft state or merge.
 
 ## Manual retry

@@ -402,7 +402,7 @@ export function validateWorkflowContract(workflow) {
       "automation-policy",
       "typecheck-lint-format-test",
       "jarvis-console-01-build",
-      "copilot-review-section",
+      "pr-evidence",
       "CodeQL",
     ]) {
       if (!verifyCandidate.includes(`"${requiredCheck}"`)) {
@@ -425,7 +425,7 @@ export function validateWorkflowContract(workflow) {
     "automation-policy",
     "typecheck-lint-format-test",
     "jarvis-console-01-build",
-    "copilot-review-section",
+    "pr-evidence",
     "CodeQL",
   ]) {
     const statusContext = new RegExp(

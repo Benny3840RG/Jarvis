@@ -18,16 +18,21 @@ Describe changes:
 
 Paste Claude's refined problem statement.
 
-# Copilot Review
+# PR Evidence
 
-Use [/docs/copilot/copilot-review-template.md](/docs/copilot/copilot-review-template.md):
+<!--
+Keep only the lines relevant to the changed files. A concrete finding or
+"N/A — <reason>" is acceptable. Unrelated headings are not required.
 
 - CLI Contract: [...]
 - Persistence Providers: [...]
 - Backup / Restore: [...]
 - HTTP / MCP: [...]
-- Tests & Checks: [...]
 - Documentation: [...]
+
+Required CI reports test results automatically; do not copy test counts here.
+AI review is advisory evidence only. It does not grant approval or merge authority.
+-->
 
 # Operator Verification
 

@@ -465,14 +465,15 @@ jobs:
 
           The approved issue and acceptance criteria defined the complete scope. No broader authority was granted.
 
-          # Copilot Review
+          # PR Evidence
 
-          - CLI Contract: Requires review against the issue acceptance criteria before leaving draft.
-          - Persistence Providers: Requires review for JSON and Convex behavioural parity before leaving draft.
-          - Backup / Restore: Requires review for persistence or recovery impact before leaving draft.
-          - HTTP / MCP: Requires review for contract and operator-interface impact before leaving draft.
-          - Tests & Checks: Independent pull-request CI is machine-enforced; the agent's own check report is advisory.
-          - Documentation: Requires review for operator and runbook accuracy before leaving draft.
+          - CLI Contract: Record command, flag, provider or operator-behaviour impact when the changed paths make this relevant.
+          - Persistence Providers: Record JSON, Convex, schema or storage impact when the changed paths make this relevant.
+          - Backup / Restore: Record recovery impact when relevant, otherwise use a reasoned N/A.
+          - HTTP / MCP: Record contract, authentication or operator-interface impact when relevant.
+          - Documentation: Record canonical contract, runbook or operator-guidance impact when relevant.
+
+          Required pull-request CI is authoritative for tests and checks. AI review is advisory evidence only and grants no approval or merge authority.
 
           # Operator Verification
 
@@ -547,7 +548,7 @@ jobs:
               "automation-policy",
               "typecheck-lint-format-test",
               "jarvis-console-01-build",
-              "copilot-review-section",
+              "pr-evidence",
               "CodeQL",
             ]);
             const deadline = Date.now() + 25 * 60 * 1000;
