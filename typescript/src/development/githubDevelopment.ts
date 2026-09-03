@@ -285,6 +285,9 @@ export class FetchGitHubDevelopmentClient implements GitHubDevelopmentClient {
         checks.push({ name: check.name, status: check.status, conclusion: check.conclusion });
       }
     }
+    if (!Number.isSafeInteger(totalCount) || totalCount < 0 || checks.length !== totalCount) {
+      throw new Error("GitHub check-run evidence is incomplete.");
+    }
     return checks;
   }
 }

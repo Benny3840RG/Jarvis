@@ -457,6 +457,42 @@ describe("developmentState.create", () => {
   });
 });
 
+describe("developmentState.listEvents", () => {
+  it("fails closed instead of returning a silently truncated event history", async () => {
+    const t = harness();
+    await seedSubject(t);
+    await t.run(async (ctx) => {
+      for (let index = 0; index <= 1_000; index += 1) {
+        const eventId = `event-${String(index).padStart(4, "0")}`;
+        await ctx.db.insert("developmentEvents", {
+          ownerId: "jarvis-cli",
+          subjectId: "mission-1",
+          eventId,
+          requestId: eventId,
+          canonicalRequestFingerprint: `request-${eventId}`,
+          canonicalEventFingerprint: `event-${eventId}`,
+          eventType: "DEV_MODEL_INVOCATION_RECORDED",
+          eventSchemaVersion: 1,
+          occurredAt: "2026-09-03T00:00:00.000Z",
+          recordedAt: "2026-09-03T00:00:00.000Z",
+          evidenceIds: [],
+          correlationId: "correlation-1",
+          reducerVersion: "DevelopmentReducer/v1",
+          payload: {},
+          createdAt: index,
+        });
+      }
+    });
+
+    await expect(
+      t.query(api.developmentState.listEvents, {
+        serviceToken: SERVICE_TOKEN,
+        subjectId: "mission-1",
+      }),
+    ).rejects.toThrow("Development event history list exceeds the bounded read limit");
+  });
+});
+
 describe("developmentState.commit", () => {
   it("derives the active lease and mission scope from existing durable orchestration records", async () => {
     const t = harness();
