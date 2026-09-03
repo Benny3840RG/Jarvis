@@ -34,7 +34,7 @@ Publish and verify the fail-closed evidence follow-up on a fresh branch from
 ## Verification evidence
 
 - Full Convex suite after fail-closed audit repairs: 227 passed.
-- Full Node suite after fail-closed audit repairs: 1,120 passed.
+- Full Node suite after fail-closed audit repairs: 1,121 passed.
 - Repository hygiene, application and Convex type checks: passed.
 - ESLint, full-tree Prettier and OpenAPI validation: passed.
 
@@ -358,7 +358,7 @@ so ΩΣ cannot receive partial success evidence. The same audit found
 existing `collectBounded` fail-closed helper, with a 1,001-event regression
 test.
 
-Fresh full verification after these repairs: 1,120 Node tests and 227 Convex
+Fresh full verification after these repairs: 1,121 Node tests and 227 Convex
 tests passed, together with repository hygiene, both TypeScript configurations,
 ESLint, Prettier and OpenAPI validation.
 
@@ -371,3 +371,7 @@ The first post-hardening full run also exposed one unrelated timing-sensitive
 JSON lock test failure. That exact test passed immediately in isolation, and a
 fresh full `npm run check` then passed all 1,120 Node and 227 Convex tests; the
 failed run was not counted as completion evidence.
+
+The independent PR review identified the moving-`total_count` case on the
+superseded head. The current stable-total guard already repaired it; an explicit
+regression test for that exact scenario raises the final Node total to 1,121.

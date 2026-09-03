@@ -144,4 +144,34 @@ describe("FetchGitHubDevelopmentClient.getCommitChecks", () => {
 
     assert.equal(requests, 2);
   });
+
+  it("rejects a total_count that changes while pages are being read", async () => {
+    let requests = 0;
+    const client = new FetchGitHubDevelopmentClient("test-token", {
+      async fetch() {
+        requests++;
+        if (requests === 1) {
+          return jsonResponse({
+            total_count: 101,
+            check_runs: Array.from({ length: 100 }, (_, i) => checkRun(`check-${i}`, "success")),
+          });
+        }
+        return jsonResponse({
+          total_count: 100,
+          check_runs: [checkRun("check-100", "failure")],
+        });
+      },
+    });
+
+    await assert.rejects(
+      client.getCommitChecks({
+        repository: "Benny3840RG/Jarvis",
+        sha: "f".repeat(40),
+        signal: new AbortController().signal,
+      }),
+      /GitHub check-run evidence is incomplete/,
+    );
+
+    assert.equal(requests, 2);
+  });
 });
