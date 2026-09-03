@@ -266,6 +266,7 @@ export class FetchGitHubDevelopmentClient implements GitHubDevelopmentClient {
     const { owner, repo } = repositoryParts(input.repository);
     const sha = requiredSha(input.sha, "Commit SHA");
     const checks: GitHubCommitCheckObservation[] = [];
+    const checkRunIds = new Set<number>();
     let totalCount = Number.POSITIVE_INFINITY;
     for (let page = 1; checks.length < totalCount && page <= MAX_CHECK_RUN_PAGES; page++) {
       const body = (await this.request(
@@ -274,18 +275,29 @@ export class FetchGitHubDevelopmentClient implements GitHubDevelopmentClient {
       )) as {
         total_count: number;
         check_runs: Array<{
+          id: number;
           name: string;
           status: "queued" | "in_progress" | "completed";
           conclusion: string | null;
         }>;
       };
+      if (!Number.isSafeInteger(body.total_count) || body.total_count < 0) {
+        throw new Error("GitHub check-run evidence is incomplete.");
+      }
+      if (Number.isFinite(totalCount) && body.total_count !== totalCount) {
+        throw new Error("GitHub check-run evidence is incomplete.");
+      }
       totalCount = body.total_count;
       if (body.check_runs.length === 0) break;
       for (const check of body.check_runs) {
+        if (!Number.isSafeInteger(check.id) || check.id <= 0 || checkRunIds.has(check.id)) {
+          throw new Error("GitHub check-run evidence is incomplete.");
+        }
+        checkRunIds.add(check.id);
         checks.push({ name: check.name, status: check.status, conclusion: check.conclusion });
       }
     }
-    if (!Number.isSafeInteger(totalCount) || totalCount < 0 || checks.length !== totalCount) {
+    if (checks.length !== totalCount || checkRunIds.size !== totalCount) {
       throw new Error("GitHub check-run evidence is incomplete.");
     }
     return checks;

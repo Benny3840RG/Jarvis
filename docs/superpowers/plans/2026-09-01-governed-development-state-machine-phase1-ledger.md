@@ -34,7 +34,7 @@ Publish and verify the fail-closed evidence follow-up on a fresh branch from
 ## Verification evidence
 
 - Full Convex suite after fail-closed audit repairs: 227 passed.
-- Full Node suite after fail-closed audit repairs: 1,119 passed.
+- Full Node suite after fail-closed audit repairs: 1,120 passed.
 - Repository hygiene, application and Convex type checks: passed.
 - ESLint, full-tree Prettier and OpenAPI validation: passed.
 
@@ -73,6 +73,10 @@ Publish and verify the fail-closed evidence follow-up on a fresh branch from
   by requiring the retrieved count to exactly match the provider total;
   incomplete or malformed evidence now reaches the existing post-merge
   observer as `INDETERMINATE` rather than proof of success.
+- An adversarial follow-up found that raw count equality alone accepted repeated
+  pages. The provider boundary now also requires a stable total and unique,
+  valid GitHub check-run IDs, so duplicated pagination cannot conceal omitted
+  failing evidence.
 - The Development event-history query silently returned the first 1,000 events.
   Repaired by reusing the existing bounded-read guard, which detects the
   1,001st row and fails explicitly instead of presenting a truncated audit
@@ -344,16 +348,17 @@ tests); Console 01's own `npm test` green (22 tests, up from 21) and
 ## Follow-up fail-closed audit repairs (ChatGPT)
 
 A subsequent architecture audit found that the bounded GitHub pagination fix
-still returned partial evidence at its 20-page ceiling or after a premature
-empty page. RED tests reproduced both cases. The provider client now rejects
-any response whose retrieved check count does not exactly match `total_count`;
-the existing observation boundary converts that unresolved read to
-`INDETERMINATE`, so ΩΣ cannot receive partial success evidence. The same audit
-found `developmentState.listEvents` silently truncated at 1,000 rows. It now
-uses the existing `collectBounded` fail-closed helper, with a 1,001-event
-regression test.
+still returned partial evidence at its 20-page ceiling, after a premature empty
+page, or when repeated pages happened to match the provider's raw total. RED
+tests reproduced all three cases. The provider client now requires a stable
+`total_count`, exact retrieved count, and unique valid check-run IDs; the
+existing observation boundary converts an unresolved read to `INDETERMINATE`,
+so ΩΣ cannot receive partial success evidence. The same audit found
+`developmentState.listEvents` silently truncated at 1,000 rows. It now uses the
+existing `collectBounded` fail-closed helper, with a 1,001-event regression
+test.
 
-Fresh full verification after these repairs: 1,119 Node tests and 227 Convex
+Fresh full verification after these repairs: 1,120 Node tests and 227 Convex
 tests passed, together with repository hygiene, both TypeScript configurations,
 ESLint, Prettier and OpenAPI validation.
 
@@ -361,3 +366,8 @@ One attempted verification command used a reporter name unsupported by the
 repository's installed Vitest version and exited before collecting tests. The
 canonical `npm run test:convex` command was then run successfully and produced
 the 227-test result above.
+
+The first post-hardening full run also exposed one unrelated timing-sensitive
+JSON lock test failure. That exact test passed immediately in isolation, and a
+fresh full `npm run check` then passed all 1,120 Node and 227 Convex tests; the
+failed run was not counted as completion evidence.
