@@ -336,3 +336,39 @@ Phase 1 merge itself (which never touched the console's own package path).
 Full `npm run check` green (main workspace: 1,118 node tests, 226 Convex
 tests); Console 01's own `npm test` green (22 tests, up from 21) and
 `npx tsc --noEmit` clean.
+
+**Landed, verified, and dependency-hygiene follow-through (2026-09-03).**
+PRs #415, #416, #417 (NestJS 11->12 fastify/qs security upgrade, taken on as
+its own scoped piece of work per explicit go-ahead), and #421 (main-workspace
+`fast-uri` override bump) are all merged to `main`. Confirmed the one
+red herring along the way was exactly that -- a herring: the `#417` merge
+commit (`460787e`) showed a failed "TypeScript checks" run, but its
+`Audit dependencies` step logs matched the `fast-uri` GHSA set
+(`GHSA-5JGF-P345-68V8` et al.) that #416/#421 had already fixed on other
+branches; `main`'s current tip (`eddc1e8`, the #416 merge) already runs
+green, confirming this was ordering/timing noise from those two branches
+landing close together, not a real regression.
+
+Dependabot hygiene: PR #418 (console `fast-uri` bump) auto-closed, superseded
+by our manual override fix. PRs #419 (console `qs` 6.16.0), #420 (main
+workspace `convex`+`zod` minor bumps), and #413 (dev-dependencies group,
+open since Aug 30) were all failing CI for the same reason -- each was
+branched before #416/#421 landed, so their trees still carried the fixed
+`fast-uri` vulnerability. Commented `@dependabot rebase` on all three to
+pick up current `main`; plan is to merge each once its rebased CI goes
+green, same "merge once green" pattern used for #416/#421.
+
+**Declined to merge PR #422** (console `production-dependencies` group: convex,
+mcp-use, react-router, zod). Dependabot grouped a safe set of minor bumps
+together with two *major* bumps -- `mcp-use` 1.34.5 -> 2.3.4 and
+`react-router` 7.18.3 -> 8.3.1. `mcp-use` is the framework Console 01 itself
+is built on, and its CI failure confirms this isn't cosmetic: `mcp-use` 2.x
+renamed/removed the `generate-types` CLI subcommand our `postinstall` script
+depends on (`Unknown command: generate-types`), so this would break the
+console's own build/deploy pipeline if merged as-is. This is the same shape
+of risk as the NestJS 11->12 upgrade -- a framework major-version migration
+that deserves its own deliberate, scoped piece of work (reading the mcp-use
+2.x migration notes, updating `postinstall`/`build` scripts, verifying the
+CLI's new `typecheck` command, then landing it separately) rather than a
+drive-by merge of a grouped dependency PR. Left #422 open, unmerged, pending
+that decision.
