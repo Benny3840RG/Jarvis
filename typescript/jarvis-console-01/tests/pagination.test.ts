@@ -294,16 +294,19 @@ test("Console output schema enforces returned-count metadata invariants", () => 
   assert.equal(propSchema.safeParse(props).success, false);
 });
 
-test("Console 01 source calls only bounded task, reminder, note, and governed-action queries", async () => {
+test("Console 01 source calls only bounded task, reminder, note, governed-action, and development-mission queries", async () => {
   const source = await readFile(new URL("../index.ts", import.meta.url), "utf8");
   assert.match(source, /anyApi\.tasks\.listPage/);
   assert.match(source, /anyApi\.reminders\.listPage/);
   assert.match(source, /anyApi\.notes\.listPage/);
   assert.match(source, /anyApi\.toolActions\.listRecent/);
+  assert.match(source, /anyApi\.developmentState\.listRecent/);
   assert.doesNotMatch(source, /anyApi\.tasks\.list[,)]/);
   assert.doesNotMatch(source, /anyApi\.reminders\.list[,)]/);
   assert.doesNotMatch(source, /anyApi\.notes\.list[,)]/);
-  // toolActions.listRecent must be called with an explicit bounded limit —
-  // never an unbounded full-table read of the governed-action register.
+  // toolActions.listRecent and developmentState.listRecent must both be
+  // called with an explicit bounded limit — never an unbounded full-table
+  // read of either register.
   assert.match(source, /anyApi\.toolActions\.listRecent,\s*\{[^}]*limit:/s);
+  assert.match(source, /anyApi\.developmentState\.listRecent,\s*\{[^}]*limit:/s);
 });

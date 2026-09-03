@@ -127,6 +127,39 @@ const noteSchema = z.object({
   createdAt: z.number(),
 });
 
+const developmentMissionStateSchema = z.enum([
+  "IDEA",
+  "SPECIFIED",
+  "READY",
+  "CLAIMED",
+  "BUILDING",
+  "VERIFYING",
+  "REPAIR_REQUIRED",
+  "REVIEW",
+  "READY_TO_MERGE",
+  "INDETERMINATE",
+  "MERGED",
+  "CONTRADICTED",
+  "FAILED",
+  "ABORTED",
+  "COMPLETE",
+]);
+
+/**
+ * Read-only inspection of the governed Development mission pipeline
+ * (JARVIS Phase 1). Console 01 exposes no way to propose, approve, or
+ * commit a Development transition -- only to see the current state each
+ * mission's real Convex projection has reached, mirroring the same
+ * read-only stance already taken for governedActions.
+ */
+const developmentMissionSchema = z.object({
+  id: z.string(),
+  state: developmentMissionStateSchema,
+  repository: z.string().optional(),
+  branch: z.string().optional(),
+  updatedAt: z.number(),
+});
+
 const governedActionSchema = z.object({
   id: z.string(),
   tool: z.string(),
@@ -170,6 +203,7 @@ const consoleStateSchema = z.object({
   reminders: z.array(reminderSchema).max(100),
   notes: z.array(noteSchema).max(100),
   governedActions: z.array(governedActionSchema).max(100),
+  developmentMissions: z.array(developmentMissionSchema).max(100),
   systems: z.array(
     z.object({
       label: z.string(),
@@ -240,6 +274,30 @@ type ToolActionRow = {
   createdAt: number;
 };
 
+type DevelopmentMissionRow = {
+  _id: string;
+  subjectId: string;
+  state:
+    | "IDEA"
+    | "SPECIFIED"
+    | "READY"
+    | "CLAIMED"
+    | "BUILDING"
+    | "VERIFYING"
+    | "REPAIR_REQUIRED"
+    | "REVIEW"
+    | "READY_TO_MERGE"
+    | "INDETERMINATE"
+    | "MERGED"
+    | "CONTRADICTED"
+    | "FAILED"
+    | "ABORTED"
+    | "COMPLETE";
+  repository?: string;
+  branch?: string;
+  updatedAt: number;
+};
+
 type ConsoleState = z.infer<typeof consoleStateSchema>;
 
 function requireBridge() {
@@ -306,6 +364,21 @@ function mapGovernedAction(row: ToolActionRow) {
   };
 }
 
+/**
+ * Read-only mapping. Console 01 exposes no way to advance, approve, or
+ * commit a Development transition -- only to inspect the mission's current
+ * real Convex projection state (see JARVIS_TRANSITIONS.md).
+ */
+function mapDevelopmentMission(row: DevelopmentMissionRow) {
+  return {
+    id: row.subjectId,
+    state: row.state,
+    ...(row.repository === undefined ? {} : { repository: row.repository }),
+    ...(row.branch === undefined ? {} : { branch: row.branch }),
+    updatedAt: row.updatedAt,
+  };
+}
+
 function emptyPageMetadata(requestedPageSize: number) {
   return { isDone: true, continueCursor: "", returnedCount: 0, requestedPageSize };
 }
@@ -321,32 +394,41 @@ async function loadConsoleState(
     const request = normaliseConsolePageRequest(pageRequest);
     requestedPageSize = request.pageSize;
     const { client, serviceToken } = requireBridge();
-    const [taskPage, reminderPage, notePage, governedActionRows] = await Promise.all([
-      client.query(anyApi.tasks.listPage, {
-        serviceToken,
-        paginationOpts: { numItems: request.pageSize, cursor: request.taskCursor },
-      }) as Promise<ConsolePage<TaskRow>>,
-      client.query(anyApi.reminders.listPage, {
-        serviceToken,
-        paginationOpts: { numItems: request.pageSize, cursor: request.reminderCursor },
-      }) as Promise<ConsolePage<ReminderRow>>,
-      client.query(anyApi.notes.listPage, {
-        serviceToken,
-        projectId: NOTES_PROJECT_ID,
-        paginationOpts: { numItems: request.pageSize, cursor: request.noteCursor },
-      }) as Promise<ConsolePage<NoteRow>>,
-      // Read-only inspection: no cursor pagination exists for tool actions
-      // yet, so this is a bounded recent-first snapshot, not a full register.
-      client.query(anyApi.toolActions.listRecent, {
-        serviceToken,
-        projectKey: NOTES_PROJECT_ID,
-        limit: request.pageSize,
-      }) as Promise<ToolActionRow[]>,
-    ]);
+    const [taskPage, reminderPage, notePage, governedActionRows, developmentMissionRows] =
+      await Promise.all([
+        client.query(anyApi.tasks.listPage, {
+          serviceToken,
+          paginationOpts: { numItems: request.pageSize, cursor: request.taskCursor },
+        }) as Promise<ConsolePage<TaskRow>>,
+        client.query(anyApi.reminders.listPage, {
+          serviceToken,
+          paginationOpts: { numItems: request.pageSize, cursor: request.reminderCursor },
+        }) as Promise<ConsolePage<ReminderRow>>,
+        client.query(anyApi.notes.listPage, {
+          serviceToken,
+          projectId: NOTES_PROJECT_ID,
+          paginationOpts: { numItems: request.pageSize, cursor: request.noteCursor },
+        }) as Promise<ConsolePage<NoteRow>>,
+        // Read-only inspection: no cursor pagination exists for tool actions
+        // yet, so this is a bounded recent-first snapshot, not a full register.
+        client.query(anyApi.toolActions.listRecent, {
+          serviceToken,
+          projectKey: NOTES_PROJECT_ID,
+          limit: request.pageSize,
+        }) as Promise<ToolActionRow[]>,
+        // Same bounded recent-first snapshot shape as toolActions.listRecent
+        // -- Development missions have no notion of the console's fixed
+        // project namespace, so this is scoped to the owner only.
+        client.query(anyApi.developmentState.listRecent, {
+          serviceToken,
+          limit: request.pageSize,
+        }) as Promise<DevelopmentMissionRow[]>,
+      ]);
     const tasks = taskPage.page.map(mapTask);
     const reminders = reminderPage.page.map(mapReminder);
     const notes = notePage.page.map(mapNote);
     const governedActions = governedActionRows.map(mapGovernedAction);
+    const developmentMissions = developmentMissionRows.map(mapDevelopmentMission);
     const summary = buildConsolePageSummary(taskPage, reminderPage, notePage, request.pageSize, {
       taskCursor: request.taskCursor,
       reminderCursor: request.reminderCursor,
@@ -372,6 +454,7 @@ async function loadConsoleState(
       reminders,
       notes,
       governedActions,
+      developmentMissions,
       systems: [
         { label: "MCP endpoint", value: "ONLINE", state: "good" },
         { label: "Manufact", value: "DEPLOYED", state: "good" },
@@ -386,6 +469,7 @@ async function loadConsoleState(
         `${active} visible active task${active === 1 ? "" : "s"} loaded`,
         `${reminders.length} visible reminder${reminders.length === 1 ? "" : "s"} tracked`,
         `${notes.length} visible note${notes.length === 1 ? "" : "s"} logged`,
+        `${developmentMissions.length} visible Development mission${developmentMissions.length === 1 ? "" : "s"} tracked`,
         "Convex bridge authenticated server-side",
         "No fabricated telemetry enabled",
       ].slice(0, 8),
@@ -406,6 +490,7 @@ async function loadConsoleState(
       reminders: [],
       notes: [],
       governedActions: [],
+      developmentMissions: [],
       systems: [
         { label: "MCP endpoint", value: "ONLINE", state: "good" },
         { label: "Manufact", value: "DEPLOYED", state: "good" },
