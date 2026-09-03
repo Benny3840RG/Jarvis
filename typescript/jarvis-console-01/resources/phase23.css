@@ -361,7 +361,8 @@
 
 .reminder-panel,
 .note-panel,
-.governed-action-panel {
+.governed-action-panel,
+.development-mission-panel {
   max-height: 260px;
   overflow: hidden;
 }
@@ -380,7 +381,8 @@
   border-bottom: 0;
 }
 
-.governed-action-row {
+.governed-action-row,
+.development-mission-row {
   position: relative;
   z-index: 2;
   display: flex;
@@ -391,7 +393,8 @@
   border-bottom: 1px solid #2c3341;
 }
 
-.governed-action-row:last-child {
+.governed-action-row:last-child,
+.development-mission-row:last-child {
   border-bottom: 0;
 }
 
