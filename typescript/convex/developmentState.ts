@@ -436,6 +436,43 @@ export const get = query({
   },
 });
 
+const MAX_DEVELOPMENT_MISSION_LIST_LIMIT = 100;
+
+function boundedMissionListLimit(limit: number | undefined): number {
+  const resolved = limit ?? MAX_DEVELOPMENT_MISSION_LIST_LIMIT;
+  if (
+    !Number.isInteger(resolved) ||
+    resolved < 1 ||
+    resolved > MAX_DEVELOPMENT_MISSION_LIST_LIMIT
+  ) {
+    throw new Error(
+      `Limit must be an integer between 1 and ${MAX_DEVELOPMENT_MISSION_LIST_LIMIT}.`,
+    );
+  }
+  return resolved;
+}
+
+/**
+ * Read-only, most-recently-updated-first inspection of this owner's
+ * Development subjects -- the console/HUD read model. Mirrors
+ * toolActions.listRecent's bounded recent-first shape rather than real
+ * cursor pagination, since this is a snapshot for operator inspection, not
+ * an exhaustive register.
+ */
+export const listRecent = query({
+  args: { serviceToken: v.string(), limit: v.optional(v.number()) },
+  returns: v.array(developmentSubjectDocumentValidator),
+  handler: async (ctx, args) => {
+    const ownerId = requireOwner(args.serviceToken);
+    const limit = boundedMissionListLimit(args.limit);
+    return ctx.db
+      .query("developmentSubjects")
+      .withIndex("by_owner_and_updated_at", (q) => q.eq("ownerId", ownerId))
+      .order("desc")
+      .take(limit);
+  },
+});
+
 export const listEvents = query({
   args: { serviceToken: v.string(), subjectId: v.string() },
   returns: v.array(developmentEventDocumentValidator),
