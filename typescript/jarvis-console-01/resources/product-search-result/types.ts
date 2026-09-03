@@ -43,6 +43,39 @@ export const governedActionSchema = z.object({
   createdAt: z.number(),
 });
 
+export const developmentMissionStateSchema = z.enum([
+  "IDEA",
+  "SPECIFIED",
+  "READY",
+  "CLAIMED",
+  "BUILDING",
+  "VERIFYING",
+  "REPAIR_REQUIRED",
+  "REVIEW",
+  "READY_TO_MERGE",
+  "INDETERMINATE",
+  "MERGED",
+  "CONTRADICTED",
+  "FAILED",
+  "ABORTED",
+  "COMPLETE",
+]);
+
+/**
+ * Read-only inspection of the governed Development mission pipeline
+ * (JARVIS Phase 1). Console 01 exposes no way to propose, approve, or
+ * commit a Development transition -- only to see the current state each
+ * mission's real Convex projection has reached, mirroring the same
+ * read-only stance already taken for governedActions.
+ */
+export const developmentMissionSchema = z.object({
+  id: z.string(),
+  state: developmentMissionStateSchema,
+  repository: z.string().optional(),
+  branch: z.string().optional(),
+  updatedAt: z.number(),
+});
+
 export const systemSchema = z.object({
   label: z.string(),
   value: z.string(),
@@ -69,6 +102,7 @@ export const propSchema = z.object({
   reminders: z.array(reminderSchema).max(100),
   notes: z.array(noteSchema).max(100),
   governedActions: z.array(governedActionSchema).max(100),
+  developmentMissions: z.array(developmentMissionSchema).max(100),
   systems: z.array(systemSchema),
   activity: z.array(z.string()),
   counts: z.object({
@@ -95,4 +129,5 @@ export type JarvisTask = z.infer<typeof taskSchema>;
 export type JarvisReminder = z.infer<typeof reminderSchema>;
 export type JarvisNote = z.infer<typeof noteSchema>;
 export type JarvisGovernedAction = z.infer<typeof governedActionSchema>;
+export type JarvisDevelopmentMission = z.infer<typeof developmentMissionSchema>;
 export type JarvisConsoleProps = z.infer<typeof propSchema>;

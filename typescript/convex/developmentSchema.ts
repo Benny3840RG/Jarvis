@@ -27,7 +27,9 @@ export const developmentTables = {
     branch: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
-  }).index("by_owner_and_subject_id", ["ownerId", "subjectId"]),
+  })
+    .index("by_owner_and_subject_id", ["ownerId", "subjectId"])
+    .index("by_owner_and_updated_at", ["ownerId", "updatedAt"]),
   developmentEvents: defineTable({
     ownerId: v.string(),
     subjectId: v.string(),
