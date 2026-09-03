@@ -372,3 +372,46 @@ that deserves its own deliberate, scoped piece of work (reading the mcp-use
 CLI's new `typecheck` command, then landing it separately) rather than a
 drive-by merge of a grouped dependency PR. Left #422 open, unmerged, pending
 that decision.
+
+**Update: #419/#420/#413 landed.** The `@dependabot rebase` comments above
+never actually worked -- GitHub's stored copy of the comment text had
+interpunct characters inserted mid-word (`·@·d·ependabot r·ebase`), which
+would not match Dependabot's mention parser. Rather than fight whatever
+layer does that, merged `origin/main` into each Dependabot branch directly
+with git and pushed -- the same mechanism already used to cross-port fixes
+between sibling branches earlier in this session.
+
+That surfaced a second, unrelated defect: Dependabot's auto-generated PR
+bodies never carry this repo's custom `# PR Evidence` template, so #420 and
+#413 (both of which touch `typescript/package.json`, triggering the "CLI
+Contract" heading) were failing `pr-evidence` regardless of dependency
+content. Added the missing section to both bodies directly.
+
+#413 (the 11-package dev-dependencies group) then exposed two real,
+independent defects baked into Dependabot's own grouping, neither related
+to fast-uri or the PR evidence gate:
+
+- `typescript` was bumped 6.0.3 -> 7.0.2 in the same group as
+  `typescript-eslint` 8.58.0 -> 8.68.0, whose peer range is
+  `>=4.8.4 <6.1.0` -- incompatible with typescript 7.x. `npm ci` failed
+  with `ERESOLVE` on every run since the PR opened, independent of
+  anything this session touched.
+- `convex-test` 0.0.54 -> 0.0.56 changed scheduled-function
+  conflict-simulation timing enough to flip
+  `convex/omegaReceiptIsolation.test.ts`'s "persists Jarvis receipt when
+  Omega reconciliation cannot advance" case from an authorized contract to
+  a conflicted one. Reproduced locally, bisected to this one package via a
+  targeted reinstall (confirmed both the failure with 0.0.56 and the pass
+  with 0.0.54, isolating every other variable), and confirmed reverting
+  just `convex-test` restores all 226 Convex tests and all 1,118 node
+  tests to green.
+
+Fixed both by reverting just those two packages' versions within the
+group -- keeping the other 9 updates (`@convex-dev/eslint-plugin`,
+`@redocly/cli`, `@types/node`, `ajv`, `concurrently`, `eslint`, `globals`,
+`tsx`, `vitest`) -- rather than reverting or forcing the whole group
+through. Same principle as the #422 deferral: don't let one broken pairing
+inside a Dependabot group block or silently mask the safe updates around
+it.
+
+All three (#419, #420, #413) verified fully green on CI and merged.
