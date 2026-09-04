@@ -20,7 +20,7 @@ import { fingerprintToolAction, fingerprintToolEffect } from "../src/actions/too
 import type { ToolAction } from "../src/actions/toolActions.js";
 import type { OmegaCompletionInput } from "../src/omega/policy.js";
 import { resolveTrustedModelProfile } from "../src/development/modelResourceGovernance.js";
-import { requireOwner } from "./authHelpers.js";
+import { collectBounded, requireOwner } from "./authHelpers.js";
 import {
   developmentActorRefValidator,
   developmentApprovalValidator,
@@ -479,13 +479,15 @@ export const listEvents = query({
   handler: async (ctx, args) => {
     const ownerId = requireOwner(args.serviceToken);
     const subjectId = args.subjectId.trim();
-    return ctx.db
-      .query("developmentEvents")
-      .withIndex("by_owner_and_subject_id_and_created_at", (q) =>
-        q.eq("ownerId", ownerId).eq("subjectId", subjectId),
-      )
-      .order("asc")
-      .take(1000);
+    return collectBounded(
+      ctx.db
+        .query("developmentEvents")
+        .withIndex("by_owner_and_subject_id_and_created_at", (q) =>
+          q.eq("ownerId", ownerId).eq("subjectId", subjectId),
+        )
+        .order("asc"),
+      "Development event history",
+    );
   },
 });
 

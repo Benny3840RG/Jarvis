@@ -5,8 +5,8 @@ contracts and durable Jarvis records; checklist state here grants no authority.
 
 ## Current task
 
-Hand off the published governed GitHub vertical slice for independent review
-and merge-authority evaluation in pull request #415.
+Publish and verify the fail-closed evidence follow-up on a fresh branch from
+`main`, after pull request #415 merged.
 
 ## Completed in this work sequence
 
@@ -27,16 +27,14 @@ and merge-authority evaluation in pull request #415.
 
 ## Files changed in the current task
 
-- Development boundary/schema/reducer and tests under `typescript/convex/development*` and `typescript/src/development/*`.
-- Existing ToolAction, execution-receipt, reconciliation and orchestration boundaries and their tests.
-- Existing ΩΣ mission transition plus its Development completion integration test.
-- Existing OpenAI/Gemini Totality adapters and model-resource governance tests.
-- Shared `typescript/src/actions/sha256.ts` and standard-vector test.
+- `typescript/src/development/githubDevelopment.ts` and its provider tests.
+- `typescript/convex/developmentState.ts` and its event-history tests.
+- This working ledger.
 
 ## Verification evidence
 
-- Full Convex suite: 219 passed.
-- Full Node suite after integrating remote branch work: 1,102 passed.
+- Full Convex suite after fail-closed audit repairs: 227 passed.
+- Full Node suite after fail-closed audit repairs: 1,121 passed.
 - Repository hygiene, application and Convex type checks: passed.
 - ESLint, full-tree Prettier and OpenAPI validation: passed.
 
@@ -70,6 +68,19 @@ and merge-authority evaluation in pull request #415.
   but it only validated six manually written template lines. Repaired by
   renaming it `PR Evidence Check`, requiring only path-relevant findings and
   keeping test results in authoritative CI.
+- GitHub check-run pagination could still return a partial passing set when the
+  provider reported more than the bounded 20 pages or stopped early. Repaired
+  by requiring the retrieved count to exactly match the provider total;
+  incomplete or malformed evidence now reaches the existing post-merge
+  observer as `INDETERMINATE` rather than proof of success.
+- An adversarial follow-up found that raw count equality alone accepted repeated
+  pages. The provider boundary now also requires a stable total and unique,
+  valid GitHub check-run IDs, so duplicated pagination cannot conceal omitted
+  failing evidence.
+- The Development event-history query silently returned the first 1,000 events.
+  Repaired by reusing the existing bounded-read guard, which detects the
+  1,001st row and fails explicitly instead of presenting a truncated audit
+  history as complete.
 
 ## Architectural decisions and assumptions
 
@@ -96,17 +107,14 @@ and merge-authority evaluation in pull request #415.
 - A real external mission run requires configured GitHub, Convex service and
   independent-proof approval credentials. No production credentials were
   requested or used during deterministic implementation/tests.
-- Pull request #415 remains draft because the installed ready-for-review
-  mutation requests a GitHub GraphQL field that no longer exists
-  (`Repository.fullDatabaseId`). The evidence package is complete and both
-  repository checks pass; independent review and merge remain intentionally
-  unexercised.
+- No implementation blocker remains. Pull request #415 is merged, and the
+  fail-closed audit repairs are isolated on a fresh `main`-based follow-up
+  branch so the merged branch is not reused.
 
 ## Next task
 
-An authorised collaborator must clear the draft flag and provide independent
-review. Merge may proceed only after that review establishes authority and the
-required checks remain green.
+Publish the follow-up branch, open its focused pull request, and drive checks
+and independent review to an exact-head merge-authority decision.
 
 ## Publication evidence
 
@@ -156,7 +164,7 @@ is genuinely closed. Six real findings survived verification, all fixed:
   keyed off each transition's own `evaluator` string
   (`deterministic_verification_success_gate`,
   `deterministic_review_findings_gate`, `deterministic_review_readiness_gate`)
-  -- evidence *presence* is itself required, not just checked when supplied
+  -- evidence _presence_ is itself required, not just checked when supplied
   (unlike `mergeEvidence`, which can rely on the Convex boundary's separate
   `trustedMergeReason` derivation; no such derivation exists yet for
   verification/review, so the kernel is the only line of defense).
@@ -205,7 +213,7 @@ is genuinely closed. Six real findings survived verification, all fixed:
   independently (`NaN < 4` is `false`). Investigating this revealed it is
   even less reachable than initially assessed: `canonicalJson` (shared by
   every fingerprint in this boundary) already refuses to hash a non-finite
-  number, so re-fingerprinting the stored ToolAction fails closed *before*
+  number, so re-fingerprinting the stored ToolAction fails closed _before_
   the risk check would ever run -- proven by a test that a NaN
   `effectiveRisk` throws during fixture construction itself, not merely at
   commit time. Added the explicit `Number.isFinite` check anyway as
@@ -337,6 +345,36 @@ Full `npm run check` green (main workspace: 1,118 node tests, 226 Convex
 tests); Console 01's own `npm test` green (22 tests, up from 21) and
 `npx tsc --noEmit` clean.
 
+## Follow-up fail-closed audit repairs (ChatGPT)
+
+A subsequent architecture audit found that the bounded GitHub pagination fix
+still returned partial evidence at its 20-page ceiling, after a premature empty
+page, or when repeated pages happened to match the provider's raw total. RED
+tests reproduced all three cases. The provider client now requires a stable
+`total_count`, exact retrieved count, and unique valid check-run IDs; the
+existing observation boundary converts an unresolved read to `INDETERMINATE`,
+so ΩΣ cannot receive partial success evidence. The same audit found
+`developmentState.listEvents` silently truncated at 1,000 rows. It now uses the
+existing `collectBounded` fail-closed helper, with a 1,001-event regression
+test.
+
+Fresh full verification after these repairs: 1,121 Node tests and 227 Convex
+tests passed, together with repository hygiene, both TypeScript configurations,
+ESLint, Prettier and OpenAPI validation.
+
+One attempted verification command used a reporter name unsupported by the
+repository's installed Vitest version and exited before collecting tests. The
+canonical `npm run test:convex` command was then run successfully and produced
+the 227-test result above.
+
+The first post-hardening full run also exposed one unrelated timing-sensitive
+JSON lock test failure. That exact test passed immediately in isolation, and a
+fresh full `npm run check` then passed all 1,120 Node and 227 Convex tests; the
+failed run was not counted as completion evidence.
+
+The independent PR review identified the moving-`total_count` case on the
+superseded head. The current stable-total guard already repaired it; an explicit
+regression test for that exact scenario raises the final Node total to 1,121.
 **Landed, verified, and dependency-hygiene follow-through (2026-09-03).**
 PRs #415, #416, #417 (NestJS 11->12 fastify/qs security upgrade, taken on as
 its own scoped piece of work per explicit go-ahead), and #421 (main-workspace
@@ -360,7 +398,7 @@ green, same "merge once green" pattern used for #416/#421.
 
 **Declined to merge PR #422** (console `production-dependencies` group: convex,
 mcp-use, react-router, zod). Dependabot grouped a safe set of minor bumps
-together with two *major* bumps -- `mcp-use` 1.34.5 -> 2.3.4 and
+together with two _major_ bumps -- `mcp-use` 1.34.5 -> 2.3.4 and
 `react-router` 7.18.3 -> 8.3.1. `mcp-use` is the framework Console 01 itself
 is built on, and its CI failure confirms this isn't cosmetic: `mcp-use` 2.x
 renamed/removed the `generate-types` CLI subcommand our `postinstall` script

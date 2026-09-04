@@ -17,11 +17,13 @@ function checkRun(
   name: string,
   conclusion: string | null,
 ): {
+  id: number;
   name: string;
   status: "completed";
   conclusion: string | null;
 } {
-  return { name, status: "completed", conclusion };
+  const sequence = Number(name.split("-").at(-1));
+  return { id: sequence + 1, name, status: "completed", conclusion };
 }
 
 describe("FetchGitHubDevelopmentClient.getCommitChecks", () => {
@@ -76,7 +78,7 @@ describe("FetchGitHubDevelopmentClient.getCommitChecks", () => {
     assert.equal(checks.length, 2);
   });
 
-  it("stops paginating once a page returns no check runs, even if total_count claims more", async () => {
+  it("rejects an incomplete result when GitHub returns an empty page before total_count is reached", async () => {
     let requests = 0;
     const client = new FetchGitHubDevelopmentClient("test-token", {
       async fetch() {
@@ -85,13 +87,91 @@ describe("FetchGitHubDevelopmentClient.getCommitChecks", () => {
       },
     });
 
-    const checks = await client.getCommitChecks({
-      repository: "Benny3840RG/Jarvis",
-      sha: "c".repeat(40),
-      signal: new AbortController().signal,
+    await assert.rejects(
+      client.getCommitChecks({
+        repository: "Benny3840RG/Jarvis",
+        sha: "c".repeat(40),
+        signal: new AbortController().signal,
+      }),
+      /GitHub check-run evidence is incomplete/,
+    );
+
+    assert.equal(requests, 1);
+  });
+
+  it("rejects an incomplete result when the bounded page limit is reached", async () => {
+    let requests = 0;
+    const client = new FetchGitHubDevelopmentClient("test-token", {
+      async fetch() {
+        const page = Array.from({ length: 100 }, (_, i) =>
+          checkRun(`check-${requests * 100 + i}`, "success"),
+        );
+        requests++;
+        return jsonResponse({ total_count: 2_001, check_runs: page });
+      },
     });
 
-    assert.equal(checks.length, 0);
-    assert.equal(requests, 1);
+    await assert.rejects(
+      client.getCommitChecks({
+        repository: "Benny3840RG/Jarvis",
+        sha: "d".repeat(40),
+        signal: new AbortController().signal,
+      }),
+      /GitHub check-run evidence is incomplete/,
+    );
+
+    assert.equal(requests, 20);
+  });
+
+  it("rejects duplicated pages even when their raw length matches total_count", async () => {
+    let requests = 0;
+    const duplicatedPage = Array.from({ length: 100 }, (_, i) => checkRun(`check-${i}`, "success"));
+    const client = new FetchGitHubDevelopmentClient("test-token", {
+      async fetch() {
+        requests++;
+        return jsonResponse({ total_count: 200, check_runs: duplicatedPage });
+      },
+    });
+
+    await assert.rejects(
+      client.getCommitChecks({
+        repository: "Benny3840RG/Jarvis",
+        sha: "e".repeat(40),
+        signal: new AbortController().signal,
+      }),
+      /GitHub check-run evidence is incomplete/,
+    );
+
+    assert.equal(requests, 2);
+  });
+
+  it("rejects a total_count that changes while pages are being read", async () => {
+    let requests = 0;
+    const client = new FetchGitHubDevelopmentClient("test-token", {
+      async fetch() {
+        requests++;
+        if (requests === 1) {
+          return jsonResponse({
+            total_count: 101,
+            check_runs: Array.from({ length: 100 }, (_, i) => checkRun(`check-${i}`, "success")),
+          });
+        }
+        return jsonResponse({
+          total_count: 100,
+          check_runs: [checkRun("check-100", "failure")],
+        });
+      },
+    });
+
+    await assert.rejects(
+      client.getCommitChecks({
+        repository: "Benny3840RG/Jarvis",
+        sha: "f".repeat(40),
+        signal: new AbortController().signal,
+      }),
+      /GitHub check-run evidence is incomplete/,
+    );
+
+    assert.equal(requests, 2);
   });
 });
