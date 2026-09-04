@@ -453,3 +453,28 @@ inside a Dependabot group block or silently mask the safe updates around
 it.
 
 All three (#419, #420, #413) verified fully green on CI and merged.
+
+## Phase 1 current-main commissioning and repair (2026-09-04)
+
+- Queued the existing one-shot development commissioning path through PR #425;
+  exact-head TypeScript and PR-evidence checks passed before merge.
+- The guarded dev-only run `33886204899` verified 1,121 Node tests and 227
+  Convex tests, then synced the authorised deployment successfully.
+- Commissioning correctly stopped at the self-cleaning smoke gate. The quote
+  lifecycle smoke lacked the separately governed delivery-runtime token and
+  masked the primary configuration error behind a cleanup `AggregateError`.
+- RED test added: a missing delivery dependency must be discovered before any
+  synthetic quote write. The smoke now constructs both repositories before its
+  first effect and reuses those instances for lifecycle and cleanup.
+- The workflow now reads the existing delivery token from the already-authorised
+  Convex development deployment, validates it, masks it before export, and does
+  not create a duplicate GitHub secret or service-token fallback.
+- A unique replacement request is carried in `.github/commission-development`
+  so merging the repair automatically reruns the full governed commissioning.
+- Fresh local verification after repair: 30 automation-policy tests, 1,122 Node
+  tests, 227 Convex tests, type-check, lint, format, OpenAPI and hygiene passed.
+- Production deployment remains unauthorised and was not performed.
+
+Next task: publish the repair, require exact-head CI, merge only if green, then
+reconcile the resulting commissioning run and continue to the real Development
+mission/ΩΣ evidence boundary.

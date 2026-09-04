@@ -147,6 +147,19 @@ jobs:
             exit "$sync_status"
           fi
 
+      - name: Load delivery runtime credential from authorised development deployment
+        run: |
+          set -euo pipefail
+
+          runtime_token="$(npx convex env get JARVIS_DELIVERY_RUNTIME_TOKEN)"
+          if [[ "${#runtime_token}" -lt 32 || "$runtime_token" == *$'\n'* || "$runtime_token" == *$'\r'* ]]; then
+            echo "::error::The authorised development deployment has no valid delivery runtime credential."
+            exit 1
+          fi
+
+          echo "::add-mask::$runtime_token"
+          printf 'JARVIS_DELIVERY_RUNTIME_TOKEN=%s\n' "$runtime_token" >>"$GITHUB_ENV"
+
       - name: Run self-cleaning Convex smoke test
         run: npm run smoke:convex
 
