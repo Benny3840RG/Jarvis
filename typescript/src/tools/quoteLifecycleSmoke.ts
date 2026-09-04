@@ -45,6 +45,12 @@ export async function runQuoteLifecycleSmoke(
     );
   }
 
+  // Resolve every credential-bearing dependency before the first synthetic
+  // write. A missing delivery-runtime credential must not leave a quote that
+  // the same unavailable dependency then prevents the smoke from cleaning.
+  const quoteRepository = makeRepository();
+  const deliveryRepository = makeDeliveryRepository();
+
   const marker = `jarvis-quote-lifecycle-smoke-${randomUUID()}`;
   const recipient = `${marker}@example.invalid`;
   const reconciliationId = `${marker}-reconciliation`;
@@ -58,7 +64,7 @@ export async function runQuoteLifecycleSmoke(
   let result: QuoteLifecycleSmokeResult | undefined;
 
   try {
-    const created = await makeRepository().createQuote({
+    const created = await quoteRepository.createQuote({
       clientId: `${marker}-client`,
       number: `Q-${marker}`,
       lineItems: [{ description: "Smoke line item", quantity: 1, unitPrice: 100 }],
@@ -70,7 +76,7 @@ export async function runQuoteLifecycleSmoke(
       "quote lifecycle: creation did not persist a draft revision at version 1.",
     );
 
-    const reviewed = await makeRepository().submitForReview({
+    const reviewed = await quoteRepository.submitForReview({
       quoteId,
       revision: 1,
       expectedAggregateVersion: created.aggregate.aggregateVersion,
@@ -81,7 +87,7 @@ export async function runQuoteLifecycleSmoke(
       "quote lifecycle: submitForReview did not transition the revision to reviewed.",
     );
 
-    const finalized = await makeRepository().finalizeRevision({
+    const finalized = await quoteRepository.finalizeRevision({
       quoteId,
       revision: 1,
       expectedAggregateVersion: reviewed.aggregate.aggregateVersion,
@@ -100,7 +106,7 @@ export async function runQuoteLifecycleSmoke(
       "quote lifecycle: finalizeRevision did not stamp a fingerprint.",
     );
 
-    const freshRead = await makeRepository().getQuote(quoteId);
+    const freshRead = await quoteRepository.getQuote(quoteId);
     requireCondition(
       freshRead !== null &&
         freshRead.revision.fingerprint === finalized.revision.fingerprint &&
@@ -108,7 +114,7 @@ export async function runQuoteLifecycleSmoke(
       "quote lifecycle: a fresh repository instance did not read back the same finalized fingerprint.",
     );
 
-    const forked = await makeRepository().createRevisionFromFinalized({
+    const forked = await quoteRepository.createRevisionFromFinalized({
       quoteId,
       revision: 1,
       expectedAggregateVersion: freshRead.aggregate.aggregateVersion,
@@ -122,7 +128,7 @@ export async function runQuoteLifecycleSmoke(
       "quote lifecycle: createRevisionFromFinalized did not fork a new draft revision.",
     );
 
-    const pending = await makeDeliveryRepository().createPending({
+    const pending = await deliveryRepository.createPending({
       quoteId,
       revision: 1,
       recipient,
@@ -140,7 +146,7 @@ export async function runQuoteLifecycleSmoke(
       "quote lifecycle: createPending did not persist a pending delivery attempt.",
     );
 
-    const executing = await makeDeliveryRepository().markExecuting({
+    const executing = await deliveryRepository.markExecuting({
       deliveryAttemptId: pending.deliveryAttemptId,
       expectedStatus: "pending",
     });
@@ -149,7 +155,7 @@ export async function runQuoteLifecycleSmoke(
       "quote lifecycle: markExecuting did not transition the delivery attempt.",
     );
 
-    const bound = await makeDeliveryRepository().bindProviderReference({
+    const bound = await deliveryRepository.bindProviderReference({
       deliveryAttemptId: pending.deliveryAttemptId,
       expectedStatus: "executing",
       providerRequestId,
@@ -162,7 +168,7 @@ export async function runQuoteLifecycleSmoke(
       "quote lifecycle: bindProviderReference did not persist the durable provider reference.",
     );
 
-    const indeterminate = await makeDeliveryRepository().markIndeterminate({
+    const indeterminate = await deliveryRepository.markIndeterminate({
       deliveryAttemptId: pending.deliveryAttemptId,
       expectedStatus: "executing",
       reconciliationId,
@@ -173,7 +179,7 @@ export async function runQuoteLifecycleSmoke(
       "quote lifecycle: markIndeterminate did not persist the pending reconciliation.",
     );
 
-    const reconciled = await makeDeliveryRepository().reconcile({
+    const reconciled = await deliveryRepository.reconcile({
       deliveryAttemptId: pending.deliveryAttemptId,
       expectedStatus: "indeterminate",
       reconciliationId,
@@ -184,28 +190,28 @@ export async function runQuoteLifecycleSmoke(
       "quote lifecycle: reconcile did not persist the terminal delivery outcome.",
     );
 
-    const afterDelivery = await makeRepository().getQuote(quoteId);
+    const afterDelivery = await quoteRepository.getQuote(quoteId);
     requireCondition(
       afterDelivery !== null && afterDelivery.aggregate.commercialStatus === "open",
       "quote lifecycle: an unrelated delivery/fork mutated the quote's commercial status.",
     );
 
     requireCondition(
-      await makeRepository().cleanup(quoteId),
+      await quoteRepository.cleanup(quoteId),
       "quote lifecycle: cleanup did not remove the synthetic quote and its revisions.",
     );
     quoteCleaned = true;
     requireCondition(
-      await makeDeliveryRepository().cleanup(quoteId),
+      await deliveryRepository.cleanup(quoteId),
       "quote lifecycle: cleanup did not remove the synthetic delivery attempts.",
     );
     deliveryCleaned = true;
     requireCondition(
-      (await makeRepository().getQuote(quoteId)) === null,
+      (await quoteRepository.getQuote(quoteId)) === null,
       "quote lifecycle: synthetic quote remained visible after cleanup.",
     );
     requireCondition(
-      (await makeDeliveryRepository().listForQuote({ quoteId })).length === 0,
+      (await deliveryRepository.listForQuote({ quoteId })).length === 0,
       "quote lifecycle: synthetic delivery attempts remained visible after cleanup.",
     );
 
@@ -230,14 +236,14 @@ export async function runQuoteLifecycleSmoke(
   const cleanupErrors: unknown[] = [];
   if (quoteId !== undefined && !quoteCleaned) {
     try {
-      await makeRepository().cleanup(quoteId);
+      await quoteRepository.cleanup(quoteId);
     } catch (error: unknown) {
       cleanupErrors.push(error);
     }
   }
   if (quoteId !== undefined && !deliveryCleaned) {
     try {
-      await makeDeliveryRepository().cleanup(quoteId);
+      await deliveryRepository.cleanup(quoteId);
     } catch (error: unknown) {
       cleanupErrors.push(error);
     }

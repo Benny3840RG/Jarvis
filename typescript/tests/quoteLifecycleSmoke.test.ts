@@ -386,6 +386,26 @@ describe("runQuoteLifecycleSmoke", () => {
     assert.equal(constructions, 0);
   });
 
+  it("constructs every required repository before creating synthetic state", async () => {
+    const shared = backend();
+
+    await assert.rejects(
+      runQuoteLifecycleSmoke(
+        () => new SharedFakeQuoteRepository(shared),
+        () => {
+          throw new Error("quote delivery runtime credential is unavailable");
+        },
+        "dev:outgoing-ram-798",
+      ),
+      /quote delivery runtime credential is unavailable/,
+    );
+
+    assert.equal(shared.aggregates.size, 0);
+    assert.equal(shared.revisions.size, 0);
+    assert.equal(shared.quoteCleanupCalls, 0);
+    assert.equal(shared.deliveryCleanupCalls, 0);
+  });
+
   it("runs the full quote lifecycle and delivery ledger, then cleans all synthetic state", async () => {
     const shared = backend();
     const messages: string[] = [];

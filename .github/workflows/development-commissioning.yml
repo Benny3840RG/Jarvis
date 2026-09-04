@@ -33,6 +33,7 @@ jobs:
       CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
       JARVIS_SERVICE_TOKEN: ${{ secrets.JARVIS_SERVICE_TOKEN }}
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      JARVIS_DELIVERY_RUNTIME_TOKEN: ${{ secrets.JARVIS_DELIVERY_RUNTIME_TOKEN }}
 
     defaults:
       run:
@@ -71,7 +72,7 @@ jobs:
             exit 1
           fi
 
-          for variable in CONVEX_DEPLOY_KEY JARVIS_SERVICE_TOKEN OPENAI_API_KEY; do
+          for variable in CONVEX_DEPLOY_KEY JARVIS_SERVICE_TOKEN OPENAI_API_KEY JARVIS_DELIVERY_RUNTIME_TOKEN; do
             if [[ -z "${!variable:-}" ]]; then
               echo "::error::Required repository secret $variable is unavailable."
               exit 1
@@ -99,6 +100,7 @@ jobs:
             -u CONVEX_DEPLOY_KEY \
             -u JARVIS_SERVICE_TOKEN \
             -u OPENAI_API_KEY \
+            -u JARVIS_DELIVERY_RUNTIME_TOKEN \
             npm run check
 
       - name: Sync functions to authorised development deployment

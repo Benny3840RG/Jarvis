@@ -512,3 +512,32 @@ Verified with a full clean-room pass: deleted `node_modules`, `npm ci`
 (matching CI exactly), `mcp-use build`, all 22 Console 01 tests, the full
 main-workspace `npm run check` (1,121 node tests, 227 Convex tests, hygiene,
 both typechecks, lint, format, OpenAPI lint), and `audit:ci` -- all green.
+
+## Phase 1 current-main commissioning and repair (2026-09-04)
+
+- Queued the existing one-shot development commissioning path through PR #425;
+  exact-head TypeScript and PR-evidence checks passed before merge.
+- The guarded dev-only run `33886204899` verified 1,121 Node tests and 227
+  Convex tests, then synced the authorised deployment successfully.
+- Commissioning correctly stopped at the self-cleaning smoke gate. The quote
+  lifecycle smoke lacked the separately governed delivery-runtime token and
+  masked the primary configuration error behind a cleanup `AggregateError`.
+- RED test added: a missing delivery dependency must be discovered before any
+  synthetic quote write. The smoke now constructs both repositories before its
+  first effect and reuses those instances for lifecycle and cleanup.
+- PR #426 merged the repair after exact-head CI and automatically queued run
+  `33887416427`. That run again passed verification and Convex sync, then failed
+  before smoke because the least-privilege deploy key correctly lacks
+  `deployment:env:view`; no synthetic smoke state was written.
+- The workflow now requires the separately governed
+  `JARVIS_DELIVERY_RUNTIME_TOKEN` as a dedicated GitHub Actions secret and
+  removes the forbidden Convex environment read. It does not widen the deploy
+  key, duplicate execution authority, or fall back to the service token.
+- Fresh local verification after repair: 30 automation-policy tests, 1,122 Node
+  tests, 227 Convex tests, type-check, lint, format, OpenAPI and hygiene passed.
+- Production deployment remains unauthorised and was not performed.
+
+Next task: an operator must copy the existing development deployment's
+`JARVIS_DELIVERY_RUNTIME_TOKEN` into the repository Actions secret of the same
+name. Then advance the one-shot request ID, rerun commissioning, and continue to
+the real Development mission/ΩΣ evidence boundary.
