@@ -34,7 +34,10 @@ jobs:
         with:
           node-version: "24"
       - name: Test autonomous build controls
-        run: node --test .github/automation/validate-autobuild.test.mjs
+        run: >-
+          node --test .github/automation/validate-autobuild.test.mjs
+          .github/automation/development-commissioning.test.mjs
+          .github/automation/validate-pr-evidence.test.mjs
 
   typecheck-lint-format-test:
     runs-on: ubuntu-latest
