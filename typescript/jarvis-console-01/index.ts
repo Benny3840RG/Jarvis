@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import { ConvexHttpClient } from "convex/browser";
 import { anyApi } from "convex/server";
-import { MCPServer, text, widget } from "mcp-use/server";
+import { MCPServer } from "mcp-use";
 import { z } from "zod";
 
 import { decideGatewayAccess } from "./gatewayAuth.js";
@@ -23,7 +23,6 @@ const server = new MCPServer({
   description: "Live Jarvis command centre backed by owner-scoped Convex state",
   instructions:
     "Use show-jarvis-console to open Console 01. Use the typed task and reminder tools for controlled changes. The service token remains server-side and production deployment is not authorised.",
-  baseUrl: process.env.MCP_URL || "http://localhost:3000",
   favicon: "favicon.ico",
   websiteUrl: "https://github.com/Benny3840/Jarvis",
   icons: [{ src: "icon.svg", mimeType: "image/svg+xml", sizes: ["512x512"] }],
@@ -519,7 +518,7 @@ async function loadConsoleState(
 }
 
 function consoleWidget(props: ConsoleState, message: string) {
-  return widget({ props, output: text(message) });
+  return { content: [{ type: "text" as const, text: message }], structuredContent: props };
 }
 
 server.tool(
@@ -535,7 +534,7 @@ server.tool(
     }),
     annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
     outputSchema: consoleStateSchema,
-    widget: { name: "product-search-result", invoking: "Synchronising Console 01...", invoked: "Console 01 online" },
+    view: { name: "product-search-result" },
   },
   async (pageRequest) =>
     consoleWidget(
@@ -555,7 +554,6 @@ server.tool(
     }),
     annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
     outputSchema: consoleStateSchema,
-    widget: { name: "product-search-result", invoking: "Creating task...", invoked: "Task created" },
   },
   async ({ title, category }) => {
     const { client, serviceToken } = requireBridge();
@@ -572,7 +570,6 @@ server.tool(
     schema: z.object({ taskId: z.string().min(1) }),
     annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
     outputSchema: consoleStateSchema,
-    widget: { name: "product-search-result", invoking: "Completing task...", invoked: "Task completed" },
   },
   async ({ taskId }) => {
     const { client, serviceToken } = requireBridge();
@@ -589,7 +586,6 @@ server.tool(
     schema: z.object({ title: z.string().min(1).max(500), dueRaw: z.string().max(500).optional() }),
     annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
     outputSchema: consoleStateSchema,
-    widget: { name: "product-search-result", invoking: "Setting reminder...", invoked: "Reminder set" },
   },
   async ({ title, dueRaw }) => {
     const { client, serviceToken } = requireBridge();
@@ -610,7 +606,6 @@ server.tool(
     schema: z.object({ reminderId: z.string().min(1) }),
     annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
     outputSchema: consoleStateSchema,
-    widget: { name: "product-search-result", invoking: "Removing reminder...", invoked: "Reminder removed" },
   },
   async ({ reminderId }) => {
     const { client, serviceToken } = requireBridge();
@@ -633,7 +628,6 @@ server.tool(
     }),
     annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
     outputSchema: consoleStateSchema,
-    widget: { name: "product-search-result", invoking: "Creating note...", invoked: "Note created" },
   },
   async ({ title, body, tags, domain, sensitivity }) => {
     const { client, serviceToken } = requireBridge();
@@ -664,7 +658,6 @@ server.tool(
     schema: z.object({ noteId: z.string().min(1) }),
     annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
     outputSchema: consoleStateSchema,
-    widget: { name: "product-search-result", invoking: "Removing note...", invoked: "Note removed" },
   },
   async ({ noteId }) => {
     const { client, serviceToken } = requireBridge();
@@ -677,6 +670,4 @@ server.tool(
   },
 );
 
-server.listen().then(() => {
-  console.log("Jarvis Console 01 server running");
-});
+export default server;
