@@ -63,7 +63,7 @@ function developmentMissionStatusClass(mission: JarvisDevelopmentMission) {
 const JarvisConsole: React.FC = () => {
   const toolContext = useToolContext();
   const isPending = toolContext.status === "pending";
-  const props = toolContext.toolOutput as JarvisConsoleProps | undefined;
+  const props: unknown = toolContext.toolOutput;
   const { displayMode, requestDisplayMode } = useDisplayMode();
   const sendFollowUp = useSendFollowUp();
   const { callTool: refreshConsole, isPending: refreshing } = useCallTool("show-jarvis-console");
@@ -89,9 +89,12 @@ const JarvisConsole: React.FC = () => {
   const [feedback, setFeedback] = useState("Console controls ready.");
 
   useEffect(() => {
-    // Once isPending is false the widget lifecycle guarantees props is fully
-    // populated, even though the hook's static type stays Partial throughout.
-    if (!isPending) setSnapshot(props as JarvisConsoleProps);
+    // toolOutput is untyped under the loose RegisteredTools fallback (this
+    // project exports no ToolRef), so validate it against the same schema
+    // the server's outputSchema enforces before trusting it as a snapshot.
+    if (isPending) return;
+    const parsed = propSchema.safeParse(props);
+    if (parsed.success) setSnapshot(parsed.data);
   }, [isPending, props]);
 
   const applyToolResult = (result: unknown, message: string) => {
@@ -193,23 +196,27 @@ const JarvisConsole: React.FC = () => {
     applyToolResult(result, `Note removed: ${note.title}`);
   };
 
-  const submitCommand = (event: React.FormEvent) => {
+  const submitCommand = async (event: React.FormEvent) => {
     event.preventDefault();
     const prompt = command.trim();
     if (!prompt) return;
-    void sendFollowUp({
-      prompt:
-        `Jarvis Console 01 operator note: "${prompt}". Analyse this against the current console ` +
-        "snapshot and propose next steps. Console 01 itself exposes no tool beyond show-jarvis-console, " +
-        "create-jarvis-task, complete-jarvis-task, create-jarvis-reminder, remove-jarvis-reminder, " +
-        "create-jarvis-note, and remove-jarvis-note " +
-        "— it has no deploy, infrastructure, or Convex-schema tool of any kind, so treat this as a " +
-        "request for analysis and a proposed plan, not an instruction to execute anything outside that set.",
-    });
-    setFeedback(
-      "Note sent to Jarvis for analysis — it cannot execute anything beyond this console's own typed tools.",
-    );
-    setCommand("");
+    try {
+      await sendFollowUp({
+        prompt:
+          `Jarvis Console 01 operator note: "${prompt}". Analyse this against the current console ` +
+          "snapshot and propose next steps. Console 01 itself exposes no tool beyond show-jarvis-console, " +
+          "create-jarvis-task, complete-jarvis-task, create-jarvis-reminder, remove-jarvis-reminder, " +
+          "create-jarvis-note, and remove-jarvis-note " +
+          "— it has no deploy, infrastructure, or Convex-schema tool of any kind, so treat this as a " +
+          "request for analysis and a proposed plan, not an instruction to execute anything outside that set.",
+      });
+      setFeedback(
+        "Note sent to Jarvis for analysis — it cannot execute anything beyond this console's own typed tools.",
+      );
+      setCommand("");
+    } catch {
+      setFeedback("Could not send that note to Jarvis — the host declined or the request failed.");
+    }
   };
 
   return (
