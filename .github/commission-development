@@ -1,0 +1,7 @@
+COMMISSION DEV
+request-id: phase1-postmerge-117fec1-20260904
+source: Phase 1 post-merge commissioning after PR #423
+scope: exact-main verification, authorised Convex development sync, self-cleaning smoke, HTTP/provider boundary checks, Totality probe, backup verification
+expected-main-baseline: 117fec179f9ee885b385dfeacf2ec1d202961d18
+issue: 54
+production: not authorised
