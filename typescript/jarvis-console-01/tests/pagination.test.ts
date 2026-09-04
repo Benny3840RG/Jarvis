@@ -197,7 +197,7 @@ test("Console error handling never copies raw exception messages into activity",
 
 test("System Core repeats the same visible partial markers as telemetry", async () => {
   const source = await readFile(
-    new URL("../resources/product-search-result/widget.tsx", import.meta.url),
+    new URL("../resources/product-search-result/view.tsx", import.meta.url),
     "utf8",
   );
   const activeMarkers = source.match(

@@ -453,3 +453,62 @@ inside a Dependabot group block or silently mask the safe updates around
 it.
 
 All three (#419, #420, #413) verified fully green on CI and merged.
+
+**mcp-use 1.34.5 -> 2.4.3 migration (the deferred #422 major bump, done as its
+own scoped piece of work, same treatment as the NestJS 11->12 upgrade).**
+Not a version-number change alone -- the framework did a full "widget"->"view"
+terminology and API rework between majors:
+
+- Server entry: `mcp-use/server` subpath is gone; `MCPServer` and the
+  response helpers now live at the package root (`mcp-use`). The entry file
+  must `export default` the `MCPServer` instance instead of calling
+  `server.listen()` itself -- the CLI now owns the listen lifecycle.
+  `ServerConfig.baseUrl` is gone with no direct replacement (the framework
+  derives what it needs from the request); `basePath` is a different,
+  narrower field (just the MCP route path, defaults to `/mcp`) and was not
+  substituted in.
+- Client hooks: `mcp-use/react` no longer exports `McpUseProvider`,
+  `useWidget`, or `WidgetMetadata`. Mounting is now framework-owned (no
+  provider wrapper needed in view code); an exported `viewConfig` (satisfying
+  the new `ViewConfig` type) replaces the old `autoSize`/metadata props for
+  resize and display-mode declaration. `useWidget()`'s bundled return value
+  split into three focused hooks: `useToolContext()` for the latched
+  tool-invocation data (`status`/`toolInput`/`toolOutput` replacing
+  `isPending`/`props`), `useDisplayMode()` for
+  `displayMode`/`requestDisplayMode` (now `requestDisplayMode({ mode })`,
+  async), and `useSendFollowUp()` for what was `sendFollowUpMessage` (now
+  `sendFollowUp({ prompt })`, async). `useCallTool`'s returned handle kept
+  its shape (`callTool`/`data`/`error`/`isPending`).
+- Tool-to-view binding: the `widget: { name, invoking, invoked }` field on a
+  tool definition is renamed `view: { name, ... }` -- and, unlike v1, **a
+  view may now bind to at most one tool**. Console 01's `show-jarvis-console`
+  and its six mutation tools (create/complete-task, create/remove-reminder,
+  create/remove-note) all previously bound the same `product-search-result`
+  widget so that calling any one of them independently would open/refresh
+  the HUD. That's no longer directly expressible. Kept the binding only on
+  `show-jarvis-console` (the tool that must open the console) and dropped it
+  from the six mutation tools, which are already invoked from *inside* the
+  already-mounted view via `useCallTool` -- that path is unaffected, since
+  it's a client-side RPC call, not a fresh view launch. **Behavior change
+  worth operator awareness**: if the model calls e.g. `create-jarvis-task`
+  directly, without the console already open, it no longer auto-opens the
+  HUD as part of that response (v1 did). The `invoking`/`invoked` status-text
+  hints (e.g. "Creating task...") are also gone from the API entirely with
+  no replacement -- dropped, not preserved elsewhere.
+- View discovery convention: the CLI now scans each subdirectory of a
+  `views/` directory for a file literally named `view.tsx` (was `widget.tsx`,
+  discovered by directory name alone in v1). Renamed
+  `resources/product-search-result/widget.tsx` -> `.../view.tsx` rather than
+  renaming `resources/` -> `views/` wholesale (which would have touched many
+  more file references for no functional benefit) -- pointed the CLI at it
+  instead via the supported `--views-dir resources` flag on `build`/`dev`.
+- `postinstall` changed from `mcp-use generate-types` (removed) to
+  `mcp-use typecheck`, which regenerates the same managed type bridge
+  (`mcp-env.d.ts`, now committed, matching the existing convention of
+  committing other generated type files like Convex's `_generated/api.d.ts`)
+  and additionally runs the project's own `tsc --noEmit`.
+
+Verified with a full clean-room pass: deleted `node_modules`, `npm ci`
+(matching CI exactly), `mcp-use build`, all 22 Console 01 tests, the full
+main-workspace `npm run check` (1,121 node tests, 227 Convex tests, hygiene,
+both typechecks, lint, format, OpenAPI lint), and `audit:ci` -- all green.
