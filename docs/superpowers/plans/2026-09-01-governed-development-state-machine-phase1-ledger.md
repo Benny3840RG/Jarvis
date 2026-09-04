@@ -375,3 +375,81 @@ failed run was not counted as completion evidence.
 The independent PR review identified the moving-`total_count` case on the
 superseded head. The current stable-total guard already repaired it; an explicit
 regression test for that exact scenario raises the final Node total to 1,121.
+**Landed, verified, and dependency-hygiene follow-through (2026-09-03).**
+PRs #415, #416, #417 (NestJS 11->12 fastify/qs security upgrade, taken on as
+its own scoped piece of work per explicit go-ahead), and #421 (main-workspace
+`fast-uri` override bump) are all merged to `main`. Confirmed the one
+red herring along the way was exactly that -- a herring: the `#417` merge
+commit (`460787e`) showed a failed "TypeScript checks" run, but its
+`Audit dependencies` step logs matched the `fast-uri` GHSA set
+(`GHSA-5JGF-P345-68V8` et al.) that #416/#421 had already fixed on other
+branches; `main`'s current tip (`eddc1e8`, the #416 merge) already runs
+green, confirming this was ordering/timing noise from those two branches
+landing close together, not a real regression.
+
+Dependabot hygiene: PR #418 (console `fast-uri` bump) auto-closed, superseded
+by our manual override fix. PRs #419 (console `qs` 6.16.0), #420 (main
+workspace `convex`+`zod` minor bumps), and #413 (dev-dependencies group,
+open since Aug 30) were all failing CI for the same reason -- each was
+branched before #416/#421 landed, so their trees still carried the fixed
+`fast-uri` vulnerability. Commented `@dependabot rebase` on all three to
+pick up current `main`; plan is to merge each once its rebased CI goes
+green, same "merge once green" pattern used for #416/#421.
+
+**Declined to merge PR #422** (console `production-dependencies` group: convex,
+mcp-use, react-router, zod). Dependabot grouped a safe set of minor bumps
+together with two _major_ bumps -- `mcp-use` 1.34.5 -> 2.3.4 and
+`react-router` 7.18.3 -> 8.3.1. `mcp-use` is the framework Console 01 itself
+is built on, and its CI failure confirms this isn't cosmetic: `mcp-use` 2.x
+renamed/removed the `generate-types` CLI subcommand our `postinstall` script
+depends on (`Unknown command: generate-types`), so this would break the
+console's own build/deploy pipeline if merged as-is. This is the same shape
+of risk as the NestJS 11->12 upgrade -- a framework major-version migration
+that deserves its own deliberate, scoped piece of work (reading the mcp-use
+2.x migration notes, updating `postinstall`/`build` scripts, verifying the
+CLI's new `typecheck` command, then landing it separately) rather than a
+drive-by merge of a grouped dependency PR. Left #422 open, unmerged, pending
+that decision.
+
+**Update: #419/#420/#413 landed.** The `@dependabot rebase` comments above
+never actually worked -- GitHub's stored copy of the comment text had
+interpunct characters inserted mid-word (`·@·d·ependabot r·ebase`), which
+would not match Dependabot's mention parser. Rather than fight whatever
+layer does that, merged `origin/main` into each Dependabot branch directly
+with git and pushed -- the same mechanism already used to cross-port fixes
+between sibling branches earlier in this session.
+
+That surfaced a second, unrelated defect: Dependabot's auto-generated PR
+bodies never carry this repo's custom `# PR Evidence` template, so #420 and
+#413 (both of which touch `typescript/package.json`, triggering the "CLI
+Contract" heading) were failing `pr-evidence` regardless of dependency
+content. Added the missing section to both bodies directly.
+
+#413 (the 11-package dev-dependencies group) then exposed two real,
+independent defects baked into Dependabot's own grouping, neither related
+to fast-uri or the PR evidence gate:
+
+- `typescript` was bumped 6.0.3 -> 7.0.2 in the same group as
+  `typescript-eslint` 8.58.0 -> 8.68.0, whose peer range is
+  `>=4.8.4 <6.1.0` -- incompatible with typescript 7.x. `npm ci` failed
+  with `ERESOLVE` on every run since the PR opened, independent of
+  anything this session touched.
+- `convex-test` 0.0.54 -> 0.0.56 changed scheduled-function
+  conflict-simulation timing enough to flip
+  `convex/omegaReceiptIsolation.test.ts`'s "persists Jarvis receipt when
+  Omega reconciliation cannot advance" case from an authorized contract to
+  a conflicted one. Reproduced locally, bisected to this one package via a
+  targeted reinstall (confirmed both the failure with 0.0.56 and the pass
+  with 0.0.54, isolating every other variable), and confirmed reverting
+  just `convex-test` restores all 226 Convex tests and all 1,118 node
+  tests to green.
+
+Fixed both by reverting just those two packages' versions within the
+group -- keeping the other 9 updates (`@convex-dev/eslint-plugin`,
+`@redocly/cli`, `@types/node`, `ajv`, `concurrently`, `eslint`, `globals`,
+`tsx`, `vitest`) -- rather than reverting or forcing the whole group
+through. Same principle as the #422 deferral: don't let one broken pairing
+inside a Dependabot group block or silently mask the safe updates around
+it.
+
+All three (#419, #420, #413) verified fully green on CI and merged.
