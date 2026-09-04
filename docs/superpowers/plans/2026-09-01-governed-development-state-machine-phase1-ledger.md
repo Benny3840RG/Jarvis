@@ -466,15 +466,19 @@ All three (#419, #420, #413) verified fully green on CI and merged.
 - RED test added: a missing delivery dependency must be discovered before any
   synthetic quote write. The smoke now constructs both repositories before its
   first effect and reuses those instances for lifecycle and cleanup.
-- The workflow now reads the existing delivery token from the already-authorised
-  Convex development deployment, validates it, masks it before export, and does
-  not create a duplicate GitHub secret or service-token fallback.
-- A unique replacement request is carried in `.github/commission-development`
-  so merging the repair automatically reruns the full governed commissioning.
+- PR #426 merged the repair after exact-head CI and automatically queued run
+  `33887416427`. That run again passed verification and Convex sync, then failed
+  before smoke because the least-privilege deploy key correctly lacks
+  `deployment:env:view`; no synthetic smoke state was written.
+- The workflow now requires the separately governed
+  `JARVIS_DELIVERY_RUNTIME_TOKEN` as a dedicated GitHub Actions secret and
+  removes the forbidden Convex environment read. It does not widen the deploy
+  key, duplicate execution authority, or fall back to the service token.
 - Fresh local verification after repair: 30 automation-policy tests, 1,122 Node
   tests, 227 Convex tests, type-check, lint, format, OpenAPI and hygiene passed.
 - Production deployment remains unauthorised and was not performed.
 
-Next task: publish the repair, require exact-head CI, merge only if green, then
-reconcile the resulting commissioning run and continue to the real Development
-mission/ΩΣ evidence boundary.
+Next task: an operator must copy the existing development deployment's
+`JARVIS_DELIVERY_RUNTIME_TOKEN` into the repository Actions secret of the same
+name. Then advance the one-shot request ID, rerun commissioning, and continue to
+the real Development mission/ΩΣ evidence boundary.

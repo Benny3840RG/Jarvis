@@ -7,31 +7,16 @@ const workflowUrl = new URL(
   import.meta.url,
 );
 
-test("commissioning loads and masks the deployed delivery credential before smoke", () => {
+test("commissioning requires the dedicated Actions delivery credential before smoke", () => {
   const workflow = fs.readFileSync(workflowUrl, "utf8");
-  const loadIndex = workflow.indexOf(
-    "npx convex env get JARVIS_DELIVERY_RUNTIME_TOKEN",
-  );
-  const maskIndex = workflow.indexOf("::add-mask::");
-  const exportIndex = workflow.indexOf("JARVIS_DELIVERY_RUNTIME_TOKEN=");
-  const smokeIndex = workflow.indexOf("npm run smoke:convex");
 
-  assert.notEqual(
-    loadIndex,
-    -1,
-    "commissioning must load the existing deployment credential",
+  assert.match(
+    workflow,
+    /JARVIS_DELIVERY_RUNTIME_TOKEN:\s*\$\{\{\s*secrets\.JARVIS_DELIVERY_RUNTIME_TOKEN\s*\}\}/,
   );
-  assert.ok(
-    maskIndex > loadIndex,
-    "the loaded credential must be masked before export",
+  assert.match(
+    workflow,
+    /for variable in CONVEX_DEPLOY_KEY JARVIS_SERVICE_TOKEN OPENAI_API_KEY JARVIS_DELIVERY_RUNTIME_TOKEN;/,
   );
-  assert.ok(
-    exportIndex > maskIndex,
-    "the masked credential must be exported for later steps",
-  );
-  assert.ok(
-    smokeIndex > exportIndex,
-    "smoke must run only after credential export",
-  );
-  assert.doesNotMatch(workflow, /secrets\.JARVIS_DELIVERY_RUNTIME_TOKEN/);
+  assert.doesNotMatch(workflow, /convex env get JARVIS_DELIVERY_RUNTIME_TOKEN/);
 });
