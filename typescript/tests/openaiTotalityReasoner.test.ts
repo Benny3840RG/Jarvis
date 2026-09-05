@@ -92,7 +92,7 @@ describe("OpenAI Totality reasoner", () => {
     }) as typeof fetch;
 
     const reasoner = new OpenAITotalityReasoner(
-      { apiKey: "test-key", model: "gpt-5.6", timeoutMs: 5_000, maxOutputTokens: 1_234 },
+      { apiKey: "test-key", model: "gpt-5.6-terra", timeoutMs: 5_000, maxOutputTokens: 1_234 },
       fetchImpl,
     );
     const result = await reasoner.reason(makeRequest(), makeContext());
@@ -113,7 +113,7 @@ describe("OpenAI Totality reasoner", () => {
     assert.equal(result.responseId, "resp_test");
     assert.deepEqual(result.modelUsage, {
       provider: "openai",
-      model: "gpt-5.6",
+      model: "gpt-5.6-terra",
       inputTokens: 120,
       outputTokens: 45,
       cachedInputTokens: 20,
@@ -140,7 +140,7 @@ describe("OpenAI Totality reasoner", () => {
         { status: 200, headers: { "Content-Type": "application/json" } },
       )) as typeof fetch;
     const reasoner = new OpenAITotalityReasoner(
-      { apiKey: "test-key", model: "gpt-5.6", timeoutMs: 5_000, maxOutputTokens: 4_096 },
+      { apiKey: "test-key", model: "gpt-5.6-terra", timeoutMs: 5_000, maxOutputTokens: 4_096 },
       fetchImpl,
     );
 
@@ -160,9 +160,15 @@ describe("OpenAI Totality reasoner", () => {
 
   it("requires a server-side API key", () => {
     assert.throws(
-      () => resolveOpenAITotalityConfig({ OPENAI_MODEL: "gpt-5.6" }),
+      () => resolveOpenAITotalityConfig({ OPENAI_MODEL: "gpt-5.6-terra" }),
       /OPENAI_API_KEY is required/,
     );
+  });
+
+  it("defaults Totality to the deep-reasoning model allowed by the commissioned project", () => {
+    const config = resolveOpenAITotalityConfig({ OPENAI_API_KEY: "test-key" });
+
+    assert.equal(config.model, "gpt-5.6-terra");
   });
 
   it("classifies rate limits as retryable without exposing the full response", async () => {
@@ -172,7 +178,7 @@ describe("OpenAI Totality reasoner", () => {
         headers: { "Content-Type": "application/json" },
       })) as typeof fetch;
     const reasoner = new OpenAITotalityReasoner(
-      { apiKey: "test-key", model: "gpt-5.6", timeoutMs: 5_000, maxOutputTokens: 4_096 },
+      { apiKey: "test-key", model: "gpt-5.6-terra", timeoutMs: 5_000, maxOutputTokens: 4_096 },
       fetchImpl,
     );
 
@@ -190,7 +196,7 @@ describe("OpenAI Totality reasoner", () => {
         headers: { "Content-Type": "text/plain" },
       })) as typeof fetch;
     const reasoner = new OpenAITotalityReasoner(
-      { apiKey: "test-key", model: "gpt-5.6", timeoutMs: 5_000, maxOutputTokens: 4_096 },
+      { apiKey: "test-key", model: "gpt-5.6-terra", timeoutMs: 5_000, maxOutputTokens: 4_096 },
       fetchImpl,
     );
 
@@ -208,7 +214,7 @@ describe("OpenAI Totality reasoner", () => {
       return new Response(JSON.stringify(successfulPayload()), { status: 200 });
     }) as typeof fetch;
     const reasoner = new OpenAITotalityReasoner(
-      { apiKey: "test-key", model: "gpt-5.6", timeoutMs: 5_000, maxOutputTokens: 4_096 },
+      { apiKey: "test-key", model: "gpt-5.6-terra", timeoutMs: 5_000, maxOutputTokens: 4_096 },
       fetchImpl,
     );
     const request = makeRequest();
@@ -228,7 +234,7 @@ describe("OpenAI Totality reasoner", () => {
       return new Response(JSON.stringify(successfulPayload()), { status: 200 });
     }) as typeof fetch;
     const reasoner = new OpenAITotalityReasoner(
-      { apiKey: "test-key", model: "gpt-5.6", timeoutMs: 5_000, maxOutputTokens: 4_096 },
+      { apiKey: "test-key", model: "gpt-5.6-terra", timeoutMs: 5_000, maxOutputTokens: 4_096 },
       fetchImpl,
     );
     const request = makeRequest();

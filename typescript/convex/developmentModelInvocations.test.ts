@@ -39,7 +39,7 @@ function invocation(overrides: Record<string, unknown> = {}) {
     workUnitId: "mission-1:implementation",
     purpose: "implementation",
     provider: "openai",
-    model: "gpt-5.6",
+    model: "gpt-5.6-terra",
     inputTokens: 1000,
     outputTokens: 250,
     cachedInputTokens: 500,
@@ -68,7 +68,7 @@ describe("durable Development model invocation telemetry", () => {
       correlationId: "correlation-1",
       payload: {
         provider: "openai",
-        model: "gpt-5.6",
+        model: "gpt-5.6-terra",
         cachedInputTokens: 500,
       },
     });

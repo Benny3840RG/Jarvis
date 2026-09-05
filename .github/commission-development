@@ -1,7 +1,7 @@
 COMMISSION DEV
-request-id: phase1-totality-provider-access-diagnostic-20260905
-source: Phase 1 commissioning after distinguishing provider authentication from access denial
+request-id: phase1-totality-terra-model-20260905
+source: Phase 1 commissioning after binding Totality to the enabled deep-reasoning model
 scope: exact-main verification, authorised Convex development sync, self-cleaning smoke, HTTP/provider boundary checks, Totality probe, backup verification
-expected-main-baseline: merge commit containing reviewed provider authentication/access classification on current main
+expected-main-baseline: merge commit containing reviewed trusted-model identity correction on current main
 issue: 54
 production: not authorised
