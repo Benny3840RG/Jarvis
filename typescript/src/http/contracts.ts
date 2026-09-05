@@ -50,6 +50,17 @@ export type IntegrationStatus = {
   reason?: string;
 };
 
+// Never a live-verified state -- "configured" means the required provider API
+// key env var is present, not that the provider has ever been reached. See
+// resolveTotalityReasoningStatus in totalityFactory.ts for the single source
+// of truth this mirrors.
+export type ReasoningStatus = {
+  status: "not-configured" | "configured";
+  provider: "openai" | "gemini" | null;
+  model: string | null;
+  reason: string;
+};
+
 export type SystemStatus = {
   status: "ok" | "degraded" | "unavailable";
   version: string;
@@ -57,6 +68,7 @@ export type SystemStatus = {
   provider: ProviderStatus;
   reconciliation: RuntimeReconciliationHealth;
   integrations: IntegrationStatus[];
+  reasoning: ReasoningStatus;
   timezone: string;
   layers: LayersStatus;
   zState: "disabled" | "stabilising" | "active" | "suspended";

@@ -658,6 +658,7 @@ describe("Jarvis HTTP system boundary", () => {
       sourceVersion: string;
       provider: Record<string, unknown>;
       reconciliation: { state: string; enabled: boolean };
+      reasoning: { status: string; provider: string | null; model: string | null; reason: string };
       timezone: string;
       layers: Record<string, { status: string; reason?: string }>;
       zState: string;
@@ -677,6 +678,10 @@ describe("Jarvis HTTP system boundary", () => {
       deploymentVersion: "dev/outgoing-ram-798",
     });
     assert.deepEqual(body.reconciliation, { state: "disabled", enabled: false });
+    // This test never sets PERSISTENCE_PROVIDER/OPENAI_API_KEY/GEMINI_API_KEY as
+    // real process env vars (it injects a mock persistence provider directly),
+    // so reasoning is deterministically not-configured regardless of ambient env.
+    assert.equal(body.reasoning.status, "not-configured");
     assert.equal(body.timezone, "Australia/Melbourne");
     assert.equal(body.layers.runtime.status, "partial");
     assert.equal(body.layers.integration.status, "partial");
@@ -684,6 +689,59 @@ describe("Jarvis HTTP system boundary", () => {
     assert.match(body.layers.reliability.reason ?? "", /Persistence probe passed/);
     assert.equal(body.zState, "disabled");
     assert.equal(Number.isNaN(Date.parse(body.checkedAt)), false);
+  });
+
+  it("reports reasoning as configured (never verified) when the provider key is set", async () => {
+    const envKeys = ["PERSISTENCE_PROVIDER", "OPENAI_API_KEY"] as const;
+    const original = new Map(envKeys.map((key) => [key, process.env[key]]));
+    process.env.PERSISTENCE_PROVIDER = "convex";
+    process.env.OPENAI_API_KEY = "sk-test-do-not-leak";
+    try {
+      const persistence = makePersistence({
+        async loadState() {
+          return { lastIntent: "status" };
+        },
+        async listTasks() {
+          return [];
+        },
+        async listReminders() {
+          return [];
+        },
+      });
+      const app = await makeApp({ persistence, providerName: "convex" });
+      const response = await app
+        .getHttpAdapter()
+        .getInstance()
+        .inject({
+          method: "GET",
+          url: "/api/v1/status",
+          headers: { authorization: "Bearer current-secret" },
+        });
+      const body = response.json<{
+        reasoning: {
+          status: string;
+          provider: string | null;
+          model: string | null;
+          reason: string;
+        };
+      }>();
+
+      assert.equal(response.statusCode, 200);
+      assert.deepEqual(body.reasoning, {
+        status: "configured",
+        provider: "openai",
+        model: "gpt-5.6-terra",
+        reason: "Configuration only -- invocation has not been verified with a live provider call.",
+      });
+      // The response must never echo the configured secret back to a caller.
+      assert.doesNotMatch(JSON.stringify(body), /sk-test-do-not-leak/);
+    } finally {
+      for (const key of envKeys) {
+        const value = original.get(key);
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    }
   });
 
   it("returns injected degraded reconciliation health without raw errors", async () => {

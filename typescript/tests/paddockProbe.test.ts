@@ -34,6 +34,12 @@ const STATUS: SystemStatus = {
   },
   reconciliation: { state: "disabled", enabled: false },
   integrations: [],
+  reasoning: {
+    status: "not-configured",
+    provider: "openai",
+    model: null,
+    reason: "OPENAI_API_KEY is not set.",
+  },
   timezone: "Australia/Melbourne",
   layers: {
     runtime: { status: "ready" },

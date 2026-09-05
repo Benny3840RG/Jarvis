@@ -337,4 +337,61 @@ describe("Integration commissioning HUD wiring", () => {
 
     assert.equal(h.registry.get("integration-grid")!.children.length, 0);
   });
+
+  it("renders the reasoning provider/model with a configuration-only, invocation-unverified caveat", () => {
+    const h = harness();
+    const state = {
+      status: {
+        status: "ok",
+        zState: "disabled",
+        sourceVersion: "test",
+        timezone: "Australia/Melbourne",
+        provider: { name: "convex", reachability: "ok" },
+        layers: {},
+        integrations: [],
+        reasoning: {
+          status: "configured",
+          provider: "openai",
+          model: "gpt-5.6",
+          reason:
+            "Configuration only -- invocation has not been verified with a live provider call.",
+        },
+      },
+    };
+
+    runRenderSystems(state, h);
+
+    assert.equal(h.registry.get("reasoning-provider")?.textContent, "openai · gpt-5.6");
+    assert.equal(
+      h.registry.get("reasoning-verification")?.textContent,
+      "CONFIGURATION ONLY / INVOCATION UNVERIFIED",
+    );
+  });
+
+  it("never claims a configured reasoning provider when none is set up", () => {
+    const h = harness();
+    const state = {
+      status: {
+        status: "ok",
+        zState: "disabled",
+        sourceVersion: "test",
+        timezone: "Australia/Melbourne",
+        provider: { name: "json", reachability: "ok" },
+        layers: {},
+        integrations: [],
+        reasoning: {
+          status: "not-configured",
+          provider: null,
+          model: null,
+          reason:
+            "Totality reasoning requires Convex persistence, which is not the active provider.",
+        },
+      },
+    };
+
+    runRenderSystems(state, h);
+
+    assert.equal(h.registry.get("reasoning-provider")?.textContent, "NOT CONFIGURED");
+    assert.equal(h.registry.get("reasoning-verification")?.textContent, "NOT CONFIGURED");
+  });
 });

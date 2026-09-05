@@ -419,6 +419,15 @@ const statusSchema = z.object({
       reason: z.string().optional(),
     }),
   ),
+  // Never a live-verified state -- "configured" means the provider API key
+  // env var is present, not that the provider has ever been reached. See
+  // resolveTotalityReasoningStatus in totalityFactory.ts.
+  reasoning: z.object({
+    status: z.enum(["not-configured", "configured"]),
+    provider: z.enum(["openai", "gemini"]).nullable(),
+    model: z.string().nullable(),
+    reason: z.string(),
+  }),
   timezone: z.string(),
   layers: z.object({
     runtime: layerSchema,
