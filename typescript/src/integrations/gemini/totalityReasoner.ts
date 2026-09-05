@@ -13,7 +13,8 @@ import {
 } from "../totalityDraftParsing.js";
 
 const GEMINI_ENDPOINT_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
-const DEFAULT_MODEL = "gemini-2.5-flash";
+export const DEFAULT_GEMINI_TOTALITY_MODEL = "gemini-2.5-flash";
+const DEFAULT_MODEL = DEFAULT_GEMINI_TOTALITY_MODEL;
 const DEFAULT_TIMEOUT_MS = 60_000;
 
 export type GeminiTotalityDraft = TotalityDraft;
@@ -90,12 +91,17 @@ function cleanRequiredSecret(value: string | undefined, field: string): string {
   return value;
 }
 
-function cleanModel(value: string | undefined): string {
+/** Exported so status reporting can resolve the configured model without requiring GEMINI_API_KEY. */
+export function resolveGeminiTotalityModel(value: string | undefined): string {
   const model = value?.trim() || DEFAULT_MODEL;
   if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{1,127}$/.test(model)) {
     throw new Error("GEMINI_MODEL must be a safe model identifier.");
   }
   return model;
+}
+
+function cleanModel(value: string | undefined): string {
+  return resolveGeminiTotalityModel(value);
 }
 
 function cleanClientRequestId(value: string): string {

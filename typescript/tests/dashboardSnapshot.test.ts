@@ -19,6 +19,12 @@ const STATUS: SystemStatus = {
   },
   reconciliation: { state: "disabled", enabled: false },
   integrations: [],
+  reasoning: {
+    status: "not-configured",
+    provider: null,
+    model: null,
+    reason: "Totality reasoning requires Convex persistence, which is not the active provider.",
+  },
   timezone: "Australia/Melbourne",
   layers: {
     runtime: { status: "ready" },

@@ -13,7 +13,8 @@ import {
 } from "../totalityDraftParsing.js";
 
 const OPENAI_RESPONSES_ENDPOINT = "https://api.openai.com/v1/responses";
-const DEFAULT_MODEL = "gpt-5.6-terra";
+export const DEFAULT_OPENAI_TOTALITY_MODEL = "gpt-5.6-terra";
+const DEFAULT_MODEL = DEFAULT_OPENAI_TOTALITY_MODEL;
 const DEFAULT_TIMEOUT_MS = 60_000;
 
 const MEMORY_PROPOSAL_SCHEMA = {
@@ -167,12 +168,17 @@ function cleanRequiredSecret(value: string | undefined, field: string): string {
   return value;
 }
 
-function cleanModel(value: string | undefined): string {
+/** Exported so status reporting can resolve the configured model without requiring OPENAI_API_KEY. */
+export function resolveOpenAITotalityModel(value: string | undefined): string {
   const model = value?.trim() || DEFAULT_MODEL;
   if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{1,127}$/.test(model)) {
     throw new Error("OPENAI_MODEL must be a safe model identifier.");
   }
   return model;
+}
+
+function cleanModel(value: string | undefined): string {
+  return resolveOpenAITotalityModel(value);
 }
 
 function cleanClientRequestId(value: string): string {

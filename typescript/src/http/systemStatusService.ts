@@ -7,6 +7,7 @@ import type { RuntimeReconciliationHealth } from "../reconciliation/runtimeRecon
 import { resolveReminderTimezone } from "../reminders/due.js";
 import { ReliabilityController } from "../reliability/reliabilityController.js";
 import { assessReconciliationHealth } from "../reliability/reliabilityHealth.js";
+import { resolveTotalityReasoningStatus } from "../totality/totalityFactory.js";
 import type { HttpAppConfig } from "./config.js";
 import type { IntegrationStatus, LayersStatus, SystemStatus } from "./contracts.js";
 import { JarvisProblem } from "./problemDetails.js";
@@ -147,6 +148,7 @@ export class SystemStatusService {
       },
       reconciliation,
       integrations: [this.quoteDeliveryIntegrationStatus()],
+      reasoning: resolveTotalityReasoningStatus(),
       timezone,
       layers: { ...LAYERS, reliability: this.reliability.layerStatus() },
       zState: "disabled",

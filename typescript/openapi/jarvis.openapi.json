@@ -6810,6 +6810,7 @@
           "provider",
           "reconciliation",
           "integrations",
+          "reasoning",
           "timezone",
           "layers",
           "zState",
@@ -6842,6 +6843,9 @@
             "items": {
               "$ref": "#/components/schemas/IntegrationStatus"
             }
+          },
+          "reasoning": {
+            "$ref": "#/components/schemas/ReasoningStatus"
           },
           "timezone": {
             "type": "string",
@@ -11338,6 +11342,29 @@
           "reason": {
             "type": "string",
             "description": "Present when status is \"not-commissioned\" — a concrete, non-generic reason."
+          }
+        }
+      },
+      "ReasoningStatus": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["status", "provider", "model", "reason"],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": ["not-configured", "configured"],
+            "description": "\"configured\" means the provider's API key env var is present -- never that the provider has been reached with a live call."
+          },
+          "provider": {
+            "oneOf": [{ "type": "string", "enum": ["openai", "gemini"] }, { "type": "null" }]
+          },
+          "model": {
+            "oneOf": [{ "type": "string", "minLength": 1, "maxLength": 128 }, { "type": "null" }]
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
           }
         }
       },

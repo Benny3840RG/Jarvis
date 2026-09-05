@@ -643,3 +643,59 @@ verification, then make one final bounded resume of the already-authorised
 issue #435 mission through
 draft implementation, independent review, governed merge, reconciliation,
 post-merge evidence, and the existing ΩΣ completion boundary.
+
+## Totality reasoning status surfaced on SystemStatus (2026-09-05)
+
+The Totality reasoning integration (OpenAI/Gemini, gated on Convex
+persistence plus the provider's API key) had no visibility on any status
+surface -- an operator had no way to tell from `/api/v1/status`, the MCP
+`get_jarvis_status` tool, or the HUD whether reasoning was set up at all.
+
+- New `resolveTotalityReasoningStatus()` in `totalityFactory.ts` mirrors
+  `createTotalityPipelineFromEnv`'s exact gating (Convex persistence, then
+  the resolved provider's API key) but never constructs a reasoner and never
+  makes a live call. `status` is only ever `"not-configured"` or
+  `"configured"` -- there is deliberately no `"verified"` state, matching
+  `CostProvenance`'s existing discipline in `modelResourceGovernance.ts` of
+  never claiming a live-confirmed fact without an actual provider round
+  trip. When configured, `reason` reads "Configuration only -- invocation
+  has not been verified with a live provider call."; the HUD renders that
+  literally as `CONFIGURATION ONLY / INVOCATION UNVERIFIED`.
+- Added `ReasoningStatus`/`reasoning` to `SystemStatus` (`contracts.ts`),
+  the OpenAPI `SystemStatus` schema, and the MCP tool's local `statusSchema`
+  in `mcp/server.ts` -- all three kept in lockstep by hand, matching how
+  `ProviderStatus`/`IntegrationStatus` already exist in triplicate across
+  those exact three places.
+- `resolveOpenAITotalityModel`/`resolveGeminiTotalityModel` (formerly
+  private `cleanModel` in each reasoner) are now exported so the model name
+  can be resolved for display without requiring the API key -- `apiKey`
+  itself is never read, stored, or returned by any of this; only presence
+  is checked (`!process.env.OPENAI_API_KEY`).
+- Dashboard HUD: new "Reasoning" row in the existing "Integration
+  commissioning" panel, wired the same way `renderSystems()` already wires
+  `integrations`/`layers` -- provider/model on one line, the
+  configuration-only caveat as the panel's header badge.
+- Focused tests added: `resolveTotalityReasoningStatus`'s four branches plus
+  a positive "never includes the API key value anywhere in the reported
+  status" assertion (`totalityFactory.test.ts`); a real end-to-end
+  `/api/v1/status` HTTP test with the key actually set, asserting both the
+  exact shape and that the configured secret never appears anywhere in the
+  response body (`http.test.ts`); two `renderSystems()` HUD-wiring tests for
+  the configured and not-configured render paths
+  (`mcpOperationsHudWiring.test.ts`). Five other fixtures constructing a
+  full `SystemStatus` literal (`dashboardSnapshot`, `jarvisApiClient`,
+  `mcpOperationBinding`, `mcpProtocol`, `mcpQuoteInspection`,
+  `paddockProbe`) needed the new required field added -- caught by `tsc`,
+  not guessed.
+- Full verification: main-workspace `npm run check` (hygiene, both
+  typechecks, lint, format, OpenAPI lint, 1,136 node tests, 227 Convex
+  tests), the `.github/automation/*.test.mjs` policy suite (30 tests), and
+  `npm audit --audit-level=moderate` (0 vulnerabilities) all green.
+- Diff reviewed end-to-end for secret leakage and authority-boundary risk:
+  every `process.env.OPENAI_API_KEY`/`GEMINI_API_KEY` read is a boolean
+  presence check only, never propagated into any returned value, log, or
+  the HUD; grepped the full diff for realistic API-key-shaped strings
+  (none). The whole change is additive and read-only -- one new field on an
+  existing read-only status endpoint/tool/HUD panel, no new mutation path,
+  no auth/guard change, and `resolveTotalityReasoningStatus` never gains
+  live-call authority (no reasoner is ever constructed by it).
