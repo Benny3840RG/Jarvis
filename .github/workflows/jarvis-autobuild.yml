@@ -254,7 +254,7 @@ jobs:
           permission-profile: ":workspace"
           safety-strategy: drop-sudo
           model: gpt-5.6-terra
-          effort: high
+          effort: medium
 
       - name: Enforce post-agent diff policy
         id: guard

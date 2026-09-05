@@ -618,8 +618,18 @@ both typechecks, lint, format, OpenAPI lint), and `audit:ci` -- all green.
   Astra default for the commissioned coding model is rejected. The minimal
   repair explicitly binds the existing Codex action to `gpt-5.6-terra`; no
   authority, capability floor, secret, or execution path is added.
+- PR #436 merged that binding as main `4d54a67`. Retry run `33945920551`
+  cleared the provider-access failure and entered the Terra worker, but the
+  model invocation consumed the entire job budget without producing a guarded
+  diff. GitHub cancelled it; the finalizer released the lock, verification was
+  skipped, and no candidate or external effect was committed.
+- This is classified as bounded cognitive-resource exhaustion rather than a
+  code or authority failure. RED coverage now requires the existing Terra
+  worker to use medium reasoning effort and rejects a return to the wasteful
+  high-effort default. Model capability, diff policy, CI requirements and
+  merge authority remain unchanged.
 
-Next task: merge the autobuild model-binding repair after exact-head
-verification, then resume the already-authorised issue #435 mission through
+Next task: merge the bounded-effort repair after exact-head verification, then
+resume the already-authorised issue #435 mission through
 draft implementation, independent review, governed merge, reconciliation,
 post-merge evidence, and the existing ΩΣ completion boundary.
