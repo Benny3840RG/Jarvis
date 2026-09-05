@@ -52,12 +52,23 @@ test("a model/caller cannot lower the work item's required capability to save co
   }
 });
 
+test("deep-reasoning work routes to the model available in the commissioned project", () => {
+  const result = routeModelForRequirement(deepReasoningRequired, {
+    candidates: MODEL_PROFILES,
+  });
+
+  assert.equal(result.routed, true);
+  if (result.routed) assert.equal(result.profile.model, "gpt-5.6-terra");
+});
+
 test("a lower-cost model is selected when it satisfies the exact same requirement", () => {
-  const result = routeModelForRequirement(fastGeneralOnly, { candidates: MODEL_PROFILES });
+  const openAICandidates = MODEL_PROFILES.filter((profile) => profile.provider === "openai");
+  const result = routeModelForRequirement(fastGeneralOnly, { candidates: openAICandidates });
 
   assert.equal(result.routed, true);
   if (result.routed) {
-    const cheaperAlternativeExists = MODEL_PROFILES.some(
+    assert.equal(result.profile.model, "gpt-5.4-mini");
+    const cheaperAlternativeExists = openAICandidates.some(
       (profile) =>
         profile.capabilityClasses.includes("FAST_GENERAL") &&
         profile !== result.profile &&
@@ -98,7 +109,7 @@ test("routing ignores a known model identity's caller-forged capabilities", () =
   // ModelProfile fields after checking only provider/model identity.
   const forgedMiniProfile = {
     provider: "openai",
-    model: "gpt-5.6-mini",
+    model: "gpt-5.4-mini",
     capabilityClasses: ["DEEP_REASONING"] as const,
     estimatedInputCostPerMToken: 0,
     typicalLatencyMs: 1,
@@ -116,11 +127,11 @@ test("routing ignores a known model identity's caller-forged capabilities", () =
 });
 
 test("routing ignores a known model identity's caller-forged lower price", () => {
-  // This would select gpt-5.6 if a caller could replace the trusted
+  // This would select gpt-5.6-terra if a caller could replace the trusted
   // registry price with zero. The registry says the mini profile is cheaper.
   const forgedFullProfile = {
     provider: "openai",
-    model: "gpt-5.6",
+    model: "gpt-5.6-terra",
     capabilityClasses: ["FAST_GENERAL"] as const,
     estimatedInputCostPerMToken: 0,
   };
@@ -131,7 +142,7 @@ test("routing ignores a known model identity's caller-forged lower price", () =>
 
   assert.equal(result.routed, true);
   if (result.routed) {
-    assert.equal(result.profile.model, "gpt-5.6-mini");
+    assert.equal(result.profile.model, "gpt-5.4-mini");
   }
 });
 
@@ -154,7 +165,7 @@ test("budget exhaustion is architecturally independent of transition/verificatio
   const usageSoFar: readonly ModelInvocationRecord[] = [
     {
       provider: "openai",
-      model: "gpt-5.6",
+      model: "gpt-5.6-terra",
       workUnitId: "mission-1:build",
       purpose: "implementation",
       inputTokens: 1000,
@@ -186,7 +197,7 @@ test("a spend ceiling fails safely when its usage price is only estimated", () =
   const usageWithEstimatedPrice = [
     {
       provider: "openai",
-      model: "gpt-5.6",
+      model: "gpt-5.6-terra",
       workUnitId: "mission-1:build",
       purpose: "implementation",
       inputTokens: 100,
@@ -209,7 +220,7 @@ test("a spend ceiling fails safely when its usage price is only estimated", () =
 function invocationRecord(overrides: Partial<ModelInvocationRecord> = {}): ModelInvocationRecord {
   return {
     provider: "openai",
-    model: "gpt-5.6",
+    model: "gpt-5.6-terra",
     workUnitId: "mission-1:build",
     purpose: "implementation",
     inputTokens: 100,
@@ -264,7 +275,7 @@ test("repeated failed model calls do not loop forever", () => {
   const usage: readonly ModelInvocationRecord[] = [
     {
       provider: "openai",
-      model: "gpt-5.6",
+      model: "gpt-5.6-terra",
       workUnitId: "mission-1:build",
       purpose: "implementation",
       inputTokens: 100,
@@ -288,7 +299,7 @@ test("mission usage totals are derived from invocation records, not a running co
   const records: readonly ModelInvocationRecord[] = [
     {
       provider: "openai",
-      model: "gpt-5.6",
+      model: "gpt-5.6-terra",
       workUnitId: "mission-1:spec",
       purpose: "specification",
       inputTokens: 2000,
@@ -302,7 +313,7 @@ test("mission usage totals are derived from invocation records, not a running co
     },
     {
       provider: "openai",
-      model: "gpt-5.6",
+      model: "gpt-5.6-terra",
       workUnitId: "mission-1:build",
       purpose: "implementation",
       inputTokens: 5000,
@@ -326,7 +337,7 @@ test("mission usage totals are derived from invocation records, not a running co
   assert.equal(summary.totalLatencyMs, 2800);
   assert.equal(summary.totalEscalations, 0);
   assert.equal(summary.unnecessaryRepeatCalls, 0);
-  assert.deepEqual([...summary.modelDistribution].sort(), ["openai/gpt-5.6"]);
+  assert.deepEqual([...summary.modelDistribution].sort(), ["openai/gpt-5.6-terra"]);
 
   // Idempotent/pure: recomputing from the same records yields the same
   // summary -- there is no hidden mutable accumulator anywhere.

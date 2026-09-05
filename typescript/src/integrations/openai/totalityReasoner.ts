@@ -13,7 +13,7 @@ import {
 } from "../totalityDraftParsing.js";
 
 const OPENAI_RESPONSES_ENDPOINT = "https://api.openai.com/v1/responses";
-const DEFAULT_MODEL = "gpt-5.6";
+const DEFAULT_MODEL = "gpt-5.6-terra";
 const DEFAULT_TIMEOUT_MS = 60_000;
 
 const MEMORY_PROPOSAL_SCHEMA = {

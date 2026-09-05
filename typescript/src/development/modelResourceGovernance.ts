@@ -70,7 +70,7 @@ export type ModelProfile = ModelIdentity & {
 export const MODEL_PROFILES: readonly ModelProfile[] = Object.freeze([
   Object.freeze({
     provider: "openai",
-    model: "gpt-5.6-mini",
+    model: "gpt-5.4-mini",
     capabilityClasses: Object.freeze(["FAST_GENERAL"] as const),
     contextWindow: 128_000,
     estimatedInputCostPerMToken: 0.5,
@@ -82,7 +82,7 @@ export const MODEL_PROFILES: readonly ModelProfile[] = Object.freeze([
   }),
   Object.freeze({
     provider: "openai",
-    model: "gpt-5.6",
+    model: "gpt-5.6-terra",
     capabilityClasses: Object.freeze(["FAST_GENERAL", "CODING", "DEEP_REASONING"] as const),
     contextWindow: 256_000,
     estimatedInputCostPerMToken: 3,

@@ -568,8 +568,8 @@ both typechecks, lint, format, OpenAPI lint), and `audit:ci` -- all green.
   supports the Responses API. Root-cause tracing found Jarvis was collapsing
   provider authentication rejection, request/model rejection, and upstream
   dependency failure into one generic category.
-- RED tests prove provider HTTP 401/403 must become
-  `reasoning-authentication-failed`, other non-429 client rejection must become
+- Initial RED tests required provider HTTP 401/403 to become
+  `reasoning-authentication-failed`; other non-429 client rejection became
   `reasoning-request-rejected`, and sensitive provider details remain absent.
   Rate-limit, quota, and dependency categories retain their existing semantics.
 - Production deployment remains unauthorised and was not performed.
@@ -589,7 +589,20 @@ both typechecks, lint, format, OpenAPI lint), and `audit:ci` -- all green.
   policy denial.
 - Production deployment remains unauthorised and was not performed.
 
-Next task: merge the 401/403 diagnostic correction after exact-head verification,
-then use the resulting immutable commissioning evidence to resolve the specific
-OpenAI boundary before backup evidence and the real Development mission/ΩΣ
-boundary.
+- PR #433 merged the 401/403 diagnostic correction as main `bda3db0`. Exact-head
+  evidence and TypeScript gates passed. Commissioning run `33938362823` and its
+  failed-job retry again passed verification, development sync, and self-cleaning
+  smoke before consistently reporting redacted `reasoning-request-rejected`.
+- The operator's OpenAI project model-usage view supplied the missing trusted
+  runtime fact: `gpt-5.6-terra` and `gpt-5.4-mini` are enabled, while Jarvis's
+  defaults/registry named `gpt-5.6` and `gpt-5.6-mini`. The 403 was therefore an
+  invalid model-access assumption, not a credential failure.
+- RED tests require Totality's deep-reasoning default and routing profile to use
+  the commissioned `gpt-5.6-terra` identity, and OpenAI fast-general routing to
+  use the enabled `gpt-5.4-mini` identity. Capability floors are unchanged; this
+  corrects trusted identities rather than downgrading required capability.
+- Production deployment remains unauthorised and was not performed.
+
+Next task: merge the trusted-model identity repair after exact-head verification,
+then complete the automatic commissioning run through Totality, backup evidence,
+and the real Development mission/ΩΣ boundary.
