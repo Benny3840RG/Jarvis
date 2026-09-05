@@ -307,6 +307,10 @@ export function validateWorkflowContract(workflow) {
       /^\s+model:\s*gpt-5\.6-terra\s*$/im,
     ],
     [
+      "Codex must use bounded medium reasoning effort",
+      /^\s+effort:\s*medium\s*$/im,
+    ],
+    [
       "Codex must use workspace permissions",
       /permission-profile:\s*[\"']?:workspace[\"']?/i,
     ],

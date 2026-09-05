@@ -489,6 +489,16 @@ test("workflow contract requires safe triggers, isolation, draft output, and cle
     validateWorkflowContract(unavailableDefaultModel).reasons.join("\n"),
     /commissioned gpt-5\.6-terra model/i,
   );
+
+  const unboundedDefaultEffort = workflow.replace(
+    "effort: medium",
+    "effort: high",
+  );
+  assert.equal(validateWorkflowContract(unboundedDefaultEffort).ok, false);
+  assert.match(
+    validateWorkflowContract(unboundedDefaultEffort).reasons.join("\n"),
+    /bounded medium reasoning effort/i,
+  );
   assert.match(
     workflow,
     /name: Release issue lock after build[\s\S]*if: always\(\) && steps\.eligibility\.outputs\.lock_acquired == 'true'/,
