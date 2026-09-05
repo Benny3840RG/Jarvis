@@ -10,6 +10,7 @@ import { createToolActionServiceFromEnv } from "../actions/toolActionFactory.js"
 import type { ToolActionService } from "../actions/toolActions.js";
 import { createToolExecutionServiceFromEnv } from "../actions/toolExecutionFactory.js";
 import type { ToolExecutionService } from "../actions/toolExecution.js";
+import { resolveTrustedModelProfile } from "../development/modelResourceGovernance.js";
 import type { BusinessSettingsStore } from "../businessSettings/businessSettings.js";
 import { InMemoryBusinessSettingsStore } from "../businessSettings/inMemoryBusinessSettingsStore.js";
 import { JsonBusinessSettingsStore } from "../businessSettings/jsonBusinessSettingsStore.js";
@@ -71,12 +72,15 @@ import {
   type PersistenceProvider,
   type PersistenceProviderName,
 } from "../persistence/persistence.js";
+import { resolveGeminiTotalityConfig } from "../integrations/gemini/totalityReasoner.js";
+import { resolveOpenAITotalityConfig } from "../integrations/openai/totalityReasoner.js";
 import { createTotalityPipelineFromEnv } from "../totality/totalityFactory.js";
 import type { TotalityPipeline } from "../totality/totalityPipeline.js";
 import { ConvexExternalReconciliationStore } from "../persistence/convexExternalReconciliations.js";
 import type { ExternalReconciliationReadStore } from "../reconciliation/externalReconciliation.js";
 import type { RuntimeReconciliationHealth } from "../reconciliation/runtimeReconciliationHost.js";
 import { resolveHttpAppConfig, type HttpAppConfig } from "./config.js";
+import type { ReasoningConfigurationStatus } from "./contracts.js";
 import { evaluateRemoteGatewayRequest } from "./remoteGateway.js";
 import { createOidcVerifier, type OidcVerifier } from "./oidcVerifier.js";
 import { JarvisHttpModule } from "./jarvisHttpModule.js";
@@ -86,6 +90,10 @@ import {
   createPostHogTelemetryFromEnv,
   type PostHogTelemetry,
 } from "../observability/posthog.js";
+import {
+  resolveTotalityReasonerProviderName,
+  type TotalityReasonerProviderName,
+} from "../totality/totalityFactory.js";
 
 type DefaultPersistenceOptions = {
   persistence?: never;
@@ -154,6 +162,68 @@ function selectMemoryStore<T>(
   return providerName === "convex" ? make.convex() : make.json();
 }
 
+function resolveReasoningConfigurationStatus(
+  providerName: PersistenceProviderName,
+  totalityPipeline: TotalityPipeline | null,
+): ReasoningConfigurationStatus {
+  const observability = "configuration-only" as const;
+  if (providerName !== "convex") {
+    return {
+      status: "not-configured",
+      reason: "Totality reasoning requires the configured Convex persistence provider.",
+      observability,
+    };
+  }
+  if (!totalityPipeline) {
+    return {
+      status: "not-configured",
+      reason: "Totality reasoning is not configured in this deployment.",
+      observability,
+    };
+  }
+
+  let provider: TotalityReasonerProviderName;
+  try {
+    provider = resolveTotalityReasonerProviderName();
+  } catch {
+    return {
+      status: "not-configured",
+      reason: "The configured reasoning provider is invalid or unavailable.",
+      observability,
+    };
+  }
+
+  try {
+    const model =
+      provider === "gemini"
+        ? resolveGeminiTotalityConfig().model
+        : resolveOpenAITotalityConfig().model;
+    const trusted = resolveTrustedModelProfile({ provider, model });
+    if (!trusted) {
+      return {
+        status: "not-configured",
+        reason: "The configured reasoning model is not present in the trusted governance registry.",
+        observability,
+      };
+    }
+    return {
+      status: "configured",
+      provider: trusted.provider as TotalityReasonerProviderName,
+      model: trusted.model,
+      observability,
+    };
+  } catch {
+    return {
+      status: "not-configured",
+      reason:
+        provider === "gemini"
+          ? "Gemini reasoning is not configured."
+          : "OpenAI reasoning is not configured.",
+      observability,
+    };
+  }
+}
+
 export async function createJarvisHttpApp(
   options: CreateJarvisHttpAppOptions = {},
 ): Promise<NestFastifyApplication> {
@@ -185,6 +255,10 @@ export async function createJarvisHttpApp(
       : usesEnvironment
         ? createTotalityPipelineFromEnv()
         : null;
+  const reasoningConfiguration = resolveReasoningConfigurationStatus(
+    providerName,
+    totalityPipeline,
+  );
   const memoryChangeSetService =
     options.memoryChangeSetService !== undefined
       ? options.memoryChangeSetService
@@ -353,6 +427,7 @@ export async function createJarvisHttpApp(
       reconciliationHealth,
       externalReconciliationReadStore,
       totalityPipeline,
+      reasoningConfiguration,
       memoryChangeSetService,
       toolActionService,
       toolExecutionService,

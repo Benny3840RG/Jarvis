@@ -1,20 +1,12 @@
 import { HttpStatus, Inject, Injectable } from "@nestjs/common";
 
 import type { ToolExecutionService } from "../actions/toolExecution.js";
-import { resolveTrustedModelProfile } from "../development/modelResourceGovernance.js";
-import { resolveGeminiTotalityConfig } from "../integrations/gemini/totalityReasoner.js";
-import { resolveOpenAITotalityConfig } from "../integrations/openai/totalityReasoner.js";
 import type { PersistenceProvider } from "../persistence/persistence.js";
 import type { PersistenceProviderName } from "../persistence/providerSelection.js";
 import type { RuntimeReconciliationHealth } from "../reconciliation/runtimeReconciliationHost.js";
 import { resolveReminderTimezone } from "../reminders/due.js";
 import { ReliabilityController } from "../reliability/reliabilityController.js";
 import { assessReconciliationHealth } from "../reliability/reliabilityHealth.js";
-import type { TotalityPipeline } from "../totality/totalityPipeline.js";
-import {
-  resolveTotalityReasonerProviderName,
-  type TotalityReasonerProviderName,
-} from "../totality/totalityFactory.js";
 import type { HttpAppConfig } from "./config.js";
 import type {
   IntegrationStatus,
@@ -28,7 +20,7 @@ import {
   HTTP_PERSISTENCE,
   HTTP_PROVIDER_NAME,
   HTTP_RECONCILIATION_HEALTH,
-  HTTP_TOTALITY_PIPELINE,
+  HTTP_REASONING_CONFIGURATION,
   HTTP_TOOL_EXECUTION,
 } from "./tokens.js";
 
@@ -83,8 +75,8 @@ export class SystemStatusService {
     @Inject(HTTP_APP_CONFIG) private readonly config: HttpAppConfig,
     @Inject(HTTP_RECONCILIATION_HEALTH)
     private readonly reconciliationHealth: () => RuntimeReconciliationHealth,
-    @Inject(HTTP_TOTALITY_PIPELINE)
-    private readonly totalityPipeline: TotalityPipeline | null,
+    @Inject(HTTP_REASONING_CONFIGURATION)
+    private readonly reasoningConfiguration: ReasoningConfigurationStatus,
     @Inject(HTTP_TOOL_EXECUTION)
     private readonly toolExecutionService: ToolExecutionService | null,
   ) {}
@@ -119,63 +111,7 @@ export class SystemStatusService {
   }
 
   private reasoningConfigurationStatus(): ReasoningConfigurationStatus {
-    const observability = "configuration-only" as const;
-    if (this.providerName !== "convex") {
-      return {
-        status: "not-configured",
-        reason: "Totality reasoning requires the configured Convex persistence provider.",
-        observability,
-      };
-    }
-    if (!this.totalityPipeline) {
-      return {
-        status: "not-configured",
-        reason: "Totality reasoning is not configured in this deployment.",
-        observability,
-      };
-    }
-
-    let provider: TotalityReasonerProviderName;
-    try {
-      provider = resolveTotalityReasonerProviderName();
-    } catch {
-      return {
-        status: "not-configured",
-        reason: "The configured reasoning provider is invalid or unavailable.",
-        observability,
-      };
-    }
-
-    try {
-      const model =
-        provider === "gemini"
-          ? resolveGeminiTotalityConfig().model
-          : resolveOpenAITotalityConfig().model;
-      const trusted = resolveTrustedModelProfile({ provider, model });
-      if (!trusted) {
-        return {
-          status: "not-configured",
-          reason:
-            "The configured reasoning model is not present in the trusted governance registry.",
-          observability,
-        };
-      }
-      return {
-        status: "configured",
-        provider: trusted.provider as TotalityReasonerProviderName,
-        model: trusted.model,
-        observability,
-      };
-    } catch {
-      return {
-        status: "not-configured",
-        reason:
-          provider === "gemini"
-            ? "Gemini reasoning is not configured."
-            : "OpenAI reasoning is not configured.",
-        observability,
-      };
-    }
+    return this.reasoningConfiguration;
   }
 
   async inspect(): Promise<SystemStatus> {

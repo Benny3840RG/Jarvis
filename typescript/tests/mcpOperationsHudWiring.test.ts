@@ -275,7 +275,7 @@ describe("Operations inbox / activity timeline / integration health HUD wiring",
 
 describe("Integration commissioning HUD wiring", () => {
   const systemsSource = extractSource(
-    /(function renderSystems\(\) \{[\s\S]*?\})\n\s+function renderCategories/,
+    /(function renderReasoning\(reasoning\) \{[\s\S]*?function renderSystems\(\) \{[\s\S]*?\})\n\s+function renderCategories/,
   );
 
   function runRenderSystems(state: unknown, h: ReturnType<typeof harness>) {
