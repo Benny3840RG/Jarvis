@@ -37,7 +37,9 @@ function minimalPersistence(): PersistenceProvider {
   };
 }
 
-async function statusFor(env: NodeJS.ProcessEnv): Promise<{ body: string; payload: Record<string, unknown> }> {
+async function statusFor(
+  env: NodeJS.ProcessEnv,
+): Promise<{ body: string; payload: Record<string, unknown> }> {
   const app = await createJarvisHttpApp({
     persistence: minimalPersistence(),
     providerName: "json",
@@ -65,21 +67,24 @@ afterEach(async () => {
 });
 
 describe("system status reasoning configuration projection", () => {
-  it("reports a trusted configured identity without claiming a successful invocation or exposing the credential", async () => {
-    const { body, payload } = await statusFor({
-      TOTALITY_REASONER_PROVIDER: "openai",
-      OPENAI_MODEL: "gpt-5.6-terra",
-      OPENAI_API_KEY: PROVIDER_SECRET,
-    });
+  it(
+    "reports a trusted configured identity without claiming a successful invocation or exposing the credential",
+    async () => {
+      const { body, payload } = await statusFor({
+        TOTALITY_REASONER_PROVIDER: "openai",
+        OPENAI_MODEL: "gpt-5.6-terra",
+        OPENAI_API_KEY: PROVIDER_SECRET,
+      });
 
-    assert.deepEqual(payload.reasoning, {
-      configurationState: "configured",
-      provider: "openai",
-      model: "gpt-5.6-terra",
-      invocationState: "unverified",
-    });
-    assert.equal(body.includes(PROVIDER_SECRET), false);
-  });
+      assert.deepEqual(payload.reasoning, {
+        configurationState: "configured",
+        provider: "openai",
+        model: "gpt-5.6-terra",
+        invocationState: "unverified",
+      });
+      assert.equal(body.includes(PROVIDER_SECRET), false);
+    },
+  );
 
   it("reports not-configured when the selected provider has no credential", async () => {
     const { payload } = await statusFor({
@@ -96,19 +101,22 @@ describe("system status reasoning configuration projection", () => {
     });
   });
 
-  it("reports unavailable when the configured identity is absent from the trusted model registry", async () => {
-    const { payload } = await statusFor({
-      TOTALITY_REASONER_PROVIDER: "openai",
-      OPENAI_MODEL: "unregistered-model",
-      OPENAI_API_KEY: PROVIDER_SECRET,
-    });
+  it(
+    "reports unavailable when the configured identity is absent from the trusted model registry",
+    async () => {
+      const { payload } = await statusFor({
+        TOTALITY_REASONER_PROVIDER: "openai",
+        OPENAI_MODEL: "unregistered-model",
+        OPENAI_API_KEY: PROVIDER_SECRET,
+      });
 
-    assert.deepEqual(payload.reasoning, {
-      configurationState: "unavailable",
-      provider: "openai",
-      model: "unregistered-model",
-      invocationState: "unverified",
-      reason: "The configured reasoning identity is not present in the trusted model registry.",
-    });
-  });
+      assert.deepEqual(payload.reasoning, {
+        configurationState: "unavailable",
+        provider: "openai",
+        model: "unregistered-model",
+        invocationState: "unverified",
+        reason: "The configured reasoning identity is not present in the trusted model registry.",
+      });
+    },
+  );
 });
