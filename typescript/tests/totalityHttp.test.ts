@@ -323,6 +323,44 @@ describe("Totality HTTP boundary", () => {
     assert.doesNotMatch(response.body, /sensitive upstream detail/);
   });
 
+  it("distinguishes rejected provider credentials without leaking provider details", async () => {
+    const reasoner: TotalityReasoner = {
+      async reason() {
+        throw new OpenAIRequestError("sensitive credential detail", 401, false);
+      },
+    };
+    const app = await makeApp(new TotalityPipeline(reasoner, noOpJournal()));
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/v1/totality/reason",
+      headers: authHeaders(),
+      payload: body(),
+    });
+
+    assert.equal(response.statusCode, 503);
+    assert.equal(response.json().type, "urn:jarvis:problem:reasoning-authentication-failed");
+    assert.doesNotMatch(response.body, /sensitive credential detail/);
+  });
+
+  it("distinguishes rejected provider requests without leaking provider details", async () => {
+    const reasoner: TotalityReasoner = {
+      async reason() {
+        throw new OpenAIRequestError("sensitive request detail", 400, false);
+      },
+    };
+    const app = await makeApp(new TotalityPipeline(reasoner, noOpJournal()));
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/v1/totality/reason",
+      headers: authHeaders(),
+      payload: body(),
+    });
+
+    assert.equal(response.statusCode, 503);
+    assert.equal(response.json().type, "urn:jarvis:problem:reasoning-request-rejected");
+    assert.doesNotMatch(response.body, /sensitive request detail/);
+  });
+
   it("rejects aggregate Totality quota exhaustion before provider work", async () => {
     const app = await makeApp(
       successfulPipeline(

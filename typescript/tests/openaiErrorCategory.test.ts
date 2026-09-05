@@ -21,7 +21,16 @@ describe("OpenAI error categorisation", () => {
     assert.equal(categorizeOpenAIRequestError(error), "rate_limited");
   });
 
-  it("classifies non-429 failures as dependency failures", () => {
+  it("distinguishes rejected credentials and requests from dependency failures", () => {
+    assert.equal(
+      categorizeOpenAIRequestError(new OpenAIRequestError("Invalid API key.", 401, false)),
+      "authentication_failed",
+    );
+    assert.equal(
+      categorizeOpenAIRequestError(new OpenAIRequestError("Request rejected.", 400, false)),
+      "request_rejected",
+    );
+
     const error = new OpenAIRequestError("Upstream unavailable.", 503, true);
 
     assert.equal(categorizeOpenAIRequestError(error), "dependency_failed");
