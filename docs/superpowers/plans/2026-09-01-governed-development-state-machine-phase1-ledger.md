@@ -555,7 +555,7 @@ both typechecks, lint, format, OpenAPI lint), and `audit:ci` -- all green.
   record was committed.
 - Production deployment remains unauthorised and was not performed.
 
-Next task: merge the diagnostic repair after exact-head verification, advance
-the one-shot commissioning request, and use the newly observable primary cause
-to repair or reconcile the delivery boundary before continuing to the real
-Development mission/ΩΣ evidence boundary.
+Next task: merge the diagnostic repair and its new one-shot commissioning
+request after exact-head verification, then use the newly observable primary
+cause to repair or reconcile the delivery boundary before continuing to the
+real Development mission/ΩΣ evidence boundary.

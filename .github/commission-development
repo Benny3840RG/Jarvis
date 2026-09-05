@@ -1,7 +1,7 @@
 COMMISSION DEV
-request-id: phase1-runtime-token-commission-20260905-a670a8f
-source: Phase 1 commissioning after dedicated delivery runtime token provisioning
+request-id: phase1-observable-delivery-boundary-20260905-ca75e7d
+source: Phase 1 commissioning after aggregate-cause redaction repair
 scope: exact-main verification, authorised Convex development sync, self-cleaning smoke, HTTP/provider boundary checks, Totality probe, backup verification
-expected-main-baseline: a670a8f including reviewed commissioning credential repair and current Console 01 migration
+expected-main-baseline: merge commit containing reviewed aggregate-cause diagnostics on current main
 issue: 54
 production: not authorised
