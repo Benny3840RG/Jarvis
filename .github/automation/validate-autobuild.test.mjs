@@ -479,6 +479,16 @@ test("workflow contract requires safe triggers, isolation, draft output, and cle
   assert.match(workflow, /jarvis-autobuild-lock:/);
   assert.match(workflow, /github\.paginate/);
   assert.match(workflow, /comment\.user\?\.login === "github-actions\[bot\]"/);
+
+  const unavailableDefaultModel = workflow.replace(
+    "model: gpt-5.6-terra",
+    "model: gpt-6-astra",
+  );
+  assert.equal(validateWorkflowContract(unavailableDefaultModel).ok, false);
+  assert.match(
+    validateWorkflowContract(unavailableDefaultModel).reasons.join("\n"),
+    /commissioned gpt-5\.6-terra model/i,
+  );
   assert.match(
     workflow,
     /name: Release issue lock after build[\s\S]*if: always\(\) && steps\.eligibility\.outputs\.lock_acquired == 'true'/,

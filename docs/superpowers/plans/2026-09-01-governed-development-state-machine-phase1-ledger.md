@@ -603,6 +603,23 @@ both typechecks, lint, format, OpenAPI lint), and `audit:ci` -- all green.
   corrects trusted identities rather than downgrading required capability.
 - Production deployment remains unauthorised and was not performed.
 
-Next task: merge the trusted-model identity repair after exact-head verification,
-then complete the automatic commissioning run through Totality, backup evidence,
-and the real Development mission/ΩΣ boundary.
+- PR #434 merged the trusted-model identity repair as main `0ca3162` after
+  exact-head evidence and TypeScript gates passed. Commissioning run
+  `33944892604` then passed complete verification, authorised development
+  Convex sync, self-cleaning smoke, Jarvis/status/Totality boundaries, and
+  backup export/verification. The one-shot commissioning issue closed
+  automatically; production remained untouched.
+- The first real governed mission, issue #435, was authorised by the operator.
+  Autobuild run `33945456349` acquired and released its issue-scoped lock but
+  failed before modifying code or creating a PR. The pinned Codex action had no
+  explicit model input and silently selected `gpt-6-astra`, which trusted
+  provider evidence shows is unavailable to this OpenAI project.
+- RED workflow-contract coverage now proves that substituting the unavailable
+  Astra default for the commissioned coding model is rejected. The minimal
+  repair explicitly binds the existing Codex action to `gpt-5.6-terra`; no
+  authority, capability floor, secret, or execution path is added.
+
+Next task: merge the autobuild model-binding repair after exact-head
+verification, then resume the already-authorised issue #435 mission through
+draft implementation, independent review, governed merge, reconciliation,
+post-merge evidence, and the existing ΩΣ completion boundary.
