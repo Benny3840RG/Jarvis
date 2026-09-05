@@ -206,9 +206,17 @@ function resolveReasoningConfigurationStatus(
         observability,
       };
     }
+    const publicProvider = toPublicReasoningProviderName(trusted.provider);
+    if (publicProvider === undefined) {
+      return {
+        status: "not-configured",
+        reason: "The configured reasoning provider is not available on the public status surface.",
+        observability,
+      };
+    }
     return {
       status: "configured",
-      provider: trusted.provider as TotalityReasonerProviderName,
+      provider: publicProvider,
       model: trusted.model,
       observability,
     };
@@ -222,6 +230,10 @@ function resolveReasoningConfigurationStatus(
       observability,
     };
   }
+}
+
+function toPublicReasoningProviderName(provider: string): TotalityReasonerProviderName | undefined {
+  return provider === "openai" || provider === "gemini" ? provider : undefined;
 }
 
 export async function createJarvisHttpApp(
