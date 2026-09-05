@@ -25,10 +25,19 @@ function normalizeError(error: unknown): Error {
   return error instanceof Error ? error : new Error(String(error));
 }
 
-export function redactSecret(error: unknown, secret?: string): string {
+function formatError(error: unknown): string {
   const message = error instanceof Error ? (error.stack ?? error.message) : String(error);
-  if (!secret) return message;
-  return message.split(secret).join("[REDACTED]");
+  if (!(error instanceof AggregateError) || error.errors.length === 0) return message;
+  const causes = error.errors
+    .map((cause, index) => `Cause ${index + 1}: ${formatError(cause)}`)
+    .join("\n");
+  return `${message}\n${causes}`;
+}
+
+export function redactSecret(error: unknown, ...secrets: Array<string | undefined>): string {
+  return secrets
+    .filter((secret): secret is string => Boolean(secret))
+    .reduce((message, secret) => message.split(secret).join("[REDACTED]"), formatError(error));
 }
 
 async function cleanupSmokeRecords(

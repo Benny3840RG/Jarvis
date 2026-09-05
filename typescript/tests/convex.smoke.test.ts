@@ -201,4 +201,24 @@ describe("Convex smoke runner", () => {
     assert.equal(redacted.includes(secret), false);
     assert(redacted.includes("[REDACTED]"));
   });
+
+  it("surfaces aggregate causes while redacting every runtime credential", () => {
+    const serviceToken = "service-token-that-must-not-leak";
+    const deliveryToken = "delivery-token-that-must-not-leak";
+    const error = new AggregateError(
+      [
+        new Error(`Primary failure used ${deliveryToken}`),
+        new Error(`Cleanup failure used ${serviceToken}`),
+      ],
+      "quote lifecycle smoke cleanup failed",
+    );
+
+    const redacted = redactSecret(error, serviceToken, deliveryToken);
+
+    assert.match(redacted, /quote lifecycle smoke cleanup failed/);
+    assert.match(redacted, /Primary failure used \[REDACTED\]/);
+    assert.match(redacted, /Cleanup failure used \[REDACTED\]/);
+    assert.equal(redacted.includes(serviceToken), false);
+    assert.equal(redacted.includes(deliveryToken), false);
+  });
 });
