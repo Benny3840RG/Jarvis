@@ -1,5 +1,10 @@
 import { isIP } from "node:net";
 
+import { resolveTrustedModelProfile } from "../development/modelResourceGovernance.js";
+import { resolveGeminiTotalityConfig } from "../integrations/gemini/totalityReasoner.js";
+import { resolveOpenAITotalityConfig } from "../integrations/openai/totalityReasoner.js";
+import { resolveTotalityReasonerProviderName } from "../totality/totalityFactory.js";
+import type { ReasoningConfigurationStatus } from "./contracts.js";
 import { resolveRemoteGatewayConfig, type RemoteGatewayConfig } from "./remoteGateway.js";
 
 export const JARVIS_VERSION = "0.1.0";
@@ -16,6 +21,7 @@ export type HttpAppConfig = {
   version: string;
   sourceVersion: string;
   deploymentVersion: string | null;
+  reasoning?: ReasoningConfigurationStatus;
   timezone?: string;
   currentToken?: string;
   previousToken?: string;
@@ -36,6 +42,76 @@ type JarvisEnvironment = NodeJS.ProcessEnv;
 function optionalText(value: string | undefined): string | undefined {
   const cleaned = value?.trim();
   return cleaned ? cleaned : undefined;
+}
+
+function trustedConfiguredModelHint(
+  env: JarvisEnvironment,
+  provider: "openai" | "gemini",
+): string | null {
+  const configured = optionalText(provider === "openai" ? env.OPENAI_MODEL : env.GEMINI_MODEL);
+  if (configured === undefined) return null;
+  return resolveTrustedModelProfile({ provider, model: configured })?.model ?? null;
+}
+
+export function resolveReasoningConfigurationStatus(
+  env: JarvisEnvironment = process.env,
+): ReasoningConfigurationStatus {
+  let provider: "openai" | "gemini";
+  try {
+    provider = resolveTotalityReasonerProviderName(env.TOTALITY_REASONER_PROVIDER);
+  } catch {
+    return {
+      configurationState: "unavailable",
+      provider: null,
+      model: null,
+      invocationState: "unverified",
+      reason: "The configured reasoning provider is not supported by this runtime.",
+    };
+  }
+
+  const credential = provider === "openai" ? env.OPENAI_API_KEY : env.GEMINI_API_KEY;
+  if (optionalText(credential) === undefined) {
+    return {
+      configurationState: "not-configured",
+      provider,
+      model: trustedConfiguredModelHint(env, provider),
+      invocationState: "unverified",
+      reason: "The selected reasoning provider is missing its server-side credential.",
+    };
+  }
+
+  let model: string;
+  try {
+    model =
+      provider === "openai"
+        ? resolveOpenAITotalityConfig(env).model
+        : resolveGeminiTotalityConfig(env).model;
+  } catch {
+    return {
+      configurationState: "unavailable",
+      provider,
+      model: trustedConfiguredModelHint(env, provider),
+      invocationState: "unverified",
+      reason: "The configured reasoning provider settings are invalid.",
+    };
+  }
+
+  if (!resolveTrustedModelProfile({ provider, model })) {
+    return {
+      configurationState: "unavailable",
+      provider,
+      model,
+      invocationState: "unverified",
+      reason: "The configured reasoning identity is not present in the trusted model registry.",
+    };
+  }
+
+  return {
+    configurationState: "configured",
+    provider,
+    model,
+    invocationState: "unverified",
+  };
 }
 
 const MIN_SERVICE_TOKEN_LENGTH = 32;
@@ -166,6 +242,7 @@ export function resolveHttpAppConfig(env: JarvisEnvironment = process.env): Http
     version: JARVIS_VERSION,
     sourceVersion: resolveSourceVersion(env.JARVIS_SOURCE_VERSION),
     deploymentVersion: resolveDeploymentVersion(env.JARVIS_DEPLOYMENT_VERSION),
+    reasoning: resolveReasoningConfigurationStatus(env),
     ...(timezone === undefined ? {} : { timezone }),
     ...(currentToken === undefined ? {} : { currentToken }),
     ...(previousToken === undefined ? {} : { previousToken }),
