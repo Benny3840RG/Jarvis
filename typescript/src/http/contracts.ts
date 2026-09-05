@@ -50,6 +50,14 @@ export type IntegrationStatus = {
   reason?: string;
 };
 
+export type ReasoningConfigurationStatus = {
+  configurationState: "configured" | "not-configured" | "unavailable";
+  provider: "openai" | "gemini" | null;
+  model: string | null;
+  invocationState: "unverified";
+  reason?: string;
+};
+
 export type SystemStatus = {
   status: "ok" | "degraded" | "unavailable";
   version: string;
@@ -57,6 +65,7 @@ export type SystemStatus = {
   provider: ProviderStatus;
   reconciliation: RuntimeReconciliationHealth;
   integrations: IntegrationStatus[];
+  reasoning: ReasoningConfigurationStatus;
   timezone: string;
   layers: LayersStatus;
   zState: "disabled" | "stabilising" | "active" | "suspended";
