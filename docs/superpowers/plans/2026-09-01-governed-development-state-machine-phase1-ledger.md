@@ -574,7 +574,22 @@ both typechecks, lint, format, OpenAPI lint), and `audit:ci` -- all green.
   Rate-limit, quota, and dependency categories retain their existing semantics.
 - Production deployment remains unauthorised and was not performed.
 
-Next task: merge the safe provider-classification repair and its one-shot
-commissioning request after exact-head verification, then act on the resulting
-specific Totality boundary evidence before proceeding to backup evidence and
-the real Development mission/ΩΣ boundary.
+- PR #432 merged the provider-classification repair as main `2666aff`. Both
+  exact-head gates passed, and commissioning run `33937025556` again passed the
+  complete verification gate, authorised Convex sync, and self-cleaning smoke.
+- Its first Totality attempt reported `reasoning-authentication-failed`. After
+  the operator installed a newly-created project API key, a failed-job retry of
+  the same immutable run repeated that result while all preceding gates stayed
+  green.
+- Root-cause review found the diagnostic classifier incorrectly grouped HTTP
+  403 provider permission/access denial with HTTP 401 invalid authentication.
+  RED coverage now requires 401 to remain `authentication_failed` while 403 is
+  the existing redacted `request_rejected` outcome. This preserves provider
+  secrecy while distinguishing a bad credential from a model/request access
+  policy denial.
+- Production deployment remains unauthorised and was not performed.
+
+Next task: merge the 401/403 diagnostic correction after exact-head verification,
+then use the resulting immutable commissioning evidence to resolve the specific
+OpenAI boundary before backup evidence and the real Development mission/ΩΣ
+boundary.

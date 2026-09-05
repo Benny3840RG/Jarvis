@@ -14,7 +14,7 @@ export function categorizeOpenAIRequestError(error: OpenAIRequestError): OpenAIE
   if (error.status === 429) {
     return QUOTA_EXHAUSTION_PATTERN.test(error.message) ? "quota_exhausted" : "rate_limited";
   }
-  if (error.status === 401 || error.status === 403) return "authentication_failed";
+  if (error.status === 401) return "authentication_failed";
   if (error.status !== null && error.status >= 400 && error.status < 500) {
     return "request_rejected";
   }

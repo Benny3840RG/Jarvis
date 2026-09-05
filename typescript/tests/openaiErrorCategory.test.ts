@@ -35,4 +35,14 @@ describe("OpenAI error categorisation", () => {
 
     assert.equal(categorizeOpenAIRequestError(error), "dependency_failed");
   });
+
+  it("treats provider permission denials as rejected requests, not bad credentials", () => {
+    const error = new OpenAIRequestError(
+      "The project is not permitted to use the requested model.",
+      403,
+      false,
+    );
+
+    assert.equal(categorizeOpenAIRequestError(error), "request_rejected");
+  });
 });
