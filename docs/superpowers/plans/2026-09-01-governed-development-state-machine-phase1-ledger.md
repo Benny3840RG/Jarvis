@@ -555,7 +555,26 @@ both typechecks, lint, format, OpenAPI lint), and `audit:ci` -- all green.
   record was committed.
 - Production deployment remains unauthorised and was not performed.
 
-Next task: merge the diagnostic repair and its new one-shot commissioning
-request after exact-head verification, then use the newly observable primary
-cause to repair or reconcile the delivery boundary before continuing to the
-real Development mission/ΩΣ evidence boundary.
+- PR #431 merged the aggregate diagnostic repair and queued commissioning run
+  `33936176914` against exact main `8a90eec`. The first attempt proved the
+  existing development deployment lacked the delivery token; the operator
+  corrected the deployment-local setting.
+- Retrying the same immutable run then passed the complete verification gate,
+  authorised Convex sync, and the entire self-cleaning Convex smoke suite.
+  Jarvis started and its status boundary passed, but the live Totality probe
+  failed closed with `reasoning-dependency-failed`; backup verification was
+  correctly skipped.
+- Official OpenAI model documentation confirms the configured `gpt-5.6` alias
+  supports the Responses API. Root-cause tracing found Jarvis was collapsing
+  provider authentication rejection, request/model rejection, and upstream
+  dependency failure into one generic category.
+- RED tests prove provider HTTP 401/403 must become
+  `reasoning-authentication-failed`, other non-429 client rejection must become
+  `reasoning-request-rejected`, and sensitive provider details remain absent.
+  Rate-limit, quota, and dependency categories retain their existing semantics.
+- Production deployment remains unauthorised and was not performed.
+
+Next task: merge the safe provider-classification repair and its one-shot
+commissioning request after exact-head verification, then act on the resulting
+specific Totality boundary evidence before proceeding to backup evidence and
+the real Development mission/ΩΣ boundary.

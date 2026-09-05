@@ -103,6 +103,22 @@ export class TotalityController {
             "The reasoning provider is temporarily rate limited.",
           );
         }
+        if (reasonerErrorCategory === "authentication_failed") {
+          throw new JarvisProblem(
+            503,
+            "reasoning-authentication-failed",
+            "Reasoning Authentication Failed",
+            "The configured reasoning provider rejected its server-side credential.",
+          );
+        }
+        if (reasonerErrorCategory === "request_rejected") {
+          throw new JarvisProblem(
+            503,
+            "reasoning-request-rejected",
+            "Reasoning Request Rejected",
+            "The reasoning provider rejected the configured model or request contract.",
+          );
+        }
         throw new JarvisProblem(
           503,
           "reasoning-dependency-failed",

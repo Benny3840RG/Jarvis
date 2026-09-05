@@ -1,7 +1,7 @@
 COMMISSION DEV
-request-id: phase1-observable-delivery-boundary-20260905-ca75e7d
-source: Phase 1 commissioning after aggregate-cause redaction repair
+request-id: phase1-totality-provider-classification-20260905
+source: Phase 1 commissioning after safe Totality provider-failure classification
 scope: exact-main verification, authorised Convex development sync, self-cleaning smoke, HTTP/provider boundary checks, Totality probe, backup verification
-expected-main-baseline: merge commit containing reviewed aggregate-cause diagnostics on current main
+expected-main-baseline: merge commit containing reviewed Totality provider-failure classification on current main
 issue: 54
 production: not authorised
