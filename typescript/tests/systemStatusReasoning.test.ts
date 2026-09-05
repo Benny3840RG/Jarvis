@@ -59,7 +59,10 @@ async function statusFor(
     headers: AUTH,
   });
   assert.equal(response.statusCode, 200);
-  return { body: response.body, payload: response.json() as Record<string, unknown> };
+  return {
+    body: response.body,
+    payload: response.json() as Record<string, unknown>,
+  };
 }
 
 afterEach(async () => {
@@ -86,20 +89,23 @@ describe("system status reasoning configuration projection", () => {
     },
   );
 
-  it("reports not-configured when the selected provider has no credential", async () => {
-    const { payload } = await statusFor({
-      TOTALITY_REASONER_PROVIDER: "openai",
-      OPENAI_MODEL: "gpt-5.6-terra",
-    });
+  it(
+    "reports not-configured when the selected provider has no credential",
+    async () => {
+      const { payload } = await statusFor({
+        TOTALITY_REASONER_PROVIDER: "openai",
+        OPENAI_MODEL: "gpt-5.6-terra",
+      });
 
-    assert.deepEqual(payload.reasoning, {
-      configurationState: "not-configured",
-      provider: "openai",
-      model: "gpt-5.6-terra",
-      invocationState: "unverified",
-      reason: "The selected reasoning provider is missing its server-side credential.",
-    });
-  });
+      assert.deepEqual(payload.reasoning, {
+        configurationState: "not-configured",
+        provider: "openai",
+        model: "gpt-5.6-terra",
+        invocationState: "unverified",
+        reason: "The selected reasoning provider is missing its server-side credential.",
+      });
+    },
+  );
 
   it(
     "reports unavailable when the configured identity is absent from the trusted model registry",
