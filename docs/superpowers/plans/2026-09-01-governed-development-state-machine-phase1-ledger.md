@@ -628,8 +628,18 @@ both typechecks, lint, format, OpenAPI lint), and `audit:ci` -- all green.
   worker to use medium reasoning effort and rejects a return to the wasteful
   high-effort default. Model capability, diff policy, CI requirements and
   merge authority remain unchanged.
+- PR #437 merged the medium-effort repair as main `0d61837`. Retry run
+  `33948584927` repeated the same bounded cancellation without reaching the
+  diff guard, proving reasoning depth was not the root cause. Finalization
+  again released the lock; no candidate or external effect was committed.
+- Model retries are paused after the repeated Terra stalls. Trusted runtime
+  metadata classifies `gpt-5.6-luna` as the lower-latency coding-capable model,
+  and the operator's provider model list confirms it is enabled. RED coverage
+  now rejects both unavailable Astra and the over-provisioned Terra default;
+  the worker retains medium reasoning plus every existing verification gate.
 
-Next task: merge the bounded-effort repair after exact-head verification, then
-resume the already-authorised issue #435 mission through
+Next task: merge the evidence-based Luna routing repair after exact-head
+verification, then make one final bounded resume of the already-authorised
+issue #435 mission through
 draft implementation, independent review, governed merge, reconciliation,
 post-merge evidence, and the existing ΩΣ completion boundary.

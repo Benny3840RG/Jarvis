@@ -481,13 +481,23 @@ test("workflow contract requires safe triggers, isolation, draft output, and cle
   assert.match(workflow, /comment\.user\?\.login === "github-actions\[bot\]"/);
 
   const unavailableDefaultModel = workflow.replace(
-    "model: gpt-5.6-terra",
+    "model: gpt-5.6-luna",
     "model: gpt-6-astra",
   );
   assert.equal(validateWorkflowContract(unavailableDefaultModel).ok, false);
   assert.match(
     validateWorkflowContract(unavailableDefaultModel).reasons.join("\n"),
-    /commissioned gpt-5\.6-terra model/i,
+    /commissioned gpt-5\.6-luna model/i,
+  );
+
+  const overProvisionedDefaultModel = workflow.replace(
+    "model: gpt-5.6-luna",
+    "model: gpt-5.6-terra",
+  );
+  assert.equal(validateWorkflowContract(overProvisionedDefaultModel).ok, false);
+  assert.match(
+    validateWorkflowContract(overProvisionedDefaultModel).reasons.join("\n"),
+    /commissioned gpt-5\.6-luna model/i,
   );
 
   const unboundedDefaultEffort = workflow.replace(
