@@ -65,7 +65,7 @@ export type SystemStatus = {
   provider: ProviderStatus;
   reconciliation: RuntimeReconciliationHealth;
   integrations: IntegrationStatus[];
-  reasoning: ReasoningConfigurationStatus;
+  reasoning?: ReasoningConfigurationStatus;
   timezone: string;
   layers: LayersStatus;
   zState: "disabled" | "stabilising" | "active" | "suspended";
