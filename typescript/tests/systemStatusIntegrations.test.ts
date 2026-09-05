@@ -7,7 +7,7 @@ import { z } from "zod";
 import { ToolExecutionService } from "../src/actions/toolExecution.js";
 import { createJarvisHttpApp } from "../src/http/app.js";
 import type { HttpAppConfig } from "../src/http/config.js";
-import type { IntegrationStatus } from "../src/http/contracts.js";
+import type { IntegrationStatus, ReasoningConfigurationStatus } from "../src/http/contracts.js";
 import type { PersistenceProvider } from "../src/persistence/persistence.js";
 
 const CONFIG: HttpAppConfig = {
@@ -61,6 +61,7 @@ function minimalPersistence(): PersistenceProvider {
 
 async function makeApp(
   toolExecutionService: ToolExecutionService | null,
+  reasoningConfiguration?: ReasoningConfigurationStatus,
 ): Promise<NestFastifyApplication> {
   const app = await createJarvisHttpApp({
     persistence: minimalPersistence(),
@@ -68,9 +69,22 @@ async function makeApp(
     config: CONFIG,
     logger: false,
     toolExecutionService,
+    reasoningConfiguration,
   });
   openApps.push(app);
   return app;
+}
+
+async function fetchStatus(
+  app: NestFastifyApplication,
+): Promise<{ reasoning: ReasoningConfigurationStatus }> {
+  const response = await app.inject({
+    method: "GET",
+    url: "/api/v1/status",
+    headers: AUTH,
+  });
+  assert.equal(response.statusCode, 200);
+  return response.json() as { reasoning: ReasoningConfigurationStatus };
 }
 
 afterEach(async () => {
@@ -124,5 +138,53 @@ describe("system status integration commissioning evidence", () => {
       commissioned.find((entry) => entry.name === "quote-delivery")?.status,
       "commissioned",
     );
+  });
+});
+
+describe("system status reasoning configuration projection", () => {
+  it("defaults to not-configured when no reasoning configuration is injected", async () => {
+    const app = await makeApp(null);
+    const { reasoning } = await fetchStatus(app);
+    assert.equal(reasoning.status, "not-configured");
+    assert.ok("reason" in reasoning && reasoning.reason.length > 0);
+  });
+
+  it("carries a configured reasoning projection through to the authenticated response", async () => {
+    const app = await makeApp(null, {
+      status: "configured",
+      provider: "openai",
+      model: "gpt-5.6-terra",
+      observability: "configuration-only",
+    });
+    const { reasoning } = await fetchStatus(app);
+    assert.deepEqual(reasoning, {
+      status: "configured",
+      provider: "openai",
+      model: "gpt-5.6-terra",
+      observability: "configuration-only",
+    });
+  });
+
+  it("carries a not-configured reasoning projection with its reason through to the response", async () => {
+    const app = await makeApp(null, {
+      status: "not-configured",
+      reason: "OpenAI reasoning credentials are not configured.",
+    });
+    const { reasoning } = await fetchStatus(app);
+    assert.deepEqual(reasoning, {
+      status: "not-configured",
+      reason: "OpenAI reasoning credentials are not configured.",
+    });
+  });
+
+  it("never exposes an API key, even if one were mistakenly reachable through configuration", async () => {
+    const app = await makeApp(null, {
+      status: "configured",
+      provider: "openai",
+      model: "gpt-5.6-terra",
+      observability: "configuration-only",
+    });
+    const response = await app.inject({ method: "GET", url: "/api/v1/status", headers: AUTH });
+    assert.doesNotMatch(response.body, /sk-[A-Za-z0-9]/);
   });
 });

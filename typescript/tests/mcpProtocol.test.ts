@@ -24,6 +24,10 @@ const STATUS: SystemStatus = {
   },
   reconciliation: { state: "disabled", enabled: false },
   integrations: [],
+  reasoning: {
+    status: "not-configured",
+    reason: "Reasoning is not configured in this test fixture.",
+  },
   timezone: "Australia/Melbourne",
   layers: {
     runtime: { status: "ready" },

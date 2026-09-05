@@ -50,6 +50,25 @@ export type IntegrationStatus = {
   reason?: string;
 };
 
+/**
+ * Bounded, non-secret observability of which trusted reasoning
+ * provider/model is configured for the Totality reasoning boundary. This is
+ * a configuration projection only: `configured` never implies a model call
+ * has succeeded, and it never carries API keys, provider response bodies,
+ * prompts, raw model output, or cost figures.
+ */
+export type ReasoningConfigurationStatus =
+  | {
+      status: "configured";
+      provider: string;
+      model: string;
+      observability: "configuration-only";
+    }
+  | {
+      status: "not-configured";
+      reason: string;
+    };
+
 export type SystemStatus = {
   status: "ok" | "degraded" | "unavailable";
   version: string;
@@ -57,6 +76,7 @@ export type SystemStatus = {
   provider: ProviderStatus;
   reconciliation: RuntimeReconciliationHealth;
   integrations: IntegrationStatus[];
+  reasoning: ReasoningConfigurationStatus;
   timezone: string;
   layers: LayersStatus;
   zState: "disabled" | "stabilising" | "active" | "suspended";

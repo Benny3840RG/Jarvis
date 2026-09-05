@@ -338,3 +338,98 @@ describe("Integration commissioning HUD wiring", () => {
     assert.equal(h.registry.get("integration-grid")!.children.length, 0);
   });
 });
+
+describe("Reasoning configuration HUD wiring", () => {
+  const systemsSource = extractSource(
+    /(function renderSystems\(\) \{[\s\S]*?\})\n\s+function renderCategories/,
+  );
+
+  function runRenderSystems(state: unknown, h: ReturnType<typeof harness>) {
+    const run = new Function(
+      "document",
+      "state",
+      "byId",
+      "text",
+      "renderReadiness",
+      "renderRadar",
+      `"use strict"; ${systemsSource}; renderSystems();`,
+    );
+    run(
+      h.documentStub,
+      state,
+      h.byId,
+      h.text,
+      () => {},
+      () => {},
+    );
+  }
+
+  const BASE_STATUS = {
+    status: "ok",
+    zState: "disabled",
+    sourceVersion: "test",
+    timezone: "Australia/Melbourne",
+    provider: { name: "convex", reachability: "ok" },
+    layers: {},
+    integrations: [],
+  };
+
+  it("renders a configured reasoning identity as configuration-only, never invocation proof", () => {
+    const h = harness();
+    runRenderSystems(
+      {
+        status: {
+          ...BASE_STATUS,
+          reasoning: {
+            status: "configured",
+            provider: "openai",
+            model: "gpt-5.6-terra",
+            observability: "configuration-only",
+          },
+        },
+      },
+      h,
+    );
+
+    const grid = h.registry.get("reasoning-grid")!;
+    const rows = grid.children.map((child) => child.children.map((c) => c.textContent));
+    assert.deepEqual(rows, [
+      ["State", "CONFIGURED"],
+      ["Provider · model", "openai · gpt-5.6-terra"],
+      ["Observability", "CONFIGURATION-ONLY"],
+    ]);
+  });
+
+  it("renders a not-configured reasoning projection with its reason, not a fabricated identity", () => {
+    const h = harness();
+    runRenderSystems(
+      {
+        status: {
+          ...BASE_STATUS,
+          reasoning: {
+            status: "not-configured",
+            reason: "OpenAI reasoning credentials are not configured.",
+          },
+        },
+      },
+      h,
+    );
+
+    const grid = h.registry.get("reasoning-grid")!;
+    const rows = grid.children.map((child) => child.children.map((c) => c.textContent));
+    assert.deepEqual(rows, [
+      ["State", "NOT CONFIGURED"],
+      ["Detail", "OpenAI reasoning credentials are not configured."],
+    ]);
+  });
+
+  it("clears the reasoning grid while status is still connecting", () => {
+    const h = harness();
+    const grid = h.byId("reasoning-grid");
+    grid.append(makeElement());
+
+    runRenderSystems({ status: null }, h);
+
+    assert.equal(h.registry.get("reasoning-grid")!.children.length, 0);
+  });
+});

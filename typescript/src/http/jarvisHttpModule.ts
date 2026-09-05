@@ -24,6 +24,7 @@ import type { MemoryChangeSetService } from "../memory/memoryChangeSets.js";
 import type { PersistenceProvider } from "../persistence/persistence.js";
 import type { PersistenceProviderName } from "../persistence/providerSelection.js";
 import type { TotalityPipeline } from "../totality/totalityPipeline.js";
+import type { ReasoningConfigurationStatus } from "./contracts.js";
 import type { ExternalReconciliationReadStore } from "../reconciliation/externalReconciliation.js";
 import type { RuntimeReconciliationHealth } from "../reconciliation/runtimeReconciliationHost.js";
 import type { ActivityEventReader } from "../operations/activityTimeline.js";
@@ -85,6 +86,7 @@ import {
   HTTP_TOOL_ACTIONS,
   HTTP_TOOL_EXECUTION,
   HTTP_TOTALITY_PIPELINE,
+  HTTP_REASONING_CONFIGURATION,
 } from "./tokens.js";
 
 export type JarvisHttpModuleOptions = {
@@ -95,6 +97,7 @@ export type JarvisHttpModuleOptions = {
   config: HttpAppConfig;
   oidcVerifier: OidcVerifier | null;
   totalityPipeline: TotalityPipeline | null;
+  reasoningConfiguration: ReasoningConfigurationStatus;
   memoryChangeSetService: MemoryChangeSetService | null;
   toolActionService: ToolActionService | null;
   toolExecutionService: ToolExecutionService | null;
@@ -180,6 +183,10 @@ export class JarvisHttpModule {
           useValue: options.externalReconciliationReadStore,
         },
         { provide: HTTP_TOTALITY_PIPELINE, useValue: options.totalityPipeline },
+        {
+          provide: HTTP_REASONING_CONFIGURATION,
+          useValue: options.reasoningConfiguration,
+        },
         {
           provide: HTTP_MEMORY_CHANGE_SETS,
           useValue: options.memoryChangeSetService,

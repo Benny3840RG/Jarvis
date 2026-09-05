@@ -8,12 +8,18 @@ import { resolveReminderTimezone } from "../reminders/due.js";
 import { ReliabilityController } from "../reliability/reliabilityController.js";
 import { assessReconciliationHealth } from "../reliability/reliabilityHealth.js";
 import type { HttpAppConfig } from "./config.js";
-import type { IntegrationStatus, LayersStatus, SystemStatus } from "./contracts.js";
+import type {
+  IntegrationStatus,
+  LayersStatus,
+  ReasoningConfigurationStatus,
+  SystemStatus,
+} from "./contracts.js";
 import { JarvisProblem } from "./problemDetails.js";
 import {
   HTTP_APP_CONFIG,
   HTTP_PERSISTENCE,
   HTTP_PROVIDER_NAME,
+  HTTP_REASONING_CONFIGURATION,
   HTTP_RECONCILIATION_HEALTH,
   HTTP_TOOL_EXECUTION,
 } from "./tokens.js";
@@ -71,6 +77,8 @@ export class SystemStatusService {
     private readonly reconciliationHealth: () => RuntimeReconciliationHealth,
     @Inject(HTTP_TOOL_EXECUTION)
     private readonly toolExecutionService: ToolExecutionService | null,
+    @Inject(HTTP_REASONING_CONFIGURATION)
+    private readonly reasoningConfiguration: ReasoningConfigurationStatus,
   ) {}
 
   /**
@@ -147,6 +155,7 @@ export class SystemStatusService {
       },
       reconciliation,
       integrations: [this.quoteDeliveryIntegrationStatus()],
+      reasoning: this.reasoningConfiguration,
       timezone,
       layers: { ...LAYERS, reliability: this.reliability.layerStatus() },
       zState: "disabled",

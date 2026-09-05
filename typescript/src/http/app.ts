@@ -73,6 +73,8 @@ import {
 } from "../persistence/persistence.js";
 import { createTotalityPipelineFromEnv } from "../totality/totalityFactory.js";
 import type { TotalityPipeline } from "../totality/totalityPipeline.js";
+import { resolveReasoningConfigurationStatus } from "../totality/reasoningConfigurationStatus.js";
+import type { ReasoningConfigurationStatus } from "./contracts.js";
 import { ConvexExternalReconciliationStore } from "../persistence/convexExternalReconciliations.js";
 import type { ExternalReconciliationReadStore } from "../reconciliation/externalReconciliation.js";
 import type { RuntimeReconciliationHealth } from "../reconciliation/runtimeReconciliationHost.js";
@@ -108,6 +110,7 @@ export type CreateJarvisHttpAppOptions = (
   externalReconciliationReadStore?: ExternalReconciliationReadStore | null;
   logger?: NestApplicationOptions["logger"];
   totalityPipeline?: TotalityPipeline | null;
+  reasoningConfiguration?: ReasoningConfigurationStatus;
   memoryChangeSetService?: MemoryChangeSetService | null;
   toolActionService?: ToolActionService | null;
   toolExecutionService?: ToolExecutionService | null;
@@ -185,6 +188,15 @@ export async function createJarvisHttpApp(
       : usesEnvironment
         ? createTotalityPipelineFromEnv()
         : null;
+  const reasoningConfiguration =
+    options.reasoningConfiguration !== undefined
+      ? options.reasoningConfiguration
+      : usesEnvironment
+        ? resolveReasoningConfigurationStatus(providerName)
+        : {
+            status: "not-configured" as const,
+            reason: "Reasoning configuration is not available in this deployment.",
+          };
   const memoryChangeSetService =
     options.memoryChangeSetService !== undefined
       ? options.memoryChangeSetService
@@ -353,6 +365,7 @@ export async function createJarvisHttpApp(
       reconciliationHealth,
       externalReconciliationReadStore,
       totalityPipeline,
+      reasoningConfiguration,
       memoryChangeSetService,
       toolActionService,
       toolExecutionService,

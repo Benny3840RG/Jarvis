@@ -6810,6 +6810,7 @@
           "provider",
           "reconciliation",
           "integrations",
+          "reasoning",
           "timezone",
           "layers",
           "zState",
@@ -6842,6 +6843,9 @@
             "items": {
               "$ref": "#/components/schemas/IntegrationStatus"
             }
+          },
+          "reasoning": {
+            "$ref": "#/components/schemas/ReasoningConfigurationStatus"
           },
           "timezone": {
             "type": "string",
@@ -11340,6 +11344,52 @@
             "description": "Present when status is \"not-commissioned\" — a concrete, non-generic reason."
           }
         }
+      },
+      "ReasoningConfigurationStatus": {
+        "description": "Bounded, non-secret observability of the configured Totality reasoning provider/model. This is configuration-only: `configured` never proves a model call has succeeded, and this projection never carries API keys, provider response bodies, prompts, raw model output, or cost figures.",
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["status", "provider", "model", "observability"],
+            "properties": {
+              "status": {
+                "type": "string",
+                "const": "configured"
+              },
+              "provider": {
+                "type": "string",
+                "minLength": 1,
+                "description": "The trusted reasoning provider identity, resolved from the model-resource governance registry."
+              },
+              "model": {
+                "type": "string",
+                "minLength": 1,
+                "description": "The trusted reasoning model identity, resolved from the model-resource governance registry."
+              },
+              "observability": {
+                "type": "string",
+                "const": "configuration-only"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["status", "reason"],
+            "properties": {
+              "status": {
+                "type": "string",
+                "const": "not-configured"
+              },
+              "reason": {
+                "type": "string",
+                "minLength": 1,
+                "description": "A concrete, non-secret reason reasoning is not configured."
+              }
+            }
+          }
+        ]
       },
       "BusinessContactDetails": {
         "type": "object",

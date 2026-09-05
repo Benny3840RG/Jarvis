@@ -419,6 +419,18 @@ const statusSchema = z.object({
       reason: z.string().optional(),
     }),
   ),
+  reasoning: z.discriminatedUnion("status", [
+    z.object({
+      status: z.literal("configured"),
+      provider: z.string(),
+      model: z.string(),
+      observability: z.literal("configuration-only"),
+    }),
+    z.object({
+      status: z.literal("not-configured"),
+      reason: z.string(),
+    }),
+  ]),
   timezone: z.string(),
   layers: z.object({
     runtime: layerSchema,
