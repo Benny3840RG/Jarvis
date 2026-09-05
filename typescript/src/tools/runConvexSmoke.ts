@@ -56,6 +56,13 @@ async function main(): Promise<void> {
 }
 
 main().catch((error: unknown) => {
-  console.error("Convex smoke failed:", redactSecret(error, process.env.JARVIS_SERVICE_TOKEN));
+  console.error(
+    "Convex smoke failed:",
+    redactSecret(
+      error,
+      process.env.JARVIS_SERVICE_TOKEN,
+      process.env.JARVIS_DELIVERY_RUNTIME_TOKEN,
+    ),
+  );
   process.exitCode = 1;
 });

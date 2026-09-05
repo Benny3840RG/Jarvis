@@ -487,7 +487,7 @@ terminology and API rework between majors:
   widget so that calling any one of them independently would open/refresh
   the HUD. That's no longer directly expressible. Kept the binding only on
   `show-jarvis-console` (the tool that must open the console) and dropped it
-  from the six mutation tools, which are already invoked from *inside* the
+  from the six mutation tools, which are already invoked from _inside_ the
   already-mounted view via `useCallTool` -- that path is unaffected, since
   it's a client-side RPC call, not a fresh view launch. **Behavior change
   worth operator awareness**: if the model calls e.g. `create-jarvis-task`
@@ -537,7 +537,25 @@ both typechecks, lint, format, OpenAPI lint), and `audit:ci` -- all green.
   tests, 227 Convex tests, type-check, lint, format, OpenAPI and hygiene passed.
 - Production deployment remains unauthorised and was not performed.
 
-Next task: an operator must copy the existing development deployment's
-`JARVIS_DELIVERY_RUNTIME_TOKEN` into the repository Actions secret of the same
-name. Then advance the one-shot request ID, rerun commissioning, and continue to
-the real Development mission/ΩΣ evidence boundary.
+- The operator rotated and provisioned the delivery-runtime credential in the
+  development deployment and GitHub Actions. PR #430 advanced the consumed
+  one-shot request against current main `1101fc0`; exact-head CI passed before
+  merge.
+- Commissioning run `33935311718` passed the credential guard, complete
+  verification gate, and authorised Convex development sync. The quote smoke
+  still failed with `AggregateError: quote lifecycle smoke cleanup failed`.
+- Root-cause tracing showed the aggregate retained the primary delivery
+  mutation error and cleanup error internally, but `redactSecret()` rendered
+  only the aggregate wrapper. This erased the evidence needed to distinguish a
+  credential mismatch from another delivery-boundary rejection.
+- RED test proves aggregate causes must be surfaced while every supplied
+  runtime credential remains redacted. The diagnostic path now renders nested
+  causes and accepts both service and delivery tokens for redaction; cleanup
+  remains conservative because a failed mutation response cannot prove that no
+  record was committed.
+- Production deployment remains unauthorised and was not performed.
+
+Next task: merge the diagnostic repair and its new one-shot commissioning
+request after exact-head verification, then use the newly observable primary
+cause to repair or reconcile the delivery boundary before continuing to the
+real Development mission/ΩΣ evidence boundary.
