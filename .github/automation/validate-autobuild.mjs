@@ -303,6 +303,10 @@ export function validateWorkflowContract(workflow) {
       /openai-api-key:\s*\$\{\{\s*secrets\.OPENAI_API_KEY\s*\}\}/i,
     ],
     [
+      "Codex must use the commissioned gpt-5.6-terra model",
+      /^\s+model:\s*gpt-5\.6-terra\s*$/im,
+    ],
+    [
       "Codex must use workspace permissions",
       /permission-profile:\s*[\"']?:workspace[\"']?/i,
     ],

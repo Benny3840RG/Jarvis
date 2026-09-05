@@ -253,6 +253,7 @@ jobs:
           prompt-file: .jarvis-autobuild-prompt.md
           permission-profile: ":workspace"
           safety-strategy: drop-sudo
+          model: gpt-5.6-terra
           effort: high
 
       - name: Enforce post-agent diff policy
