@@ -147,6 +147,13 @@ export class SystemStatusService {
       },
       reconciliation,
       integrations: [this.quoteDeliveryIntegrationStatus()],
+      reasoning: this.config.reasoning ?? {
+        configurationState: "unavailable",
+        provider: null,
+        model: null,
+        invocationState: "unverified",
+        reason: "Reasoning configuration is unavailable in this runtime.",
+      },
       timezone,
       layers: { ...LAYERS, reliability: this.reliability.layerStatus() },
       zState: "disabled",
