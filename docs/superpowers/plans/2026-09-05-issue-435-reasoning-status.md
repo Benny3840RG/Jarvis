@@ -23,6 +23,7 @@
 ### Task 1: HTTP reasoning configuration projection
 
 **Files:**
+
 - Test: `typescript/tests/systemStatusReasoning.test.ts`
 - Modify: `typescript/src/http/config.ts`
 - Modify: `typescript/src/http/contracts.ts`
@@ -31,6 +32,7 @@
 - Modify: `typescript/src/integrations/gemini/totalityReasoner.ts`
 
 **Interfaces:**
+
 - Consumes: `resolveTotalityReasonerProviderName()`, provider-specific model validators, `resolveTrustedModelProfile()`.
 - Produces: `ReasoningConfigurationStatus` and `SystemStatus.reasoning`.
 
@@ -47,6 +49,7 @@
 ### Task 2: MCP and HUD propagation
 
 **Files:**
+
 - Modify/Test: `typescript/src/mcp/server.ts`
 - Modify: `typescript/src/mcp/dashboard-v1.html`
 - Modify/Test: `typescript/tests/mcpProtocol.test.ts`
@@ -54,6 +57,7 @@
 - Modify affected typed `SystemStatus` fixtures under `typescript/tests/`.
 
 **Interfaces:**
+
 - Consumes: `SystemStatus.reasoning` from Task 1.
 - Produces: the same field through `get_jarvis_status`/dashboard structured content and a non-authoritative HUD rendering.
 
@@ -68,10 +72,12 @@
 ### Task 3: OpenAPI contract and full verification
 
 **Files:**
+
 - Modify: `typescript/openapi/jarvis.openapi.json`
 - Modify existing OpenAPI/status contract tests where present.
 
 **Interfaces:**
+
 - Consumes: final `SystemStatus.reasoning` shape.
 - Produces: a documented authenticated response contract with bounded, non-secret fields only.
 
