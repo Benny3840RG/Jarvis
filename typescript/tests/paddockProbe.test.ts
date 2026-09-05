@@ -32,6 +32,12 @@ const STATUS: SystemStatus = {
     schemaCompatibility: "compatible",
     deploymentVersion: AUTHORISED_DEVELOPMENT_DEPLOYMENT,
   },
+  reasoning: {
+    status: "configured",
+    provider: "openai",
+    model: "gpt-5.6-terra",
+    observability: "configuration-only",
+  },
   reconciliation: { state: "disabled", enabled: false },
   integrations: [],
   timezone: "Australia/Melbourne",

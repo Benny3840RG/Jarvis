@@ -216,7 +216,7 @@
       "get": {
         "operationId": "getJarvisStatus",
         "summary": "Inspect Jarvis runtime and provider status",
-        "description": "Checks storage reachability, authentication, schema compatibility, layer readiness, timezone, and Z-State activation without returning secrets.",
+        "description": "Checks storage reachability, authentication, schema compatibility, trusted reasoning configuration observability, layer readiness, timezone, and Z-State activation without returning secrets or treating configuration as invocation proof.",
         "tags": ["System"],
         "x-mcp-tool": {
           "exposed": true,
@@ -6808,6 +6808,7 @@
           "version",
           "sourceVersion",
           "provider",
+          "reasoning",
           "reconciliation",
           "integrations",
           "timezone",
@@ -6833,6 +6834,9 @@
           },
           "provider": {
             "$ref": "#/components/schemas/ProviderStatus"
+          },
+          "reasoning": {
+            "$ref": "#/components/schemas/ReasoningConfigurationStatus"
           },
           "reconciliation": {
             "$ref": "#/components/schemas/ReconciliationStatus"
@@ -6861,6 +6865,56 @@
             "format": "date-time"
           }
         }
+      },
+      "ReasoningConfigurationStatus": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["status", "provider", "model", "observability"],
+            "properties": {
+              "status": {
+                "type": "string",
+                "const": "configured"
+              },
+              "provider": {
+                "type": "string",
+                "enum": ["openai", "gemini"]
+              },
+              "model": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "observability": {
+                "type": "string",
+                "const": "configuration-only",
+                "description": "Configuration-only observability; never proof of a successful model call."
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["status", "reason", "observability"],
+            "properties": {
+              "status": {
+                "type": "string",
+                "const": "not-configured"
+              },
+              "reason": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "observability": {
+                "type": "string",
+                "const": "configuration-only",
+                "description": "Configuration-only observability; never proof of a successful model call."
+              }
+            }
+          }
+        ]
       },
       "ReconciliationStatus": {
         "type": "object",

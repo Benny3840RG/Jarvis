@@ -106,4 +106,45 @@ describe("HTTP and OpenAPI route alignment", () => {
       if (app) await app.close();
     }
   });
+
+  it("documents the bounded reasoning configuration projection on system status", async () => {
+    const contract = JSON.parse(
+      await fs.readFile(new URL("../openapi/jarvis.openapi.json", import.meta.url), "utf8"),
+    ) as {
+      components: {
+        schemas: {
+          SystemStatus: {
+            required: string[];
+            properties: Record<string, { $ref?: string }>;
+          };
+          ReasoningConfigurationStatus: {
+            oneOf: Array<{
+              required: string[];
+              properties: Record<string, { const?: string; enum?: string[] }>;
+            }>;
+          };
+        };
+      };
+    };
+
+    assert.ok(contract.components.schemas.SystemStatus.required.includes("reasoning"));
+    assert.equal(
+      contract.components.schemas.SystemStatus.properties.reasoning?.$ref,
+      "#/components/schemas/ReasoningConfigurationStatus",
+    );
+    assert.deepEqual(
+      contract.components.schemas.ReasoningConfigurationStatus.oneOf.map(
+        (schema) => schema.properties.status?.const,
+      ),
+      ["configured", "not-configured"],
+    );
+    assert.ok(
+      contract.components.schemas.ReasoningConfigurationStatus.oneOf[0]?.required.includes("model"),
+    );
+    assert.ok(
+      contract.components.schemas.ReasoningConfigurationStatus.oneOf[1]?.required.includes(
+        "reason",
+      ),
+    );
+  });
 });

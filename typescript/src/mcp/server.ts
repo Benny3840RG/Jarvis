@@ -391,6 +391,20 @@ const layerSchema = z.object({
   reason: z.string().optional(),
 });
 
+const reasoningSchema = z.discriminatedUnion("status", [
+  z.object({
+    status: z.literal("configured"),
+    provider: z.enum(["openai", "gemini"]),
+    model: z.string(),
+    observability: z.literal("configuration-only"),
+  }),
+  z.object({
+    status: z.literal("not-configured"),
+    reason: z.string(),
+    observability: z.literal("configuration-only"),
+  }),
+]);
+
 const statusSchema = z.object({
   status: z.enum(["ok", "degraded", "unavailable"]),
   version: z.string(),
@@ -402,6 +416,7 @@ const statusSchema = z.object({
     schemaCompatibility: z.enum(["compatible", "incompatible", "unknown"]),
     deploymentVersion: z.string().nullable(),
   }),
+  reasoning: reasoningSchema,
   reconciliation: z.object({
     state: z.enum(["disabled", "starting", "running", "stopping", "stopped", "degraded"]),
     enabled: z.boolean(),

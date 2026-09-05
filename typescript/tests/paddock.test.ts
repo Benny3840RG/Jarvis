@@ -31,6 +31,13 @@ function healthyStatus(deployment = AUTHORISED_DEVELOPMENT_DEPLOYMENT): SystemSt
       schemaCompatibility: "compatible",
       deploymentVersion: deployment,
     },
+    reasoning: {
+      status: "configured",
+      provider: "openai",
+      model: "gpt-5.6-terra",
+      observability: "configuration-only",
+    },
+    reconciliation: { state: "disabled", enabled: false },
     timezone: "Australia/Melbourne",
     layers: {},
     zState: "disabled",

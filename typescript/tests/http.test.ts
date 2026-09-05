@@ -657,6 +657,7 @@ describe("Jarvis HTTP system boundary", () => {
       version: string;
       sourceVersion: string;
       provider: Record<string, unknown>;
+      reasoning: Record<string, unknown>;
       reconciliation: { state: string; enabled: boolean };
       timezone: string;
       layers: Record<string, { status: string; reason?: string }>;
@@ -675,6 +676,11 @@ describe("Jarvis HTTP system boundary", () => {
       authentication: "ok",
       schemaCompatibility: "compatible",
       deploymentVersion: "dev/outgoing-ram-798",
+    });
+    assert.deepEqual(body.reasoning, {
+      status: "not-configured",
+      reason: "Totality reasoning is not configured in this deployment.",
+      observability: "configuration-only",
     });
     assert.deepEqual(body.reconciliation, { state: "disabled", enabled: false });
     assert.equal(body.timezone, "Australia/Melbourne");

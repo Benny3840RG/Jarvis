@@ -15,6 +15,12 @@ const STATUS: SystemStatus = {
     schemaCompatibility: "compatible",
     deploymentVersion: "dev:outgoing-ram-798",
   },
+  reasoning: {
+    status: "configured",
+    provider: "openai",
+    model: "gpt-5.6-terra",
+    observability: "configuration-only",
+  },
   reconciliation: { state: "disabled", enabled: false },
   integrations: [],
   timezone: "Australia/Melbourne",
@@ -56,6 +62,7 @@ describe("Jarvis MCP REST client", () => {
     assert.equal(headers.Authorization, "Bearer secret-token");
     assert.match(headers["X-Request-Id"], /^mcp-/);
     assert.equal(status.provider.name, "convex");
+    assert.deepEqual(status.reasoning, STATUS.reasoning);
   });
 
   it("uses a unique safe idempotency key when creating a task", async () => {

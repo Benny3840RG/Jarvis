@@ -50,11 +50,25 @@ export type IntegrationStatus = {
   reason?: string;
 };
 
+export type ReasoningConfigurationStatus =
+  | {
+      status: "configured";
+      provider: "openai" | "gemini";
+      model: string;
+      observability: "configuration-only";
+    }
+  | {
+      status: "not-configured";
+      reason: string;
+      observability: "configuration-only";
+    };
+
 export type SystemStatus = {
   status: "ok" | "degraded" | "unavailable";
   version: string;
   sourceVersion: string;
   provider: ProviderStatus;
+  reasoning: ReasoningConfigurationStatus;
   reconciliation: RuntimeReconciliationHealth;
   integrations: IntegrationStatus[];
   timezone: string;

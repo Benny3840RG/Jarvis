@@ -36,6 +36,11 @@ const STATUS: SystemStatus = {
     schemaCompatibility: "compatible",
     deploymentVersion: null,
   },
+  reasoning: {
+    status: "not-configured",
+    reason: "Totality reasoning requires the configured Convex persistence provider.",
+    observability: "configuration-only",
+  },
   reconciliation: { state: "disabled", enabled: false },
   integrations: [],
   timezone: "Australia/Melbourne",

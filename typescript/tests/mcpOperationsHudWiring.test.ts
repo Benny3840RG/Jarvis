@@ -307,6 +307,12 @@ describe("Integration commissioning HUD wiring", () => {
         sourceVersion: "test",
         timezone: "Australia/Melbourne",
         provider: { name: "convex", reachability: "ok" },
+        reasoning: {
+          status: "configured",
+          provider: "openai",
+          model: "gpt-5.6-terra",
+          observability: "configuration-only",
+        },
         layers: {},
         integrations: [
           {
@@ -324,6 +330,10 @@ describe("Integration commissioning HUD wiring", () => {
     assert.equal(grid.children.length, 1);
     const values = grid.children[0]!.children.map((child) => child.textContent);
     assert.deepEqual(values, ["quote-delivery", "NOT-COMMISSIONED"]);
+    assert.equal(h.registry.get("reasoning-state")?.textContent, "CONFIGURED");
+    assert.equal(h.registry.get("reasoning-identity")?.textContent, "OPENAI · GPT-5.6-TERRA");
+    assert.equal(h.registry.get("reasoning-observability")?.textContent, "CONFIGURATION ONLY");
+    assert.equal(h.registry.get("reasoning-detail")?.textContent, "NOT INVOCATION PROOF");
   });
 
   it("clears the integration grid while status is still connecting", () => {
@@ -336,5 +346,36 @@ describe("Integration commissioning HUD wiring", () => {
     runRenderSystems({ status: null }, h);
 
     assert.equal(h.registry.get("integration-grid")!.children.length, 0);
+  });
+
+  it("renders an unconfigured reasoning state without claiming a successful model call", () => {
+    const h = harness();
+    const state = {
+      status: {
+        status: "ok",
+        zState: "disabled",
+        sourceVersion: "test",
+        timezone: "Australia/Melbourne",
+        provider: { name: "json", reachability: "ok" },
+        reasoning: {
+          status: "not-configured",
+          reason: "Totality reasoning requires the configured Convex persistence provider.",
+          observability: "configuration-only",
+        },
+        layers: {},
+        integrations: [],
+      },
+    };
+
+    runRenderSystems(state, h);
+
+    assert.equal(h.registry.get("reasoning-state")?.textContent, "NOT CONFIGURED");
+    assert.equal(h.registry.get("reasoning-identity")?.textContent, "UNAVAILABLE");
+    assert.equal(h.registry.get("reasoning-observability")?.textContent, "CONFIGURATION ONLY");
+    assert.match(
+      h.registry.get("reasoning-detail")?.textContent ?? "",
+      /configured Convex persistence provider/i,
+    );
+    assert.doesNotMatch(h.registry.get("reasoning-detail")?.textContent ?? "", /success/i);
   });
 });
