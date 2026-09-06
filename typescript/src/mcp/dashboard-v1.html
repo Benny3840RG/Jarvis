@@ -680,13 +680,13 @@
           if (!healthy) pill.classList.add("bad");
           text(
             byId("status-label"),
-            healthy ? "OPERATIONAL" : status.status.toUpperCase(),
+            healthy ? "OPERATIONAL" : status.status.toUpperCase()
           );
           text(byId("system-status"), status.status.toUpperCase());
           text(byId("z-state"), status.zState.toUpperCase());
           text(
             byId("provider"),
-            `${status.provider?.name || "unknown"} · ${status.provider?.reachability || "unknown"}`,
+            `${status.provider?.name || "unknown"} · ${status.provider?.reachability || "unknown"}`
           );
           text(byId("deployment"), status.provider?.deploymentVersion || "development");
           text(byId("source-version"), status.sourceVersion || "unknown");
@@ -695,7 +695,7 @@
             byId("checked-at"),
             status.checkedAt
               ? new Date(status.checkedAt).toLocaleTimeString("en-AU")
-              : "",
+              : ""
           );
           const grid = byId("layer-grid");
           grid.replaceChildren();
@@ -721,7 +721,7 @@
               text(value, integration.status.toUpperCase());
               item.append(label, value);
               integrationGrid.append(item);
-            },
+            }
           );
           const reasoning = status.reasoning || null;
           const reasoningConfigured = reasoning?.status === "configured";
@@ -729,43 +729,43 @@
             byId("reasoning-provider"),
             reasoningConfigured
               ? `${reasoning.provider || "unknown"} · ${reasoning.model || "unknown"}`
-              : "NOT CONFIGURED",
+              : "NOT CONFIGURED"
           );
           text(
             byId("reasoning-verification"),
             reasoningConfigured
               ? "CONFIGURATION ONLY / INVOCATION UNVERIFIED"
-              : "NOT CONFIGURED",
+              : "NOT CONFIGURED"
           );
           const provider = status.provider || {};
           text(byId("right-provider"), `${provider.name || "UNKNOWN"} PERSISTENCE`);
           text(
             byId("provider-reachability"),
-            (provider.reachability || "unknown").toUpperCase(),
+            (provider.reachability || "unknown").toUpperCase()
           );
           text(
             byId("provider-authentication"),
-            (provider.authentication || "unknown").toUpperCase(),
+            (provider.authentication || "unknown").toUpperCase()
           );
           text(
             byId("provider-schema"),
-            (provider.schemaCompatibility || "unknown").toUpperCase(),
+            (provider.schemaCompatibility || "unknown").toUpperCase()
           );
           text(byId("provider-version"), provider.deploymentVersion || "DEVELOPMENT");
           text(
             byId("provider-link-state"),
-            provider.reachability === "ok" ? "LINK ONLINE" : "LINK DEGRADED",
+            provider.reachability === "ok" ? "LINK ONLINE" : "LINK DEGRADED"
           );
           text(byId("telemetry-provider"), (provider.name || "unknown").toUpperCase());
           text(
             byId("telemetry-deployment"),
-            provider.deploymentVersion || "DEVELOPMENT",
+            provider.deploymentVersion || "DEVELOPMENT"
           );
           text(byId("telemetry-z-state"), status.zState.toUpperCase());
           text(byId("source-pill"), `SOURCE · ${status.sourceVersion || "UNKNOWN"}`);
           text(
             byId("footer-status"),
-            `Jarvis ${status.status} · ${provider.name || "unknown"} persistence`,
+            `Jarvis ${status.status} · ${provider.name || "unknown"} persistence`
           );
           renderReadiness();
           renderRadar();
