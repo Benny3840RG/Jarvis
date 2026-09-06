@@ -48,7 +48,7 @@ describe("Sentry runtime adapter", () => {
       assert.equal(payload.type, "transaction");
       assert.equal(header.event_id, payload.event_id);
       assert.match(payload.event_id, /^[a-f0-9]{32}$/);
-      assert.equal(payload.timestamp - payload.start_timestamp, 1.5);
+      assert.ok(Math.abs(payload.timestamp - payload.start_timestamp - 1.5) < 1e-9);
       assert.equal(payload.environment, "development");
       assert.equal(payload.release, "jarvis-wire-test");
       assert.equal(payload.transaction, "jarvis.commissioning.measurement");
