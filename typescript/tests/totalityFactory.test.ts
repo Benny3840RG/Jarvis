@@ -143,4 +143,47 @@ describe("resolveTotalityReasoningStatus", () => {
     const status = resolveTotalityReasoningStatus();
     assert.doesNotMatch(JSON.stringify(status), /sk-super-secret-do-not-leak/);
   });
+
+  it("reports an invalid provider as not-configured instead of throwing", () => {
+    process.env.PERSISTENCE_PROVIDER = "convex";
+    process.env.TOTALITY_REASONER_PROVIDER = "unsupported-provider";
+    process.env.OPENAI_API_KEY = "sk-super-secret-do-not-leak";
+
+    const status = resolveTotalityReasoningStatus();
+
+    assert.deepEqual(status, {
+      status: "not-configured",
+      provider: null,
+      model: null,
+      reason: "TOTALITY_REASONER_PROVIDER is invalid.",
+    });
+    assert.doesNotMatch(JSON.stringify(status), /unsupported-provider|sk-super-secret-do-not-leak/);
+  });
+
+  it("reports an invalid OpenAI model as not-configured instead of throwing", () => {
+    process.env.PERSISTENCE_PROVIDER = "convex";
+    process.env.OPENAI_API_KEY = "test-key";
+    process.env.OPENAI_MODEL = "invalid model";
+
+    assert.deepEqual(resolveTotalityReasoningStatus(), {
+      status: "not-configured",
+      provider: "openai",
+      model: null,
+      reason: "OPENAI_MODEL is invalid.",
+    });
+  });
+
+  it("reports an invalid Gemini model as not-configured instead of throwing", () => {
+    process.env.PERSISTENCE_PROVIDER = "convex";
+    process.env.TOTALITY_REASONER_PROVIDER = "gemini";
+    process.env.GEMINI_API_KEY = "test-key";
+    process.env.GEMINI_MODEL = "invalid model";
+
+    assert.deepEqual(resolveTotalityReasoningStatus(), {
+      status: "not-configured",
+      provider: "gemini",
+      model: null,
+      reason: "GEMINI_MODEL is invalid.",
+    });
+  });
 });

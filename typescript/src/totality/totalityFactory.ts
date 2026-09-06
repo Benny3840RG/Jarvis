@@ -45,7 +45,17 @@ export function resolveTotalityReasoningStatus(): TotalityReasoningStatus {
     };
   }
 
-  const provider = resolveTotalityReasonerProviderName();
+  let provider: TotalityReasonerProviderName;
+  try {
+    provider = resolveTotalityReasonerProviderName();
+  } catch {
+    return {
+      status: "not-configured",
+      provider: null,
+      model: null,
+      reason: "TOTALITY_REASONER_PROVIDER is invalid.",
+    };
+  }
   if (provider === "gemini") {
     if (!process.env.GEMINI_API_KEY) {
       return {
@@ -55,12 +65,21 @@ export function resolveTotalityReasoningStatus(): TotalityReasoningStatus {
         reason: "GEMINI_API_KEY is not set.",
       };
     }
-    return {
-      status: "configured",
-      provider,
-      model: resolveGeminiTotalityModel(process.env.GEMINI_MODEL),
-      reason: UNVERIFIED_REASON,
-    };
+    try {
+      return {
+        status: "configured",
+        provider,
+        model: resolveGeminiTotalityModel(process.env.GEMINI_MODEL),
+        reason: UNVERIFIED_REASON,
+      };
+    } catch {
+      return {
+        status: "not-configured",
+        provider,
+        model: null,
+        reason: "GEMINI_MODEL is invalid.",
+      };
+    }
   }
 
   if (!process.env.OPENAI_API_KEY) {
@@ -71,12 +90,21 @@ export function resolveTotalityReasoningStatus(): TotalityReasoningStatus {
       reason: "OPENAI_API_KEY is not set.",
     };
   }
-  return {
-    status: "configured",
-    provider,
-    model: resolveOpenAITotalityModel(process.env.OPENAI_MODEL),
-    reason: UNVERIFIED_REASON,
-  };
+  try {
+    return {
+      status: "configured",
+      provider,
+      model: resolveOpenAITotalityModel(process.env.OPENAI_MODEL),
+      reason: UNVERIFIED_REASON,
+    };
+  } catch {
+    return {
+      status: "not-configured",
+      provider,
+      model: null,
+      reason: "OPENAI_MODEL is invalid.",
+    };
+  }
 }
 
 export function resolveTotalityReasonerProviderName(
