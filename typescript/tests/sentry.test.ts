@@ -16,6 +16,61 @@ function transport(events: SentryEvent[]): SentryTransport {
 }
 
 describe("Sentry runtime adapter", () => {
+  it("serializes complete transactions through the native envelope transport", async (t) => {
+    const envelopes: string[] = [];
+    t.mock.method(globalThis, "fetch", async (_input: unknown, init: RequestInit) => {
+      envelopes.push(String(init.body));
+      return new Response(null, { status: 200 });
+    });
+    const runtime = createSentryRuntime({
+      enabled: true,
+      dsn: "https://test-key@example.invalid/123",
+      release: "jarvis-wire-test",
+      environment: "development",
+    });
+
+    for (const success of [false, true]) {
+      await runtime.recordMeasurement({
+        operation: "jarvis.commissioning.measurement",
+        durationMs: 1500,
+        success,
+        measurements: { synthetic_failure: success ? 0 : 1 },
+      });
+    }
+    await runtime.captureError(new Error("synthetic error"), { operation: "test.error" });
+
+    assert.equal(envelopes.length, 3);
+    const traceIds = new Set<string>();
+    for (const [index, success] of [false, true].entries()) {
+      const lines = envelopes[index]!.trim().split("\n");
+      const [header, item, payload] = lines.map((line) => JSON.parse(line));
+      assert.equal(item.type, "transaction");
+      assert.equal(payload.type, "transaction");
+      assert.equal(header.event_id, payload.event_id);
+      assert.match(payload.event_id, /^[a-f0-9]{32}$/);
+      assert.ok(Math.abs(payload.timestamp - payload.start_timestamp - 1.5) < 1e-9);
+      assert.equal(payload.environment, "development");
+      assert.equal(payload.release, "jarvis-wire-test");
+      assert.equal(payload.transaction, "jarvis.commissioning.measurement");
+      assert.match(payload.contexts.trace.trace_id, /^[a-f0-9]{32}$/);
+      assert.match(payload.contexts.trace.span_id, /^[a-f0-9]{16}$/);
+      assert.equal(payload.contexts.trace.op, payload.transaction);
+      assert.equal(payload.contexts.trace.status, success ? "ok" : "internal_error");
+      assert.equal(payload.tags.outcome, success ? "success" : "failure");
+      assert.deepEqual(payload.measurements.latency_ms, { value: 1500, unit: "millisecond" });
+      assert.equal(payload.measurements.synthetic_failure.value, success ? 0 : 1);
+      assert.equal("user" in payload, false);
+      assert.equal("request" in payload, false);
+      traceIds.add(payload.contexts.trace.trace_id);
+    }
+    assert.equal(traceIds.size, 2);
+    const errorLines = envelopes[2]!.trim().split("\n");
+    const [, errorItem, errorPayload] = errorLines.map((line) => JSON.parse(line));
+    assert.equal(errorItem.type, "event");
+    assert.equal("type" in errorPayload, false);
+    assert.equal("contexts" in errorPayload, false);
+  });
+
   it("is inert when disabled", async () => {
     const events: SentryEvent[] = [];
     const runtime = createSentryRuntime(
