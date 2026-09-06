@@ -81,10 +81,11 @@ jobs:
                 return;
               }
             } catch (error) {
-              core.warning(
+              core.setFailed(
                 "Could not read Actions workflow permissions preflight: " +
                   (error instanceof Error ? error.message : String(error)),
               );
+              return;
             }
 
             const { data: issue } = await github.rest.issues.get({
