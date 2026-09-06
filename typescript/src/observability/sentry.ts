@@ -16,6 +16,15 @@ export type SentryEvent = {
     }>;
   };
   transaction?: string;
+  start_timestamp?: number;
+  contexts?: {
+    trace: {
+      trace_id: string;
+      span_id: string;
+      op: string;
+      status: "ok" | "internal_error";
+    };
+  };
   measurements?: Record<string, { value: number; unit: "millisecond" | "none" }>;
 };
 
@@ -217,7 +226,10 @@ class SentryEnvelopeTransport implements SentryTransport {
     const itemHeader = JSON.stringify({
       type: event.type === "transaction" ? "transaction" : "event",
     });
-    const { type: _eventType, ...payload } = event;
+    const { type: eventType, ...eventFields } = event;
+    // Error events omit the internal discriminator, but Sentry transactions
+    // require it in both the envelope item header and the event payload.
+    const payload = eventType === "transaction" ? { ...eventFields, type: eventType } : eventFields;
     const body = `${envelopeHeader}\n${itemHeader}\n${JSON.stringify(payload)}\n`;
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
@@ -298,10 +310,21 @@ export function createSentryRuntime(
           measurements[name] = { value: Math.max(0, value), unit: "none" };
         }
       }
+      const timestamp = Date.now() / 1000;
+      const operation = safeTag(input.operation) ?? "jarvis.operation";
       await send({
         type: "transaction",
         event_id: randomUUID().replace(/-/g, ""),
-        timestamp: Date.now() / 1000,
+        timestamp,
+        start_timestamp: timestamp - durationMs / 1000,
+        contexts: {
+          trace: {
+            trace_id: randomUUID().replace(/-/g, ""),
+            span_id: randomUUID().replace(/-/g, "").slice(0, 16),
+            op: operation,
+            status: input.success ? "ok" : "internal_error",
+          },
+        },
         platform: "node",
         release,
         environment,
@@ -310,7 +333,7 @@ export function createSentryRuntime(
           ...tagsFor({ operation: input.operation, tags: input.tags }),
           outcome: input.tags?.outcome ?? (input.success ? "success" : "failure"),
         },
-        transaction: safeTag(input.operation) ?? "jarvis.operation",
+        transaction: operation,
         measurements,
       });
     },
