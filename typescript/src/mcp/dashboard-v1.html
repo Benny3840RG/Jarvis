@@ -671,9 +671,28 @@
           if (!status) {
             pill.classList.add("pending");
             text(byId("status-label"), "CONNECTING");
+            text(byId("system-status"), "UNAVAILABLE");
+            text(byId("z-state"), "UNAVAILABLE");
+            text(byId("provider"), "UNAVAILABLE");
+            text(byId("deployment"), "UNAVAILABLE");
+            text(byId("source-version"), "UNAVAILABLE");
+            text(byId("timezone"), "UNAVAILABLE");
+            text(byId("checked-at"), "");
+            byId("layer-grid").replaceChildren();
             byId("integration-grid").replaceChildren();
             text(byId("reasoning-provider"), "UNAVAILABLE");
             text(byId("reasoning-verification"), "WAITING FOR STATUS");
+            text(byId("right-provider"), "UNAVAILABLE");
+            text(byId("provider-reachability"), "UNAVAILABLE");
+            text(byId("provider-authentication"), "UNAVAILABLE");
+            text(byId("provider-schema"), "UNAVAILABLE");
+            text(byId("provider-version"), "UNAVAILABLE");
+            text(byId("provider-link-state"), "CONNECTING");
+            text(byId("telemetry-provider"), "UNAVAILABLE");
+            text(byId("telemetry-deployment"), "UNAVAILABLE");
+            text(byId("telemetry-z-state"), "UNAVAILABLE");
+            text(byId("source-pill"), "SOURCE · CONNECTING");
+            text(byId("footer-status"), "Jarvis reconnecting · status unavailable");
             renderReadiness();
             renderRadar();
             return;
