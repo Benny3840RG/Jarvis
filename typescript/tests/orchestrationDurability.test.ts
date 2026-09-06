@@ -440,6 +440,33 @@ describe("orchestration composition authority", () => {
     assert.match(String(calls[0]?.workerId), /^oidc:[a-f0-9]{64}$/);
   });
 
+  it("does not allow caller-supplied options to override the derived worker identity", async () => {
+    const request = {};
+    setAuthenticatedPrincipal(request, {
+      subject: "operator-subject",
+      issuer: "https://issuer.example.com/",
+      audience: "jarvis-api",
+    });
+
+    const calls: Array<Record<string, unknown>> = [];
+    const boundary = createConvexOrchestrationStateBoundaryForAuthenticatedRequest(request, {
+      client: fakeClient((args) => {
+        calls.push(args);
+        return { leaseToken: "lease-1", fencingToken: 1 };
+      }),
+      serviceToken: "service-token",
+      leaseTtlMs: 10_000,
+      workerId: "attacker-worker-id",
+    } as unknown as Parameters<
+      typeof createConvexOrchestrationStateBoundaryForAuthenticatedRequest
+    >[1]);
+
+    await boundary.start({ context, node: graph.orderedNodes()[0] });
+
+    assert.notEqual(calls[0]?.workerId, "attacker-worker-id");
+    assert.match(String(calls[0]?.workerId), /^oidc:[a-f0-9]{64}$/);
+  });
+
   it("rejects composition without a verified request principal", () => {
     assert.throws(
       () =>
