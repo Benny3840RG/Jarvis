@@ -607,6 +607,7 @@ test("workflow contract requires safe triggers, isolation, draft output, and cle
   assert.match(workflow, /github\.paginate/);
   assert.match(workflow, /comment\.user\?\.login === "github-actions\[bot\]"/);
   assert.match(workflow, /actions\/permissions\/workflow/);
+  assert.match(workflow, /can_create_pull_request/);
   assert.match(workflow, /can_approve_pull_request_reviews/);
 
   const unavailableDefaultModel = workflow.replace(
@@ -691,6 +692,16 @@ test("workflow contract requires safe triggers, isolation, draft output, and cle
     ).ok,
     false,
     "workflow must preflight the explicit Actions workflow-permission endpoint",
+  );
+  assert.equal(
+    validateWorkflowContract(
+      workflow.replace(
+        "can_create_pull_request",
+        "can_build_pull_request",
+      ),
+    ).ok,
+    false,
+    "workflow must preflight draft PR creation capability explicitly",
   );
 });
 

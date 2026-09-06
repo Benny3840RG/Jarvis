@@ -72,9 +72,17 @@ jobs:
                   repo: context.repo.repo,
                 },
               );
-              if (workflowPermissions?.can_approve_pull_request_reviews !== true) {
+              if (workflowPermissions?.can_create_pull_request !== true) {
                 core.setFailed(
                   "GitHub Actions is not permitted to create pull requests (createPullRequest). " +
+                    'Enable "Allow GitHub Actions to create and approve pull requests" in ' +
+                    "repository Actions workflow permissions.",
+                );
+                return;
+              }
+              if (workflowPermissions?.can_approve_pull_request_reviews !== true) {
+                core.setFailed(
+                  "GitHub Actions is not permitted to approve pull request workflows. " +
                     'Enable "Allow GitHub Actions to create and approve pull requests" in ' +
                     "repository Actions workflow permissions.",
                 );
