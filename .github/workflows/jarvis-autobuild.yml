@@ -581,7 +581,8 @@ jobs:
                 if (
                   run.head_sha !== candidateSha ||
                   run.event !== "pull_request" ||
-                  run.status !== "action_required" ||
+                  run.status !== "completed" ||
+                  run.conclusion !== "action_required" ||
                   approvedRunIds.has(run.id)
                 ) {
                   continue;
