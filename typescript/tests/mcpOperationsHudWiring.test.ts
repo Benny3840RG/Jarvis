@@ -347,8 +347,10 @@ describe("Integration commissioning HUD wiring", () => {
         status: "ok",
         checkedAt: "2026-08-01T04:05:06.000Z",
         zState: "disabled",
-        provider: { name: "convex", reachability: "ok" },
-        layers: {},
+        provider: { name: "convex", reachability: "ok", deploymentVersion: "dev-one" },
+        sourceVersion: "source-one",
+        timezone: "Australia/Melbourne",
+        layers: { runtime: { status: "ok" } },
         integrations: [],
       },
     };
@@ -357,15 +359,54 @@ describe("Integration commissioning HUD wiring", () => {
     runRenderSystems(configured, h);
     assert.equal(h.registry.get("system-status")?.textContent, "OK");
     assert.equal(h.registry.get("checked-at")?.textContent, expectedCheckedAt);
+    assert.equal(h.registry.get("z-state")?.textContent, "DISABLED");
+    assert.equal(h.registry.get("provider")?.textContent, "convex · ok");
+    assert.equal(h.registry.get("deployment")?.textContent, "dev-one");
+    assert.equal(h.registry.get("source-version")?.textContent, "source-one");
+    assert.equal(h.registry.get("timezone")?.textContent, "Australia/Melbourne");
+    assert.equal(h.registry.get("layer-grid")?.children.length, 1);
+    assert.equal(flattenText(h.registry.get("layer-grid")!), "runtime ok");
 
     runRenderSystems({ status: null }, h);
     assert.equal(h.registry.get("status-label")?.textContent, "CONNECTING");
-    assert.equal(h.registry.get("system-status")?.textContent, "UNAVAILABLE");
+    for (const id of [
+      "system-status",
+      "z-state",
+      "provider",
+      "deployment",
+      "source-version",
+      "timezone",
+    ]) {
+      assert.equal(h.registry.get(id)?.textContent, "UNAVAILABLE", id);
+    }
     assert.equal(h.registry.get("checked-at")?.textContent, "");
+    assert.equal(h.registry.get("layer-grid")?.children.length, 0);
 
-    runRenderSystems(configured, h);
-    assert.equal(h.registry.get("system-status")?.textContent, "OK");
-    assert.equal(h.registry.get("checked-at")?.textContent, expectedCheckedAt);
+    const restored = {
+      status: {
+        ...configured.status,
+        status: "degraded",
+        checkedAt: "2026-08-01T05:06:07.000Z",
+        provider: { name: "convex", reachability: "unavailable", deploymentVersion: "dev-two" },
+        sourceVersion: "source-two",
+        timezone: "UTC",
+        layers: { storage: { status: "degraded" } },
+      },
+    };
+    runRenderSystems(restored, h);
+    assert.equal(h.registry.get("status-label")?.textContent, "DEGRADED");
+    assert.equal(h.registry.get("system-status")?.textContent, "DEGRADED");
+    assert.equal(
+      h.registry.get("checked-at")?.textContent,
+      new Date(restored.status.checkedAt).toLocaleTimeString("en-AU"),
+    );
+    assert.equal(h.registry.get("z-state")?.textContent, "DISABLED");
+    assert.equal(h.registry.get("provider")?.textContent, "convex · unavailable");
+    assert.equal(h.registry.get("deployment")?.textContent, "dev-two");
+    assert.equal(h.registry.get("source-version")?.textContent, "source-two");
+    assert.equal(h.registry.get("timezone")?.textContent, "UTC");
+    assert.equal(h.registry.get("layer-grid")?.children.length, 1);
+    assert.equal(flattenText(h.registry.get("layer-grid")!), "storage degraded");
   });
 
   it("keeps persistence reachability distinct from authentication and schema status", () => {

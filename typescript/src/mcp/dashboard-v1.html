@@ -672,7 +672,13 @@
             pill.classList.add("pending");
             text(byId("status-label"), "CONNECTING");
             text(byId("system-status"), "UNAVAILABLE");
+            text(byId("z-state"), "UNAVAILABLE");
+            text(byId("provider"), "UNAVAILABLE");
+            text(byId("deployment"), "UNAVAILABLE");
+            text(byId("source-version"), "UNAVAILABLE");
+            text(byId("timezone"), "UNAVAILABLE");
             text(byId("checked-at"), "");
+            byId("layer-grid").replaceChildren();
             byId("integration-grid").replaceChildren();
             text(byId("reasoning-provider"), "UNAVAILABLE");
             text(byId("reasoning-verification"), "WAITING FOR STATUS");
