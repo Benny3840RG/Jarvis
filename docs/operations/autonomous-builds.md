@@ -116,4 +116,4 @@ Autonomous builds never commission or deploy. Jarvis development commissioning r
 
 GitHub Actions must be allowed to create pull requests: **Settings → Actions → General → Workflow permissions → Allow GitHub Actions to create and approve pull requests**. This permits draft PR creation and approval of the exact candidate's held CI workflow runs only; the workflow cannot approve a pull request or merge it.
 
-If this setting is disabled, the build job now fails in the eligibility phase with `createPullRequest` guidance before the coding step starts.
+If this setting is disabled, the build job now fails in the eligibility phase with explicit guidance before the coding step starts. The same early-fail gate applies when pull-request review approval is unavailable or Actions workflow permissions cannot be read.
