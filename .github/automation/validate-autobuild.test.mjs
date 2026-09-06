@@ -23,6 +23,118 @@ const eligibleIssue = {
   hasExistingAutomationPr: false,
 };
 
+async function finalizeRun(overrides = {}) {
+  const workflow = fs.readFileSync(
+    new URL("../workflows/jarvis-autobuild.yml", import.meta.url),
+    "utf8",
+  );
+  const finalizer = workflow.slice(workflow.indexOf("\n  finalize:"));
+  const script = finalizer
+    .split("          script: |\n")[1]
+    .split("\n")
+    .map((line) => line.slice(12))
+    .join("\n");
+  const comments = [];
+  const statuses = [];
+  const labels = [];
+  const env = {
+    ISSUE_NUMBER: "435",
+    BUILD_RESULT: "failure",
+    VERIFY_RESULT: "skipped",
+    SOURCE_SHA: "a".repeat(40),
+    CODEX_OUTCOME: "failure",
+    DEPENDENCIES_OUTCOME: "success",
+    GUARD_OUTCOME: "skipped",
+    PUBLISH_OUTCOME: "skipped",
+    ...overrides,
+  };
+  const github = {
+    paginate: async () => [],
+    rest: {
+      repos: { createCommitStatus: async (value) => statuses.push(value) },
+      issues: {
+        listComments: async () => {},
+        createComment: async (value) => comments.push(value.body),
+        addLabels: async (value) => labels.push(value.labels),
+      },
+    },
+  };
+  const context = {
+    repo: { owner: "owner", repo: "repo" },
+    runId: 123,
+    serverUrl: "https://github.com",
+  };
+  await new Function(
+    "context",
+    "github",
+    "core",
+    "process",
+    `return (async () => {${script}\n})();`,
+  )(context, github, { setFailed: assert.fail }, { env });
+  const body = comments.join("\n");
+  const match = body.match(/```json\n([\s\S]*?)\n```/);
+  assert.ok(
+    match,
+    "finalization must persist its diagnostic receipt in the issue",
+  );
+  return { body, receipt: JSON.parse(match[1]), statuses, labels };
+}
+
+test("worker failure retains stage evidence without publishing success", async () => {
+  const result = await finalizeRun();
+  assert.equal(result.receipt.source_sha, "a".repeat(40));
+  assert.equal(result.receipt.stages.worker, "failure");
+  assert.equal(result.receipt.stages.guard, "skipped");
+  assert.equal(result.receipt.build_result, "failure");
+  assert.deepEqual(result.statuses, []);
+  assert.deepEqual(result.labels, [["automation-blocked"]]);
+});
+
+test("cancelled jobs retain unavailable stages without inventing a worker result", async () => {
+  const { receipt } = await finalizeRun({
+    BUILD_RESULT: "cancelled",
+    SOURCE_SHA: "",
+    CODEX_OUTCOME: "",
+  });
+  assert.equal(receipt.source_sha, null);
+  assert.equal(receipt.stages.worker, "unavailable");
+  assert.equal(receipt.build_result, "cancelled");
+});
+
+test("receipt discards unexpected strings and never upgrades failed verification", async () => {
+  const secret = "private-canary-do-not-persist";
+  const result = await finalizeRun({
+    BUILD_RESULT: "success",
+    VERIFY_RESULT: "failure",
+    CANDIDATE_SHA: "b".repeat(40),
+    SOURCE_SHA: secret,
+    CODEX_OUTCOME: secret,
+    RAW_MODEL_OUTPUT: secret,
+  });
+  assert.equal(result.receipt.source_sha, null);
+  assert.equal(result.receipt.stages.worker, "unavailable");
+  assert.ok(!result.body.includes(secret));
+  assert.equal(result.statuses[0].state, "failure");
+  assert.deepEqual(result.labels, [["automation-blocked"]]);
+});
+
+test("worker timeout reserves time for normal cleanup and never continues on error", () => {
+  const workflow = fs.readFileSync(
+    new URL("../workflows/jarvis-autobuild.yml", import.meta.url),
+    "utf8",
+  );
+  const build = workflow
+    .split("\n  build:")[1]
+    .split("\n  verify-candidate:")[0];
+  const worker = build
+    .split("- name: Run bounded Codex implementation")[1]
+    .split("\n      - name:")[0];
+  const jobLimit = Number(build.match(/timeout-minutes: (\d+)/)?.[1]);
+  const workerLimit = Number(worker.match(/timeout-minutes: (\d+)/)?.[1]);
+  assert.ok(workerLimit > 0 && workerLimit <= jobLimit - 10);
+  assert.doesNotMatch(worker, /continue-on-error:\s*true/);
+});
+
 test("accepts a single approved open issue with acceptance criteria", () => {
   assert.deepEqual(evaluateIssue(eligibleIssue), { ok: true, reasons: [] });
 });

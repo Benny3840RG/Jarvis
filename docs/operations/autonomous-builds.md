@@ -78,6 +78,26 @@ A failed run removes `automation-in-progress`, applies `automation-blocked`, and
 - If a branch exists but PR creation failed, a manual retry can safely create a new attempt-specific branch; stale branch cleanup remains an operator decision.
 - If any credential exposure is suspected, cancel the run, revoke the key, and investigate before retrying.
 
+### Bounded worker and diagnostic receipt
+
+Dependency installation has a five-minute step limit and the Codex worker has a
+30-minute step limit inside the 45-minute build job. A worker timeout remains a
+failure: it cannot publish a partial candidate, and normal cleanup still runs.
+The independent finalizer retains a JSON receipt in its existing issue comment,
+so stage evidence survives expiry of the detailed Actions logs.
+
+The receipt includes the run and issue IDs, source SHA when available, build and
+verification results, and dependency/worker/guard/publication outcomes. It contains
+no prompts, model output, raw logs or credential values. Missing outcomes after
+cancellation are recorded as `unavailable`, never inferred as success. A worker
+`failure` alone does not distinguish a timeout from a provider or execution error.
+Use the linked Actions step details when they are available.
+
+The receipt is diagnostic only. Existing exact-candidate CI, independent review,
+draft-only publication and owner merge controls still apply. It does not authorise
+a retry. Check whether the original issue was already implemented before retrying;
+for example, #435 was implemented by PRs #442/#443 after its builder attempts failed.
+
 ## API key and cost control
 
 `OPENAI_API_KEY` must exist only as a GitHub Actions repository secret. Never place it in issue text, PR text, workflow input, artefacts, logs, or repository files.
