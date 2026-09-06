@@ -682,6 +682,178 @@ test("workflow contract requires safe triggers, isolation, draft output, and cle
   );
 });
 
+async function runCandidateVerification({
+  runs = [],
+  checksByPoll,
+  approveError,
+} = {}) {
+  const workflow = fs.readFileSync(
+    new URL("../workflows/jarvis-autobuild.yml", import.meta.url),
+    "utf8",
+  );
+  const start = workflow.indexOf("\n  verify-candidate:");
+  const end = workflow.indexOf("\n  finalize:", start);
+  const scriptBody = workflow
+    .slice(start, end)
+    .split("          script: |\n")[1];
+  assert.ok(scriptBody, "candidate verifier script must exist");
+  const script = scriptBody
+    .split("\n")
+    .map((line) => line.slice(12))
+    .join("\n");
+  const candidateSha = "a".repeat(40);
+  const success = [
+    "automation-policy",
+    "typecheck-lint-format-test",
+    "jarvis-console-01-build",
+    "pr-evidence",
+    "CodeQL",
+  ].map((name, index) => ({
+    id: index + 1,
+    name,
+    status: "completed",
+    conclusion: "success",
+  }));
+  const polls = checksByPoll ?? [success];
+  const approved = [];
+  const failures = [];
+  const messages = [];
+  let checkPoll = 0;
+  let now = 0;
+  const listWorkflowRunsForRepo = () => {};
+  const listForRef = () => {};
+  const github = {
+    rest: {
+      actions: {
+        listWorkflowRunsForRepo,
+        approveWorkflowRun: async ({ run_id }) => {
+          if (approveError) throw approveError;
+          approved.push(run_id);
+        },
+      },
+      checks: { listForRef },
+    },
+    paginate: async (method, args) => {
+      if (method === listWorkflowRunsForRepo) {
+        assert.equal(args.head_sha, candidateSha);
+        assert.equal(args.event, "pull_request");
+        return runs;
+      }
+      assert.equal(method, listForRef);
+      assert.equal(args.ref, candidateSha);
+      return polls[Math.min(checkPoll++, polls.length - 1)];
+    },
+  };
+  await new Function(
+    "github",
+    "context",
+    "core",
+    "process",
+    "Date",
+    "setTimeout",
+    `return (async () => {${script}\n})();`,
+  )(
+    github,
+    { repo: { owner: "owner", repo: "repo" } },
+    {
+      setFailed: (message) => failures.push(message),
+      info: (message) => messages.push(message),
+    },
+    { env: { CANDIDATE_SHA: candidateSha } },
+    { now: () => now },
+    (callback, delay) => {
+      now += delay;
+      callback();
+    },
+  );
+  return { approved, failures, messages, checkPoll };
+}
+
+test("candidate verification approves completed action-required runs once and excludes unrelated runs", async () => {
+  const held = {
+    id: 1,
+    head_sha: "a".repeat(40),
+    event: "pull_request",
+    status: "completed",
+    conclusion: "action_required",
+  };
+  const names = [
+    "automation-policy",
+    "typecheck-lint-format-test",
+    "jarvis-console-01-build",
+    "pr-evidence",
+    "CodeQL",
+  ];
+  const success = names.map((name, index) => ({
+    id: index + 1,
+    name,
+    status: "completed",
+    conclusion: "success",
+  }));
+  const result = await runCandidateVerification({
+    runs: [
+      held,
+      { ...held, id: 2, head_sha: "b".repeat(40) },
+      { ...held, id: 3, event: "push" },
+      { ...held, id: 4, conclusion: "failure" },
+      { ...held, id: 5, conclusion: "success" },
+      { ...held, id: 6, status: "in_progress", conclusion: null },
+      { ...held, id: 7, status: "queued" },
+    ],
+    checksByPoll: [success.slice(1), success],
+  });
+  assert.deepEqual(result.approved, [1]);
+  assert.equal(result.checkPoll, 2);
+  assert.deepEqual(result.failures, []);
+  assert.ok(
+    result.messages.some((message) =>
+      message.startsWith("All required PR checks passed"),
+    ),
+  );
+});
+
+test("candidate verification does not report success for failed or missing required checks", async () => {
+  const failed = await runCandidateVerification({
+    checksByPoll: [
+      [
+        { id: 2, name: "CodeQL", status: "completed", conclusion: "failure" },
+        { id: 1, name: "CodeQL", status: "completed", conclusion: "success" },
+      ],
+    ],
+  });
+  assert.match(failed.failures[0], /CodeQL:failure/);
+  assert.ok(
+    !failed.messages.some((message) =>
+      message.startsWith("All required PR checks passed"),
+    ),
+  );
+  const missing = await runCandidateVerification({ checksByPoll: [[]] });
+  assert.match(missing.failures[0], /Timed out/);
+  assert.ok(
+    !missing.messages.some((message) =>
+      message.startsWith("All required PR checks passed"),
+    ),
+  );
+});
+
+test("candidate verification propagates an approval denial", async () => {
+  await assert.rejects(
+    runCandidateVerification({
+      runs: [
+        {
+          id: 1,
+          head_sha: "a".repeat(40),
+          event: "pull_request",
+          status: "completed",
+          conclusion: "action_required",
+        },
+      ],
+      approveError: new Error("Approval denied"),
+    }),
+    /Approval denied/,
+  );
+});
+
 test("candidate verification approves exact-head PR runs without executing candidate content", () => {
   const workflow = fs.readFileSync(
     new URL("../workflows/jarvis-autobuild.yml", import.meta.url),
@@ -695,7 +867,8 @@ test("candidate verification approves exact-head PR runs without executing candi
   assert.match(verifyJob, /github\.rest\.actions\.listWorkflowRunsForRepo/);
   assert.match(verifyJob, /head_sha:\s*candidateSha/);
   assert.match(verifyJob, /event:\s*"pull_request"/);
-  assert.match(verifyJob, /run\.status !== "action_required"/);
+  assert.match(verifyJob, /run\.status !== "completed"/);
+  assert.match(verifyJob, /run\.conclusion !== "action_required"/);
   assert.match(verifyJob, /github\.rest\.actions\.approveWorkflowRun/);
   assert.match(verifyJob, /github\.rest\.checks\.listForRef/);
   assert.match(verifyJob, /CANDIDATE_SHA/);
