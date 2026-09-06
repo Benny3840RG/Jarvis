@@ -703,6 +703,16 @@ test("workflow contract requires safe triggers, isolation, draft output, and cle
     false,
     "workflow must preflight draft PR creation capability explicitly",
   );
+  assert.equal(
+    validateWorkflowContract(
+      workflow.replace(
+        "can_approve_pull_request_reviews",
+        "can_review_pull_request_permissions",
+      ),
+    ).ok,
+    false,
+    "workflow must preflight pull request review approval capability explicitly",
+  );
 });
 
 test("candidate verification approves exact-head PR runs without executing candidate content", () => {
