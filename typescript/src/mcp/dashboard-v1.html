@@ -672,6 +672,8 @@
             pill.classList.add("pending");
             text(byId("status-label"), "CONNECTING");
             byId("integration-grid").replaceChildren();
+            text(byId("reasoning-provider"), "UNAVAILABLE");
+            text(byId("reasoning-verification"), "WAITING FOR STATUS");
             renderReadiness();
             renderRadar();
             return;
