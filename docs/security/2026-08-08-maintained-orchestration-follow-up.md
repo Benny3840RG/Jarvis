@@ -42,9 +42,9 @@ Durable Convex run/step state, maintained-runner composition, offline compositio
 
 Issue #333 is complete as a pre-composition hardening slice. The next P4 gates under #324 are real trigger ingress, followed by deployed restart/restore and provider-level reconciliation before any CLI, scheduler, HTTP, or MCP activation. Composition-owned policy binding is now present offline; no external credential or production side effect is implied by this record.
 
-## Addendum — authenticated worker composition evidence (2026-08-09)
+## Historical addendum — authenticated worker composition evidence (2026-08-09)
 
 - PR #354 records a verified OIDC principal on authenticated HTTP requests and freezes it as immutable request context.
 - PR #356 composes the offline Convex durable orchestration boundary with that verified principal by deriving a bounded `oidc:<sha256>` worker fingerprint and rejecting composition when no verified principal exists.
-- Exact-head TypeScript workflow #1497 and Copilot Review Check #774 passed on PR #356.
+- PR #356 exact head `7ad3cbd0e41dd753a903cdc79310d62a6ffa4332` passed [TypeScript workflow #1497](https://github.com/Benny3840RG/Jarvis/actions/runs/31318790900) and [Copilot Review Check #774](https://github.com/Benny3840RG/Jarvis/actions/runs/31318790894); its merge revision is `1e6e96171c01858bdc7fb19e5c415492624ceab0`.
 - Scope remains offline-only: no CLI/scheduler/HTTP/MCP trigger activation, no production ingress, and no live provider/deployment effects were commissioned by this slice.
