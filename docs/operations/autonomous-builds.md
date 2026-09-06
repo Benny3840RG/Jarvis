@@ -86,7 +86,7 @@ failure: it cannot publish a partial candidate, and normal cleanup still runs.
 The independent finalizer retains a JSON receipt in its existing issue comment,
 so stage evidence survives expiry of the detailed Actions logs.
 
-The receipt includes the run and issue IDs, source SHA when available, build and
+The receipt includes the run ID and issue number, source SHA when available, build and
 verification results, and dependency/worker/guard/publication outcomes. It contains
 no prompts, model output, raw logs or credential values. Missing outcomes after
 cancellation are recorded as `unavailable`, never inferred as success. A worker

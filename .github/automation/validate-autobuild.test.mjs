@@ -118,7 +118,7 @@ test("receipt discards unexpected strings and never upgrades failed verification
   assert.deepEqual(result.labels, [["automation-blocked"]]);
 });
 
-test("worker timeout reserves time for normal cleanup and never continues on error", () => {
+test("dependency and worker timeouts reserve cleanup time and fail closed", () => {
   const workflow = fs.readFileSync(
     new URL("../workflows/jarvis-autobuild.yml", import.meta.url),
     "utf8",
@@ -129,10 +129,19 @@ test("worker timeout reserves time for normal cleanup and never continues on err
   const worker = build
     .split("- name: Run bounded Codex implementation")[1]
     .split("\n      - name:")[0];
+  const dependencies = build
+    .split("- name: Install locked dependencies before sandboxing")[1]
+    .split("\n      - name:")[0];
   const jobLimit = Number(build.match(/timeout-minutes: (\d+)/)?.[1]);
   const workerLimit = Number(worker.match(/timeout-minutes: (\d+)/)?.[1]);
+  const dependencyLimit = Number(
+    dependencies.match(/timeout-minutes: (\d+)/)?.[1],
+  );
+  assert.equal(dependencyLimit, 5);
   assert.ok(workerLimit > 0 && workerLimit <= jobLimit - 10);
+  assert.ok(dependencyLimit + workerLimit <= jobLimit - 10);
   assert.doesNotMatch(worker, /continue-on-error:\s*true/);
+  assert.doesNotMatch(dependencies, /continue-on-error:\s*true/);
 });
 
 test("accepts a single approved open issue with acceptance criteria", () => {
