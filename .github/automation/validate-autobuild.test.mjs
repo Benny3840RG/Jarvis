@@ -28,9 +28,15 @@ async function finalizeRun(overrides = {}) {
     new URL("../workflows/jarvis-autobuild.yml", import.meta.url),
     "utf8",
   );
-  const finalizer = workflow.slice(workflow.indexOf("\n  finalize:"));
-  const script = finalizer
-    .split("          script: |\n")[1]
+  const finalizerStart = workflow.indexOf("\n  finalize:");
+  assert.notEqual(finalizerStart, -1, "workflow must contain the finalize job");
+  const finalizer = workflow.slice(finalizerStart);
+  const scriptBody = finalizer.split("          script: |\n")[1];
+  assert.ok(
+    scriptBody?.trim(),
+    "finalize job must contain a github-script body",
+  );
+  const script = scriptBody
     .split("\n")
     .map((line) => line.slice(12))
     .join("\n");
