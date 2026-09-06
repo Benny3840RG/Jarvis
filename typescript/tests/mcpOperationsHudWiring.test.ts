@@ -338,6 +338,33 @@ describe("Integration commissioning HUD wiring", () => {
     assert.equal(h.registry.get("integration-grid")!.children.length, 0);
   });
 
+  it("keeps persistence reachability distinct from authentication and schema status", () => {
+    const h = harness();
+    runRenderSystems(
+      {
+        status: {
+          status: "degraded",
+          zState: "disabled",
+          provider: {
+            name: "convex",
+            reachability: "ok",
+            authentication: "failed",
+            schemaCompatibility: "unknown",
+          },
+          layers: {},
+          integrations: [],
+        },
+      },
+      h,
+    );
+
+    assert.equal(h.registry.get("status-label")?.textContent, "DEGRADED");
+    assert.equal(h.registry.get("provider-reachability")?.textContent, "OK");
+    assert.equal(h.registry.get("provider-authentication")?.textContent, "FAILED");
+    assert.equal(h.registry.get("provider-schema")?.textContent, "UNKNOWN");
+    assert.equal(h.registry.get("reasoning-provider")?.textContent, "NOT CONFIGURED");
+  });
+
   it("renders the reasoning provider/model with a configuration-only, invocation-unverified caveat", () => {
     const h = harness();
     const state = {
