@@ -42,10 +42,8 @@ describe("Sentry runtime adapter", () => {
     assert.equal(envelopes.length, 3);
     const traceIds = new Set<string>();
     for (const [index, success] of [false, true].entries()) {
-      const [header, item, payload] = envelopes[index]!
-        .trim()
-        .split("\n")
-        .map((line) => JSON.parse(line));
+      const lines = envelopes[index]!.trim().split("\n");
+      const [header, item, payload] = lines.map((line) => JSON.parse(line));
       assert.equal(item.type, "transaction");
       assert.equal(payload.type, "transaction");
       assert.equal(header.event_id, payload.event_id);
@@ -66,10 +64,8 @@ describe("Sentry runtime adapter", () => {
       traceIds.add(payload.contexts.trace.trace_id);
     }
     assert.equal(traceIds.size, 2);
-    const [, errorItem, errorPayload] = envelopes[2]!
-      .trim()
-      .split("\n")
-      .map((line) => JSON.parse(line));
+    const errorLines = envelopes[2]!.trim().split("\n");
+    const [, errorItem, errorPayload] = errorLines.map((line) => JSON.parse(line));
     assert.equal(errorItem.type, "event");
     assert.equal("type" in errorPayload, false);
     assert.equal("contexts" in errorPayload, false);
