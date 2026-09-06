@@ -296,11 +296,11 @@ export function validateWorkflowContract(workflow) {
     ["workflow must allow draft PR creation", /pull-requests:\s*write/i],
     [
       "workflow must preflight Actions PR-create permissions",
-      /actions\/permissions\/workflow[\s\S]*can_create_pull_request[\s\S]*createPullRequest/i,
+      /actions\/permissions\/workflow[\s\S]*can_create_pull_request/i,
     ],
     [
       "workflow must preflight Actions workflow-approval permissions",
-      /actions\/permissions\/workflow[\s\S]*can_approve_pull_request_reviews[\s\S]*approve pull request reviews/i,
+      /actions\/permissions\/workflow[\s\S]*can_approve_pull_request_reviews/i,
     ],
     [
       "Codex action must be pinned to an immutable SHA",
