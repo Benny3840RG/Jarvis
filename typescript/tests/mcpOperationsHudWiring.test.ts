@@ -14,6 +14,7 @@ type Element = {
     remove(...names: string[]): void;
     toggle(name: string, force?: boolean): void;
   };
+  setAttribute(name: string, value: string): void;
   append(...items: Element[]): void;
   replaceChildren(): void;
 };
@@ -34,6 +35,7 @@ function makeElement(id?: string): Element {
         else classes.delete(name);
       },
     },
+    setAttribute: (_name, _value) => {},
     append(...items: Element[]) {
       element.children.push(...items);
     },
@@ -388,6 +390,34 @@ describe("Integration commissioning HUD wiring", () => {
 
     runRenderSystems(state, h);
 
+    assert.equal(h.registry.get("reasoning-provider")?.textContent, "openai · gpt-5.6");
+    assert.equal(
+      h.registry.get("reasoning-verification")?.textContent,
+      "CONFIGURATION ONLY / INVOCATION UNVERIFIED",
+    );
+  });
+
+  it("clears stale reasoning identity while connecting and restores it afterward", () => {
+    const h = harness();
+    const configured = {
+      status: {
+        status: "ok",
+        zState: "disabled",
+        provider: { name: "convex", reachability: "ok" },
+        layers: {},
+        integrations: [],
+        reasoning: { status: "configured", provider: "openai", model: "gpt-5.6" },
+      },
+    };
+
+    runRenderSystems(configured, h);
+    assert.equal(h.registry.get("reasoning-provider")?.textContent, "openai · gpt-5.6");
+
+    runRenderSystems({ status: null }, h);
+    assert.equal(h.registry.get("reasoning-provider")?.textContent, "UNAVAILABLE");
+    assert.equal(h.registry.get("reasoning-verification")?.textContent, "WAITING FOR STATUS");
+
+    runRenderSystems(configured, h);
     assert.equal(h.registry.get("reasoning-provider")?.textContent, "openai · gpt-5.6");
     assert.equal(
       h.registry.get("reasoning-verification")?.textContent,
