@@ -300,7 +300,7 @@ export function validateWorkflowContract(workflow) {
     ],
     [
       "workflow must preflight Actions workflow-approval permissions",
-      /actions\/permissions\/workflow[\s\S]*can_approve_pull_request_reviews[\s\S]*approve pull request workflows/i,
+      /actions\/permissions\/workflow[\s\S]*can_approve_pull_request_reviews[\s\S]*approve pull request reviews/i,
     ],
     [
       "Codex action must be pinned to an immutable SHA",

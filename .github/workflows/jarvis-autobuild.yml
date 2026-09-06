@@ -82,7 +82,7 @@ jobs:
               }
               if (workflowPermissions?.can_approve_pull_request_reviews !== true) {
                 core.setFailed(
-                  "GitHub Actions is not permitted to approve pull request workflows. " +
+                  "GitHub Actions is not permitted to approve pull request reviews. " +
                     'Enable "Allow GitHub Actions to create and approve pull requests" in ' +
                     "repository Actions workflow permissions.",
                 );
