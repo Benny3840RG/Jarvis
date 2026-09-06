@@ -347,7 +347,13 @@ describe("Integration commissioning HUD wiring", () => {
         status: "ok",
         checkedAt: "2026-08-01T04:05:06.000Z",
         zState: "disabled",
-        provider: { name: "convex", reachability: "ok", deploymentVersion: "dev-one" },
+        provider: {
+          name: "convex",
+          reachability: "ok",
+          deploymentVersion: "dev-one",
+          authentication: "ok",
+          schemaCompatibility: "ok",
+        },
         sourceVersion: "source-one",
         timezone: "Australia/Melbourne",
         layers: { runtime: { status: "ok" } },
@@ -366,6 +372,17 @@ describe("Integration commissioning HUD wiring", () => {
     assert.equal(h.registry.get("timezone")?.textContent, "Australia/Melbourne");
     assert.equal(h.registry.get("layer-grid")?.children.length, 1);
     assert.equal(flattenText(h.registry.get("layer-grid")!), "runtime ok");
+    assert.equal(h.registry.get("right-provider")?.textContent, "convex PERSISTENCE");
+    assert.equal(h.registry.get("provider-reachability")?.textContent, "OK");
+    assert.equal(h.registry.get("provider-authentication")?.textContent, "OK");
+    assert.equal(h.registry.get("provider-schema")?.textContent, "OK");
+    assert.equal(h.registry.get("provider-version")?.textContent, "dev-one");
+    assert.equal(h.registry.get("provider-link-state")?.textContent, "LINK ONLINE");
+    assert.equal(h.registry.get("telemetry-provider")?.textContent, "CONVEX");
+    assert.equal(h.registry.get("telemetry-deployment")?.textContent, "dev-one");
+    assert.equal(h.registry.get("telemetry-z-state")?.textContent, "DISABLED");
+    assert.equal(h.registry.get("source-pill")?.textContent, "SOURCE · source-one");
+    assert.equal(h.registry.get("footer-status")?.textContent, "Jarvis ok · convex persistence");
 
     runRenderSystems({ status: null }, h);
     assert.equal(h.registry.get("status-label")?.textContent, "CONNECTING");
@@ -376,18 +393,38 @@ describe("Integration commissioning HUD wiring", () => {
       "deployment",
       "source-version",
       "timezone",
+      "right-provider",
+      "provider-reachability",
+      "provider-authentication",
+      "provider-schema",
+      "provider-version",
+      "telemetry-provider",
+      "telemetry-deployment",
+      "telemetry-z-state",
     ]) {
       assert.equal(h.registry.get(id)?.textContent, "UNAVAILABLE", id);
     }
     assert.equal(h.registry.get("checked-at")?.textContent, "");
     assert.equal(h.registry.get("layer-grid")?.children.length, 0);
+    assert.equal(h.registry.get("provider-link-state")?.textContent, "CONNECTING");
+    assert.equal(h.registry.get("source-pill")?.textContent, "SOURCE · CONNECTING");
+    assert.equal(
+      h.registry.get("footer-status")?.textContent,
+      "Jarvis reconnecting · status unavailable",
+    );
 
     const restored = {
       status: {
         ...configured.status,
         status: "degraded",
         checkedAt: "2026-08-01T05:06:07.000Z",
-        provider: { name: "convex", reachability: "unavailable", deploymentVersion: "dev-two" },
+        provider: {
+          name: "convex",
+          reachability: "unavailable",
+          deploymentVersion: "dev-two",
+          authentication: "failed",
+          schemaCompatibility: "unknown",
+        },
         sourceVersion: "source-two",
         timezone: "UTC",
         layers: { storage: { status: "degraded" } },
@@ -407,6 +444,20 @@ describe("Integration commissioning HUD wiring", () => {
     assert.equal(h.registry.get("timezone")?.textContent, "UTC");
     assert.equal(h.registry.get("layer-grid")?.children.length, 1);
     assert.equal(flattenText(h.registry.get("layer-grid")!), "storage degraded");
+    assert.equal(h.registry.get("right-provider")?.textContent, "convex PERSISTENCE");
+    assert.equal(h.registry.get("provider-reachability")?.textContent, "UNAVAILABLE");
+    assert.equal(h.registry.get("provider-authentication")?.textContent, "FAILED");
+    assert.equal(h.registry.get("provider-schema")?.textContent, "UNKNOWN");
+    assert.equal(h.registry.get("provider-version")?.textContent, "dev-two");
+    assert.equal(h.registry.get("provider-link-state")?.textContent, "LINK DEGRADED");
+    assert.equal(h.registry.get("telemetry-provider")?.textContent, "CONVEX");
+    assert.equal(h.registry.get("telemetry-deployment")?.textContent, "dev-two");
+    assert.equal(h.registry.get("telemetry-z-state")?.textContent, "DISABLED");
+    assert.equal(h.registry.get("source-pill")?.textContent, "SOURCE · source-two");
+    assert.equal(
+      h.registry.get("footer-status")?.textContent,
+      "Jarvis degraded · convex persistence",
+    );
   });
 
   it("keeps persistence reachability distinct from authentication and schema status", () => {

@@ -682,6 +682,17 @@
             byId("integration-grid").replaceChildren();
             text(byId("reasoning-provider"), "UNAVAILABLE");
             text(byId("reasoning-verification"), "WAITING FOR STATUS");
+            text(byId("right-provider"), "UNAVAILABLE");
+            text(byId("provider-reachability"), "UNAVAILABLE");
+            text(byId("provider-authentication"), "UNAVAILABLE");
+            text(byId("provider-schema"), "UNAVAILABLE");
+            text(byId("provider-version"), "UNAVAILABLE");
+            text(byId("provider-link-state"), "CONNECTING");
+            text(byId("telemetry-provider"), "UNAVAILABLE");
+            text(byId("telemetry-deployment"), "UNAVAILABLE");
+            text(byId("telemetry-z-state"), "UNAVAILABLE");
+            text(byId("source-pill"), "SOURCE · CONNECTING");
+            text(byId("footer-status"), "Jarvis reconnecting · status unavailable");
             renderReadiness();
             renderRadar();
             return;
