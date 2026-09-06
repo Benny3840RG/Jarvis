@@ -26,13 +26,13 @@
   },
   "dependencies": {
     "@openai/apps-sdk-ui": "^0.2.1",
-    "convex": "^1.42.3",
+    "convex": "^1.45.0",
     "mcp-use": "2.4.3",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
-    "react-router": "^7.18.2",
+    "react-router": "^8.3.1",
     "tailwindcss": "^4.2.0",
-    "zod": "4.4.3"
+    "zod": "4.5.4"
   },
   "devDependencies": {
     "@types/node": "^26.4.0",
