@@ -606,6 +606,8 @@ test("workflow contract requires safe triggers, isolation, draft output, and cle
   assert.match(workflow, /jarvis-autobuild-lock:/);
   assert.match(workflow, /github\.paginate/);
   assert.match(workflow, /comment\.user\?\.login === "github-actions\[bot\]"/);
+  assert.match(workflow, /actions\/permissions\/workflow/);
+  assert.match(workflow, /can_approve_pull_request_reviews/);
 
   const unavailableDefaultModel = workflow.replace(
     "model: gpt-5.6-luna",
@@ -679,6 +681,16 @@ test("workflow contract requires safe triggers, isolation, draft output, and cle
     validateWorkflowContract(outputsAfterMetadata).ok,
     false,
     "candidate outputs must be durable before optional metadata operations",
+  );
+  assert.equal(
+    validateWorkflowContract(
+      workflow.replace(
+        "actions/permissions/workflow",
+        "actions/permissions",
+      ),
+    ).ok,
+    false,
+    "workflow must preflight the explicit Actions workflow-permission endpoint",
   );
 });
 

@@ -295,6 +295,10 @@ export function validateWorkflowContract(workflow) {
     ["workflow must allow issue receipts", /issues:\s*write/i],
     ["workflow must allow draft PR creation", /pull-requests:\s*write/i],
     [
+      "workflow must preflight Actions PR-create permissions",
+      /actions\/permissions\/workflow[\s\S]*can_approve_pull_request_reviews[\s\S]*createPullRequest/i,
+    ],
+    [
       "Codex action must be pinned to an immutable SHA",
       /openai\/codex-action@[0-9a-f]{40}\b/i,
     ],
