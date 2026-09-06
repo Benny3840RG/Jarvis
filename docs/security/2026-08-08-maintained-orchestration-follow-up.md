@@ -30,7 +30,7 @@ The merged slices are maintained offline foundations, not a production commissio
 
 ## Scope boundary
 
-Durable Convex run/step state, maintained-runner composition, and offline composition-owned policy binding now exist, but production trigger ingress, authenticated worker identity, checkpoint/resume drills, compensation, or governed HTTP/MCP activation remain open. Existing live blockers remain:
+Durable Convex run/step state, maintained-runner composition, offline composition-owned policy binding, and offline authenticated worker composition evidence now exist, but production trigger ingress, checkpoint/resume drills, compensation, or governed HTTP/MCP activation remain open. Existing live blockers remain:
 
 - Outlook OAuth and quote delivery proof: issues #293, #294, and #297.
 - PostHog ingestion proof: issue #302.
@@ -40,4 +40,11 @@ Durable Convex run/step state, maintained-runner composition, and offline compos
 
 ## Next gate
 
-Issue #333 is complete as a pre-composition hardening slice. The next P4 gates under #324 are real trigger ingress and authenticated worker identity, followed by deployed restart/restore and provider-level reconciliation before any CLI, scheduler, HTTP, or MCP activation. Composition-owned policy binding is now present offline; no external credential or production side effect is implied by this record.
+Issue #333 is complete as a pre-composition hardening slice. The next P4 gates under #324 are real trigger ingress, followed by deployed restart/restore and provider-level reconciliation before any CLI, scheduler, HTTP, or MCP activation. Composition-owned policy binding is now present offline; no external credential or production side effect is implied by this record.
+
+## Addendum — authenticated worker composition evidence (2026-08-09)
+
+- PR #354 records a verified OIDC principal on authenticated HTTP requests and freezes it as immutable request context.
+- PR #356 composes the offline Convex durable orchestration boundary with that verified principal by deriving a bounded `oidc:<sha256>` worker fingerprint and rejecting composition when no verified principal exists.
+- Exact-head TypeScript workflow #1497 and Copilot Review Check #774 passed on PR #356.
+- Scope remains offline-only: no CLI/scheduler/HTTP/MCP trigger activation, no production ingress, and no live provider/deployment effects were commissioned by this slice.
