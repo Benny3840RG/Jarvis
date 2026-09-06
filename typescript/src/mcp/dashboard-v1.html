@@ -671,6 +671,8 @@
           if (!status) {
             pill.classList.add("pending");
             text(byId("status-label"), "CONNECTING");
+            text(byId("system-status"), "UNAVAILABLE");
+            text(byId("checked-at"), "");
             byId("integration-grid").replaceChildren();
             text(byId("reasoning-provider"), "UNAVAILABLE");
             text(byId("reasoning-verification"), "WAITING FOR STATUS");

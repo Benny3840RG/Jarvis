@@ -340,6 +340,34 @@ describe("Integration commissioning HUD wiring", () => {
     assert.equal(h.registry.get("integration-grid")!.children.length, 0);
   });
 
+  it("clears stale runtime health while connecting and restores it with the next status payload", () => {
+    const h = harness();
+    const configured = {
+      status: {
+        status: "ok",
+        checkedAt: "2026-08-01T04:05:06.000Z",
+        zState: "disabled",
+        provider: { name: "convex", reachability: "ok" },
+        layers: {},
+        integrations: [],
+      },
+    };
+    const expectedCheckedAt = new Date(configured.status.checkedAt).toLocaleTimeString("en-AU");
+
+    runRenderSystems(configured, h);
+    assert.equal(h.registry.get("system-status")?.textContent, "OK");
+    assert.equal(h.registry.get("checked-at")?.textContent, expectedCheckedAt);
+
+    runRenderSystems({ status: null }, h);
+    assert.equal(h.registry.get("status-label")?.textContent, "CONNECTING");
+    assert.equal(h.registry.get("system-status")?.textContent, "UNAVAILABLE");
+    assert.equal(h.registry.get("checked-at")?.textContent, "");
+
+    runRenderSystems(configured, h);
+    assert.equal(h.registry.get("system-status")?.textContent, "OK");
+    assert.equal(h.registry.get("checked-at")?.textContent, expectedCheckedAt);
+  });
+
   it("keeps persistence reachability distinct from authentication and schema status", () => {
     const h = harness();
     runRenderSystems(
