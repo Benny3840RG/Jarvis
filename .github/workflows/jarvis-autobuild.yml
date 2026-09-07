@@ -254,6 +254,17 @@ jobs:
               mode: 0o600,
             });
 
+      - name: Preserve service sockets during worker isolation
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! -x /usr/bin/getfacl || ! -x /usr/bin/setfacl ]]; then
+            sudo apt-get update
+            sudo apt-get install --no-install-recommends -y acl
+          fi
+          node .github/automation/patch-codex-sockets.mjs \
+            "$RUNNER_TEMP/../_actions/openai/codex-action/86365089eb2b84e0a8fb0717b304f8bdcb13b20e/dist/main.js"
+
       - name: Run bounded Codex implementation
         id: codex
         # Leave room in the 45-minute job for failure cleanup and receipts.
