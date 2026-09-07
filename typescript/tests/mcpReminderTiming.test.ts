@@ -93,7 +93,7 @@ function run(state: { reminders: Reminder[] }, now: number) {
     "empty",
     "fillList",
     "Date",
-    `${reminderSource}; return { timingBuckets, renderReminders, renderRightReminders };`,
+    `"use strict"; ${reminderSource}; return { timingBuckets, renderReminders, renderRightReminders };`,
   ) as (...args: unknown[]) => {
     timingBuckets: () => number[];
     renderReminders: () => void;
