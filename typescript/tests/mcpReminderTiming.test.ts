@@ -63,7 +63,7 @@ function harness() {
   return { byId, documentStub, elements, empty, fillList, text };
 }
 
-type Reminder = { title: string; dueAt?: number; dueRaw?: string };
+type Reminder = { title: string; dueAt?: number | null; dueRaw?: string };
 
 function extractSource(pattern: RegExp): string {
   const match = widget.match(pattern)?.[1];
@@ -73,7 +73,9 @@ function extractSource(pattern: RegExp): string {
 
 const reminderSource = [
   extractSource(/(^\s*const reminderTime = .*;$)/m),
-  extractSource(/(^\s*const reminderDue = .*;$)/m),
+  // Older renderers sort inline. Permit their missing helper so regression
+  // checks fail on real behaviour, rather than on a newly introduced symbol.
+  widget.match(/(^\s*const reminderDue = .*;$)/m)?.[1] ?? "",
   extractSource(/(^\s*function reminderRow\(reminder\).*\})$/m),
   extractSource(/(^\s*function timingBuckets\(\).*\})$/m),
   extractSource(/(^\s*function renderReminderChart\(\).*\})$/m),
@@ -132,7 +134,14 @@ describe("HUD reminder timing", () => {
       ["Epoch", "Later", "Open"],
     );
     assert.equal(fullList.children[0]!.children[1]!.textContent, "TIMED");
-    assert.notEqual(fullList.children[0]!.children[0]!.children[1]!.textContent, "No due time");
+    assert.equal(
+      fullList.children[0]!.children[0]!.children[1]!.textContent,
+      new Date(0).toLocaleString("en-AU"),
+    );
+    assert.equal(
+      fullList.children[1]!.children[0]!.children[1]!.textContent,
+      new Date(2000).toLocaleString("en-AU"),
+    );
 
     const rightList = h.elements.get("right-reminder-list")!;
     assert.deepEqual(
@@ -152,5 +161,56 @@ describe("HUD reminder timing", () => {
     assert.equal(list.children[1]!.children[1]!.textContent, "OPEN");
     assert.equal(list.children[1]!.children[0]!.children[1]!.textContent, "No due time");
     assert.equal(list.children[0]!.children[0]!.children[0]!.textContent, "Epoch");
+  });
+
+  it("keeps dueRaw display precedence for zero and ordinary timestamps", () => {
+    const h = run(
+      {
+        reminders: [
+          { title: "Epoch", dueAt: 0, dueRaw: "Original epoch wording" },
+          { title: "Later", dueAt: 2000, dueRaw: "After lunch" },
+        ],
+      },
+      1000,
+    );
+    h.renderReminders();
+    h.renderRightReminders();
+    assert.deepEqual(
+      h.byId("reminder-list").children.map((row) => row.children[0]!.children[1]!.textContent),
+      ["Original epoch wording", "After lunch"],
+    );
+    assert.deepEqual(
+      h.byId("right-reminder-list").children.map((row) => row.children[1]!.textContent),
+      ["Original epoch wording", "After lunch"],
+    );
+  });
+
+  it("sorts before taking the three-item right list without mutating input", () => {
+    const reminders: Reminder[] = [
+      { title: "Missing" },
+      { title: "Null", dueAt: null },
+      { title: "Far", dueAt: 3000 },
+      { title: "Later", dueAt: 2000 },
+      { title: "Epoch", dueAt: 0 },
+    ];
+    const original = structuredClone(reminders);
+    const h = run({ reminders }, 1000);
+    h.renderReminders();
+    h.renderRightReminders();
+    assert.deepEqual(h.timingBuckets(), [1, 2, 0, 2]);
+    assert.deepEqual(
+      h.byId("reminder-list").children.map((row) => row.children[0]!.children[0]!.textContent),
+      ["Epoch", "Later", "Far", "Missing", "Null"],
+    );
+    assert.deepEqual(
+      h.byId("right-reminder-list").children.map((row) => row.children[0]!.textContent),
+      ["Epoch", "Later", "Far"],
+    );
+    assert.equal(h.byId("reminder-list").children[4]!.children[1]!.textContent, "OPEN");
+    assert.equal(
+      h.byId("reminder-list").children[4]!.children[0]!.children[1]!.textContent,
+      "No due time",
+    );
+    assert.deepEqual(reminders, original);
   });
 });
