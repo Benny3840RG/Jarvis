@@ -2,6 +2,8 @@
 
 Jarvis can implement one bounded GitHub issue at a time. The system creates a draft pull request; it cannot mark the PR ready, merge, commission, or deploy.
 
+Once a writer has approved a backlog of issues, the queue-advance workflow starts the next mission for them, one at a time, so the operator does not re-trigger the builder between issues. It only dispatches the same bounded builder; it adds no authority (see [Queue advance](#queue-advance)).
+
 ## Smoke-test verification
 
 Approved automation opens autonomous output as a draft pull request. Owner review and merge remain mandatory, and commissioning and deployment are never automatic.
@@ -28,11 +30,39 @@ Adding `automation-approved` starts the builder immediately. Applying the label 
 | `automation-blocked`     | The last attempt stopped and needs operator attention     |
 | `automation-generated`   | Branch or draft PR was produced by the autonomous builder |
 
+`automation-approved` is also what the queue-advance workflow reads to pick the next mission, so review each issue completely before applying it.
+
 Different approved issues may run concurrently. Attempts for the same issue remain serialised by the issue-scoped workflow concurrency group, the `automation-in-progress` lock, and existing automation-PR detection.
 
 ## Parallel eligibility
 
 Concurrent execution is permitted only when approved issues have no unresolved dependency on one another and no expected overlapping write surface. Shared control-plane files, security boundaries, schemas, deployments, commissioning, and other sequential contracts remain ordered and must use normal reviewed work.
+
+## Queue advance
+
+`.github/workflows/jarvis-queue-advance.yml` drains the approved queue one mission at a time. It **only dispatches** `jarvis-autobuild.yml`; it never reviews, approves, marks ready, merges, commissions, or deploys. Every gate in the lifecycle below still applies to each dispatched mission. The workflow definition is always resolved from `main`, so a merged pull request cannot change this logic. Selection logic lives in `.github/automation/select-next-mission.mjs` and is unit tested.
+
+The operator's approval of an issue (`automation-approved`) is the authority record. Queue advance re-dispatches an already-approved issue as `github-actions[bot]`; the builder still enforces the label, acceptance-criteria, lock, and existing-PR gates on every run, and a human dispatch is still additionally gated on writer permission.
+
+### Triggers
+
+| Trigger | Behaviour |
+| --- | --- |
+| An `automation-generated` pull request is merged | Verify the required checks (`automation-policy`, `typecheck-lint-format-test`, `jarvis-console-01-build`, `CodeQL`) on the **merge commit** on `main`, then dispatch the next mission. |
+| `schedule` (every 6 hours) | Recovery sweep for missed merge events. Dispatches the next mission if nothing is active. |
+| `workflow_dispatch` | Manual sweep, same as the schedule path. |
+
+### One mission at a time
+
+Queue advance dispatches nothing while any mission is active: any open issue carrying `automation-in-progress`, or any open `automation/issue-*` pull request, halts the queue. It selects the lowest-numbered eligible issue and skips issues that are closed, missing `automation-approved`, carrying `automation-blocked`, locked, missing testable acceptance criteria, or already have an open automation pull request.
+
+A writer may still apply `automation-approved` to a second issue for genuinely independent parallel work; that path is unchanged. Queue-driven advance stays serial.
+
+### Queue advance failures
+
+- Post-merge checks red or timed out: the queue **does not advance**. The workflow comments the failing checks on the merged pull request and fails visibly. Repair `main`; the next merge or scheduled sweep resumes the queue.
+- A stale open automation pull request halts the queue indefinitely by design. Close or merge it; queue advance never force-clears a lock or closes a candidate.
+- Queue advance never retries a blocked issue. Clear `automation-blocked` through the normal manual retry path after fixing the recorded blocker.
 
 ## Normal lifecycle
 

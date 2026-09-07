@@ -47,6 +47,7 @@ jobs:
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           TRIGGER_ACTOR: ${{ github.actor }}
+          EVENT_NAME: ${{ github.event_name }}
         with:
           script: |
             const issueNumber = Number(process.env.ISSUE_NUMBER);
@@ -55,14 +56,25 @@ jobs:
               return;
             }
 
-            const permission = await github.rest.repos.getCollaboratorPermissionLevel({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              username: process.env.TRIGGER_ACTOR,
-            });
-            if (!["admin", "maintain", "write"].includes(permission.data.permission)) {
-              core.setFailed("Only a repository writer may authorise an autonomous build.");
-              return;
+            // A repository writer authorises every build by applying the
+            // `automation-approved` label (checked below). A human dispatch is
+            // additionally gated on writer permission here. The queue-advance
+            // workflow (owner-reviewed, on main) re-dispatches already-approved
+            // issues as `github-actions[bot]`; that path is covered by the label
+            // gate, so skip only the collaborator lookup for it.
+            const internalDispatch =
+              process.env.EVENT_NAME === "workflow_dispatch" &&
+              process.env.TRIGGER_ACTOR === "github-actions[bot]";
+            if (!internalDispatch) {
+              const permission = await github.rest.repos.getCollaboratorPermissionLevel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                username: process.env.TRIGGER_ACTOR,
+              });
+              if (!["admin", "maintain", "write"].includes(permission.data.permission)) {
+                core.setFailed("Only a repository writer may authorise an autonomous build.");
+                return;
+              }
             }
 
             const { data: issue } = await github.rest.issues.get({

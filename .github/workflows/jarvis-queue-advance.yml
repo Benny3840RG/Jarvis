@@ -1,0 +1,250 @@
+name: Jarvis queue advance
+
+# Drains the approved autonomous-build queue one mission at a time.
+#
+# This workflow only DISPATCHES the existing bounded builder
+# (.github/workflows/jarvis-autobuild.yml). It never reviews, approves, marks
+# ready, merges, commissions, or deploys. Every existing gate stays in force:
+# a repository writer still applies `automation-approved`, the builder still
+# opens a draft PR, independent review and exact-candidate CI still run, and a
+# maintainer still merges.
+#
+# The workflow definition is always resolved from the base branch (`main`), so a
+# merged pull request cannot alter this logic. Selection logic lives in
+# .github/automation/select-next-mission.mjs and is unit tested.
+
+on:
+  pull_request:
+    types: [closed]
+  schedule:
+    # Recovery sweep for merge events the workflow missed. Offset from the hour.
+    - cron: "17 */6 * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  # One advance at a time across the whole repository, regardless of trigger.
+  group: jarvis-queue-advance-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  verify-post-merge:
+    # Only the merge of an autonomous-build PR needs a post-merge CI gate before
+    # the queue advances. Scheduled and manual sweeps skip straight to advance.
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.merged == true &&
+      contains(github.event.pull_request.labels.*.name, 'automation-generated')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      checks: read
+      pull-requests: write
+    steps:
+      - name: Wait for post-merge checks on the merge commit
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        with:
+          script: |
+            const mergeSha = process.env.MERGE_SHA;
+            if (!/^[0-9a-f]{40}$/.test(mergeSha || "")) {
+              core.setFailed("Merge commit SHA is missing or invalid.");
+              return;
+            }
+            const prNumber = Number(process.env.PR_NUMBER);
+            const requiredChecks = new Set([
+              "automation-policy",
+              "typecheck-lint-format-test",
+              "jarvis-console-01-build",
+              "CodeQL",
+            ]);
+            const halt = async (body) => {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                body,
+              });
+            };
+            const deadline = Date.now() + 25 * 60 * 1000;
+            while (Date.now() < deadline) {
+              const checks = await github.paginate(github.rest.checks.listForRef, {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                ref: mergeSha,
+                filter: "latest",
+                per_page: 100,
+              });
+              const latestByName = new Map();
+              for (const check of checks) {
+                if (!requiredChecks.has(check.name)) continue;
+                const previous = latestByName.get(check.name);
+                if (!previous || Number(check.id) > Number(previous.id)) {
+                  latestByName.set(check.name, check);
+                }
+              }
+              const failed = [];
+              const pending = [];
+              for (const name of requiredChecks) {
+                const check = latestByName.get(name);
+                if (!check || check.status !== "completed") {
+                  pending.push(name);
+                  continue;
+                }
+                // CodeQL's aggregate check can be neutral while analyses finish.
+                if (name === "CodeQL" && check.conclusion === "neutral") {
+                  pending.push(name);
+                  continue;
+                }
+                if (check.conclusion !== "success") {
+                  failed.push(`${name}:${check.conclusion || "unknown"}`);
+                }
+              }
+              if (failed.length > 0) {
+                await halt(
+                  `Queue advance halted: post-merge checks failed on \`${mergeSha}\` ` +
+                    `(${failed.join(", ")}). Repair \`main\` before the autonomous-build ` +
+                    `queue resumes. No further mission was dispatched.`,
+                );
+                core.setFailed(`Post-merge checks failed: ${failed.join(", ")}`);
+                return;
+              }
+              if (pending.length === 0) {
+                core.info(`Post-merge checks passed for ${mergeSha}.`);
+                return;
+              }
+              core.info(`Waiting for post-merge checks: ${pending.join(", ")}`);
+              await new Promise((resolve) => setTimeout(resolve, 15_000));
+            }
+            await halt(
+              `Queue advance halted: timed out waiting for post-merge checks on ` +
+                `\`${mergeSha}\`. No further mission was dispatched.`,
+            );
+            core.setFailed("Timed out waiting for post-merge checks.");
+
+  advance:
+    needs: [verify-post-merge]
+    # Run after a clean post-merge verification, or directly for a scheduled or
+    # manual sweep (where verify-post-merge is skipped). Ignore every other
+    # pull_request close.
+    if: >-
+      always() &&
+      (needs.verify-post-merge.result == 'success' || needs.verify-post-merge.result == 'skipped') &&
+      (
+        github.event_name != 'pull_request' ||
+        (
+          github.event.pull_request.merged == true &&
+          contains(github.event.pull_request.labels.*.name, 'automation-generated')
+        )
+      )
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: read
+      actions: write
+    steps:
+      - name: Check out the base-branch selection module
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: main
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Select and dispatch the next mission
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const { pathToFileURL } = require("node:url");
+            const { selectNextMission } = await import(
+              pathToFileURL(
+                `${process.env.GITHUB_WORKSPACE}/.github/automation/select-next-mission.mjs`,
+              ).href
+            );
+
+            const approved = await github.paginate(github.rest.issues.listForRepo, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: "open",
+              labels: "automation-approved",
+              per_page: 100,
+            });
+            const inProgress = await github.paginate(github.rest.issues.listForRepo, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: "open",
+              labels: "automation-in-progress",
+              per_page: 100,
+            });
+            const openPulls = await github.paginate(github.rest.pulls.list, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: "open",
+              per_page: 100,
+            });
+
+            const ownRepo = `${context.repo.owner}/${context.repo.repo}`;
+            const ownHeadRefs = openPulls
+              .filter((pull) => pull.head.repo?.full_name === ownRepo)
+              .map((pull) => pull.head.ref);
+            const issues = approved.filter((issue) => !issue.pull_request);
+            const lockActive =
+              inProgress.filter((issue) => !issue.pull_request).length > 0;
+
+            // Close the lock-acquisition race: a builder that was just
+            // dispatched has not applied `automation-in-progress` yet.
+            const builderRuns = await github.rest.actions.listWorkflowRuns({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: "jarvis-autobuild.yml",
+              per_page: 30,
+            });
+            const builderActive = builderRuns.data.workflow_runs.some((run) =>
+              ["queued", "in_progress", "waiting", "pending", "requested"].includes(
+                run.status,
+              ),
+            );
+
+            const result = selectNextMission({
+              issues,
+              openAutomationPrHeadRefs: ownHeadRefs,
+              lockActive: lockActive || builderActive,
+            });
+
+            if (result.blocked) {
+              core.info(`Queue busy: ${result.reason}. No mission dispatched.`);
+              return;
+            }
+            if (!result.issue) {
+              core.info("Approved queue is drained or every candidate is ineligible.");
+              for (const entry of result.skipped) {
+                core.info(`  skipped #${entry.number}: ${entry.reasons.join("; ")}`);
+              }
+              return;
+            }
+
+            const issueNumber = Number(result.issue.number);
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: "jarvis-autobuild.yml",
+              ref: "main",
+              inputs: { issue_number: String(issueNumber) },
+            });
+            const workflowUrl =
+              `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}` +
+              `/actions/workflows/jarvis-autobuild.yml`;
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issueNumber,
+              body:
+                `Queue advance dispatched the bounded autonomous builder for this ` +
+                `mission ([workflow](${workflowUrl})). Draft PR, independent review, ` +
+                `exact-candidate CI, and authorised maintainer merge still apply.`,
+            });
+            core.info(`Dispatched jarvis-autobuild for issue #${issueNumber}.`);

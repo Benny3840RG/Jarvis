@@ -77,6 +77,8 @@ The autonomous builder uses an issue-scoped concurrency key. Different approved 
 
 Concurrency does not override the parallelism gate: unresolved dependencies or overlapping write surfaces require sequential reviewed delivery.
 
+The queue-advance workflow (`.github/workflows/jarvis-queue-advance.yml`) drains the writer-approved queue one mission at a time — a merge or scheduled sweep dispatches the next approved issue only when no mission is active. It adds no authority: it dispatches the same bounded builder, and all of the controls above still apply per mission. See `docs/operations/autonomous-builds.md` for the queue-advance triggers and failure handling.
+
 ## Throughput metric
 
 Optimise for completed, verified slices per unit time — not PR count, agent count, or lines changed.
