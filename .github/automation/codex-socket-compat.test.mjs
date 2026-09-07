@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import { test } from "node:test";
+import { socketPipeline } from "./codex-socket-test-harness.mjs";
 
 const bundlePath = process.env.CODEX_ACTION_BUNDLE;
 const original = process.env.CODEX_SOCKET_TEST_MODE === "original";
@@ -95,6 +96,58 @@ const options = {
     "Set CODEX_ACTION_BUNDLE; Linux CI supplies the pinned bundle",
 };
 const descriptor = { path: "/fixture/service.sock", device: 1, inode: 2 };
+
+test(
+  "root verifier honours a worker deny despite world-writable socket mode",
+  options,
+  async () => {
+    const stats = {
+      mode: 0o140777,
+      uid: 0,
+      gid: 0,
+      dev: 1,
+      ino: 2,
+      isSocket: () => true,
+    };
+    const os = {
+      constants: fs.constants,
+      promises: {
+        open: async () => ({
+          fd: 12,
+          stat: async () => stats,
+          close: async () => {},
+        }),
+        readdir: async () => [
+          {
+            name: "service.sock",
+            isDirectory: () => false,
+            isSocket: () => true,
+          },
+        ],
+        lstat: async () => stats,
+      },
+    };
+    const credentials = {
+      userId: 1001,
+      primaryGroupId: 1001,
+      supplementaryGroupIds: [999],
+      fallbackGroupId: 65534,
+    };
+    const pipeline = socketPipeline(
+      original ? bundle : patch(bundle),
+      "/fixture",
+      {
+        fs: os,
+        process: { getuid: () => 0 },
+        execCommand: async () => ({ code: 1, stdout: "", stderr: "" }),
+      },
+    );
+    await pipeline.verifyPrivilegedSocketsRestricted(
+      new Set([999, 65534]),
+      credentials,
+    );
+  },
+);
 
 test(
   "socket restriction preserves service permissions while denying the worker",

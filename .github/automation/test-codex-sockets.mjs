@@ -5,8 +5,9 @@ import * as fs from "node:fs";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { patchCodexBundle } from "./patch-codex-sockets.mjs";
+import { socketPipeline } from "./codex-socket-test-harness.mjs";
 
 assert.equal(process.getuid(), 0, "Run the disposable Linux fixture as root");
 assert.equal(process.platform, "linux");
@@ -79,11 +80,174 @@ function acl() {
   assert.equal(result.status, 0, result.stderr);
   return result.stdout.split("\n").filter(Boolean);
 }
+
+function command(program, args) {
+  const result = childProcess.spawnSync(program, args, {
+    encoding: "utf8",
+    timeout: 10000,
+  });
+  assert.ifError(result.error);
+  assert.equal(result.signal, null);
+  assert.equal(result.status, 0, result.stderr);
+}
+
+async function verifyPipeline() {
+  const credentials = {
+    userId: 65534,
+    primaryGroupId: 65533,
+    supplementaryGroupIds: [65532],
+    fallbackGroupId: 65531,
+  };
+  const groups = new Set([65533, 65532, 65531]);
+  const pipeline = socketPipeline(patched, directory);
+  // #465 combined the original discovery/verifier with the repaired restriction.
+  const previous = socketPipeline(patched, directory, {
+    discoverySource: bundle,
+  });
+  // Hosted-runner checkout parents may be private to the runner UID. Give the
+  // disposable test identities only these secret-free fixture files, without
+  // changing checkout/home permissions or relying on their traversability.
+  const fixtureHarness = path.join(directory, "harness.mjs");
+  const fixtureBundle = path.join(directory, "patched-bundle.js");
+  fs.writeFileSync(
+    fixtureHarness,
+    fs.readFileSync(
+      new URL("./codex-socket-test-harness.mjs", import.meta.url),
+    ),
+    { mode: 0o644 },
+  );
+  fs.writeFileSync(fixtureBundle, patched, { mode: 0o644 });
+  const childScript = `
+    import fs from 'node:fs';
+    import { socketPipeline } from ${JSON.stringify(pathToFileURL(fixtureHarness).href)};
+    const source = fs.readFileSync(process.argv[1], 'utf8');
+    try { await socketPipeline(source, process.argv[2]).verifyPrivilegedSocketsRestricted(); }
+    catch (error) {
+      if (!error.message.startsWith('drop-sudo did not revoke access')) throw error;
+      process.exitCode = 81;
+    }
+  `;
+  const unprivileged = (gid, supplementary = []) => {
+    const result = childProcess.spawnSync(
+      "/usr/bin/setpriv",
+      [
+        "--reuid=65534",
+        "--regid=" + gid,
+        supplementary.length
+          ? "--groups=" + supplementary.join(",")
+          : "--clear-groups",
+        "--no-new-privs",
+        "--bounding-set=-all",
+        "--inh-caps=-all",
+        "--ambient-caps=-all",
+        "--",
+        process.execPath,
+        "--input-type=module",
+        "-e",
+        childScript,
+        fixtureBundle,
+        directory,
+      ],
+      { encoding: "utf8", timeout: 10000 },
+    );
+    assert.ifError(result.error);
+    assert.equal(result.signal, null);
+    assert.ok([0, 81].includes(result.status), result.stderr);
+    return result.status;
+  };
+  for (const scenario of [
+    "world",
+    "supplementary-group",
+    "named-acl",
+    "fallback-group",
+  ]) {
+    command("/usr/bin/setfacl", ["-b", "--", socketPath]);
+    fs.chownSync(
+      socketPath,
+      0,
+      scenario === "supplementary-group"
+        ? 65532
+        : scenario === "fallback-group"
+          ? 65531
+          : 0,
+    );
+    fs.chmodSync(
+      socketPath,
+      scenario === "world" ? 0o777 : scenario === "named-acl" ? 0o700 : 0o770,
+    );
+    // Ensure an unrelated UID has explicit access even in the group-only cases.
+    command("/usr/bin/setfacl", [
+      "-m",
+      scenario === "named-acl" ? "u:1:rw-,u:65534:rw-" : "u:1:rw-",
+      "--",
+      socketPath,
+    ]);
+    assert.equal(writableAs(1), true);
+    const originalIdentity = scenario !== "fallback-group";
+    const gid = originalIdentity ? 65533 : 65531;
+    const supplementary = originalIdentity ? [65532] : [];
+    assert.equal(
+      unprivileged(gid, supplementary),
+      81,
+      "accessible socket must fail final unprivileged verification: " +
+        scenario,
+    );
+    const found = await pipeline.findRootServiceSockets(
+      directory,
+      groups,
+      credentials,
+    );
+    assert.equal(found.length, 1, "discover worker access: " + scenario);
+    await assert.rejects(
+      pipeline.verifyPrivilegedSocketsRestricted(groups, credentials),
+      /did not revoke access/,
+    );
+    const mode = fs.statSync(socketPath).mode;
+    await pipeline.restrictRootServiceSocket(found[0], credentials.userId);
+    assert.equal(fs.statSync(socketPath).mode, mode);
+    assert.equal(writableAs(1), true, "preserve service peer: " + scenario);
+    if (scenario === "world") {
+      await assert.rejects(
+        previous.verifyPrivilegedSocketsRestricted(groups, credentials),
+        /did not revoke access/,
+      );
+      console.log(
+        "REPRODUCED: #465 root verification rejects worker-denied sockets with preserved mode bits.",
+      );
+    }
+    await pipeline.verifyPrivilegedSocketsRestricted(groups, credentials);
+    assert.deepEqual(
+      await pipeline.findRootServiceSockets(directory, groups, credentials),
+      [],
+    );
+    assert.equal(unprivileged(65533, [65532]), 0);
+    assert.equal(unprivileged(65531), 0);
+    console.log(
+      "VERIFIED full socket discovery/restriction/root and unprivileged checks: " +
+        scenario,
+    );
+  }
+  for (const result of [
+    { code: 2, stdout: "", stderr: "" },
+    { code: 1, stdout: "", stderr: "probe failed" },
+  ]) {
+    const broken = socketPipeline(patched, directory, {
+      execCommand: async () => result,
+    });
+    await assert.rejects(
+      broken.verifyPrivilegedSocketsRestricted(groups, credentials),
+      /Could not verify access/,
+    );
+  }
+  command("/usr/bin/setfacl", ["-b", "--", socketPath]);
+  fs.chownSync(socketPath, 0, 0);
+}
 try {
   await new Promise((resolve, reject) => {
     server.once("error", reject);
     server.listen(socketPath, resolve);
   });
+  await verifyPipeline();
   fs.chmodSync(socketPath, 0o777);
   assert.equal(writableAs(1), true);
   await original(descriptor());

@@ -113,12 +113,26 @@ export function patchCodexBundle(bundle) {
     );
   }
   const call = "restrictRootServiceSocket(socket))";
+  // Mode bits describe group/other access, but a named UID deny takes precedence.
+  // Probe every potentially writable root socket under the actual worker identities,
+  // using upstream's inode-pinned, inherited-fd helper (original + fallback groups).
+  const discovery = `      const groupWritable = (stats.mode & 16) !== 0 && groupIds.has(stats.gid);
+      const worldWritable = (stats.mode & 2) !== 0;
+      const aclWritable = !groupWritable && !worldWritable && (stats.mode & 16) !== 0 && stats.isSocket() && stats.uid === 0 && await hasWritableSocketAcl(entryPath, stats, credentials);
+      if (stats.isSocket() && stats.uid === 0 && (groupWritable || worldWritable || aclWritable)) {`;
+  const checkedDiscovery = `      const potentiallyWritable = (stats.mode & 18) !== 0;
+      if (stats.isSocket() && stats.uid === 0 && potentiallyWritable && await hasWritableSocketAcl(entryPath, stats, credentials)) {`;
   const start = bundle.indexOf("async function restrictRootServiceSocket(");
   const end = bundle.indexOf(
     "\nasync function verifyPrivilegedSocketsRestricted(",
     start,
   );
-  if (bundle.split(call).length !== 2 || start < 0 || end <= start) {
+  if (
+    bundle.split(call).length !== 2 ||
+    bundle.split(discovery).length !== 2 ||
+    start < 0 ||
+    end <= start
+  ) {
     throw new Error("Pinned Codex action socket patch boundary is invalid.");
   }
   return (
@@ -126,10 +140,12 @@ export function patchCodexBundle(bundle) {
     restrictRootServiceSocket.toString() +
     "\n" +
     bundle.slice(end)
-  ).replace(
-    call,
-    "restrictRootServiceSocket(socket, linuxSocketCredentials.userId))",
-  );
+  )
+    .replace(discovery, checkedDiscovery)
+    .replace(
+      call,
+      "restrictRootServiceSocket(socket, linuxSocketCredentials.userId))",
+    );
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
