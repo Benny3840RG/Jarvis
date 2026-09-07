@@ -5,7 +5,7 @@ import * as fs from "node:fs";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { patchCodexBundle } from "./patch-codex-sockets.mjs";
 import { socketPipeline } from "./codex-socket-test-harness.mjs";
 
@@ -104,11 +104,23 @@ async function verifyPipeline() {
   const previous = socketPipeline(patched, directory, {
     discoverySource: bundle,
   });
+  // Hosted-runner checkout parents may be private to the runner UID. Give the
+  // disposable test identities only these secret-free fixture files, without
+  // changing checkout/home permissions or relying on their traversability.
+  const fixtureHarness = path.join(directory, "harness.mjs");
+  const fixtureBundle = path.join(directory, "patched-bundle.js");
+  fs.writeFileSync(
+    fixtureHarness,
+    fs.readFileSync(
+      new URL("./codex-socket-test-harness.mjs", import.meta.url),
+    ),
+    { mode: 0o644 },
+  );
+  fs.writeFileSync(fixtureBundle, patched, { mode: 0o644 });
   const childScript = `
     import fs from 'node:fs';
-    import { socketPipeline } from ${JSON.stringify(new URL("./codex-socket-test-harness.mjs", import.meta.url).href)};
-    import { patchCodexBundle } from ${JSON.stringify(new URL("./patch-codex-sockets.mjs", import.meta.url).href)};
-    const source = patchCodexBundle(fs.readFileSync(process.argv[1], 'utf8'));
+    import { socketPipeline } from ${JSON.stringify(pathToFileURL(fixtureHarness).href)};
+    const source = fs.readFileSync(process.argv[1], 'utf8');
     try { await socketPipeline(source, process.argv[2]).verifyPrivilegedSocketsRestricted(); }
     catch (error) {
       if (!error.message.startsWith('drop-sudo did not revoke access')) throw error;
@@ -133,7 +145,7 @@ async function verifyPipeline() {
         "--input-type=module",
         "-e",
         childScript,
-        process.argv[2],
+        fixtureBundle,
         directory,
       ],
       { encoding: "utf8", timeout: 10000 },
