@@ -3,8 +3,12 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 
 const ANSI_ESCAPE = /\u001b\[[0-?]*[ -\/]*[@-~]/g;
+// Installation tokens are opaque and may contain a variable-length JWT suffix.
+// Share a non-global pattern so residual checks cannot drift or retain lastIndex.
+const GITHUB_TOKEN_PATTERN =
+  /\b(?:ghs_[A-Za-z0-9._-]{12,}|(?:ghp|gho|ghu|github_pat)_[A-Za-z0-9_-]{12,})/;
 const RESIDUAL_SECRET_PATTERNS = [
-  /\b(?:ghp|gho|ghs|ghu|github_pat)_[A-Za-z0-9_\-]{12,}\b/,
+  GITHUB_TOKEN_PATTERN,
   /\bsk-(?:proj-)?[A-Za-z0-9_-]{8,}\b/,
   /\bAIza[A-Za-z0-9_-]{20,}\b/,
   /\bBearer\s+[A-Za-z0-9._~+\/-]{12,}\b/i,
@@ -46,7 +50,7 @@ export function redactCommissioningLog(input, secrets) {
     .replace(/(Bearer\s+)[A-Za-z0-9._~+\/-]+/gi, "$1[REDACTED]")
     .replace(/(Authorization\s*:\s*Basic\s+)[^\s"',]+/gi, "$1[REDACTED]")
     .replace(/(Basic\s+)[A-Za-z0-9+/=_-]{16,}/gi, "$1[REDACTED]")
-    .replace(/\b(?:ghp|gho|ghs|ghu|github_pat)_[A-Za-z0-9_\-]{12,}\b/g, "[REDACTED_GITHUB_TOKEN]")
+    .replace(new RegExp(GITHUB_TOKEN_PATTERN.source, "g"), "[REDACTED_GITHUB_TOKEN]")
     .replace(/\bsk-(?:proj-)?[A-Za-z0-9_-]{8,}\b/g, "[REDACTED_OPENAI_KEY]")
     .replace(/\bAIza[A-Za-z0-9_-]{20,}\b/g, "[REDACTED_PROVIDER_KEY]")
     .replace(
