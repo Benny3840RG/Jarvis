@@ -623,6 +623,12 @@ jobs:
                   pending.push(checkName);
                   continue;
                 }
+                // CodeQL's aggregate check can be neutral while analyses finish.
+                // Keep polling; only success satisfies the required check.
+                if (checkName === "CodeQL" && check.conclusion === "neutral") {
+                  pending.push(checkName);
+                  continue;
+                }
                 if (check.conclusion !== "success") {
                   failed.push(`${checkName}:${check.conclusion || "unknown"}`);
                 }
