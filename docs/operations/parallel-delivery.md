@@ -73,11 +73,11 @@ Later ideas remain queued until the agreed Priority 1-4 baseline is complete.
 
 ## Autonomous-build concurrency
 
-The autonomous builder uses an issue-scoped concurrency key. Different approved issue numbers may execute concurrently; duplicate attempts for one issue resolve to the same key and remain serialised. The existing issue lock, attempt-specific branches, forbidden-path controls, immutable control verification, PR-scoped candidate verification, draft-PR boundary, owner-controlled merge, and commissioning/deployment hard stops remain unchanged.
+The autonomous builder is **serial**. `jarvis-autobuild.yml` has one repository-global concurrency group and a single `workflow_dispatch` trigger; `jarvis-queue-advance.yml` is the only dispatcher and starts a mission only when none is occupied (a held `automation-in-progress` lock, an open `automation/issue-*` candidate PR, or a live builder run). One mission occupies the pipeline from approval through merge. The issue lock, attempt-specific branches, forbidden-path controls, immutable control verification, PR-scoped candidate verification, draft-PR boundary, owner-controlled merge, and commissioning/deployment hard stops are unchanged.
 
-Concurrency does not override the parallelism gate: unresolved dependencies or overlapping write surfaces require sequential reviewed delivery.
+Every dispatch path first verifies the current `main` HEAD is green from trusted producers (the `typescript.yml` checks and the individual `dynamic/github-code-scanning/codeql` per-language analyses). A scheduled sweep therefore cannot bypass an earlier failure.
 
-The queue-advance workflow (`.github/workflows/jarvis-queue-advance.yml`) drains the writer-approved queue one mission at a time — a merge or scheduled sweep dispatches the next approved issue only when no mission is active. It adds no authority: it dispatches the same bounded builder, and all of the controls above still apply per mission. See `docs/operations/autonomous-builds.md` for the queue-advance triggers and failure handling.
+Work that must genuinely proceed in parallel uses normal reviewed pull requests, not the autonomous builder. See `docs/operations/autonomous-builds.md` for the coordinator's triggers, the `main`-health gate, and failure handling.
 
 ## Throughput metric
 

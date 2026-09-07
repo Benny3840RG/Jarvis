@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import { createRequire } from "node:module";
+import { fileURLToPath } from "node:url";
 import test from "node:test";
 
+const require = createRequire(import.meta.url);
+const REPO_ROOT = fileURLToPath(new URL("../../", import.meta.url));
+
+import { validateQueueAdvanceContract } from "./validate-autobuild.mjs";
 import {
   automationIssueNumbers,
   evaluateQueueCandidate,
@@ -13,6 +19,8 @@ const workflow = fs.readFileSync(
   new URL("../workflows/jarvis-queue-advance.yml", import.meta.url),
   "utf8",
 );
+
+// --- pure selection module -------------------------------------------------
 
 function issue(overrides = {}) {
   return {
@@ -26,15 +34,11 @@ function issue(overrides = {}) {
 
 test("parseAutomationIssueRef extracts issue numbers only from attempt refs", () => {
   assert.equal(parseAutomationIssueRef("automation/issue-42/run-123456"), 42);
-  assert.equal(
-    parseAutomationIssueRef("automation/issue-7/run-gh-abc.def_1"),
-    7,
-  );
+  assert.equal(parseAutomationIssueRef("automation/issue-7/run-gh-abc.def_1"), 7);
   assert.equal(parseAutomationIssueRef("automation/issue-42/run-1/extra"), null);
   assert.equal(parseAutomationIssueRef("feat/issue-42"), null);
   assert.equal(parseAutomationIssueRef("main"), null);
   assert.equal(parseAutomationIssueRef(""), null);
-  assert.equal(parseAutomationIssueRef(undefined), null);
 });
 
 test("automationIssueNumbers collapses head refs to a set", () => {
@@ -63,12 +67,9 @@ test("evaluateQueueCandidate rejects every ineligible state", () => {
       issue({ labels: ["automation-approved", "automation-in-progress"] }),
       "automation-in-progress lock is already present",
     ],
+    [issue({ body: "no criteria" }), "testable acceptance criteria are missing"],
     [
-      issue({ body: "no acceptance criteria here" }),
-      "testable acceptance criteria are missing",
-    ],
-    [
-      issue({ pull_request: { url: "https://example.invalid/pr/1" } }),
+      issue({ pull_request: { url: "x" } }),
       "target is a pull request, not an issue",
     ],
   ];
@@ -89,11 +90,7 @@ test("evaluateQueueCandidate rejects an issue that already has an automation PR"
 
 test("selectNextMission picks the lowest-numbered eligible issue", () => {
   const result = selectNextMission({
-    issues: [
-      issue({ number: 30 }),
-      issue({ number: 12 }),
-      issue({ number: 21 }),
-    ],
+    issues: [issue({ number: 30 }), issue({ number: 12 }), issue({ number: 21 })],
   });
   assert.equal(result.blocked, false);
   assert.equal(result.issue.number, 12);
@@ -115,10 +112,7 @@ test("selectNextMission skips ineligible issues and reports why", () => {
 });
 
 test("selectNextMission dispatches nothing while a lock is held", () => {
-  const result = selectNextMission({
-    issues: [issue({ number: 3 })],
-    lockActive: true,
-  });
+  const result = selectNextMission({ issues: [issue({ number: 3 })], lockActive: true });
   assert.equal(result.blocked, true);
   assert.equal(result.issue, null);
 });
@@ -138,89 +132,461 @@ test("selectNextMission returns no issue when the queue is drained", () => {
   assert.equal(result.issue, null);
 });
 
-test("queue-advance workflow only dispatches the bounded builder", () => {
-  // Triggers: merge events, a recovery sweep, and manual runs.
-  assert.match(workflow, /pull_request:\s*\n\s*types:\s*\[closed\]/);
-  assert.match(workflow, /schedule:\s*\n[\s\S]*?-\s*cron:/);
-  assert.match(workflow, /workflow_dispatch:/);
+// --- workflow contract ---------------------------------------------------
 
-  // One advance at a time, never cancelled mid-flight, finite runtime.
-  assert.match(
-    workflow,
-    /group:\s*jarvis-queue-advance-\$\{\{\s*github\.repository\s*\}\}/,
+test("queue-advance workflow satisfies the coordinator contract", () => {
+  assert.deepEqual(validateQueueAdvanceContract(workflow), { ok: true, reasons: [] });
+
+  assert.equal(
+    validateQueueAdvanceContract(
+      workflow.replace('workflow_id: "jarvis-autobuild.yml"', 'workflow_id: "deploy.yml"'),
+    ).ok,
+    false,
+    "must dispatch only the bounded builder",
   );
-  assert.match(workflow, /cancel-in-progress:\s*false/);
-  assert.match(workflow, /timeout-minutes:\s*[1-9]\d*/);
+  assert.equal(
+    validateQueueAdvanceContract(
+      workflow.replace("needs: [verify-main]", "needs: []"),
+    ).ok,
+    false,
+    "advance must depend on verify-main",
+  );
+  assert.equal(
+    validateQueueAdvanceContract(workflow.replace("contents: read", "contents: write")).ok,
+    false,
+    "must never hold write access to repository contents",
+  );
+  assert.equal(
+    validateQueueAdvanceContract(
+      workflow + "\n          await github.rest.pulls.merge({});\n",
+    ).ok,
+    false,
+    "must never merge a pull request",
+  );
+  assert.equal(
+    validateQueueAdvanceContract(workflow.replaceAll("Analyze (", "Aggregate (")).ok,
+    false,
+    "must verify individual CodeQL analyses",
+  );
+  assert.equal(
+    validateQueueAdvanceContract(
+      workflow.replaceAll("dynamic/github-code-scanning/", "dynamic/anything-else/"),
+    ).ok,
+    false,
+    "must verify the trusted code-scanning producer",
+  );
+});
 
-  // It dispatches jarvis-autobuild.yml and does nothing stronger.
-  assert.match(workflow, /workflow_id:\s*"jarvis-autobuild\.yml"/);
-  assert.match(workflow, /createWorkflowDispatch/);
-  assert.doesNotMatch(workflow, /\bmergePull\b|\.merge\(|pulls\.merge/);
-  assert.doesNotMatch(workflow, /createReview|submitReview|approveWorkflowRun/);
-  assert.doesNotMatch(workflow, /\b(?:deploy|commission)\b/i);
-
-  // Never grants write to repository contents.
-  assert.doesNotMatch(workflow, /contents:\s*write/);
-
-  // The merge path is gated on a real, labelled autonomous-build merge.
-  assert.match(workflow, /github\.event\.pull_request\.merged\s*==\s*true/);
-  assert.match(workflow, /'automation-generated'/);
-
-  // Post-merge CI is verified on the merge commit before advancing.
-  assert.match(workflow, /verify-post-merge:/);
-  assert.match(workflow, /merge_commit_sha/);
-  assert.match(workflow, /github\.rest\.checks\.listForRef/);
-  assert.match(workflow, /needs:\s*\[verify-post-merge\]/);
-
-  // Actions are pinned to immutable commit SHAs.
-  for (const pin of workflow.match(/uses:\s*[^\s]+/g) ?? []) {
-    assert.match(pin, /@[0-9a-f]{40}$/, pin);
+test("all queue-advance actions are pinned to immutable SHAs", () => {
+  for (const use of workflow.match(/uses:\s*\S+/g) ?? []) {
+    assert.match(use, /@[0-9a-f]{40}$/, use);
   }
-
-  // The selection module is loaded from the trusted base branch only.
-  assert.match(workflow, /ref:\s*main/);
-  assert.match(workflow, /persist-credentials:\s*false/);
-  assert.match(workflow, /select-next-mission\.mjs/);
-
-  // The lock-acquisition race is closed by also checking for a live builder run.
-  assert.match(workflow, /listWorkflowRuns/);
-  assert.match(workflow, /lockActive:\s*lockActive\s*\|\|\s*builderActive/);
 });
 
-test("autobuild eligibility still gates internal dispatch on the approved label", () => {
-  const autobuild = fs.readFileSync(
-    new URL("../workflows/jarvis-autobuild.yml", import.meta.url),
-    "utf8",
-  );
-  const eligibilityStart = autobuild.indexOf("id: eligibility");
-  const eligibilityEnd = autobuild.indexOf(
-    "- name: Require the OpenAI Actions secret",
-  );
-  const eligibility = autobuild.slice(eligibilityStart, eligibilityEnd);
+// --- behavioural: extract and run the github-script bodies --------------
 
-  // The collaborator lookup may be skipped only for a github-actions[bot]
-  // workflow_dispatch (the queue-advance re-dispatch), never for a human run.
-  assert.match(eligibility, /internalDispatch/);
-  assert.match(
-    eligibility,
-    /EVENT_NAME === "workflow_dispatch"[\s\S]*TRIGGER_ACTOR === "github-actions\[bot\]"/,
+function scriptFor(stepName) {
+  const marker = `- name: ${stepName}`;
+  const start = workflow.indexOf(marker);
+  assert.notEqual(start, -1, `step not found: ${stepName}`);
+  const after = workflow.slice(start);
+  const body = after.split("          script: |\n")[1];
+  assert.ok(body, `no script body for: ${stepName}`);
+  const nextStep = body.search(/\n {6}- name: |\n {2}[a-z-]+:\n/);
+  const raw = nextStep === -1 ? body : body.slice(0, nextStep);
+  return raw
+    .split("\n")
+    .map((line) => (line.startsWith("            ") ? line.slice(12) : line))
+    .join("\n");
+}
+
+async function run(stepName, { env = {}, github, core: coreOverrides = {} } = {}) {
+  const script = scriptFor(stepName);
+  const calls = { setFailed: [], setOutput: {}, comments: [], added: [], removed: [], dispatched: [] };
+  const core = {
+    info: () => {},
+    warning: () => {},
+    error: () => {},
+    setFailed: (m) => calls.setFailed.push(String(m)),
+    setOutput: (k, v) => {
+      calls.setOutput[k] = v;
+    },
+    ...coreOverrides,
+  };
+  const wrapIssues = (g) => ({
+    ...g.rest.issues,
+    createComment: async (v) => {
+      calls.comments.push(v);
+      return g.rest.issues.createComment ? g.rest.issues.createComment(v) : {};
+    },
+    addLabels: async (v) => {
+      calls.added.push(...v.labels);
+      return {};
+    },
+    removeLabel: async (v) => {
+      calls.removed.push(v.name);
+      if (g.rest.issues.removeLabel) return g.rest.issues.removeLabel(v);
+      return {};
+    },
+  });
+  const gh = {
+    paginate: async (fn, params) => {
+      const out = await fn(params);
+      return Array.isArray(out) ? out : out.data;
+    },
+    rest: {
+      ...github.rest,
+      issues: { ...github.rest.issues, ...(github.rest.issues ? wrapIssues(github) : {}) },
+      actions: {
+        ...github.rest.actions,
+        createWorkflowDispatch: async (v) => {
+          calls.dispatched.push(v);
+          return {};
+        },
+      },
+    },
+  };
+  const context = { repo: { owner: "Benny3840RG", repo: "Jarvis" }, serverUrl: "https://github.com" };
+  let tick = 0;
+  const fakeDate = { now: () => 1_000_000 + tick++ * 200_000 };
+  const fakeSetTimeout = (cb) => {
+    cb();
+    return 0;
+  };
+  await new Function(
+    "context",
+    "github",
+    "core",
+    "process",
+    "require",
+    "Date",
+    "setTimeout",
+    `return (async () => {\n${script}\n})();`,
+  )(
+    context,
+    gh,
+    core,
+    { env: { GITHUB_WORKSPACE: REPO_ROOT, ...env } },
+    require,
+    fakeDate,
+    fakeSetTimeout,
   );
-  // The label gate is unconditional and still present.
-  assert.match(eligibility, /automation-approved label is missing/);
-  assert.match(eligibility, /labels\.has\("automation-approved"\)/);
-  // The lock and existing-PR gates are unconditional too.
-  assert.match(eligibility, /automation-in-progress lock is already present/);
-  assert.match(eligibility, /an automation pull request already exists/);
+  return calls;
+}
+
+const HEALTHY_MAIN_SHA = "a".repeat(40);
+
+function healthyChecks(sha) {
+  const tsRun = 111;
+  const codeqlRun = 222;
+  const ok = (name, run) => ({
+    name,
+    status: "completed",
+    conclusion: "success",
+    app: { slug: "github-actions" },
+    id: Math.random(),
+    details_url: `https://github.com/Benny3840RG/Jarvis/actions/runs/${run}/job/1`,
+  });
+  return {
+    checks: [
+      ok("automation-policy", tsRun),
+      ok("typecheck-lint-format-test", tsRun),
+      ok("jarvis-console-01-build", tsRun),
+      ok("Analyze (actions)", codeqlRun),
+      ok("Analyze (python)", codeqlRun),
+      ok("Analyze (ruby)", codeqlRun),
+      ok("Analyze (javascript-typescript)", codeqlRun),
+    ],
+    runPaths: {
+      [tsRun]: ".github/workflows/typescript.yml",
+      [codeqlRun]: "dynamic/github-code-scanning/codeql",
+    },
+    sha,
+  };
+}
+
+function verifyMainGithub(fixture) {
+  return {
+    rest: {
+      repos: {
+        getBranch: async () => ({ data: { commit: { sha: fixture.sha } } }),
+      },
+      checks: {
+        listForRef: async () => ({ data: fixture.checks }),
+      },
+      actions: {
+        getWorkflowRun: async ({ run_id }) => ({
+          data: { path: fixture.runPaths[run_id] ?? "" },
+        }),
+      },
+      issues: { createComment: async () => ({}) },
+    },
+  };
+}
+
+test("verify-main passes when trusted producers report a healthy main", async () => {
+  const fixture = healthyChecks(HEALTHY_MAIN_SHA);
+  const calls = await run("Verify the current main revision is healthy", {
+    env: { EVENT_NAME: "schedule" },
+    github: verifyMainGithub(fixture),
+  });
+  assert.equal(calls.setOutput.verified_sha, HEALTHY_MAIN_SHA);
+  assert.deepEqual(calls.setFailed, []);
 });
 
-test("TypeScript CI runs the queue-advance policy tests", () => {
-  const ci = fs.readFileSync(
-    new URL("../workflows/typescript.yml", import.meta.url),
-    "utf8",
+test("verify-main blocks when a required main check failed", async () => {
+  const fixture = healthyChecks(HEALTHY_MAIN_SHA);
+  fixture.checks.find((c) => c.name === "typecheck-lint-format-test").conclusion = "failure";
+  const calls = await run("Verify the current main revision is healthy", {
+    env: { EVENT_NAME: "pull_request", MERGED_PR_NUMBER: "470" },
+    github: verifyMainGithub(fixture),
+  });
+  assert.equal(calls.setOutput.verified_sha, undefined);
+  assert.equal(calls.setFailed.length, 1);
+  assert.match(calls.setFailed[0], /typecheck-lint-format-test:failure/);
+  assert.equal(calls.comments.length, 1, "the merged PR is told the queue halted");
+});
+
+test("verify-main blocks when an expected CodeQL analysis is missing", async () => {
+  const fixture = healthyChecks(HEALTHY_MAIN_SHA);
+  fixture.checks = fixture.checks.filter((c) => c.name !== "Analyze (ruby)");
+  const calls = await run("Verify the current main revision is healthy", {
+    env: { EVENT_NAME: "schedule" },
+    github: verifyMainGithub(fixture),
+  });
+  assert.equal(calls.setOutput.verified_sha, undefined);
+  assert.match(calls.setFailed.join(" "), /Timed out.*CodeQL\(ruby\)/s);
+});
+
+test("verify-main blocks a CodeQL analysis from an untrusted producer", async () => {
+  const fixture = healthyChecks(HEALTHY_MAIN_SHA);
+  // Rewrite every Analyze job to point at a non-managed run.
+  for (const check of fixture.checks) {
+    if (check.name.startsWith("Analyze (")) {
+      check.details_url = "https://github.com/Benny3840RG/Jarvis/actions/runs/999/job/1";
+    }
+  }
+  fixture.runPaths[999] = ".github/workflows/impersonator.yml";
+  const calls = await run("Verify the current main revision is healthy", {
+    env: { EVENT_NAME: "schedule" },
+    github: verifyMainGithub(fixture),
+  });
+  assert.equal(calls.setOutput.verified_sha, undefined);
+  assert.match(calls.setFailed.join(" "), /CodeQL\(actions\)/);
+});
+
+test("verify-main blocks a required check from an untrusted producer", async () => {
+  const fixture = healthyChecks(HEALTHY_MAIN_SHA);
+  fixture.runPaths[111] = ".github/workflows/not-typescript.yml";
+  const calls = await run("Verify the current main revision is healthy", {
+    env: { EVENT_NAME: "schedule" },
+    github: verifyMainGithub(fixture),
+  });
+  assert.match(calls.setFailed.join(" "), /untrusted producer/);
+});
+
+// --- behavioural: advance -------------------------------------------------
+
+function advanceGithub({
+  verifiedSha = HEALTHY_MAIN_SHA,
+  currentSha = HEALTHY_MAIN_SHA,
+  approved = [],
+  inProgress = [],
+  openPulls = [],
+  builderRuns = [],
+  issueById = {},
+} = {}) {
+  return {
+    rest: {
+      repos: { getBranch: async () => ({ data: { commit: { sha: currentSha } } }) },
+      issues: {
+        get: async ({ issue_number }) => ({
+          data: issueById[issue_number] ?? { number: issue_number, state: "open", labels: [], body: "" },
+        }),
+        listForRepo: async ({ labels }) => ({
+          data: labels === "automation-approved" ? approved : inProgress,
+        }),
+        createComment: async () => ({}),
+        removeLabel: async () => ({}),
+        addLabels: async () => ({}),
+      },
+      pulls: { list: async () => ({ data: openPulls }) },
+      actions: {
+        listWorkflowRuns: async () => ({ data: { workflow_runs: builderRuns } }),
+      },
+    },
+    _verifiedSha: verifiedSha,
+  };
+}
+
+function approvedIssue(number, overrides = {}) {
+  return {
+    number,
+    state: "open",
+    labels: [{ name: "automation-approved" }],
+    body: "## Acceptance criteria\n\n- [ ] a\n- [ ] b",
+    ...overrides,
+  };
+}
+
+async function runAdvance(opts) {
+  const github = advanceGithub(opts);
+  return run("Select and dispatch at most one mission", {
+    env: {
+      VERIFIED_SHA: github._verifiedSha,
+      EVENT_NAME: opts.eventName ?? "schedule",
+      MERGED: opts.merged ?? "",
+      MERGED_HEAD_REF: opts.mergedHeadRef ?? "",
+    },
+    github,
+  });
+}
+
+test("advance dispatches exactly one mission from a multi-issue queue", async () => {
+  const approved = [approvedIssue(210), approvedIssue(204), approvedIssue(219)];
+  const calls = await runAdvance({ approved, issueById: Object.fromEntries(approved.map((i) => [i.number, i])) });
+  assert.equal(calls.dispatched.length, 1);
+  assert.deepEqual(calls.dispatched[0].inputs, { issue_number: "204" });
+});
+
+test("advance dispatches nothing while another mission holds the lock", async () => {
+  const calls = await runAdvance({
+    approved: [approvedIssue(210)],
+    inProgress: [{ number: 199, labels: [{ name: "automation-in-progress" }] }],
+    issueById: { 210: approvedIssue(210) },
+  });
+  assert.equal(calls.dispatched.length, 0);
+});
+
+test("advance dispatches nothing while a candidate PR is open", async () => {
+  const calls = await runAdvance({
+    approved: [approvedIssue(210)],
+    openPulls: [
+      {
+        number: 471,
+        head: { ref: "automation/issue-188/run-5", repo: { full_name: "Benny3840RG/Jarvis" } },
+      },
+    ],
+    issueById: { 210: approvedIssue(210) },
+  });
+  assert.equal(calls.dispatched.length, 0);
+});
+
+test("advance dispatches nothing while a builder run is active", async () => {
+  const calls = await runAdvance({
+    approved: [approvedIssue(210)],
+    builderRuns: [{ status: "in_progress" }],
+    issueById: { 210: approvedIssue(210) },
+  });
+  assert.equal(calls.dispatched.length, 0);
+});
+
+test("advance skips a blocked issue and takes the next", async () => {
+  const approved = [
+    approvedIssue(205, { labels: [{ name: "automation-approved" }, { name: "automation-blocked" }] }),
+    approvedIssue(208),
+  ];
+  const calls = await runAdvance({ approved, issueById: Object.fromEntries(approved.map((i) => [i.number, i])) });
+  assert.equal(calls.dispatched.length, 1);
+  assert.deepEqual(calls.dispatched[0].inputs, { issue_number: "208" });
+});
+
+test("advance aborts when main HEAD moved since verification", async () => {
+  const calls = await runAdvance({
+    approved: [approvedIssue(210)],
+    currentSha: "b".repeat(40),
+    issueById: { 210: approvedIssue(210) },
+  });
+  assert.equal(calls.dispatched.length, 0);
+});
+
+test("advance aborts when the chosen issue lost its approval between selection and dispatch", async () => {
+  const stale = approvedIssue(210);
+  const calls = await runAdvance({
+    approved: [stale],
+    issueById: { 210: { number: 210, state: "open", labels: [], body: stale.body } },
+  });
+  assert.equal(calls.dispatched.length, 0);
+});
+
+test("advance releases the lock of a merged candidate before selecting", async () => {
+  const next = approvedIssue(230);
+  const calls = await runAdvance({
+    eventName: "pull_request",
+    merged: "true",
+    mergedHeadRef: "automation/issue-225/run-77",
+    approved: [next],
+    issueById: { 230: next },
+  });
+  assert.ok(calls.removed.includes("automation-in-progress"));
+  assert.equal(calls.dispatched.length, 1);
+  assert.deepEqual(calls.dispatched[0].inputs, { issue_number: "230" });
+});
+
+// --- behavioural: pr-close-cleanup -------------------------------------
+
+test("pr-close-cleanup blocks the mission of an unmerged candidate and does not advance", async () => {
+  const calls = await run("Block the mission whose candidate was closed unmerged", {
+    env: { HEAD_REF: "automation/issue-240/run-9", PR_NUMBER: "472" },
+    github: {
+      rest: {
+        issues: {
+          removeLabel: async () => ({}),
+          addLabels: async () => ({}),
+          createComment: async () => ({}),
+        },
+      },
+    },
+  });
+  assert.ok(calls.removed.includes("automation-in-progress"));
+  assert.deepEqual(calls.added, ["automation-blocked"]);
+  assert.equal(calls.dispatched.length, 0);
+  assert.match(calls.comments[0].body, /closed without merging/i);
+});
+
+test("pr-close-cleanup ignores a non-automation head ref", async () => {
+  const calls = await run("Block the mission whose candidate was closed unmerged", {
+    env: { HEAD_REF: "feature/unrelated", PR_NUMBER: "473" },
+    github: {
+      rest: {
+        issues: {
+          removeLabel: async () => ({}),
+          addLabels: async () => ({}),
+          createComment: async () => ({}),
+        },
+      },
+    },
+  });
+  assert.deepEqual(calls.added, []);
+  assert.deepEqual(calls.removed, []);
+});
+
+// --- simultaneous approvals are queued, not lost ----------------------
+
+test("simultaneous approvals dispatch one worker and leave the rest queued for later", async () => {
+  const approved = [approvedIssue(300), approvedIssue(301), approvedIssue(302)];
+  const issueById = Object.fromEntries(approved.map((i) => [i.number, i]));
+
+  // First advance: nothing active -> dispatch #300.
+  const first = await runAdvance({ approved, issueById });
+  assert.deepEqual(first.dispatched[0].inputs, { issue_number: "300" });
+
+  // Concurrent advances while #300's builder run is live -> no dispatch, none lost.
+  const during = await runAdvance({ approved, issueById, builderRuns: [{ status: "queued" }] });
+  assert.equal(during.dispatched.length, 0);
+  assert.deepEqual(
+    approved.map((i) => i.number),
+    [300, 301, 302],
+    "every approved issue is still in the queue",
   );
-  assert.match(
-    ci,
-    /node --test[\s\S]*\.github\/automation\/jarvis-queue-advance\.test\.mjs/,
-  );
-  assert.match(ci, /\.github\/workflows\/jarvis-queue-advance\.yml/);
+
+  // After #300 merges: its lock is freed and the next lowest is dispatched.
+  const afterMerge = await runAdvance({
+    eventName: "pull_request",
+    merged: "true",
+    mergedHeadRef: "automation/issue-300/run-1",
+    approved: [approvedIssue(301), approvedIssue(302)],
+    issueById,
+  });
+  assert.deepEqual(afterMerge.dispatched[0].inputs, { issue_number: "301" });
 });

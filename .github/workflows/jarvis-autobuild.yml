@@ -1,8 +1,9 @@
 name: Jarvis autonomous build
 
 on:
-  issues:
-    types: [labeled]
+  # The only entry point. Applying `automation-approved` no longer starts a build
+  # directly; jarvis-queue-advance.yml is the single coordinator and dispatches
+  # one mission at a time. A repository writer may still dispatch manually.
   workflow_dispatch:
     inputs:
       issue_number:
@@ -13,14 +14,15 @@ on:
 permissions: {}
 
 concurrency:
-  group: jarvis-autobuild-${{ github.repository }}-${{ github.event_name == 'workflow_dispatch' && format('issue-{0}', inputs.issue_number) || format('issue-{0}', github.event.issue.number) }}
+  # Repository-global and never cancelled: exactly one autonomous-build worker
+  # runs at a time, regardless of which issue or trigger started it. This makes
+  # the eligibility recheck below a race-free claim.
+  group: jarvis-autobuild-${{ github.repository }}
   cancel-in-progress: false
 
 jobs:
   build:
-    if: >-
-      github.event_name == 'workflow_dispatch' ||
-      github.event.label.name == 'automation-approved'
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
@@ -38,8 +40,8 @@ jobs:
       lock-acquired: ${{ steps.eligibility.outputs.lock_acquired }}
       pr-url: ${{ steps.publish.outputs.pr_url }}
     env:
-      ISSUE_NUMBER: ${{ github.event_name == 'workflow_dispatch' && format('{0}', inputs.issue_number) || format('{0}', github.event.issue.number) }}
-      BRANCH_NAME: automation/${{ github.event_name == 'workflow_dispatch' && format('issue-{0}', inputs.issue_number) || format('issue-{0}', github.event.issue.number) }}/run-${{ github.run_id }}
+      ISSUE_NUMBER: ${{ format('{0}', inputs.issue_number) }}
+      BRANCH_NAME: automation/issue-${{ inputs.issue_number }}/run-${{ github.run_id }}
 
     steps:
       - name: Validate approved issue and acquire lock
@@ -77,6 +79,9 @@ jobs:
               }
             }
 
+            // Recheck eligibility now, immediately before any work. The
+            // repository-global concurrency group means no other build job can be
+            // in this step at the same time, so this read-then-claim is race-free.
             const { data: issue } = await github.rest.issues.get({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -87,17 +92,35 @@ jobs:
             ));
             const hasAcceptanceHeading = /^#{1,6}\s+acceptance criteria\s*$/im.test(issue.body || "");
             const hasChecklistItem = /^\s*-\s*\[[ xX]\]\s+\S+/m.test(issue.body || "");
-            const pulls = await github.rest.pulls.list({
+            const pulls = await github.paginate(github.rest.pulls.list, {
               owner: context.repo.owner,
               repo: context.repo.repo,
               state: "open",
               per_page: 100,
             });
-            const branchPrefix = `automation/issue-${issueNumber}/`;
-            const existing = pulls.data.filter(
-              (pull) =>
-                pull.head.repo?.full_name === context.payload.repository.full_name &&
-                pull.head.ref.startsWith(branchPrefix),
+            const ownRepo = `${context.repo.owner}/${context.repo.repo}`;
+            const automationRef = /^automation\/issue-(\d+)\/run-/;
+            const ownAutomationPulls = pulls
+              .filter((pull) => pull.head.repo?.full_name === ownRepo)
+              .map((pull) => ({
+                ref: pull.head.ref,
+                number: pull.number,
+                issue: Number(automationRef.exec(pull.head.ref)?.[1]),
+              }))
+              .filter((pull) => Number.isSafeInteger(pull.issue));
+            const existing = ownAutomationPulls.filter((pull) => pull.issue === issueNumber);
+            const otherCandidatePr = ownAutomationPulls.find((pull) => pull.issue !== issueNumber);
+
+            // Any other issue that still holds the mission lock.
+            const lockedIssues = await github.paginate(github.rest.issues.listForRepo, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: "open",
+              labels: "automation-in-progress",
+              per_page: 100,
+            });
+            const otherLockedIssue = lockedIssues.find(
+              (candidate) => candidate.number !== issueNumber && !candidate.pull_request,
             );
 
             const failures = [];
@@ -108,11 +131,23 @@ jobs:
             if (labels.has("automation-in-progress")) {
               failures.push("automation-in-progress lock is already present");
             }
+            // Never silently retry a blocked issue on the coordinated path. A
+            // repository writer dispatching manually is an explicit retry and may
+            // clear the block (handled after the claim).
+            if (labels.has("automation-blocked") && internalDispatch) {
+              failures.push("automation-blocked is set; clear it with a manual retry");
+            }
             if (!hasAcceptanceHeading || !hasChecklistItem) {
               failures.push("testable acceptance criteria are missing");
             }
             if (existing.length > 0) {
               failures.push("an automation pull request already exists");
+            }
+            if (otherLockedIssue) {
+              failures.push(`another mission is active: issue #${otherLockedIssue.number}`);
+            }
+            if (otherCandidatePr) {
+              failures.push(`another mission is active: PR #${otherCandidatePr.number}`);
             }
             if (failures.length > 0) {
               core.setFailed(failures.join("; "));
@@ -134,7 +169,8 @@ jobs:
                 body:
                   `${lockMarker}\nAutonomous build lock acquired by ` +
                   `[run ${context.runId}](${context.serverUrl}/${context.repo.owner}/` +
-                  `${context.repo.repo}/actions/runs/${context.runId}).`,
+                  `${context.repo.repo}/actions/runs/${context.runId}). The mission holds ` +
+                  `the queue until its pull request is merged or closed.`,
               });
             } catch (error) {
               await github.rest.issues.removeLabel({
@@ -146,7 +182,7 @@ jobs:
               throw error;
             }
             core.setOutput("lock_acquired", "true");
-            if (labels.has("automation-blocked")) {
+            if (labels.has("automation-blocked") && !internalDispatch) {
               await github.rest.issues.removeLabel({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
@@ -548,8 +584,11 @@ jobs:
             echo "::warning::Draft PR was created, but its metadata label could not be applied."
           fi
 
-      - name: Release issue lock after build
-        if: always() && steps.eligibility.outputs.lock_acquired == 'true'
+      - name: Release the mission lock when no candidate was published
+        # On success the draft PR now holds the mission, so the lock stays until
+        # jarvis-queue-advance.yml sees that PR merged or closed. Only release
+        # here when the build stopped before publishing a candidate.
+        if: always() && steps.eligibility.outputs.lock_acquired == 'true' && steps.publish.outcome != 'success'
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
@@ -680,23 +719,18 @@ jobs:
 
   finalize:
     needs: [build, verify-candidate]
-    if: >-
-      always() &&
-      (
-        github.event_name == 'workflow_dispatch' ||
-        github.event.label.name == 'automation-approved'
-      )
+    if: always() && github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
       issues: write
       statuses: write
     steps:
-      - name: Publish verification status and release issue lock
+      - name: Publish verification status and settle the mission lock
         if: always()
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
-          ISSUE_NUMBER: ${{ github.event_name == 'workflow_dispatch' && format('{0}', inputs.issue_number) || format('{0}', github.event.issue.number) }}
+          ISSUE_NUMBER: ${{ format('{0}', inputs.issue_number) }}
           CANDIDATE_SHA: ${{ needs.build.outputs.candidate-sha }}
           PR_URL: ${{ needs.build.outputs.pr-url }}
           BUILD_RESULT: ${{ needs.build.result }}
@@ -775,37 +809,53 @@ jobs:
                 comment.body?.includes(lockMarker) &&
                 comment.user?.login === "github-actions[bot]",
             );
-            if (lockComment) {
-              try {
-                await github.rest.issues.removeLabel({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  issue_number: issueNumber,
-                  name: "automation-in-progress",
-                });
-              } catch (error) {
-                if (error.status !== 404) throw error;
-              }
-              await github.rest.issues.updateComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                comment_id: lockComment.id,
-                body:
-                  `${lockMarker}\nAutonomous build lock released by ` +
-                  `[run ${context.runId}](${runUrl}).`,
-              });
-            }
 
             if (succeeded) {
+              // The draft PR now holds the mission. Keep automation-in-progress
+              // until jarvis-queue-advance.yml observes that PR merged or closed;
+              // that is how one mission stays occupied through review and merge.
+              if (lockComment) {
+                await github.rest.issues.updateComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  comment_id: lockComment.id,
+                  body:
+                    `${lockMarker}\nMission lock held for ${process.env.PR_URL} ` +
+                    `pending independent review and authorised maintainer merge ` +
+                    `([run ${context.runId}](${runUrl})).`,
+                });
+              }
               await github.rest.issues.createComment({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 issue_number: issueNumber,
                 body:
                   `Autonomous build opened draft PR ${process.env.PR_URL} and ` +
-                  `passed PR-scoped CI verification. Owner review is still required.` + receiptBody,
+                  `passed PR-scoped CI verification. The mission holds the queue ` +
+                  `until this PR is merged or closed. Independent review and ` +
+                  `authorised maintainer merge are still required.` + receiptBody,
               });
             } else {
+              if (lockComment) {
+                try {
+                  await github.rest.issues.removeLabel({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number: issueNumber,
+                    name: "automation-in-progress",
+                  });
+                } catch (error) {
+                  if (error.status !== 404) throw error;
+                }
+                await github.rest.issues.updateComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  comment_id: lockComment.id,
+                  body:
+                    `${lockMarker}\nMission lock released by ` +
+                    `[run ${context.runId}](${runUrl}).`,
+                });
+              }
               await github.rest.issues.addLabels({
                 owner: context.repo.owner,
                 repo: context.repo.repo,

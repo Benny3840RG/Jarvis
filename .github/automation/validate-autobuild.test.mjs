@@ -13,6 +13,7 @@ import {
   redactReceipt,
   validateCiContract,
   validatePromptContract,
+  validateQueueAdvanceContract,
   validateWorkflowContract,
 } from "./validate-autobuild.mjs";
 
@@ -638,7 +639,7 @@ test("workflow contract requires safe triggers, isolation, draft output, and cle
   );
   assert.match(
     workflow,
-    /name: Release issue lock after build[\s\S]*if: always\(\) && steps\.eligibility\.outputs\.lock_acquired == 'true'/,
+    /name: Release the mission lock when no candidate was published[\s\S]*if: always\(\) && steps\.eligibility\.outputs\.lock_acquired == 'true' && steps\.publish\.outcome != 'success'/,
   );
   assert.equal(
     validateWorkflowContract(
@@ -656,10 +657,24 @@ test("workflow contract requires safe triggers, isolation, draft output, and cle
     false,
   );
   const unrelatedFinalize = workflow.replace(
-    /(\n  finalize:[\s\S]*?\n    if: >-\n)([\s\S]*?)(\n    runs-on:)/,
-    "$1      always()$3",
+    /\n    if: always\(\) && github\.event_name == 'workflow_dispatch'\n/,
+    "\n    if: always()\n",
   );
-  assert.equal(validateWorkflowContract(unrelatedFinalize).ok, false);
+  assert.equal(
+    validateWorkflowContract(unrelatedFinalize).ok,
+    false,
+    "finalize must stay scoped to a manual dispatch",
+  );
+
+  const successReleasesLock = workflow.replace(
+    /Mission lock held/,
+    "Mission lock released",
+  );
+  assert.equal(
+    validateWorkflowContract(successReleasesLock).ok,
+    false,
+    "a successful build must keep the mission lock for its draft PR",
+  );
 
   const fatalMetadataLabel = workflow.replace(
     /if ! gh pr edit "\$pr_url" --add-label automation-generated; then[\s\S]*?^          fi$/m,
@@ -1004,37 +1019,48 @@ test("TypeScript CI independently enforces the automation policy", () => {
   );
 });
 
-test("requires issue-scoped concurrency and preserves duplicate-issue serialization", () => {
+test("requires one repository-global serial builder and dispatch-only triggers", () => {
   const workflow = fs.readFileSync(
     new URL("../workflows/jarvis-autobuild.yml", import.meta.url),
     "utf8",
   );
 
-  const issueScopedGroup =
-    /^\s{2}group:\s*jarvis-autobuild-\$\{\{\s*github\.repository\s*\}\}-\$\{\{(?=.*github\.event_name)(?=.*inputs\.issue_number)(?=.*github\.event\.issue\.number).*?\}\}\s*$/im;
-  assert.match(workflow, issueScopedGroup);
   const groupLine = workflow
     .split("\n")
     .find((line) => /^\s{2}group:/.test(line));
   assert.ok(groupLine);
-  assert.match(groupLine, /format\('issue-\{0\}',\s*inputs\.issue_number\)/);
-  assert.match(
-    groupLine,
-    /format\('issue-\{0\}',\s*github\.event\.issue\.number\)/,
+  assert.equal(
+    groupLine.trim(),
+    "group: jarvis-autobuild-${{ github.repository }}",
+    "the concurrency group must be repository-wide so only one worker runs",
   );
-  assert.doesNotMatch(
-    groupLine,
-    /inputs\.issue_number\s*\|\|\s*github\.event\.issue\.number/,
+  assert.doesNotMatch(groupLine, /issue-|inputs\.issue_number|github\.event\.issue/);
+  assert.match(workflow, /cancel-in-progress:\s*false/);
+
+  // The builder must not be started by a label; that routing belongs to
+  // jarvis-queue-advance.yml.
+  const onBlock = /^on:([\s\S]*?)\npermissions:/m.exec(workflow)?.[1] ?? "";
+  assert.doesNotMatch(onBlock, /\bissues:/);
+  assert.doesNotMatch(onBlock, /\bpull_request:/);
+  assert.match(onBlock, /workflow_dispatch:/);
+
+  const issueTriggered = workflow.replace(
+    /^on:\n/m,
+    "on:\n  issues:\n    types: [labeled]\n",
+  );
+  assert.equal(
+    validateWorkflowContract(issueTriggered).ok,
+    false,
+    "an issue trigger on the builder must fail the contract",
   );
 
-  const groupForIssue = (issueNumber) =>
-    "jarvis-autobuild-Benny3840RG/Jarvis-issue-" + issueNumber;
-  assert.notEqual(groupForIssue(331), groupForIssue(332));
-  assert.equal(groupForIssue(331), groupForIssue(331));
-
-  const repositoryWide = workflow.replace(
-    /^(\s{2}group:\s*).+$/m,
-    "$1jarvis-autobuild-${{ github.repository }}",
+  const perIssueGroup = workflow.replace(
+    "group: jarvis-autobuild-${{ github.repository }}",
+    "group: jarvis-autobuild-${{ github.repository }}-issue-${{ inputs.issue_number }}",
   );
-  assert.equal(validateWorkflowContract(repositoryWide).ok, false);
+  assert.equal(
+    validateWorkflowContract(perIssueGroup).ok,
+    false,
+    "a per-issue concurrency group must fail the contract",
+  );
 });
