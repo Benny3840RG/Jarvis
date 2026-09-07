@@ -254,6 +254,23 @@ jobs:
               mode: 0o600,
             });
 
+      - name: Preserve service sockets during worker isolation
+        timeout-minutes: 5
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! -x /usr/bin/getfacl || ! -x /usr/bin/setfacl ]]; then
+            sudo apt-get update
+            sudo apt-get install --no-install-recommends -y acl
+          fi
+          actions_root="$(dirname "$(realpath "$RUNNER_TEMP")")/_actions"
+          bundle="$actions_root/openai/codex-action/86365089eb2b84e0a8fb0717b304f8bdcb13b20e/dist/main.js"
+          if [[ ! -f "$bundle" || -L "$bundle" ]]; then
+            echo "::error::Expected pinned Codex action bundle is unavailable; refusing to start worker."
+            exit 1
+          fi
+          node .github/automation/patch-codex-sockets.mjs "$bundle"
+
       - name: Run bounded Codex implementation
         id: codex
         # Leave room in the 45-minute job for failure cleanup and receipts.
