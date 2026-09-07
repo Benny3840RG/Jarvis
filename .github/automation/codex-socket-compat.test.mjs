@@ -133,11 +133,15 @@ test(
       supplementaryGroupIds: [999],
       fallbackGroupId: 65534,
     };
-    const pipeline = socketPipeline(patch(bundle), "/fixture", {
-      fs: os,
-      process: { getuid: () => 0 },
-      execCommand: async () => ({ code: 1, stdout: "", stderr: "" }),
-    });
+    const pipeline = socketPipeline(
+      original ? bundle : patch(bundle),
+      "/fixture",
+      {
+        fs: os,
+        process: { getuid: () => 0 },
+        execCommand: async () => ({ code: 1, stdout: "", stderr: "" }),
+      },
+    );
     await pipeline.verifyPrivilegedSocketsRestricted(
       new Set([999, 65534]),
       credentials,
