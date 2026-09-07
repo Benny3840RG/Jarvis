@@ -572,3 +572,78 @@ describe("Integration commissioning HUD wiring", () => {
     assert.equal(h.registry.get("reasoning-verification")?.textContent, "NOT CONFIGURED");
   });
 });
+
+describe("HUD connection staleness detection", () => {
+  const declaredStaleMs = Number(widget.match(/const STATUS_STALE_MS = (\d+);/)?.[1]);
+  assert.ok(
+    Number.isFinite(declaredStaleMs) && declaredStaleMs > 0,
+    "STATUS_STALE_MS constant not found in dashboard-v1.html",
+  );
+
+  const staleSource = extractSource(/(function isConnectionStale\([\s\S]*?\})\n\s+function update/);
+
+  function loadConnectionHealth(
+    state: { status: unknown; lastStatusAt: number },
+    render: () => void,
+  ) {
+    const run = new Function(
+      "state",
+      "render",
+      "STATUS_STALE_MS",
+      `"use strict"; ${staleSource}; return { isConnectionStale, checkConnectionHealth };`,
+    );
+    return run(state, render, declaredStaleMs) as {
+      isConnectionStale: (lastUpdateAt: number, now: number, thresholdMs: number) => boolean;
+      checkConnectionHealth: () => void;
+    };
+  }
+
+  it("treats a never-updated connection and one older than the threshold as stale", () => {
+    const { isConnectionStale } = loadConnectionHealth({ status: null, lastStatusAt: 0 }, () => {});
+    const now = Date.now();
+
+    assert.equal(isConnectionStale(0, now, declaredStaleMs), true);
+    assert.equal(isConnectionStale(now - declaredStaleMs - 1, now, declaredStaleMs), true);
+    assert.equal(isConnectionStale(now - declaredStaleMs + 1, now, declaredStaleMs), false);
+    assert.equal(isConnectionStale(now, now, declaredStaleMs), false);
+  });
+
+  it("clears a stale status and re-renders instead of leaving the last-known snapshot on screen", () => {
+    const state = { status: { status: "ok" }, lastStatusAt: Date.now() - declaredStaleMs - 1000 };
+    let renderCalls = 0;
+    const { checkConnectionHealth } = loadConnectionHealth(state, () => {
+      renderCalls += 1;
+    });
+
+    checkConnectionHealth();
+
+    assert.equal(state.status, null);
+    assert.equal(renderCalls, 1);
+  });
+
+  it("leaves a fresh status untouched and never re-renders while the connection is healthy", () => {
+    const state = { status: { status: "ok" }, lastStatusAt: Date.now() };
+    let renderCalls = 0;
+    const { checkConnectionHealth } = loadConnectionHealth(state, () => {
+      renderCalls += 1;
+    });
+
+    checkConnectionHealth();
+
+    assert.deepEqual(state.status, { status: "ok" });
+    assert.equal(renderCalls, 0);
+  });
+
+  it("does not re-render on every heartbeat once a stale connection has already been cleared", () => {
+    const state = { status: null as unknown, lastStatusAt: Date.now() - declaredStaleMs - 1000 };
+    let renderCalls = 0;
+    const { checkConnectionHealth } = loadConnectionHealth(state, () => {
+      renderCalls += 1;
+    });
+
+    checkConnectionHealth();
+    checkConnectionHealth();
+
+    assert.equal(renderCalls, 0);
+  });
+});
