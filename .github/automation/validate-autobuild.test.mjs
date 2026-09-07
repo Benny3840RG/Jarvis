@@ -836,6 +836,58 @@ test("candidate verification does not report success for failed or missing requi
   );
 });
 
+test("candidate verification waits for neutral CodeQL to become successful", async () => {
+  const success = [
+    "automation-policy",
+    "typecheck-lint-format-test",
+    "jarvis-console-01-build",
+    "pr-evidence",
+    "CodeQL",
+  ].map((name, index) => ({
+    id: index + 1,
+    name,
+    status: "completed",
+    conclusion: "success",
+  }));
+  const neutral = success.map((check) =>
+    check.name === "CodeQL" ? { ...check, conclusion: "neutral" } : check,
+  );
+  const result = await runCandidateVerification({
+    checksByPoll: [neutral, success],
+  });
+  assert.equal(result.checkPoll, 2);
+  assert.deepEqual(result.failures, []);
+  assert.ok(
+    result.messages.some((message) =>
+      message.startsWith("All required PR checks passed"),
+    ),
+  );
+
+  const unresolved = await runCandidateVerification({ checksByPoll: [neutral] });
+  assert.match(unresolved.failures[0], /Timed out/);
+  assert.ok(
+    !unresolved.messages.some((message) =>
+      message.startsWith("All required PR checks passed"),
+    ),
+  );
+});
+
+test("candidate verification still rejects neutral non-CodeQL checks", async () => {
+  const result = await runCandidateVerification({
+    checksByPoll: [
+      [
+        {
+          id: 1,
+          name: "automation-policy",
+          status: "completed",
+          conclusion: "neutral",
+        },
+      ],
+    ],
+  });
+  assert.match(result.failures[0], /automation-policy:neutral/);
+});
+
 test("candidate verification propagates an approval denial", async () => {
   await assert.rejects(
     runCandidateVerification({
