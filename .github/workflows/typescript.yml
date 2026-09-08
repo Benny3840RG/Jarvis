@@ -14,6 +14,7 @@ on:
       - ".github/workflows/development-commissioning.yml"
       - ".github/workflows/queue-development-commissioning.yml"
       - ".github/workflows/jarvis-autobuild.yml"
+      - ".github/workflows/jarvis-queue-advance.yml"
       - ".github/automation/**"
   pull_request:
     branches: [main]
@@ -38,6 +39,8 @@ jobs:
           node --test .github/automation/validate-autobuild.test.mjs
           .github/automation/development-commissioning.test.mjs
           .github/automation/validate-pr-evidence.test.mjs
+          .github/automation/jarvis-queue-advance.test.mjs
+          .github/automation/revision-health.test.mjs
 
       - name: Check out the pinned socket compatibility fixture
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7

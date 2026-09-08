@@ -1,6 +1,8 @@
 # Jarvis autonomous builds
 
-Jarvis can implement one bounded GitHub issue at a time. The system creates a draft pull request; it cannot mark the PR ready, merge, commission, or deploy.
+Jarvis implements **one bounded GitHub issue at a time, end to end**. The system creates a draft pull request; it cannot mark the PR ready, merge, commission, or deploy.
+
+`jarvis-autobuild.yml` no longer runs on the `automation-approved` label. It has a single trigger, `workflow_dispatch`, and one repository-global concurrency group, so only one autonomous-build worker can ever run. `jarvis-queue-advance.yml` is the sole coordinator: it verifies `main` is healthy, then dispatches the builder for the next eligible approved issue. A mission occupies the queue from dispatch until its pull request is merged or closed — not just while the coding worker runs (see [Queue advance](#queue-advance)).
 
 ## Smoke-test verification
 
@@ -17,36 +19,91 @@ The issue must be open and carry `automation-approved`. It must include testable
 - [ ] Test or verification result two
 ```
 
-Adding `automation-approved` starts the builder immediately. Applying the label is an authority decision: review the complete issue first, including hidden HTML, links, attachments, and comments that could contain hostile instructions.
+Adding `automation-approved` no longer starts a build. It records the authority decision and adds the issue to the queue; the coordinator dispatches it when its turn comes. Applying the label is still an authority decision: review the complete issue first, including hidden HTML, links, attachments, and comments that could contain hostile instructions.
 
 ## Labels
 
-| Label                    | Meaning                                                   |
-| ------------------------ | --------------------------------------------------------- |
-| `automation-approved`    | Owner or repository writer authorises one bounded attempt |
-| `automation-in-progress` | A build currently owns the issue                          |
-| `automation-blocked`     | The last attempt stopped and needs operator attention     |
-| `automation-generated`   | Branch or draft PR was produced by the autonomous builder |
+| Label                    | Meaning                                                                                  |
+| ------------------------ | --------------------------------------------------------------------------------------- |
+| `automation-approved`    | Owner or repository writer authorises one bounded attempt; the coordinator will dispatch it |
+| `automation-in-progress` | The mission lock. Held from dispatch until the candidate pull request is merged or closed |
+| `automation-blocked`     | The last attempt stopped and needs operator attention                                   |
+| `automation-generated`   | Branch or draft PR was produced by the autonomous builder                               |
 
-Different approved issues may run concurrently. Attempts for the same issue remain serialised by the issue-scoped workflow concurrency group, the `automation-in-progress` lock, and existing automation-PR detection.
+`automation-approved` is what the coordinator reads to pick the next mission, so review each issue completely before applying it.
 
 ## Parallel eligibility
 
-Concurrent execution is permitted only when approved issues have no unresolved dependency on one another and no expected overlapping write surface. Shared control-plane files, security boundaries, schemas, deployments, commissioning, and other sequential contracts remain ordered and must use normal reviewed work.
+Autonomous builds are serial: one mission occupies the pipeline from approval through merge, and the next is not dispatched until it completes. Work that genuinely must proceed in parallel uses normal reviewed pull requests, not the autonomous builder.
+
+## Queue advance
+
+`.github/workflows/jarvis-queue-advance.yml` is the single coordinator. It **only dispatches** `jarvis-autobuild.yml`; it never reviews, approves, marks ready, merges, commissions, or deploys, and never holds write access to repository contents. Its definition is always resolved from the base branch, so a merged pull request cannot change this logic. Selection logic lives in `.github/automation/select-next-mission.mjs` and is unit and behaviourally tested.
+
+The operator's approval of an issue (`automation-approved`) is the authority record. The coordinator dispatches an already-approved issue as `github-actions[bot]`; that identity is **not** treated as approval. The builder re-checks the `automation-approved` label, `automation-blocked` state, acceptance criteria, the mission lock, existing candidate PRs, and any other active mission on every run, immediately before work, while holding the global concurrency lease. A human `workflow_dispatch` is additionally gated on writer permission.
+
+### Revision health is verified twice, bound to one SHA
+
+The rule set lives in `.github/automation/revision-health.mjs` and is applied by both the coordinator and the builder. A revision is healthy only when all of these are `success` from their trusted producer:
+
+| Check | Trusted producer (workflow-run `path`) |
+| --- | --- |
+| `automation-policy`, `typecheck-lint-format-test`, `jarvis-console-01-build` | `.github/workflows/typescript.yml` |
+| `Analyze (actions)`, `Analyze (python)`, `Analyze (ruby)`, `Analyze (javascript-typescript)` | `dynamic/github-code-scanning/codeql` |
+
+There is no aggregate `CodeQL` check on `main` — only these individual per-language analyses. A missing, failed, cancelled, `neutral`, still-pending, or wrong-producer check blocks.
+
+1. **Coordinator** `verify-main` runs on **every** dispatch path. It resolves the current `main` HEAD, verifies that revision, and passes the exact SHA to the builder as the `source_sha` input. Because the target is always `main` HEAD, a scheduled sweep cannot bypass an earlier failure: while a bad revision sits on `main`, nothing is dispatched.
+2. **Builder** `Verify the dispatched source revision` re-does the check for `source_sha` before it checks anything out, confirms that SHA is `main` or an ancestor of it (`compareCommitsWithBasehead`), then checks out **that exact SHA** — not a moving `main`. A merge that lands between coordinator verification and builder checkout cannot slip unverified code into a mission. A manual `workflow_dispatch` that omits `source_sha` uses `main` HEAD and is verified the same way, so a manual build cannot skip the health gate.
+
+`revision-health.mjs` is hashed into the builder's immutable control manifest alongside `validate-autobuild.mjs`.
+
+### Triggers
+
+| Trigger | Behaviour |
+| --- | --- |
+| `automation-approved` applied to an issue | Verify `main`, then dispatch the next eligible mission if none is active. |
+| An `automation-generated` pull request is **merged** | Verify `main` (now the merge commit), release that mission's lock, then dispatch the next. |
+| An `automation-generated` pull request is **closed unmerged** | Label its issue `automation-blocked` and comment. Do **not** advance. |
+| `schedule` (every 6 hours) | Recovery sweep for missed events. |
+| `workflow_dispatch` | Manual sweep. |
+
+### One mission at a time
+
+The coordinator dispatches nothing while a mission is occupied: any open issue carrying `automation-in-progress`, any open `automation/issue-*` pull request, or any queued/running builder run. It selects the lowest-numbered eligible issue, re-fetches it, and re-checks eligibility immediately before `createWorkflowDispatch`. The builder then re-checks again under the global lease. Multiple approvals, manual sweeps, and concurrent triggers therefore dispatch at most one worker; the rest keep their `automation-approved` label and are picked up one by one as each mission's PR merges.
+
+If `main` moves between `verify-main` and dispatch, the coordinator defers to the next trigger rather than dispatch against an unverified revision.
+
+### Stale-lock recovery
+
+If a `pull_request:[closed]` event is missed, an issue can keep `automation-in-progress` with no live candidate behind it, which would stall the queue forever. On a **sweep only** (`schedule` / `workflow_dispatch`), the coordinator reconciles: for each held lock with **no** open candidate PR **and** no autonomous-build run active across the paginated history, it verifies that the newest bot-authored lock receipt identifies a completed builder run before releasing the lock, setting `automation-blocked`, and commenting. Missing, inaccessible or non-terminal owning-run evidence preserves the lock. A lock with an open candidate PR, or any lock while a builder run is active, is left untouched — genuinely live locks are never cleared. Merge and approval triggers do not reconcile; only sweeps do.
+
+### Queue advance failures
+
+- `verify-main` red or timed out: the queue **does not advance**. On a merge trigger it comments the failing checks on the merged pull request. Repair `main`; the next merge or scheduled sweep resumes the queue.
+- A candidate pull request closed **unmerged**: its issue is set `automation-blocked`. Clear the label with a manual retry after fixing the blocker.
+- A stale open automation pull request halts the queue by design. Merge or close it; the coordinator never force-clears a lock or closes a candidate.
+- The coordinator never retries a blocked issue.
 
 ## Normal lifecycle
 
-1. A repository writer reviews the issue and acceptance criteria.
-2. They add `automation-approved`.
-3. The workflow validates eligibility and applies `automation-in-progress`.
+1. A repository writer reviews the issue and acceptance criteria and adds `automation-approved`.
+2. The coordinator verifies the current `main` revision is healthy and, when no mission is occupied, dispatches the builder for this issue with that verified SHA as `source_sha`.
+3. The builder re-checks eligibility under the global lease, applies `automation-in-progress`, re-verifies `source_sha` health and that it is on `main`, then checks that exact SHA out.
 4. Codex edits the isolated checkout under the repository policy.
 5. A trusted guard rejects forbidden or excessive changes.
-6. The workflow pushes an attempt-specific `automation/issue-<number>/run-<run-id>` branch and opens one draft PR.
+6. The builder pushes an attempt-specific `automation/issue-<number>/run-<run-id>` branch and opens one draft PR labelled `automation-generated`.
 7. A separate secret-free job waits on the exact candidate SHA for the PR-scoped `automation-policy`, TypeScript, Console, PR Evidence, and CodeQL checks. It does not check out or execute the candidate tree in the default-branch workflow. `GITHUB_TOKEN`-created draft PRs often leave those workflows waiting for approval; the verifier attempts to approve them so verification stays PR-scoped.
-8. The workflow publishes one namespaced `jarvis-autobuild/verify-candidate` status on the draft PR and blocks the issue if those required checks fail or time out.
+8. The builder publishes one namespaced `jarvis-autobuild/verify-candidate` status on the draft PR and blocks the issue if those required checks fail or time out.
 9. Ordinary TypeScript, Console, PR Evidence, and CodeQL checks keep their own names and remain authoritative. The autonomous verifier never impersonates or satisfies them.
-10. The owner reviews the diff, independent findings, checks, and remaining risk.
-11. Only the owner may change draft state or merge.
+10. **The mission lock stays on the issue.** The queue does not advance while the draft PR is open.
+11. The owner (or a `@Benny3840` CODEOWNERS review) reviews the diff, Copilot's independent review, the checks, and remaining risk. Copilot and the builder cannot approve or merge; `.github/CODEOWNERS` requires human review of `.github/**`.
+12. The owner marks the PR ready and squash-merges it. Only the owner may change draft state or merge.
+13. The merge closes the issue (`Closes #<n>`) and triggers the coordinator: it verifies the post-merge `main`, releases the lock, and dispatches the next mission.
+
+### Handoff to review and merge
+
+Every queue-generated candidate reaches a human the same way: a draft PR with `automation-generated`, `jarvis-autobuild/verify-candidate` plus the five required checks on the exact head, a Copilot review, and CODEOWNERS review on `.github/**`. Neither `jarvis-autobuild.yml` nor `jarvis-queue-advance.yml` has `pull-requests` permission beyond commenting, and neither calls any merge, approve, review, or ready-for-review API — enforced by `validateQueueAdvanceContract` and the builder contract tests. This handoff is generic; it is not tied to any single issue or PR.
 
 Held PR workflow runs are returned by GitHub with `status: completed` and
 `conclusion: action_required`. The verifier checks both fields before approving
@@ -56,9 +113,9 @@ Actions settings endpoint as an eligibility requirement.
 
 ## Manual retry
 
-Use **Actions → Jarvis autonomous build → Run workflow** and enter the issue number only after correcting the recorded blocker. Remove a stale `automation-in-progress` label only after confirming no run is active.
+Use **Actions → Jarvis autonomous build → Run workflow**, enter the issue number, and leave `source_sha` blank (it defaults to `main` HEAD, which is verified before work) — only after correcting the recorded blocker. Remove a stale `automation-in-progress` label only after confirming no run is active, or let the next scheduled sweep reconcile it.
 
-The workflow does not retry automatically. This prevents repeated API spend and repeated unsafe edits. Agent-reported checks are advisory; PR-scoped CI on the exact candidate SHA is machine-enforced before the build is reported successful.
+The workflow does not retry automatically. This prevents repeated API spend and repeated unsafe edits. Agent-reported checks are advisory; the dispatched revision's health and the PR-scoped CI on the exact candidate SHA are machine-enforced.
 
 ## Hard stops
 
@@ -77,7 +134,7 @@ Split such work into a reviewed design and owner-approved implementation instead
 
 ## Failure recovery
 
-A failed run removes `automation-in-progress`, applies `automation-blocked`, and comments with the run URL. Review the failed step and redacted logs.
+A failed run that never published a candidate removes `automation-in-progress`, applies `automation-blocked`, and comments with the run URL. A run that published a draft PR keeps `automation-in-progress` until the coordinator sees that PR merged or closed. Review the failed step and redacted logs.
 
 - If no branch exists, correct the issue and retry manually; each attempt receives a unique branch.
 - If a draft PR exists, inspect or close it before retrying. Open automation PRs prevent duplicate attempts.
