@@ -7,6 +7,8 @@ const workflow = fs.readFileSync(
   "utf8",
 );
 
+// Queue dispatch intentionally runs as github-actions[bot]. Keep the downstream
+// Codex admission equally narrow: exact bot allowlist, never the general bypass.
 const codexStep = workflow
   .split("- name: Run bounded Codex implementation")[1]
   ?.split("\n      - name:")[0] ?? "";
