@@ -12,6 +12,7 @@ import {
   automationIssueNumbers,
   evaluateQueueCandidate,
   parseAutomationIssueRef,
+  reconcileLocks,
   selectNextMission,
 } from "./select-next-mission.mjs";
 
@@ -132,6 +133,30 @@ test("selectNextMission returns no issue when the queue is drained", () => {
   assert.equal(result.issue, null);
 });
 
+test("reconcileLocks releases a lock with no backing candidate", () => {
+  const result = reconcileLocks({
+    lockedIssueNumbers: [10, 20],
+    openAutomationPrHeadRefs: ["automation/issue-20/run-1"],
+  });
+  assert.deepEqual(result.release, [10]);
+  assert.deepEqual(result.held, [20]);
+});
+
+test("reconcileLocks releases nothing while a builder run is active", () => {
+  const result = reconcileLocks({
+    lockedIssueNumbers: [10, 20],
+    openAutomationPrHeadRefs: [],
+    builderActive: true,
+  });
+  assert.deepEqual(result.release, []);
+  assert.deepEqual(result.held, [10, 20]);
+  assert.match(result.reason, /run is active/);
+});
+
+test("reconcileLocks is a no-op when no locks are held", () => {
+  assert.deepEqual(reconcileLocks({ lockedIssueNumbers: [] }), { release: [], held: [] });
+});
+
 // --- workflow contract ---------------------------------------------------
 
 test("queue-advance workflow satisfies the coordinator contract", () => {
@@ -164,16 +189,24 @@ test("queue-advance workflow satisfies the coordinator contract", () => {
     "must never merge a pull request",
   );
   assert.equal(
-    validateQueueAdvanceContract(workflow.replaceAll("Analyze (", "Aggregate (")).ok,
+    validateQueueAdvanceContract(workflow.replaceAll("evaluateRevisionHealth", "trustBlindly")).ok,
     false,
-    "must verify individual CodeQL analyses",
+    "must evaluate revision health through the shared module",
   );
   assert.equal(
     validateQueueAdvanceContract(
-      workflow.replaceAll("dynamic/github-code-scanning/", "dynamic/anything-else/"),
+      workflow.replace(
+        "inputs: { issue_number: String(issueNumber), source_sha: verifiedSha }",
+        "inputs: { issue_number: String(issueNumber) }",
+      ),
     ).ok,
     false,
-    "must verify the trusted code-scanning producer",
+    "must forward the verified revision to the builder",
+  );
+  assert.equal(
+    validateQueueAdvanceContract(workflow.replaceAll("reconcileLocks", "ignoreLocks")).ok,
+    false,
+    "must reconcile stale mission locks on sweeps",
   );
 });
 
@@ -446,16 +479,19 @@ test("advance dispatches exactly one mission from a multi-issue queue", async ()
   const approved = [approvedIssue(210), approvedIssue(204), approvedIssue(219)];
   const calls = await runAdvance({ approved, issueById: Object.fromEntries(approved.map((i) => [i.number, i])) });
   assert.equal(calls.dispatched.length, 1);
-  assert.deepEqual(calls.dispatched[0].inputs, { issue_number: "204" });
+  assert.equal(calls.dispatched[0].inputs.issue_number, "204");
+  assert.equal(calls.dispatched[0].inputs.source_sha, HEALTHY_MAIN_SHA);
 });
 
-test("advance dispatches nothing while another mission holds the lock", async () => {
+test("advance dispatches nothing while another mission holds a live lock", async () => {
   const calls = await runAdvance({
+    eventName: "issues",
     approved: [approvedIssue(210)],
     inProgress: [{ number: 199, labels: [{ name: "automation-in-progress" }] }],
     issueById: { 210: approvedIssue(210) },
   });
   assert.equal(calls.dispatched.length, 0);
+  assert.equal(calls.removed.length, 0, "a non-sweep trigger never reconciles locks");
 });
 
 test("advance dispatches nothing while a candidate PR is open", async () => {
@@ -488,7 +524,7 @@ test("advance skips a blocked issue and takes the next", async () => {
   ];
   const calls = await runAdvance({ approved, issueById: Object.fromEntries(approved.map((i) => [i.number, i])) });
   assert.equal(calls.dispatched.length, 1);
-  assert.deepEqual(calls.dispatched[0].inputs, { issue_number: "208" });
+  assert.equal(calls.dispatched[0].inputs.issue_number, "208");
 });
 
 test("advance aborts when main HEAD moved since verification", async () => {
@@ -520,7 +556,70 @@ test("advance releases the lock of a merged candidate before selecting", async (
   });
   assert.ok(calls.removed.includes("automation-in-progress"));
   assert.equal(calls.dispatched.length, 1);
-  assert.deepEqual(calls.dispatched[0].inputs, { issue_number: "230" });
+  assert.equal(calls.dispatched[0].inputs.issue_number, "230");
+});
+
+// --- behavioural: sweep lock reconciliation (missed PR-close recovery) ---
+
+test("a sweep releases a stale lock with no candidate and no active run, then advances", async () => {
+  const stale = { number: 190, labels: [{ name: "automation-in-progress" }] };
+  const next = approvedIssue(215);
+  const calls = await runAdvance({
+    eventName: "schedule",
+    inProgress: [stale],
+    approved: [next],
+    issueById: { 215: next },
+  });
+  assert.ok(calls.removed.includes("automation-in-progress"));
+  assert.deepEqual(calls.added, ["automation-blocked"]);
+  assert.match(calls.comments[0].body, /stale mission lock/i);
+  assert.equal(calls.dispatched.length, 1);
+  assert.equal(calls.dispatched[0].inputs.issue_number, "215");
+});
+
+test("a sweep keeps a lock whose candidate PR is still open", async () => {
+  const held = { number: 191, labels: [{ name: "automation-in-progress" }] };
+  const calls = await runAdvance({
+    eventName: "schedule",
+    inProgress: [held],
+    openPulls: [
+      {
+        number: 480,
+        head: { ref: "automation/issue-191/run-2", repo: { full_name: "Benny3840RG/Jarvis" } },
+      },
+    ],
+    approved: [approvedIssue(215)],
+    issueById: { 215: approvedIssue(215) },
+  });
+  assert.deepEqual(calls.added, []);
+  assert.equal(calls.removed.length, 0);
+  assert.equal(calls.dispatched.length, 0, "the open candidate still holds the queue");
+});
+
+test("a sweep keeps every lock while a builder run is active", async () => {
+  const calls = await runAdvance({
+    eventName: "schedule",
+    inProgress: [{ number: 192, labels: [{ name: "automation-in-progress" }] }],
+    builderRuns: [{ status: "in_progress" }],
+    approved: [approvedIssue(215)],
+    issueById: { 215: approvedIssue(215) },
+  });
+  assert.equal(calls.removed.length, 0);
+  assert.equal(calls.dispatched.length, 0);
+});
+
+test("a merge trigger does NOT reconcile other locks (only sweeps do)", async () => {
+  const calls = await runAdvance({
+    eventName: "pull_request",
+    merged: "true",
+    mergedHeadRef: "automation/issue-300/run-1",
+    inProgress: [{ number: 193, labels: [{ name: "automation-in-progress" }] }],
+    approved: [],
+    issueById: {},
+  });
+  // The merged mission's own lock is released, but #193's is left untouched.
+  assert.deepEqual(calls.added, []);
+  assert.equal(calls.dispatched.length, 0, "another lock still blocks the queue");
 });
 
 // --- behavioural: pr-close-cleanup -------------------------------------
@@ -569,7 +668,7 @@ test("simultaneous approvals dispatch one worker and leave the rest queued for l
 
   // First advance: nothing active -> dispatch #300.
   const first = await runAdvance({ approved, issueById });
-  assert.deepEqual(first.dispatched[0].inputs, { issue_number: "300" });
+  assert.equal(first.dispatched[0].inputs.issue_number, "300");
 
   // Concurrent advances while #300's builder run is live -> no dispatch, none lost.
   const during = await runAdvance({ approved, issueById, builderRuns: [{ status: "queued" }] });
@@ -588,5 +687,5 @@ test("simultaneous approvals dispatch one worker and leave the rest queued for l
     approved: [approvedIssue(301), approvedIssue(302)],
     issueById,
   });
-  assert.deepEqual(afterMerge.dispatched[0].inputs, { issue_number: "301" });
+  assert.equal(afterMerge.dispatched[0].inputs.issue_number, "301");
 });

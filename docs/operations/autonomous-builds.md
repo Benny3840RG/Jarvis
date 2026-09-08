@@ -42,16 +42,21 @@ Autonomous builds are serial: one mission occupies the pipeline from approval th
 
 The operator's approval of an issue (`automation-approved`) is the authority record. The coordinator dispatches an already-approved issue as `github-actions[bot]`; that identity is **not** treated as approval. The builder re-checks the `automation-approved` label, `automation-blocked` state, acceptance criteria, the mission lock, existing candidate PRs, and any other active mission on every run, immediately before work, while holding the global concurrency lease. A human `workflow_dispatch` is additionally gated on writer permission.
 
-### Every trigger verifies `main` first
+### Revision health is verified twice, bound to one SHA
 
-On **every** dispatch path the `verify-main` job resolves the current `main` HEAD and requires all of these to be `success`, from their trusted producers, before anything is dispatched:
+The rule set lives in `.github/automation/revision-health.mjs` and is applied by both the coordinator and the builder. A revision is healthy only when all of these are `success` from their trusted producer:
 
-| Check | Trusted producer |
+| Check | Trusted producer (workflow-run `path`) |
 | --- | --- |
 | `automation-policy`, `typecheck-lint-format-test`, `jarvis-console-01-build` | `.github/workflows/typescript.yml` |
 | `Analyze (actions)`, `Analyze (python)`, `Analyze (ruby)`, `Analyze (javascript-typescript)` | `dynamic/github-code-scanning/codeql` |
 
-There is no aggregate `CodeQL` check on `main` — only these individual per-language analyses. A missing, failed, cancelled, `neutral`, or still-pending check blocks dispatch. Because the check target is always the current `main` HEAD, a scheduled sweep cannot bypass an earlier failure: while a bad revision sits on `main`, no mission is dispatched.
+There is no aggregate `CodeQL` check on `main` — only these individual per-language analyses. A missing, failed, cancelled, `neutral`, still-pending, or wrong-producer check blocks.
+
+1. **Coordinator** `verify-main` runs on **every** dispatch path. It resolves the current `main` HEAD, verifies that revision, and passes the exact SHA to the builder as the `source_sha` input. Because the target is always `main` HEAD, a scheduled sweep cannot bypass an earlier failure: while a bad revision sits on `main`, nothing is dispatched.
+2. **Builder** `Verify the dispatched source revision` re-does the check for `source_sha` before it checks anything out, confirms that SHA is `main` or an ancestor of it (`compareCommitsWithBasehead`), then checks out **that exact SHA** — not a moving `main`. A merge that lands between coordinator verification and builder checkout cannot slip unverified code into a mission. A manual `workflow_dispatch` that omits `source_sha` uses `main` HEAD and is verified the same way, so a manual build cannot skip the health gate.
+
+`revision-health.mjs` is hashed into the builder's immutable control manifest alongside `validate-autobuild.mjs`.
 
 ### Triggers
 
@@ -69,6 +74,10 @@ The coordinator dispatches nothing while a mission is occupied: any open issue c
 
 If `main` moves between `verify-main` and dispatch, the coordinator defers to the next trigger rather than dispatch against an unverified revision.
 
+### Stale-lock recovery
+
+If a `pull_request:[closed]` event is missed, an issue can keep `automation-in-progress` with no live candidate behind it, which would stall the queue forever. On a **sweep only** (`schedule` / `workflow_dispatch`), the coordinator reconciles: for each held lock with **no** open candidate PR **and** no autonomous-build run active, it releases the lock, sets `automation-blocked`, and comments. A lock with an open candidate PR, or any lock while a builder run is active, is left untouched — genuinely live locks are never cleared. Merge and approval triggers do not reconcile; only sweeps do.
+
 ### Queue advance failures
 
 - `verify-main` red or timed out: the queue **does not advance**. On a merge trigger it comments the failing checks on the merged pull request. Repair `main`; the next merge or scheduled sweep resumes the queue.
@@ -79,8 +88,8 @@ If `main` moves between `verify-main` and dispatch, the coordinator defers to th
 ## Normal lifecycle
 
 1. A repository writer reviews the issue and acceptance criteria and adds `automation-approved`.
-2. The coordinator verifies `main` is healthy and, when no mission is occupied, dispatches the builder for this issue.
-3. The builder re-checks eligibility under the global lease and applies `automation-in-progress`.
+2. The coordinator verifies the current `main` revision is healthy and, when no mission is occupied, dispatches the builder for this issue with that verified SHA as `source_sha`.
+3. The builder re-checks eligibility under the global lease, applies `automation-in-progress`, re-verifies `source_sha` health and that it is on `main`, then checks that exact SHA out.
 4. Codex edits the isolated checkout under the repository policy.
 5. A trusted guard rejects forbidden or excessive changes.
 6. The builder pushes an attempt-specific `automation/issue-<number>/run-<run-id>` branch and opens one draft PR labelled `automation-generated`.
@@ -104,9 +113,9 @@ Actions settings endpoint as an eligibility requirement.
 
 ## Manual retry
 
-Use **Actions → Jarvis autonomous build → Run workflow** and enter the issue number only after correcting the recorded blocker. Remove a stale `automation-in-progress` label only after confirming no run is active.
+Use **Actions → Jarvis autonomous build → Run workflow**, enter the issue number, and leave `source_sha` blank (it defaults to `main` HEAD, which is verified before work) — only after correcting the recorded blocker. Remove a stale `automation-in-progress` label only after confirming no run is active, or let the next scheduled sweep reconcile it.
 
-The workflow does not retry automatically. This prevents repeated API spend and repeated unsafe edits. Agent-reported checks are advisory; PR-scoped CI on the exact candidate SHA is machine-enforced before the build is reported successful.
+The workflow does not retry automatically. This prevents repeated API spend and repeated unsafe edits. Agent-reported checks are advisory; the dispatched revision's health and the PR-scoped CI on the exact candidate SHA are machine-enforced.
 
 ## Hard stops
 

@@ -75,7 +75,7 @@ Later ideas remain queued until the agreed Priority 1-4 baseline is complete.
 
 The autonomous builder is **serial**. `jarvis-autobuild.yml` has one repository-global concurrency group and a single `workflow_dispatch` trigger; `jarvis-queue-advance.yml` is the only dispatcher and starts a mission only when none is occupied (a held `automation-in-progress` lock, an open `automation/issue-*` candidate PR, or a live builder run). One mission occupies the pipeline from approval through merge. The issue lock, attempt-specific branches, forbidden-path controls, immutable control verification, PR-scoped candidate verification, draft-PR boundary, owner-controlled merge, and commissioning/deployment hard stops are unchanged.
 
-Every dispatch path first verifies the current `main` HEAD is green from trusted producers (the `typescript.yml` checks and the individual `dynamic/github-code-scanning/codeql` per-language analyses). A scheduled sweep therefore cannot bypass an earlier failure.
+Every dispatch path first verifies the current `main` HEAD is green from trusted producers (the `typescript.yml` checks and the individual `dynamic/github-code-scanning/codeql` per-language analyses; there is no aggregate `CodeQL` check on `main`). The coordinator passes that exact SHA to the builder, which re-verifies it and checks out that revision rather than a moving `main`. A scheduled sweep cannot bypass an earlier failure, and it reconciles mission locks left behind by a missed pull-request close.
 
 Work that must genuinely proceed in parallel uses normal reviewed pull requests, not the autonomous builder. See `docs/operations/autonomous-builds.md` for the coordinator's triggers, the `main`-health gate, and failure handling.
 

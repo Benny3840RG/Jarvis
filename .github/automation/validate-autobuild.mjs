@@ -289,6 +289,34 @@ export function validateWorkflowContract(workflow) {
       "eligibility must not silently retry a blocked issue on the coordinated path",
       /automation-blocked[\s\S]{0,80}internalDispatch/i,
     ],
+    [
+      "builder must accept a verified source revision input",
+      /^\s+source_sha:\s*$/m,
+    ],
+    [
+      "builder must verify the dispatched source revision before work",
+      /name: Verify the dispatched source revision/i,
+    ],
+    [
+      "builder must load the shared revision-health module",
+      /import\([\s\S]{0,120}revision-health\.mjs/i,
+    ],
+    [
+      "builder must evaluate source revision health",
+      /evaluateRevisionHealth\(/,
+    ],
+    [
+      "builder must confirm the source revision is on main",
+      /sourceRevisionIsOnMain\(|compareCommitsWithBasehead\(/i,
+    ],
+    [
+      "builder must check out the verified source revision",
+      /ref:\s*\$\{\{\s*steps\.source\.outputs\.source_sha\s*\}\}/i,
+    ],
+    [
+      "builder must hash the revision-health verifier as an immutable control",
+      /sha256sum[\s\S]{0,200}\.github\/automation\/revision-health\.mjs/i,
+    ],
     ["workflow must have a finite timeout", /timeout-minutes:\s*[1-9]\d*/i],
     ["workflow must declare permissions", /permissions:/i],
     ["workflow must allow branch writes", /contents:\s*write/i],
@@ -346,10 +374,6 @@ export function validateWorkflowContract(workflow) {
       /^\s{2}verify-candidate:\s*$/m,
     ],
     ["candidate verification must read check runs", /checks:\s*read/i],
-    [
-      "candidate verification must query the exact ref",
-      /github\.rest\.checks\.listForRef/i,
-    ],
     ["workflow must publish candidate commit statuses", /createCommitStatus/i],
     [
       "verification status must use its own namespace",
@@ -390,6 +414,9 @@ export function validateWorkflowContract(workflow) {
   }
   const verifyCandidate = topLevelJobBody(text, "verify-candidate");
   if (verifyCandidate) {
+    if (!/github\.rest\.checks\.listForRef/i.test(verifyCandidate)) {
+      reasons.push("candidate verification must query check runs for the exact ref");
+    }
     if (!/actions:\s*write/i.test(verifyCandidate)) {
       reasons.push("candidate verification must approve held PR workflows");
     }
@@ -484,6 +511,10 @@ export function validateCiContract(workflow) {
       /\.github\/automation\/jarvis-queue-advance\.test\.mjs/i,
     ],
     [
+      "CI must run the revision-health policy tests",
+      /\.github\/automation\/revision-health\.test\.mjs/i,
+    ],
+    [
       "CI must trigger for the queue-advance workflow",
       /\.github\/workflows\/jarvis-queue-advance\.yml/i,
     ],
@@ -516,12 +547,13 @@ export function validateQueueAdvanceContract(workflow) {
     ["queue advance must not cancel a running advance", /cancel-in-progress:\s*false/i],
     ["queue advance must have a finite timeout", /timeout-minutes:\s*[1-9]\d*/i],
     ["queue advance must verify main before dispatch", /needs:\s*\[?\s*verify-main/i],
-    ["queue advance must resolve the current main revision", /rest\.repos\.getBranch|rev-parse\s+(?:origin\/)?main|listCommits/i],
-    ["queue advance must require the typescript.yml checks", /automation-policy[\s\S]{0,200}typecheck-lint-format-test[\s\S]{0,200}jarvis-console-01-build/i],
-    ["queue advance must verify individual CodeQL analyses", /Analyze \(/],
-    ["queue advance must verify the trusted code-scanning producer", /dynamic\/github-code-scanning/i],
+    ["queue advance must resolve the current main revision", /rest\.repos\.getBranch/i],
+    ["queue advance must verify health via the shared revision-health module", /revision-health\.mjs/i],
+    ["queue advance must evaluate revision health", /evaluateRevisionHealth/],
     ["queue advance must dispatch only the bounded builder", QUEUE_ADVANCE_DISPATCH_TARGET],
+    ["queue advance must forward the verified revision to the builder", /inputs:\s*\{[^}]*source_sha/i],
     ["queue advance must handle an unmerged candidate close", /merged\s*==\s*false|!\s*.*merged|pull_request\.merged\b/i],
+    ["queue advance must reconcile stale mission locks on sweeps", /reconcileLocks/],
     ["queue advance must load the pinned selection module", /select-next-mission\.mjs/i],
   ]);
   const reasons = [...checked.reasons];

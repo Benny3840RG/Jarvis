@@ -128,3 +128,33 @@ export function selectNextMission({
   eligible.sort((a, b) => Number(a.number) - Number(b.number));
   return { issue: eligible[0] ?? null, skipped, blocked: false };
 }
+
+/**
+ * Recovery reconciliation for a sweep: decide which held `automation-in-progress`
+ * locks are stale and safe to release.
+ *
+ * A lock is genuinely live while its candidate pull request is still open, or
+ * while any autonomous-build run is queued/in-progress. Otherwise the mission's
+ * run finished without a surviving candidate (merged with a missed close event,
+ * closed unmerged, or crashed), and its lock would otherwise stall the queue
+ * forever.
+ *
+ * @param lockedIssueNumbers  open issues currently carrying `automation-in-progress`
+ * @param openAutomationPrHeadRefs  head refs of all open pull requests
+ * @param builderActive  true when any jarvis-autobuild run is queued/in-progress
+ * @returns { release: number[], held: number[], reason? }
+ */
+export function reconcileLocks({
+  lockedIssueNumbers = [],
+  openAutomationPrHeadRefs = [],
+  builderActive = false,
+} = {}) {
+  const unique = [...new Set(lockedIssueNumbers.map(Number).filter((n) => Number.isSafeInteger(n)))];
+  if (builderActive) {
+    return { release: [], held: unique, reason: "an autonomous-build run is active" };
+  }
+  const openAutomationIssueNumbers = automationIssueNumbers(openAutomationPrHeadRefs);
+  const release = unique.filter((number) => !openAutomationIssueNumbers.has(number));
+  const held = unique.filter((number) => openAutomationIssueNumbers.has(number));
+  return { release, held };
+}

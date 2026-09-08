@@ -955,8 +955,11 @@ test("candidate verification approves exact-head PR runs without executing candi
   assert.equal(
     validateWorkflowContract(
       workflow.replace(
-        "github.rest.checks.listForRef",
-        "github.rest.checks.listSuitesForRef",
+        verifyJob,
+        verifyJob.replace(
+          "github.rest.checks.listForRef",
+          "github.rest.checks.listSuitesForRef",
+        ),
       ),
     ).ok,
     false,

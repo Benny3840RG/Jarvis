@@ -101,12 +101,20 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
+      contents: read
       checks: read
       actions: read
       pull-requests: write
     outputs:
       verified-sha: ${{ steps.verify.outputs.verified_sha }}
     steps:
+      - name: Check out the revision-health verifier from main
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: main
+          fetch-depth: 1
+          persist-credentials: false
+
       - name: Verify the current main revision is healthy
         id: verify
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
@@ -117,43 +125,29 @@ jobs:
           script: |
             const owner = context.repo.owner;
             const repo = context.repo.repo;
+            const { pathToFileURL } = require("node:url");
+            const { evaluateRevisionHealth, referencedRunIds } = await import(
+              pathToFileURL(
+                `${process.env.GITHUB_WORKSPACE}/.github/automation/revision-health.mjs`,
+              ).href
+            );
 
             // The verification target is always the current main HEAD.
             const branch = await github.rest.repos.getBranch({ owner, repo, branch: "main" });
             const sha = branch.data.commit.sha;
 
-            // Required checks and the workflow that is the only trusted producer.
-            const WORKFLOW_CHECKS = {
-              "automation-policy": ".github/workflows/typescript.yml",
-              "typecheck-lint-format-test": ".github/workflows/typescript.yml",
-              "jarvis-console-01-build": ".github/workflows/typescript.yml",
-            };
-            // GitHub managed code scanning exposes individual per-language jobs
-            // named `Analyze (<language>)`; there is no aggregate `CodeQL` check
-            // on main. Every expected language must pass; neutral is not success.
-            const EXPECTED_CODEQL_LANGUAGES = [
-              "actions",
-              "python",
-              "ruby",
-              "javascript-typescript",
-            ];
-            const TRUSTED_CODEQL_PATH_PREFIX = "dynamic/github-code-scanning/";
-
-            const runPathCache = new Map();
-            const runPath = async (runId) => {
-              if (!Number.isSafeInteger(runId)) return "";
-              if (!runPathCache.has(runId)) {
+            const runPathById = new Map();
+            const resolveRunPaths = async (checkRuns) => {
+              for (const runId of referencedRunIds(checkRuns)) {
+                if (runPathById.has(runId)) continue;
                 try {
                   const run = await github.rest.actions.getWorkflowRun({ owner, repo, run_id: runId });
-                  runPathCache.set(runId, run.data.path || "");
+                  runPathById.set(runId, run.data.path || "");
                 } catch {
-                  runPathCache.set(runId, "");
+                  runPathById.set(runId, "");
                 }
               }
-              return runPathCache.get(runId);
             };
-            const runIdOf = (check) =>
-              Number(/\/actions\/runs\/(\d+)/.exec(check.details_url || check.html_url || "")?.[1]);
 
             const halt = async (summary) => {
               core.error(summary);
@@ -174,57 +168,22 @@ jobs:
             let waitingFor = "checks have not started";
 
             while (Date.now() < deadline) {
-              const checks = await github.paginate(github.rest.checks.listForRef, {
+              const checkRuns = await github.paginate(github.rest.checks.listForRef, {
                 owner,
                 repo,
                 ref: sha,
                 filter: "latest",
                 per_page: 100,
               });
-              const problems = [];
-              const pending = [];
-
-              for (const [name, wfPath] of Object.entries(WORKFLOW_CHECKS)) {
-                const run = checks
-                  .filter((c) => c.name === name && c.app?.slug === "github-actions")
-                  .sort((a, b) => Number(b.id) - Number(a.id))[0];
-                if (!run || run.status !== "completed") {
-                  pending.push(name);
-                  continue;
-                }
-                if ((await runPath(runIdOf(run))) !== wfPath) {
-                  problems.push(`${name}: untrusted producer`);
-                  continue;
-                }
-                if (run.conclusion !== "success") {
-                  problems.push(`${name}:${run.conclusion || "unknown"}`);
-                }
-              }
-
-              const perLanguage = new Map();
-              for (const check of checks) {
-                const language = /^Analyze \(([^)]+)\)\s*$/.exec(check.name)?.[1];
-                if (!language || check.app?.slug !== "github-actions") continue;
-                if (!(await runPath(runIdOf(check))).startsWith(TRUSTED_CODEQL_PATH_PREFIX)) continue;
-                perLanguage.set(language, { status: check.status, conclusion: check.conclusion });
-              }
-              for (const language of EXPECTED_CODEQL_LANGUAGES) {
-                const analysis = perLanguage.get(language);
-                if (!analysis || analysis.status !== "completed") {
-                  pending.push(`CodeQL(${language})`);
-                  continue;
-                }
-                if (analysis.conclusion !== "success") {
-                  problems.push(`CodeQL(${language}):${analysis.conclusion || "unknown"}`);
-                }
-              }
+              await resolveRunPaths(checkRuns);
+              const { ok, problems, pending } = evaluateRevisionHealth({ checkRuns, runPathById });
 
               if (problems.length > 0) {
                 await halt(`main \`${sha}\` is not healthy (${problems.join(", ")}).`);
                 core.setFailed(`main is not healthy: ${problems.join(", ")}`);
                 return;
               }
-              if (pending.length === 0) {
+              if (ok) {
                 core.info(`main \`${sha}\` verified healthy from trusted producers.`);
                 core.setOutput("verified_sha", sha);
                 return;
@@ -267,7 +226,7 @@ jobs:
             const owner = context.repo.owner;
             const repo = context.repo.repo;
             const { pathToFileURL } = require("node:url");
-            const { selectNextMission } = await import(
+            const { selectNextMission, reconcileLocks } = await import(
               pathToFileURL(
                 `${process.env.GITHUB_WORKSPACE}/.github/automation/select-next-mission.mjs`,
               ).href
@@ -338,16 +297,66 @@ jobs:
               .filter((pull) => pull.head.repo?.full_name === ownRepo)
               .map((pull) => pull.head.ref);
             const issues = approved.filter((issue) => !issue.pull_request);
-            const lockActive =
-              inProgress.filter((issue) => !issue.pull_request).length > 0;
+            const lockedIssueNumbers = inProgress
+              .filter((issue) => !issue.pull_request)
+              .map((issue) => issue.number);
             const builderActive = builderRuns.data.workflow_runs.some((run) =>
               ["queued", "in_progress", "waiting", "pending", "requested"].includes(run.status),
             );
 
+            // Recovery reconciliation: a missed pull_request:[closed] event leaves
+            // a mission lock that no live candidate or run backs, which would
+            // stall the queue forever. Reconcile only on a sweep, and only
+            // release locks that are provably stale.
+            const isSweep =
+              process.env.EVENT_NAME === "schedule" ||
+              process.env.EVENT_NAME === "workflow_dispatch";
+            let effectiveLocks = lockedIssueNumbers;
+            if (isSweep) {
+              const { release, held, reason } = reconcileLocks({
+                lockedIssueNumbers,
+                openAutomationPrHeadRefs: ownHeadRefs,
+                builderActive,
+              });
+              effectiveLocks = held;
+              if (reason) core.info(`Lock reconciliation skipped: ${reason}.`);
+              for (const staleIssue of release) {
+                try {
+                  await github.rest.issues.removeLabel({
+                    owner,
+                    repo,
+                    issue_number: staleIssue,
+                    name: "automation-in-progress",
+                  });
+                } catch (error) {
+                  if (error.status !== 404) throw error;
+                }
+                await github.rest.issues.addLabels({
+                  owner,
+                  repo,
+                  issue_number: staleIssue,
+                  labels: ["automation-blocked"],
+                });
+                await github.rest.issues.createComment({
+                  owner,
+                  repo,
+                  issue_number: staleIssue,
+                  body:
+                    `Recovered a stale mission lock: no open candidate pull request ` +
+                    `and no active autonomous-build run. If a candidate was merged, ` +
+                    `this is safe to ignore. Otherwise clear \`automation-blocked\` to re-queue.`,
+                });
+                core.info(`Released stale mission lock on #${staleIssue}.`);
+              }
+              for (const liveIssue of held) {
+                core.info(`Kept live mission lock on #${liveIssue}.`);
+              }
+            }
+
             const result = selectNextMission({
               issues,
               openAutomationPrHeadRefs: ownHeadRefs,
-              lockActive: lockActive || builderActive,
+              lockActive: effectiveLocks.length > 0 || builderActive,
             });
             if (result.blocked) {
               core.info(`Queue busy: ${result.reason}. No mission dispatched.`);
@@ -377,12 +386,14 @@ jobs:
               return;
             }
 
+            // Carry the verified revision to the builder so its checkout and its
+            // own health re-check are bound to this exact SHA, not a moving main.
             await github.rest.actions.createWorkflowDispatch({
               owner,
               repo,
               workflow_id: "jarvis-autobuild.yml",
               ref: "main",
-              inputs: { issue_number: String(issueNumber) },
+              inputs: { issue_number: String(issueNumber), source_sha: verifiedSha },
             });
             await github.rest.issues.createComment({
               owner,

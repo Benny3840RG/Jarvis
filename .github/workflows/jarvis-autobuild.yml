@@ -10,6 +10,13 @@ on:
         description: Open issue number carrying automation-approved
         required: true
         type: number
+      source_sha:
+        description: >-
+          Verified main revision to build from. jarvis-queue-advance.yml always
+          supplies this. A manual dispatch may leave it blank to use main HEAD;
+          the builder verifies the revision either way.
+        required: false
+        type: string
 
 permissions: {}
 
@@ -24,11 +31,13 @@ jobs:
   build:
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 55
     permissions:
       contents: write
       issues: write
       pull-requests: write
+      checks: read
+      actions: read
     outputs:
       source-sha: ${{ steps.controls.outputs.source_sha }}
       dependencies-outcome: ${{ steps.dependencies.outcome }}
@@ -201,10 +210,96 @@ jobs:
             exit 1
           fi
 
-      - name: Check out current main
+      - name: Check out current main for the revision verifier
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: main
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Verify the dispatched source revision
+        id: source
+        timeout-minutes: 12
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          INPUT_SOURCE_SHA: ${{ inputs.source_sha }}
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const { pathToFileURL } = require("node:url");
+            const { evaluateRevisionHealth, referencedRunIds, sourceRevisionIsOnMain } = await import(
+              pathToFileURL(
+                `${process.env.GITHUB_WORKSPACE}/.github/automation/revision-health.mjs`,
+              ).href
+            );
+
+            const branch = await github.rest.repos.getBranch({ owner, repo, branch: "main" });
+            const mainSha = branch.data.commit.sha;
+            const requested = (process.env.INPUT_SOURCE_SHA || "").trim();
+            const sha = /^[0-9a-f]{40}$/.test(requested) ? requested : mainSha;
+
+            if (sha !== mainSha) {
+              const comparison = await github.rest.repos.compareCommitsWithBasehead({
+                owner,
+                repo,
+                basehead: `${sha}...${mainSha}`,
+              });
+              if (!sourceRevisionIsOnMain(comparison.data.status)) {
+                core.setFailed(
+                  `Source revision ${sha} is not on main (status: ${comparison.data.status}).`,
+                );
+                return;
+              }
+            }
+
+            const runPathById = new Map();
+            const resolveRunPaths = async (checkRuns) => {
+              for (const runId of referencedRunIds(checkRuns)) {
+                if (runPathById.has(runId)) continue;
+                try {
+                  const run = await github.rest.actions.getWorkflowRun({ owner, repo, run_id: runId });
+                  runPathById.set(runId, run.data.path || "");
+                } catch {
+                  runPathById.set(runId, "");
+                }
+              }
+            };
+
+            // The coordinator already verified this SHA, so this normally returns
+            // on the first pass. The budget only covers a manual dispatch made
+            // while main CI is still finishing.
+            const deadline = Date.now() + 8 * 60 * 1000;
+            let waitingFor = "checks have not started";
+            while (Date.now() < deadline) {
+              const checkRuns = await github.paginate(github.rest.checks.listForRef, {
+                owner,
+                repo,
+                ref: sha,
+                filter: "latest",
+                per_page: 100,
+              });
+              await resolveRunPaths(checkRuns);
+              const { ok, problems, pending } = evaluateRevisionHealth({ checkRuns, runPathById });
+              if (problems.length > 0) {
+                core.setFailed(`Source revision ${sha} is not healthy: ${problems.join(", ")}`);
+                return;
+              }
+              if (ok) {
+                core.info(`Source revision ${sha} verified healthy from trusted producers.`);
+                core.setOutput("source_sha", sha);
+                return;
+              }
+              waitingFor = pending.join(", ");
+              core.info(`Waiting for ${sha} checks: ${waitingFor}`);
+              await new Promise((resolve) => setTimeout(resolve, 15_000));
+            }
+            core.setFailed(`Timed out verifying source revision ${sha}: ${waitingFor}`);
+
+      - name: Check out the verified source revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ steps.source.outputs.source_sha }}
           fetch-depth: 1
           persist-credentials: false
 
@@ -225,6 +320,7 @@ jobs:
           control_manifest="$RUNNER_TEMP/jarvis-control.sha256"
           sha256sum \
             .github/automation/validate-autobuild.mjs \
+            .github/automation/revision-health.mjs \
             .github/automation/codex-autobuild-prompt.md \
             .github/workflows/jarvis-autobuild.yml \
             >"$control_manifest"
