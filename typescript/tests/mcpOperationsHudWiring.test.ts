@@ -580,26 +580,47 @@ describe("HUD connection staleness detection", () => {
     "STATUS_STALE_MS constant not found in dashboard-v1.html",
   );
 
-  const staleSource = extractSource(/(function isConnectionStale\([\s\S]*?\})\n\s+function update/);
+  const staleSource = extractSource(
+    /(function structured\([\s\S]*?\})\n\s+window\.addEventListener\("message"/,
+  );
+
+  function tick(): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, 0));
+  }
 
   function loadConnectionHealth(
-    state: { status: unknown; lastStatusAt: number },
+    state: { status: unknown; lastStatusAt: number; tasks?: unknown[]; reminders?: unknown[] },
     render: () => void,
+    callTool: (name: string, args?: Record<string, unknown>) => Promise<unknown>,
+    heartbeatTimeoutMs = 10000,
   ) {
+    state.tasks ??= [];
+    state.reminders ??= [];
     const run = new Function(
       "state",
       "render",
+      "callTool",
       "STATUS_STALE_MS",
-      `"use strict"; ${staleSource}; return { isConnectionStale, checkConnectionHealth };`,
+      "HEARTBEAT_TIMEOUT_MS",
+      `"use strict"; ${staleSource}; return { isConnectionStale, checkConnectionHealth, update };`,
     );
-    return run(state, render, declaredStaleMs) as {
+    return run(state, render, callTool, declaredStaleMs, heartbeatTimeoutMs) as {
       isConnectionStale: (lastUpdateAt: number, now: number, thresholdMs: number) => boolean;
       checkConnectionHealth: () => void;
+      update: (result: unknown) => void;
     };
   }
 
+  const neverCall = async (): Promise<never> => {
+    throw new Error("callTool must not be invoked here");
+  };
+
   it("treats a never-updated connection and one older than the threshold as stale", () => {
-    const { isConnectionStale } = loadConnectionHealth({ status: null, lastStatusAt: 0 }, () => {});
+    const { isConnectionStale } = loadConnectionHealth(
+      { status: null, lastStatusAt: 0 },
+      () => {},
+      neverCall,
+    );
     const now = Date.now();
 
     assert.equal(isConnectionStale(0, now, declaredStaleMs), true);
@@ -608,25 +629,16 @@ describe("HUD connection staleness detection", () => {
     assert.equal(isConnectionStale(now, now, declaredStaleMs), false);
   });
 
-  it("clears a stale status and re-renders instead of leaving the last-known snapshot on screen", () => {
-    const state = { status: { status: "ok" }, lastStatusAt: Date.now() - declaredStaleMs - 1000 };
-    let renderCalls = 0;
-    const { checkConnectionHealth } = loadConnectionHealth(state, () => {
-      renderCalls += 1;
-    });
-
-    checkConnectionHealth();
-
-    assert.equal(state.status, null);
-    assert.equal(renderCalls, 1);
-  });
-
-  it("leaves a fresh status untouched and never re-renders while the connection is healthy", () => {
+  it("leaves a healthy, idle-but-visible dashboard alone -- freshness never triggers a refresh or a clear", () => {
     const state = { status: { status: "ok" }, lastStatusAt: Date.now() };
     let renderCalls = 0;
-    const { checkConnectionHealth } = loadConnectionHealth(state, () => {
-      renderCalls += 1;
-    });
+    const { checkConnectionHealth } = loadConnectionHealth(
+      state,
+      () => {
+        renderCalls += 1;
+      },
+      neverCall,
+    );
 
     checkConnectionHealth();
 
@@ -634,16 +646,108 @@ describe("HUD connection staleness detection", () => {
     assert.equal(renderCalls, 0);
   });
 
-  it("does not re-render on every heartbeat once a stale connection has already been cleared", () => {
+  it("does not clear a stale-by-the-clock dashboard when the bounded liveness refresh succeeds", async () => {
+    const state = { status: { status: "ok" }, lastStatusAt: Date.now() - declaredStaleMs - 1000 };
+    let renderCalls = 0;
+    let callToolCalls = 0;
+    const { checkConnectionHealth } = loadConnectionHealth(
+      state,
+      () => {
+        renderCalls += 1;
+      },
+      async () => {
+        callToolCalls += 1;
+        return { structuredContent: {} };
+      },
+    );
+
+    checkConnectionHealth();
+    await tick();
+
+    assert.equal(callToolCalls, 1);
+    assert.deepEqual(state.status, { status: "ok" });
+    assert.equal(renderCalls, 0);
+  });
+
+  it("clears the display only once the bounded liveness refresh actually fails", async () => {
+    const state = { status: { status: "ok" }, lastStatusAt: Date.now() - declaredStaleMs - 1000 };
+    let renderCalls = 0;
+    const { checkConnectionHealth } = loadConnectionHealth(
+      state,
+      () => {
+        renderCalls += 1;
+      },
+      async () => {
+        throw new Error("bridge is down");
+      },
+    );
+
+    checkConnectionHealth();
+    await tick();
+
+    assert.equal(state.status, null);
+    assert.equal(renderCalls, 1);
+  });
+
+  it("treats a refresh that never settles as a failure once the bounded timeout elapses", async () => {
+    const state = { status: { status: "ok" }, lastStatusAt: Date.now() - declaredStaleMs - 1000 };
+    let renderCalls = 0;
+    const { checkConnectionHealth } = loadConnectionHealth(
+      state,
+      () => {
+        renderCalls += 1;
+      },
+      () => new Promise(() => {}), // a hung request that never resolves or rejects
+      15, // small bounded timeout so the test stays fast
+    );
+
+    checkConnectionHealth();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    assert.equal(state.status, null);
+    assert.equal(renderCalls, 1);
+  });
+
+  it("keeps retrying every heartbeat but never re-renders once a stale connection is already cleared", async () => {
     const state = { status: null as unknown, lastStatusAt: Date.now() - declaredStaleMs - 1000 };
     let renderCalls = 0;
-    const { checkConnectionHealth } = loadConnectionHealth(state, () => {
-      renderCalls += 1;
-    });
+    let callToolCalls = 0;
+    const { checkConnectionHealth } = loadConnectionHealth(
+      state,
+      () => {
+        renderCalls += 1;
+      },
+      async () => {
+        callToolCalls += 1;
+        throw new Error("still down");
+      },
+    );
 
     checkConnectionHealth();
+    await tick();
     checkConnectionHealth();
+    await tick();
 
+    assert.equal(callToolCalls, 2);
     assert.equal(renderCalls, 0);
+  });
+
+  it("only refreshes freshness from a status-bearing response, not any unrelated tool result", () => {
+    const state = { status: null as unknown, lastStatusAt: 0, tasks: [], reminders: [] };
+    const { update } = loadConnectionHealth(state, () => {}, neverCall);
+
+    update({ structuredContent: { tasks: [{ id: "1" }] } });
+    assert.equal(
+      state.lastStatusAt,
+      0,
+      "an unrelated (status-less) result must not extend freshness",
+    );
+
+    const before = Date.now();
+    update({ structuredContent: { status: { status: "ok" } } });
+    assert.ok(
+      state.lastStatusAt >= before,
+      "a genuine status-bearing result must refresh freshness",
+    );
   });
 });
