@@ -108,6 +108,41 @@ jobs:
     outputs:
       verified-sha: ${{ steps.verify.outputs.verified_sha }}
     steps:
+      - name: Require the labeler to be a repository writer
+        # `issues: [labeled]` also fires for a triage-role user, who may apply
+        # labels but is not authorised to start an autonomous build. The builder
+        # trusts a dispatch from this coordinator (github-actions[bot]) and skips
+        # its own actor check, so the writer gate for the label path lives here.
+        # Fails closed: any lookup error refuses the advance.
+        if: github.event_name == 'issues'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          LABELER: ${{ github.event.sender.login }}
+        with:
+          script: |
+            const username = process.env.LABELER;
+            let permission;
+            try {
+              const { data } = await github.rest.repos.getCollaboratorPermissionLevel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                username,
+              });
+              permission = data.permission;
+            } catch (error) {
+              core.setFailed(
+                `Could not confirm \`${username}\` is a repository writer ` +
+                  `(${error.status || error.message}); refusing to advance the queue.`,
+              );
+              return;
+            }
+            if (!["admin", "maintain", "write"].includes(permission)) {
+              core.setFailed(
+                `\`${username}\` applied automation-approved but is not a repository ` +
+                  `writer (permission: ${permission}); refusing to advance the queue.`,
+              );
+            }
+
       - name: Check out the revision-health verifier from main
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:

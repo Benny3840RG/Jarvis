@@ -189,7 +189,12 @@ export function evaluatePatch(patch) {
     }
     if (!/^[+-]/.test(line)) continue;
     const currentPath = line.startsWith("+") ? newPath : oldPath;
-    if (/^docs\/operations\/.+\.md$/.test(currentPath)) continue;
+    // Markdown anywhere under `docs/` is prose about the system, not an
+    // executable authority control — a ledger or design note has to be able to
+    // say "review, approve, merge, commission or deploy". A rename FROM an
+    // executable path is still scanned: `oldPath` for the removed lines is the
+    // original location, which does not match here.
+    if (/^docs\/.+\.md$/.test(currentPath)) continue;
     if (sensitive.test(line.slice(1))) {
       reasons.push(
         `authority-sensitive patch content at diff line ${index + 1}`,
@@ -491,14 +496,6 @@ export function validateCiContract(workflow) {
   const text = String(workflow ?? "");
   const checked = requirePatterns(text, [
     [
-      "CI must trigger for the autonomous builder workflow",
-      /\.github\/workflows\/jarvis-autobuild\.yml/i,
-    ],
-    [
-      "CI must trigger for automation policy changes",
-      /\.github\/automation\/\*\*/i,
-    ],
-    [
       "CI must define the automation-policy job",
       /^\s{2}automation-policy:\s*$/m,
     ],
@@ -515,15 +512,25 @@ export function validateCiContract(workflow) {
       /\.github\/automation\/revision-health\.test\.mjs/i,
     ],
     [
-      "CI must trigger for the queue-advance workflow",
-      /\.github\/workflows\/jarvis-queue-advance\.yml/i,
-    ],
-    [
       "automation-policy must use Node.js 24",
       /node-version:\s*[\"']?24[\"']?/i,
     ],
   ]);
   const reasons = [...checked.reasons];
+  // `jarvis-queue-advance.yml`'s `verify-main` waits for this workflow's required
+  // checks on the current `main` HEAD before dispatching a mission. Neither
+  // trigger may carry a paths filter: a commit on `main` filtered out of this
+  // workflow would never produce those checks, and the queue would stall waiting
+  // for them. `pull_request` runs unconditionally, so every commit that reaches
+  // `main` has already produced them at least once.
+  const pushSection = text.match(
+    /^\s{2}push:\s*$([\s\S]*?)(?=^\s{2}\S)/m,
+  )?.[1];
+  if (pushSection && /^\s{4}paths:/m.test(pushSection)) {
+    reasons.push(
+      "push CI must not use path filters (verify-main needs every main commit to produce the required checks)",
+    );
+  }
   const pullRequestSection = text.match(
     /^\s{2}pull_request:\s*$([\s\S]*?)(?=^\S|^\s{2}[a-zA-Z_-]+:\s*$)/m,
   )?.[1];
@@ -547,6 +554,8 @@ export function validateQueueAdvanceContract(workflow) {
     ["queue advance must not cancel a running advance", /cancel-in-progress:\s*false/i],
     ["queue advance must have a finite timeout", /timeout-minutes:\s*[1-9]\d*/i],
     ["queue advance must verify main before dispatch", /needs:\s*\[?\s*verify-main/i],
+    ["queue advance must gate label approvals on the labeler's permission", /getCollaboratorPermissionLevel/],
+    ["queue advance must read the labeler from the trusted event payload", /github\.event\.sender\.login/],
     ["queue advance must resolve the current main revision", /rest\.repos\.getBranch/i],
     ["queue advance must verify health via the shared revision-health module", /revision-health\.mjs/i],
     ["queue advance must evaluate revision health", /evaluateRevisionHealth/],
