@@ -76,7 +76,7 @@ If `main` moves between `verify-main` and dispatch, the coordinator defers to th
 
 ### Stale-lock recovery
 
-If a `pull_request:[closed]` event is missed, an issue can keep `automation-in-progress` with no live candidate behind it, which would stall the queue forever. On a **sweep only** (`schedule` / `workflow_dispatch`), the coordinator reconciles: for each held lock with **no** open candidate PR **and** no autonomous-build run active, it releases the lock, sets `automation-blocked`, and comments. A lock with an open candidate PR, or any lock while a builder run is active, is left untouched — genuinely live locks are never cleared. Merge and approval triggers do not reconcile; only sweeps do.
+If a `pull_request:[closed]` event is missed, an issue can keep `automation-in-progress` with no live candidate behind it, which would stall the queue forever. On a **sweep only** (`schedule` / `workflow_dispatch`), the coordinator reconciles: for each held lock with **no** open candidate PR **and** no autonomous-build run active across the paginated history, it verifies that the newest bot-authored lock receipt identifies a completed builder run before releasing the lock, setting `automation-blocked`, and commenting. Missing, inaccessible or non-terminal owning-run evidence preserves the lock. A lock with an open candidate PR, or any lock while a builder run is active, is left untouched — genuinely live locks are never cleared. Merge and approval triggers do not reconcile; only sweeps do.
 
 ### Queue advance failures
 

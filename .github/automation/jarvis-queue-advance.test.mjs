@@ -265,7 +265,15 @@ async function run(stepName, { env = {}, github, core: coreOverrides = {} } = {}
   const gh = {
     paginate: async (fn, params) => {
       const out = await fn(params);
-      return Array.isArray(out) ? out : out.data;
+      if (!out.data?.workflow_runs) return Array.isArray(out) ? out : out.data;
+      const rows = [...out.data.workflow_runs];
+      let page = 1;
+      while (rows.length < (out.data.total_count ?? rows.length)) {
+        const next = await fn({ ...params, page: ++page });
+        if (!next.data.workflow_runs.length) break;
+        rows.push(...next.data.workflow_runs);
+      }
+      return rows;
     },
     rest: {
       ...github.rest,
@@ -433,6 +441,10 @@ function advanceGithub({
     rest: {
       repos: { getBranch: async () => ({ data: { commit: { sha: currentSha } } }) },
       issues: {
+        listComments: async ({ issue_number }) => ({data:[{
+          id:issue_number, user:{login:"github-actions[bot]"},
+          body:`<!-- jarvis-autobuild-lock:${issue_number} -->`,
+        }]}),
         get: async ({ issue_number }) => ({
           data: issueById[issue_number] ?? { number: issue_number, state: "open", labels: [], body: "" },
         }),
@@ -446,6 +458,7 @@ function advanceGithub({
       pulls: { list: async () => ({ data: openPulls }) },
       actions: {
         listWorkflowRuns: async () => ({ data: { workflow_runs: builderRuns } }),
+        getWorkflowRun: async () => ({data:{status:"completed",conclusion:"success",path:".github/workflows/jarvis-autobuild.yml"}}),
       },
     },
     _verifiedSha: verifiedSha,
@@ -689,3 +702,34 @@ test("simultaneous approvals dispatch one worker and leave the rest queued for l
   });
   assert.equal(afterMerge.dispatched[0].inputs.issue_number, "301");
 });
+
+test("a sweep preserves a live run beyond the first history page", async () => {
+  const held = {number:190};
+  const github = advanceGithub({inProgress:[held]});
+  const history = [...Array.from({length:105},(_,i)=>({id:200-i,status:"completed"})), {id:94,status:"in_progress"}];
+  github.rest.actions.listWorkflowRuns = async ({per_page=30,page=1}) => ({data:{
+    total_count:history.length,workflow_runs:history.slice((page-1)*per_page,page*per_page),
+  }});
+  const calls = await run("Select and dispatch at most one mission", {
+    env:{VERIFIED_SHA:HEALTHY_MAIN_SHA,EVENT_NAME:"schedule"},github,
+  });
+  assert.deepEqual(calls.removed,[]);
+  assert.deepEqual(calls.dispatched,[]);
+});
+
+for (const scenario of ["missing", "live", "inaccessible", "wrong-workflow"]) {
+  test(`sweep preserves lock with ${scenario} owning-run evidence`, async () => {
+    const github = advanceGithub({inProgress:[{number:190}]});
+    if (scenario === "missing") github.rest.issues.listComments = async () => ({data:[]});
+    else github.rest.actions.getWorkflowRun = async () => {
+      if (scenario === "inaccessible") throw new Error("unavailable");
+      return {data:{status:scenario === "live" ? "in_progress" : "completed", conclusion:"success",
+        path:scenario === "wrong-workflow" ? "other.yml" : ".github/workflows/jarvis-autobuild.yml"}};
+    };
+    const calls = await run("Select and dispatch at most one mission", {
+      env:{VERIFIED_SHA:HEALTHY_MAIN_SHA,EVENT_NAME:"schedule"},github,
+    });
+    assert.deepEqual(calls.removed,[]);
+    assert.deepEqual(calls.dispatched,[]);
+  });
+}

@@ -115,3 +115,16 @@ test("sourceRevisionIsOnMain accepts only identical or ancestor revisions", () =
   assert.equal(sourceRevisionIsOnMain("diverged"), false);
   assert.equal(sourceRevisionIsOnMain(undefined), false);
 });
+
+for (const conclusion of ["failure", null, "success"]) {
+  test(`CodeQL uses newest check regardless of ordering (${conclusion})`, () => {
+    for (const reverse of [false, true]) {
+      const input = healthyInput();
+      input.checkRuns = input.checkRuns.filter(c => c.name !== "Analyze (ruby)");
+      const old = { ...check("Analyze (ruby)", {run:CODEQL_RUN}), id:1, conclusion:"success" };
+      const latest = { ...old, id:2, conclusion, status:conclusion === null ? "in_progress" : "completed" };
+      input.checkRuns.push(...(reverse ? [old, latest] : [latest, old]));
+      assert.equal(evaluateRevisionHealth(input).ok, conclusion === "success");
+    }
+  });
+}

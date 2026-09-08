@@ -1,15 +1,16 @@
 import {
   GeminiTotalityReasoner,
   resolveGeminiTotalityConfig,
-  resolveGeminiTotalityModel,
 } from "../integrations/gemini/totalityReasoner.js";
 import {
   OpenAITotalityReasoner,
   resolveOpenAITotalityConfig,
-  resolveOpenAITotalityModel,
 } from "../integrations/openai/totalityReasoner.js";
 import { ConvexTotalityJournal } from "../persistence/convexTotalityJournal.js";
-import { resolvePersistenceProviderName } from "../persistence/providerSelection.js";
+import {
+  resolvePersistenceProviderName,
+  type PersistenceProviderName,
+} from "../persistence/providerSelection.js";
 import { TotalityPipeline } from "./totalityPipeline.js";
 
 export type TotalityReasonerProviderName = "openai" | "gemini";
@@ -35,8 +36,23 @@ export type TotalityReasoningStatus = {
 const UNVERIFIED_REASON =
   "Configuration only -- invocation has not been verified with a live provider call.";
 
-export function resolveTotalityReasoningStatus(): TotalityReasoningStatus {
-  if (resolvePersistenceProviderName() !== "convex") {
+/**
+ * Accepts the already-resolved persistence provider name rather than
+ * re-reading PERSISTENCE_PROVIDER itself, so this can never disagree with
+ * the `provider` field callers (e.g. SystemStatusService) report alongside
+ * it from the same resolved value.
+ *
+ * Resolves the reasoner's full config via the same
+ * `resolveOpenAITotalityConfig`/`resolveGeminiTotalityConfig` functions
+ * `createTotalityPipelineFromEnv` uses -- never a hand-rolled subset of
+ * their validation -- so "configured" here and "a pipeline is actually
+ * constructed" there cannot drift apart. The resolved API key is discarded;
+ * only `model` is ever reported.
+ */
+export function resolveTotalityReasoningStatus(
+  providerName: PersistenceProviderName = resolvePersistenceProviderName(),
+): TotalityReasoningStatus {
+  if (providerName !== "convex") {
     return {
       status: "not-configured",
       provider: null,
@@ -56,53 +72,19 @@ export function resolveTotalityReasoningStatus(): TotalityReasoningStatus {
       reason: "TOTALITY_REASONER_PROVIDER is invalid.",
     };
   }
-  if (provider === "gemini") {
-    if (!process.env.GEMINI_API_KEY) {
-      return {
-        status: "not-configured",
-        provider,
-        model: null,
-        reason: "GEMINI_API_KEY is not set.",
-      };
-    }
-    try {
-      return {
-        status: "configured",
-        provider,
-        model: resolveGeminiTotalityModel(process.env.GEMINI_MODEL),
-        reason: UNVERIFIED_REASON,
-      };
-    } catch {
-      return {
-        status: "not-configured",
-        provider,
-        model: null,
-        reason: "GEMINI_MODEL is invalid.",
-      };
-    }
-  }
 
-  if (!process.env.OPENAI_API_KEY) {
-    return {
-      status: "not-configured",
-      provider,
-      model: null,
-      reason: "OPENAI_API_KEY is not set.",
-    };
-  }
   try {
-    return {
-      status: "configured",
-      provider,
-      model: resolveOpenAITotalityModel(process.env.OPENAI_MODEL),
-      reason: UNVERIFIED_REASON,
-    };
-  } catch {
+    const model =
+      provider === "gemini"
+        ? resolveGeminiTotalityConfig().model
+        : resolveOpenAITotalityConfig().model;
+    return { status: "configured", provider, model, reason: UNVERIFIED_REASON };
+  } catch (error) {
     return {
       status: "not-configured",
       provider,
       model: null,
-      reason: "OPENAI_MODEL is invalid.",
+      reason: error instanceof Error ? error.message : "Reasoning configuration is invalid.",
     };
   }
 }

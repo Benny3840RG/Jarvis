@@ -85,7 +85,10 @@ export function evaluateRevisionHealth({ checkRuns = [], runPathById = new Map()
     if (!language || check.app?.slug !== "github-actions") continue;
     const path = runPathById.get(runIdFromCheck(check)) || "";
     if (!path.startsWith(TRUSTED_CODEQL_PATH_PREFIX)) continue;
-    perLanguage.set(language, { status: check.status, conclusion: check.conclusion });
+    const current = perLanguage.get(language);
+    if (!current || Number(check.id) > Number(current.id)) {
+      perLanguage.set(language, check);
+    }
   }
   for (const language of EXPECTED_CODEQL_LANGUAGES) {
     const analysis = perLanguage.get(language);
