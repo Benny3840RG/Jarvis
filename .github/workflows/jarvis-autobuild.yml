@@ -425,6 +425,7 @@ jobs:
           prompt-file: .jarvis-autobuild-prompt.md
           permission-profile: ":workspace"
           safety-strategy: drop-sudo
+          allow-bot-users: github-actions[bot]
           model: gpt-5.6-luna
           effort: medium
 
