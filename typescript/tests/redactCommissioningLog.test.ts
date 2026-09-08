@@ -6,6 +6,31 @@ import { fileURLToPath } from "node:url";
 import { redactCommissioningLog, RedactionError } from "../scripts/redact-commissioning-log.mjs";
 
 describe("commissioning log redaction", () => {
+  const githubTokens = [
+    ["classic installation", `ghs_${"a".repeat(36)}`],
+    ["stateless installation", `ghs_${"a".repeat(170)}.${"b".repeat(170)}.${"c".repeat(174)}`],
+    [
+      "variable-length stateless installation",
+      `ghs_123_${"a".repeat(300)}.b_c.${"d".repeat(720)}-`,
+    ],
+    ["short JWT segments", "ghs_123_ab.cd_ef.gh-ij_kl-"],
+    ["classic personal access", `ghp_${"a".repeat(36)}`],
+    ["fine-grained personal access", `github_pat_${"a".repeat(82)}`],
+  ];
+
+  for (const [format, token] of githubTokens) {
+    it(`fully redacts ${format} tokens without a known-secret list`, () => {
+      const redacted = redactCommissioningLog(`before "${token}" between '${token}' after`, []);
+
+      assert.equal(
+        redacted,
+        "before \"[REDACTED_GITHUB_TOKEN]\" between '[REDACTED_GITHUB_TOKEN]' after",
+      );
+      // Repeated calls must not skip matches through a stateful residual regex.
+      assert.equal(redactCommissioningLog(token, []), "[REDACTED_GITHUB_TOKEN]");
+    });
+  }
+
   it("redacts known credentials and rejects residual credential-shaped data", () => {
     const redacted = redactCommissioningLog(
       "Authorization: Bearer secret-token\nOPENAI_API_KEY=sk-proj-secret-value",

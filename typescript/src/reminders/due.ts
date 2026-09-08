@@ -14,6 +14,7 @@ type CalendarDateTime = {
 };
 
 const DAY_MS = 24 * 60 * 60 * 1_000;
+const MAX_DATE_TIMESTAMP = 8_640_000_000_000_000;
 const WEEKDAYS = [
   "sunday",
   "monday",
@@ -342,8 +343,13 @@ export function validateReminderDue(due: ReminderDue): ReminderDue {
   if (hasAt !== hasTimezone) {
     throw new Error("A normalized reminder due value requires both a timestamp and timezone.");
   }
-  if (due.at !== undefined && !Number.isFinite(due.at)) {
-    throw new Error("Reminder due timestamp must be a finite number.");
+  if (due.at !== undefined) {
+    if (!Number.isFinite(due.at)) {
+      throw new Error("Reminder due timestamp must be a finite number.");
+    }
+    if (Math.abs(due.at) > MAX_DATE_TIMESTAMP) {
+      throw new Error("Reminder due timestamp must be within the supported Date range.");
+    }
   }
 
   const timezone = due.timezone === undefined ? undefined : validateStoredTimezone(due.timezone);
