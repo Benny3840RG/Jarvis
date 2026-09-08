@@ -5,8 +5,10 @@ contracts and durable Jarvis records; checklist state here grants no authority.
 
 ## Current task
 
-Publish and verify the fail-closed evidence follow-up on a fresh branch from
-`main`, after pull request #415 merged.
+Reconcile this audit ledger with the completed bounded autonomous mission
+evidence and the current serial queue-coordinator boundary. The historical
+Phase 1 implementation and repair entries below remain evidence, not current
+tasks.
 
 ## Completed in this work sequence
 
@@ -104,19 +106,29 @@ Publish and verify the fail-closed evidence follow-up on a fresh branch from
 
 ## Blockers
 
-- A real external mission run requires configured GitHub, Convex service and
-  independent-proof approval credentials. No production credentials were
-  requested or used during deterministic implementation/tests.
-- No implementation blocker remains. Pull request #415 is merged, and the
-  fail-closed audit repairs are isolated on a fresh `main`-based follow-up
-  branch so the merged branch is not reused.
+- Autonomous-development maturity remains incomplete. Issue #462 (long-run
+  runner reliability) is still unproven: the successful bounded mission
+  recorded below demonstrates the path, but a short run does not establish
+  long-duration runner reliability. The tracked follow-up issues #324, #293,
+  #294, #297, #302, #303, #306 and #307 also remain open where they are not
+  otherwise closed by current evidence.
+- External/live commissioning and production gates remain separate blockers.
+  Production deployment, commissioning beyond the authorised development
+  path, and any credential or operator action remain unauthorised unless their
+  existing gates are explicitly satisfied. Historical credential and smoke
+  failures below are preserved as evidence and are not treated as current
+  implementation failures.
 
 ## Next task
 
-Publish the follow-up branch, open its focused pull request, and drive checks
-and independent review to an exact-head merge-authority decision.
+Continue the remaining bounded autonomous-development maturity work, beginning
+with the long-run reliability evidence tracked by #462, while keeping external
+commissioning and production work behind their existing gates.
 
 ## Publication evidence
+
+The following is historical evidence for the earlier Phase 1 implementation;
+it is not the current task or blocker:
 
 - Remote branch: `agent/governed-dev-state-machine-phase1`.
 - Pull request: #415, `feat: complete governed development mission Phase 1`.
@@ -699,3 +711,37 @@ surface -- an operator had no way to tell from `/api/v1/status`, the MCP
   existing read-only status endpoint/tool/HUD panel, no new mutation path,
   no auth/guard change, and `resolveTotalityReasoningStatus` never gains
   live-call authority (no reasoner is ever constructed by it).
+
+## Current-main reconciliation: bounded autonomous mission evidence (2026-09-08)
+
+The earlier PR #415 draft/review handoff is complete historical evidence, not
+the current Phase 1 task or blocker. The current evidence set includes the
+real bounded autonomous mission for issue #458 / PR #467:
+
+- The worker completed the worker -> immutable guard -> draft PR publication
+  -> exact-candidate verification path.
+- The Codex socket-isolation integration defect was repaired and proven during
+  that real mission. This confirms the repaired integration path; the bounded
+  run does not prove long-duration runner reliability.
+- The execution boundary remained a draft PR. This evidence does not grant
+  merge, commissioning, deployment, or production authority.
+
+PR #470 introduced the single serial `jarvis-queue-advance.yml` coordinator
+and merged it on `main`. Its boundary is deliberately limited to
+verify/select/dispatch. It does not independently review, approve, merge,
+commission, or deploy. Those authorities remain with the existing guarded
+workflow and operator/live gates.
+
+The remaining work is therefore split into two distinct classes:
+
+- Autonomous-development maturity: #462 remains the long-run reliability
+  gap, and #324, #293, #294, #297, #302, #303, #306 and #307 remain tracked
+  follow-up items where still open. The #458/#467 mission is one successful
+  bounded run, not evidence that those maturity gaps are resolved.
+- External/live commissioning and production: live commissioning and
+  production deployment remain independently gated and unauthorised by this
+  ledger. No successful autonomous mission or queue dispatch changes those
+  gates, and no production effect is claimed here.
+
+Historical failures, repairs, commissioning attempts, and the earlier #415
+publication record above are intentionally retained for audit continuity.
