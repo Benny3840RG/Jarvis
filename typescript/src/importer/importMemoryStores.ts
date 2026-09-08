@@ -32,10 +32,9 @@ export type ImportSummary = {
  * the target's own build ids, rather than copying the now-meaningless source id.
  */
 async function copyBuilds(
-  source: BuildStore,
+  records: readonly Build[],
   target: BuildStore,
 ): Promise<{ count: number; buildIds: ReadonlyMap<string, string> }> {
-  const records: Build[] = await source.list();
   const buildIds = new Map<string, string>();
   for (const build of records) {
     const created = await target.add({
@@ -52,11 +51,10 @@ async function copyBuilds(
 }
 
 async function copyBuildLogs(
-  source: BuildLogStore,
+  records: readonly BuildLogEntry[],
   target: BuildLogStore,
   buildIds: ReadonlyMap<string, string>,
 ): Promise<number> {
-  const records: BuildLogEntry[] = await source.list();
   for (const log of records) {
     const buildId = buildIds.get(log.buildId);
     if (buildId === undefined) {
@@ -76,11 +74,10 @@ async function copyBuildLogs(
 }
 
 async function copyUpgrades(
-  source: UpgradeStore,
+  records: readonly Upgrade[],
   target: UpgradeStore,
   buildIds: ReadonlyMap<string, string>,
 ): Promise<number> {
-  const records: Upgrade[] = await source.list();
   for (const upgrade of records) {
     const buildId = buildIds.get(upgrade.buildId);
     if (buildId === undefined) {
@@ -163,11 +160,32 @@ export async function importMemoryStores(
     );
   }
 
-  const { count: buildCount, buildIds } = await copyBuilds(source.builds, target.builds);
+  const [sourceBuilds, sourceBuildLogs, sourceUpgrades] = await Promise.all([
+    source.builds.list(),
+    source.buildLogs.list(),
+    source.upgrades.list(),
+  ]);
+  const sourceBuildIds = new Set(sourceBuilds.map((build) => build.id));
+  for (const log of sourceBuildLogs) {
+    if (!sourceBuildIds.has(log.buildId)) {
+      throw new Error(
+        `Import refused: build log ${log.id} references unknown build ${log.buildId}.`,
+      );
+    }
+  }
+  for (const upgrade of sourceUpgrades) {
+    if (!sourceBuildIds.has(upgrade.buildId)) {
+      throw new Error(
+        `Import refused: upgrade ${upgrade.id} references unknown build ${upgrade.buildId}.`,
+      );
+    }
+  }
+
+  const { count: buildCount, buildIds } = await copyBuilds(sourceBuilds, target.builds);
   return {
     builds: buildCount,
-    buildLogs: await copyBuildLogs(source.buildLogs, target.buildLogs, buildIds),
-    upgrades: await copyUpgrades(source.upgrades, target.upgrades, buildIds),
+    buildLogs: await copyBuildLogs(sourceBuildLogs, target.buildLogs, buildIds),
+    upgrades: await copyUpgrades(sourceUpgrades, target.upgrades, buildIds),
     assets: await copyAssets(source.assets, target.assets),
     preferences: await copyPreferences(source.preferences, target.preferences),
   };
