@@ -648,14 +648,16 @@ describe("HUD connection staleness detection", () => {
     assert.deepEqual(h.state.status, { status: "ok" });
     assert.equal(h.state.lastStatusAt, 61000);
   });
-  it("clears on refresh failure and recovers on the next successful check", async () => {
+  it("retries after a forced failure even when the previous status was fresh", async () => {
     let fail = true;
     const h = harness(async () => {
       if (fail) throw new Error("offline");
       return { status: { status: "ok" } };
     });
-    await h.methods.checkConnectionHealth();
+    h.state.lastStatusAt = 61000;
+    await h.methods.checkConnectionHealth(true);
     assert.equal(h.state.status, null);
+    assert.equal(h.state.lastStatusAt, 0);
     fail = false;
     await h.methods.checkConnectionHealth();
     assert.deepEqual(h.state.status, { status: "ok" });

@@ -669,6 +669,7 @@
           } catch {
             if (state.lastStatusAt === observedAt && state.status === observedStatus && state.status !== null) {
               state.status = null;
+              state.lastStatusAt = 0;
               render();
             }
           } finally {
