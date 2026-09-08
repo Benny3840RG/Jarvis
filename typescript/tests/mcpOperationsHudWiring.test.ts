@@ -574,180 +574,132 @@ describe("Integration commissioning HUD wiring", () => {
 });
 
 describe("HUD connection staleness detection", () => {
-  const declaredStaleMs = Number(widget.match(/const STATUS_STALE_MS = (\d+);/)?.[1]);
-  assert.ok(
-    Number.isFinite(declaredStaleMs) && declaredStaleMs > 0,
-    "STATUS_STALE_MS constant not found in dashboard-v1.html",
+  const healthSource = extractSource(
+    /(function isConnectionStale\([\s\S]*?\})\n\s+function update/,
   );
-
-  const staleSource = extractSource(
-    /(function structured\([\s\S]*?\})\n\s+window\.addEventListener\("message"/,
-  );
-
-  function tick(): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, 0));
-  }
-
-  function loadConnectionHealth(
-    state: { status: unknown; lastStatusAt: number; tasks?: unknown[]; reminders?: unknown[] },
-    render: () => void,
-    callTool: (name: string, args?: Record<string, unknown>) => Promise<unknown>,
-    heartbeatTimeoutMs = 10000,
-  ) {
-    state.tasks ??= [];
-    state.reminders ??= [];
-    const run = new Function(
+  const updateSource = extractSource(/(function update\([\s\S]*?\})\n\s+window.addEventListener/);
+  function harness(request: () => Promise<unknown>, hidden = false) {
+    const state = { status: { status: "ok" } as unknown, lastStatusAt: 1000 };
+    const load = new Function(
       "state",
-      "render",
-      "callTool",
-      "STATUS_STALE_MS",
-      "HEARTBEAT_TIMEOUT_MS",
-      `"use strict"; ${staleSource}; return { isConnectionStale, checkConnectionHealth, update };`,
+      "request",
+      "document",
+      "Date",
+      `
+      const STATUS_STALE_MS=45000;
+      let healthCheckInFlight=false, bridgeInitialised=true;
+      const structured=r=>r?.structuredContent||r;
+      const render=()=>{}, recalc=()=>{};
+      ${healthSource}
+      ${updateSource}
+      return {checkConnectionHealth,update};
+    `,
     );
-    return run(state, render, callTool, declaredStaleMs, heartbeatTimeoutMs) as {
-      isConnectionStale: (lastUpdateAt: number, now: number, thresholdMs: number) => boolean;
-      checkConnectionHealth: () => void;
-      update: (result: unknown) => void;
+    const methods = load(
+      state,
+      request,
+      { visibilityState: hidden ? "hidden" : "visible" },
+      { now: () => 61000 },
+    ) as {
+      checkConnectionHealth(force?: boolean): Promise<void>;
+      update(result: unknown): void;
     };
+    return { state, methods };
   }
-
-  const neverCall = async (): Promise<never> => {
-    throw new Error("callTool must not be invoked here");
-  };
-
-  it("treats a never-updated connection and one older than the threshold as stale", () => {
-    const { isConnectionStale } = loadConnectionHealth(
-      { status: null, lastStatusAt: 0 },
-      () => {},
-      neverCall,
-    );
-    const now = Date.now();
-
-    assert.equal(isConnectionStale(0, now, declaredStaleMs), true);
-    assert.equal(isConnectionStale(now - declaredStaleMs - 1, now, declaredStaleMs), true);
-    assert.equal(isConnectionStale(now - declaredStaleMs + 1, now, declaredStaleMs), false);
-    assert.equal(isConnectionStale(now, now, declaredStaleMs), false);
+  it("refreshes a healthy idle dashboard instead of falsely disconnecting", async () => {
+    let calls = 0;
+    const h = harness(async () => {
+      calls++;
+      return { status: { status: "ok" } };
+    });
+    await h.methods.checkConnectionHealth();
+    assert.equal(calls, 1);
+    assert.deepEqual(h.state.status, { status: "ok" });
+    assert.equal(h.state.lastStatusAt, 61000);
   });
-
-  it("leaves a healthy, idle-but-visible dashboard alone -- freshness never triggers a refresh or a clear", () => {
-    const state = { status: { status: "ok" }, lastStatusAt: Date.now() };
-    let renderCalls = 0;
-    const { checkConnectionHealth } = loadConnectionHealth(
-      state,
-      () => {
-        renderCalls += 1;
-      },
-      neverCall,
-    );
-
-    checkConnectionHealth();
-
-    assert.deepEqual(state.status, { status: "ok" });
-    assert.equal(renderCalls, 0);
+  it("clears on refresh failure and recovers on the next successful check", async () => {
+    let fail = true;
+    const h = harness(async () => {
+      if (fail) throw new Error("offline");
+      return { status: { status: "ok" } };
+    });
+    await h.methods.checkConnectionHealth();
+    assert.equal(h.state.status, null);
+    fail = false;
+    await h.methods.checkConnectionHealth();
+    assert.deepEqual(h.state.status, { status: "ok" });
   });
-
-  it("does not clear a stale-by-the-clock dashboard when the bounded liveness refresh succeeds", async () => {
-    const state = { status: { status: "ok" }, lastStatusAt: Date.now() - declaredStaleMs - 1000 };
-    let renderCalls = 0;
-    let callToolCalls = 0;
-    const { checkConnectionHealth } = loadConnectionHealth(
-      state,
-      () => {
-        renderCalls += 1;
-      },
-      async () => {
-        callToolCalls += 1;
-        return { structuredContent: {} };
-      },
-    );
-
-    checkConnectionHealth();
-    await tick();
-
-    assert.equal(callToolCalls, 1);
-    assert.deepEqual(state.status, { status: "ok" });
-    assert.equal(renderCalls, 0);
+  it("ignores unrelated results when tracking status freshness", () => {
+    const h = harness(async () => ({}));
+    h.methods.update({ tasks: [] });
+    assert.equal(h.state.lastStatusAt, 1000);
   });
-
-  it("clears the display only once the bounded liveness refresh actually fails", async () => {
-    const state = { status: { status: "ok" }, lastStatusAt: Date.now() - declaredStaleMs - 1000 };
-    let renderCalls = 0;
-    const { checkConnectionHealth } = loadConnectionHealth(
-      state,
-      () => {
-        renderCalls += 1;
-      },
-      async () => {
-        throw new Error("bridge is down");
-      },
-    );
-
-    checkConnectionHealth();
-    await tick();
-
-    assert.equal(state.status, null);
-    assert.equal(renderCalls, 1);
+  it("does not overlap refreshes or poll a hidden dashboard", async () => {
+    let calls = 0;
+    let finish!: (v: unknown) => void;
+    const h = harness(() => {
+      calls++;
+      return new Promise((resolve) => {
+        finish = resolve;
+      });
+    });
+    const first = h.methods.checkConnectionHealth();
+    await h.methods.checkConnectionHealth();
+    assert.equal(calls, 1);
+    finish({ status: { status: "ok" } });
+    await first;
+    const hidden = harness(async () => {
+      calls++;
+      return {};
+    }, true);
+    await hidden.methods.checkConnectionHealth();
+    assert.equal(calls, 1);
   });
-
-  it("treats a refresh that never settles as a failure once the bounded timeout elapses", async () => {
-    const state = { status: { status: "ok" }, lastStatusAt: Date.now() - declaredStaleMs - 1000 };
-    let renderCalls = 0;
-    const { checkConnectionHealth } = loadConnectionHealth(
-      state,
-      () => {
-        renderCalls += 1;
-      },
-      () => new Promise(() => {}), // a hung request that never resolves or rejects
-      15, // small bounded timeout so the test stays fast
+  it("preserves newer received status when an older refresh fails", async () => {
+    let reject!: (e: Error) => void;
+    const h = harness(
+      () =>
+        new Promise((_, no) => {
+          reject = no;
+        }),
     );
-
-    checkConnectionHealth();
-    await new Promise((resolve) => setTimeout(resolve, 50));
-
-    assert.equal(state.status, null);
-    assert.equal(renderCalls, 1);
+    const first = h.methods.checkConnectionHealth();
+    h.methods.update({ status: { status: "new" } });
+    reject(new Error("old failure"));
+    await first;
+    assert.deepEqual(h.state.status, { status: "new" });
   });
-
-  it("keeps retrying every heartbeat but never re-renders once a stale connection is already cleared", async () => {
-    const state = { status: null as unknown, lastStatusAt: Date.now() - declaredStaleMs - 1000 };
-    let renderCalls = 0;
-    let callToolCalls = 0;
-    const { checkConnectionHealth } = loadConnectionHealth(
-      state,
-      () => {
-        renderCalls += 1;
-      },
-      async () => {
-        callToolCalls += 1;
-        throw new Error("still down");
-      },
-    );
-
-    checkConnectionHealth();
-    await tick();
-    checkConnectionHealth();
-    await tick();
-
-    assert.equal(callToolCalls, 2);
-    assert.equal(renderCalls, 0);
+  it("rejects a refresh response that lacks status", async () => {
+    const h = harness(async () => ({ tasks: [] }));
+    await h.methods.checkConnectionHealth();
+    assert.equal(h.state.status, null);
+    assert.equal(h.state.lastStatusAt, 1000);
   });
+});
 
-  it("only refreshes freshness from a status-bearing response, not any unrelated tool result", () => {
-    const state = { status: null as unknown, lastStatusAt: 0, tasks: [], reminders: [] };
-    const { update } = loadConnectionHealth(state, () => {}, neverCall);
-
-    update({ structuredContent: { tasks: [{ id: "1" }] } });
-    assert.equal(
-      state.lastStatusAt,
-      0,
-      "an unrelated (status-less) result must not extend freshness",
-    );
-
-    const before = Date.now();
-    update({ structuredContent: { status: { status: "ok" } } });
-    assert.ok(
-      state.lastStatusAt >= before,
-      "a genuine status-bearing result must refresh freshness",
-    );
-  });
+it("expires an unanswered health request and removes its pending bridge entry", async () => {
+  const source = extractSource(/(function request\([\s\S]*?\})\n\s+function toast/);
+  let expire!: () => void;
+  const pending = new Map();
+  const load = new Function(
+    "pending",
+    "window",
+    "setTimeout",
+    "clearTimeout",
+    `let rpcId=0; ${source}; return request;`,
+  );
+  const request = load(
+    pending,
+    { parent: { postMessage: () => {} } },
+    (callback: () => void) => {
+      expire = callback;
+      return 1;
+    },
+    () => {},
+  ) as (method: string, params: unknown, timeout: number) => Promise<unknown>;
+  const result = request("tools/call", {}, 10000);
+  assert.equal(pending.size, 1);
+  expire();
+  await assert.rejects(result, /timed out/);
+  assert.equal(pending.size, 0);
 });

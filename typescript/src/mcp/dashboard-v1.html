@@ -630,24 +630,54 @@
         "use strict";
         const state = { status: null, lastStatusAt: 0, tasks: [], reminders: [], brief: null, quotes: [], quoteRegisterStatus: "unavailable", counts: { activeTasks: 0, completedTasks: 0, reminders: 0 }, captureMode: "task", activities: [], selectedQuoteSummary: null, selectedQuote: null, quoteDetailState: "empty", quoteRequestGeneration: 0, inbox: null, activity: null };
         const STATUS_STALE_MS = 45000;
-        const HEARTBEAT_TIMEOUT_MS = 10000;
         let rpcId = 0;
+        let healthCheckInFlight = false;
+        let bridgeInitialised = false;
         let toastTimer = null;
         const pending = new Map();
         const byId = (id) => document.getElementById(id);
         const text = (el, value) => { el.textContent = value == null ? "" : String(value); };
         function notify(method, params) { window.parent.postMessage({ jsonrpc: "2.0", method, params }, "*"); }
-        function request(method, params) { return new Promise((resolve, reject) => { const id = ++rpcId; pending.set(id, { resolve, reject }); window.parent.postMessage({ jsonrpc: "2.0", id, method, params }, "*"); }); }
+        function request(method, params, timeoutMs = 0) {
+          return new Promise((resolve, reject) => {
+            const id = ++rpcId;
+            const timer = timeoutMs > 0 ? setTimeout(() => {
+              pending.delete(id);
+              reject(new Error("Request timed out"));
+            }, timeoutMs) : null;
+            const settle = (fn) => (value) => { if (timer !== null) clearTimeout(timer); fn(value); };
+            pending.set(id, { resolve: settle(resolve), reject: settle(reject) });
+            window.parent.postMessage({ jsonrpc: "2.0", id, method, params }, "*");
+          });
+        }
         function toast(message, error = false) { const el = byId("toast"); text(el, message); el.classList.toggle("error", error); el.classList.add("show"); clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove("show"), 3000); }
         function activity(title, detail) { state.activities.unshift({ title, detail, at: new Date() }); state.activities = state.activities.slice(0, 7); renderActivity(); }
         function structured(result) { return result && typeof result === "object" && result.structuredContent ? result.structuredContent : result; }
         function recalc() { state.counts = { activeTasks: state.tasks.filter((task) => !task.completed).length, completedTasks: state.tasks.filter((task) => task.completed).length, reminders: state.reminders.length }; }
         function isConnectionStale(lastUpdateAt, now, thresholdMs) { return lastUpdateAt === 0 || now - lastUpdateAt > thresholdMs; }
-        function withTimeout(promise, ms) { return new Promise((resolve, reject) => { const timer = setTimeout(() => reject(new Error("timeout")), ms); promise.then((value) => { clearTimeout(timer); resolve(value); }, (error) => { clearTimeout(timer); reject(error); }); }); }
-        function checkConnectionHealth() { if (!isConnectionStale(state.lastStatusAt, Date.now(), STATUS_STALE_MS)) return; withTimeout(callTool("show_jarvis_dashboard"), HEARTBEAT_TIMEOUT_MS).catch(() => { if (state.status === null) return; state.status = null; render(); }); }
+        async function checkConnectionHealth(force = false) {
+          if (!bridgeInitialised || document.visibilityState !== "visible" || healthCheckInFlight) return;
+          if (!force && !isConnectionStale(state.lastStatusAt, Date.now(), STATUS_STALE_MS)) return;
+          healthCheckInFlight = true;
+          const observedAt = state.lastStatusAt;
+          const observedStatus = state.status;
+          try {
+            const result = await request("tools/call", { name: "show_jarvis_dashboard", arguments: {} }, 10000);
+            const data = structured(result);
+            if (!data?.status || typeof data.status !== "object") throw new Error("Status unavailable");
+            if (state.lastStatusAt === observedAt && state.status === observedStatus) update(result);
+          } catch {
+            if (state.lastStatusAt === observedAt && state.status === observedStatus && state.status !== null) {
+              state.status = null;
+              render();
+            }
+          } finally {
+            healthCheckInFlight = false;
+          }
+        }
         function update(result) { const data = structured(result); if (!data || typeof data !== "object") return; if (data.status && typeof data.status === "object") { state.status = data.status; state.lastStatusAt = Date.now(); } if (Array.isArray(data.tasks)) state.tasks = data.tasks; if (Array.isArray(data.reminders)) state.reminders = data.reminders; if (data.brief && typeof data.brief === "object") state.brief = data.brief; if (data.quoteRegister && typeof data.quoteRegister === "object") { state.quoteRegisterStatus = data.quoteRegister.status === "ready" ? "ready" : "unavailable"; state.quotes = Array.isArray(data.quoteRegister.quotes) ? data.quoteRegister.quotes : []; } if ("inbox" in data) state.inbox = data.inbox; if ("activity" in data) state.activity = data.activity; if (data.counts && typeof data.counts === "object") state.counts = data.counts; else recalc(); render(); }
         window.addEventListener("message", (event) => { if (event.source !== window.parent) return; const message = event.data; if (!message || message.jsonrpc !== "2.0") return; if (typeof message.id === "number") { const waiting = pending.get(message.id); if (!waiting) return; pending.delete(message.id); if (message.error) waiting.reject(message.error); else waiting.resolve(message.result); return; } if (message.method === "ui/notifications/tool-result") update(message.params); }, { passive: true });
-        const bridgeReady = (async () => { await request("ui/initialize", { appInfo: { name: "jarvis-dashboard", version: "0.2.0" }, appCapabilities: {}, protocolVersion: "2026-01-26" }); notify("ui/notifications/initialized", {}); activity("HUD bridge online", "MCP Apps connection initialised"); })();
+        const bridgeReady = (async () => { await request("ui/initialize", { appInfo: { name: "jarvis-dashboard", version: "0.2.0" }, appCapabilities: {}, protocolVersion: "2026-01-26" }); notify("ui/notifications/initialized", {}); bridgeInitialised = true; activity("HUD bridge online", "MCP Apps connection initialised"); })();
         async function callTool(name, args = {}) { await bridgeReady; const result = await request("tools/call", { name, arguments: args }); update(result); return result; }
         const activeTasks = () => state.tasks.filter((task) => !task.completed);
         const completedTasks = () => state.tasks.filter((task) => task.completed).slice().reverse();
@@ -886,7 +916,7 @@
         byId("capture-form").addEventListener("submit",async (event) => { event.preventDefault(); const input = byId("capture-title"); const title = input.value.trim(); if (!title) return; const button = byId("capture-submit"); button.disabled = true; try { if (state.captureMode === "task") { await callTool("create_task",{ title, category: byId("capture-category").value }); activity("Task captured",title); toast(`Added ${title}`); } else { const due = byId("capture-due").value.trim(); await callTool("create_reminder",{ title, ...(due ? { due: { text: due } } : {}) }); byId("capture-due").value = ""; activity("Reminder captured",title); toast(`Added reminder ${title}`); } input.value = ""; } catch { toast(state.captureMode === "task" ? "Could not add that task." : "Could not add that reminder.",true); } finally { button.disabled = false; } });
         function clock() { text(byId("clock"),new Date().toLocaleTimeString("en-AU",{hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:false})); }
         bridgeReady.catch(() => { activity("HUD bridge failed","ChatGPT Apps bridge did not initialise"); toast("The ChatGPT app bridge did not initialise.",true); });
-        document.addEventListener("visibilitychange",() => { if (document.visibilityState !== "visible") return; callTool("show_jarvis_dashboard").catch(() => { toast("Could not refresh Jarvis after reconnect.",true); }); });
+        document.addEventListener("visibilitychange",() => { if (document.visibilityState !== "visible") return; void checkConnectionHealth(true); });
         setCaptureMode("task"); render(); clock(); window.setInterval(clock,1000); window.setInterval(checkConnectionHealth,15000);
       })();
     </script>

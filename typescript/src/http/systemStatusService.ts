@@ -148,7 +148,7 @@ export class SystemStatusService {
       },
       reconciliation,
       integrations: [this.quoteDeliveryIntegrationStatus()],
-      reasoning: resolveTotalityReasoningStatus(),
+      reasoning: resolveTotalityReasoningStatus(this.providerName),
       timezone,
       layers: { ...LAYERS, reliability: this.reliability.layerStatus() },
       zState: "disabled",
