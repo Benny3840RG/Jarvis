@@ -43,15 +43,6 @@ const MAX_BACKUP_BYTES = 10 * 1024 * 1024;
  */
 export type BackupMemoryStores = MemoryStoreBundle;
 
-/**
- * Explicit opt-out sentinel for {@link exportBackup} and
- * {@link restoreBackupIntoEmptyProvider}: pass this instead of a
- * {@link BackupMemoryStores} bundle to intentionally produce or restore a
- * core-only (state/tasks/reminders) archive. Forces every caller to make that
- * choice on purpose rather than by omitting an optional argument.
- */
-export const NO_MEMORY_STORES = Symbol("jarvis-backup-no-memory-stores");
-
 export type BackupArchive = {
   format: typeof BACKUP_FORMAT;
   version: typeof BACKUP_VERSION;
@@ -543,32 +534,33 @@ export function parseBackup(value: unknown): BackupArchive {
 }
 
 /**
- * `memoryStores` is required, not optional: a v3 archive claims to cover builds,
- * build logs, upgrades, assets, and preferences, so a caller must say explicitly
- * whether that's true. Pass `NO_MEMORY_STORES` to intentionally export a
- * core-only archive (state/tasks/reminders) rather than omitting the argument —
- * omission previously produced a v3 archive with silently empty memory-domain
- * arrays even when the live stores held real data.
+ * `memoryStores` must be supplied to get a complete version 3 archive: a v3
+ * archive claims to cover builds, build logs, upgrades, assets, and
+ * preferences, so omitting it (rather than passing an explicit, even empty,
+ * bundle) is refused instead of silently producing an archive with empty
+ * memory-domain arrays even when the live stores held real data.
  */
 export async function exportBackup(
   provider: PersistenceProvider,
-  memoryStores: BackupMemoryStores | typeof NO_MEMORY_STORES,
   now: () => Date = () => new Date(),
+  memoryStores?: BackupMemoryStores,
 ): Promise<BackupArchive> {
   if (!provider.snapshot) {
     throw new Error("Backup export requires an atomic persistence snapshot capability.");
   }
+  if (!memoryStores) {
+    throw new Error(
+      "Backup export requires memory-domain stores; refusing to create an incomplete version 3 archive.",
+    );
+  }
   const snapshot = await provider.snapshot();
-  const [builds, buildLogs, upgrades, assets, preferences] =
-    memoryStores === NO_MEMORY_STORES
-      ? [[], [], [], [], []]
-      : await Promise.all([
-          memoryStores.builds.list(),
-          memoryStores.buildLogs.list(),
-          memoryStores.upgrades.list(),
-          memoryStores.assets.list(),
-          memoryStores.preferences.list(),
-        ]);
+  const [builds, buildLogs, upgrades, assets, preferences] = await Promise.all([
+    memoryStores.builds.list(),
+    memoryStores.buildLogs.list(),
+    memoryStores.upgrades.list(),
+    memoryStores.assets.list(),
+    memoryStores.preferences.list(),
+  ]);
   return parseBackup({
     format: BACKUP_FORMAT,
     version: BACKUP_VERSION,

@@ -35,9 +35,9 @@ export type ImportSummary = {
  * with a dangling reference is refused before the target is touched at all.
  */
 function validateBuildReferences(
-  builds: Build[],
-  buildLogs: BuildLogEntry[],
-  upgrades: Upgrade[],
+  builds: readonly Build[],
+  buildLogs: readonly BuildLogEntry[],
+  upgrades: readonly Upgrade[],
 ): void {
   const buildIds = new Set(builds.map((build) => build.id));
   for (const log of buildLogs) {
@@ -57,7 +57,7 @@ function validateBuildReferences(
 }
 
 async function copyBuilds(
-  records: Build[],
+  records: readonly Build[],
   target: BuildStore,
 ): Promise<{ count: number; buildIds: ReadonlyMap<string, string> }> {
   const buildIds = new Map<string, string>();
@@ -76,7 +76,7 @@ async function copyBuilds(
 }
 
 async function copyBuildLogs(
-  records: BuildLogEntry[],
+  records: readonly BuildLogEntry[],
   target: BuildLogStore,
   buildIds: ReadonlyMap<string, string>,
 ): Promise<number> {
@@ -100,7 +100,7 @@ async function copyBuildLogs(
 }
 
 async function copyUpgrades(
-  records: Upgrade[],
+  records: readonly Upgrade[],
   target: UpgradeStore,
   buildIds: ReadonlyMap<string, string>,
 ): Promise<number> {

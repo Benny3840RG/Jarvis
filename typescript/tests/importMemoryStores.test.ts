@@ -78,12 +78,11 @@ describe("importMemoryStores", () => {
     assert.equal(upgrades[0]?.buildId, builds[0]?.id);
   });
 
-  it("refuses to import a build log that references an unknown build id, without writing anything to the target", async () => {
+  it("refuses unknown build references before writing anything to the target", async () => {
     const source = emptyBundle();
-    // A valid build alongside the dangling reference proves the refusal is
-    // caught before copyBuilds ever writes to the target, not partway through.
-    await source.builds.add({ name: "Trailer", kind: "shed" });
+    await source.builds.add({ name: "Valid build", kind: "test" });
     await source.buildLogs.add({ buildId: "no-such-build", title: "Orphaned", kind: "note" });
+    await source.upgrades.add({ buildId: "another-missing-build", title: "Orphaned upgrade" });
 
     const target = emptyBundle();
     await assert.rejects(
@@ -91,9 +90,11 @@ describe("importMemoryStores", () => {
       /build log .* references unknown build no-such-build/,
     );
     assert.deepEqual(await target.builds.list(), []);
+    assert.deepEqual(await target.buildLogs.list(), []);
+    assert.deepEqual(await target.upgrades.list(), []);
   });
 
-  it("refuses to import an upgrade that references an unknown build id, without writing anything to the target", async () => {
+  it("refuses an upgrade that references an unknown build id (with no other invalid reference present)", async () => {
     const source = emptyBundle();
     await source.builds.add({ name: "Trailer", kind: "shed" });
     await source.upgrades.add({ buildId: "no-such-build", title: "Orphaned upgrade" });

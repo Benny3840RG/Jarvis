@@ -78,7 +78,11 @@ async function main(): Promise<void> {
 
   if (command === "export") {
     if (confirmation !== undefined) usage();
-    const archive = await exportBackup(createPersistenceFromEnv(), createMemoryStoresFromEnv());
+    const archive = await exportBackup(
+      createPersistenceFromEnv(),
+      undefined,
+      createMemoryStoresFromEnv(),
+    );
     await writeBackupFile(filePath, archive);
     console.log(
       `Backup written: ${filePath} (${archive.tasks.length} task(s), ${archive.reminders.length} reminder(s), ` +
