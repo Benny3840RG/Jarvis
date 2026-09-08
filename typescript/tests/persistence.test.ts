@@ -276,7 +276,10 @@ describe("JSONPersistence", () => {
     const old = new Date(Date.now() - 5_000);
     await fs.utimes(lockPath, old, old);
 
-    const provider = new JSONPersistence(file, (message) => warnings.push(message), 40);
+    // Recovery success should not depend on completing fsync/link within a
+    // 40 ms CI scheduling window. The lock is already five seconds stale;
+    // dedicated tests separately verify timeout and live-owner behaviour.
+    const provider = new JSONPersistence(file, (message) => warnings.push(message), 2_000);
     const task = await provider.addTask("Recovered malformed lock", "personal");
 
     assert.equal(task.title, "Recovered malformed lock");
