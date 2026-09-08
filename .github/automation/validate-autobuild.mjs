@@ -189,7 +189,12 @@ export function evaluatePatch(patch) {
     }
     if (!/^[+-]/.test(line)) continue;
     const currentPath = line.startsWith("+") ? newPath : oldPath;
-    if (/^docs\/operations\/.+\.md$/.test(currentPath)) continue;
+    // Markdown anywhere under `docs/` is prose about the system, not an
+    // executable authority control — a ledger or design note has to be able to
+    // say "review, approve, merge, commission or deploy". A rename FROM an
+    // executable path is still scanned: `oldPath` for the removed lines is the
+    // original location, which does not match here.
+    if (/^docs\/.+\.md$/.test(currentPath)) continue;
     if (sensitive.test(line.slice(1))) {
       reasons.push(
         `authority-sensitive patch content at diff line ${index + 1}`,

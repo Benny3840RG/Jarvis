@@ -443,6 +443,56 @@ test("allows removal of authority prose from operational Markdown", () => {
   assert.deepEqual(result, { ok: true, reasons: [] });
 });
 
+test("allows authority-model prose in Markdown outside docs/operations", () => {
+  const result = evaluatePatch(
+    [
+      "diff --git a/docs/superpowers/plans/2026-09-01-phase1-ledger.md b/docs/superpowers/plans/2026-09-01-phase1-ledger.md",
+      "--- a/docs/superpowers/plans/2026-09-01-phase1-ledger.md",
+      "+++ b/docs/superpowers/plans/2026-09-01-phase1-ledger.md",
+      "@@ -10,0 +11,2 @@",
+      "+PR #470 introduced the serial queue coordinator: verify, select and",
+      "+dispatch only — it does not review, approve, merge, commission or deploy.",
+    ].join("\n"),
+  );
+
+  assert.deepEqual(result, { ok: true, reasons: [] });
+});
+
+test("still scans a rename from an executable path into docs/", () => {
+  const result = evaluatePatch(
+    [
+      "diff --git a/typescript/tests/authority.test.ts b/docs/superpowers/authority.md",
+      "similarity index 60%",
+      "rename from typescript/tests/authority.test.ts",
+      "rename to docs/superpowers/authority.md",
+      "--- a/typescript/tests/authority.test.ts",
+      "+++ b/docs/superpowers/authority.md",
+      "@@ -1,1 +1,1 @@",
+      "-const requireApproval = false;",
+      "+Owner approval remains mandatory.",
+    ].join("\n"),
+  );
+
+  assert.equal(result.ok, false);
+  assert.ok(
+    result.reasons.some((reason) => reason.includes("authority-sensitive")),
+  );
+});
+
+test("does not exempt non-Markdown files under docs/", () => {
+  const result = evaluatePatch(
+    [
+      "diff --git a/docs/scripts/deploy.sh b/docs/scripts/deploy.sh",
+      "--- a/docs/scripts/deploy.sh",
+      "+++ b/docs/scripts/deploy.sh",
+      "@@ -1,0 +2,1 @@",
+      "+export DEPLOYMENT_TOKEN=$(cat secret)",
+    ].join("\n"),
+  );
+
+  assert.equal(result.ok, false);
+});
+
 test("does not exempt case-variant operational paths", () => {
   const result = evaluatePatch(
     [
