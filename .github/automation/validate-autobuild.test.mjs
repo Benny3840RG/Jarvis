@@ -24,7 +24,7 @@ const eligibleIssue = {
   hasExistingAutomationPr: false,
 };
 
-async function finalizeRun(overrides = {}) {
+async function runFinalize(overrides = {}) {
   const workflow = fs.readFileSync(
     new URL("../workflows/jarvis-autobuild.yml", import.meta.url),
     "utf8",
@@ -44,10 +44,13 @@ async function finalizeRun(overrides = {}) {
   const comments = [];
   const statuses = [];
   const labels = [];
+  const removedLabels = [];
+  const failures = [];
   const env = {
     ISSUE_NUMBER: "435",
     BUILD_RESULT: "failure",
     VERIFY_RESULT: "skipped",
+    LOCK_ACQUIRED: "true",
     SOURCE_SHA: "a".repeat(40),
     CODEX_OUTCOME: "failure",
     DEPENDENCIES_OUTCOME: "success",
@@ -63,6 +66,7 @@ async function finalizeRun(overrides = {}) {
         listComments: async () => {},
         createComment: async (value) => comments.push(value.body),
         addLabels: async (value) => labels.push(value.labels),
+        removeLabel: async (value) => removedLabels.push(value.name),
       },
     },
   };
@@ -77,14 +81,25 @@ async function finalizeRun(overrides = {}) {
     "core",
     "process",
     `return (async () => {${script}\n})();`,
-  )(context, github, { setFailed: assert.fail }, { env });
+  )(
+    context,
+    github,
+    { info: () => {}, setFailed: (m) => failures.push(String(m)) },
+    { env },
+  );
   const body = comments.join("\n");
-  const match = body.match(/```json\n([\s\S]*?)\n```/);
+  return { body, comments, statuses, labels, removedLabels, failures };
+}
+
+async function finalizeRun(overrides = {}) {
+  const result = await runFinalize(overrides);
+  const match = result.body.match(/```json\n([\s\S]*?)\n```/);
   assert.ok(
     match,
     "finalization must persist its diagnostic receipt in the issue",
   );
-  return { body, receipt: JSON.parse(match[1]), statuses, labels };
+  assert.deepEqual(result.failures, [], "finalization must not fail the job");
+  return { ...result, receipt: JSON.parse(match[1]) };
 }
 
 test("worker failure retains stage evidence without publishing success", async () => {
@@ -123,6 +138,22 @@ test("receipt discards unexpected strings and never upgrades failed verification
   assert.ok(!result.body.includes(secret));
   assert.equal(result.statuses[0].state, "failure");
   assert.deepEqual(result.labels, [["automation-blocked"]]);
+});
+
+test("a run that never acquired the lock leaves the issue for the queue to retry", async () => {
+  const result = await runFinalize({
+    LOCK_ACQUIRED: "",
+    BUILD_RESULT: "failure",
+    VERIFY_RESULT: "skipped",
+  });
+  assert.deepEqual(
+    result.labels,
+    [],
+    "a race loser must not be marked automation-blocked",
+  );
+  assert.deepEqual(result.removedLabels, []);
+  assert.deepEqual(result.comments, []);
+  assert.deepEqual(result.failures, []);
 });
 
 test("dependency and worker timeouts reserve cleanup time and fail closed", () => {
@@ -1019,6 +1050,16 @@ test("TypeScript CI independently enforces the automation policy", () => {
       ),
     ).ok,
     false,
+  );
+  assert.equal(
+    validateCiContract(
+      workflow.replace(
+        "  push:\n",
+        '  push:\n    paths:\n      - "typescript/**"\n',
+      ),
+    ).ok,
+    false,
+    "a paths filter on the push trigger must fail the contract — verify-main needs every main commit to produce the required checks",
   );
 });
 
