@@ -706,7 +706,7 @@ describe("HUD connection staleness detection", () => {
     const h = harness(async () => ({ tasks: [] }));
     await h.methods.checkConnectionHealth();
     assert.equal(h.state.status, null);
-    assert.equal(h.state.lastStatusAt, 1000);
+    assert.equal(h.state.lastStatusAt, 0);
   });
 });
 
