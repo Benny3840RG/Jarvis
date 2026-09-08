@@ -541,16 +541,19 @@ export async function exportBackup(
   if (!provider.snapshot) {
     throw new Error("Backup export requires an atomic persistence snapshot capability.");
   }
+  if (!memoryStores) {
+    throw new Error(
+      "Backup export requires memory-domain stores; refusing to create an incomplete version 3 archive.",
+    );
+  }
   const snapshot = await provider.snapshot();
-  const [builds, buildLogs, upgrades, assets, preferences] = memoryStores
-    ? await Promise.all([
-        memoryStores.builds.list(),
-        memoryStores.buildLogs.list(),
-        memoryStores.upgrades.list(),
-        memoryStores.assets.list(),
-        memoryStores.preferences.list(),
-      ])
-    : [[], [], [], [], []];
+  const [builds, buildLogs, upgrades, assets, preferences] = await Promise.all([
+    memoryStores.builds.list(),
+    memoryStores.buildLogs.list(),
+    memoryStores.upgrades.list(),
+    memoryStores.assets.list(),
+    memoryStores.preferences.list(),
+  ]);
   return parseBackup({
     format: BACKUP_FORMAT,
     version: BACKUP_VERSION,
