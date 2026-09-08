@@ -13,11 +13,35 @@ import {
   type Task,
 } from "../persistence/persistence.js";
 import { validateReminderDue } from "../reminders/due.js";
+import { isBuildStatus, type Build } from "../builds/build.js";
+import { JsonBuildStore } from "../builds/jsonBuildStore.js";
+import { isBuildLogKind, type BuildLogEntry } from "../buildLog/buildLogEntry.js";
+import { JsonBuildLogStore } from "../buildLog/jsonBuildLogStore.js";
+import type { Upgrade } from "../upgrades/upgrade.js";
+import { JsonUpgradeStore } from "../upgrades/jsonUpgradeStore.js";
+import type { Asset } from "../assets/asset.js";
+import { JsonAssetStore } from "../assets/jsonAssetStore.js";
+import type { Preference } from "../preferences/preference.js";
+import { JsonPreferenceStore } from "../preferences/jsonPreferenceStore.js";
+import type { MemoryStoreBundle } from "../importer/importMemoryStores.js";
 
 const BACKUP_FORMAT = "jarvis-backup" as const;
-const BACKUP_VERSION = 2 as const;
+const BACKUP_VERSION = 3 as const;
+const V2_BACKUP_VERSION = 2 as const;
 const LEGACY_BACKUP_VERSION = 1 as const;
 const MAX_BACKUP_BYTES = 10 * 1024 * 1024;
+
+/**
+ * Builds/build logs/upgrades/assets/preferences: the "memory store" domains that
+ * `npm run import:convex` already treats as one self-contained bundle. They were
+ * added to the backup archive in version 3. Every other durable-memory domain
+ * (clients, quotes, invoices, projects, properties, enquiries, errands, ...) is
+ * cross-referenced by id (e.g. a quote holds a clientId) and is intentionally
+ * NOT covered yet — restoring those safely needs a consistent id remap across
+ * every domain that references them, not just a per-domain copy. See
+ * typescript/docs/ROADMAP.md.
+ */
+export type BackupMemoryStores = MemoryStoreBundle;
 
 export type BackupArchive = {
   format: typeof BACKUP_FORMAT;
@@ -26,6 +50,11 @@ export type BackupArchive = {
   state: AssistantState;
   tasks: Task[];
   reminders: Reminder[];
+  builds: Build[];
+  buildLogs: BuildLogEntry[];
+  upgrades: Upgrade[];
+  assets: Asset[];
+  preferences: Preference[];
 };
 
 export type RestoreResult = {
@@ -33,6 +62,12 @@ export type RestoreResult = {
   reminderIds: ReadonlyMap<string, string>;
   taskCount: number;
   reminderCount: number;
+  buildIds: ReadonlyMap<string, string>;
+  buildCount: number;
+  buildLogCount: number;
+  upgradeCount: number;
+  assetCount: number;
+  preferenceCount: number;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -171,6 +206,255 @@ function parseReminder(value: unknown, index: number, version: 1 | 2): Reminder 
   };
 }
 
+function parseBuild(value: unknown, index: number): Build {
+  if (!isRecord(value)) throw new Error(`Backup build ${index} must be an object.`);
+  if (typeof value.id !== "string" || value.id.length === 0) {
+    throw new Error(`Backup build ${index} has an invalid id.`);
+  }
+  if (typeof value.name !== "string" || value.name.length === 0) {
+    throw new Error(`Backup build ${index} has an invalid name.`);
+  }
+  if (typeof value.kind !== "string" || value.kind.length === 0) {
+    throw new Error(`Backup build ${index} has an invalid kind.`);
+  }
+  if (!isBuildStatus(value.status)) {
+    throw new Error(`Backup build ${index} has an invalid status.`);
+  }
+  if (
+    value.description !== undefined &&
+    (typeof value.description !== "string" || value.description.length === 0)
+  ) {
+    throw new Error(`Backup build ${index} has an invalid description.`);
+  }
+  if (
+    value.nickname !== undefined &&
+    (typeof value.nickname !== "string" || value.nickname.length === 0)
+  ) {
+    throw new Error(`Backup build ${index} has an invalid nickname.`);
+  }
+  if (value.notes !== undefined && (typeof value.notes !== "string" || value.notes.length === 0)) {
+    throw new Error(`Backup build ${index} has an invalid notes value.`);
+  }
+  if (typeof value.createdAt !== "number" || !Number.isFinite(value.createdAt)) {
+    throw new Error(`Backup build ${index} has an invalid createdAt value.`);
+  }
+  if (typeof value.updatedAt !== "number" || !Number.isFinite(value.updatedAt)) {
+    throw new Error(`Backup build ${index} has an invalid updatedAt value.`);
+  }
+  return {
+    id: value.id,
+    name: value.name,
+    kind: value.kind,
+    status: value.status,
+    ...(typeof value.description === "string" ? { description: value.description } : {}),
+    ...(typeof value.nickname === "string" ? { nickname: value.nickname } : {}),
+    ...(typeof value.notes === "string" ? { notes: value.notes } : {}),
+    createdAt: value.createdAt,
+    updatedAt: value.updatedAt,
+  };
+}
+
+function parseBuildLogEntry(value: unknown, index: number): BuildLogEntry {
+  if (!isRecord(value)) throw new Error(`Backup build log ${index} must be an object.`);
+  if (typeof value.id !== "string" || value.id.length === 0) {
+    throw new Error(`Backup build log ${index} has an invalid id.`);
+  }
+  if (typeof value.buildId !== "string" || value.buildId.length === 0) {
+    throw new Error(`Backup build log ${index} has an invalid buildId.`);
+  }
+  if (!isBuildLogKind(value.kind)) {
+    throw new Error(`Backup build log ${index} has an invalid kind.`);
+  }
+  if (typeof value.title !== "string" || value.title.length === 0) {
+    throw new Error(`Backup build log ${index} has an invalid title.`);
+  }
+  if (value.body !== undefined && (typeof value.body !== "string" || value.body.length === 0)) {
+    throw new Error(`Backup build log ${index} has an invalid body.`);
+  }
+  if (
+    value.occurredAt !== undefined &&
+    (typeof value.occurredAt !== "number" || !Number.isFinite(value.occurredAt))
+  ) {
+    throw new Error(`Backup build log ${index} has an invalid occurredAt value.`);
+  }
+  if (typeof value.createdAt !== "number" || !Number.isFinite(value.createdAt)) {
+    throw new Error(`Backup build log ${index} has an invalid createdAt value.`);
+  }
+  if (
+    value.updatedAt !== undefined &&
+    (typeof value.updatedAt !== "number" || !Number.isFinite(value.updatedAt))
+  ) {
+    throw new Error(`Backup build log ${index} has an invalid updatedAt value.`);
+  }
+  return {
+    id: value.id,
+    buildId: value.buildId,
+    kind: value.kind,
+    title: value.title,
+    ...(typeof value.body === "string" ? { body: value.body } : {}),
+    ...(typeof value.occurredAt === "number" ? { occurredAt: value.occurredAt } : {}),
+    createdAt: value.createdAt,
+    ...(typeof value.updatedAt === "number" ? { updatedAt: value.updatedAt } : {}),
+  };
+}
+
+function parseUpgrade(value: unknown, index: number): Upgrade {
+  if (!isRecord(value)) throw new Error(`Backup upgrade ${index} must be an object.`);
+  if (typeof value.id !== "string" || value.id.length === 0) {
+    throw new Error(`Backup upgrade ${index} has an invalid id.`);
+  }
+  if (typeof value.buildId !== "string" || value.buildId.length === 0) {
+    throw new Error(`Backup upgrade ${index} has an invalid buildId.`);
+  }
+  if (typeof value.title !== "string" || value.title.length === 0) {
+    throw new Error(`Backup upgrade ${index} has an invalid title.`);
+  }
+  if (
+    value.reason !== undefined &&
+    (typeof value.reason !== "string" || value.reason.length === 0)
+  ) {
+    throw new Error(`Backup upgrade ${index} has an invalid reason.`);
+  }
+  if (
+    value.beforeState !== undefined &&
+    (typeof value.beforeState !== "string" || value.beforeState.length === 0)
+  ) {
+    throw new Error(`Backup upgrade ${index} has an invalid beforeState value.`);
+  }
+  if (
+    value.afterState !== undefined &&
+    (typeof value.afterState !== "string" || value.afterState.length === 0)
+  ) {
+    throw new Error(`Backup upgrade ${index} has an invalid afterState value.`);
+  }
+  if (
+    value.outcome !== undefined &&
+    (typeof value.outcome !== "string" || value.outcome.length === 0)
+  ) {
+    throw new Error(`Backup upgrade ${index} has an invalid outcome value.`);
+  }
+  if (
+    value.parts !== undefined &&
+    (!Array.isArray(value.parts) || value.parts.some((part) => typeof part !== "string"))
+  ) {
+    throw new Error(`Backup upgrade ${index} has an invalid parts list.`);
+  }
+  if (
+    value.version !== undefined &&
+    (typeof value.version !== "string" || value.version.length === 0)
+  ) {
+    throw new Error(`Backup upgrade ${index} has an invalid version value.`);
+  }
+  if (
+    value.occurredAt !== undefined &&
+    (typeof value.occurredAt !== "number" || !Number.isFinite(value.occurredAt))
+  ) {
+    throw new Error(`Backup upgrade ${index} has an invalid occurredAt value.`);
+  }
+  if (typeof value.createdAt !== "number" || !Number.isFinite(value.createdAt)) {
+    throw new Error(`Backup upgrade ${index} has an invalid createdAt value.`);
+  }
+  if (
+    value.updatedAt !== undefined &&
+    (typeof value.updatedAt !== "number" || !Number.isFinite(value.updatedAt))
+  ) {
+    throw new Error(`Backup upgrade ${index} has an invalid updatedAt value.`);
+  }
+  return {
+    id: value.id,
+    buildId: value.buildId,
+    title: value.title,
+    ...(typeof value.reason === "string" ? { reason: value.reason } : {}),
+    ...(typeof value.beforeState === "string" ? { beforeState: value.beforeState } : {}),
+    ...(typeof value.afterState === "string" ? { afterState: value.afterState } : {}),
+    ...(typeof value.outcome === "string" ? { outcome: value.outcome } : {}),
+    ...(Array.isArray(value.parts) ? { parts: [...(value.parts as string[])] } : {}),
+    ...(typeof value.version === "string" ? { version: value.version } : {}),
+    ...(typeof value.occurredAt === "number" ? { occurredAt: value.occurredAt } : {}),
+    createdAt: value.createdAt,
+    ...(typeof value.updatedAt === "number" ? { updatedAt: value.updatedAt } : {}),
+  };
+}
+
+function parseAsset(value: unknown, index: number): Asset {
+  if (!isRecord(value)) throw new Error(`Backup asset ${index} must be an object.`);
+  if (typeof value.id !== "string" || value.id.length === 0) {
+    throw new Error(`Backup asset ${index} has an invalid id.`);
+  }
+  if (typeof value.name !== "string" || value.name.length === 0) {
+    throw new Error(`Backup asset ${index} has an invalid name.`);
+  }
+  if (typeof value.kind !== "string" || value.kind.length === 0) {
+    throw new Error(`Backup asset ${index} has an invalid kind.`);
+  }
+  if (
+    value.serviceIntervalDays !== undefined &&
+    (typeof value.serviceIntervalDays !== "number" || !Number.isFinite(value.serviceIntervalDays))
+  ) {
+    throw new Error(`Backup asset ${index} has an invalid serviceIntervalDays value.`);
+  }
+  if (
+    value.lastServicedAt !== undefined &&
+    (typeof value.lastServicedAt !== "number" || !Number.isFinite(value.lastServicedAt))
+  ) {
+    throw new Error(`Backup asset ${index} has an invalid lastServicedAt value.`);
+  }
+  if (value.notes !== undefined && (typeof value.notes !== "string" || value.notes.length === 0)) {
+    throw new Error(`Backup asset ${index} has an invalid notes value.`);
+  }
+  if (typeof value.createdAt !== "number" || !Number.isFinite(value.createdAt)) {
+    throw new Error(`Backup asset ${index} has an invalid createdAt value.`);
+  }
+  if (typeof value.updatedAt !== "number" || !Number.isFinite(value.updatedAt)) {
+    throw new Error(`Backup asset ${index} has an invalid updatedAt value.`);
+  }
+  return {
+    id: value.id,
+    name: value.name,
+    kind: value.kind,
+    ...(typeof value.serviceIntervalDays === "number"
+      ? { serviceIntervalDays: value.serviceIntervalDays }
+      : {}),
+    ...(typeof value.lastServicedAt === "number" ? { lastServicedAt: value.lastServicedAt } : {}),
+    ...(typeof value.notes === "string" ? { notes: value.notes } : {}),
+    createdAt: value.createdAt,
+    updatedAt: value.updatedAt,
+  };
+}
+
+function parsePreference(value: unknown, index: number): Preference {
+  if (!isRecord(value)) throw new Error(`Backup preference ${index} must be an object.`);
+  if (typeof value.id !== "string" || value.id.length === 0) {
+    throw new Error(`Backup preference ${index} has an invalid id.`);
+  }
+  if (typeof value.key !== "string" || value.key.length === 0) {
+    throw new Error(`Backup preference ${index} has an invalid key.`);
+  }
+  if (typeof value.value !== "string" || value.value.length === 0) {
+    throw new Error(`Backup preference ${index} has an invalid value.`);
+  }
+  if (
+    value.category !== undefined &&
+    (typeof value.category !== "string" || value.category.length === 0)
+  ) {
+    throw new Error(`Backup preference ${index} has an invalid category.`);
+  }
+  if (typeof value.createdAt !== "number" || !Number.isFinite(value.createdAt)) {
+    throw new Error(`Backup preference ${index} has an invalid createdAt value.`);
+  }
+  if (typeof value.updatedAt !== "number" || !Number.isFinite(value.updatedAt)) {
+    throw new Error(`Backup preference ${index} has an invalid updatedAt value.`);
+  }
+  return {
+    id: value.id,
+    key: value.key,
+    value: value.value,
+    ...(typeof value.category === "string" ? { category: value.category } : {}),
+    createdAt: value.createdAt,
+    updatedAt: value.updatedAt,
+  };
+}
+
 function assertUniqueIds(records: Array<{ id: string }>, name: string): void {
   const ids = new Set<string>();
   for (const record of records) {
@@ -183,7 +467,11 @@ function assertUniqueIds(records: Array<{ id: string }>, name: string): void {
 export function parseBackup(value: unknown): BackupArchive {
   if (!isRecord(value)) throw new Error("Backup must be an object.");
   if (value.format !== BACKUP_FORMAT) throw new Error("Unsupported backup format.");
-  if (value.version !== BACKUP_VERSION && value.version !== LEGACY_BACKUP_VERSION) {
+  if (
+    value.version !== BACKUP_VERSION &&
+    value.version !== V2_BACKUP_VERSION &&
+    value.version !== LEGACY_BACKUP_VERSION
+  ) {
     throw new Error(`Unsupported backup version: ${String(value.version)}.`);
   }
   if (typeof value.createdAt !== "string" || Number.isNaN(Date.parse(value.createdAt))) {
@@ -193,13 +481,42 @@ export function parseBackup(value: unknown): BackupArchive {
   if (!Array.isArray(value.tasks)) throw new Error("Backup tasks must be an array.");
   if (!Array.isArray(value.reminders)) throw new Error("Backup reminders must be an array.");
 
+  const hasMemoryDomains = value.version === BACKUP_VERSION;
+  if (hasMemoryDomains) {
+    for (const field of ["builds", "buildLogs", "upgrades", "assets", "preferences"] as const) {
+      if (!Array.isArray(value[field])) throw new Error(`Backup ${field} must be an array.`);
+    }
+  }
+
   assertJsonSafe(value.state, "backup.state");
   const tasks = value.tasks.map(parseTask);
   const reminders = value.reminders.map((entry, index) =>
-    parseReminder(entry, index, value.version as 1 | 2),
+    parseReminder(entry, index, value.version === LEGACY_BACKUP_VERSION ? 1 : 2),
   );
+  const builds = hasMemoryDomains ? (value.builds as unknown[]).map(parseBuild) : [];
+  const buildLogs = hasMemoryDomains ? (value.buildLogs as unknown[]).map(parseBuildLogEntry) : [];
+  const upgrades = hasMemoryDomains ? (value.upgrades as unknown[]).map(parseUpgrade) : [];
+  const assets = hasMemoryDomains ? (value.assets as unknown[]).map(parseAsset) : [];
+  const preferences = hasMemoryDomains ? (value.preferences as unknown[]).map(parsePreference) : [];
   assertUniqueIds(tasks, "task");
   assertUniqueIds(reminders, "reminder");
+  assertUniqueIds(builds, "build");
+  assertUniqueIds(buildLogs, "build log");
+  assertUniqueIds(upgrades, "upgrade");
+  assertUniqueIds(assets, "asset");
+  assertUniqueIds(preferences, "preference");
+
+  const buildIds = new Set(builds.map((build) => build.id));
+  for (const log of buildLogs) {
+    if (!buildIds.has(log.buildId)) {
+      throw new Error(`Backup build log ${log.id} references unknown build ${log.buildId}.`);
+    }
+  }
+  for (const upgrade of upgrades) {
+    if (!buildIds.has(upgrade.buildId)) {
+      throw new Error(`Backup upgrade ${upgrade.id} references unknown build ${upgrade.buildId}.`);
+    }
+  }
 
   return {
     format: BACKUP_FORMAT,
@@ -208,17 +525,42 @@ export function parseBackup(value: unknown): BackupArchive {
     state: cloneJson(value.state) as AssistantState,
     tasks: tasks.map((task) => ({ ...task })),
     reminders: reminders.map((reminder) => ({ ...reminder })),
+    builds: builds.map((build) => ({ ...build })),
+    buildLogs: buildLogs.map((log) => ({ ...log })),
+    upgrades: upgrades.map((upgrade) => ({ ...upgrade })),
+    assets: assets.map((asset) => ({ ...asset })),
+    preferences: preferences.map((preference) => ({ ...preference })),
   };
 }
 
+/**
+ * `memoryStores` must be supplied to get a complete version 3 archive: a v3
+ * archive claims to cover builds, build logs, upgrades, assets, and
+ * preferences, so omitting it (rather than passing an explicit, even empty,
+ * bundle) is refused instead of silently producing an archive with empty
+ * memory-domain arrays even when the live stores held real data.
+ */
 export async function exportBackup(
   provider: PersistenceProvider,
   now: () => Date = () => new Date(),
+  memoryStores?: BackupMemoryStores,
 ): Promise<BackupArchive> {
   if (!provider.snapshot) {
     throw new Error("Backup export requires an atomic persistence snapshot capability.");
   }
+  if (!memoryStores) {
+    throw new Error(
+      "Backup export requires memory-domain stores; refusing to create an incomplete version 3 archive.",
+    );
+  }
   const snapshot = await provider.snapshot();
+  const [builds, buildLogs, upgrades, assets, preferences] = await Promise.all([
+    memoryStores.builds.list(),
+    memoryStores.buildLogs.list(),
+    memoryStores.upgrades.list(),
+    memoryStores.assets.list(),
+    memoryStores.preferences.list(),
+  ]);
   return parseBackup({
     format: BACKUP_FORMAT,
     version: BACKUP_VERSION,
@@ -226,6 +568,11 @@ export async function exportBackup(
     state: snapshot.state,
     tasks: snapshot.tasks,
     reminders: snapshot.reminders,
+    builds,
+    buildLogs,
+    upgrades,
+    assets,
+    preferences,
   });
 }
 
@@ -315,10 +662,88 @@ function reminderSignatures(reminders: Reminder[]): string[] {
     .sort();
 }
 
+function buildSignatureById(builds: Build[]): Map<string, string> {
+  const map = new Map<string, string>();
+  for (const build of builds) {
+    map.set(
+      build.id,
+      JSON.stringify([
+        build.name,
+        build.kind,
+        build.status,
+        build.description ?? null,
+        build.nickname ?? null,
+        build.notes ?? null,
+      ]),
+    );
+  }
+  return map;
+}
+
+function buildLogSignatures(
+  logs: BuildLogEntry[],
+  buildSignatureByBuildId: ReadonlyMap<string, string>,
+): string[] {
+  return logs
+    .map((log) =>
+      JSON.stringify([
+        buildSignatureByBuildId.get(log.buildId) ?? null,
+        log.kind,
+        log.title,
+        log.body ?? null,
+        log.occurredAt ?? null,
+      ]),
+    )
+    .sort();
+}
+
+function upgradeSignatures(
+  upgrades: Upgrade[],
+  buildSignatureByBuildId: ReadonlyMap<string, string>,
+): string[] {
+  return upgrades
+    .map((upgrade) =>
+      JSON.stringify([
+        buildSignatureByBuildId.get(upgrade.buildId) ?? null,
+        upgrade.title,
+        upgrade.reason ?? null,
+        upgrade.beforeState ?? null,
+        upgrade.afterState ?? null,
+        upgrade.outcome ?? null,
+        upgrade.parts ?? null,
+        upgrade.version ?? null,
+        upgrade.occurredAt ?? null,
+      ]),
+    )
+    .sort();
+}
+
+function assetSignatures(assets: Asset[]): string[] {
+  return assets
+    .map((asset) =>
+      JSON.stringify([
+        asset.name,
+        asset.kind,
+        asset.serviceIntervalDays ?? null,
+        asset.lastServicedAt ?? null,
+        asset.notes ?? null,
+      ]),
+    )
+    .sort();
+}
+
+function preferenceSignatures(preferences: Preference[]): string[] {
+  return preferences
+    .map((preference) =>
+      JSON.stringify([preference.key, preference.value, preference.category ?? null]),
+    )
+    .sort();
+}
+
 export function assertRestoredBackup(
   snapshot: PersistenceSnapshot,
   archive: BackupArchive,
-  result: RestoreResult,
+  result: Pick<RestoreResult, "taskIds" | "reminderIds">,
 ): void {
   const allIds = new Map<string, string>([
     ...result.taskIds.entries(),
@@ -341,13 +766,207 @@ export function assertRestoredBackup(
   }
 }
 
+type RestoredMemory = {
+  buildIds: ReadonlyMap<string, string>;
+  builds: Build[];
+  buildLogs: BuildLogEntry[];
+  upgrades: Upgrade[];
+  assets: Asset[];
+  preferences: Preference[];
+};
+
+const EMPTY_RESTORED_MEMORY: RestoredMemory = {
+  buildIds: new Map(),
+  builds: [],
+  buildLogs: [],
+  upgrades: [],
+  assets: [],
+  preferences: [],
+};
+
+/**
+ * Populates the five memory-store domains from an already-parsed archive. Unlike
+ * the core state/tasks/reminders restore, this is NOT atomic — each record is a
+ * separate store.add() call (the same limitation `importMemoryStores` accepts).
+ * Callers must therefore only invoke this after every up-front emptiness check
+ * has passed, so the only way it can fail partway through is a genuine store
+ * error, not a refused precondition.
+ */
+async function restoreMemoryStores(
+  memoryStores: BackupMemoryStores,
+  archive: BackupArchive,
+): Promise<RestoredMemory> {
+  const buildIds = new Map<string, string>();
+  const builds: Build[] = [];
+  for (const build of archive.builds) {
+    const created = await memoryStores.builds.add({
+      name: build.name,
+      kind: build.kind,
+      status: build.status,
+      ...(build.description === undefined ? {} : { description: build.description }),
+      ...(build.nickname === undefined ? {} : { nickname: build.nickname }),
+      ...(build.notes === undefined ? {} : { notes: build.notes }),
+    });
+    buildIds.set(build.id, created.id);
+    builds.push(created);
+  }
+
+  const buildLogs: BuildLogEntry[] = [];
+  for (const log of archive.buildLogs) {
+    const buildId = buildIds.get(log.buildId);
+    if (buildId === undefined) {
+      throw new Error(
+        `Backup restore refused: build log ${log.id} references unknown build ${log.buildId}.`,
+      );
+    }
+    buildLogs.push(
+      await memoryStores.buildLogs.add({
+        buildId,
+        title: log.title,
+        kind: log.kind,
+        ...(log.body === undefined ? {} : { body: log.body }),
+        ...(log.occurredAt === undefined ? {} : { occurredAt: log.occurredAt }),
+      }),
+    );
+  }
+
+  const upgrades: Upgrade[] = [];
+  for (const upgrade of archive.upgrades) {
+    const buildId = buildIds.get(upgrade.buildId);
+    if (buildId === undefined) {
+      throw new Error(
+        `Backup restore refused: upgrade ${upgrade.id} references unknown build ${upgrade.buildId}.`,
+      );
+    }
+    upgrades.push(
+      await memoryStores.upgrades.add({
+        buildId,
+        title: upgrade.title,
+        ...(upgrade.reason === undefined ? {} : { reason: upgrade.reason }),
+        ...(upgrade.beforeState === undefined ? {} : { beforeState: upgrade.beforeState }),
+        ...(upgrade.afterState === undefined ? {} : { afterState: upgrade.afterState }),
+        ...(upgrade.outcome === undefined ? {} : { outcome: upgrade.outcome }),
+        ...(upgrade.parts === undefined ? {} : { parts: upgrade.parts }),
+        ...(upgrade.version === undefined ? {} : { version: upgrade.version }),
+        ...(upgrade.occurredAt === undefined ? {} : { occurredAt: upgrade.occurredAt }),
+      }),
+    );
+  }
+
+  const assets: Asset[] = [];
+  for (const asset of archive.assets) {
+    assets.push(
+      await memoryStores.assets.add({
+        name: asset.name,
+        kind: asset.kind,
+        ...(asset.serviceIntervalDays === undefined
+          ? {}
+          : { serviceIntervalDays: asset.serviceIntervalDays }),
+        ...(asset.lastServicedAt === undefined ? {} : { lastServicedAt: asset.lastServicedAt }),
+        ...(asset.notes === undefined ? {} : { notes: asset.notes }),
+      }),
+    );
+  }
+
+  const preferences: Preference[] = [];
+  for (const preference of archive.preferences) {
+    preferences.push(
+      await memoryStores.preferences.add({
+        key: preference.key,
+        value: preference.value,
+        ...(preference.category === undefined ? {} : { category: preference.category }),
+      }),
+    );
+  }
+
+  return { buildIds, builds, buildLogs, upgrades, assets, preferences };
+}
+
+function assertRestoredMemoryStores(restored: RestoredMemory, archive: BackupArchive): void {
+  const restoredBuildSignatures = buildSignatureById(restored.builds);
+  const archiveBuildSignatures = buildSignatureById(archive.builds);
+  if (
+    !isDeepStrictEqual(
+      [...restoredBuildSignatures.values()].sort(),
+      [...archiveBuildSignatures.values()].sort(),
+    )
+  ) {
+    throw new Error("Restored builds do not match the backup.");
+  }
+  if (
+    !isDeepStrictEqual(
+      buildLogSignatures(restored.buildLogs, restoredBuildSignatures),
+      buildLogSignatures(archive.buildLogs, archiveBuildSignatures),
+    )
+  ) {
+    throw new Error("Restored build logs do not match the backup.");
+  }
+  if (
+    !isDeepStrictEqual(
+      upgradeSignatures(restored.upgrades, restoredBuildSignatures),
+      upgradeSignatures(archive.upgrades, archiveBuildSignatures),
+    )
+  ) {
+    throw new Error("Restored upgrades do not match the backup.");
+  }
+  if (!isDeepStrictEqual(assetSignatures(restored.assets), assetSignatures(archive.assets))) {
+    throw new Error("Restored assets do not match the backup.");
+  }
+  if (
+    !isDeepStrictEqual(
+      preferenceSignatures(restored.preferences),
+      preferenceSignatures(archive.preferences),
+    )
+  ) {
+    throw new Error("Restored preferences do not match the backup.");
+  }
+}
+
 export async function restoreBackupIntoEmptyProvider(
   provider: PersistenceProvider,
   archiveInput: BackupArchive,
+  memoryStores?: BackupMemoryStores,
 ): Promise<RestoreResult> {
   const archive = parseBackup(archiveInput);
   if (!provider.restoreSnapshotIntoEmpty) {
     throw new Error("Backup restore requires an atomic empty-target restore capability.");
+  }
+
+  const hasMemoryData =
+    archive.builds.length > 0 ||
+    archive.buildLogs.length > 0 ||
+    archive.upgrades.length > 0 ||
+    archive.assets.length > 0 ||
+    archive.preferences.length > 0;
+  if (hasMemoryData && !memoryStores) {
+    throw new Error(
+      "Backup restore refused: the archive contains build, build log, upgrade, asset, or preference records but no memory stores were supplied to restore them into.",
+    );
+  }
+
+  if (memoryStores) {
+    const [
+      existingBuilds,
+      existingBuildLogs,
+      existingUpgrades,
+      existingAssets,
+      existingPreferences,
+    ] = await Promise.all([
+      memoryStores.builds.list(),
+      memoryStores.buildLogs.list(),
+      memoryStores.upgrades.list(),
+      memoryStores.assets.list(),
+      memoryStores.preferences.list(),
+    ]);
+    const nonEmpty: string[] = [];
+    if (existingBuilds.length > 0) nonEmpty.push("build");
+    if (existingBuildLogs.length > 0) nonEmpty.push("build log");
+    if (existingUpgrades.length > 0) nonEmpty.push("upgrade");
+    if (existingAssets.length > 0) nonEmpty.push("asset");
+    if (existingPreferences.length > 0) nonEmpty.push("preference");
+    if (nonEmpty.length > 0) {
+      throw new Error(`Restore refused: the target ${nonEmpty.join("/")} store is not empty.`);
+    }
   }
 
   const restored = await provider.restoreSnapshotIntoEmpty({
@@ -355,21 +974,42 @@ export async function restoreBackupIntoEmptyProvider(
     tasks: archive.tasks,
     reminders: archive.reminders,
   });
-  const result: RestoreResult = {
+  const coreResult = {
     taskIds: restored.taskIds,
     reminderIds: restored.reminderIds,
     taskCount: restored.taskIds.size,
     reminderCount: restored.reminderIds.size,
   };
-  assertRestoredBackup(restored.snapshot, archive, result);
-  return result;
+  assertRestoredBackup(restored.snapshot, archive, coreResult);
+
+  const restoredMemory = memoryStores
+    ? await restoreMemoryStores(memoryStores, archive)
+    : EMPTY_RESTORED_MEMORY;
+  assertRestoredMemoryStores(restoredMemory, archive);
+
+  return {
+    ...coreResult,
+    buildIds: restoredMemory.buildIds,
+    buildCount: restoredMemory.builds.length,
+    buildLogCount: restoredMemory.buildLogs.length,
+    upgradeCount: restoredMemory.upgrades.length,
+    assetCount: restoredMemory.assets.length,
+    preferenceCount: restoredMemory.preferences.length,
+  };
 }
 
 export async function verifyBackupRestore(archive: BackupArchive): Promise<RestoreResult> {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), "jarvis-backup-verify-"));
   try {
     const provider = new JSONPersistence(path.join(directory, "restored.json"));
-    return await restoreBackupIntoEmptyProvider(provider, archive);
+    const memoryStores: BackupMemoryStores = {
+      builds: new JsonBuildStore(path.join(directory, "builds.json")),
+      buildLogs: new JsonBuildLogStore(path.join(directory, "build-logs.json")),
+      upgrades: new JsonUpgradeStore(path.join(directory, "upgrades.json")),
+      assets: new JsonAssetStore(path.join(directory, "assets.json")),
+      preferences: new JsonPreferenceStore(path.join(directory, "preferences.json")),
+    };
+    return await restoreBackupIntoEmptyProvider(provider, archive, memoryStores);
   } finally {
     await fs.rm(directory, { recursive: true, force: true });
   }

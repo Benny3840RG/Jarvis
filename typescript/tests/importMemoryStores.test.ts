@@ -21,16 +21,20 @@ function emptyBundle(): MemoryStoreBundle {
 describe("importMemoryStores", () => {
   it("copies every domain's records into an empty target", async () => {
     const source = emptyBundle();
-    await source.builds.add({ name: "Trailer", kind: "shed", description: "before" });
+    const sourceBuild = await source.builds.add({
+      name: "Trailer",
+      kind: "shed",
+      description: "before",
+    });
     await source.buildLogs.add({
-      buildId: "b-1",
+      buildId: sourceBuild.id,
       title: "First weld",
       kind: "milestone",
       body: "went well",
       occurredAt: 1000,
     });
     await source.upgrades.add({
-      buildId: "b-1",
+      buildId: sourceBuild.id,
       title: "New axle",
       reason: "stronger",
       parts: ["axle", "hub"],
@@ -67,8 +71,40 @@ describe("importMemoryStores", () => {
     assert.equal(preferences[0]?.category, "paint");
 
     // The target assigns its own ids — the migrated record is not a clone of the source id.
-    const sourceBuild = (await source.builds.list())[0];
-    assert.notEqual(builds[0]?.id, sourceBuild?.id);
+    assert.notEqual(builds[0]?.id, sourceBuild.id);
+    // The migrated build log/upgrade must follow the build to its NEW id, not
+    // keep pointing at the now-meaningless source build id.
+    assert.equal(buildLogs[0]?.buildId, builds[0]?.id);
+    assert.equal(upgrades[0]?.buildId, builds[0]?.id);
+  });
+
+  it("refuses unknown build references before writing anything to the target", async () => {
+    const source = emptyBundle();
+    await source.builds.add({ name: "Valid build", kind: "test" });
+    await source.buildLogs.add({ buildId: "no-such-build", title: "Orphaned", kind: "note" });
+    await source.upgrades.add({ buildId: "another-missing-build", title: "Orphaned upgrade" });
+
+    const target = emptyBundle();
+    await assert.rejects(
+      () => importMemoryStores(source, target),
+      /build log .* references unknown build no-such-build/,
+    );
+    assert.deepEqual(await target.builds.list(), []);
+    assert.deepEqual(await target.buildLogs.list(), []);
+    assert.deepEqual(await target.upgrades.list(), []);
+  });
+
+  it("refuses an upgrade that references an unknown build id (with no other invalid reference present)", async () => {
+    const source = emptyBundle();
+    await source.builds.add({ name: "Trailer", kind: "shed" });
+    await source.upgrades.add({ buildId: "no-such-build", title: "Orphaned upgrade" });
+
+    const target = emptyBundle();
+    await assert.rejects(
+      () => importMemoryStores(source, target),
+      /upgrade .* references unknown build no-such-build/,
+    );
+    assert.deepEqual(await target.builds.list(), []);
   });
 
   it("returns all-zero counts and writes nothing when the source is empty", async () => {

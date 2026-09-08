@@ -26,11 +26,43 @@ export type ImportSummary = {
  * an override for them). Domains with a first-class occurredAt field (build logs,
  * upgrades) keep that value, since it is distinct from createdAt and is a normal
  * input field. This is a one-shot data carry-over, not a byte-for-byte clone.
+ *
+ * Build logs and upgrades reference a build by id, so builds are copied first and
+ * their old-id -> new-id map is threaded through to re-point those references at
+ * the target's own build ids, rather than copying the now-meaningless source id.
+ * Every buildId reference is validated against the source's own builds before
+ * anything is written to the target (see `validateBuildReferences`), so a source
+ * with a dangling reference is refused before the target is touched at all.
  */
-async function copyBuilds(source: BuildStore, target: BuildStore): Promise<number> {
-  const records: Build[] = await source.list();
+function validateBuildReferences(
+  builds: readonly Build[],
+  buildLogs: readonly BuildLogEntry[],
+  upgrades: readonly Upgrade[],
+): void {
+  const buildIds = new Set(builds.map((build) => build.id));
+  for (const log of buildLogs) {
+    if (!buildIds.has(log.buildId)) {
+      throw new Error(
+        `Import refused: build log ${log.id} references unknown build ${log.buildId}.`,
+      );
+    }
+  }
+  for (const upgrade of upgrades) {
+    if (!buildIds.has(upgrade.buildId)) {
+      throw new Error(
+        `Import refused: upgrade ${upgrade.id} references unknown build ${upgrade.buildId}.`,
+      );
+    }
+  }
+}
+
+async function copyBuilds(
+  records: readonly Build[],
+  target: BuildStore,
+): Promise<{ count: number; buildIds: ReadonlyMap<string, string> }> {
+  const buildIds = new Map<string, string>();
   for (const build of records) {
-    await target.add({
+    const created = await target.add({
       name: build.name,
       kind: build.kind,
       status: build.status,
@@ -38,15 +70,26 @@ async function copyBuilds(source: BuildStore, target: BuildStore): Promise<numbe
       ...(build.nickname === undefined ? {} : { nickname: build.nickname }),
       ...(build.notes === undefined ? {} : { notes: build.notes }),
     });
+    buildIds.set(build.id, created.id);
   }
-  return records.length;
+  return { count: records.length, buildIds };
 }
 
-async function copyBuildLogs(source: BuildLogStore, target: BuildLogStore): Promise<number> {
-  const records: BuildLogEntry[] = await source.list();
+async function copyBuildLogs(
+  records: readonly BuildLogEntry[],
+  target: BuildLogStore,
+  buildIds: ReadonlyMap<string, string>,
+): Promise<number> {
   for (const log of records) {
+    const buildId = buildIds.get(log.buildId);
+    if (buildId === undefined) {
+      // Unreachable: validateBuildReferences already checked every buildId.
+      throw new Error(
+        `Import refused: build log ${log.id} references unknown build ${log.buildId}.`,
+      );
+    }
     await target.add({
-      buildId: log.buildId,
+      buildId,
       title: log.title,
       kind: log.kind,
       ...(log.body === undefined ? {} : { body: log.body }),
@@ -56,11 +99,21 @@ async function copyBuildLogs(source: BuildLogStore, target: BuildLogStore): Prom
   return records.length;
 }
 
-async function copyUpgrades(source: UpgradeStore, target: UpgradeStore): Promise<number> {
-  const records: Upgrade[] = await source.list();
+async function copyUpgrades(
+  records: readonly Upgrade[],
+  target: UpgradeStore,
+  buildIds: ReadonlyMap<string, string>,
+): Promise<number> {
   for (const upgrade of records) {
+    const buildId = buildIds.get(upgrade.buildId);
+    if (buildId === undefined) {
+      // Unreachable: validateBuildReferences already checked every buildId.
+      throw new Error(
+        `Import refused: upgrade ${upgrade.id} references unknown build ${upgrade.buildId}.`,
+      );
+    }
     await target.add({
-      buildId: upgrade.buildId,
+      buildId,
       title: upgrade.title,
       ...(upgrade.reason === undefined ? {} : { reason: upgrade.reason }),
       ...(upgrade.beforeState === undefined ? {} : { beforeState: upgrade.beforeState }),
@@ -134,10 +187,20 @@ export async function importMemoryStores(
     );
   }
 
+  const [sourceBuilds, sourceBuildLogs, sourceUpgrades] = await Promise.all([
+    source.builds.list(),
+    source.buildLogs.list(),
+    source.upgrades.list(),
+  ]);
+  // Validate every buildId reference before writing anything, so a dangling
+  // reference refuses cleanly rather than leaving the target half-populated.
+  validateBuildReferences(sourceBuilds, sourceBuildLogs, sourceUpgrades);
+
+  const { count: buildCount, buildIds } = await copyBuilds(sourceBuilds, target.builds);
   return {
-    builds: await copyBuilds(source.builds, target.builds),
-    buildLogs: await copyBuildLogs(source.buildLogs, target.buildLogs),
-    upgrades: await copyUpgrades(source.upgrades, target.upgrades),
+    builds: buildCount,
+    buildLogs: await copyBuildLogs(sourceBuildLogs, target.buildLogs, buildIds),
+    upgrades: await copyUpgrades(sourceUpgrades, target.upgrades, buildIds),
     assets: await copyAssets(source.assets, target.assets),
     preferences: await copyPreferences(source.preferences, target.preferences),
   };

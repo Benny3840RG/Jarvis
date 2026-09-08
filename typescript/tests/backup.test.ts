@@ -13,6 +13,7 @@ import {
   restoreBackupIntoEmptyProvider,
   verifyBackupRestore,
   writeBackupFile,
+  type BackupMemoryStores,
 } from "../src/backup/backup.js";
 import {
   ConvexPersistence,
@@ -29,6 +30,26 @@ import {
   type Task,
   type TaskUpdate,
 } from "../src/persistence/persistence.js";
+import { InMemoryBuildStore } from "../src/builds/inMemoryBuildStore.js";
+import { InMemoryBuildLogStore } from "../src/buildLog/inMemoryBuildLogStore.js";
+import { InMemoryUpgradeStore } from "../src/upgrades/inMemoryUpgradeStore.js";
+import { InMemoryAssetStore } from "../src/assets/inMemoryAssetStore.js";
+import { InMemoryPreferenceStore } from "../src/preferences/inMemoryPreferenceStore.js";
+import { JsonBuildStore } from "../src/builds/jsonBuildStore.js";
+import { JsonBuildLogStore } from "../src/buildLog/jsonBuildLogStore.js";
+import { JsonUpgradeStore } from "../src/upgrades/jsonUpgradeStore.js";
+import { JsonAssetStore } from "../src/assets/jsonAssetStore.js";
+import { JsonPreferenceStore } from "../src/preferences/jsonPreferenceStore.js";
+
+function emptyMemoryStores(): BackupMemoryStores {
+  return {
+    builds: new InMemoryBuildStore(),
+    buildLogs: new InMemoryBuildLogStore(),
+    upgrades: new InMemoryUpgradeStore(),
+    assets: new InMemoryAssetStore(),
+    preferences: new InMemoryPreferenceStore(),
+  };
+}
 
 type ConvexStub = {
   query(reference: unknown, args?: Record<string, unknown>): Promise<unknown>;
@@ -193,8 +214,12 @@ describe("Jarvis backup archives", () => {
       nested: { ids: [pending.id, completed.id, reminder.id] },
     });
 
-    const archive = await exportBackup(source, () => new Date("2026-07-13T03:30:00.000Z"));
-    assert.equal(archive.version, 2);
+    const archive = await exportBackup(
+      source,
+      () => new Date("2026-07-13T03:30:00.000Z"),
+      emptyMemoryStores(),
+    );
+    assert.equal(archive.version, 3);
     assert.equal(archive.createdAt, "2026-07-13T03:30:00.000Z");
     assert.equal(archive.tasks.length, 2);
     assert.equal(archive.reminders.length, 1);
@@ -241,6 +266,7 @@ describe("Jarvis backup archives", () => {
     const archive = await exportBackup(
       new SnapshotOnlyProvider(),
       () => new Date("2026-07-13T03:30:00.000Z"),
+      emptyMemoryStores(),
     );
 
     assert.deepEqual(archive.state, { coherent: true });
@@ -251,7 +277,7 @@ describe("Jarvis backup archives", () => {
     const source = new JSONPersistence(path.join(tempDir, "source-concurrent.json"));
     await source.addTask("Only one copy", "work");
     await source.addReminder("Only one reminder", { raw: "after Claire calls" });
-    const archive = await exportBackup(source);
+    const archive = await exportBackup(source, undefined, emptyMemoryStores());
     const target = path.join(tempDir, "concurrent-target.json");
 
     const attempts = await Promise.allSettled([
@@ -285,7 +311,7 @@ describe("Jarvis backup archives", () => {
       ],
     });
 
-    assert.equal(migrated.version, 2);
+    assert.equal(migrated.version, 3);
     assert.deepEqual(migrated.reminders[0], {
       id: "legacy-reminder",
       title: "Legacy reminder",
@@ -296,17 +322,25 @@ describe("Jarvis backup archives", () => {
 
   it("refuses to overwrite an existing backup file", async () => {
     const provider = new JSONPersistence(path.join(tempDir, "source.json"));
-    const archive = await exportBackup(provider);
+    const archive = await exportBackup(provider, undefined, emptyMemoryStores());
     const backupPath = path.join(tempDir, "backup.json");
     await writeBackupFile(backupPath, archive);
     await assert.rejects(() => writeBackupFile(backupPath, archive), /already exists/);
+  });
+
+  it("refuses to create a version 3 archive without memory-domain stores", async () => {
+    const provider = new JSONPersistence(path.join(tempDir, "source.json"));
+    await assert.rejects(
+      () => exportBackup(provider),
+      /requires memory-domain stores.*incomplete version 3 archive/,
+    );
   });
 
   it("refuses to read a backup through a symbolic link", async () => {
     if (process.platform === "win32") return;
 
     const provider = new JSONPersistence(path.join(tempDir, "source.json"));
-    const archive = await exportBackup(provider);
+    const archive = await exportBackup(provider, undefined, emptyMemoryStores());
     const realPath = path.join(tempDir, "real-backup.json");
     const linkPath = path.join(tempDir, "linked-backup.json");
     await writeBackupFile(realPath, archive);
@@ -318,7 +352,7 @@ describe("Jarvis backup archives", () => {
   it("refuses restore when the target contains state or records", async () => {
     const source = new JSONPersistence(path.join(tempDir, "source.json"));
     await source.addTask("Source task", "work");
-    const archive = await exportBackup(source);
+    const archive = await exportBackup(source, undefined, emptyMemoryStores());
 
     const destination = new JSONPersistence(path.join(tempDir, "destination.json"));
     await destination.saveState({ occupied: true });
@@ -454,7 +488,7 @@ describe("Jarvis backup archives", () => {
       () =>
         parseBackup({
           format: "jarvis-backup",
-          version: 3,
+          version: 4,
           createdAt: "2026-07-13T03:30:00.000Z",
           state: {},
           tasks: [],
@@ -518,5 +552,235 @@ describe("Jarvis backup archives", () => {
         }),
       /duplicate task id/,
     );
+  });
+
+  describe("memory store domains (builds, build logs, upgrades, assets, preferences)", () => {
+    it("round-trips all five domains, remapping buildId to the restored build's new id", async () => {
+      const source = new JSONPersistence(path.join(tempDir, "source.json"));
+      await source.addTask("Measure gate", "work");
+      const sourceMemory = emptyMemoryStores();
+      const build = await sourceMemory.builds.add({
+        name: "Trailer",
+        kind: "shed",
+        status: "active",
+        description: "gull-wing",
+      });
+      await sourceMemory.buildLogs.add({
+        buildId: build.id,
+        title: "First weld",
+        kind: "milestone",
+        body: "went well",
+        occurredAt: 1000,
+      });
+      await sourceMemory.upgrades.add({
+        buildId: build.id,
+        title: "New axle",
+        reason: "stronger",
+        parts: ["axle", "hub"],
+      });
+      await sourceMemory.assets.add({
+        name: "Angle grinder",
+        kind: "tool",
+        serviceIntervalDays: 60,
+      });
+      await sourceMemory.preferences.add({ key: "paint-brand", value: "Dulux", category: "paint" });
+
+      const archive = await exportBackup(
+        source,
+        () => new Date("2026-07-13T03:30:00.000Z"),
+        sourceMemory,
+      );
+      assert.equal(archive.version, 3);
+      assert.equal(archive.builds.length, 1);
+      assert.equal(archive.buildLogs.length, 1);
+      assert.equal(archive.upgrades.length, 1);
+      assert.equal(archive.assets.length, 1);
+      assert.equal(archive.preferences.length, 1);
+
+      const backupPath = path.join(tempDir, "backup.json");
+      await writeBackupFile(backupPath, archive);
+      const loaded = await readBackupFile(backupPath);
+      assert.deepEqual(loaded, archive);
+
+      const isolated = await verifyBackupRestore(loaded);
+      assert.equal(isolated.buildCount, 1);
+      assert.equal(isolated.buildLogCount, 1);
+      assert.equal(isolated.upgradeCount, 1);
+      assert.equal(isolated.assetCount, 1);
+      assert.equal(isolated.preferenceCount, 1);
+
+      const destination = new JSONPersistence(path.join(tempDir, "destination.json"));
+      const destinationMemory = emptyMemoryStores();
+      const result = await restoreBackupIntoEmptyProvider(destination, loaded, destinationMemory);
+
+      const restoredBuilds = await destinationMemory.builds.list();
+      const restoredBuildLogs = await destinationMemory.buildLogs.list();
+      const restoredUpgrades = await destinationMemory.upgrades.list();
+      const restoredAssets = await destinationMemory.assets.list();
+      const restoredPreferences = await destinationMemory.preferences.list();
+
+      assert.equal(restoredBuilds.length, 1);
+      assert.notEqual(restoredBuilds[0]?.id, build.id);
+      assert.equal(result.buildIds.get(build.id), restoredBuilds[0]?.id);
+      assert.equal(restoredBuildLogs[0]?.buildId, restoredBuilds[0]?.id);
+      assert.equal(restoredUpgrades[0]?.buildId, restoredBuilds[0]?.id);
+      assert.deepEqual(restoredUpgrades[0]?.parts, ["axle", "hub"]);
+      assert.equal(restoredAssets[0]?.serviceIntervalDays, 60);
+      assert.equal(restoredPreferences[0]?.category, "paint");
+    });
+
+    it("keeps a v2 archive restorable without supplying memory stores", async () => {
+      const archive = parseBackup({
+        format: "jarvis-backup",
+        version: 2,
+        createdAt: "2026-07-13T03:30:00.000Z",
+        state: {},
+        tasks: [],
+        reminders: [],
+      });
+      assert.deepEqual(archive.builds, []);
+
+      const destination = new JSONPersistence(path.join(tempDir, "destination.json"));
+      const result = await restoreBackupIntoEmptyProvider(destination, archive);
+      assert.equal(result.buildCount, 0);
+    });
+
+    it("refuses restore when the archive holds memory records but no memory stores are supplied", async () => {
+      const source = new JSONPersistence(path.join(tempDir, "source.json"));
+      const sourceMemory = emptyMemoryStores();
+      await sourceMemory.preferences.add({ key: "paint-brand", value: "Dulux" });
+      const archive = await exportBackup(source, undefined, sourceMemory);
+
+      const destination = new JSONPersistence(path.join(tempDir, "destination.json"));
+      await assert.rejects(
+        () => restoreBackupIntoEmptyProvider(destination, archive),
+        /no memory stores were supplied/,
+      );
+      // Nothing in the core provider should have been written either.
+      assert.deepEqual(await destination.loadState(), {});
+    });
+
+    it("refuses restore when a target memory store is not empty", async () => {
+      const source = new JSONPersistence(path.join(tempDir, "source.json"));
+      const sourceMemory = emptyMemoryStores();
+      await sourceMemory.assets.add({ name: "Angle grinder", kind: "tool" });
+      const archive = await exportBackup(source, undefined, sourceMemory);
+
+      const destination = new JSONPersistence(path.join(tempDir, "destination.json"));
+      const destinationMemory = emptyMemoryStores();
+      await destinationMemory.preferences.add({ key: "existing", value: "already here" });
+
+      await assert.rejects(
+        () => restoreBackupIntoEmptyProvider(destination, archive, destinationMemory),
+        /target preference store is not empty/,
+      );
+      // The core provider must not have been touched either — the pre-check runs first.
+      assert.deepEqual(await destination.loadState(), {});
+      assert.equal((await destination.listTasks()).length, 0);
+    });
+
+    it("rejects a build log or upgrade whose buildId does not match any build in the archive", () => {
+      assert.throws(
+        () =>
+          parseBackup({
+            format: "jarvis-backup",
+            version: 3,
+            createdAt: "2026-07-13T03:30:00.000Z",
+            state: {},
+            tasks: [],
+            reminders: [],
+            builds: [],
+            buildLogs: [
+              {
+                id: "log-1",
+                buildId: "no-such-build",
+                kind: "note",
+                title: "Orphaned",
+                createdAt: 1,
+              },
+            ],
+            upgrades: [],
+            assets: [],
+            preferences: [],
+          }),
+        /build log log-1 references unknown build no-such-build/,
+      );
+    });
+
+    it("rejects malformed build, asset, and preference records", () => {
+      const base = {
+        format: "jarvis-backup" as const,
+        version: 3 as const,
+        createdAt: "2026-07-13T03:30:00.000Z",
+        state: {},
+        tasks: [],
+        reminders: [],
+        buildLogs: [],
+        upgrades: [],
+      };
+      assert.throws(
+        () =>
+          parseBackup({
+            ...base,
+            builds: [{ id: "b-1", name: "Trailer", kind: "shed", status: "unknown-status" }],
+            assets: [],
+            preferences: [],
+          }),
+        /invalid status/,
+      );
+      assert.throws(
+        () =>
+          parseBackup({
+            ...base,
+            builds: [],
+            assets: [{ id: "a-1", name: "Grinder", kind: "tool", createdAt: "not-a-number" }],
+            preferences: [],
+          }),
+        /invalid createdAt/,
+      );
+      assert.throws(
+        () =>
+          parseBackup({
+            ...base,
+            builds: [],
+            assets: [],
+            preferences: [
+              { id: "p-1", key: "brand", value: "Dulux", createdAt: 1, updatedAt: 1 },
+              { id: "p-1", key: "brand", value: "Dulux", createdAt: 1, updatedAt: 1 },
+            ],
+          }),
+        /duplicate preference id/,
+      );
+    });
+
+    it("round-trips through the real JSON-file stores end to end", async () => {
+      const source = new JSONPersistence(path.join(tempDir, "source.json"));
+      const sourceMemory: BackupMemoryStores = {
+        builds: new JsonBuildStore(path.join(tempDir, "src-builds.json")),
+        buildLogs: new JsonBuildLogStore(path.join(tempDir, "src-build-logs.json")),
+        upgrades: new JsonUpgradeStore(path.join(tempDir, "src-upgrades.json")),
+        assets: new JsonAssetStore(path.join(tempDir, "src-assets.json")),
+        preferences: new JsonPreferenceStore(path.join(tempDir, "src-preferences.json")),
+      };
+      const build = await sourceMemory.builds.add({ name: "Trailer", kind: "shed" });
+      await sourceMemory.buildLogs.add({ buildId: build.id, title: "Origin", kind: "origin" });
+
+      const archive = await exportBackup(source, undefined, sourceMemory);
+
+      const destination = new JSONPersistence(path.join(tempDir, "dst.json"));
+      const destinationMemory: BackupMemoryStores = {
+        builds: new JsonBuildStore(path.join(tempDir, "dst-builds.json")),
+        buildLogs: new JsonBuildLogStore(path.join(tempDir, "dst-build-logs.json")),
+        upgrades: new JsonUpgradeStore(path.join(tempDir, "dst-upgrades.json")),
+        assets: new JsonAssetStore(path.join(tempDir, "dst-assets.json")),
+        preferences: new JsonPreferenceStore(path.join(tempDir, "dst-preferences.json")),
+      };
+      await restoreBackupIntoEmptyProvider(destination, archive, destinationMemory);
+
+      const restoredBuilds = await destinationMemory.builds.list();
+      const restoredLogs = await destinationMemory.buildLogs.list();
+      assert.equal(restoredBuilds[0]?.name, "Trailer");
+      assert.equal(restoredLogs[0]?.buildId, restoredBuilds[0]?.id);
+    });
   });
 });

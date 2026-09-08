@@ -204,7 +204,7 @@ Do not run the smoke command while deliberately testing against production. The 
 
 ### Backup, verification, and restore
 
-Backups are provider-neutral JSON archives containing assistant state, tasks, reminders, source IDs, source timestamps, and normalized reminder due data. Files are created with private permissions and an existing backup file is never overwritten. Version 1 archives remain accepted and are migrated to the current version during validation.
+Backups are provider-neutral JSON archives containing assistant state, tasks, reminders, builds, build logs, upgrades, assets, preferences, source IDs, source timestamps, and normalized reminder due data. Files are created with private permissions and an existing backup file is never overwritten. Version 1 and version 2 archives remain accepted and are migrated to the current version during validation (a migrated legacy archive simply carries no build/build-log/upgrade/asset/preference records).
 
 ```bash
 cd typescript
@@ -213,7 +213,7 @@ npm run backup -- export "$BACKUP_FILE"
 npm run backup -- verify "$BACKUP_FILE"
 ```
 
-`verify` restores the archive into isolated temporary JSON storage, checks tasks, reminders, completion state, due fields, and remapped assistant-state references, then deletes the temporary files. It does not touch the configured live provider.
+`verify` restores the archive into isolated temporary JSON storage, checks tasks, reminders, completion state, due fields, builds/build logs/upgrades/assets/preferences, and remapped id references, then deletes the temporary files. It does not touch the configured live provider.
 
 A real restore is deliberately empty-target only and requires an explicit confirmation flag:
 
@@ -221,7 +221,9 @@ A real restore is deliberately empty-target only and requires an explicit confir
 npm run backup -- restore "$BACKUP_FILE" --confirm-empty-target
 ```
 
-Restore refuses any provider that already contains state, tasks, or reminders. It rolls back records created during a failed restore. Because JSON and Convex issue their own record IDs and timestamps, a portable restore recreates those values; known and nested record-ID references inside assistant state are remapped automatically. The archive retains the original IDs and timestamps for audit purposes.
+Restore refuses any provider or memory store that already contains data. It rolls back records created during a failed restore of assistant state, tasks, and reminders (that portion is one atomic operation); builds, build logs, upgrades, assets, and preferences are restored afterward with one `add()` call per record and are not covered by that same rollback — see the `BackupMemoryStores` doc comment in `typescript/src/backup/backup.ts`. Because JSON and Convex issue their own record IDs and timestamps, a portable restore recreates those values; known and nested record-ID references inside assistant state and build logs/upgrades' `buildId` are remapped automatically. The archive retains the original IDs and timestamps for audit purposes.
+
+**Not yet covered:** clients, quotes, invoices, projects, properties, enquiries, and errands are separate JSON-backed domains that are *not* included in the backup archive yet. Unlike builds/build logs/upgrades/assets/preferences, these domains are densely cross-referenced by id (a quote holds a `clientId`, an invoice holds a `quoteId`, etc.), so restoring them safely needs one consistent id-remap applied across every domain at once, not a per-domain copy. See `typescript/docs/ROADMAP.md` for the plan.
 
 ## Checks
 
