@@ -24,7 +24,7 @@ permissions:
 jobs:
   automation-policy:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -38,6 +38,26 @@ jobs:
           node --test .github/automation/validate-autobuild.test.mjs
           .github/automation/development-commissioning.test.mjs
           .github/automation/validate-pr-evidence.test.mjs
+
+      - name: Check out the pinned socket compatibility fixture
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: openai/codex-action
+          ref: 86365089eb2b84e0a8fb0717b304f8bdcb13b20e
+          path: codex-action-fixture
+          persist-credentials: false
+      - name: Verify worker-only socket isolation on Linux
+        env:
+          CODEX_ACTION_BUNDLE: ${{ github.workspace }}/codex-action-fixture/dist/main.js
+        run: |
+          set -euo pipefail
+          if [[ ! -x /usr/bin/getfacl || ! -x /usr/bin/setfacl ]]; then
+            sudo apt-get update
+            sudo apt-get install --no-install-recommends -y acl
+          fi
+          test -f "$CODEX_ACTION_BUNDLE"
+          node --test .github/automation/codex-socket-compat.test.mjs
+          sudo "$(command -v node)" .github/automation/test-codex-sockets.mjs "$CODEX_ACTION_BUNDLE"
 
   typecheck-lint-format-test:
     runs-on: ubuntu-latest

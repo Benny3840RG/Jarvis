@@ -624,6 +624,13 @@ describe("Jarvis HTTP system boundary", () => {
   });
 
   it("checks persistence and reports truthful Z-State readiness", async () => {
+    // The injected providerName ("convex") now flows straight into the
+    // reasoning projection, so this pins the provider-key env vars rather
+    // than relying on ambient absence, keeping the "not-configured" outcome
+    // deterministic regardless of what else is set in the process.
+    const envKeys = ["OPENAI_API_KEY", "GEMINI_API_KEY", "TOTALITY_REASONER_PROVIDER"] as const;
+    const original = new Map(envKeys.map((key) => [key, process.env[key]]));
+    for (const key of envKeys) delete process.env[key];
     const reads = { state: 0, tasks: 0, reminders: 0 };
     const persistence = makePersistence({
       async loadState() {
@@ -639,56 +646,71 @@ describe("Jarvis HTTP system boundary", () => {
         return [];
       },
     });
-    const app = await makeApp({
-      persistence,
-      providerName: "convex",
-      config: { deploymentVersion: "dev/outgoing-ram-798" },
-    });
-    const response = await app
-      .getHttpAdapter()
-      .getInstance()
-      .inject({
-        method: "GET",
-        url: "/api/v1/status",
-        headers: { authorization: "Bearer current-secret" },
+    try {
+      const app = await makeApp({
+        persistence,
+        providerName: "convex",
+        config: { deploymentVersion: "dev/outgoing-ram-798" },
       });
-    const body = response.json<Record<string, unknown>>() as {
-      status: string;
-      version: string;
-      sourceVersion: string;
-      provider: Record<string, unknown>;
-      reconciliation: { state: string; enabled: boolean };
-      reasoning: { status: string; provider: string | null; model: string | null; reason: string };
-      timezone: string;
-      layers: Record<string, { status: string; reason?: string }>;
-      zState: string;
-      checkedAt: string;
-    };
+      const response = await app
+        .getHttpAdapter()
+        .getInstance()
+        .inject({
+          method: "GET",
+          url: "/api/v1/status",
+          headers: { authorization: "Bearer current-secret" },
+        });
+      const body = response.json<Record<string, unknown>>() as {
+        status: string;
+        version: string;
+        sourceVersion: string;
+        provider: Record<string, unknown>;
+        reconciliation: { state: string; enabled: boolean };
+        reasoning: {
+          status: string;
+          provider: string | null;
+          model: string | null;
+          reason: string;
+        };
+        timezone: string;
+        layers: Record<string, { status: string; reason?: string }>;
+        zState: string;
+        checkedAt: string;
+      };
 
-    assert.equal(response.statusCode, 200);
-    assert.deepEqual(reads, { state: 1, tasks: 1, reminders: 1 });
-    assert.equal(body.status, "ok");
-    assert.equal(body.version, "0.1.0");
-    assert.equal(body.sourceVersion, "test-source-0001");
-    assert.deepEqual(body.provider, {
-      name: "convex",
-      reachability: "ok",
-      authentication: "ok",
-      schemaCompatibility: "compatible",
-      deploymentVersion: "dev/outgoing-ram-798",
-    });
-    assert.deepEqual(body.reconciliation, { state: "disabled", enabled: false });
-    // This test never sets PERSISTENCE_PROVIDER/OPENAI_API_KEY/GEMINI_API_KEY as
-    // real process env vars (it injects a mock persistence provider directly),
-    // so reasoning is deterministically not-configured regardless of ambient env.
-    assert.equal(body.reasoning.status, "not-configured");
-    assert.equal(body.timezone, "Australia/Melbourne");
-    assert.equal(body.layers.runtime.status, "partial");
-    assert.equal(body.layers.integration.status, "partial");
-    assert.equal(body.layers.reliability.status, "partial");
-    assert.match(body.layers.reliability.reason ?? "", /Persistence probe passed/);
-    assert.equal(body.zState, "disabled");
-    assert.equal(Number.isNaN(Date.parse(body.checkedAt)), false);
+      assert.equal(response.statusCode, 200);
+      assert.deepEqual(reads, { state: 1, tasks: 1, reminders: 1 });
+      assert.equal(body.status, "ok");
+      assert.equal(body.version, "0.1.0");
+      assert.equal(body.sourceVersion, "test-source-0001");
+      assert.deepEqual(body.provider, {
+        name: "convex",
+        reachability: "ok",
+        authentication: "ok",
+        schemaCompatibility: "compatible",
+        deploymentVersion: "dev/outgoing-ram-798",
+      });
+      assert.deepEqual(body.reconciliation, { state: "disabled", enabled: false });
+      // The injected provider is "convex", so reasoning is evaluated against
+      // it directly (never re-reading PERSISTENCE_PROVIDER) and is
+      // not-configured for the true reason: no reasoner API key is set here.
+      assert.equal(body.reasoning.status, "not-configured");
+      assert.equal(body.reasoning.provider, "openai");
+      assert.match(body.reasoning.reason, /OPENAI_API_KEY is required/);
+      assert.equal(body.timezone, "Australia/Melbourne");
+      assert.equal(body.layers.runtime.status, "partial");
+      assert.equal(body.layers.integration.status, "partial");
+      assert.equal(body.layers.reliability.status, "partial");
+      assert.match(body.layers.reliability.reason ?? "", /Persistence probe passed/);
+      assert.equal(body.zState, "disabled");
+      assert.equal(Number.isNaN(Date.parse(body.checkedAt)), false);
+    } finally {
+      for (const key of envKeys) {
+        const value = original.get(key);
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    }
   });
 
   it("reports reasoning as configured (never verified) when the provider key is set", async () => {

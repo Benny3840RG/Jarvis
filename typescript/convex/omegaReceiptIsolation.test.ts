@@ -155,7 +155,7 @@ async function drainScheduled(t: ReturnType<typeof harness>): Promise<unknown> {
 }
 
 describe("Omega receipt isolation", () => {
-  it("persists Jarvis receipt when Omega reconciliation cannot advance", async () => {
+  it("persists Jarvis receipt while Omega records the missing execution claim", async () => {
     const t = harness();
     await seedAuthorizedButUnclaimedContract(t);
 
@@ -175,7 +175,21 @@ describe("Omega receipt isolation", () => {
       serviceToken: SERVICE_TOKEN,
       toolActionId: "action-isolation",
     });
-    expect(contract?.status).toBe("authorized");
+    // A receipt without the bound execution claim is retained as execution
+    // truth, while Omega independently records the identity contradiction.
+    expect(contract?.status).toBe("conflicted");
+    const conflicts = await t.run(async (ctx) =>
+      (await ctx.db.query("auditEvents").take(100)).filter(
+        (event) => event.eventType === "omega.contract.receipt-identity-conflict",
+      ),
+    );
+    expect(conflicts).toHaveLength(1);
+    expect(conflicts[0]?.payload).toMatchObject({
+      projectMatches: true,
+      toolMatches: true,
+      operationMatches: true,
+      claimMatches: false,
+    });
   });
 
   it("persists Jarvis receipt even when scheduled Omega reconciliation hits inconsistent indexed state", async () => {
