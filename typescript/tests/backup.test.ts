@@ -214,7 +214,11 @@ describe("Jarvis backup archives", () => {
       nested: { ids: [pending.id, completed.id, reminder.id] },
     });
 
-    const archive = await exportBackup(source, () => new Date("2026-07-13T03:30:00.000Z"));
+    const archive = await exportBackup(
+      source,
+      () => new Date("2026-07-13T03:30:00.000Z"),
+      emptyMemoryStores(),
+    );
     assert.equal(archive.version, 3);
     assert.equal(archive.createdAt, "2026-07-13T03:30:00.000Z");
     assert.equal(archive.tasks.length, 2);
@@ -262,6 +266,7 @@ describe("Jarvis backup archives", () => {
     const archive = await exportBackup(
       new SnapshotOnlyProvider(),
       () => new Date("2026-07-13T03:30:00.000Z"),
+      emptyMemoryStores(),
     );
 
     assert.deepEqual(archive.state, { coherent: true });
@@ -272,7 +277,7 @@ describe("Jarvis backup archives", () => {
     const source = new JSONPersistence(path.join(tempDir, "source-concurrent.json"));
     await source.addTask("Only one copy", "work");
     await source.addReminder("Only one reminder", { raw: "after Claire calls" });
-    const archive = await exportBackup(source);
+    const archive = await exportBackup(source, undefined, emptyMemoryStores());
     const target = path.join(tempDir, "concurrent-target.json");
 
     const attempts = await Promise.allSettled([
@@ -317,17 +322,25 @@ describe("Jarvis backup archives", () => {
 
   it("refuses to overwrite an existing backup file", async () => {
     const provider = new JSONPersistence(path.join(tempDir, "source.json"));
-    const archive = await exportBackup(provider);
+    const archive = await exportBackup(provider, undefined, emptyMemoryStores());
     const backupPath = path.join(tempDir, "backup.json");
     await writeBackupFile(backupPath, archive);
     await assert.rejects(() => writeBackupFile(backupPath, archive), /already exists/);
+  });
+
+  it("refuses to create a version 3 archive without memory-domain stores", async () => {
+    const provider = new JSONPersistence(path.join(tempDir, "source.json"));
+    await assert.rejects(
+      () => exportBackup(provider),
+      /requires memory-domain stores.*incomplete version 3 archive/,
+    );
   });
 
   it("refuses to read a backup through a symbolic link", async () => {
     if (process.platform === "win32") return;
 
     const provider = new JSONPersistence(path.join(tempDir, "source.json"));
-    const archive = await exportBackup(provider);
+    const archive = await exportBackup(provider, undefined, emptyMemoryStores());
     const realPath = path.join(tempDir, "real-backup.json");
     const linkPath = path.join(tempDir, "linked-backup.json");
     await writeBackupFile(realPath, archive);
@@ -339,7 +352,7 @@ describe("Jarvis backup archives", () => {
   it("refuses restore when the target contains state or records", async () => {
     const source = new JSONPersistence(path.join(tempDir, "source.json"));
     await source.addTask("Source task", "work");
-    const archive = await exportBackup(source);
+    const archive = await exportBackup(source, undefined, emptyMemoryStores());
 
     const destination = new JSONPersistence(path.join(tempDir, "destination.json"));
     await destination.saveState({ occupied: true });
