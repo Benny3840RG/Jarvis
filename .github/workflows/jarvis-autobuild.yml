@@ -831,6 +831,7 @@ jobs:
           PR_URL: ${{ needs.build.outputs.pr-url }}
           BUILD_RESULT: ${{ needs.build.result }}
           VERIFY_RESULT: ${{ needs.verify-candidate.result }}
+          LOCK_ACQUIRED: ${{ needs.build.outputs.lock-acquired }}
           SOURCE_SHA: ${{ needs.build.outputs.source-sha }}
           DEPENDENCIES_OUTCOME: ${{ needs.build.outputs.dependencies-outcome }}
           CODEX_OUTCOME: ${{ needs.build.outputs.codex-outcome }}
@@ -932,6 +933,17 @@ jobs:
                   `authorised maintainer merge are still required.` + receiptBody,
               });
             } else {
+              // A run that never acquired the mission lock did not own this
+              // issue — it lost the dispatch race to another active mission, or
+              // failed its own eligibility recheck. Blocking it here would drop a
+              // still-eligible issue from the queue until an operator cleared the
+              // label. Leave it untouched; the coordinator retries it.
+              if (process.env.LOCK_ACQUIRED !== "true") {
+                core.info(
+                  "This run never acquired the mission lock; leaving the issue for the queue to retry.",
+                );
+                return;
+              }
               if (lockComment) {
                 try {
                   await github.rest.issues.removeLabel({

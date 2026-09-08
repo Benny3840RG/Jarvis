@@ -208,6 +208,13 @@ test("queue-advance workflow satisfies the coordinator contract", () => {
     false,
     "must reconcile stale mission locks on sweeps",
   );
+  assert.equal(
+    validateQueueAdvanceContract(
+      workflow.replaceAll("getCollaboratorPermissionLevel", "trustTheLabeler"),
+    ).ok,
+    false,
+    "must gate label approvals on the labeler's repository permission",
+  );
 });
 
 test("all queue-advance actions are pinned to immutable SHAs", () => {

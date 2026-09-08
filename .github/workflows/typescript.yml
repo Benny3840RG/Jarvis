@@ -7,15 +7,14 @@ name: TypeScript checks
 
 on:
   push:
+    # No paths filter on purpose. Every commit on `main` must publish the
+    # required status checks (automation-policy, typecheck-lint-format-test,
+    # jarvis-console-01-build): jarvis-queue-advance.yml's `verify-main` gate
+    # waits for them on `main` HEAD before dispatching a mission, so a docs-only
+    # or workflow-only push that skipped this workflow would stall the approved
+    # queue until an unrelated code change happened to land. `pull_request`
+    # already runs unconditionally.
     branches: [main]
-    paths:
-      - "typescript/**"
-      - ".github/workflows/typescript.yml"
-      - ".github/workflows/development-commissioning.yml"
-      - ".github/workflows/queue-development-commissioning.yml"
-      - ".github/workflows/jarvis-autobuild.yml"
-      - ".github/workflows/jarvis-queue-advance.yml"
-      - ".github/automation/**"
   pull_request:
     branches: [main]
 
