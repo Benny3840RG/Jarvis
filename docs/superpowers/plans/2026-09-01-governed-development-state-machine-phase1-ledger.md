@@ -3,10 +3,22 @@
 This ledger is an audit aid. Canonical authority remains the machine-readable
 contracts and durable Jarvis records; checklist state here grants no authority.
 
-## Current task
+## Current Phase 1 status
 
-Publish and verify the fail-closed evidence follow-up on a fresh branch from
-`main`, after pull request #415 merged.
+- PR #415 completed the original governed-development Phase 1 implementation
+  slice and remains the canonical merge for that work.
+- Issue #458 / PR #467 then completed one real bounded autonomous mission from
+  fresh `main`: worker -> immutable guard -> draft PR publication ->
+  exact-candidate verification -> final-head review/checks -> merge. This is
+  real end-to-end path evidence, but one short successful run does not by
+  itself prove long-duration hosted-runner reliability.
+- PR #470 merged the single serial `jarvis-queue-advance.yml` coordinator on
+  `main`. Its authority boundary is limited to verifying `main`, selecting one
+  eligible mission, and dispatching the bounded builder against an exact SHA;
+  it does not independently review, approve, merge, commission, or deploy.
+- Historical failures and repairs remain preserved below as history, including
+  the socket-isolation defect, its repair, and the later autonomous-mission
+  evidence.
 
 ## Completed in this work sequence
 
@@ -25,13 +37,13 @@ Publish and verify the fail-closed evidence follow-up on a fresh branch from
 | Canonical hashing                     | HARDEN         | One canonical JSON encoder plus one isomorphic SHA-256 primitive now serves Phase 1 fingerprints without importing Node crypto into Convex mutations.                                                                        |
 | Pull-request evidence gate            | HARDEN         | The former Copilot-named template check is now path-aware, requires companion tests for TypeScript source, obtains test truth from CI and treats every model review as advisory evidence rather than authority.              |
 
-## Files changed in the current task
+## Files changed in the historical fail-closed follow-up
 
 - `typescript/src/development/githubDevelopment.ts` and its provider tests.
 - `typescript/convex/developmentState.ts` and its event-history tests.
 - This working ledger.
 
-## Verification evidence
+## Verification evidence from that follow-up
 
 - Full Convex suite after fail-closed audit repairs: 227 passed.
 - Full Node suite after fail-closed audit repairs: 1,121 passed.
@@ -102,21 +114,53 @@ Publish and verify the fail-closed evidence follow-up on a fresh branch from
   no-effect resolution and same-operation resume are preserved in immutable
   audit history rather than creating a second receipt authority.
 
-## Blockers
+## Recent autonomous-build evidence after PR #415
 
-- A real external mission run requires configured GitHub, Convex service and
-  independent-proof approval credentials. No production credentials were
-  requested or used during deterministic implementation/tests.
-- No implementation blocker remains. Pull request #415 is merged, and the
-  fail-closed audit repairs are isolated on a fresh `main`-based follow-up
-  branch so the merged branch is not reused.
+- Issue #458 / PR #467 (`a924340b8844bdbc192b41486c99c9b8f0ca4f9d`) provides the
+  first successful real bounded autonomous mission after the reviewed
+  socket-isolation repair in #466: the actual worker, immutable guard, draft
+  PR publication,
+  original-candidate verification, final-head independent review, and all five
+  named checks succeeded before merge.
+- That success is recorded as real mission evidence for the Phase 1 path, not
+  as proof that long-duration hosted-runner reliability is fully closed. Issue
+  #462 therefore remains open for the separate long-run reliability question.
+- PR #470 (`c0dbcb7f8a47202e90809264b131c2e2d4991226`) merged the single serial
+  queue coordinator. Its boundary is verify/select/dispatch only: it verifies
+  `main`, selects one eligible mission, and dispatches the bounded builder
+  against an exact SHA; it does not review, approve, merge, commission, or
+  deploy on its own.
 
-## Next task
+## Current remaining blockers
 
-Publish the follow-up branch, open its focused pull request, and drive checks
-and independent review to an exact-head merge-authority decision.
+### Autonomous-development maturity
 
-## Publication evidence
+- Issue #462 remains open. The Codex socket-isolation defect was repaired and a
+  real bounded mission then completed through #467, but the earlier ~55 minute
+  hosted-runner failures still leave long-duration reliability as its own open
+  evidence requirement.
+
+### External, live commissioning, and production gates
+
+- Issue #324 remains open for remote trigger ingress, commissioned identity,
+  restart/recovery drills, live provider reconciliation, and operator approval
+  before the durable run-state composition can be treated as a live path.
+- Issues #293, #294, and #297 remain open for delegated Outlook OAuth, AM-013
+  quote delivery, and Outlook reconciliation runtime commissioning.
+- Issues #302 and #303 remain open for live PostHog analytics and Sentry
+  runtime observability proof.
+- Issues #306 and #307 remain open for replacing the local service-token
+  boundary before remote exposure and for production operations/recovery/
+  deployment evidence.
+
+## Next Phase 1 work
+
+Carry the autonomous path from "one real successful bounded mission" to
+"repeatably reliable and live-gated" by closing #462's long-run reliability
+question and then satisfying the still-open external commissioning and
+production-gate issues above.
+
+## Historical publication evidence
 
 - Remote branch: `agent/governed-dev-state-machine-phase1`.
 - Pull request: #415, `feat: complete governed development mission Phase 1`.
