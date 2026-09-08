@@ -1,6 +1,6 @@
 version: 1
 status: canonical
-updated_at: 2026-09-01
+updated_at: 2026-09-08
 
 vision:
   name: Governed Cognitive Operating System
@@ -24,6 +24,14 @@ phases:
       reviewed pull request under explicit transition, evidence and ΩΣ rules.
     domains:
       - development
+    note: >-
+      Two implementations of this objective coexist: the TypeScript transition
+      kernel plus Convex commit boundary (workstreams below) and the GitHub
+      Actions autobuild pipeline (p1-autobuild-pipeline), which runs real
+      missions today. Neither has yet run end to end against a live Convex
+      deployment through ΩΣ COMPLETE; that, plus p1-stress-suite and #462
+      socket-isolation stability and security evidence, is the phase exit gate. Working detail:
+      docs/superpowers/plans/2026-09-01-governed-development-state-machine-phase1-ledger.md.
     success_criteria:
       - illegal transitions fail closed
       - workers cannot expand authority
@@ -47,23 +55,26 @@ phases:
           - JARVIS_ROADMAP.yaml
       - id: p1-transition-kernel
         priority: 95
-        status: ready
+        status: in_progress
         depends_on:
           - p1-canonical-contract
         outputs:
           - typescript/src/development/stateMachine.ts
+          - typescript/src/development/transitionRegistry.ts
           - typescript/tests/developmentStateMachine.test.ts
       - id: p1-event-contract
         priority: 90
-        status: blocked
+        status: in_progress
         depends_on:
           - p1-transition-kernel
         outputs:
           - development event validation/types
           - deterministic reducer boundary
+          - typescript/src/development/events.ts
+          - typescript/src/development/reducer.ts
       - id: p1-github-adapter
         priority: 85
-        status: blocked
+        status: in_progress
         depends_on:
           - p1-transition-kernel
         outputs:
@@ -71,15 +82,37 @@ phases:
           - branch/PR capability adapter
           - merge attempt receipts
           - reconciliation hooks
+          - typescript/src/development/githubDevelopment.ts
+          - typescript/src/development/specValidation.ts
       - id: p1-omega-development-completion
         priority: 80
-        status: blocked
+        status: in_progress
         depends_on:
           - p1-event-contract
           - p1-github-adapter
         outputs:
           - development completion context adapter
           - Omega-only completion commit path
+          - typescript/src/development/convexDevelopmentOmegaGateway.ts
+          - typescript/src/development/developmentCompletion.ts
+      - id: p1-autobuild-pipeline
+        priority: 78
+        status: in_progress
+        depends_on:
+          - p1-canonical-contract
+        note: >-
+          Operational proving vehicle, parallel to the TypeScript kernel above.
+          Serial by design (one mission from approval through merge);
+          verify/select/dispatch only; writer-applied automation-approved label,
+          draft PR, independent review and authorised human merge always
+          required. Not phase-2, which requires bounded parallelism.
+        outputs:
+          - .github/workflows/jarvis-autobuild.yml
+          - .github/workflows/jarvis-queue-advance.yml
+          - .github/automation/select-next-mission.mjs
+          - .github/automation/revision-health.mjs
+          - .github/automation/validate-autobuild.mjs
+          - docs/operations/autonomous-builds.md
       - id: p1-stress-suite
         priority: 75
         status: blocked
