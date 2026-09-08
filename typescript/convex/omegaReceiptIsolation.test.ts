@@ -179,9 +179,13 @@ describe("Omega receipt isolation", () => {
     // truth, while Omega independently records the identity contradiction.
     expect(contract?.status).toBe("conflicted");
     const conflicts = await t.run(async (ctx) =>
-      (await ctx.db.query("auditEvents").take(100)).filter(
-        (event) => event.eventType === "omega.contract.receipt-identity-conflict",
-      ),
+      (
+        await ctx.db
+          .query("auditEvents")
+          .withIndex("by_owner_and_created_at", (q) => q.eq("ownerId", OWNER_ID))
+          .order("desc")
+          .take(100)
+      ).filter((event) => event.eventType === "omega.contract.receipt-identity-conflict"),
     );
     expect(conflicts).toHaveLength(1);
     expect(conflicts[0]?.payload).toMatchObject({
