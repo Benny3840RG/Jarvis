@@ -30,7 +30,7 @@ phases:
       Actions autobuild pipeline (p1-autobuild-pipeline), which runs real
       missions today. Neither has yet run end to end against a live Convex
       deployment through ΩΣ COMPLETE; that, plus p1-stress-suite and #462
-      long-run runner reliability, is the phase exit gate. Working detail:
+      socket-isolation stability and security evidence, is the phase exit gate. Working detail:
       docs/superpowers/plans/2026-09-01-governed-development-state-machine-phase1-ledger.md.
     success_criteria:
       - illegal transitions fail closed
