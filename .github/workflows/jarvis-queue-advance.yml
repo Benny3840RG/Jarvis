@@ -320,11 +320,11 @@ jobs:
               state: "open",
               per_page: 100,
             });
-            const builderRuns = await github.rest.actions.listWorkflowRuns({
+            const builderRuns = await github.paginate(github.rest.actions.listWorkflowRuns, {
               owner,
               repo,
               workflow_id: "jarvis-autobuild.yml",
-              per_page: 30,
+              per_page: 100,
             });
 
             const ownRepo = `${owner}/${repo}`;
@@ -335,7 +335,7 @@ jobs:
             const lockedIssueNumbers = inProgress
               .filter((issue) => !issue.pull_request)
               .map((issue) => issue.number);
-            const builderActive = builderRuns.data.workflow_runs.some((run) =>
+            const builderActive = builderRuns.some((run) =>
               ["queued", "in_progress", "waiting", "pending", "requested"].includes(run.status),
             );
 
@@ -356,6 +356,31 @@ jobs:
               effectiveLocks = held;
               if (reason) core.info(`Lock reconciliation skipped: ${reason}.`);
               for (const staleIssue of release) {
+                // Absence from a run listing is not terminal evidence. Resolve
+                // the newest trusted lock receipt and verify its owning run.
+                const comments = await github.paginate(github.rest.issues.listComments, {
+                  owner, repo, issue_number: staleIssue, per_page: 100,
+                });
+                const receipt = comments
+                  .filter((comment) => comment.user?.login === "github-actions[bot]" &&
+                    /<!-- jarvis-autobuild-lock:\d+ -->/.test(comment.body || ""))
+                  .sort((a, b) => Number(b.id) - Number(a.id))[0];
+                const runId = Number(/<!-- jarvis-autobuild-lock:(\d+) -->/.exec(receipt?.body || "")?.[1]);
+                let terminal = false;
+                if (Number.isSafeInteger(runId)) {
+                  try {
+                    const run = await github.rest.actions.getWorkflowRun({ owner, repo, run_id: runId });
+                    terminal = run.data.status === "completed" && Boolean(run.data.conclusion) &&
+                      run.data.path === ".github/workflows/jarvis-autobuild.yml";
+                  } catch {
+                    // Missing/inaccessible receipts preserve the lock.
+                  }
+                }
+                if (!terminal) {
+                  effectiveLocks.push(staleIssue);
+                  core.info(`Kept mission lock on #${staleIssue}: owning run is not proven terminal.`);
+                  continue;
+                }
                 try {
                   await github.rest.issues.removeLabel({
                     owner,
