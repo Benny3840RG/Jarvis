@@ -572,3 +572,167 @@ describe("Integration commissioning HUD wiring", () => {
     assert.equal(h.registry.get("reasoning-verification")?.textContent, "NOT CONFIGURED");
   });
 });
+
+describe("HUD connection staleness detection", () => {
+  it("refreshes immediately after the bridge handshake completes", async () => {
+    const source = extractSource(/(const bridgeReady = [\s\S]*?)\n\s+async function callTool/);
+    let completeHandshake!: () => void;
+    const handshake = new Promise<void>((resolve) => {
+      completeHandshake = resolve;
+    });
+    let refreshes = 0;
+    const ready = new Function(
+      "request",
+      "notify",
+      "activity",
+      "checkConnectionHealth",
+      `
+      let bridgeInitialised = false;
+      ${source}
+      return bridgeReady;
+    `,
+    )(
+      () => handshake,
+      () => {},
+      () => {},
+      (force: boolean) => {
+        assert.equal(force, true);
+        refreshes++;
+      },
+    ) as Promise<void>;
+    assert.equal(refreshes, 0);
+    completeHandshake();
+    await ready;
+    assert.equal(refreshes, 1);
+  });
+  const healthSource = extractSource(
+    /(function isConnectionStale\([\s\S]*?\})\n\s+function update/,
+  );
+  const updateSource = extractSource(/(function update\([\s\S]*?\})\n\s+window.addEventListener/);
+  function harness(request: () => Promise<unknown>, hidden = false) {
+    const state = { status: { status: "ok" } as unknown, lastStatusAt: 1000 };
+    const load = new Function(
+      "state",
+      "request",
+      "document",
+      "Date",
+      `
+      const STATUS_STALE_MS=45000;
+      let healthCheckInFlight=false, bridgeInitialised=true;
+      const structured=r=>r?.structuredContent||r;
+      const render=()=>{}, recalc=()=>{};
+      ${healthSource}
+      ${updateSource}
+      return {checkConnectionHealth,update};
+    `,
+    );
+    const methods = load(
+      state,
+      request,
+      { visibilityState: hidden ? "hidden" : "visible" },
+      { now: () => 61000 },
+    ) as {
+      checkConnectionHealth(force?: boolean): Promise<void>;
+      update(result: unknown): void;
+    };
+    return { state, methods };
+  }
+  it("refreshes a healthy idle dashboard instead of falsely disconnecting", async () => {
+    let calls = 0;
+    const h = harness(async () => {
+      calls++;
+      return { status: { status: "ok" } };
+    });
+    await h.methods.checkConnectionHealth();
+    assert.equal(calls, 1);
+    assert.deepEqual(h.state.status, { status: "ok" });
+    assert.equal(h.state.lastStatusAt, 61000);
+  });
+  it("retries after a forced failure even when the previous status was fresh", async () => {
+    let fail = true;
+    const h = harness(async () => {
+      if (fail) throw new Error("offline");
+      return { status: { status: "ok" } };
+    });
+    h.state.lastStatusAt = 61000;
+    await h.methods.checkConnectionHealth(true);
+    assert.equal(h.state.status, null);
+    assert.equal(h.state.lastStatusAt, 0);
+    fail = false;
+    await h.methods.checkConnectionHealth();
+    assert.deepEqual(h.state.status, { status: "ok" });
+  });
+  it("ignores unrelated results when tracking status freshness", () => {
+    const h = harness(async () => ({}));
+    h.methods.update({ tasks: [] });
+    assert.equal(h.state.lastStatusAt, 1000);
+  });
+  it("does not overlap refreshes or poll a hidden dashboard", async () => {
+    let calls = 0;
+    let finish!: (v: unknown) => void;
+    const h = harness(() => {
+      calls++;
+      return new Promise((resolve) => {
+        finish = resolve;
+      });
+    });
+    const first = h.methods.checkConnectionHealth();
+    await h.methods.checkConnectionHealth();
+    assert.equal(calls, 1);
+    finish({ status: { status: "ok" } });
+    await first;
+    const hidden = harness(async () => {
+      calls++;
+      return {};
+    }, true);
+    await hidden.methods.checkConnectionHealth();
+    assert.equal(calls, 1);
+  });
+  it("preserves newer received status when an older refresh fails", async () => {
+    let reject!: (e: Error) => void;
+    const h = harness(
+      () =>
+        new Promise((_, no) => {
+          reject = no;
+        }),
+    );
+    const first = h.methods.checkConnectionHealth();
+    h.methods.update({ status: { status: "new" } });
+    reject(new Error("old failure"));
+    await first;
+    assert.deepEqual(h.state.status, { status: "new" });
+  });
+  it("rejects a refresh response that lacks status", async () => {
+    const h = harness(async () => ({ tasks: [] }));
+    await h.methods.checkConnectionHealth();
+    assert.equal(h.state.status, null);
+    assert.equal(h.state.lastStatusAt, 0);
+  });
+});
+
+it("expires an unanswered health request and removes its pending bridge entry", async () => {
+  const source = extractSource(/(function request\([\s\S]*?\})\n\s+function toast/);
+  let expire!: () => void;
+  const pending = new Map();
+  const load = new Function(
+    "pending",
+    "window",
+    "setTimeout",
+    "clearTimeout",
+    `let rpcId=0; ${source}; return request;`,
+  );
+  const request = load(
+    pending,
+    { parent: { postMessage: () => {} } },
+    (callback: () => void) => {
+      expire = callback;
+      return 1;
+    },
+    () => {},
+  ) as (method: string, params: unknown, timeout: number) => Promise<unknown>;
+  const result = request("tools/call", {}, 10000);
+  assert.equal(pending.size, 1);
+  expire();
+  await assert.rejects(result, /timed out/);
+  assert.equal(pending.size, 0);
+});
