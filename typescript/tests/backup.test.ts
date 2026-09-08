@@ -8,6 +8,7 @@ import { getFunctionName } from "convex/server";
 
 import {
   exportBackup,
+  NO_MEMORY_STORES,
   parseBackup,
   readBackupFile,
   restoreBackupIntoEmptyProvider,
@@ -214,7 +215,11 @@ describe("Jarvis backup archives", () => {
       nested: { ids: [pending.id, completed.id, reminder.id] },
     });
 
-    const archive = await exportBackup(source, () => new Date("2026-07-13T03:30:00.000Z"));
+    const archive = await exportBackup(
+      source,
+      NO_MEMORY_STORES,
+      () => new Date("2026-07-13T03:30:00.000Z"),
+    );
     assert.equal(archive.version, 3);
     assert.equal(archive.createdAt, "2026-07-13T03:30:00.000Z");
     assert.equal(archive.tasks.length, 2);
@@ -261,6 +266,7 @@ describe("Jarvis backup archives", () => {
   it("exports from one provider snapshot rather than three independent reads", async () => {
     const archive = await exportBackup(
       new SnapshotOnlyProvider(),
+      NO_MEMORY_STORES,
       () => new Date("2026-07-13T03:30:00.000Z"),
     );
 
@@ -272,7 +278,7 @@ describe("Jarvis backup archives", () => {
     const source = new JSONPersistence(path.join(tempDir, "source-concurrent.json"));
     await source.addTask("Only one copy", "work");
     await source.addReminder("Only one reminder", { raw: "after Claire calls" });
-    const archive = await exportBackup(source);
+    const archive = await exportBackup(source, NO_MEMORY_STORES);
     const target = path.join(tempDir, "concurrent-target.json");
 
     const attempts = await Promise.allSettled([
@@ -317,7 +323,7 @@ describe("Jarvis backup archives", () => {
 
   it("refuses to overwrite an existing backup file", async () => {
     const provider = new JSONPersistence(path.join(tempDir, "source.json"));
-    const archive = await exportBackup(provider);
+    const archive = await exportBackup(provider, NO_MEMORY_STORES);
     const backupPath = path.join(tempDir, "backup.json");
     await writeBackupFile(backupPath, archive);
     await assert.rejects(() => writeBackupFile(backupPath, archive), /already exists/);
@@ -327,7 +333,7 @@ describe("Jarvis backup archives", () => {
     if (process.platform === "win32") return;
 
     const provider = new JSONPersistence(path.join(tempDir, "source.json"));
-    const archive = await exportBackup(provider);
+    const archive = await exportBackup(provider, NO_MEMORY_STORES);
     const realPath = path.join(tempDir, "real-backup.json");
     const linkPath = path.join(tempDir, "linked-backup.json");
     await writeBackupFile(realPath, archive);
@@ -339,7 +345,7 @@ describe("Jarvis backup archives", () => {
   it("refuses restore when the target contains state or records", async () => {
     const source = new JSONPersistence(path.join(tempDir, "source.json"));
     await source.addTask("Source task", "work");
-    const archive = await exportBackup(source);
+    const archive = await exportBackup(source, NO_MEMORY_STORES);
 
     const destination = new JSONPersistence(path.join(tempDir, "destination.json"));
     await destination.saveState({ occupied: true });
@@ -574,8 +580,8 @@ describe("Jarvis backup archives", () => {
 
       const archive = await exportBackup(
         source,
-        () => new Date("2026-07-13T03:30:00.000Z"),
         sourceMemory,
+        () => new Date("2026-07-13T03:30:00.000Z"),
       );
       assert.equal(archive.version, 3);
       assert.equal(archive.builds.length, 1);
@@ -636,7 +642,7 @@ describe("Jarvis backup archives", () => {
       const source = new JSONPersistence(path.join(tempDir, "source.json"));
       const sourceMemory = emptyMemoryStores();
       await sourceMemory.preferences.add({ key: "paint-brand", value: "Dulux" });
-      const archive = await exportBackup(source, () => new Date(), sourceMemory);
+      const archive = await exportBackup(source, sourceMemory);
 
       const destination = new JSONPersistence(path.join(tempDir, "destination.json"));
       await assert.rejects(
@@ -651,7 +657,7 @@ describe("Jarvis backup archives", () => {
       const source = new JSONPersistence(path.join(tempDir, "source.json"));
       const sourceMemory = emptyMemoryStores();
       await sourceMemory.assets.add({ name: "Angle grinder", kind: "tool" });
-      const archive = await exportBackup(source, () => new Date(), sourceMemory);
+      const archive = await exportBackup(source, sourceMemory);
 
       const destination = new JSONPersistence(path.join(tempDir, "destination.json"));
       const destinationMemory = emptyMemoryStores();
@@ -752,7 +758,7 @@ describe("Jarvis backup archives", () => {
       const build = await sourceMemory.builds.add({ name: "Trailer", kind: "shed" });
       await sourceMemory.buildLogs.add({ buildId: build.id, title: "Origin", kind: "origin" });
 
-      const archive = await exportBackup(source, () => new Date(), sourceMemory);
+      const archive = await exportBackup(source, sourceMemory);
 
       const destination = new JSONPersistence(path.join(tempDir, "dst.json"));
       const destinationMemory: BackupMemoryStores = {
