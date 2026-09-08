@@ -78,6 +78,8 @@ describe("resolveTotalityReasoningStatus", () => {
     "GEMINI_API_KEY",
     "OPENAI_MODEL",
     "GEMINI_MODEL",
+    "OPENAI_TIMEOUT_MS",
+    "GEMINI_TIMEOUT_MS",
   ] as const;
   const originalValues = new Map<string, string | undefined>();
 
@@ -112,7 +114,21 @@ describe("resolveTotalityReasoningStatus", () => {
     assert.equal(status.status, "not-configured");
     assert.equal(status.provider, "openai");
     assert.equal(status.model, null);
-    assert.match(status.reason, /OPENAI_API_KEY is not set/);
+    assert.match(status.reason, /OPENAI_API_KEY is required/);
+  });
+
+  it("takes the resolved provider name as an argument instead of re-reading PERSISTENCE_PROVIDER", () => {
+    process.env.PERSISTENCE_PROVIDER = "convex";
+    process.env.OPENAI_API_KEY = "test-key";
+    // Even though PERSISTENCE_PROVIDER=convex is set, an explicitly passed
+    // "json" must win -- this can never disagree with the `provider` field a
+    // caller reports from the same already-resolved value.
+    assert.deepEqual(resolveTotalityReasoningStatus("json"), {
+      status: "not-configured",
+      provider: null,
+      model: null,
+      reason: "Totality reasoning requires Convex persistence, which is not the active provider.",
+    });
   });
 
   it("reports configured with the default model for openai without ever claiming verification", () => {
@@ -169,7 +185,7 @@ describe("resolveTotalityReasoningStatus", () => {
       status: "not-configured",
       provider: "openai",
       model: null,
-      reason: "OPENAI_MODEL is invalid.",
+      reason: "OPENAI_MODEL must be a safe model identifier.",
     });
   });
 
@@ -183,7 +199,20 @@ describe("resolveTotalityReasoningStatus", () => {
       status: "not-configured",
       provider: "gemini",
       model: null,
-      reason: "GEMINI_MODEL is invalid.",
+      reason: "GEMINI_MODEL must be a safe model identifier.",
+    });
+  });
+
+  it("reports not-configured with a specific reason when the reasoner timeout is invalid", () => {
+    process.env.PERSISTENCE_PROVIDER = "convex";
+    process.env.OPENAI_API_KEY = "test-key";
+    process.env.OPENAI_TIMEOUT_MS = "not-a-number";
+
+    assert.deepEqual(resolveTotalityReasoningStatus(), {
+      status: "not-configured",
+      provider: "openai",
+      model: null,
+      reason: "OPENAI_TIMEOUT_MS must be an integer.",
     });
   });
 });

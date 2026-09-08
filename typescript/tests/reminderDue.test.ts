@@ -102,6 +102,33 @@ describe("reminder due normalization", () => {
     });
   });
 
+  it("accepts the supported Date boundaries and valid fractional timestamps", () => {
+    assert.deepEqual(
+      validateReminderDue({ raw: "minimum", at: -8_640_000_000_000_000, timezone: "UTC" }),
+      { raw: "minimum", at: -8_640_000_000_000_000, timezone: "UTC" },
+    );
+    assert.deepEqual(
+      validateReminderDue({ raw: "maximum", at: 8_640_000_000_000_000, timezone: "UTC" }),
+      { raw: "maximum", at: 8_640_000_000_000_000, timezone: "UTC" },
+    );
+    assert.deepEqual(validateReminderDue({ raw: "fractional", at: 1.5, timezone: "UTC" }), {
+      raw: "fractional",
+      at: 1.5,
+      timezone: "UTC",
+    });
+  });
+
+  it("rejects finite timestamps outside the supported Date range", () => {
+    assert.throws(
+      () => validateReminderDue({ raw: "too early", at: -8_640_000_000_000_001, timezone: "UTC" }),
+      /supported Date range/,
+    );
+    assert.throws(
+      () => validateReminderDue({ raw: "too late", at: 8_640_000_000_000_001, timezone: "UTC" }),
+      /supported Date range/,
+    );
+  });
+
   it("rejects invalid timezone configuration and inconsistent normalized values", () => {
     assert.throws(() => resolveReminderTimezone("Not/A-Timezone"), /Invalid JARVIS_TIMEZONE/);
     assert.throws(

@@ -48,6 +48,12 @@ Concurrent execution is permitted only when approved issues have no unresolved d
 10. The owner reviews the diff, independent findings, checks, and remaining risk.
 11. Only the owner may change draft state or merge.
 
+Held PR workflow runs are returned by GitHub with `status: completed` and
+`conclusion: action_required`. The verifier checks both fields before approving
+the exact candidate's PR runs. A denied approval remains a failure; no stronger
+token or bypass is substituted. The workflow does not use the administrator-only
+Actions settings endpoint as an eligibility requirement.
+
 ## Manual retry
 
 Use **Actions → Jarvis autonomous build → Run workflow** and enter the issue number only after correcting the recorded blocker. Remove a stale `automation-in-progress` label only after confirming no run is active.
