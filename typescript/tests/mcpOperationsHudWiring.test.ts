@@ -574,6 +574,37 @@ describe("Integration commissioning HUD wiring", () => {
 });
 
 describe("HUD connection staleness detection", () => {
+  it("refreshes immediately after the bridge handshake completes", async () => {
+    const source = extractSource(/(const bridgeReady = [\s\S]*?)\n\s+async function callTool/);
+    let completeHandshake!: () => void;
+    const handshake = new Promise<void>((resolve) => {
+      completeHandshake = resolve;
+    });
+    let refreshes = 0;
+    const ready = new Function(
+      "request",
+      "notify",
+      "activity",
+      "checkConnectionHealth",
+      `
+      let bridgeInitialised = false;
+      ${source}
+      return bridgeReady;
+    `,
+    )(
+      () => handshake,
+      () => {},
+      () => {},
+      (force: boolean) => {
+        assert.equal(force, true);
+        refreshes++;
+      },
+    ) as Promise<void>;
+    assert.equal(refreshes, 0);
+    completeHandshake();
+    await ready;
+    assert.equal(refreshes, 1);
+  });
   const healthSource = extractSource(
     /(function isConnectionStale\([\s\S]*?\})\n\s+function update/,
   );
