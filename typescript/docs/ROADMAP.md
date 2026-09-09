@@ -4,6 +4,52 @@ This file is a living record for the autonomous engineering sessions working on
 Jarvis: current state, what changed recently, and what to pick up next. Update
 it at the end of every session.
 
+## Phase 0 baseline refresh (2026-09-09)
+
+- Inspected the root README, TypeScript structure, package scripts, strict
+  compiler configuration, architecture/operator docs, OpenAPI paths, recent
+  commits, and open GitHub issues. Runtime is Node 24.20.0 (`.nvmrc`: 24).
+- The checkout remote is `Benny3840RG/Jarvis`; the requested
+  `Benny3840/Jarvis` issue query returned no open issues. The checkout remote
+  has eight open commissioning issues (#293, #294, #297, #302, #303, #306,
+  #307, #324), plus PR #480.
+- `npm ci` passed (318 packages installed). npm reported one moderate and
+  one high dependency vulnerability; advisory triage remains outstanding.
+- `npm run check` passed: hygiene, both TypeScript projects, ESLint,
+  Prettier, zero-warning OpenAPI lint, 1,187 Node tests, and 231 Convex tests.
+- The configured `dev:` Convex smoke passed core CRUD, five memory domains,
+  notes, controlled task/reminder actions, external reconciliation, and quote
+  lifecycle checks, including cleanup. No deployment sync was performed.
+- Existing orchestration/isolated-ingress changes were present at session
+  start and are outside this baseline commit. Checks exercise the working
+  tree, including that work; they do not establish its deployment readiness.
+- Core persistence already has explicit provider types, document validation,
+  atomic JSON writes and locking, due normalization, and backup versioning.
+  No TODO/FIXME markers were found in `src/`, `convex/`, or `tests/`.
+- Known gaps: business-domain backup coverage and memory-restore atomicity
+  remain as documented below. `docs/operators/http-api.md` still says no
+  execution route exists although OpenAPI exposes tool-action execution;
+  reconcile that documentation during the adapter audit.
+
+### Ordered build sequence
+
+1. Phase 1: add failing duplicate task/reminder ID tests for JSON document
+   loading (`document.ts` currently normalizes rows without a uniqueness
+   check), then implement rejection while preserving legacy-format support.
+   Continue with completion semantics and assistant-state/provider parity.
+2. Phase 2: verify shared provider semantics, JSON lock/recovery failure paths,
+   and Convex authentication/owner isolation without replacing working code.
+3. Phase 3: audit CLI flag parsing and error/no-partial-write coverage.
+4. Phase 4: reconcile operator documentation, OpenAPI, HTTP, and MCP behavior
+   with contract-first changes and zero-warning lint.
+5. Phase 5: extend backup coverage using consistent cross-domain ID remapping
+   and harden rollback for the existing memory-domain restore.
+6. Phase 6: audit structured logging, destructive-operation guards, and budgets.
+7. Phase 7: triage dependency advisories, remaining debt, and CI gate coverage.
+
+Earlier session history follows; its backup priorities do not override this
+phase order.
+
 ## Current state (2026-09-08)
 
 - `npm run check` (hygiene + `tsc` + ESLint + Prettier + OpenAPI lint + Node
