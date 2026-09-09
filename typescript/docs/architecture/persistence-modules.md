@@ -28,8 +28,11 @@ runtime behaviour belongs in the focused modules below.
 - Both provider classes reject null, arrays, and primitive assistant-state
   inputs before any write or remote mutation. Empty objects and extensible
   nested state remain supported, for example `saveState({ lastIntent: "help" })`.
-  This guard validates the root shape; it does not validate nested application
-  fields or replace validation on direct Convex server calls.
+  The guard also rejects non-finite numbers in nested objects/arrays and
+  circular references before either provider writes. Repeated references to
+  the same non-circular object are allowed. This prevents JSON from silently
+  replacing non-finite numbers with null. It is not a complete serialization
+  validator and does not replace validation on direct Convex server calls.
 - Current writes use version 2 and preserve normalized reminder timezone data.
 - Numeric task/reminder creation timestamps must be finite in every document
   version. Missing legacy timestamps still default to zero. Overflowing JSON

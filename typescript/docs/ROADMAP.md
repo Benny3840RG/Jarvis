@@ -4,6 +4,21 @@ This file is a living record for the autonomous engineering sessions working on
 Jarvis: current state, what changed recently, and what to pick up next. Update
 it at the end of every session.
 
+## Phase 1 nested assistant-state validation (2026-09-10)
+
+- Extended the shared provider guard to reject nested non-finite numbers and
+  circular references. JSON previously converted NaN/infinities to null while
+  Convex could retain them, producing different persisted state.
+- Expanded both provider tests before implementation and observed failures.
+  Coverage includes nested objects/arrays, NaN, both infinities, cycles,
+  preservation of previous state, and valid shared references/zero/null values.
+- This remains a bounded validation step, not a complete JSON-serialization
+  contract. Direct Convex server upsert validation remains next, followed by
+  non-JSON values such as dates, undefined, and custom serialization methods.
+- `npm run check` passed: 1,191 Node tests, 227 Convex tests, TypeScript,
+  ESLint, Prettier, hygiene, and zero-warning OpenAPI lint. Development Convex
+  smoke passed with cleanup; no server deployment was changed.
+
 ## Phase 1 assistant-state write validation (2026-09-10)
 
 - Both provider classes now reject null, arrays, and primitive root state

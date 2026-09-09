@@ -72,7 +72,7 @@ afterEach(async () => {
 
 describe("assistant-state write validation", () => {
   for (const kind of ["json", "convex"] as const) {
-    it(`${kind} rejects non-object state without replacing the previous state`, async () => {
+    it(`${kind} rejects invalid state without replacing the previous state`, async () => {
       const file = path.join(tempDir, "validated-state.json");
       let stored: unknown = {};
       let mutations = 0;
@@ -92,13 +92,32 @@ describe("assistant-state write validation", () => {
               }),
               "test-service-token",
             );
-      const original = { lastIntent: "retained", custom: { notes: ["Keep this"] } };
+      const shared = { score: 0, previous: -1, optional: null };
+      const original = {
+        lastIntent: "retained",
+        custom: { notes: ["Keep this"], first: shared, second: shared },
+      };
       await provider.saveState(original);
       const raw = kind === "json" ? await fs.readFile(file, "utf8") : undefined;
-      for (const invalid of [null, undefined, [], ["value"], "text", 42, true]) {
+      const cyclic: Record<string, unknown> = {};
+      cyclic.self = cyclic;
+      for (const invalid of [
+        null,
+        undefined,
+        [],
+        ["value"],
+        "text",
+        42,
+        true,
+        { custom: { score: NaN } },
+        { custom: { score: Infinity } },
+        { custom: { score: -Infinity } },
+        { history: [{ score: Infinity }] },
+        { custom: cyclic },
+      ]) {
         await assert.rejects(
           provider.saveState(invalid as unknown as AssistantState),
-          /Assistant state must be an object/,
+          /Assistant state/,
         );
         assert.deepEqual(await provider.loadState(), original);
       }
