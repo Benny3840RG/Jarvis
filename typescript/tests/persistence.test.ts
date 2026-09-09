@@ -202,6 +202,69 @@ describe("JSONPersistence", () => {
     );
   });
 
+  for (const version of [undefined, 1, 2]) {
+    for (const collection of ["tasks", "reminders"] as const) {
+      it(`rejects non-finite ${collection} creation timestamps in version ${String(version)}`, () => {
+        for (const createdAt of [NaN, Infinity, -Infinity]) {
+          assert.throws(
+            () =>
+              normalizeDocument({
+                ...(version === undefined ? {} : { version }),
+                state: {},
+                tasks: [],
+                reminders: [],
+                [collection]: [
+                  {
+                    id: "record-1",
+                    title: "Record",
+                    completed: false,
+                    category: "personal",
+                    createdAt,
+                  },
+                ],
+              }),
+            /invalid createdAt/,
+          );
+        }
+      });
+    }
+  }
+
+  it("preserves finite creation timestamps including zero in all document versions", () => {
+    for (const version of [undefined, 1, 2]) {
+      for (const createdAt of [0, -1, 1720000000000]) {
+        const document = normalizeDocument({
+          ...(version === undefined ? {} : { version }),
+          state: {},
+          tasks: [
+            { id: "task-1", title: "Task", completed: false, category: "personal", createdAt },
+          ],
+          reminders: [{ id: "reminder-1", title: "Reminder", createdAt }],
+        });
+        assert.equal(document.tasks[0].createdAt, createdAt);
+        assert.equal(document.reminders[0].createdAt, createdAt);
+      }
+    }
+  });
+
+  it("quarantines an overflowing JSON creation timestamp without rewriting its bytes", async () => {
+    const file = path.join(tempDir, "overflow.json");
+    const raw =
+      '{"version":2,"state":{},"tasks":[],"reminders":[{"id":"r-1","title":"Reminder","createdAt":1e400}]}';
+    await fs.writeFile(file, raw, "utf8");
+    const warnings: string[] = [];
+    const provider = new JSONPersistence(file, (message) => warnings.push(message));
+    assert.deepEqual(await provider.listReminders(), []);
+    assert.equal(warnings.length, 1);
+    const corrupt = (await fs.readdir(tempDir)).find((name) =>
+      name.startsWith("overflow.json.corrupt-"),
+    );
+    assert(corrupt);
+    assert.equal(await fs.readFile(path.join(tempDir, corrupt), "utf8"), raw);
+    await provider.addTask("Recovered", "personal");
+    assert.equal((await new JSONPersistence(file).listTasks())[0].title, "Recovered");
+  });
+
   it("rejects a document that repeats a task or reminder id within one collection", () => {
     assert.throws(
       () =>

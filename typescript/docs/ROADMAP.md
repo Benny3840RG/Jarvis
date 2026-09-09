@@ -4,6 +4,22 @@ This file is a living record for the autonomous engineering sessions working on
 Jarvis: current state, what changed recently, and what to pick up next. Update
 it at the end of every session.
 
+## Phase 1 progress (2026-09-10)
+
+- Duplicate task/reminder ID rejection was already committed in `eaf625e`;
+  the Phase 0 next-step entry below has been reconciled with that code.
+- Added finite creation-timestamp validation for JSON tasks and reminders in
+  unversioned, v1, and v2 documents. Missing legacy timestamps still default
+  to zero; finite timestamps, including zero and negative values, are retained.
+- Eight regression tests cover non-finite values, finite-value compatibility,
+  and real-file `1e400` overflow quarantine with exact-byte preservation and
+  successful writes after recovery. Seven tests failed before implementation.
+- `npm run check` passed: 1,187 Node tests, 227 Convex tests, TypeScript,
+  ESLint, Prettier, hygiene, and zero-warning OpenAPI lint. Backup round-trip
+  and legacy migration tests remain green.
+- Next: audit repeated task completion semantics, then assistant-state
+  validation and parity between providers before entering Phase 2.
+
 ## Phase 0 baseline refresh (2026-09-09)
 
 - Inspected the root README, TypeScript structure, package scripts, strict
@@ -33,10 +49,8 @@ it at the end of every session.
 
 ### Ordered build sequence
 
-1. Phase 1: add failing duplicate task/reminder ID tests for JSON document
-   loading (`document.ts` currently normalizes rows without a uniqueness
-   check), then implement rejection while preserving legacy-format support.
-   Continue with completion semantics and assistant-state/provider parity.
+1. Phase 1: duplicate-ID rejection is implemented. Continue with completion
+   semantics and assistant-state/provider parity after timestamp validation.
 2. Phase 2: verify shared provider semantics, JSON lock/recovery failure paths,
    and Convex authentication/owner isolation without replacing working code.
 3. Phase 3: audit CLI flag parsing and error/no-partial-write coverage.

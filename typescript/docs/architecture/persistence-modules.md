@@ -25,6 +25,10 @@ runtime behaviour belongs in the focused modules below.
 
 - Existing version 1 and unversioned JSON documents remain readable.
 - Current writes use version 2 and preserve normalized reminder timezone data.
+- Numeric task/reminder creation timestamps must be finite in every document
+  version. Missing legacy timestamps still default to zero. Overflowing JSON
+  numbers (such as `1e400`) trigger the existing corrupt-file quarantine, which
+  preserves the original bytes for recovery.
 - JSON mutations reread the latest document after acquiring the cross-process lock.
 - Convex calls use generated API references and service-token authentication.
 - Snapshot and restore operations remain provider-atomic.
