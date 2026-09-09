@@ -283,6 +283,85 @@ describe("JSONPersistence", () => {
     assert(quarantined);
   });
 
+  it("keeps every supported legacy document format readable after the uniqueness check", async () => {
+    // Version 1: structured rows survive, and the legacy `due` string is
+    // migrated to `dueRaw`. (Versioned documents hold tasks to the strict shape,
+    // unchanged by this PR.)
+    const v1 = normalizeDocument({
+      version: 1,
+      state: { lastIntent: "greeting" },
+      tasks: [{ id: "t-1", title: "Legacy task", completed: true, category: "work", createdAt: 5 }],
+      reminders: [{ id: "r-1", title: "Legacy reminder", due: "Monday", createdAt: 6 }],
+    });
+    assert.equal(v1.version, 2);
+    assert.deepEqual(v1.state, { lastIntent: "greeting" });
+    assert.deepEqual(v1.tasks, [
+      { id: "t-1", title: "Legacy task", completed: true, category: "work", createdAt: 5 },
+    ]);
+    assert.deepEqual(v1.reminders, [
+      { id: "r-1", title: "Legacy reminder", dueRaw: "Monday", createdAt: 6 },
+    ]);
+
+    // Unversioned document that carries rows.
+    const unversioned = normalizeDocument({
+      state: { retained: true },
+      tasks: [{ id: "u-1", title: "Old", completed: false }],
+      reminders: [],
+    });
+    assert.deepEqual(unversioned.state, { retained: true });
+    assert.equal(unversioned.tasks[0]?.id, "u-1");
+
+    // Bare object with no state/tasks/reminders keys: the whole object is state.
+    const bare = normalizeDocument({ lastInput: "Hello Jarvis", lastResult: 3 });
+    assert.deepEqual(bare, {
+      version: 2,
+      state: { lastInput: "Hello Jarvis", lastResult: 3 },
+      tasks: [],
+      reminders: [],
+    });
+  });
+
+  it("reads real legacy state files through JSONPersistence without quarantining them", async () => {
+    const cases: Array<{ name: string; raw: unknown; expectTasks: number }> = [
+      {
+        name: "v1.json",
+        raw: {
+          version: 1,
+          state: { lastIntent: "greeting" },
+          tasks: [
+            { id: "t-1", title: "Legacy", completed: false, category: "personal", createdAt: 1 },
+          ],
+          reminders: [{ id: "r-1", title: "Ping", due: "Friday", createdAt: 2 }],
+        },
+        expectTasks: 1,
+      },
+      {
+        name: "unversioned.json",
+        raw: { lastIntent: "hello", lastInput: "hi" },
+        expectTasks: 0,
+      },
+    ];
+    for (const { name, raw, expectTasks } of cases) {
+      const file = path.join(tempDir, name);
+      const original = JSON.stringify(raw, null, 2);
+      await fs.writeFile(file, original, "utf8");
+      const warnings: string[] = [];
+      const provider = new JSONPersistence(file, (message) => warnings.push(message));
+
+      assert.equal((await provider.listTasks()).length, expectTasks, name);
+      assert.equal(warnings.length, 0, `${name} must not warn`);
+      const files = await fs.readdir(tempDir);
+      assert.equal(
+        files.some((entry) => entry.startsWith(`${name}.corrupt-`)),
+        false,
+        `${name} must not be quarantined`,
+      );
+      // A read of valid legacy data does not rewrite the file on startup.
+      assert.equal(await fs.readFile(file, "utf8"), original, `${name} left untouched`);
+      await fs.rm(file);
+    }
+  });
+
   it("removes tasks durably and returns null for missing IDs", async () => {
     const provider = new JSONPersistence(path.join(tempDir, "state.json"));
     const task = await provider.addTask("Disposable task", "personal");
