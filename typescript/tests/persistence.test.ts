@@ -70,6 +70,46 @@ afterEach(async () => {
   await fs.rm(tempDir, { recursive: true, force: true });
 });
 
+describe("assistant-state write validation", () => {
+  for (const kind of ["json", "convex"] as const) {
+    it(`${kind} rejects non-object state without replacing the previous state`, async () => {
+      const file = path.join(tempDir, "validated-state.json");
+      let stored: unknown = {};
+      let mutations = 0;
+      const provider =
+        kind === "json"
+          ? new JSONPersistence(file)
+          : new ConvexPersistence(
+              asConvexClient({
+                async query() {
+                  return { state: stored };
+                },
+                async mutation(_reference, args) {
+                  mutations += 1;
+                  stored = args.state;
+                  return "state-id";
+                },
+              }),
+              "test-service-token",
+            );
+      const original = { lastIntent: "retained", custom: { notes: ["Keep this"] } };
+      await provider.saveState(original);
+      const raw = kind === "json" ? await fs.readFile(file, "utf8") : undefined;
+      for (const invalid of [null, undefined, [], ["value"], "text", 42, true]) {
+        await assert.rejects(
+          provider.saveState(invalid as unknown as AssistantState),
+          /Assistant state must be an object/,
+        );
+        assert.deepEqual(await provider.loadState(), original);
+      }
+      if (kind === "json") assert.equal(await fs.readFile(file, "utf8"), raw);
+      else assert.equal(mutations, 1, "Invalid state must never reach the Convex mutation");
+      await provider.saveState({});
+      assert.deepEqual(await provider.loadState(), {});
+    });
+  }
+});
+
 describe("JSONPersistence", () => {
   it("returns empty durable collections when the file is missing", async () => {
     const provider = new JSONPersistence(path.join(tempDir, "missing.json"));

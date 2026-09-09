@@ -4,6 +4,23 @@ This file is a living record for the autonomous engineering sessions working on
 Jarvis: current state, what changed recently, and what to pick up next. Update
 it at the end of every session.
 
+## Phase 1 assistant-state write validation (2026-09-10)
+
+- Both provider classes now reject null, arrays, and primitive root state
+  values before disk writes or Convex mutation calls. This prevents JSON
+  object-spread coercion from silently replacing saved state.
+- Two provider-parameterized regression tests failed before implementation.
+  They cover seven invalid inputs, prior-state preservation, unchanged JSON
+  bytes, no invalid remote mutations, nested custom fields, and empty objects.
+- The shared `assistantState.ts` guard validates root shape only. Direct
+  Convex server calls and nested field/serialization validation remain separate
+  work; existing backup formats are unchanged.
+- `npm run check` passed: 1,191 Node tests, 227 Convex tests, TypeScript,
+  ESLint, Prettier, hygiene, and zero-warning OpenAPI lint. Development Convex
+  smoke passed all domains with cleanup; no server deployment was changed.
+- Next: audit nested assistant-state serialization and direct Convex upsert
+  validation, then review remaining Phase 1 invariants before Phase 2.
+
 ## Phase 1 completion audit (2026-09-10)
 
 - Audited direct task completion in JSON and Convex against OpenAPI: both

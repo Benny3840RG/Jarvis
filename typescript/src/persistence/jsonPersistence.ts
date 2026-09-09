@@ -15,6 +15,7 @@ import {
   type PersistedDocument,
 } from "./document.js";
 import { JsonFileLock } from "./jsonFileLock.js";
+import { assertAssistantState } from "./assistantState.js";
 import type {
   AssistantState,
   PersistenceProvider,
@@ -202,6 +203,7 @@ export class JSONPersistence implements PersistenceProvider {
   }
 
   async saveState(state: AssistantState): Promise<void> {
+    assertAssistantState(state);
     await this.enqueue(() =>
       this.withWriteLock(async () => {
         const current = await this.readDocument();
