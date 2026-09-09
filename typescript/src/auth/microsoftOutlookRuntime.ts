@@ -1,8 +1,10 @@
+import { createNamedOutlookRuntime } from "./microsoftOutlookConnections.js";
 import {
   FileRefreshTokenStore,
   MicrosoftDelegatedAccessTokenSupplier,
   resolveMicrosoftDelegatedOAuthConfig,
   type RefreshTokenStore,
+  type EnabledMicrosoftDelegatedOAuthConfig,
 } from "./microsoftDelegatedOAuth.js";
 import { MicrosoftGraphQuoteEmailProvider } from "../quotes/microsoftGraphQuoteEmailProvider.js";
 import type { QuoteEmailProvider } from "../quotes/quoteEmailProvider.js";
@@ -23,6 +25,7 @@ export type MicrosoftOutlookRuntime = {
 
 export type MicrosoftOutlookRuntimeDependencies = {
   refreshTokenStore?: RefreshTokenStore;
+  createRefreshTokenStore?: (config: EnabledMicrosoftDelegatedOAuthConfig) => RefreshTokenStore;
   fetch?: typeof globalThis.fetch;
   messageStatusClient?: OutlookMessageStatusClient;
 };
@@ -31,11 +34,19 @@ export function createMicrosoftOutlookRuntimeFromEnv(
   environment: Environment = process.env,
   dependencies: MicrosoftOutlookRuntimeDependencies = {},
 ): MicrosoftOutlookRuntime | null {
+  if (
+    environment.JARVIS_OUTLOOK_ENABLED === "true" &&
+    environment.JARVIS_OUTLOOK_CONNECTIONS_JSON !== undefined
+  ) {
+    return createNamedOutlookRuntime(environment, dependencies);
+  }
   const config = resolveMicrosoftDelegatedOAuthConfig(environment);
   if (!config.enabled) return null;
 
   const refreshTokenStore =
-    dependencies.refreshTokenStore ?? new FileRefreshTokenStore(config.refreshTokenFile);
+    dependencies.createRefreshTokenStore?.(config) ??
+    dependencies.refreshTokenStore ??
+    new FileRefreshTokenStore(config.refreshTokenFile);
   const accessTokenSupplier = new MicrosoftDelegatedAccessTokenSupplier({
     clientId: config.clientId,
     scopes: config.scopes,

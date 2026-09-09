@@ -2,7 +2,7 @@ export { FileRefreshTokenStore } from "./fileRefreshTokenStore.js";
 
 const PERSONAL_ACCOUNT_TOKEN_ENDPOINT =
   "https://login.microsoftonline.com/consumers/oauth2/v2.0/token";
-const APPROVED_SCOPES = ["offline_access", "Mail.ReadWrite", "Mail.Send"] as const;
+export const APPROVED_SCOPES = ["offline_access", "Mail.ReadWrite", "Mail.Send"] as const;
 const REFRESH_EARLY_MS = 60_000;
 
 type Environment = Readonly<Record<string, string | undefined>>;
@@ -16,7 +16,7 @@ export type EnabledMicrosoftDelegatedOAuthConfig = {
   clientId: string;
   mailbox: string;
   refreshTokenFile: string;
-  tokenEndpoint: typeof PERSONAL_ACCOUNT_TOKEN_ENDPOINT;
+  tokenEndpoint: string;
   scopes: [...typeof APPROVED_SCOPES];
 };
 
@@ -66,12 +66,19 @@ export function resolveMicrosoftDelegatedOAuthConfig(
     throw new Error("JARVIS_OUTLOOK_REFRESH_TOKEN_FILE must be an absolute path.");
   }
 
+  const tenantId = environment.JARVIS_OUTLOOK_TENANT_ID;
+  if (tenantId !== undefined && !/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/iu.test(tenantId)) {
+    fail("microsoft-oauth-tenant-invalid");
+  }
   return {
     enabled: true,
     clientId,
     mailbox,
     refreshTokenFile,
-    tokenEndpoint: PERSONAL_ACCOUNT_TOKEN_ENDPOINT,
+    tokenEndpoint:
+      tenantId === undefined
+        ? PERSONAL_ACCOUNT_TOKEN_ENDPOINT
+        : `https://login.microsoftonline.com/${tenantId.toLowerCase()}/oauth2/v2.0/token`,
     scopes: [...APPROVED_SCOPES],
   };
 }
@@ -100,7 +107,11 @@ export class MicrosoftDelegatedAccessTokenSupplier {
     this.fetch = options.fetch ?? globalThis.fetch;
     this.now = options.now ?? Date.now;
     if (!options.clientId.trim()) fail("microsoft-oauth-client-id-invalid");
-    if (options.tokenEndpoint !== PERSONAL_ACCOUNT_TOKEN_ENDPOINT) {
+    if (
+      !/^https:\/\/login\.microsoftonline\.com\/(?:consumers|[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12})\/oauth2\/v2\.0\/token$/u.test(
+        options.tokenEndpoint,
+      )
+    ) {
       fail("microsoft-oauth-token-endpoint-invalid");
     }
     if (options.scopes.join(" ") !== APPROVED_SCOPES.join(" ")) {
@@ -173,9 +184,23 @@ export class MicrosoftDelegatedAccessTokenSupplier {
       fail("microsoft-oauth-refresh-response-invalid");
     }
     if (typeof record.scope !== "string") fail("microsoft-oauth-refresh-response-invalid");
-    const granted = new Set(record.scope.split(/\s+/u).filter(Boolean));
-    if (!this.options.scopes.every((scope) => granted.has(scope))) {
+    const granted = new Set(
+      record.scope
+        .split(/\s+/u)
+        .filter(Boolean)
+        .map((scope) => scope.replace(/^https:\/\/graph\.microsoft\.com\//u, "")),
+    );
+    // offline_access requests a refresh token; it need not appear in the API token's scopes.
+    if (!["Mail.ReadWrite", "Mail.Send"].every((scope) => granted.has(scope))) {
       fail("microsoft-oauth-scopes-missing");
+    }
+
+    if (
+      [...granted].some(
+        (scope) => !APPROVED_SCOPES.includes(scope as (typeof APPROVED_SCOPES)[number]),
+      )
+    ) {
+      fail("microsoft-oauth-scopes-excessive");
     }
 
     if (record.refresh_token !== undefined) {
