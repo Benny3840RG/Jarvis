@@ -1,4 +1,5 @@
 import { v } from "convex/values";
+import { assertAssistantState } from "../src/persistence/assistantState.js";
 
 import { collectBounded, requireOwner } from "./authHelpers.js";
 import type { Doc, Id } from "./_generated/dataModel.js";
@@ -119,6 +120,7 @@ export const upsert = mutation({
   returns: v.id("assistantState"),
   handler: async (ctx, args) => {
     const ownerId = requireOwner(args.serviceToken);
+    assertAssistantState(args.state);
     const existing = await ctx.db
       .query("assistantState")
       .withIndex("by_owner_key", (q) => q.eq("ownerId", ownerId).eq("key", PRIMARY_KEY))
@@ -185,6 +187,7 @@ export const restoreEmpty = mutation({
   handler: async (ctx, args) => {
     const ownerId = requireOwner(args.serviceToken);
     if (!isRecord(args.state)) throw new Error("Backup assistant state must be an object.");
+    assertAssistantState(args.state);
     assertUniqueSourceIds(args.tasks, "task");
     assertUniqueSourceIds(args.reminders, "reminder");
 

@@ -4,6 +4,17 @@ This file is a living record for the autonomous engineering sessions working on
 Jarvis: current state, what changed recently, and what to pick up next. Update
 it at the end of every session.
 
+## Phase 1 direct Convex state validation (2026-09-10)
+
+- Direct `assistantState.upsert` and `restoreEmpty` now reuse the provider
+  guard after service-token authentication and before database access.
+- Five Convex tests cover invalid create/update state, preserved prior rows,
+  valid nested and empty state, authentication ordering, and rejected restore
+  with no records created. Three tests failed before implementation.
+- Validation: full checks and development deployment verification pending.
+- Next: audit non-JSON assistant-state values (undefined, dates, and custom
+  serialization methods), then review Phase 1 coverage before Phase 2.
+
 ## Phase 1 nested assistant-state validation (2026-09-10)
 
 - Extended the shared provider guard to reject nested non-finite numbers and
@@ -217,6 +228,17 @@ rather than an occasional operator action.
 
 ## Notes for future sessions
 
+- **#324 isolated-ingress commissioning bootstrap** (`src/commissioning/isolatedIngress/`,
+  `npm run commission:isolated-ingress`, `docs/operators/isolated-ingress-commissioning.md`):
+  a loopback OIDC-authenticated probe listener that composes the durable
+  orchestration boundary and executes one read-only `commissioningProbe` step.
+  All contracts are tested offline (`tests/commissioningIsolatedIngress.test.ts`,
+  `convex/orchestrationCommissioning.test.ts`). It changes no production route
+  and `resolveHttpAppConfig` is untouched (the `commissioningProbe` command is
+  admitted only via `OrchestrationRunner`'s new `additionalCapabilities` seam, so
+  it never reaches `IMPLEMENTED_CAPABILITIES` / OpenAPI / `/api/v1/help`).
+  Merging clears no live gate — the recorded two-process development-backend
+  drill is the follow-up that clears the bounded ingress/idempotency item.
 - Before touching `.github/workflows/jarvis-autobuild.yml` or its automation
   policy tests, check whether the task is actually meant for the dedicated
   autobuild worker (see "Current state" above) — those issues carry very

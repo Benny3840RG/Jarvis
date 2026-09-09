@@ -32,7 +32,9 @@ runtime behaviour belongs in the focused modules below.
   circular references before either provider writes. Repeated references to
   the same non-circular object are allowed. This prevents JSON from silently
   replacing non-finite numbers with null. It is not a complete serialization
-  validator and does not replace validation on direct Convex server calls.
+  validator. Direct Convex `assistantState.upsert` and `restoreEmpty` also run
+  this guard after authentication and before database work, so callers cannot
+  bypass these checks by calling the server directly.
 - Current writes use version 2 and preserve normalized reminder timezone data.
 - Numeric task/reminder creation timestamps must be finite in every document
   version. Missing legacy timestamps still default to zero. Overflowing JSON
