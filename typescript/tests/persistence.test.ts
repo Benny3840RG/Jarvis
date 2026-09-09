@@ -78,6 +78,41 @@ describe("JSONPersistence", () => {
     assert.deepEqual(await provider.listReminders(), []);
   });
 
+  it("does not rewrite an already completed legacy task on repeated completion", async () => {
+    const file = path.join(tempDir, "completed-legacy.json");
+    const task = {
+      id: "task-1",
+      title: "Finished task",
+      category: "personal",
+      completed: true,
+      createdAt: 1,
+    };
+    const raw = JSON.stringify({ version: 1, state: {}, tasks: [task], reminders: [] });
+    await fs.writeFile(file, raw, "utf8");
+    const provider = new JSONPersistence(file);
+    const result = await provider.completeTask(task.id);
+    assert.deepEqual(result, task);
+    assert.equal(await fs.readFile(file, "utf8"), raw);
+    assert(result);
+    result.title = "Caller mutation";
+    assert.deepEqual(await new JSONPersistence(file).completeTask(task.id), task);
+    assert.equal(await fs.readFile(file, "utf8"), raw);
+  });
+
+  it("persists first completion and leaves subsequent completion unchanged", async () => {
+    const file = path.join(tempDir, "completion.json");
+    const provider = new JSONPersistence(file);
+    const task = await provider.addTask("Finish once", "personal");
+    const completed = await provider.completeTask(task.id);
+    assert.deepEqual(completed, { ...task, completed: true });
+    const before = await fs.stat(file, { bigint: true });
+    assert.deepEqual(await new JSONPersistence(file).completeTask(task.id), completed);
+    const after = await fs.stat(file, { bigint: true });
+    assert.equal(after.ino, before.ino);
+    assert.equal(after.mtimeNs, before.mtimeNs);
+    assert.deepEqual(await provider.listTasks(), [completed]);
+  });
+
   it("saves normalized reminder due data in the current versioned document", async () => {
     const file = path.join(tempDir, "state.json");
     const provider = new JSONPersistence(file);

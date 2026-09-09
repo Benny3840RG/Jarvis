@@ -255,6 +255,7 @@ export class JSONPersistence implements PersistenceProvider {
         const current = await this.readDocument();
         const index = current.tasks.findIndex((task) => task.id === id);
         if (index < 0) return null;
+        if (current.tasks[index].completed) return cloneTask(current.tasks[index]);
         const task = { ...current.tasks[index], completed: true };
         const tasks = current.tasks.map((entry, taskIndex) => (taskIndex === index ? task : entry));
         await this.writeDocument({ ...current, tasks });

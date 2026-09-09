@@ -30,6 +30,9 @@ runtime behaviour belongs in the focused modules below.
   numbers (such as `1e400`) trigger the existing corrupt-file quarantine, which
   preserves the original bytes for recovery.
 - JSON mutations reread the latest document after acquiring the cross-process lock.
+- Task completion remains idempotent: repeats return the completed task. The
+  JSON provider checks completion after its locked reread and returns a copy
+  without replacing the state file or migrating a legacy document on a repeat.
 - Convex calls use generated API references and service-token authentication.
 - Snapshot and restore operations remain provider-atomic.
 - Restore continues to refuse a non-empty target and remaps nested record IDs.

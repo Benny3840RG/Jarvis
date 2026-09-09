@@ -4,6 +4,20 @@ This file is a living record for the autonomous engineering sessions working on
 Jarvis: current state, what changed recently, and what to pick up next. Update
 it at the end of every session.
 
+## Phase 1 completion audit (2026-09-10)
+
+- Audited direct task completion in JSON and Convex against OpenAPI: both
+  return the completed task on repeats, as the existing contract specifies.
+- JSON now returns a defensive copy after the locked reread when the task is
+  already complete, avoiding state-file replacement and incidental legacy
+  migration. First completion and missing-ID behavior remain unchanged.
+- Two regression tests failed before the fix: legacy file-byte preservation
+  and current-document inode/mtime preservation across fresh provider instances.
+- `npm run check` passed: 1,189 Node tests, 227 Convex tests, TypeScript,
+  ESLint, Prettier, hygiene, and zero-warning OpenAPI lint.
+- Next: audit assistant-state validation and provider parity, then review
+  Phase 1 coverage before advancing to persistence hardening in Phase 2.
+
 ## Phase 1 progress (2026-09-10)
 
 - Duplicate task/reminder ID rejection was already committed in `eaf625e`;
