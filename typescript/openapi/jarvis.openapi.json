@@ -11329,19 +11329,25 @@
       "IntegrationStatus": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["name", "status"],
+        "required": ["name", "stage", "status"],
         "properties": {
           "name": {
             "type": "string",
             "minLength": 1
           },
+          "stage": {
+            "type": "string",
+            "enum": ["implemented", "configured", "commissioned", "production-approved"],
+            "description": "Highest lifecycle stage with recorded evidence of that kind. Never inferred upward: registering a tool proves \"configured\" only, never \"commissioned\"."
+          },
           "status": {
             "type": "string",
-            "enum": ["commissioned", "not-commissioned"]
+            "enum": ["commissioned", "not-commissioned"],
+            "description": "Derived from \"stage\" for existing consumers: \"commissioned\" only when stage is \"commissioned\" or \"production-approved\"."
           },
           "reason": {
             "type": "string",
-            "description": "Present when status is \"not-commissioned\" — a concrete, non-generic reason."
+            "description": "Why the integration is not further along. Present unless stage is \"production-approved\"."
           }
         }
       },

@@ -415,6 +415,9 @@ const statusSchema = z.object({
   integrations: z.array(
     z.object({
       name: z.string(),
+      // `stage` is the real answer; `status` is the derived legacy field.
+      // Registration proves `configured` only — never `commissioned`.
+      stage: z.enum(["implemented", "configured", "commissioned", "production-approved"]),
       status: z.enum(["commissioned", "not-commissioned"]),
       reason: z.string().optional(),
     }),

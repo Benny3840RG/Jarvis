@@ -10,6 +10,7 @@ import { assessReconciliationHealth } from "../reliability/reliabilityHealth.js"
 import { resolveTotalityReasoningStatus } from "../totality/totalityFactory.js";
 import type { HttpAppConfig } from "./config.js";
 import type { IntegrationStatus, LayersStatus, SystemStatus } from "./contracts.js";
+import { integrationStatusFromStage } from "./contracts.js";
 import { JarvisProblem } from "./problemDetails.js";
 import {
   HTTP_APP_CONFIG,
@@ -27,7 +28,12 @@ const LAYERS: LayersStatus = {
   },
   domains: {
     status: "partial",
-    reason: "Business, workshop, and home engines remain non-durable prototypes.",
+    // Disambiguated: the prototype *engines* in `src/domains/` are non-durable,
+    // but the trade-business record stores (clients, properties, projects,
+    // quotes, invoices, enquiries, errands) are durable. Reporting only the
+    // first half read as "business data is not durable", which is false.
+    reason:
+      "The trade-business record stores (clients, properties, projects, quotes, invoices, enquiries, errands) are durable; the separate business, workshop, and home reasoning engines in src/domains/ remain non-durable prototypes whose generated records are synthetic and never persisted.",
   },
   integration: {
     status: "partial",
@@ -36,8 +42,13 @@ const LAYERS: LayersStatus = {
   },
   orchestration: {
     status: "partial",
+    // Durable run state is no longer pending: `convex/orchestrationState.ts`
+    // persists runs and steps with worker-bound leases and fencing tokens, and
+    // `src/orchestration/convexStateBoundary.ts` composes it. What is still
+    // pending is that this composition is wired into no CLI, HTTP, MCP or
+    // scheduler ingress path, and has never been exercised against a deployment.
     reason:
-      "A validated trigger registry, weighted dependency graph, and bounded fail-closed runner exist; durable run state, production composition, and governed workflow evolution remain pending.",
+      "A validated trigger registry, weighted dependency graph, bounded fail-closed runner, and durable Convex-backed run/step state with worker-bound leases are implemented and covered by offline tests; that composition is wired into no ingress path, and live commissioning plus governed workflow evolution remain pending.",
   },
   safety: {
     status: "partial",
@@ -82,12 +93,20 @@ export class SystemStatusService {
    * dependency bundle (Convex, quote repository, email provider, delivery
    * repository, PDF artifact repository). No new live call to Outlook is
    * made here.
+   *
+   * Registration is evidence of `configured` and nothing stronger. It proves the
+   * dependency bundle is wired; it does not prove Outlook has ever been reached,
+   * and it carries no operator approval. `commissioned` requires a recorded
+   * result from exercising the real provider, and `production-approved` requires
+   * a human decision — neither has a wired evidence source yet, so neither is
+   * reachable here. Reporting `configured` is the honest ceiling.
    */
   private quoteDeliveryIntegrationStatus(): IntegrationStatus {
     if (!this.toolExecutionService) {
       return {
         name: "quote-delivery",
-        status: "not-commissioned",
+        stage: "implemented",
+        status: integrationStatusFromStage("implemented"),
         reason:
           "Tool execution is not configured in this deployment (requires Convex persistence).",
       };
@@ -95,12 +114,19 @@ export class SystemStatusService {
     if (!this.toolExecutionService.isRegistered("quotes", "send")) {
       return {
         name: "quote-delivery",
-        status: "not-commissioned",
+        stage: "implemented",
+        status: integrationStatusFromStage("implemented"),
         reason:
           "The quotes:send tool is not registered — one or more of the quote repository, email provider, delivery repository, or PDF artifact repository is not configured.",
       };
     }
-    return { name: "quote-delivery", status: "commissioned" };
+    return {
+      name: "quote-delivery",
+      stage: "configured",
+      status: integrationStatusFromStage("configured"),
+      reason:
+        "The quotes:send dependency bundle is registered, so this deployment is configured. No commissioning evidence exists: nothing here records a delivery actually completed against the live provider, and no operator production approval is recorded.",
+    };
   }
 
   async inspect(): Promise<SystemStatus> {

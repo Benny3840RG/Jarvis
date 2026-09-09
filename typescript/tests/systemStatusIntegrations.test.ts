@@ -88,41 +88,61 @@ async function fetchIntegrations(app: NestFastifyApplication): Promise<Integrati
 }
 
 describe("system status integration commissioning evidence", () => {
-  it("reports quote-delivery as not-commissioned with a reason when tool execution is unconfigured", async () => {
+  it("reports quote-delivery as implemented-only with a reason when tool execution is unconfigured", async () => {
     const app = await makeApp(null);
     const integrations = await fetchIntegrations(app);
     const quoteDelivery = integrations.find((entry) => entry.name === "quote-delivery");
+    assert.equal(quoteDelivery?.stage, "implemented");
     assert.equal(quoteDelivery?.status, "not-commissioned");
     assert.ok(quoteDelivery?.reason);
   });
 
-  it("reports quote-delivery as not-commissioned with a reason when quotes:send is not registered", async () => {
+  it("reports quote-delivery as implemented-only with a reason when quotes:send is not registered", async () => {
     const app = await makeApp(new ToolExecutionService([]));
     const integrations = await fetchIntegrations(app);
     const quoteDelivery = integrations.find((entry) => entry.name === "quote-delivery");
+    assert.equal(quoteDelivery?.stage, "implemented");
     assert.equal(quoteDelivery?.status, "not-commissioned");
     assert.ok(quoteDelivery?.reason);
   });
 
-  it("reports quote-delivery as commissioned, with no reason, once quotes:send is actually registered", async () => {
+  it("treats a registered quotes:send as configured only — registration never implies commissioning", async () => {
     const app = await makeApp(quoteSendRegisteredService());
     const integrations = await fetchIntegrations(app);
     const quoteDelivery = integrations.find((entry) => entry.name === "quote-delivery");
-    assert.equal(quoteDelivery?.status, "commissioned");
-    assert.equal("reason" in (quoteDelivery ?? {}), false);
+    // Registration proves the dependency bundle is wired. It proves nothing
+    // about the live provider ever being reached, and carries no operator
+    // approval, so the reported stage stops at "configured".
+    assert.equal(quoteDelivery?.stage, "configured");
+    assert.equal(quoteDelivery?.status, "not-commissioned");
+    assert.match(quoteDelivery?.reason ?? "", /No commissioning evidence exists/);
   });
 
-  it("is a live evidence check, not a fabricated constant — it flips with the actual registered service", async () => {
-    const uncommissioned = await fetchIntegrations(await makeApp(new ToolExecutionService([])));
-    const commissioned = await fetchIntegrations(await makeApp(quoteSendRegisteredService()));
+  it("is a live evidence check, not a fabricated constant — the stage flips with the actual registered service", async () => {
+    const unregistered = await fetchIntegrations(await makeApp(new ToolExecutionService([])));
+    const registered = await fetchIntegrations(await makeApp(quoteSendRegisteredService()));
 
     assert.equal(
-      uncommissioned.find((entry) => entry.name === "quote-delivery")?.status,
-      "not-commissioned",
+      unregistered.find((entry) => entry.name === "quote-delivery")?.stage,
+      "implemented",
     );
-    assert.equal(
-      commissioned.find((entry) => entry.name === "quote-delivery")?.status,
-      "commissioned",
-    );
+    assert.equal(registered.find((entry) => entry.name === "quote-delivery")?.stage, "configured");
+  });
+
+  it("never derives a commissioned status from a stage weaker than commissioned", async () => {
+    for (const service of [null, new ToolExecutionService([]), quoteSendRegisteredService()]) {
+      const integrations = await fetchIntegrations(await makeApp(service));
+      for (const integration of integrations) {
+        const derived =
+          integration.stage === "commissioned" || integration.stage === "production-approved"
+            ? "commissioned"
+            : "not-commissioned";
+        assert.equal(
+          integration.status,
+          derived,
+          `${integration.name}: status must be derived from stage, never asserted independently`,
+        );
+      }
+    }
   });
 });
