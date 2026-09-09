@@ -202,6 +202,87 @@ describe("JSONPersistence", () => {
     );
   });
 
+  it("rejects a document that repeats a task or reminder id within one collection", () => {
+    assert.throws(
+      () =>
+        normalizeDocument({
+          version: 2,
+          state: {},
+          tasks: [
+            { id: "task-1", title: "First", completed: false, category: "personal", createdAt: 1 },
+            { id: "task-1", title: "Second", completed: true, category: "work", createdAt: 2 },
+          ],
+          reminders: [],
+        }),
+      /task id task-1 appears more than once/,
+    );
+    assert.throws(
+      () =>
+        normalizeDocument({
+          version: 2,
+          state: {},
+          tasks: [],
+          reminders: [
+            { id: "reminder-1", title: "First", createdAt: 1 },
+            { id: "reminder-1", title: "Second", createdAt: 2 },
+          ],
+        }),
+      /reminder id reminder-1 appears more than once/,
+    );
+    // Legacy and version 1 documents are held to the same rule.
+    assert.throws(
+      () =>
+        normalizeDocument({
+          state: {},
+          tasks: [
+            { id: "dup", title: "One", completed: false },
+            { id: "dup", title: "Two", completed: false },
+          ],
+        }),
+      /Legacy task id dup appears more than once/,
+    );
+  });
+
+  it("still accepts distinct task and reminder ids that happen to match each other", () => {
+    const document = normalizeDocument({
+      version: 2,
+      state: {},
+      tasks: [
+        { id: "shared-1", title: "Task", completed: false, category: "personal", createdAt: 1 },
+      ],
+      reminders: [{ id: "shared-1", title: "Reminder", createdAt: 2 }],
+    });
+    assert.equal(document.tasks[0].id, "shared-1");
+    assert.equal(document.reminders[0].id, "shared-1");
+  });
+
+  it("quarantines a state file with a duplicate task id and starts empty", async () => {
+    const file = path.join(tempDir, "dupe.json");
+    const warnings: string[] = [];
+    await fs.writeFile(
+      file,
+      JSON.stringify({
+        version: 2,
+        state: {},
+        tasks: [
+          { id: "task-1", title: "First", completed: false, category: "personal", createdAt: 1 },
+          { id: "task-1", title: "Clone", completed: false, category: "personal", createdAt: 2 },
+        ],
+        reminders: [],
+      }),
+      "utf8",
+    );
+    const provider = new JSONPersistence(file, (message) => warnings.push(message));
+
+    assert.deepEqual(await provider.listTasks(), []);
+    assert.equal(warnings.length, 1);
+    assert.match(warnings[0], /appears more than once/);
+    const quarantined = (await fs.readdir(tempDir)).find((name) =>
+      name.startsWith("dupe.json.corrupt-"),
+    );
+    assert(quarantined);
+  });
+
   it("removes tasks durably and returns null for missing IDs", async () => {
     const provider = new JSONPersistence(path.join(tempDir, "state.json"));
     const task = await provider.addTask("Disposable task", "personal");

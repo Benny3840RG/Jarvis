@@ -144,6 +144,25 @@ function normalizeRows<T>(
   return value.map(normalize);
 }
 
+/**
+ * Rejects a document that carries the same row id twice within one collection.
+ * `AssistantState` can hold a task or reminder id (`lastTask`, `lastReminder`,
+ * nested references), and every mutation and the backup/restore id remap assume
+ * an id resolves to exactly one row, so a duplicate is corruption, not
+ * something to silently load. Ids may still legitimately collide *across*
+ * collections (a task id equal to a reminder id), matching the backup archive
+ * contract, so the check is per-collection.
+ */
+function assertUniqueRowIds(rows: ReadonlyArray<{ id: string }>, noun: string): void {
+  const seen = new Set<string>();
+  for (const row of rows) {
+    if (seen.has(row.id)) {
+      throw new StateDocumentError(`${noun} id ${row.id} appears more than once.`);
+    }
+    seen.add(row.id);
+  }
+}
+
 export function normalizeDocument(value: unknown): PersistedDocument {
   if (!isRecord(value)) throw new StateDocumentError("State document must be an object.");
 
@@ -155,17 +174,23 @@ export function normalizeDocument(value: unknown): PersistedDocument {
       throw new StateDocumentError(`Version ${String(value.version)} state must be an object.`);
     }
     const format = value.version === DOCUMENT_VERSION ? "version2" : "version1";
+    const tasks = normalizeRows(
+      value.tasks,
+      `Version ${String(value.version)} tasks`,
+      (entry, index) => normalizeTask(entry, index, true),
+    );
+    const reminders = normalizeRows(
+      value.reminders,
+      `Version ${String(value.version)} reminders`,
+      (entry, index) => normalizeReminder(entry, index, format),
+    );
+    assertUniqueRowIds(tasks, `Version ${String(value.version)} task`);
+    assertUniqueRowIds(reminders, `Version ${String(value.version)} reminder`);
     return {
       version: DOCUMENT_VERSION,
       state: { ...value.state },
-      tasks: normalizeRows(value.tasks, `Version ${String(value.version)} tasks`, (entry, index) =>
-        normalizeTask(entry, index, true),
-      ),
-      reminders: normalizeRows(
-        value.reminders,
-        `Version ${String(value.version)} reminders`,
-        (entry, index) => normalizeReminder(entry, index, format),
-      ),
+      tasks,
+      reminders,
     };
   }
 
@@ -182,20 +207,24 @@ export function normalizeDocument(value: unknown): PersistedDocument {
   if (value.state !== undefined && !isRecord(value.state)) {
     throw new StateDocumentError("Legacy state must be an object.");
   }
+  const tasks =
+    value.tasks === undefined
+      ? []
+      : normalizeRows(value.tasks, "Legacy tasks", (entry, index) =>
+          normalizeTask(entry, index, false),
+        );
+  const reminders =
+    value.reminders === undefined
+      ? []
+      : normalizeRows(value.reminders, "Legacy reminders", (entry, index) =>
+          normalizeReminder(entry, index, "legacy"),
+        );
+  assertUniqueRowIds(tasks, "Legacy task");
+  assertUniqueRowIds(reminders, "Legacy reminder");
   return {
     version: DOCUMENT_VERSION,
     state: value.state === undefined ? {} : { ...value.state },
-    tasks:
-      value.tasks === undefined
-        ? []
-        : normalizeRows(value.tasks, "Legacy tasks", (entry, index) =>
-            normalizeTask(entry, index, false),
-          ),
-    reminders:
-      value.reminders === undefined
-        ? []
-        : normalizeRows(value.reminders, "Legacy reminders", (entry, index) =>
-            normalizeReminder(entry, index, "legacy"),
-          ),
+    tasks,
+    reminders,
   };
 }
