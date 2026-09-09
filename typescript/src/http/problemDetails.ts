@@ -120,6 +120,22 @@ function redact(
   return result;
 }
 
+/**
+ * Every bearer credential this config carries, so no response body can echo one
+ * back. The approval tokens gate tool *execution* approval
+ * (`toolActionController.ts`), so omitting them from redaction while redacting
+ * the service tokens protected the lower-value credential and not the higher-value
+ * one. Anything added to `HttpAppConfig` that is a secret belongs here too.
+ */
+export function configuredSecrets(config: HttpAppConfig): Array<string | undefined> {
+  return [
+    config.currentToken,
+    config.previousToken,
+    config.currentApprovalToken,
+    config.previousApprovalToken,
+  ];
+}
+
 @Catch()
 export class ProblemDetailsFilter implements ExceptionFilter {
   constructor(@Inject(HTTP_APP_CONFIG) private readonly config: HttpAppConfig) {}
@@ -135,12 +151,8 @@ export class ProblemDetailsFilter implements ExceptionFilter {
       type: `urn:jarvis:problem:${definition.slug}`,
       title: definition.title,
       status,
-      detail: redact(definition.detail, [this.config.currentToken, this.config.previousToken]),
-      instance: redact(
-        requestPath(request.url),
-        [this.config.currentToken, this.config.previousToken],
-        "redacted",
-      ),
+      detail: redact(definition.detail, configuredSecrets(this.config)),
+      instance: redact(requestPath(request.url), configuredSecrets(this.config), "redacted"),
       requestId,
     };
 
