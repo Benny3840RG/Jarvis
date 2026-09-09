@@ -25,6 +25,9 @@ const ORCHESTRATION_TRIGGER_METADATA_KEYS = new Set([
   "source",
   "correlationId",
   "triggerId",
+  // Isolated-ingress commissioning campaign id (#324): lets a bounded cleanup
+  // mutation delete only the runs a specific drill campaign created.
+  "campaignId",
 ]);
 const MIN_LEASE_TTL_MS = 1_000;
 const MAX_LEASE_TTL_MS = 15 * 60 * 1_000;

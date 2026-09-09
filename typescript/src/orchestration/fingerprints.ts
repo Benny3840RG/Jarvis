@@ -27,3 +27,26 @@ export function orchestrationPlanFingerprint(graph: OrchestrationGraph): string 
   const canonicalJson = JSON.stringify(canonicalize(plan));
   return `orchestration-plan:v1:sha256:${createHash("sha256").update(canonicalJson).digest("hex")}`;
 }
+
+/**
+ * A stable fingerprint of a *validated, already-canonical* trigger request. Two
+ * requests that differ only in JSON key order or insignificant whitespace hash
+ * identically (via `canonicalize` + `JSON.stringify`); any change to a
+ * semantically significant value changes the hash. Callers pass the parsed,
+ * schema-validated request body — never the raw bytes — so a whitespace or
+ * key-order change is already gone by the time it reaches here, and the
+ * synthetic pre-image (`JSON.stringify(canonicalize(input))`) is safe to retain
+ * as commissioning evidence.
+ */
+export function orchestrationRequestFingerprint(input: unknown): {
+  fingerprint: string;
+  preImage: string;
+} {
+  const preImage = JSON.stringify(canonicalize(input));
+  return {
+    fingerprint: `orchestration-request:v1:sha256:${createHash("sha256")
+      .update(preImage)
+      .digest("hex")}`,
+    preImage,
+  };
+}

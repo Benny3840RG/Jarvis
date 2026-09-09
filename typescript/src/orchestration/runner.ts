@@ -52,9 +52,12 @@ export type OrchestrationRunResult =
       executedResult?: DomainSuccess;
     };
 
-function capabilityFor(node: OrchestrationNode): Capability | null {
+function capabilityFor(
+  node: OrchestrationNode,
+  additionalCapabilities: readonly Capability[],
+): Capability | null {
   return (
-    IMPLEMENTED_CAPABILITIES.find(
+    [...IMPLEMENTED_CAPABILITIES, ...additionalCapabilities].find(
       (capability) => capability.operationId === node.command.operationId,
     ) ?? null
   );
@@ -78,6 +81,13 @@ export type OrchestrationRunnerOptions = {
   clock?: () => number;
   /** Durable step lifecycle; omitted for pure/unit execution. */
   stepState?: OrchestrationStepStateBoundary;
+  /**
+   * Extra capabilities a specific composition admits to the execution boundary
+   * on top of `IMPLEMENTED_CAPABILITIES`. Used by the isolated-ingress
+   * commissioning bootstrap to admit its read-only `commissioningProbe` without
+   * putting it on the public capability / OpenAPI surface. Empty by default.
+   */
+  additionalCapabilities?: readonly Capability[];
 };
 
 const DEFAULT_MAX_STEPS = 100;
@@ -92,6 +102,7 @@ export class OrchestrationRunner {
   private readonly maxDurationMs: number;
   private readonly clock: () => number;
   private readonly stepState?: OrchestrationStepStateBoundary;
+  private readonly additionalCapabilities: readonly Capability[];
 
   constructor(
     private readonly executor: OrchestrationExecutor,
@@ -103,6 +114,7 @@ export class OrchestrationRunner {
     this.maxDurationMs = options.maxDurationMs ?? DEFAULT_MAX_DURATION_MS;
     this.clock = options.clock ?? Date.now;
     this.stepState = options.stepState;
+    this.additionalCapabilities = options.additionalCapabilities ?? [];
     if (!positiveSafeInteger(this.maxSteps)) {
       throw new Error("Orchestration maxSteps must be a positive safe integer.");
     }
@@ -129,7 +141,7 @@ export class OrchestrationRunner {
           failure("execution_budget_exceeded", "Orchestration execution budget exhausted."),
         );
       }
-      const capability = capabilityFor(node);
+      const capability = capabilityFor(node, this.additionalCapabilities);
       let leaseToken: string | undefined;
       let fencingToken: number | undefined;
       if (!capability) {
