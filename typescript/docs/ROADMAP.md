@@ -181,3 +181,11 @@ rather than an occasional operator action.
   restored verification is credited. See [the S4 capture boundary](architecture/backup-v4-s4-capture.md).
 - Next: inert empty-target restore, typed references (including S5 links),
   ordinary-store read-back and source/restored digest proof before integration.
+
+- S4 isolated restore increment: projects/notes-only typed adapter, exact capture
+  integrity/inventory checks, fresh application-database refusal, atomic schema-backed
+  insertion, typed source-ID metadata and ordinary-store/digest readback. All other
+  nonempty S4 tables fail closed; verification returns partial with no verified group.
+  Remaining S4 logical/physical/opaque references are classified in
+  `architecture/backup-v4-s4-restore-slice.md`; project memory and effect-history
+  inertness plus S5 bindings remain required before whole-group coverage.
