@@ -103,7 +103,7 @@ test("failed post-merge CI is durable evidence but can never request completion"
   });
 
   assert.equal(result.status, "failed");
-  assert.deepEqual(gateway.calls, ["proof:fail"]);
+  assert.deepEqual(gateway.calls, ["proof:inconclusive"]);
 });
 
 for (const defect of [
@@ -230,3 +230,56 @@ for (const metadata of [{ workflowEvent: "push" }, { workflowBranch: "refs/pull/
     assert.equal(gateway.calls.includes("omega:complete"), false);
   });
 }
+
+for (const metadata of [
+  { appSlug: "untrusted" },
+  { workflowPath: ".github/workflows/foreign.yml" },
+]) {
+  test("newer untrusted same-name success cannot fall back to older green evidence", async () => {
+    const provider = github();
+    const checks = await provider.getCommitChecks({
+      repository: "o/r",
+      sha: mergeSha,
+      signal: new AbortController().signal,
+    });
+    provider.getCommitChecks = async () => [
+      ...checks,
+      ...checks.map((check) => ({ ...check, id: check.id! + 100, ...metadata })),
+    ];
+    const gateway = new Gateway();
+    const result = await new GitHubDevelopmentCompletionCoordinator(
+      provider,
+      gateway,
+    ).observeAndRequestCompletion({
+      missionId: "mission-1",
+      repository: "o/r",
+      pullRequestNumber: 42,
+      baseBranch: "main",
+      reviewedHeadSha: headSha,
+      criterionId: "post-merge-ci",
+      residualUncertainty: 0,
+      signal: new AbortController().signal,
+    });
+    assert.equal(result.status, "failed");
+    assert.equal(gateway.calls.includes("omega:complete"), false);
+  });
+}
+test("failed then green observations do not leave an immutable failed completion proof", async () => {
+  const provider = github("failure");
+  const gateway = new Gateway();
+  const coordinator = new GitHubDevelopmentCompletionCoordinator(provider, gateway);
+  const input = {
+    missionId: "mission-1",
+    repository: "o/r",
+    pullRequestNumber: 42,
+    baseBranch: "main",
+    reviewedHeadSha: headSha,
+    criterionId: "post-merge-ci",
+    residualUncertainty: 0,
+    signal: new AbortController().signal,
+  };
+  await coordinator.observeAndRequestCompletion(input);
+  provider.getCommitChecks = github().getCommitChecks;
+  await coordinator.observeAndRequestCompletion(input);
+  assert.deepEqual(gateway.calls, ["proof:inconclusive", "proof:pass", "omega:complete"]);
+});

@@ -151,6 +151,7 @@ function fixture() {
     writes,
     history,
     checkSets,
+    runs,
     core,
     async identity() {
       const e = await collectCandidateChecks({
@@ -242,6 +243,10 @@ test("failed, malformed and out-of-diff model evidence cannot dispatch a repair"
       false,
     );
     assert.equal(f.writes.find((w) => w.kind === "status").state, "failure");
+    assert.equal(
+      f.writes.find((w) => w.kind === "development")?.review.verdict,
+      "blocked",
+    );
   }
 });
 
@@ -347,3 +352,38 @@ test("durable scheduling defers mutable or foreign candidates before consuming r
   head = "b".repeat(40);
   assert.equal(await durableCandidateReady(pull, "o/r", call), false);
 });
+
+test("missing generated label does not silently disable durable review recording", async () => {
+  const f = fixture();
+  f.pull.head.ref = "automation/issue-7/run-1";
+  await f.publish(await f.identity());
+  assert.equal(f.writes.find((w) => w.kind === "development")?.issueNumber, 7);
+});
+for (const extra of [{ event: "pull_request" }, { head_branch: "foreign" }]) {
+  test("same-SHA foreign branch or PR checks cannot authorise repair", async () => {
+    const f = fixture();
+    f.pull.head.ref = "automation/issue-7/run-1";
+    f.pull.labels = ["automation-generated"];
+    Object.assign(f.runs.get(101), extra);
+    const raw = JSON.stringify({
+      verdict: "changes_requested",
+      summary: "Fix notes",
+      findings: [
+        {
+          file: "docs/notes.md",
+          line: 1,
+          severity: "medium",
+          message: "Wrong statement",
+        },
+      ],
+    });
+    await assert.rejects(
+      f.publish(await f.identity(), raw),
+      /Main is not healthy/,
+    );
+    assert.equal(
+      f.writes.some((w) => w.kind === "dispatch"),
+      false,
+    );
+  });
+}

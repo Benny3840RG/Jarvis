@@ -45,8 +45,15 @@ function mainCheckVerdict(
       .filter(
         (entry) =>
           entry.name === name &&
-          entry.appSlug === "github-actions" &&
-          (!path.endsWith("/") || entry.workflowPath?.startsWith(path)),
+          // GitHub's separate code-quality product reuses Analyze names.
+          // Exempt only its exact trusted producer, never arbitrary paths/apps.
+          !(
+            path.endsWith("/") &&
+            entry.appSlug === "github-actions" &&
+            entry.workflowPath?.startsWith("dynamic/github-code-quality/") &&
+            entry.workflowEvent === "dynamic" &&
+            entry.workflowBranch === baseBranch
+          ),
       )
       .sort((left, right) => (right.id ?? 0) - (left.id ?? 0))[0];
     if (!check) {
@@ -54,6 +61,7 @@ function mainCheckVerdict(
       continue;
     }
     if (
+      check.appSlug !== "github-actions" ||
       !Number.isSafeInteger(check.id) ||
       check.id! <= 0 ||
       check.workflowBranch !== baseBranch ||

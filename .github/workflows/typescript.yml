@@ -49,6 +49,7 @@ jobs:
           .github/automation/pr-maintenance-workflow.test.mjs
           .github/automation/repair-context.test.mjs
           .github/automation/development-workflow.test.mjs
+          .github/automation/development-worker-recovery.test.mjs
           .github/automation/review-prompt-transport.test.mjs
 
       - name: Check out the pinned socket compatibility fixture

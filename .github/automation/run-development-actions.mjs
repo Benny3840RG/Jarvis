@@ -1,4 +1,8 @@
 import {
+  observeUnpublishedWorker,
+  checkpointPublishedWorker,
+} from "./development-worker-recovery.mjs";
+import {
   DevelopmentMissions,
   convexDevelopmentClient,
   developmentMissionId,
@@ -15,7 +19,7 @@ const issueNumber = Number(env.ISSUE_NUMBER);
 const call = convexDevelopmentClient();
 const missions = new DevelopmentMissions(call);
 const base = `https://api.github.com/repos/${repository}`;
-async function get(path) {
+async function get(path, allowMissing = false) {
   const response = await fetch(`${base}/${path}`, {
     headers: {
       Authorization: `Bearer ${env.GH_TOKEN}`,
@@ -23,6 +27,7 @@ async function get(path) {
     },
     signal: AbortSignal.timeout(30_000),
   });
+  if (allowMissing && response.status === 404) return null;
   if (!response.ok)
     throw new Error(
       `GitHub observation unavailable (${response.status}): ${path}.`,
@@ -68,6 +73,8 @@ async function admit() {
       throw new Error("Repair identity mismatch.");
   }
   const binding = await missions.admit({
+    observeUnpublishedWorker: (workerId) =>
+      observeUnpublishedWorker({ get, repository, issueNumber, workerId }),
     repository,
     issue,
     runId,
@@ -83,48 +90,17 @@ async function admit() {
   console.log(`Durable Development worker admitted: ${binding.subjectId}.`);
 }
 async function checkpoint() {
-  const headSha = env.CANDIDATE_SHA || "";
-  const pullUrl = env.PR_URL || "";
-  const prefix = `https://github.com/${repository}/pull/`;
-  const pullNumber = pullUrl.startsWith(prefix)
-    ? Number(pullUrl.slice(prefix.length))
-    : 0;
-  const published =
-    /^[a-f0-9]{40}$/.test(headSha) &&
-    Number.isSafeInteger(pullNumber) &&
-    pullNumber > 0;
-  let success = env.BUILD_RESULT === "success" && published;
-  if (published) {
-    const pull = await get(`pulls/${pullNumber}`);
-    const original = `automation/issue-${issueNumber}/run-${runId}`;
-    if (
-      pull.number !== pullNumber ||
-      pull.head.sha !== headSha ||
-      pull.head.repo?.full_name !== repository ||
-      pull.base.repo?.full_name !== repository ||
-      pull.base.ref !== "main" ||
-      pull.state !== "open" ||
-      (env.REPAIR_PR
-        ? pullNumber !== Number(env.REPAIR_PR) ||
-          !new RegExp(`^automation/issue-${issueNumber}/run-[1-9][0-9]*$`).test(
-            pull.head.ref,
-          )
-        : pull.head.ref !== original)
-    ) {
-      throw new Error(
-        "Published candidate identity changed before durable checkpoint.",
-      );
-    }
-  }
-  await missions.checkpoint({
-    subjectId: developmentMissionId(repository, issueNumber),
-    workerId: `github-actions:${runId}`,
+  const success = await checkpointPublishedWorker({
+    missions,
+    get,
+    repository,
+    issueNumber,
     runId,
-    pullNumber: published ? pullNumber : 0,
-    headSha: published ? headSha : "",
-    success,
+    env,
   });
-  console.log("Durable checkpoint bound to guarded publication outputs.");
+  console.log(
+    "Durable checkpoint recorded from guarded publication observation.",
+  );
   if (!success) process.exitCode = 1;
 }
 async function supervise() {
@@ -169,13 +145,28 @@ async function supervise() {
   );
 }
 async function complete() {
-  const subjects = await missions.query("developmentState:listRecent", {
-    limit: 100,
-  });
-  if (subjects.length === 100)
-    throw new Error(
-      "Completion sweep reached its observation bound; narrow the mission scope.",
-    );
+  let cursor = null;
+  for (let page = 0; page < 100; page++) {
+    const result = await missions.query("developmentState:listPage", {
+      paginationOpts: { numItems: 100, cursor },
+    });
+    await completeSubjects(result.page);
+    if (result.isDone) return;
+    if (!result.continueCursor || result.continueCursor === cursor)
+      throw new Error("Invalid completion cursor.");
+    cursor = result.continueCursor;
+  }
+  throw new Error(
+    "Completion sweep page budget exhausted; processed pages retained.",
+  );
+}
+async function completeSubjects(subjects) {
+  for (const subject of subjects) {
+    if (subject.repository === repository && subject.state === "COMPLETE")
+      await missions.mutate("developmentWorkerClaims:finalize", {
+        subjectId: subject.subjectId,
+      });
+  }
   for (const subject of subjects)
     if (
       subject.repository === repository &&
@@ -228,6 +219,10 @@ async function complete() {
       }),
     );
     if (result.status !== "passed") process.exitCode = 1;
+    else
+      await missions.mutate("developmentWorkerClaims:finalize", {
+        subjectId: subject.subjectId,
+      });
   }
 }
 try {

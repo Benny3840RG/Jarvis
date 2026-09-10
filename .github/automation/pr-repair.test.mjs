@@ -218,6 +218,7 @@ test("repair requires original branch run from trusted owning workflow on main",
         getWorkflowRun: async () => ({
           data: run(55, {
             status: "completed",
+            display_title: "Jarvis build issue #12",
             head_repository: { full_name: "owner/repo" },
           }),
         }),
@@ -235,6 +236,9 @@ test("repair requires original branch run from trusted owning workflow on main",
   assert.equal((await readRepair(args)).branch, input.pull.head.ref);
   for (const extra of [
     { head_branch: "evil" },
+    { display_title: "Jarvis build issue #99" },
+    { display_title: "Jarvis repair PR #34" },
+    { run_attempt: 2 },
     { path: "evil.yml" },
     { status: "in_progress" },
     { head_repository: { full_name: "fork/repo" } },
@@ -242,6 +246,7 @@ test("repair requires original branch run from trusted owning workflow on main",
     github.rest.actions.getWorkflowRun = async () => ({
       data: run(55, {
         status: "completed",
+        display_title: "Jarvis build issue #12",
         head_repository: { full_name: "owner/repo" },
         ...extra,
       }),
