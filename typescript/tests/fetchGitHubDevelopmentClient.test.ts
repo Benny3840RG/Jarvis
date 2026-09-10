@@ -204,18 +204,20 @@ for (const defect of [
           );
         }
         return jsonResponse({
-          total_count: 2,
-          check_runs: ["automation-policy", "typecheck-lint-format-test"].map((name, index) => ({
-            id: index + 1,
-            name,
-            status: "completed",
-            conclusion: "success",
-            app: { slug: "github-actions" },
-            details_url:
-              defect === "missing-url"
-                ? undefined
-                : `https://github.com/${defect === "foreign-url" ? "attacker/other" : "Benny3840RG/Jarvis"}/actions/runs/42/job/1`,
-          })),
+          total_count: 3,
+          check_runs: ["automation-policy", "typecheck-lint-format-test", "observe"].map(
+            (name, index) => ({
+              id: index + 1,
+              name,
+              status: "completed",
+              conclusion: "success",
+              app: { slug: "github-actions" },
+              details_url:
+                defect === "missing-url"
+                  ? undefined
+                  : `https://github.com/${defect === "foreign-url" ? "attacker/other" : "Benny3840RG/Jarvis"}/actions/runs/42/job/1`,
+            }),
+          ),
         });
       },
     });
@@ -231,7 +233,88 @@ for (const defect of [
       assert.equal(checks[0]?.workflowEvent, "push");
       assert.equal(checks[0]?.workflowBranch, "main");
       assert.equal(checks[0]?.id, 1);
+      assert.equal(checks[2]?.name, "observe");
+      assert.equal(checks[2]?.workflowPath, ".github/workflows/typescript.yml");
       assert.equal(runLookups, 1);
     } else await assert.rejects(operation);
+  });
+}
+
+describe("FetchGitHubDevelopmentClient.getPullRequest API compatibility", () => {
+  it("observes the real merge SHA using the PR response version that includes it", async () => {
+    const mergeSha = "b".repeat(40);
+    const client = new FetchGitHubDevelopmentClient("test-token", {
+      async fetch(input, init) {
+        const headers = new Headers(init?.headers);
+        assert.equal(headers.get("Authorization"), "Bearer test-token");
+        if (String(input).includes("/pulls/")) {
+          return jsonResponse({
+            number: 498,
+            state: "closed",
+            merged: true,
+            base: { ref: "main", sha: "c".repeat(40) },
+            head: { sha: "a".repeat(40) },
+            // GitHub 2026-03-10 removed this field from PR responses.
+            ...(headers.get("X-GitHub-Api-Version") === "2022-11-28"
+              ? { merge_commit_sha: mergeSha }
+              : {}),
+          });
+        }
+        assert.equal(headers.get("X-GitHub-Api-Version"), "2026-03-10");
+        return jsonResponse({ sha: mergeSha });
+      },
+    });
+    const signal = new AbortController().signal;
+    const pull = await client.getPullRequest({
+      repository: "Benny3840RG/Jarvis",
+      pullRequestNumber: 498,
+      signal,
+    });
+    assert.equal(pull.mergeCommitSha, mergeSha);
+    assert.equal(pull.headSha, "a".repeat(40));
+    assert.equal(pull.merged, true);
+    await client.getCommit({ repository: "Benny3840RG/Jarvis", sha: mergeSha, signal });
+  });
+});
+
+for (const defect of ["wrong-sha", "wrong-run", "foreign-url", "missing-url"]) {
+  it(`rejects observer-only forged producer evidence: ${defect}`, async () => {
+    const sha = "a".repeat(40);
+    const client = new FetchGitHubDevelopmentClient("test-token", {
+      async fetch(input) {
+        if (String(input).includes("/actions/runs/")) {
+          return jsonResponse({
+            id: defect === "wrong-run" ? 99 : 42,
+            head_sha: defect === "wrong-sha" ? "b".repeat(40) : sha,
+            path: ".github/workflows/jarvis-development-completion.yml",
+            event: "workflow_run",
+            head_branch: "main",
+          });
+        }
+        return jsonResponse({
+          total_count: 1,
+          check_runs: [
+            {
+              id: 1,
+              name: "observe",
+              status: "completed",
+              conclusion: "failure",
+              app: { slug: "github-actions" },
+              details_url:
+                defect === "missing-url"
+                  ? undefined
+                  : `https://github.com/${defect === "foreign-url" ? "attacker/other" : "Benny3840RG/Jarvis"}/actions/runs/42/job/1`,
+            },
+          ],
+        });
+      },
+    });
+    await assert.rejects(
+      client.getCommitChecks({
+        repository: "Benny3840RG/Jarvis",
+        sha,
+        signal: new AbortController().signal,
+      }),
+    );
   });
 }
