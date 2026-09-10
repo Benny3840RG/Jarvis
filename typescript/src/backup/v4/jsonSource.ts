@@ -1,10 +1,8 @@
-import fs, { constants as fsConstants, type FileHandle } from "node:fs/promises";
-
 import type { Asset } from "../../assets/asset.js";
 import type { Build } from "../../builds/build.js";
 import type { BuildLogEntry } from "../../buildLog/buildLogEntry.js";
 import { JsonFileLock } from "../../persistence/jsonFileLock.js";
-import { coreDataFiles } from "../../persistence/jarvisDataPaths.js";
+import { businessDataFiles, coreDataFiles } from "../../persistence/jarvisDataPaths.js";
 import type {
   AssistantState,
   PersistenceWarning,
@@ -15,7 +13,6 @@ import { resolvePersistenceProviderName } from "../../persistence/providerSelect
 import type { Preference } from "../../preferences/preference.js";
 import type { Upgrade } from "../../upgrades/upgrade.js";
 import {
-  assertUniqueIds,
   parseAsset,
   parseBuild,
   parseBuildLogEntry,
@@ -26,7 +23,6 @@ import {
 } from "../backup.js";
 import { sortUnresolvedReferences, type ArchiveUnresolvedReference } from "../archiveManifest.js";
 import {
-  assertArray,
   assertJsonSafe,
   assertNoUnknownKeys,
   assertRecord,
@@ -34,6 +30,17 @@ import {
   isRecord,
   StrictBackupError,
 } from "../strictValues.js";
+import {
+  assertDocumentVersion,
+  parseRows,
+  readArrayDocument,
+  readRawJson,
+} from "./strictDocument.js";
+import {
+  BUSINESS_LOCK_ORDER,
+  readBusinessGroup,
+  type BusinessRecordsPayload,
+} from "./businessSource.js";
 
 /**
  * Archive v4, stage 2: strict, lossless capture of the JSON-backed `core` and
@@ -63,13 +70,14 @@ export type JsonSourceKey = keyof typeof coreDataFiles;
  * captures can never deadlock against each other, and stable so the order is
  * reviewable rather than incidental.
  */
-export const CAPTURE_LOCK_ORDER: readonly JsonSourceKey[] = [
+export const CAPTURE_LOCK_ORDER: ReadonlyArray<keyof CapturePaths> = [
   "state",
   "builds",
   "buildLogs",
   "upgrades",
   "assets",
   "preferences",
+  ...BUSINESS_LOCK_ORDER,
 ];
 
 const STATE_DOCUMENT_VERSION = 2;
@@ -141,110 +149,13 @@ export type MemoryGroupPayload = {
 export type JsonCapture = {
   core: CoreGroupPayload;
   memory: MemoryGroupPayload;
+  businessRecords: BusinessRecordsPayload;
 };
 
-function isNodeError(error: unknown): error is NodeJS.ErrnoException {
-  return error instanceof Error && "code" in error;
-}
+export type CapturePaths = typeof coreDataFiles & typeof businessDataFiles;
 
-/** Reads and parses one covered file. `null` means the file has never existed. */
-async function readRawJson(filePath: string): Promise<unknown | null> {
-  const linkStat = await fs.lstat(filePath).catch((error: unknown) => {
-    if (isNodeError(error) && error.code === "ENOENT") return null;
-    throw new StrictBackupError(
-      `Backup source ${filePath} could not be inspected: ${
-        error instanceof Error ? error.message : String(error)
-      }`,
-    );
-  });
-  if (linkStat === null) return null;
-  if (linkStat.isSymbolicLink()) {
-    throw new StrictBackupError(
-      `Backup source ${filePath} is a symbolic link; refusing to follow it.`,
-    );
-  }
-
-  let handle: FileHandle | undefined;
-  let raw: string;
-  try {
-    handle = await fs.open(filePath, fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW ?? 0));
-    const stat = await handle.stat();
-    if (!stat.isFile())
-      throw new StrictBackupError(`Backup source ${filePath} is not a regular file.`);
-    raw = await handle.readFile("utf8");
-  } catch (error: unknown) {
-    if (error instanceof StrictBackupError) throw error;
-    if (isNodeError(error) && error.code === "ENOENT") return null;
-    throw new StrictBackupError(
-      `Backup source ${filePath} could not be read: ${
-        error instanceof Error ? error.message : String(error)
-      }`,
-    );
-  } finally {
-    await handle?.close().catch(() => undefined);
-  }
-
-  try {
-    return JSON.parse(raw) as unknown;
-  } catch (error: unknown) {
-    throw new StrictBackupError(
-      `Backup source ${filePath} is not valid JSON: ${
-        error instanceof Error ? error.message : String(error)
-      }`,
-    );
-  }
-}
-
-function assertDocumentVersion(
-  document: Record<string, unknown>,
-  expected: number,
-  filePath: string,
-): void {
-  if (!("version" in document)) {
-    throw new StrictBackupError(`Backup source ${filePath} is missing its document version.`);
-  }
-  if (document.version !== expected) {
-    throw new StrictBackupError(
-      `Backup source ${filePath} has unsupported document version ${String(document.version)} (expected ${expected}).`,
-    );
-  }
-}
-
-function parseRows<T extends { id: string }>(
-  rows: unknown,
-  filePath: string,
-  arrayKey: string,
-  allowed: readonly string[],
-  parse: (value: unknown, index: number) => T,
-  noun: string,
-): T[] {
-  const array = assertArray(rows, `${filePath} "${arrayKey}"`);
-  const records = array.map((row, index) => {
-    const record = assertRecord(row, `${filePath} ${arrayKey}[${index}]`);
-    assertNoUnknownKeys(record, allowed, `${filePath} ${arrayKey}[${index}]`);
-    return parse(row, index);
-  });
-  assertUniqueIds(records, noun);
-  return records;
-}
-
-async function readArrayDocument<T extends { id: string }>(
-  filePath: string,
-  arrayKey: string,
-  allowed: readonly string[],
-  parse: (value: unknown, index: number) => T,
-  noun: string,
-): Promise<T[]> {
-  const raw = await readRawJson(filePath);
-  if (raw === null) return [];
-  const document = assertRecord(raw, `Backup source ${filePath}`);
-  assertDocumentVersion(document, MEMORY_DOCUMENT_VERSION, filePath);
-  assertNoUnknownKeys(document, ["version", arrayKey], `Backup source ${filePath}`);
-  if (!(arrayKey in document)) {
-    throw new StrictBackupError(`Backup source ${filePath} is missing its "${arrayKey}" array.`);
-  }
-  return parseRows(document[arrayKey], filePath, arrayKey, allowed, parse, noun);
-}
+/** Every JSON-backed file archive v4 covers, in one object. */
+export const ALL_CAPTURE_FILES: CapturePaths = { ...coreDataFiles, ...businessDataFiles };
 
 export async function readCoreGroup(filePath: string): Promise<CoreGroupPayload> {
   const raw = await readRawJson(filePath);
@@ -276,11 +187,46 @@ export async function readMemoryGroup(
   paths: Pick<typeof coreDataFiles, "builds" | "buildLogs" | "upgrades" | "assets" | "preferences">,
 ): Promise<MemoryGroupPayload> {
   const [builds, buildLogs, upgrades, assets, preferences] = await Promise.all([
-    readArrayDocument(paths.builds, "builds", BUILD_KEYS, parseBuild, "build"),
-    readArrayDocument(paths.buildLogs, "entries", BUILD_LOG_KEYS, parseBuildLogEntry, "build log"),
-    readArrayDocument(paths.upgrades, "entries", UPGRADE_KEYS, parseUpgrade, "upgrade"),
-    readArrayDocument(paths.assets, "entries", ASSET_KEYS, parseAsset, "asset"),
-    readArrayDocument(paths.preferences, "entries", PREFERENCE_KEYS, parsePreference, "preference"),
+    readArrayDocument(
+      paths.builds,
+      "builds",
+      MEMORY_DOCUMENT_VERSION,
+      BUILD_KEYS,
+      parseBuild,
+      "build",
+    ),
+    readArrayDocument(
+      paths.buildLogs,
+      "entries",
+      MEMORY_DOCUMENT_VERSION,
+      BUILD_LOG_KEYS,
+      parseBuildLogEntry,
+      "build log",
+    ),
+    readArrayDocument(
+      paths.upgrades,
+      "entries",
+      MEMORY_DOCUMENT_VERSION,
+      UPGRADE_KEYS,
+      parseUpgrade,
+      "upgrade",
+    ),
+    readArrayDocument(
+      paths.assets,
+      "entries",
+      MEMORY_DOCUMENT_VERSION,
+      ASSET_KEYS,
+      parseAsset,
+      "asset",
+    ),
+    readArrayDocument(
+      paths.preferences,
+      "entries",
+      MEMORY_DOCUMENT_VERSION,
+      PREFERENCE_KEYS,
+      parsePreference,
+      "preference",
+    ),
   ]);
   return { builds, buildLogs, upgrades, assets, preferences };
 }
@@ -328,8 +274,8 @@ export function memoryUnresolvedReferences(
  */
 export function resolveJsonSourceConfig(
   providerName = resolvePersistenceProviderName(),
-  paths: typeof coreDataFiles = coreDataFiles,
-): typeof coreDataFiles {
+  paths: CapturePaths = ALL_CAPTURE_FILES,
+): CapturePaths {
   if (providerName !== "json") {
     throw new StrictBackupError(
       `Archive v4 captures JSON-backed groups only, but PERSISTENCE_PROVIDER selects "${providerName}". Refusing; archive v1-v3 is unaffected.`,
@@ -344,7 +290,7 @@ export function resolveJsonSourceConfig(
  * no lock is ever re-entered through a store API.
  */
 export async function captureJsonGroups(
-  paths: typeof coreDataFiles,
+  paths: CapturePaths,
   options: { lockTimeoutMs?: number; warn?: PersistenceWarning } = {},
 ): Promise<JsonCapture> {
   const timeout = options.lockTimeoutMs ?? 10_000;
@@ -353,6 +299,7 @@ export async function captureJsonGroups(
   const read = async (): Promise<JsonCapture> => ({
     core: await readCoreGroup(paths.state),
     memory: await readMemoryGroup(paths),
+    businessRecords: await readBusinessGroup(paths),
   });
   const run = locks.reduceRight<() => Promise<JsonCapture>>(
     (inner, lock) => () => lock.run(inner, "archive v4 coherent capture"),

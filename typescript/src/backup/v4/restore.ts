@@ -3,6 +3,14 @@ import path from "node:path";
 import { isDeepStrictEqual } from "node:util";
 
 import { JsonAssetStore } from "../../assets/jsonAssetStore.js";
+import { JsonBusinessSettingsStore } from "../../businessSettings/jsonBusinessSettingsStore.js";
+import { JsonClientStore } from "../../clients/jsonClientStore.js";
+import { JsonEnquiryStore } from "../../enquiries/jsonEnquiryStore.js";
+import { JsonErrandStore } from "../../errands/jsonErrandStore.js";
+import { JsonInvoiceStore } from "../../invoices/jsonInvoiceStore.js";
+import { JsonProjectStore } from "../../projects/jsonProjectStore.js";
+import { JsonPropertyStore } from "../../properties/jsonPropertyStore.js";
+import { JsonQuoteStore } from "../../quotes/jsonQuoteStore.js";
 import { JsonBuildStore } from "../../builds/jsonBuildStore.js";
 import { JsonBuildLogStore } from "../../buildLog/jsonBuildLogStore.js";
 import { JARVIS_DATA_DIR } from "../../persistence/jarvisDataPaths.js";
@@ -13,6 +21,7 @@ import { assertRecoverable, type ArchiveManifest } from "../archiveManifest.js";
 import { StrictBackupError } from "../strictValues.js";
 import { unresolvedReferencesFor } from "./archive.js";
 import type { ArchiveV4 } from "./archive.js";
+import { readBusinessGroup } from "./businessSource.js";
 import { readCoreGroup, readMemoryGroup } from "./jsonSource.js";
 
 export const RESTORE_MARKER = ".jarvis-archive-v4-complete.json";
@@ -26,6 +35,14 @@ const FILENAMES = {
   upgrades: "jarvis-upgrades.json",
   assets: "jarvis-assets.json",
   preferences: "jarvis-preferences.json",
+  clients: "jarvis-clients.json",
+  properties: "jarvis-properties.json",
+  projects: "jarvis-projects.json",
+  quotes: "jarvis-quotes.json",
+  invoices: "jarvis-invoices.json",
+  enquiries: "jarvis-enquiries.json",
+  errands: "jarvis-errands.json",
+  businessSettings: "jarvis-business-settings.json",
 } as const;
 
 export type RestoreV4Result = {
@@ -88,6 +105,27 @@ async function reserveDestination(destination: string): Promise<string> {
     throw error;
   }
   return dest;
+}
+
+/**
+ * Writes one group's documents in order, honouring the failure-injection hook so
+ * a drill can interrupt the restore at any named file.
+ */
+async function writeDocuments(
+  destDir: string,
+  documents: ReadonlyArray<[keyof typeof FILENAMES, unknown]>,
+  written: Array<keyof typeof FILENAMES>,
+  options: Pick<RestoreOptions, "injectAfterWrite">,
+): Promise<void> {
+  for (const [key, document] of documents) {
+    await writeJson(path.join(destDir, FILENAMES[key]), document);
+    written.push(key);
+    if (options.injectAfterWrite === key) {
+      throw new StrictBackupError(
+        `Injected failure after writing ${key}; restore left incomplete at ${destDir}.`,
+      );
+    }
+  }
 }
 
 async function writeJson(target: string, document: unknown): Promise<void> {
@@ -184,18 +222,6 @@ export async function verifyRestoredGroups(destDir: string, archive: ArchiveV4):
     compare("assets", memory.assets, strict.assets, "strict re-read");
     compare("preferences", memory.preferences, strict.preferences, "strict re-read");
 
-    // Derived from what was just read back off disk, not copied from the
-    // manifest: this is what stops an archive from understating a broken edge it
-    // carries, or claiming one it does not.
-    const rederived = unresolvedReferencesFor({ memory: strict });
-    if (!isDeepStrictEqual(rederived, archive.manifest.unresolvedReferences)) {
-      throw new StrictBackupError(
-        `Restore verification failed: the manifest declares ${String(
-          archive.manifest.unresolvedReferences.length,
-        )} unresolved reference(s), the restored data has ${String(rederived.length)}.`,
-      );
-    }
-
     compare(
       "builds",
       memory.builds,
@@ -226,6 +252,97 @@ export async function verifyRestoredGroups(destDir: string, archive: ArchiveV4):
       await new JsonPreferenceStore(file("preferences"), QUIET).list(),
       "runtime store",
     );
+  }
+
+  if (archive.groups.businessRecords) {
+    const business = archive.groups.businessRecords;
+    const strict = await readBusinessGroup({
+      clients: file("clients"),
+      properties: file("properties"),
+      projects: file("projects"),
+      quotes: file("quotes"),
+      invoices: file("invoices"),
+      enquiries: file("enquiries"),
+      errands: file("errands"),
+      businessSettings: file("businessSettings"),
+    });
+    compare("clients", business.clients, strict.clients, "strict re-read");
+    compare("properties", business.properties, strict.properties, "strict re-read");
+    compare("projects", business.projects, strict.projects, "strict re-read");
+    compare("quotes", business.quotes, strict.quotes, "strict re-read");
+    compare("invoices", business.invoices, strict.invoices, "strict re-read");
+    compare("enquiries", business.enquiries, strict.enquiries, "strict re-read");
+    compare("errands", business.errands, strict.errands, "strict re-read");
+    if (!isDeepStrictEqual(strict.businessSettings, business.businessSettings)) {
+      throw new StrictBackupError(
+        "Restore verification failed (strict re-read): business settings do not match the archive.",
+      );
+    }
+
+    compare(
+      "clients",
+      business.clients,
+      await new JsonClientStore(file("clients"), QUIET).list(),
+      "runtime store",
+    );
+    compare(
+      "properties",
+      business.properties,
+      await new JsonPropertyStore(file("properties"), QUIET).list(),
+      "runtime store",
+    );
+    compare(
+      "projects",
+      business.projects,
+      await new JsonProjectStore(file("projects"), QUIET).list(),
+      "runtime store",
+    );
+    compare(
+      "quotes",
+      business.quotes,
+      await new JsonQuoteStore(file("quotes"), QUIET).list(),
+      "runtime store",
+    );
+    compare(
+      "invoices",
+      business.invoices,
+      await new JsonInvoiceStore(file("invoices"), QUIET).list(),
+      "runtime store",
+    );
+    compare(
+      "enquiries",
+      business.enquiries,
+      await new JsonEnquiryStore(file("enquiries"), QUIET).list(),
+      "runtime store",
+    );
+    compare(
+      "errands",
+      business.errands,
+      await new JsonErrandStore(file("errands"), QUIET).list(),
+      "runtime store",
+    );
+    if (business.businessSettings !== null) {
+      const runtime = await new JsonBusinessSettingsStore(file("businessSettings"), QUIET).get();
+      if (!isDeepStrictEqual(runtime, business.businessSettings)) {
+        throw new StrictBackupError(
+          "Restore verification failed (runtime store): business settings changed on normal load.",
+        );
+      }
+    }
+  }
+
+  {
+    // Derived from what was just read back off disk, not copied from the
+    // manifest: this is what stops an archive from understating a broken edge it
+    // carries, or claiming one it does not.
+    const rederived = unresolvedReferencesFor(archive.groups);
+    if (!isDeepStrictEqual(rederived, archive.manifest.unresolvedReferences)) {
+      throw new StrictBackupError(
+        `Restore verification failed: the manifest declares ${String(
+          archive.manifest.unresolvedReferences.length,
+        )} unresolved reference(s), the restored data has ${String(rederived.length)}.`,
+      );
+    }
   }
 }
 
@@ -284,15 +401,28 @@ export async function restoreArchiveV4(
       ["assets", { version: 1, entries: memory.assets }],
       ["preferences", { version: 1, entries: memory.preferences }],
     ];
-    for (const [key, document] of documents) {
-      await writeJson(path.join(destDir, FILENAMES[key]), document);
-      written.push(key);
-      if (options.injectAfterWrite === key) {
-        throw new StrictBackupError(
-          `Injected failure after writing ${key}; restore left incomplete at ${destDir}.`,
-        );
-      }
-    }
+    await writeDocuments(destDir, documents, written, options);
+  }
+  if (archive.groups.businessRecords) {
+    const business = archive.groups.businessRecords;
+    const documents: Array<[keyof typeof FILENAMES, unknown]> = [
+      ["clients", { version: 1, clients: business.clients }],
+      ["properties", { version: 1, properties: business.properties }],
+      ["projects", { version: 1, projects: business.projects }],
+      ["quotes", { version: 1, quotes: business.quotes }],
+      ["invoices", { version: 1, invoices: business.invoices }],
+      ["enquiries", { version: 1, enquiries: business.enquiries }],
+      ["errands", { version: 1, errands: business.errands }],
+      // Settings that were never written stay unwritten: the store synthesises
+      // defaults on read, so writing a defaults file here would turn "never
+      // configured" into "configured with defaults".
+      ...(business.businessSettings === null
+        ? []
+        : ([["businessSettings", { version: 1, settings: business.businessSettings }]] as Array<
+            [keyof typeof FILENAMES, unknown]
+          >)),
+    ];
+    await writeDocuments(destDir, documents, written, options);
   }
 
   // The restored directory is self-describing: the manifest travels with it, so

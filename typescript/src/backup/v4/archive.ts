@@ -13,6 +13,7 @@ import {
   type ArchiveUnresolvedReference,
 } from "../archiveManifest.js";
 import { StrictBackupError } from "../strictValues.js";
+import { businessUnresolvedReferences, type BusinessRecordsPayload } from "./businessSource.js";
 import { memoryUnresolvedReferences } from "./jsonSource.js";
 import type { CoreGroupPayload, JsonCapture, MemoryGroupPayload } from "./jsonSource.js";
 
@@ -21,14 +22,19 @@ const MAX_ARCHIVE_BYTES = 10 * 1024 * 1024;
 /** Schema version of each group payload shape, independent of the contract version. */
 export const CORE_GROUP_SCHEMA_VERSION = 1;
 export const MEMORY_GROUP_SCHEMA_VERSION = 1;
+export const BUSINESS_RECORDS_GROUP_SCHEMA_VERSION = 1;
 
 export type ArchiveV4 = {
   manifest: ArchiveManifest;
   groups: {
     core?: CoreGroupPayload;
     memory?: MemoryGroupPayload;
+    businessRecords?: BusinessRecordsPayload;
   };
 };
+
+/** Group names this stage knows how to carry a payload for. */
+type PayloadGroup = keyof ArchiveV4["groups"];
 
 function coreEntry(payload: CoreGroupPayload): ArchiveGroupEntry {
   return {
@@ -60,6 +66,27 @@ function memoryEntry(payload: MemoryGroupPayload): ArchiveGroupEntry {
   };
 }
 
+function businessRecordsEntry(payload: BusinessRecordsPayload): ArchiveGroupEntry {
+  return {
+    group: "businessRecords",
+    schemaVersion: BUSINESS_RECORDS_GROUP_SCHEMA_VERSION,
+    counts: {
+      clients: payload.clients.length,
+      properties: payload.properties.length,
+      projects: payload.projects.length,
+      quotes: payload.quotes.length,
+      invoices: payload.invoices.length,
+      enquiries: payload.enquiries.length,
+      errands: payload.errands.length,
+      // 0 distinguishes "settings have never been written, the runtime
+      // synthesises defaults" from 1, "these exact settings were stored".
+      businessSettings: payload.businessSettings === null ? 0 : 1,
+    },
+    checksum: groupChecksum(payload),
+    consistentSnapshot: true,
+  };
+}
+
 /**
  * Assembles a v4 archive from a JSON capture. Both groups are marked
  * `consistentSnapshot: true` because `captureJsonGroups` held every covered
@@ -71,13 +98,18 @@ export function buildArchiveV4(capture: JsonCapture, createdAt: Date): ArchiveV4
   return {
     manifest: buildManifest({
       createdAt,
-      groups: [coreEntry(capture.core), memoryEntry(capture.memory)],
-      unresolvedReferences: unresolvedReferencesFor({
-        core: capture.core,
-        memory: capture.memory,
-      }),
+      groups: [
+        coreEntry(capture.core),
+        memoryEntry(capture.memory),
+        businessRecordsEntry(capture.businessRecords),
+      ],
+      unresolvedReferences: unresolvedReferencesFor(capture),
     }),
-    groups: { core: capture.core, memory: capture.memory },
+    groups: {
+      core: capture.core,
+      memory: capture.memory,
+      businessRecords: capture.businessRecords,
+    },
   };
 }
 
@@ -87,12 +119,15 @@ export function buildArchiveV4(capture: JsonCapture, createdAt: Date): ArchiveV4
  * manifest was not overstated or understated.
  */
 export function unresolvedReferencesFor(groups: ArchiveV4["groups"]): ArchiveUnresolvedReference[] {
-  return sortUnresolvedReferences(groups.memory ? memoryUnresolvedReferences(groups.memory) : []);
+  return sortUnresolvedReferences([
+    ...(groups.memory ? memoryUnresolvedReferences(groups.memory) : []),
+    ...(groups.businessRecords ? businessUnresolvedReferences(groups.businessRecords) : []),
+  ]);
 }
 
 function verifyChecksums(archive: ArchiveV4): void {
   for (const entry of archive.manifest.groups) {
-    const payload = archive.groups[entry.group as "core" | "memory"];
+    const payload = archive.groups[entry.group as PayloadGroup];
     if (payload === undefined) {
       throw new StrictBackupError(
         `Archive manifest lists group "${entry.group}" but the archive carries no payload for it.`,
