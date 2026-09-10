@@ -326,15 +326,19 @@ export async function collectCandidateChecks({
 }
 
 /** Fetch full before/after contents; truncated patches are never represented as a full review. */
-export async function collectReviewContext({
-  github,
-  owner,
-  repo,
-  headSha,
-  baseSha,
-  files,
-  changedFiles,
-}) {
+export async function collectReviewContext(input) {
+  return collectBoundedReviewContext(input, MAX_CONTEXT_BYTES);
+}
+
+/** Same per-file validation; finite complete input for sixteen bounded invocations. */
+export async function collectSegmentedReviewContext(input) {
+  return collectBoundedReviewContext(input, 16 * MAX_CONTEXT_BYTES);
+}
+
+async function collectBoundedReviewContext(
+  { github, owner, repo, headSha, baseSha, files, changedFiles },
+  contextLimit,
+) {
   if (
     !SHA.test(headSha ?? "") ||
     !SHA.test(baseSha ?? "") ||
@@ -369,7 +373,7 @@ export async function collectReviewContext({
     if (bytes.toString("base64") !== encoded || bytes.length !== data.size)
       throw new Error(`Incomplete file content: ${path}`);
     totalBytes += bytes.length;
-    if (totalBytes > MAX_CONTEXT_BYTES || bytes.includes(0))
+    if (totalBytes > contextLimit || bytes.includes(0))
       throw new Error("Review context is oversized or binary.");
     return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
   };

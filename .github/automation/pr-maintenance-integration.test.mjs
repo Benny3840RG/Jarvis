@@ -1,8 +1,11 @@
+import { segmentReceipt } from "./review-segments.mjs";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { collectCandidateChecks } from "./pr-maintenance.mjs";
 import {
   prepareReview,
+  prepareSegmentedReview,
+  publishSegmentedReview,
   publishReview,
   reviewRunTitle,
   sweep,
@@ -387,3 +390,93 @@ for (const extra of [{ event: "pull_request" }, { head_branch: "foreign" }]) {
     );
   });
 }
+
+test("segmented preparation and publication require every exact run-bound result", async () => {
+  for (const mode of [
+    "complete",
+    "missing",
+    "failed",
+    "wrong-attempt",
+    "context-request",
+    "bad-manifest",
+  ]) {
+    const f = fixture();
+    const identity = await f.identity();
+    f.github.rest.repos.getContent = async () => {
+      const bytes = Buffer.from("schema\n".repeat(50000));
+      return {
+        data: {
+          type: "file",
+          encoding: "base64",
+          size: bytes.length,
+          content: bytes.toString("base64"),
+        },
+      };
+    };
+    const plan = await prepareSegmentedReview({
+      github: f.github,
+      owner: "o",
+      repo: "r",
+      identity,
+      runId: 500,
+      runAttempt: 1,
+    });
+    assert.ok(plan.prompts.length > 1);
+    const receipts = plan.prompts.map((_, index) =>
+      segmentReceipt(
+        plan,
+        index,
+        JSON.stringify({
+          verdict: "pass",
+          summary: "Segment checked",
+          findings: [],
+          contextRequests:
+            mode === "context-request" ? ["Need another segment"] : [],
+        }),
+      ),
+    );
+    if (mode === "missing") receipts.pop();
+    const result = await publishSegmentedReview({
+      github: f.github,
+      owner: "o",
+      repo: "r",
+      identity,
+      runId: 500,
+      runAttempt: mode === "wrong-attempt" ? 2 : 1,
+      serverUrl: "https://github.com",
+      manifest: mode === "bad-manifest" ? null : plan.manifest,
+      expectedDigest: plan.digest,
+      receipts,
+      reviewResult: mode === "failed" ? "failure" : "success",
+      recordDevelopment: async (input) =>
+        f.writes.push({ kind: "development", ...input }),
+    });
+    assert.equal(result, mode === "complete" ? "awaiting-owner" : "blocked");
+    assert.equal(f.writes.filter((w) => w.kind === "comment").length, 1);
+    assert.equal(f.writes.filter((w) => w.kind === "dispatch").length, 0);
+  }
+});
+
+test("segmented preparation reports bounded failures and preserves retry budget", async () => {
+  const f = fixture();
+  const identity = await f.identity();
+  f.github.rest.repos.getContent = async () => {
+    throw new Error("Content unavailable");
+  };
+  const input = {
+    github: f.github,
+    owner: "o",
+    repo: "r",
+    identity,
+    runId: 500,
+    runAttempt: 1,
+  };
+  assert.match(
+    (await prepareSegmentedReview(input)).blockedReason,
+    /Content unavailable/,
+  );
+  await assert.rejects(
+    () => prepareSegmentedReview({ ...input, runAttempt: 3 }),
+    /retry budget/,
+  );
+});
