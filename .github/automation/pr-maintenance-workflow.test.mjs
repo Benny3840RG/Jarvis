@@ -32,7 +32,8 @@ test("reviewer never receives a write token or executes a candidate checkout", (
     /npm (?:ci|test|run)|GH_TOKEN|JARVIS_SERVICE_TOKEN/,
   );
   assert.match(reviewJob, /working-directory:.*runner.temp/);
-  assert.match(reviewJob, /skip-git-repo-check/);
+  // The pinned action already appends this single-use CLI flag.
+  assert.doesNotMatch(reviewJob, /skip-git-repo-check/);
 });
 
 test("publication is isolated from model execution and rechecks provider evidence", () => {
