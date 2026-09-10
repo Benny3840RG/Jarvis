@@ -63,3 +63,12 @@ test("every action is SHA pinned and every checkout drops credentials", () => {
   );
   assert.match(workflow, /if: github.ref == 'refs\/heads\/main'/);
 });
+
+test("review context uses bounded chunks and a prompt file instead of one oversized action input", () => {
+  assert.match(reviewJob, /prompt-file:/);
+  assert.doesNotMatch(reviewJob, /prompt:|needs.prepare.outputs.prompt[ }]/);
+  for (let i = 0; i < 6; i++)
+    assert.ok(reviewJob.includes(`PROMPT_CHUNK_${i}:`));
+  assert.match(reviewJob, /PROMPT_DIGEST:/);
+  assert.match(publishJob, /pull-requests: write/);
+});

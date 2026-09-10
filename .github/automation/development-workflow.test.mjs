@@ -53,3 +53,17 @@ test("checkpoint binds guarded build outputs on a trusted separate runner", () =
     .split("async function complete()")[0];
   assert.doesNotMatch(supervisor, /missions.checkpoint|pull.head/);
 });
+
+// Issue approval must not populate a repository-wide default for later missions.
+test("admission budget is selected only by the dispatched issue number", () => {
+  const mission = build.split("\n  mission:")[1].split("\n  supervise:")[0];
+  assert.ok(
+    mission.includes(
+      "vars[format('JARVIS_DEVELOPMENT_UNCERTAINTY_BUDGET_{0}', inputs.issue_number)]",
+    ),
+  );
+  assert.doesNotMatch(
+    mission,
+    /vars\.JARVIS_DEVELOPMENT_UNCERTAINTY_BUDGET\b|\|\|/,
+  );
+});

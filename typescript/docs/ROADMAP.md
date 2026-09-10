@@ -155,3 +155,6 @@ rather than an occasional operator action.
 - Business settings (`src/businessSettings/`) has no Convex-backed store yet
   (`JsonBusinessSettingsStore` only) — flag this if `PERSISTENCE_PROVIDER=convex`
   commissioning ever depends on it.
+
+- Development admission now selects an issue-specific uncertainty-budget variable; approving one issue cannot supply a default budget to another. Residual uncertainty and owner merge gates remain separate.
+- Live PR-maintenance failures led to bounded, digest-checked prompt-file transport and the isolated publisher permission required for PR comments; model execution remains read-only.
