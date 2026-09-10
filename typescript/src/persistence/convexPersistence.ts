@@ -1,6 +1,7 @@
 import { ConvexHttpClient } from "convex/browser";
 
 import { api } from "../../convex/_generated/api.js";
+import { assertAssistantState } from "./assistantState.js";
 import { validateReminderDue, type ReminderDue } from "../reminders/due.js";
 import type {
   AssistantState,
@@ -105,6 +106,7 @@ export class ConvexPersistence implements PersistenceProvider {
   }
 
   async saveState(state: AssistantState): Promise<void> {
+    assertAssistantState(state);
     await this.client.mutation(assistantStateFunctions.upsert, {
       serviceToken: this.serviceToken,
       state,

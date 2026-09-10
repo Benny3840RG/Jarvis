@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, it } from "node:test";
 
 import { getFunctionName } from "convex/server";
+import { StateDocumentError } from "../src/persistence/document.js";
 
 import {
   ConvexPersistence,
@@ -70,12 +71,129 @@ afterEach(async () => {
   await fs.rm(tempDir, { recursive: true, force: true });
 });
 
+describe("assistant-state write validation", () => {
+  it("rejects state that becomes invalid while a JSON save is pending", async () => {
+    const file = path.join(tempDir, "pending-state.json");
+    const provider = new JSONPersistence(file);
+    const original = { lastIntent: "retained" };
+    await provider.saveState(original);
+    const raw = await fs.readFile(file, "utf8");
+    for (const invalidate of [
+      (custom: Record<string, unknown>) => {
+        custom.score = Infinity;
+      },
+      (custom: Record<string, unknown>) => {
+        custom.self = custom;
+      },
+    ]) {
+      const custom: Record<string, unknown> = { score: 1 };
+      const pending = provider.saveState({ custom });
+      invalidate(custom);
+      await assert.rejects(pending, /Assistant state/);
+      assert.deepEqual(await provider.loadState(), original);
+      assert.equal(await fs.readFile(file, "utf8"), raw);
+    }
+  });
+
+  for (const kind of ["json", "convex"] as const) {
+    it(`${kind} rejects invalid state without replacing the previous state`, async () => {
+      const file = path.join(tempDir, "validated-state.json");
+      let stored: unknown = {};
+      let mutations = 0;
+      const provider =
+        kind === "json"
+          ? new JSONPersistence(file)
+          : new ConvexPersistence(
+              asConvexClient({
+                async query() {
+                  return { state: stored };
+                },
+                async mutation(_reference, args) {
+                  mutations += 1;
+                  stored = args.state;
+                  return "state-id";
+                },
+              }),
+              "test-service-token",
+            );
+      const shared = { score: 0, previous: -1, optional: null };
+      const original = {
+        lastIntent: "retained",
+        custom: { notes: ["Keep this"], first: shared, second: shared },
+      };
+      await provider.saveState(original);
+      const raw = kind === "json" ? await fs.readFile(file, "utf8") : undefined;
+      const cyclic: Record<string, unknown> = {};
+      cyclic.self = cyclic;
+      for (const invalid of [
+        null,
+        undefined,
+        [],
+        ["value"],
+        "text",
+        42,
+        true,
+        { custom: { score: NaN } },
+        { custom: { score: Infinity } },
+        { custom: { score: -Infinity } },
+        { history: [{ score: Infinity }] },
+        { custom: cyclic },
+      ]) {
+        await assert.rejects(
+          provider.saveState(invalid as unknown as AssistantState),
+          /Assistant state/,
+        );
+        assert.deepEqual(await provider.loadState(), original);
+      }
+      if (kind === "json") assert.equal(await fs.readFile(file, "utf8"), raw);
+      else assert.equal(mutations, 1, "Invalid state must never reach the Convex mutation");
+      await provider.saveState({});
+      assert.deepEqual(await provider.loadState(), {});
+    });
+  }
+});
+
 describe("JSONPersistence", () => {
   it("returns empty durable collections when the file is missing", async () => {
     const provider = new JSONPersistence(path.join(tempDir, "missing.json"));
     assert.deepEqual(await provider.loadState(), {});
     assert.deepEqual(await provider.listTasks(), []);
     assert.deepEqual(await provider.listReminders(), []);
+  });
+
+  it("does not rewrite an already completed legacy task on repeated completion", async () => {
+    const file = path.join(tempDir, "completed-legacy.json");
+    const task = {
+      id: "task-1",
+      title: "Finished task",
+      category: "personal",
+      completed: true,
+      createdAt: 1,
+    };
+    const raw = JSON.stringify({ version: 1, state: {}, tasks: [task], reminders: [] });
+    await fs.writeFile(file, raw, "utf8");
+    const provider = new JSONPersistence(file);
+    const result = await provider.completeTask(task.id);
+    assert.deepEqual(result, task);
+    assert.equal(await fs.readFile(file, "utf8"), raw);
+    assert(result);
+    result.title = "Caller mutation";
+    assert.deepEqual(await new JSONPersistence(file).completeTask(task.id), task);
+    assert.equal(await fs.readFile(file, "utf8"), raw);
+  });
+
+  it("persists first completion and leaves subsequent completion unchanged", async () => {
+    const file = path.join(tempDir, "completion.json");
+    const provider = new JSONPersistence(file);
+    const task = await provider.addTask("Finish once", "personal");
+    const completed = await provider.completeTask(task.id);
+    assert.deepEqual(completed, { ...task, completed: true });
+    const before = await fs.stat(file, { bigint: true });
+    assert.deepEqual(await new JSONPersistence(file).completeTask(task.id), completed);
+    const after = await fs.stat(file, { bigint: true });
+    assert.equal(after.ino, before.ino);
+    assert.equal(after.mtimeNs, before.mtimeNs);
+    assert.deepEqual(await provider.listTasks(), [completed]);
   });
 
   it("saves normalized reminder due data in the current versioned document", async () => {
@@ -200,6 +318,266 @@ describe("JSONPersistence", () => {
         }),
       /both dueAt and dueTimezone/,
     );
+  });
+
+  for (const version of [undefined, 1, 2]) {
+    for (const collection of ["tasks", "reminders"] as const) {
+      it(`rejects non-finite ${collection} creation timestamps in version ${String(version)}`, () => {
+        for (const createdAt of [NaN, Infinity, -Infinity]) {
+          assert.throws(
+            () =>
+              normalizeDocument({
+                ...(version === undefined ? {} : { version }),
+                state: {},
+                tasks: [],
+                reminders: [],
+                [collection]: [
+                  {
+                    id: "record-1",
+                    title: "Record",
+                    completed: false,
+                    category: "personal",
+                    createdAt,
+                  },
+                ],
+              }),
+            /invalid createdAt/,
+          );
+        }
+      });
+    }
+  }
+
+  it("preserves finite creation timestamps including zero in all document versions", () => {
+    for (const version of [undefined, 1, 2]) {
+      for (const createdAt of [0, -1, 1720000000000]) {
+        const document = normalizeDocument({
+          ...(version === undefined ? {} : { version }),
+          state: {},
+          tasks: [
+            { id: "task-1", title: "Task", completed: false, category: "personal", createdAt },
+          ],
+          reminders: [{ id: "reminder-1", title: "Reminder", createdAt }],
+        });
+        assert.equal(document.tasks[0].createdAt, createdAt);
+        assert.equal(document.reminders[0].createdAt, createdAt);
+      }
+    }
+  });
+
+  it("quarantines an overflowing JSON creation timestamp without rewriting its bytes", async () => {
+    const file = path.join(tempDir, "overflow.json");
+    const raw =
+      '{"version":2,"state":{},"tasks":[],"reminders":[{"id":"r-1","title":"Reminder","createdAt":1e400}]}';
+    await fs.writeFile(file, raw, "utf8");
+    const warnings: string[] = [];
+    const provider = new JSONPersistence(file, (message) => warnings.push(message));
+    assert.deepEqual(await provider.listReminders(), []);
+    assert.equal(warnings.length, 1);
+    const corrupt = (await fs.readdir(tempDir)).find((name) =>
+      name.startsWith("overflow.json.corrupt-"),
+    );
+    assert(corrupt);
+    assert.equal(await fs.readFile(path.join(tempDir, corrupt), "utf8"), raw);
+    await provider.addTask("Recovered", "personal");
+    assert.equal((await new JSONPersistence(file).listTasks())[0].title, "Recovered");
+  });
+
+  it("rejects a document that repeats a task or reminder id within one collection", () => {
+    assert.throws(
+      () =>
+        normalizeDocument({
+          version: 2,
+          state: {},
+          tasks: [
+            { id: "task-1", title: "First", completed: false, category: "personal", createdAt: 1 },
+            { id: "task-1", title: "Second", completed: true, category: "work", createdAt: 2 },
+          ],
+          reminders: [],
+        }),
+      /task id task-1 appears more than once/,
+    );
+    assert.throws(
+      () =>
+        normalizeDocument({
+          version: 2,
+          state: {},
+          tasks: [],
+          reminders: [
+            { id: "reminder-1", title: "First", createdAt: 1 },
+            { id: "reminder-1", title: "Second", createdAt: 2 },
+          ],
+        }),
+      /reminder id reminder-1 appears more than once/,
+    );
+    // Legacy documents are held to the same rule.
+    assert.throws(
+      () =>
+        normalizeDocument({
+          state: {},
+          tasks: [
+            { id: "dup", title: "One", completed: false },
+            { id: "dup", title: "Two", completed: false },
+          ],
+        }),
+      /Legacy task id dup appears more than once/,
+    );
+  });
+
+  it("rejects duplicate task and reminder ids in version 1 documents", () => {
+    const task = {
+      id: "task-v1",
+      title: "Legacy task",
+      completed: false,
+      category: "personal",
+      createdAt: 1,
+    };
+    const reminder = { id: "reminder-v1", title: "Legacy reminder", due: "Friday", createdAt: 2 };
+    for (const { tasks, reminders, noun, id } of [
+      { tasks: [task, { ...task }], reminders: [], noun: "task", id: task.id },
+      { tasks: [], reminders: [reminder, { ...reminder }], noun: "reminder", id: reminder.id },
+    ]) {
+      assert.throws(() => normalizeDocument({ version: 1, state: {}, tasks, reminders }), {
+        constructor: StateDocumentError,
+        message: `Version 1 ${noun} id ${id} appears more than once.`,
+      });
+    }
+  });
+
+  it("rejects duplicate reminder ids in legacy documents", () => {
+    assert.throws(
+      () =>
+        normalizeDocument({
+          state: {},
+          reminders: [
+            { id: "legacy-reminder", title: "First", due: "Friday" },
+            { id: "legacy-reminder", title: "Second", due: "Monday" },
+          ],
+        }),
+      {
+        constructor: StateDocumentError,
+        message: "Legacy reminder id legacy-reminder appears more than once.",
+      },
+    );
+  });
+
+  it("still accepts distinct task and reminder ids that happen to match each other", () => {
+    const document = normalizeDocument({
+      version: 2,
+      state: {},
+      tasks: [
+        { id: "shared-1", title: "Task", completed: false, category: "personal", createdAt: 1 },
+      ],
+      reminders: [{ id: "shared-1", title: "Reminder", createdAt: 2 }],
+    });
+    assert.equal(document.tasks[0].id, "shared-1");
+    assert.equal(document.reminders[0].id, "shared-1");
+  });
+
+  it("quarantines a state file with a duplicate task id and starts empty", async () => {
+    const file = path.join(tempDir, "dupe.json");
+    const warnings: string[] = [];
+    await fs.writeFile(
+      file,
+      JSON.stringify({
+        version: 2,
+        state: {},
+        tasks: [
+          { id: "task-1", title: "First", completed: false, category: "personal", createdAt: 1 },
+          { id: "task-1", title: "Clone", completed: false, category: "personal", createdAt: 2 },
+        ],
+        reminders: [],
+      }),
+      "utf8",
+    );
+    const provider = new JSONPersistence(file, (message) => warnings.push(message));
+
+    assert.deepEqual(await provider.listTasks(), []);
+    assert.equal(warnings.length, 1);
+    assert.match(warnings[0], /appears more than once/);
+    const quarantined = (await fs.readdir(tempDir)).find((name) =>
+      name.startsWith("dupe.json.corrupt-"),
+    );
+    assert(quarantined);
+  });
+
+  it("keeps every supported legacy document format readable after the uniqueness check", async () => {
+    // Version 1: structured rows survive, and the legacy `due` string is
+    // migrated to `dueRaw`. (Versioned documents hold tasks to the strict shape,
+    // unchanged by this PR.)
+    const v1 = normalizeDocument({
+      version: 1,
+      state: { lastIntent: "greeting" },
+      tasks: [{ id: "t-1", title: "Legacy task", completed: true, category: "work", createdAt: 5 }],
+      reminders: [{ id: "r-1", title: "Legacy reminder", due: "Monday", createdAt: 6 }],
+    });
+    assert.equal(v1.version, 2);
+    assert.deepEqual(v1.state, { lastIntent: "greeting" });
+    assert.deepEqual(v1.tasks, [
+      { id: "t-1", title: "Legacy task", completed: true, category: "work", createdAt: 5 },
+    ]);
+    assert.deepEqual(v1.reminders, [
+      { id: "r-1", title: "Legacy reminder", dueRaw: "Monday", createdAt: 6 },
+    ]);
+
+    // Unversioned document that carries rows.
+    const unversioned = normalizeDocument({
+      state: { retained: true },
+      tasks: [{ id: "u-1", title: "Old", completed: false }],
+      reminders: [],
+    });
+    assert.deepEqual(unversioned.state, { retained: true });
+    assert.equal(unversioned.tasks[0]?.id, "u-1");
+
+    // Bare object with no state/tasks/reminders keys: the whole object is state.
+    const bare = normalizeDocument({ lastInput: "Hello Jarvis", lastResult: 3 });
+    assert.deepEqual(bare, {
+      version: 2,
+      state: { lastInput: "Hello Jarvis", lastResult: 3 },
+      tasks: [],
+      reminders: [],
+    });
+  });
+
+  it("reads real legacy state files through JSONPersistence without quarantining them", async () => {
+    const cases: Array<{ name: string; raw: unknown; expectTasks: number }> = [
+      {
+        name: "v1.json",
+        raw: {
+          version: 1,
+          state: { lastIntent: "greeting" },
+          tasks: [
+            { id: "t-1", title: "Legacy", completed: false, category: "personal", createdAt: 1 },
+          ],
+          reminders: [{ id: "r-1", title: "Ping", due: "Friday", createdAt: 2 }],
+        },
+        expectTasks: 1,
+      },
+      {
+        name: "unversioned.json",
+        raw: { lastIntent: "hello", lastInput: "hi" },
+        expectTasks: 0,
+      },
+    ];
+    for (const { name, raw, expectTasks } of cases) {
+      const file = path.join(tempDir, name);
+      const original = JSON.stringify(raw, null, 2);
+      await fs.writeFile(file, original, "utf8");
+      const warnings: string[] = [];
+      const provider = new JSONPersistence(file, (message) => warnings.push(message));
+
+      assert.equal((await provider.listTasks()).length, expectTasks, name);
+      assert.equal(warnings.length, 0, `${name} must not warn`);
+      const files = await fs.readdir(tempDir);
+      assert.equal(
+        files.some((entry) => entry.startsWith(`${name}.corrupt-`)),
+        false,
+        `${name} must not be quarantined`,
+      );
+      // A read of valid legacy data does not rewrite the file on startup.
+      assert.equal(await fs.readFile(file, "utf8"), original, `${name} left untouched`);
+      await fs.rm(file);
+    }
   });
 
   it("removes tasks durably and returns null for missing IDs", async () => {
