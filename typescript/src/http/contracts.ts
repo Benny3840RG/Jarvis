@@ -54,7 +54,7 @@ export type ProviderStatus = {
  * operator has approved production use (`production-approved`).
  */
 export type LifecycleStage =
-  /** Code exists and is covered by offline tests. Nothing is wired in this deployment. */
+  /** Code exists and is covered by offline tests. Full deployment wiring is not established. */
   | "implemented"
   /** Every dependency/credential this deployment needs is present and wired. */
   | "configured"

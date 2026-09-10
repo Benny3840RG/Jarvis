@@ -45,10 +45,10 @@ const LAYERS: LayersStatus = {
     // Durable run state is no longer pending: `convex/orchestrationState.ts`
     // persists runs and steps with worker-bound leases and fencing tokens, and
     // `src/orchestration/convexStateBoundary.ts` composes it. What is still
-    // pending is that this composition is wired into no CLI, HTTP, MCP or
-    // scheduler ingress path, and has never been exercised against a deployment.
+    // pending is recorded commissioning evidence for this composition.
+    // Static status prose cannot determine whether a live drill has occurred.
     reason:
-      "A validated trigger registry, weighted dependency graph, bounded fail-closed runner, and durable Convex-backed run/step state with worker-bound leases are implemented and covered by offline tests; that composition is wired into no ingress path, and live commissioning plus governed workflow evolution remain pending.",
+      "A validated trigger registry, weighted dependency graph, bounded fail-closed runner, and durable Convex-backed run/step state with worker-bound leases are implemented and covered by offline tests; the Development Actions bridge has durable admission and completion scheduling, while this status reader does not inspect live commissioning evidence; governed workflow evolution remains pending.",
   },
   safety: {
     status: "partial",
@@ -125,7 +125,7 @@ export class SystemStatusService {
       stage: "configured",
       status: integrationStatusFromStage("configured"),
       reason:
-        "The quotes:send dependency bundle is registered, so this deployment is configured. No commissioning evidence exists: nothing here records a delivery actually completed against the live provider, and no operator production approval is recorded.",
+        "The quotes:send dependency bundle is registered, so this deployment is configured. No commissioning or production-approval evidence reader is wired into this status check; live delivery and production approval are unknown here.",
     };
   }
 

@@ -34,22 +34,26 @@ accepted a message, and it carries no operator approval. Reporting it as
 `commissioned` was an upward inference; it now reports `configured`.
 
 **There is currently no wired evidence source for `commissioned` or
-`production-approved`, so neither stage is reachable today.** That is the honest
-state, not a gap to paper over. Making `commissioned` reachable means reading a
-durable record of a real delivery (the `quoteDeliveries` ledger is the obvious
+`production-approved`, so neither stage is reachable today.** This describes the reader’s evidence limit, not a claim that no real delivery
+or operator approval exists elsewhere. Making `commissioned` reachable means reading a
+durable record of a real delivery (the `quoteDeliveryAttempts` ledger is the obvious
 candidate); `production-approved` needs an operator approval record. Both are
 follow-on work and require Jarvis acceptance.
+
+Registration establishes the wiring represented by `configured` in this four-stage
+contract. It does not independently certify end-to-end integration, authentication,
+provider reachability or a successful delivery. No additional `integrated` stage is
+asserted without a defined evidence source.
 
 ## Layer reasons
 
 `layers.*` carries prose. Two claims were stale and have been corrected:
 
-- **orchestration** previously said durable run state was pending. It is not:
-  `convex/orchestrationState.ts` persists runs and steps with worker-bound leases
-  and fencing tokens, and `src/orchestration/convexStateBoundary.ts` composes it,
-  both covered by offline tests. What _is_ still true is that this composition is
-  wired into no CLI/HTTP/MCP/scheduler ingress path and has never run against a
-  deployment.
+- **orchestration** previously said durable run state was pending. The Convex
+  run/step store, worker-bound leases and fencing tokens exist. The Development
+  Actions bridge also supplies durable admission and completion scheduling.
+  Status does not inspect live commissioning evidence for those paths; source
+  and offline tests establish implementation, not a completed live drill.
 - **domains** previously said only that the business/workshop/home engines are
   non-durable prototypes. Read alone that implies business data is not durable,
   which is false — the trade-business record stores (clients, properties,
@@ -62,13 +66,13 @@ as claims requiring review whenever the underlying area changes.
 
 ## Current matrix
 
-| Area                            | Stage / state                  | Evidence                                                                                                                                                                                                                                                     | Open                                                                                                                                                                         |
-| ------------------------------- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Persistence integrity (A6)      | `implemented`                  | PR #483 @ `c1c640d` — duplicate task/reminder id rejection + proof every supported legacy format stays readable. Branch `agent-persistence-hardening` — non-finite timestamps, non-finite/cyclic assistant state, validate-before-write, no-rewrite-on-read. | The two touch the same file (`src/persistence/document.ts`) on different lines and cannot merge independently; an assembly step is required. Codex review outstanding.       |
-| Orchestration durable run state | `implemented`                  | `convex/orchestrationState.ts` + `convex/orchestrationState.test.ts`; `src/orchestration/convexStateBoundary.ts` + `tests/orchestrationDurability.test.ts`.                                                                                                  | Wired into no ingress path. Isolated-ingress commissioning bootstrap is PR #481; the recorded development-backend drill is not run.                                          |
-| Quote delivery                  | `configured` (when registered) | `ToolExecutionService.isRegistered("quotes","send")`.                                                                                                                                                                                                        | No commissioning evidence source is wired; `commissioned` unreachable.                                                                                                       |
-| Business backup coverage (A2)   | `implemented` (v1–v3 only)     | `src/backup/backup.ts` covers state/tasks/reminders + five memory domains.                                                                                                                                                                                   | The seven cross-referenced business domains are not covered. Business settings, notes, approval/evidence state, delivery ledger and artifact references are not inventoried. |
-| Reasoning provider              | `configured` at most           | `resolveTotalityReasoningStatus` reads env-var presence only.                                                                                                                                                                                                | Never live-verified; documented as such in `contracts.ts`.                                                                                                                   |
+| Area                            | Stage / state                  | Evidence                                                                                                                                                                                                                    | Open                                                                                                                         |
+| ------------------------------- | ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| Persistence integrity (A6)      | `implemented`                  | Current main includes duplicate-ID validation, strict values and versioned persistence readers.                                                                                                                             | Release acceptance and live recovery remain separate evidence.                                                               |
+| Orchestration durable run state | `implemented`                  | Convex run/step state, worker claims and Development Actions admission/completion scheduling have offline tests.                                                                                                            | No commissioning evidence reader is wired into status.                                                                       |
+| Quote delivery                  | `configured` (when registered) | `ToolExecutionService.isRegistered("quotes", "send")`.                                                                                                                                                                      | No commissioning or production-approval evidence reader is wired; stronger stages are unknown here.                          |
+| Business backup coverage (A2)   | `implemented`, partial v4      | v4 captures and verifies core, memory and JSON businessRecords including business settings; v1–v3 remain available. See [the v4 contract](backup-v4-contract.md) and [domain inventory](authoritative-domain-inventory.md). | Convex notesAndEvidence, orchestration and quoteAggregate/blob groups remain absent. Full recovery refuses partial archives. |
+| Reasoning provider              | `configured` at most           | `resolveTotalityReasoningStatus` checks configuration presence.                                                                                                                                                             | This reader does not live-verify provider reachability.                                                                      |
 
 Evidence packets from both workers are folded into this table only after Jarvis
 accepts them. Neither worker marks its own row complete.

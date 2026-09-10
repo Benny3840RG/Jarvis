@@ -115,7 +115,11 @@ describe("system status integration commissioning evidence", () => {
     // approval, so the reported stage stops at "configured".
     assert.equal(quoteDelivery?.stage, "configured");
     assert.equal(quoteDelivery?.status, "not-commissioned");
-    assert.match(quoteDelivery?.reason ?? "", /No commissioning evidence exists/);
+    assert.match(
+      quoteDelivery?.reason ?? "",
+      /No commissioning or production-approval evidence reader is wired/,
+    );
+    assert.doesNotMatch(quoteDelivery?.reason ?? "", /No commissioning evidence exists/);
   });
 
   it("is a live evidence check, not a fabricated constant — the stage flips with the actual registered service", async () => {
