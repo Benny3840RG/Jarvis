@@ -1427,9 +1427,9 @@ export function createJarvisMcpServer(client: JarvisApiClient): McpServer {
       annotations: readAnnotations,
       _meta: { ui: { visibility: ["model"] } },
     },
-    async ({ projectId }) => {
+    async ({ projectId, state, limit }) => {
       try {
-        const actions: ToolAction[] = await client.listToolActions(projectId);
+        const actions: ToolAction[] = await client.listToolActions(projectId, { state, limit });
         return {
           content: [
             { type: "text" as const, text: `Found ${actions.length} tool-action proposals.` },

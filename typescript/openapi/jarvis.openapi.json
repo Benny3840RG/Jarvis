@@ -4105,7 +4105,7 @@
       "get": {
         "operationId": "listNotes",
         "summary": "List notes",
-        "description": "Returns the authoritative, owner+project-scoped list of durable notes. Note creation is not exposed here: it stays on the governed tool-actions execute path (POST /api/v1/projects/{projectId}/tool-actions), which is where the mandatory idempotency/fingerprint contract on note creation is actually enforced.",
+        "description": "Returns the authoritative, owner+project-scoped list of durable notes. Note creation is not exposed here: it stays on the governed tool-actions execute path (POST /api/v1/projects/{projectId}/tool-actions/{actionId}/execute), which is where the mandatory idempotency/fingerprint contract on note creation is actually enforced.",
         "tags": ["Notes"],
         "parameters": [
           {
@@ -11535,6 +11535,8 @@
           },
           "workerStep": {
             "type": ["object", "null"],
+            "additionalProperties": false,
+            "required": ["nodeId", "state"],
             "properties": {
               "nodeId": {
                 "type": "string"

@@ -1,5 +1,15 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  rm,
+  stat,
+  writeFile,
+  symlink,
+  rename,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, describe, it } from "node:test";
@@ -534,4 +544,89 @@ describe("archive v4 restore — no effect outside the destination", () => {
     await restoreArchiveV4(archive, path.join(parent, "restore"), { allowPartial: true });
     assert.deepEqual(await readdir(parent), ["restore"]);
   });
+});
+
+describe("archive v4 restore — physical isolation and unchanged resume output", () => {
+  for (const aliasTarget of ["destination-parent", "live-directory"] as const) {
+    it(`rejects physical live overlap through a symlinked ${aliasTarget}`, async () => {
+      const archive = await captureFixture();
+      const root = await scratch();
+      const live = path.join(root, "live");
+      const alias = path.join(root, "alias");
+      await mkdir(live);
+      await symlink(live, alias);
+      const destination = path.join(aliasTarget === "destination-parent" ? alias : live, "restore");
+      await assert.rejects(
+        restoreArchiveV4(archive, destination, {
+          allowPartial: true,
+          liveDataDir: aliasTarget === "live-directory" ? alias : live,
+        }),
+        /overlaps the live|symbolic link/,
+      );
+      assert.deepEqual(await readdir(live), []);
+    });
+  }
+
+  for (const changedFile of ["jarvis-state.json", "manifest.json"] as const) {
+    it(`preserves every file when ${changedFile} was replaced after interruption`, async () => {
+      const archive = await captureFixture();
+      const root = await scratch();
+      const destination = path.join(root, "restore");
+      await assert.rejects(
+        restoreArchiveV4(archive, destination, {
+          allowPartial: true,
+          injectAfterVerify: true,
+        }),
+        /Injected failure/,
+      );
+      const replacement = path.join(root, "replacement");
+      await writeFile(
+        replacement,
+        changedFile === "jarvis-state.json"
+          ? "X".repeat((await stat(path.join(destination, changedFile))).size)
+          : "operator replacement; never remove",
+      );
+      await rename(replacement, path.join(destination, changedFile));
+      const before = await contentsOf(destination);
+      await assert.rejects(
+        restoreArchiveV4(archive, destination, {
+          allowPartial: true,
+          resume: true,
+        }),
+        /does not match|changed|unmodified/,
+      );
+      assert.deepEqual(await contentsOf(destination), before);
+    });
+  }
+});
+
+it("retains exact matching output files when resuming missing writes", async () => {
+  const archive = await captureFixture();
+  const destination = path.join(await scratch(), "restore");
+  await assert.rejects(
+    restoreArchiveV4(archive, destination, {
+      allowPartial: true,
+      injectAfterWrite: "state",
+    }),
+    /Injected failure/,
+  );
+  const target = path.join(destination, "jarvis-state.json");
+  const before = await stat(target);
+  await restoreArchiveV4(archive, destination, { allowPartial: true, resume: true });
+  const after = await stat(target);
+  assert.equal(after.ino, before.ino);
+  assert.equal(after.mtimeMs, before.mtimeMs);
+});
+
+it("rejects a live descendant whose name merely starts with two dots", async () => {
+  const archive = await captureFixture();
+  const live = await scratch();
+  await assert.rejects(
+    restoreArchiveV4(archive, path.join(live, "..restore"), {
+      allowPartial: true,
+      liveDataDir: live,
+    }),
+    /overlaps the live/,
+  );
+  assert.deepEqual(await readdir(live), []);
 });

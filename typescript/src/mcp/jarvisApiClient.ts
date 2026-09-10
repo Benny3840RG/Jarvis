@@ -16,7 +16,7 @@ import type { Preference, PreferenceInput, PreferenceUpdate } from "../preferenc
 import type { Project, ProjectInput, ProjectUpdate } from "../projects/project.js";
 import type { QuoteSnapshot } from "../quotes/quoteLifecycle.js";
 import type { QuoteSummary } from "../quotes/quoteRepository.js";
-import type { ToolAction } from "../actions/toolActions.js";
+import type { ToolAction, ToolActionState } from "../actions/toolActions.js";
 import type { SystemStatus } from "../http/contracts.js";
 import type { Reminder, Task } from "../persistence/persistence.js";
 import type { TaskUpdate } from "../persistence/updates.js";
@@ -594,10 +594,17 @@ export class JarvisApiClient {
   }
 
   /** Read-only: lists tool-action proposals for one project. Cannot approve, revoke, or execute. */
-  async listToolActions(projectId: string): Promise<ToolAction[]> {
+  async listToolActions(
+    projectId: string,
+    options: { state?: ToolActionState; limit?: number } = {},
+  ): Promise<ToolAction[]> {
+    const query = new URLSearchParams();
+    if (options.state !== undefined) query.set("state", options.state);
+    if (options.limit !== undefined) query.set("limit", String(options.limit));
+    const suffix = query.size ? `?${query.toString()}` : "";
     return this.request<ToolAction[]>(
       "GET",
-      `/api/v1/projects/${encodeURIComponent(projectId)}/tool-actions`,
+      `/api/v1/projects/${encodeURIComponent(projectId)}/tool-actions${suffix}`,
     );
   }
 

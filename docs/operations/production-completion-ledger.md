@@ -100,7 +100,7 @@
 - REVIEW: Independent lead review plus old trusted reviewer run `34540569749`
   passed. No unresolved blocking threads; no review or permission gate bypassed.
 - PR: #503. MERGE SHA: `344554b98b818440e0484a8b336a9c3cb498e5e6`.
-  Fetched main tree exactly equals the reviewed head; main CI verification pending.
+  Fetched main tree exactly equals the reviewed head; main TypeScript `34541036703`, CodeQL `34541035987`/`34541036053` and completion/sweep runs passed.
 - SECURITY: Existing owner/approval/completion authority unchanged. Every bounded
   segment and exact run/attempt binding is required; essential missing-context
   requests block aggregation. No claim of holistic context or approval from a model.
@@ -109,3 +109,23 @@
 - BACKLOG UPDATE: This prerequisite clears the preparation implementation defect;
   it does not yet establish Live Work review success or production completion.
 - NEXT ACTION: Verify main CI, integrate current main and exercise segmented review.
+
+## Exact-candidate reconciliation and review repairs — 2026-09-11
+
+- Live Work #502 integrated main at `a1f9c07a0f140da2747a5c77dbabd5864f41e7ac`; full check passed (1,415 Node / 250 Convex), hosted TypeScript `34541710656`, evidence `34541710237`, CodeQL `34541705514`/`34541705524` passed. Actual MCP read against the existing development Convex again returned available/idle from both tools; no redeployment or mission mutation.
+- Actual segmented review `34541896077` ran all 15 segments but did **not** pass. Several lacked paired before/after OpenAPI or cross-file wiring context. Complete byte coverage alone did not provide sufficient review context. The bounded planner is being repaired without waiving context requests or increasing permissions.
+- Review regressions reproduced and repaired the permissive worker-step OpenAPI object, ignored MCP tool-action state/limit inputs, and repeated dashboard mascot overlays/styles. Focused tests pass; these uncommitted repairs still require the final full gate and independent review. A regression also confirms the existing shared merge-argument schema rejects a wrong action transition while accepting the original action after indeterminate reconciliation; the reported missing validation was not present.
+- Restore review reproduced physical-path overlap through symlinked ancestors and deletion of replaced same-name files during resume, using temporary fixtures only. Physical-path checks and archive-derived byte validation now reject these cases; resume retains matching files and writes only missing files. Six new regressions and all 33 focused restore tests pass. The earlier marker allowlist fix did not address these cases; final candidate verification remains required.
+- PR #481 exact `cb317a811875039a4cf59106b519e6eda963a220` passed full check (1,392 Node / 245 Convex) and independent review after admission-timeout, bounded evidence, fingerprint and cleanup repairs. Published to its existing branch; real OIDC/orchestration commissioning and final hosted review remain outstanding.
+- PR #482 exact `5c3ba86537b200418dcc2923254e9c88183e63dc` passed full check (1,384 Node / 237 Convex) and 27 offline PowerShell setup/recovery scenarios. Published; no real Microsoft call or consent performed. Segmented review remains blocked by context.
+- CodeQL alert [#7](https://github.com/Benny3840RG/Jarvis/security/code-scanning/7) on #482 was statically triaged and dismissed as false positive. The cited SHA-256 input is a closed public connection identity (ID, client GUID, mailbox, public token endpoint), not a password; refresh/access token contents and token path are excluded. GitHub's exact-head aggregate CodeQL check now reports success. No scanner rule, credential handling or authority was weakened.
+- PR #486 integrated main at `a563ef4b46e743af24a961dc25ce90d14fe38426`, passed full check (1,376 Node / 237 Convex), and was published. Both old review threads were addressed with evidence and resolved. New hosted checks/review remain pending.
+- PR #487 was published after the earlier entry; another session subsequently added marker-collision repairs and CodeQL/documentation corrections. Those commits are preserved and require current-head reconciliation; the old local candidate is not authoritative.
+- S4 capture `483934b574a212a72654b46820d194e71e10e381` passes 1,375 Node / 245 Convex plus all static checks; independent review found no blocking capture defect. It requires owner and separate approval credentials and retains `restoreVerified: false`. Typed isolated project/note restore verification is in progress; full S4–S6 recovery remains incomplete.
+- Non-claim lease-secret reader repair `9d55b9a3425a1161d808622f0bc4d9cac37072a0` passes 1,375 Node / 240 Convex plus all static checks. Raw persisted replay fingerprints and rightful claim responses are preserved; public projections are redacted. Independent review/landing remains pending.
+- Production deployment remains unapproved. Independent engineering remains available; no external-gates-only claim is made.
+
+- Repository reconciliation found overlapping Live Work PR #504 (`78d6b7e1`) from the other session. Its terminal monitor is additional work to preserve, but its read model predates #502 candidate/evidence and worker-state hardening. Neither overlapping implementation may be landed in a way that removes those controls or creates a second truth source.
+- Public-evidence reader repair is now PR #505; hosted CI/review pending.
+
+- Existing ΩΣ assessment extension `95c1e772692a31dfc7284ae0ca1adc3d32d76023` passed its full gate (1,415 Node / 265 Convex) and a local governed MCP proof. Actual authenticated Convex functions recorded a bounded, context-bound assessment; MCP showed MERGED / ΩΣ READY without completing Development. The existing authoritative complete mutation then persisted the explicitly bound, differently named subject as COMPLETE; both MCP surfaces subsequently reported idle because terminal subjects are excluded. This used seeded synthetic evidence and convex-test, not live provider or production commissioning. No new completion authority was introduced.

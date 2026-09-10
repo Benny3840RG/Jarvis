@@ -184,3 +184,7 @@ describe("Live Work HUD runtime wiring", () => {
     });
   }
 });
+
+it("renders one mission mascot without duplicated overlay effects", () => {
+  assert.equal((widget.match(/class="mission-mascot"/g) ?? []).length, 1);
+});

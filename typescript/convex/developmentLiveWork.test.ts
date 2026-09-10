@@ -385,6 +385,32 @@ it("projects candidate identity only from the current committed owner's merge ac
     receiptId: "receipt-1",
   });
   expect(snapshot?.events[0]?.evidenceIds).toEqual(["evidence-1"]);
+  // The shared argument schema pins the original merge action transition.
+  // Reconciliation may commit INDETERMINATE -> MERGED using that same action.
+  await t.run(async (ctx) => {
+    const action = await ctx.db.get("toolActions", actionId);
+    if (!action) throw new Error("Missing action");
+    await ctx.db.patch("toolActions", actionId, {
+      arguments: { ...action.arguments, transitionId: "DEV_TRANSITION_REVIEW_TO_READY_TO_MERGE" },
+    });
+  });
+  expect(
+    (await t.query(api.developmentState.liveWork, { serviceToken: SERVICE_TOKEN }))?.candidate,
+  ).toBeNull();
+  await t.run(async (ctx) => {
+    const action = await ctx.db.get("toolActions", actionId);
+    const event = await ctx.db.query("developmentEvents").first();
+    if (!action || !event) throw new Error("Missing fixture");
+    await ctx.db.patch("toolActions", actionId, {
+      arguments: { ...action.arguments, transitionId: "DEV_TRANSITION_READY_TO_MERGE_TO_MERGED" },
+    });
+    await ctx.db.patch("developmentEvents", event._id, {
+      transitionId: "DEV_TRANSITION_INDETERMINATE_TO_MERGED",
+    });
+  });
+  expect(
+    (await t.query(api.developmentState.liveWork, { serviceToken: SERVICE_TOKEN }))?.candidate,
+  ).toEqual(snapshot?.candidate);
   await t.run(async (ctx) => {
     const action = await ctx.db.get("toolActions", actionId);
     if (!action) throw new Error("Missing action");
