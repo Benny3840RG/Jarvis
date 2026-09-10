@@ -24,6 +24,7 @@ import {
   readCoreGroup,
   readMemoryGroup,
   resolveJsonSourceConfig,
+  type CapturePaths,
 } from "../src/backup/v4/jsonSource.js";
 import { RESTORE_MARKER, restoreArchiveV4 } from "../src/backup/v4/restore.js";
 import { archiveV4Usage, isArchiveV4Command } from "../src/tools/runBackupV4.js";
@@ -32,8 +33,8 @@ import { JsonBuildStore } from "../src/builds/jsonBuildStore.js";
 
 const CREATED_AT = new Date("2026-09-10T12:00:00.000Z");
 
-/** Groups this stage cannot capture from JSON storage. Every S2 archive lacks them. */
-const S2_ABSENT_GROUPS = ["businessRecords", "notesAndEvidence", "orchestration", "quoteAggregate"];
+/** Groups not yet captured from JSON storage. Every archive this stage writes lacks them. */
+const ABSENT_GROUPS = ["notesAndEvidence", "orchestration", "quoteAggregate"];
 
 const scratchRoots: string[] = [];
 
@@ -47,7 +48,7 @@ async function scratch(): Promise<string> {
   return dir;
 }
 
-function pathsIn(dir: string) {
+function pathsIn(dir: string): CapturePaths {
   return {
     state: path.join(dir, "jarvis-state.json"),
     builds: path.join(dir, "jarvis-builds.json"),
@@ -55,6 +56,14 @@ function pathsIn(dir: string) {
     upgrades: path.join(dir, "jarvis-upgrades.json"),
     assets: path.join(dir, "jarvis-assets.json"),
     preferences: path.join(dir, "jarvis-preferences.json"),
+    clients: path.join(dir, "jarvis-clients.json"),
+    properties: path.join(dir, "jarvis-properties.json"),
+    projects: path.join(dir, "jarvis-projects.json"),
+    quotes: path.join(dir, "jarvis-quotes.json"),
+    invoices: path.join(dir, "jarvis-invoices.json"),
+    enquiries: path.join(dir, "jarvis-enquiries.json"),
+    errands: path.join(dir, "jarvis-errands.json"),
+    businessSettings: path.join(dir, "jarvis-business-settings.json"),
   };
 }
 
@@ -181,7 +190,9 @@ async function writeSource(dir: string, overrides: Record<string, unknown> = {})
   const documents: Record<string, unknown> = { ...FIXTURE, ...overrides };
   for (const [key, target] of Object.entries(paths)) {
     const document = documents[key];
-    if (document === null) continue; // null means "this file has never existed"
+    // `null` means "this file has never existed"; absent means the same, for the
+    // business files this suite does not exercise.
+    if (document === null || document === undefined) continue;
     await writeFile(target, `${JSON.stringify(document, null, 2)}\n`, "utf8");
   }
 }
@@ -383,11 +394,11 @@ describe("archive v4 — archive file integrity", () => {
 });
 
 describe("archive v4 — a JSON-only archive is unmistakably partial", () => {
-  it("marks the four uncaptured groups absent and the archive partial", async () => {
+  it("marks the uncaptured groups absent and the archive partial", async () => {
     const { manifest } = await captureFixture();
     assert.equal(manifest.completeness, "partial");
-    assert.deepEqual(manifest.coverage.present, ["core", "memory"]);
-    assert.deepEqual(manifest.coverage.absent, S2_ABSENT_GROUPS);
+    assert.deepEqual(manifest.coverage.present, ["core", "memory", "businessRecords"]);
+    assert.deepEqual(manifest.coverage.absent, ABSENT_GROUPS);
     assert.deepEqual(manifest.coverage.required, [...ARCHIVE_GROUPS]);
     // Absence is not an exclusion: nothing here claims a recovery method.
     assert.deepEqual(manifest.exclusions, []);
@@ -435,7 +446,7 @@ describe("archive v4 — isolated restore", () => {
       absentGroups: string[];
     };
     assert.equal(marker.completeness, "partial");
-    assert.deepEqual(marker.absentGroups, S2_ABSENT_GROUPS);
+    assert.deepEqual(marker.absentGroups, ABSENT_GROUPS);
     // The restored directory carries its own manifest, so it can never be
     // mistaken later for a complete recovery image.
     assert.deepEqual(

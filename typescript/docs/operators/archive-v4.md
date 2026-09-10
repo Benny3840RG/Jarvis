@@ -53,20 +53,45 @@ Only a file that has genuinely never been created is reported as empty. Ids,
 timestamps and array order are preserved verbatim — nothing is renumbered,
 re-sorted or re-stamped.
 
+## Derived values must agree with their inputs
+
+Quote and invoice totals are recomputed from line items on every read, and an
+invoice's `status` is partly derived from its payments. A stored value that no
+longer matches its inputs is therefore not recoverable data — the runtime
+silently replaces it on load, so an archive that carried it could never round
+trip.
+
+Each business domain is read twice for this reason: once by the strict reader
+and once through its own ordinary store. The two must agree exactly. Any value
+the runtime would change on load — a drifted quote total, an
+un-deduplicated hazard list, a row the store would skip because its id is not a
+string — fails the capture by name rather than producing an archive that cannot
+be restored faithfully.
+
 ## References the source itself cannot resolve
 
-Deleting a build does not cascade to its logs and upgrades, and nothing enforces
-the dependency, so a log whose build is gone is a **legal state of live data**,
-not corruption. Refusing to capture it would make the backup unusable after an
+No business domain guards or cascades a deletion: removing a client leaves its
+properties, projects, quotes, invoices and enquiries in place, and nothing
+validates the id when they are created. Deleting a build likewise does not
+cascade to its logs and upgrades, and nothing enforces that dependency either.
+A record whose referent is gone is a **legal state of live data**, not
+corruption. Refusing to capture it would make the backup unusable after an
 ordinary deletion, and would lose rows that are still authoritative.
 
 Such rows are therefore captured verbatim and the broken edge is recorded in the
 manifest's `unresolvedReferences`, printed by every command:
 
 ```
-1 reference(s) in the source do not resolve. They are captured as-is, not repaired:
+2 reference(s) in the source do not resolve. They are captured as-is, not repaired:
   buildLogs/log-1.buildId -> builds/build-deleted (missing)
+  projects/project-1.clientId -> clients/client-deleted (missing)
 ```
+
+The edges checked are `properties.clientId`, `projects.clientId`,
+`projects.propertyId`, `quotes.clientId`, `quotes.projectId`,
+`invoices.clientId`, `invoices.projectId`, `invoices.quoteId`,
+`enquiries.clientId`, `enquiries.propertyId`, `enquiries.convertedProjectId`,
+`errands.projectId`, `buildLogs.buildId` and `upgrades.buildId`.
 
 This does not change `completeness`, which describes group coverage rather than
 the source's own consistency. What the archive does guarantee is that it never
@@ -94,6 +119,14 @@ refuses it.
 The restored directory also carries a copy of the archive's `manifest.json`, so
 it is self-describing and a partial restore cannot later be mistaken for a
 recovery image.
+
+### Business settings
+
+Business settings are a single object rather than a collection, and "the file has
+never been written" is a real state distinct from "written with default values" —
+the store synthesises defaults on read either way. A source with no settings file
+is captured as `businessSettings: null` (manifest count `0`), and restore writes
+no settings file, so the restored deployment reads exactly the same defaults.
 
 ### `--allow-partial`
 

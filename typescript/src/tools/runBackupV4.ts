@@ -34,8 +34,9 @@ export function archiveV4Usage(): string[] {
     "  npm run backup -- verify-v4 <file>",
     "  npm run backup -- restore-v4 <file> <empty-destination-dir> [--allow-partial]",
     "",
-    "Archive v4 is a separate, additive format. This stage covers the core and",
-    "memory groups from JSON storage only, so every v4 archive it writes is",
+    "Archive v4 is a separate, additive format covering the core, memory and",
+    "business-record groups from JSON storage. Notes/evidence, orchestration and",
+    "the quote aggregate are not covered yet, so every v4 archive it writes is",
     "coverage: partial — the full-recovery restore path refuses it, and a staged",
     "restore must say --allow-partial to acknowledge it is not a recovery.",
   ];

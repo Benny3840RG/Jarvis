@@ -32,3 +32,25 @@ export const coreDataFiles = {
   assets: jarvisDataFile("jarvis-assets.json"),
   preferences: jarvisDataFile("jarvis-preferences.json"),
 } as const;
+
+/**
+ * The JSON-backed business record documents. Same shape as `coreDataFiles`: one
+ * file per domain, each a `{ version, <collection> }` object, all written into
+ * the same directory by `src/<domain>/json<Domain>Store.ts`.
+ *
+ * `businessSettings` is the odd one out — a single settings object rather than a
+ * collection — and is listed here because archive v4 locks and reads it with the
+ * rest of the group.
+ */
+export const businessDataFiles = {
+  clients: jarvisDataFile("jarvis-clients.json"),
+  properties: jarvisDataFile("jarvis-properties.json"),
+  projects: jarvisDataFile("jarvis-projects.json"),
+  quotes: jarvisDataFile("jarvis-quotes.json"),
+  invoices: jarvisDataFile("jarvis-invoices.json"),
+  enquiries: jarvisDataFile("jarvis-enquiries.json"),
+  errands: jarvisDataFile("jarvis-errands.json"),
+  businessSettings: jarvisDataFile("jarvis-business-settings.json"),
+} as const;
+
+export type BusinessDataKey = keyof typeof businessDataFiles;
