@@ -147,7 +147,11 @@ the durable Development and Omega records both confirm it.
 Trusted Actions jobs require repository variables `CONVEX_DEPLOYMENT=dev:<name>`
 and its exact `CONVEX_URL=https://<name>.convex.cloud`, the existing matching
 `JARVIS_SERVICE_TOKEN` secret, and an explicit
-`JARVIS_DEVELOPMENT_UNCERTAINTY_BUDGET` variable. Independent post-merge proof
+`JARVIS_DEVELOPMENT_UNCERTAINTY_BUDGET_<issue-number>` variable (for example,
+`JARVIS_DEVELOPMENT_UNCERTAINTY_BUDGET_493=0.05` only after owner approval
+for issue #493). Admission reads only the dispatched issue's variable; no
+repository-wide budget fallback exists. Missing issue-specific approval
+configuration blocks both initial admission and repair. Independent post-merge proof
 also requires the separate `JARVIS_APPROVAL_TOKEN` secret and explicit operator
 judgement in `JARVIS_DEVELOPMENT_RESIDUAL_UNCERTAINTY`. The GitHub observer uses
 the workflow's read-only token. Owner execution still uses the authorised

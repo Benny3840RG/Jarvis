@@ -76,7 +76,7 @@ jobs:
           CONVEX_DEPLOYMENT: ${{ vars.CONVEX_DEPLOYMENT }}
           CONVEX_URL: ${{ vars.CONVEX_URL }}
           JARVIS_SERVICE_TOKEN: ${{ secrets.JARVIS_SERVICE_TOKEN }}
-          JARVIS_DEVELOPMENT_UNCERTAINTY_BUDGET: ${{ vars.JARVIS_DEVELOPMENT_UNCERTAINTY_BUDGET }}
+          JARVIS_DEVELOPMENT_UNCERTAINTY_BUDGET: ${{ vars[format('JARVIS_DEVELOPMENT_UNCERTAINTY_BUDGET_{0}', inputs.issue_number)] }}
           ISSUE_NUMBER: ${{ inputs.issue_number }}
           SOURCE_SHA: ${{ inputs.source_sha }}
           REPAIR_PR: ${{ inputs.pull_request_number }}
