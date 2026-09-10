@@ -23,7 +23,7 @@ absent and claims no recovery method for them.
 ```
 npm run backup -- export-v4 <file>
 npm run backup -- verify-v4 <file>
-npm run backup -- restore-v4 <file> <empty-destination-dir> [--allow-partial]
+npm run backup -- restore-v4 <file> <empty-destination-dir> [--allow-partial] [--resume]
 ```
 
 - **`export-v4`** captures both groups under one coordinated set of file locks,
@@ -101,24 +101,82 @@ archive cannot understate a broken edge it carries or claim one it does not.
 
 ## Restore semantics
 
-`restore-v4` never merges and never overwrites:
+`restore-v4` never merges and never overwrites. It classifies the destination
+before writing anything, and each condition is refused by name:
 
-- The destination must not exist. It is reserved with an exclusive `mkdir`; an
-  existing directory — including a leftover from a failed restore — is refused
-  and must be removed by an operator.
-- A destination that overlaps the live Jarvis data directory is refused.
-- A symlinked destination is refused.
+| Destination                                                 | Result                                                   |
+| ----------------------------------------------------------- | -------------------------------------------------------- |
+| does not exist                                              | reserved with an exclusive `mkdir`, restore proceeds     |
+| holds a **completed** restore                               | refused — restoring again would overwrite recovered data |
+| holds an **interrupted** restore of **this** archive        | refused, naming `--resume` as the recovery               |
+| holds an **interrupted** restore of a **different** archive | refused                                                  |
+| exists but was **not** written by a restore                 | refused, never touched                                   |
+| a symbolic link                                             | refused                                                  |
+| overlaps the live Jarvis data directory                     | refused                                                  |
 
 After writing, both readers must agree: every document is re-read strictly _and_
 through a fresh ordinary runtime store, and any difference fails the restore
-rather than reporting success. Only then is `.jarvis-archive-v4-complete.json`
-written. **The absence of that marker is the signal that a restore was
-interrupted**; the directory left behind is unmistakably incomplete and a retry
-refuses it.
+rather than reporting success.
 
 The restored directory also carries a copy of the archive's `manifest.json`, so
 it is self-describing and a partial restore cannot later be mistaken for a
 recovery image.
+
+### Interrupted restores are recoverable
+
+Two markers make an interruption a named, recoverable condition rather than a
+directory an operator has to reason about:
+
+- `.jarvis-archive-v4-in-progress.json` is written **before the first document**
+  and removed **only after** the restore has verified and completed. It records
+  the archive's fingerprint and every file the restore intends to write.
+- `.jarvis-archive-v4-complete.json` is written **last**, after verification
+  passes.
+
+So a failure at _any_ point — including after every document is on disk and
+correct, but before the completion marker — leaves a directory that is
+unmistakably incomplete and says so.
+
+```
+npm run backup -- restore-v4 archive.json /srv/restore --allow-partial --resume
+```
+
+`--resume` discards that restore's own partial output and restores again. It is
+safe because everything the restore wrote is inside the directory it reserved and
+is named in the marker it wrote first:
+
+- The set of files a resume may delete is computed from the **archive**, not from
+  what happens to be on disk, so a forged or stale marker cannot widen it.
+- If the directory holds **any** entry the restore did not write, the resume
+  refuses and deletes nothing.
+- If the marker's fingerprint does not match the archive being restored, the
+  resume refuses: a different archive was being materialised there.
+
+Recovery is always an explicit operator decision — a plain retry never resumes
+silently.
+
+### Proving it
+
+`npm run restore-drill` runs the whole interrupted-restore matrix and prints a
+recorded result table: for each of the fourteen files, it interrupts the restore
+after that file, then checks the destination was left incomplete, that a plain
+retry is refused, that `--resume` completes, and that the recovered directory is
+**byte-identical** to an uninterrupted restore of the same archive. It also
+checks the source dataset is unchanged.
+
+The drill builds its own dataset, captures its own archive and works entirely
+inside a temporary directory it creates and removes. It never reads the live
+Jarvis data directory and performs no external effect, so it is safe to run in
+any clean development environment.
+
+### External effects
+
+A v4 restore performs **no external effect at all**: it writes JSON documents
+into the directory it reserved and nothing else — no network call, no message, no
+approval, no lease. Duplicate external effects are therefore not merely avoided
+but impossible at this stage. That changes when orchestration state and delivery
+receipts arrive; the inertness rules for those (a restored receipt must not renew
+an approval, reactivate a lease, or authorise execution) apply then.
 
 ### Business settings
 

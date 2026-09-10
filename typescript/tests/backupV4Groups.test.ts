@@ -464,7 +464,7 @@ describe("archive v4 — isolated restore", () => {
       restoreArchiveV4(archive, destination, { allowPartial: true }),
       (error: unknown) => {
         assert.ok(error instanceof StrictBackupError);
-        assert.match(error.message, /already exists; refusing to merge/);
+        assert.match(error.message, /was not written by a restore/);
         return true;
       },
     );
@@ -515,10 +515,11 @@ describe("archive v4 — isolated restore", () => {
     assert.equal(await exists(path.join(destination, "manifest.json")), false);
     assert.equal(await exists(path.join(destination, RESTORE_MARKER)), false);
 
-    // The incomplete directory is not silently reused or repaired.
+    // The incomplete directory is not silently reused or repaired; recovery is
+    // an explicit choice, and the refusal names it.
     await assert.rejects(
       restoreArchiveV4(archive, destination, { allowPartial: true }),
-      /already exists; refusing to merge/,
+      /interrupted restore of this archive[\s\S]*--resume/,
     );
   });
 });

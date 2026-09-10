@@ -32,13 +32,17 @@ export function archiveV4Usage(): string[] {
   return [
     "  npm run backup -- export-v4 <file>",
     "  npm run backup -- verify-v4 <file>",
-    "  npm run backup -- restore-v4 <file> <empty-destination-dir> [--allow-partial]",
+    "  npm run backup -- restore-v4 <file> <empty-destination-dir> [--allow-partial] [--resume]",
     "",
     "Archive v4 is a separate, additive format covering the core, memory and",
     "business-record groups from JSON storage. Notes/evidence, orchestration and",
     "the quote aggregate are not covered yet, so every v4 archive it writes is",
     "coverage: partial — the full-recovery restore path refuses it, and a staged",
     "restore must say --allow-partial to acknowledge it is not a recovery.",
+    "",
+    "An interrupted restore leaves the destination unmistakably incomplete. Re-run",
+    "with --resume to discard that restore's own output and start again; a plain",
+    "retry refuses it.",
   ];
 }
 
@@ -115,6 +119,7 @@ async function restoreArchive(
   filePath: string,
   destination: string,
   allowPartial: boolean,
+  resume: boolean,
 ): Promise<void> {
   const archive = await readArchiveV4File(filePath);
   if (archive.manifest.completeness === "partial" && !allowPartial) {
@@ -124,9 +129,9 @@ async function restoreArchive(
         "intend a staged development restore, which is not a recovery.",
     );
   }
-  const result = await restoreArchiveV4(archive, destination, { allowPartial });
+  const result = await restoreArchiveV4(archive, destination, { allowPartial, resume });
   console.log(
-    `Archive v4 restored into ${result.destination} — ${describeCoverage(result.manifest)}; ${describeCounts(archive)}.`,
+    `Archive v4 ${result.resumed ? "restore resumed and completed" : "restored"} into ${result.destination} — ${describeCoverage(result.manifest)}; ${describeCounts(archive)}.`,
   );
   console.log(`Completion marker: ${result.markerPath}`);
   reportUnresolvedReferences(result.manifest);
@@ -152,6 +157,12 @@ export async function runArchiveV4Command(
 
   const [filePath, destination, ...flags] = args;
   if (!filePath || !destination) usage();
-  if (flags.some((flag) => flag !== "--allow-partial")) usage();
-  await restoreArchive(filePath, destination, flags.includes("--allow-partial"));
+  const known = new Set(["--allow-partial", "--resume"]);
+  if (flags.some((flag) => !known.has(flag)) || new Set(flags).size !== flags.length) usage();
+  await restoreArchive(
+    filePath,
+    destination,
+    flags.includes("--allow-partial"),
+    flags.includes("--resume"),
+  );
 }
