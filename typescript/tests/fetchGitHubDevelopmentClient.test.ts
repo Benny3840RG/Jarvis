@@ -235,3 +235,40 @@ for (const defect of [
     } else await assert.rejects(operation);
   });
 }
+
+describe("FetchGitHubDevelopmentClient.getPullRequest API compatibility", () => {
+  it("observes the real merge SHA using the PR response version that includes it", async () => {
+    const mergeSha = "b".repeat(40);
+    const client = new FetchGitHubDevelopmentClient("test-token", {
+      async fetch(input, init) {
+        const headers = new Headers(init?.headers);
+        assert.equal(headers.get("Authorization"), "Bearer test-token");
+        if (String(input).includes("/pulls/")) {
+          return jsonResponse({
+            number: 498,
+            state: "closed",
+            merged: true,
+            base: { ref: "main", sha: "c".repeat(40) },
+            head: { sha: "a".repeat(40) },
+            // GitHub 2026-03-10 removed this field from PR responses.
+            ...(headers.get("X-GitHub-Api-Version") === "2022-11-28"
+              ? { merge_commit_sha: mergeSha }
+              : {}),
+          });
+        }
+        assert.equal(headers.get("X-GitHub-Api-Version"), "2026-03-10");
+        return jsonResponse({ sha: mergeSha });
+      },
+    });
+    const signal = new AbortController().signal;
+    const pull = await client.getPullRequest({
+      repository: "Benny3840RG/Jarvis",
+      pullRequestNumber: 498,
+      signal,
+    });
+    assert.equal(pull.mergeCommitSha, mergeSha);
+    assert.equal(pull.headSha, "a".repeat(40));
+    assert.equal(pull.merged, true);
+    await client.getCommit({ repository: "Benny3840RG/Jarvis", sha: mergeSha, signal });
+  });
+});

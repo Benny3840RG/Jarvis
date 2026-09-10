@@ -279,7 +279,13 @@ export class FetchGitHubDevelopmentClient implements GitHubDevelopmentClient {
     const { owner, repo } = repositoryParts(input.repository);
     const body = (await this.request(
       `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/pulls/${input.pullRequestNumber}`,
-      { method: "GET", signal: input.signal },
+      {
+        method: "GET",
+        signal: input.signal,
+        // 2026-03-10 removed merge_commit_sha from PR responses. This read
+        // needs the provider's actual merge SHA for reconciliation/completion.
+        headers: { "X-GitHub-Api-Version": "2022-11-28" },
+      },
     )) as {
       number: number;
       state: "open" | "closed";

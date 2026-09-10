@@ -186,3 +186,12 @@ invented mission stages for an old PR merely to obtain a completion record.
 Post-merge provider observations have been hardened to require the maintained
 TypeScript checks and all four CodeQL analyses from trusted producers; missing,
 neutral, skipped, stale or mismatched evidence cannot complete a mission.
+
+### GitHub merge observation compatibility
+
+The maintained client requests PR details with API version `2022-11-28`: GitHub
+removed `merge_commit_sha` from PR responses in `2026-03-10`. Other requests keep
+the current version. Completion still requires an actual provider merge SHA,
+the exact reviewed head, the succeeded governed receipt and trusted main checks.
+A missing SHA is inconclusive evidence, never permission to infer a merge or
+replay it. See [GitHub breaking changes](https://docs.github.com/en/rest/about-the-rest-api/breaking-changes).
