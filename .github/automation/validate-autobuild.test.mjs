@@ -25,6 +25,18 @@ const eligibleIssue = {
   hasExistingAutomationPr: false,
 };
 
+test("comment-only Claude action uses the scoped workflow token without OIDC exchange", () => {
+  const workflow = fs.readFileSync(
+    new URL("../workflows/claude.yml", import.meta.url),
+    "utf8",
+  );
+  // The pinned action otherwise exchanges OIDC for a separately scoped app token.
+  assert.match(workflow, /github_token: \$\{\{ github\.token \}\}/);
+  assert.doesNotMatch(workflow, /^\s+id-token:\s+write/m);
+  assert.doesNotMatch(workflow, /^\s+contents:\s+write/m);
+  assert.match(workflow, /^\s+contents:\s+read/m);
+});
+
 async function runFinalize(overrides = {}) {
   const workflow = fs.readFileSync(
     new URL("../workflows/jarvis-autobuild.yml", import.meta.url),
