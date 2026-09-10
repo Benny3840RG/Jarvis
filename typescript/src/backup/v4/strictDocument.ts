@@ -7,6 +7,7 @@ import {
   assertRecord,
   StrictBackupError,
 } from "../strictValues.js";
+import { overLimitAdvice, resolveMaxArchiveBytes } from "./limits.js";
 
 /**
  * The strict document readers every archive v4 JSON source goes through.
@@ -47,6 +48,15 @@ export async function readRawJson(filePath: string): Promise<unknown | null> {
     const stat = await handle.stat();
     if (!stat.isFile())
       throw new StrictBackupError(`Backup source ${filePath} is not a regular file.`);
+    // Bounded on the same limit the archive is bounded on: reading a source the
+    // archive could never hold, only to fail at write time, wastes the whole
+    // capture and pulls an unbounded file into memory on the way.
+    const limit = resolveMaxArchiveBytes();
+    if (stat.size > limit) {
+      throw new StrictBackupError(
+        `Backup source ${filePath} is ${String(stat.size)} bytes. ${overLimitAdvice(limit)}`,
+      );
+    }
     raw = await handle.readFile("utf8");
   } catch (error: unknown) {
     if (error instanceof StrictBackupError) throw error;

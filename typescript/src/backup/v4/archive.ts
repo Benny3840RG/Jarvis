@@ -13,11 +13,10 @@ import {
   type ArchiveUnresolvedReference,
 } from "../archiveManifest.js";
 import { StrictBackupError } from "../strictValues.js";
+import { overLimitAdvice, resolveMaxArchiveBytes } from "./limits.js";
 import { businessUnresolvedReferences, type BusinessRecordsPayload } from "./businessSource.js";
 import { memoryUnresolvedReferences } from "./jsonSource.js";
 import type { CoreGroupPayload, JsonCapture, MemoryGroupPayload } from "./jsonSource.js";
-
-const MAX_ARCHIVE_BYTES = 10 * 1024 * 1024;
 
 /** Schema version of each group payload shape, independent of the contract version. */
 export const CORE_GROUP_SCHEMA_VERSION = 1;
@@ -179,20 +178,24 @@ export function parseArchiveV4(value: unknown): ArchiveV4 {
   return archive;
 }
 
-function serialize(archive: ArchiveV4): string {
+function serialize(archive: ArchiveV4, limit: number): string {
   const body = `${JSON.stringify(archive, null, 2)}\n`;
   const bytes = Buffer.byteLength(body, "utf8");
-  if (bytes > MAX_ARCHIVE_BYTES) {
+  if (bytes > limit) {
     throw new StrictBackupError(
-      `Archive is ${bytes} bytes, over the ${MAX_ARCHIVE_BYTES} byte safety limit; refusing to write a truncated file.`,
+      `Archive would be ${String(bytes)} bytes. ${overLimitAdvice(limit)}`,
     );
   }
   return body;
 }
 
-export async function writeArchiveV4File(filePath: string, archive: ArchiveV4): Promise<void> {
+export async function writeArchiveV4File(
+  filePath: string,
+  archive: ArchiveV4,
+  maxBytes = resolveMaxArchiveBytes(),
+): Promise<void> {
   verifyChecksums(archive);
-  const body = serialize(archive);
+  const body = serialize(archive, maxBytes);
   const target = path.resolve(filePath);
   await fs.mkdir(path.dirname(target), { recursive: true });
   await fs.access(target, fsConstants.F_OK).then(
@@ -211,14 +214,27 @@ export async function writeArchiveV4File(filePath: string, archive: ArchiveV4): 
     await handle.sync();
     await handle.close();
     handle = undefined;
-    await fs.link(tempPath, target);
+    // `link` — not the `access` probe above — is what actually makes this
+    // exclusive: it fails rather than replacing an existing target, so a file
+    // created between the probe and here is never overwritten.
+    try {
+      await fs.link(tempPath, target);
+    } catch (error: unknown) {
+      if (error instanceof Error && "code" in error && error.code === "EEXIST") {
+        throw new StrictBackupError(`Archive target already exists: ${target}`);
+      }
+      throw error;
+    }
   } finally {
     await handle?.close().catch(() => undefined);
     await fs.rm(tempPath, { force: true }).catch(() => undefined);
   }
 }
 
-export async function readArchiveV4File(filePath: string): Promise<ArchiveV4> {
+export async function readArchiveV4File(
+  filePath: string,
+  maxBytes = resolveMaxArchiveBytes(),
+): Promise<ArchiveV4> {
   const target = path.resolve(filePath);
   const linkStat = await fs.lstat(target);
   if (linkStat.isSymbolicLink()) {
@@ -230,8 +246,10 @@ export async function readArchiveV4File(filePath: string): Promise<ArchiveV4> {
     handle = await fs.open(target, fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW ?? 0));
     const stat = await handle.stat();
     if (!stat.isFile()) throw new StrictBackupError(`Archive path is not a file: ${target}`);
-    if (stat.size > MAX_ARCHIVE_BYTES) {
-      throw new StrictBackupError(`Archive exceeds the ${MAX_ARCHIVE_BYTES} byte safety limit.`);
+    if (stat.size > maxBytes) {
+      throw new StrictBackupError(
+        `Archive ${target} is ${String(stat.size)} bytes. ${overLimitAdvice(maxBytes)}`,
+      );
     }
     raw = await handle.readFile("utf8");
   } finally {

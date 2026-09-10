@@ -570,6 +570,32 @@ function assertRuntimeAgreement<T>(
 }
 
 /**
+ * Reads one domain through its own ordinary store, so a failure there is
+ * reported as a backup failure rather than escaping as a bare store error.
+ *
+ * The stores refuse some files outright — business settings reject text that
+ * looks like a credential, which is a correct refusal at a boundary the write
+ * path already enforces. But the operator running a backup needs to know which
+ * file the refusal came from, and that it is what stopped the capture.
+ */
+async function readThroughRuntime<T>(
+  domain: string,
+  filePath: string,
+  read: () => Promise<T>,
+): Promise<T> {
+  try {
+    return await read();
+  } catch (error: unknown) {
+    if (error instanceof StrictBackupError) throw error;
+    throw new StrictBackupError(
+      `Backup source ${filePath}: the ordinary ${domain} store refuses to load this file (${
+        error instanceof Error ? error.message : String(error)
+      }). It cannot be captured, because a restore would not be able to load it either.`,
+    );
+  }
+}
+
+/**
  * References the business group cannot resolve within itself.
  *
  * Unlike builds, no business domain guards or cascades a deletion — removing a
@@ -639,7 +665,9 @@ export async function readBusinessGroup(paths: BusinessPaths): Promise<BusinessR
   assertRuntimeAgreement(
     "clients",
     clients,
-    await new JsonClientStore(paths.clients, QUIET).list(),
+    await readThroughRuntime("clients", paths.clients, () =>
+      new JsonClientStore(paths.clients, QUIET).list(),
+    ),
   );
 
   const properties = await readStrictArrayDocument(
@@ -652,7 +680,9 @@ export async function readBusinessGroup(paths: BusinessPaths): Promise<BusinessR
   assertRuntimeAgreement(
     "properties",
     properties,
-    await new JsonPropertyStore(paths.properties, QUIET).list(),
+    await readThroughRuntime("properties", paths.properties, () =>
+      new JsonPropertyStore(paths.properties, QUIET).list(),
+    ),
   );
 
   const projects = await readStrictArrayDocument(
@@ -665,7 +695,9 @@ export async function readBusinessGroup(paths: BusinessPaths): Promise<BusinessR
   assertRuntimeAgreement(
     "projects",
     projects,
-    await new JsonProjectStore(paths.projects, QUIET).list(),
+    await readThroughRuntime("projects", paths.projects, () =>
+      new JsonProjectStore(paths.projects, QUIET).list(),
+    ),
   );
 
   const quotes = await readStrictArrayDocument(
@@ -675,7 +707,13 @@ export async function readBusinessGroup(paths: BusinessPaths): Promise<BusinessR
     parseQuote,
     "quote",
   );
-  assertRuntimeAgreement("quotes", quotes, await new JsonQuoteStore(paths.quotes, QUIET).list());
+  assertRuntimeAgreement(
+    "quotes",
+    quotes,
+    await readThroughRuntime("quotes", paths.quotes, () =>
+      new JsonQuoteStore(paths.quotes, QUIET).list(),
+    ),
+  );
 
   const invoices = await readStrictArrayDocument(
     paths.invoices,
@@ -687,7 +725,9 @@ export async function readBusinessGroup(paths: BusinessPaths): Promise<BusinessR
   assertRuntimeAgreement(
     "invoices",
     invoices,
-    await new JsonInvoiceStore(paths.invoices, QUIET).list(),
+    await readThroughRuntime("invoices", paths.invoices, () =>
+      new JsonInvoiceStore(paths.invoices, QUIET).list(),
+    ),
   );
 
   const enquiries = await readStrictArrayDocument(
@@ -700,7 +740,9 @@ export async function readBusinessGroup(paths: BusinessPaths): Promise<BusinessR
   assertRuntimeAgreement(
     "enquiries",
     enquiries,
-    await new JsonEnquiryStore(paths.enquiries, QUIET).list(),
+    await readThroughRuntime("enquiries", paths.enquiries, () =>
+      new JsonEnquiryStore(paths.enquiries, QUIET).list(),
+    ),
   );
 
   const errands = await readStrictArrayDocument(
@@ -713,7 +755,9 @@ export async function readBusinessGroup(paths: BusinessPaths): Promise<BusinessR
   assertRuntimeAgreement(
     "errands",
     errands,
-    await new JsonErrandStore(paths.errands, QUIET).list(),
+    await readThroughRuntime("errands", paths.errands, () =>
+      new JsonErrandStore(paths.errands, QUIET).list(),
+    ),
   );
 
   const businessSettings = await readBusinessSettings(paths.businessSettings);
@@ -721,7 +765,11 @@ export async function readBusinessGroup(paths: BusinessPaths): Promise<BusinessR
     assertRuntimeAgreement(
       "businessSettings",
       [businessSettings],
-      [await new JsonBusinessSettingsStore(paths.businessSettings, QUIET).get()],
+      [
+        await readThroughRuntime("businessSettings", paths.businessSettings, () =>
+          new JsonBusinessSettingsStore(paths.businessSettings, QUIET).get(),
+        ),
+      ],
     );
   }
 
