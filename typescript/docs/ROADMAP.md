@@ -81,20 +81,19 @@ rather than an occasional operator action.
    are NOT in the backup archive. These are harder than phase 1: they're
    densely cross-referenced by id (a quote holds `clientId`; an invoice holds
    `quoteId` and `clientId`; a project can hold both). Restoring them safely
-   needs ONE consistent id-remap table applied across every domain at once
-   (extending the existing `remapIds` helper in `backup.ts`, which today only
-   remaps ids inside `assistantState`), not a per-domain copy loop. Recommend
-   tackling this as its own session: map the full foreign-key graph first
-   (grep each domain's type for `clientId`/`quoteId`/`projectId`/etc.), then
-   design the remap order (restore in dependency order: clients before
-   quotes/projects/properties/enquiries, quotes before invoices, etc.)
-   before writing any restore code.
-2. **Quote delivery / PDF artifact backup.** `quoteDeliveries` (Convex-only,
-   see `src/persistence/convexQuoteDeliveries.ts`) and
-   `quotePdfArtifactRepository` are also outside backup's reach. These are
-   lower priority than the core business records above since they're
-   regenerable/re-derivable (a delivery ledger, a rendered PDF) rather than
-   the only copy of user-entered data — but worth a note once phase 2 lands.
+   needs the explicit reference inventory in
+   [the v4 contract](architecture/backup-v4-contract.md): preserve logical IDs
+   in an empty destination and translate platform-generated IDs, including
+   string-typed references, with table-scoped maps. Existing `add()` APIs do
+   not necessarily preserve IDs. Verify the complete reference graph rather
+   than applying an untyped global string replacement.
+2. **Quote delivery / PDF artifact backup.** The delivery-attempt/outcome ledger
+   is authoritative history, including failed and indeterminate outcomes;
+   re-sending cannot restore it. PDF bytes are only conditionally regenerable
+   from the full aggregate/revision snapshot, stored issuer/client/generatedAt
+   and pinned renderer, with a verified digest. Blob backup remains in scope.
+   See the [domain inventory](architecture/authoritative-domain-inventory.md)
+   and [v4 contract](architecture/backup-v4-contract.md).
 3. **`personalTraitsService.ts` dead code.** `addNote` and `priorityRank` on
    `PersonalTraitsService` (`src/runtime/personalTraitsService.ts`) are
    unused anywhere in the codebase or tests (only `dailyBrief`/`motivation`
