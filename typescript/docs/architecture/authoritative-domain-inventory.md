@@ -54,23 +54,24 @@ aggregate, not the flat JSON quote record). Not covered.
 
 ### Convex-only — none covered by v3
 
-| Table                                                                                                              | Domain                                                                   | Authoritative?                          |
-| ------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------ | --------------------------------------- |
-| `notes`                                                                                                            | **notes** — no JSON store exists; Convex is the only backing             | yes                                     |
-| `quoteRevisions`                                                                                                   | quote revision content history                                           | yes                                     |
-| `quoteDeliveryAttempts`                                                                                            | **delivery ledger** — evidence a quote was sent                          | yes                                     |
-| `quotePdfArtifacts`                                                                                                | **artifact references** (storageId, digest, issuer, client, generatedAt) | yes                                     |
-| `quoteMigrationRecords`                                                                                            | quote migration history                                                  | yes                                     |
-| `toolActions`                                                                                                      | **approval state** for governed tool actions                             | yes                                     |
-| `toolExecutionReceipts`                                                                                            | **execution evidence**                                                   | yes                                     |
-| `memoryChangeSets`                                                                                                 | staged/approved memory changes                                           | yes                                     |
-| `auditEvents`                                                                                                      | audit trail                                                              | yes                                     |
-| `externalReconciliations`                                                                                          | provider reconciliation evidence                                         | yes                                     |
-| `validationReports`                                                                                                | validation evidence                                                      | yes                                     |
-| `omegaMissions`, `omegaActionContracts`, `omegaEvidence`, `omegaValidationProofs`, `omegaContradictionResolutions` | ΩΣ mission / evidence / proof state                                      | yes                                     |
-| `orchestrationRuns`, `orchestrationSteps`, `orchestrationReconciliations`                                          | durable orchestration run state                                          | yes                                     |
-| `directCreateReceipts`, `internalActionResults`                                                                    | idempotency receipts — replay protection                                 | yes (losing them re-admits a duplicate) |
-| `developmentEvents`, `developmentSubjects`, `projectRecords`, `runtimeEvents`                                      | development / runtime event state                                        | yes                                     |
+| Table                                                                                                              | Domain                                                                                                                                                 | Authoritative?                          |
+| ------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------- |
+| `notes`                                                                                                            | **notes** — no JSON store exists; Convex is the only backing                                                                                           | yes                                     |
+| `quoteRevisions`                                                                                                   | quote revision content history                                                                                                                         | yes                                     |
+| `quoteDeliveryAttempts`                                                                                            | **delivery ledger** — delivery-attempt and outcome evidence                                                                                            | yes                                     |
+| `quotePdfArtifacts`                                                                                                | **artifact references** (storageId, digest, issuer, client, generatedAt)                                                                               | yes                                     |
+| `quoteMigrationRecords`                                                                                            | quote migration history                                                                                                                                | yes                                     |
+| `toolActions`                                                                                                      | **approval state** for governed tool actions                                                                                                           | yes                                     |
+| `toolExecutionReceipts`                                                                                            | **execution evidence**                                                                                                                                 | yes                                     |
+| `memoryChangeSets`                                                                                                 | staged/approved memory changes                                                                                                                         | yes                                     |
+| `auditEvents`                                                                                                      | audit trail                                                                                                                                            | yes                                     |
+| `externalReconciliations`                                                                                          | provider reconciliation evidence                                                                                                                       | yes                                     |
+| `validationReports`                                                                                                | validation evidence                                                                                                                                    | yes                                     |
+| `omegaMissions`, `omegaActionContracts`, `omegaEvidence`, `omegaValidationProofs`, `omegaContradictionResolutions` | ΩΣ mission / evidence / proof state                                                                                                                    | yes                                     |
+| `orchestrationRuns`, `orchestrationSteps`, `orchestrationReconciliations`                                          | durable orchestration run state                                                                                                                        | yes                                     |
+| `directCreateReceipts`, `internalActionResults`                                                                    | idempotency receipts — replay protection                                                                                                               | yes (losing them re-admits a duplicate) |
+| `developmentEvents`, `developmentSubjects`, `runtimeEvents`                                                        | development / runtime event state                                                                                                                      | yes                                     |
+| `projectRecords`                                                                                                   | **project memory** — components, facts, assumptions, constraints, measurements, decisions, risks, tasks and events; approved memory changes write here | yes                                     |
 
 ### 3. Convex file storage (blob store, outside all tables)
 
@@ -83,24 +84,25 @@ archive; not reachable through the store interfaces backup uses today.
 The earlier roadmap note called delivery ledger and PDF artifacts
 "regenerable/re-derivable". That is **not** accurate as stated:
 
-- **Delivery ledger (`quoteDeliveryAttempts`) is not regenerable at all.** It is
-  evidence that a message was sent to a client at a time. Re-sending a quote
-  produces a _new_ delivery, not a restoration of the old one. Treating it as
-  regenerable would silently destroy the only record that a client was
-  contacted.
-- **PDF artifact bytes are conditionally regenerable.** `renderFinalizedQuotePdf`
-  takes `generatedAt` as an input and embeds it in the PDF `/CreationDate`, so a
-  re-render at a different time yields **different bytes and a different
-  digest**. Byte-identical regeneration is possible only if all of these are
-  preserved and fed back: the `quoteRevisions` snapshot, the artifact's stored
-  `issuer` / `client` / `generatedAt`, and the _same_ `rendererVersion` code.
-  A renderer change breaks digest reproduction permanently.
+- **Delivery ledger (`quoteDeliveryAttempts`) is not regenerable.** It records
+  pending, executing, succeeded, failed, indeterminate and reconciled attempts.
+  A row proves only its recorded attempt/outcome; a pending or failed row is
+  not proof that a client received a quote. Re-sending creates a new attempt,
+  not a restoration of the original delivery history.
+- **PDF artifact bytes are conditionally regenerable.** Preserve the complete
+  render input: the Convex `quotes` aggregate (including its `number`), the
+  `quoteRevisions` snapshot, the artifact's stored `issuer`, `client` and
+  `generatedAt`, and the exact `rendererVersion` implementation. The renderer
+  uses the aggregate number in the page header, PDF title and filename, and
+  embeds `generatedAt` in `/CreationDate` (`src/quotes/quotePdfRenderer.ts`).
+  A different timestamp or renderer can produce a different digest. A changed
+  renderer does not make recovery impossible if the pinned original remains
+  available, but regeneration must be verified against the stored digest.
 
-So excluding either on regenerability grounds requires, at minimum, backing up
-`quoteRevisions` + `quotePdfArtifacts` metadata and pinning `rendererVersion` —
-and even then the residual risk is that a future renderer change makes stored
-digests unverifiable. That is a decision for Jarvis, not an assumption for
-backup to make.
+Delivery history requires its own backup; revision/artifact metadata cannot
+reconstruct it. Excluding PDF bytes requires all the inputs above, a preserved
+renderer and an accepted, verified recovery procedure. Otherwise the bytes are
+an authoritative coverage gap. The v4 contract includes blob export/import.
 
 ## Coverage gap summary
 
@@ -112,25 +114,25 @@ backup to make.
 | Convex tables uncovered     | 27           | **gap** (incl. notes, delivery ledger, approval/evidence state, artifact references, ΩΣ evidence, orchestration run state, idempotency receipts) |
 | Convex file storage         | 1 blob store | **gap**, and not reachable via any store interface                                                                                               |
 
-## Open questions for Jarvis before coverage work proceeds
+## Decisions recorded after the inventory
 
-1. **Cross-domain ID mapping vs identity preservation.** A2 asks for "one
-   consistent cross-domain ID mapping". A mapping is only required when the
-   restore target may already hold conflicting ids. If restore targets a freshly
-   reserved empty destination, preserving ids verbatim is both simpler and
-   strictly safer (no reference rewriting, no chance of collapsing distinct
-   records). Which restore model is intended decides this, and it should be
-   decided before code is written.
-2. **Idempotency receipts.** Restoring `directCreateReceipts` /
-   `internalActionResults` preserves replay protection but also re-admits stale
-   keys; not restoring them re-opens duplicate admission. Either is defensible;
-   it needs a decision.
-3. **Convex file storage.** Backing up PDF bytes needs a blob export path that
-   does not exist. Options: add one, or accept metadata-only coverage with the
-   conditional-regeneration recovery method above.
-4. **Scope of a single archive.** 35 Convex tables plus 14 JSON files in one
-   archive with one consistent contract is a large surface. Whether this lands
-   as one archive version or staged by domain group is a scoping decision.
+The four questions raised by this inventory are resolved in
+[the archive v4 contract](backup-v4-contract.md). That contract governs the
+staged implementation:
+
+1. Restore only into a freshly reserved empty destination. Preserve logical
+   identity; explicitly translate platform-generated physical IDs wherever
+   they occur, including string-typed references. Empty destinations do not
+   make Convex `_id` values assignable, and existing JSON store `add()` APIs
+   also generate IDs rather than accepting archived ones. The restore path
+   must support preserved IDs explicitly instead of reusing those APIs blindly.
+2. Restore receipts with their connected operation history and original scope,
+   fingerprints and timestamps. Receipt restoration does not renew approval,
+   reactivate leases or authorise another external effect.
+3. Include blob export/import and digest verification. Exclusions need an
+   accepted recovery method; metadata alone is not complete blob coverage.
+4. Use one versioned manifest contract with staged domain groups, explicit
+   coverage and partial-archive refusal on the full-recovery path.
 
 Nothing here is a completion claim. This inventory is evidence for A2 items 3
 and 4 and is handed to Codex alongside them.

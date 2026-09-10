@@ -11,23 +11,47 @@ acceptance gate at the end, which only Jarvis can close.
 Restore targets a **freshly reserved, empty destination**. A non-empty
 destination is **refused** — never merged into, never overwritten.
 
-**Logical IDs are preserved verbatim.** No universal remapping. Every
-cross-domain reference in this schema is a logical string id (`clientId`,
-`quoteId`, `buildId`, `runId`, …), so references need no rewriting at all.
+**Logical IDs are preserved verbatim.** Physical IDs are translated explicitly,
+including when stored in `v.string()` fields or nested state. A schema type
+alone does not establish the identity semantics of a reference; its writers,
+readers and provider adapters must be traced. No universal string remapping.
 
-**Physical IDs are a separate, explicit translation.** "Empty" does not
-guarantee the platform will accept original physical ids, and in Convex it will
-not: `ctx.db.insert(table, doc)` assigns `_id` itself and offers no way to
-choose one. The translation surface is therefore:
+**Convex assigns new physical IDs.** `ctx.db.insert` does not accept an original
+`_id`, and imported blobs receive new storage IDs. The known translation surface
+includes the following; each later group must inventory additional references
+before claiming verified coverage:
 
-| Physical id                                        | Scope                                                   | Handling                                                                                                                                                                                                                                                                                                                                   |
-| -------------------------------------------------- | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `quotePdfArtifacts.storageId` (`v.id("_storage")`) | **the only `v.id(...)` reference in the entire schema** | Explicit old→new translation map, applied when the blob is re-imported and the referencing row is written.                                                                                                                                                                                                                                 |
-| Convex `_id`                                       | every table                                             | Re-assigned by the platform. Nothing in the schema references another row's `_id`, so no translation is needed — verified by scanning all three schema files.                                                                                                                                                                              |
-| Convex `_creationTime`                             | every table                                             | Re-assigned. Every domain carries its own preserved `createdAt`; `_creationTime` is exposed in return validators, so clients will observe a changed value. Queries using `.withIndex(...)` order by index fields (preserved), not `_creationTime`. Any bare `.query(table).order(...)` without an index would reorder — checked per group. |
+| Physical reference                                                | Evidence in current code                                                                                                                                                   | Required restore handling                                                                                                                                        |
+| ----------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `quotePdfArtifacts.storageId`                                     | Explicit `v.id("_storage")` field                                                                                                                                          | Translate old blob ID to imported blob ID and verify bytes/digest.                                                                                               |
+| `buildLogs.buildId`, `upgrades.buildId`                           | `convex/buildOwnership.ts` resolves the value with `normalizeId("builds", ...)`                                                                                            | Translate using the source `builds` table's old-to-new ID map.                                                                                                   |
+| `directCreateReceipts.entityId`                                   | `convex/tasks.ts` and `reminders.ts` store `_id` and resolve it with `normalizeId`                                                                                         | Translate according to the receipt's task/reminder entity type.                                                                                                  |
+| `internalActionResults.entityId`, nested `result.id`              | The task/reminder handlers persist the same generated entity ID in both fields                                                                                             | Translate both references consistently, preserving receipt scope and fingerprints.                                                                               |
+| IDs embedded in `assistantState`, including task/reminder objects | `src/persistence/convexPersistence.ts` exposes `_id` as public `id`; the CLI stores those objects. Existing `convex/assistantState.ts` restore already remaps nested state | Inventory reference fields and translate physical IDs with source-table context. Do not rewrite arbitrary matching strings or assume all nested IDs are logical. |
+| Convex `_id` on every restored table                              | Assigned by the platform                                                                                                                                                   | Retain source identity in archive metadata and create table-scoped maps wherever references depend on it.                                                        |
 
-JSON-backed stores have no physical/logical split: their ids are logical and are
-written verbatim.
+`storageId` is the only explicit `v.id(...)` field in the schema definitions,
+but it is not the only physical reference. A group with an unclassified or
+ambiguous reference cannot claim reference integrity. Logical values such as
+project keys and domain-generated operation IDs are preserved, not blindly
+substituted through physical-ID maps. References and stored fingerprints must
+remain mutually consistent without minting new approval or replay authority.
+
+**Timestamp and ordering recovery are explicit.** Preserve recorded domain
+clocks as data, but do not assume every table has `createdAt`: `assistantState`,
+`projectRecords` and `orchestrationSteps` do not. Archive source `_creationTime`
+where needed as historical metadata; normal Convex insertion assigns a new
+system value. Convex uses `_creationTime` as the final tie-breaker in every
+index, including custom indexes. A `by_owner` query with a fixed owner therefore
+orders by that system clock; `convex/builds.ts` uses this pattern. A restore can
+change list order, pagination and ties even when business timestamps survive.
+Each group must verify its ordering behavior and specify how required source
+ordering is retained or how a changed order is accepted. See the
+[Convex index ordering contract](https://docs.convex.dev/database/reading-data/indexes/).
+
+JSON store IDs are logical and the v4 restore path must write them verbatim.
+Existing store `add()` APIs may generate replacement IDs, so empty-target
+reservation alone is not evidence that an existing import API preserves them.
 
 ## 2. Idempotency receipts — restored, and inert
 
@@ -66,7 +90,8 @@ qualify as a complete backup where the bytes are needed for recovery.
 An artifact may be excluded as regenerable **only** where all of the following
 are retained and recorded explicitly: every render input, the required
 renderer and its version, and a _verified_ regeneration procedure. For quote
-PDFs that means the `quoteRevisions` snapshot, the artifact's stored
+PDFs that means the Convex `quotes` aggregate (including its number), the
+`quoteRevisions` snapshot, the artifact's stored
 `issuer` / `client` / `generatedAt`, and a pinned `rendererVersion` — because
 `renderFinalizedQuotePdf` embeds `generatedAt` in the PDF `/CreationDate`, so a
 re-render at any other time yields a different digest. Absent all of that,
@@ -100,25 +125,25 @@ captured outside the consistent boundary is recorded as such in the manifest.
 
 ## Staged plan
 
-| Stage | Group                                | Notes                                                                                                                                                                                           |
-| ----- | ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| S1    | Manifest + contract scaffolding      | Manifest schema, `completeness` gating, partial-archive refusal in the full-recovery path. No domain coverage yet — every required group absent, so every archive is `partial` by construction. |
-| S2    | Core + memory domains                | The eight sections v3 already covers, moved onto the v4 manifest with checksums and counts. Establishes parity before expansion.                                                                |
-| S3    | Business records                     | clients, properties, projects, quotes, invoices, enquiries, errands + **business settings**. JSON-backed; identity verbatim.                                                                    |
-| S4    | Notes + approval/evidence state      | notes, toolActions, toolExecutionReceipts, memoryChangeSets, auditEvents, validationReports, externalReconciliations, `omega*`. Convex-only. Receipt inertness rules from §2 apply here.        |
-| S5    | Orchestration + idempotency receipts | orchestrationRuns/Steps/Reconciliations, directCreateReceipts, internalActionResults. Lease and indeterminate-state rules from §2 apply here.                                                   |
-| S6    | Quote aggregate + blobs              | quoteRevisions, quoteDeliveryAttempts, quoteMigrationRecords, quotePdfArtifacts + Convex file storage. Physical-id translation and blob verification from §1/§3 apply here.                     |
+| Stage | Group                                            | Notes                                                                                                                                                                                                                                                                                                                        |
+| ----- | ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| S1    | Manifest + contract scaffolding                  | Manifest schema, `completeness` gating, partial-archive refusal in the full-recovery path. No domain coverage yet — every required group absent, so every archive is `partial` by construction.                                                                                                                              |
+| S2    | Core + memory domains                            | The eight sections v3 already covers, moved onto the v4 manifest with checksums and counts. Establishes parity before expansion.                                                                                                                                                                                             |
+| S3    | Business records                                 | clients, properties, projects, quotes, invoices, enquiries, errands + **business settings**. JSON-backed; identity verbatim.                                                                                                                                                                                                 |
+| S4    | Notes + project memory + approval/evidence state | `projects` (Convex project aggregate), `projectRecords`, `notes`, `developmentEvents`, `developmentSubjects`, `runtimeEvents`, `toolActions`, `toolExecutionReceipts`, `memoryChangeSets`, `auditEvents`, `validationReports`, `externalReconciliations`, `omega*`. Convex-only. Receipt inertness rules from §2 apply here. |
+| S5    | Orchestration + idempotency receipts             | orchestrationRuns/Steps/Reconciliations, directCreateReceipts, internalActionResults. Lease and indeterminate-state rules from §2 apply here.                                                                                                                                                                                |
+| S6    | Quote aggregate + blobs                          | `quotes` (Convex aggregate), quoteRevisions, quoteDeliveryAttempts, quoteMigrationRecords, quotePdfArtifacts + Convex file storage. Physical-id translation and blob verification from §1/§3 apply here.                                                                                                                     |
 
 Groups are built and tested incrementally. `completeness: complete` is only
 reachable after S6 verifies, and only Jarvis decides whether it is accepted.
 
 ## Relationship to the parked archive-v4 prototype
 
-An earlier prototype (`stash@{0}` on this machine) already implements, for the
-JSON provider only: empty-destination reservation with refusal, verbatim
-identity preservation, strict lossless readers, a lock-held coherent capture,
-two-way restore verification, and an isolated-restore completion marker. Those
-parts match §1 and are reusable.
+The original handoff describes a parked JSON-only prototype with empty-target
+reservation, verbatim logical identity, strict readers, lock-held capture,
+two-way verification and an isolated-restore completion marker. Its local
+`stash@{0}` reference is not a durable review artifact. Those reported behaviors
+must be verified against the actual S2–S3 candidate before reuse is accepted.
 
 It does **not** implement: the manifest, `completeness` gating, partial-archive
 refusal, any Convex-backed group, blob export/import, physical-id translation,
