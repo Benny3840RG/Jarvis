@@ -35,6 +35,11 @@ It does not grant merge approval or declare a durable Development mission comple
 The reviewer may be the same model family as the builder but is a separate
 invocation without the builder's conversation, writes or execution authority.
 Its conclusion remains advisory; it is not a GitHub approving review.
+The prepared prompt travels in bounded base64 chunks with a SHA-256 digest
+and is reconstructed into a file on the isolated review runner. This preserves
+the full admitted context without exceeding per-environment-entry limits.
+Only the separate trusted publisher has issue and pull-request write permissions
+for the advisory comment; the model runner retains read-only permissions.
 
 ## Limits and failure handling
 
