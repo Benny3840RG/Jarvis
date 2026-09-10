@@ -1062,6 +1062,7 @@ export const commit = mutation({
           to: request.to,
           sourceSubjectVersion: subject.subjectVersion,
           resultingSubjectVersion: subject.subjectVersion + 1,
+          ...(request.effectPayload ? { effectPayload: request.effectPayload } : {}),
           ...(request.approval ? { approvalId: request.approval.approvalId } : {}),
           ...(request.lease ? { leaseFencingToken: request.lease.fencingToken } : {}),
           ...(mergeReceiptKey ? { mergeReceiptKey } : {}),
