@@ -12,6 +12,7 @@
     "start:mcp": "node --import tsx src/mcp/main.ts",
     "start:preview": "node --import tsx src/preview/main.ts",
     "paddock": "node --import tsx src/tools/runPaddock.ts",
+    "monitor": "node --import tsx src/tools/runLiveWorkMonitor.ts",
     "agent:check": "node --import tsx src/agent/main.ts",
     "agent:repl": "node --import tsx src/agent/replMain.ts",
     "test": "concurrently -n node,convex -c auto \"npm:test:node\" \"npm:test:convex\"",
