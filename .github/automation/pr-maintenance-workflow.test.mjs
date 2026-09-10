@@ -46,7 +46,7 @@ test("publication is isolated from model execution and rechecks provider evidenc
     [...publishJob.matchAll(/secrets\.([A-Z_]+)/g)].map((m) => m[1]),
     ["JARVIS_SERVICE_TOKEN"],
   );
-  assert.match(publishJob, /publishReview/);
+  assert.match(publishJob, /publishSegmentedReview/);
   assert.match(publishJob, /github.workflow_sha/);
   assert.doesNotMatch(
     workflow,
@@ -65,11 +65,15 @@ test("every action is SHA pinned and every checkout drops credentials", () => {
   assert.match(workflow, /if: github.ref == 'refs\/heads\/main'/);
 });
 
-test("review context uses bounded chunks and a prompt file instead of one oversized action input", () => {
+test("review segments have bounded concurrency and exact manifest artifact bindings", () => {
   assert.match(reviewJob, /prompt-file:/);
+  assert.match(reviewJob, /max-parallel: 2/);
+  assert.match(reviewJob, /fail-fast: false/);
+  assert.match(reviewJob, /rebuildSegmentedReview/);
+  assert.match(reviewJob, /MANIFEST_DIGEST:/);
+  assert.match(reviewJob, /upload-artifact@[a-f0-9]{40}/);
+  assert.match(publishJob, /download-artifact@[a-f0-9]{40}/);
+  assert.match(publishJob, /publishSegmentedReview/);
+  assert.match(publishJob, /github.run_attempt/);
   assert.doesNotMatch(reviewJob, /prompt:|needs.prepare.outputs.prompt[ }]/);
-  for (let i = 0; i < 6; i++)
-    assert.ok(reviewJob.includes(`PROMPT_CHUNK_${i}:`));
-  assert.match(reviewJob, /PROMPT_DIGEST:/);
-  assert.match(publishJob, /pull-requests: write/);
 });

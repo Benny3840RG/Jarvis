@@ -44,13 +44,9 @@ jobs:
     outputs:
       selected: ${{ steps.prepare.outputs.selected }}
       prompt-ready: ${{ steps.prepare.outputs.prompt-ready }}
-      prompt-digest: ${{ steps.prepare.outputs.prompt-digest }}
-      prompt-0: ${{ steps.prepare.outputs.prompt-0 }}
-      prompt-1: ${{ steps.prepare.outputs.prompt-1 }}
-      prompt-2: ${{ steps.prepare.outputs.prompt-2 }}
-      prompt-3: ${{ steps.prepare.outputs.prompt-3 }}
-      prompt-4: ${{ steps.prepare.outputs.prompt-4 }}
-      prompt-5: ${{ steps.prepare.outputs.prompt-5 }}
+      manifest: ${{ steps.prepare.outputs.manifest }}
+      manifest-digest: ${{ steps.prepare.outputs.manifest-digest }}
+      segments: ${{ steps.prepare.outputs.segments }}
     steps:
       - name: Check out trusted workflow revision only
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -73,7 +69,7 @@ jobs:
         with:
           script: |
             const { pathToFileURL } = require('node:url');
-            const { sweep, prepareReview } = await import(pathToFileURL(
+            const { sweep, prepareSegmentedReview } = await import(pathToFileURL(
               `${process.env.GITHUB_WORKSPACE}/.github/automation/pr-maintenance-controller.mjs`,
             ).href);
             const { owner, repo } = context.repo;
@@ -90,14 +86,12 @@ jobs:
               return;
             }
             const identity = { pullNumber, headSha: process.env.HEAD_SHA, baseSha: process.env.BASE_SHA, fingerprint: process.env.EVIDENCE_FINGERPRINT };
-            const prompt = await prepareReview({ github, owner, repo, identity, runId: context.runId, runAttempt: Number(process.env.RUN_ATTEMPT) });
-            const { encodePrompt } = await import(pathToFileURL(
-              `${process.env.GITHUB_WORKSPACE}/.github/automation/review-prompt-transport.mjs`,
-            ).href);
-            const encoded = encodePrompt(prompt);
-            encoded.chunks.forEach((chunk, i) => core.setOutput(`prompt-${i}`, chunk));
-            core.setOutput('prompt-digest', encoded.digest);
-            core.setOutput('prompt-ready', prompt !== '');
+            const plan = await prepareSegmentedReview({ github, owner, repo, identity, runId: context.runId, runAttempt: Number(process.env.RUN_ATTEMPT) });
+            if (plan.blockedReason) core.warning(plan.blockedReason);
+            core.setOutput('manifest', plan.manifest ? JSON.stringify(plan.manifest) : 'null');
+            core.setOutput('manifest-digest', plan.digest || '');
+            core.setOutput('segments', JSON.stringify(plan.manifest ? plan.manifest.segments.map(s => s.index) : []));
+            core.setOutput('prompt-ready', Boolean(plan.manifest));
             core.setOutput('selected', 'true');
 
   review:
@@ -107,8 +101,11 @@ jobs:
     timeout-minutes: 20
     permissions:
       contents: read
-    outputs:
-      result: ${{ steps.reviewer.outputs.final-message }}
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        segment: ${{ fromJSON(needs.prepare.outputs.segments) }}
     steps:
       - name: Check out trusted socket compatibility control only
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -128,16 +125,24 @@ jobs:
           bundle="$actions_root/openai/codex-action/86365089eb2b84e0a8fb0717b304f8bdcb13b20e/dist/main.js"
           test -f "$bundle" && test ! -L "$bundle"
           node .github/automation/patch-codex-sockets.mjs "$bundle"
-      - name: Restore complete review context without oversized environment entries
+      - name: Reconstruct exact bounded segment on the trusted runner
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3
         env:
-          PROMPT_DIGEST: ${{ needs.prepare.outputs.prompt-digest }}
-          PROMPT_CHUNK_0: ${{ needs.prepare.outputs.prompt-0 }}
-          PROMPT_CHUNK_1: ${{ needs.prepare.outputs.prompt-1 }}
-          PROMPT_CHUNK_2: ${{ needs.prepare.outputs.prompt-2 }}
-          PROMPT_CHUNK_3: ${{ needs.prepare.outputs.prompt-3 }}
-          PROMPT_CHUNK_4: ${{ needs.prepare.outputs.prompt-4 }}
-          PROMPT_CHUNK_5: ${{ needs.prepare.outputs.prompt-5 }}
-        run: node .github/automation/review-prompt-transport.mjs "$RUNNER_TEMP/jarvis-independent-review/prompt.txt"
+          REVIEW_MANIFEST: ${{ needs.prepare.outputs.manifest }}
+          MANIFEST_DIGEST: ${{ needs.prepare.outputs.manifest-digest }}
+          SEGMENT_INDEX: ${{ matrix.segment }}
+        with:
+          script: |
+            const { pathToFileURL } = require('node:url');
+            const { writeFileSync } = require('node:fs');
+            const { rebuildSegmentedReview } = await import(pathToFileURL(`${process.env.GITHUB_WORKSPACE}/.github/automation/pr-maintenance-controller.mjs`).href);
+            const { segmentReceipt } = await import(pathToFileURL(`${process.env.GITHUB_WORKSPACE}/.github/automation/review-segments.mjs`).href);
+            const plan = await rebuildSegmentedReview({ github, ...context.repo, manifest:JSON.parse(process.env.REVIEW_MANIFEST), expectedDigest:process.env.MANIFEST_DIGEST });
+            const index = Number(process.env.SEGMENT_INDEX);
+            const receipt = segmentReceipt(plan,index,'');
+            const root = `${process.env.RUNNER_TEMP}/jarvis-independent-review`;
+            writeFileSync(`${root}/prompt.txt`,plan.prompts[index],{flag:'wx',mode:0o644});
+            writeFileSync(`${root}/binding.json`,JSON.stringify(receipt),{flag:'wx',mode:0o644});
       - name: Review supplied evidence without executing candidate code
         id: reviewer
         timeout-minutes: 15
@@ -149,10 +154,31 @@ jobs:
           permission-profile: ":read-only"
           safety-strategy: drop-sudo
           output-schema: |
-            {"type":"object","additionalProperties":false,"required":["verdict","summary","findings"],"properties":{"verdict":{"type":"string","enum":["pass","changes_requested","blocked"]},"summary":{"type":"string"},"findings":{"type":"array","items":{"type":"object","additionalProperties":false,"required":["file","line","severity","message"],"properties":{"file":{"type":"string"},"line":{"type":"integer"},"severity":{"type":"string","enum":["high","medium","low"]},"message":{"type":"string"}}}}}}
+            {"type":"object","additionalProperties":false,"required":["verdict","summary","findings","contextRequests"],"properties":{"contextRequests":{"type":"array","items":{"type":"string"}},"verdict":{"type":"string","enum":["pass","changes_requested","blocked"]},"summary":{"type":"string"},"findings":{"type":"array","items":{"type":"object","additionalProperties":false,"required":["file","line","severity","message"],"properties":{"file":{"type":"string"},"line":{"type":"integer"},"severity":{"type":"string","enum":["high","medium","low"]},"message":{"type":"string"}}}}}}
           allow-bot-users: github-actions[bot]
           model: gpt-5.6-luna
           effort: high
+
+      - name: Bind bounded model output to the trusted segment
+        env:
+          REVIEW_JSON: ${{ steps.reviewer.outputs.final-message }}
+        shell: bash
+        run: |
+          node --input-type=module - <<'JS'
+          import fs from 'node:fs';
+          const root = `${process.env.RUNNER_TEMP}/jarvis-independent-review`;
+          const receipt = JSON.parse(fs.readFileSync(`${root}/binding.json`,'utf8'));
+          const raw = process.env.REVIEW_JSON || '';
+          if(Buffer.byteLength(raw)>32768) throw new Error('Segment output exceeds bound.');
+          fs.writeFileSync(`${root}/result.json`,JSON.stringify({...receipt,raw}),{flag:'wx',mode:0o600});
+          JS
+      - name: Retain exact segment result for the isolated publisher
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: jarvis-review-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.segment }}
+          path: ${{ runner.temp }}/jarvis-independent-review/result.json
+          if-no-files-found: error
+          retention-days: 1
 
   publish:
     needs: [prepare, review]
@@ -172,6 +198,12 @@ jobs:
         with:
           ref: ${{ github.workflow_sha }}
           persist-credentials: false
+      - name: Read results from this workflow attempt only
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        continue-on-error: true
+        with:
+          pattern: jarvis-review-${{ github.run_id }}-${{ github.run_attempt }}-*
+          path: ${{ runner.temp }}/jarvis-review-results
       - name: Recheck evidence, publish advisory review and request bounded repair
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
@@ -180,20 +212,41 @@ jobs:
           BASE_SHA: ${{ inputs.expected_base_sha }}
           EVIDENCE_FINGERPRINT: ${{ inputs.evidence_fingerprint }}
           REVIEW_RESULT: ${{ needs.review.result }}
-          REVIEW_JSON: ${{ needs.review.outputs.result }}
+          REVIEW_MANIFEST: ${{ needs.prepare.outputs.manifest }}
+          MANIFEST_DIGEST: ${{ needs.prepare.outputs.manifest-digest }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
           CONVEX_DEPLOYMENT: ${{ vars.CONVEX_DEPLOYMENT }}
           CONVEX_URL: ${{ vars.CONVEX_URL }}
           JARVIS_SERVICE_TOKEN: ${{ secrets.JARVIS_SERVICE_TOKEN }}
         with:
           script: |
             const { pathToFileURL } = require('node:url');
-            const { publishReview } = await import(pathToFileURL(
+            const { publishSegmentedReview } = await import(pathToFileURL(
               `${process.env.GITHUB_WORKSPACE}/.github/automation/pr-maintenance-controller.mjs`,
             ).href);
-            const disposition = await publishReview({ github, ...context.repo,
+            const fs = require('node:fs');
+            const resultRoot = `${process.env.RUNNER_TEMP}/jarvis-review-results`;
+            let receipts = [];
+            try {
+              const entries = fs.readdirSync(resultRoot,{withFileTypes:true});
+              if(entries.length>16) throw new Error('Too many segment artifacts.');
+              receipts = entries.map(entry => {
+                if(!entry.isDirectory() || !new RegExp(`^jarvis-review-${context.runId}-${process.env.RUN_ATTEMPT}-[0-9]+$`).test(entry.name)) throw new Error('Unexpected artifact.');
+                const file = `${resultRoot}/${entry.name}/result.json`;
+                if(fs.readdirSync(`${resultRoot}/${entry.name}`).join() !== 'result.json' || !fs.lstatSync(file).isFile() || fs.statSync(file).size>70000) throw new Error('Invalid result artifact.');
+                const receipt = JSON.parse(fs.readFileSync(file,'utf8'));
+                if(String(receipt.index)!==entry.name.split('-').at(-1)) throw new Error('Artifact index mismatch.');
+                return receipt;
+              });
+            } catch { receipts = []; }
+            let manifest = null;
+            try { if(Buffer.byteLength(process.env.REVIEW_MANIFEST || '')>32768) throw new Error('Manifest exceeds bound.'); manifest = JSON.parse(process.env.REVIEW_MANIFEST || 'null'); }
+            catch { core.warning('Invalid review manifest; publishing blocked evidence.'); }
+            const disposition = await publishSegmentedReview({ github, ...context.repo,
               identity: { pullNumber: Number(process.env.PR_NUMBER), headSha: process.env.HEAD_SHA,
                 baseSha: process.env.BASE_SHA, fingerprint: process.env.EVIDENCE_FINGERPRINT },
-              rawReview: process.env.REVIEW_JSON, reviewResult: process.env.REVIEW_RESULT,
+              manifest, expectedDigest:process.env.MANIFEST_DIGEST,
+              receipts, runAttempt:Number(process.env.RUN_ATTEMPT), reviewResult: process.env.REVIEW_RESULT,
               runId: context.runId, serverUrl: context.serverUrl,
             });
             core.info(disposition);
