@@ -172,3 +172,12 @@ rather than an occasional operator action.
 - Pin only GitHub PR-detail reads to API 2022-11-28 because 2026-03-10 removed `merge_commit_sha`; preserve actual provider SHA checks for reconciliation and completion. Other requests retain their current API version.
 - Issue #493 live proof exposed the mismatch after a succeeded governed merge. Preserve the inconclusive observation; retry only after a fresh provider observation includes the actual merge SHA.
 - Remove the completion observer self-dependency using exact workflow/app/commit/branch/event provenance; retain all required CI and unrelated-failure gates, plus prior inconclusive proofs.
+
+## S4 bounded capture primitive (2026-09-11)
+
+- Added owner-scoped, one-transaction raw Convex capture for all 17 S4 tables,
+  preserving complete source rows and tagged Convex values with lossless checks.
+- This is capture material only: no `notesAndEvidence` archive coverage or
+  restored verification is credited. See [the S4 capture boundary](architecture/backup-v4-s4-capture.md).
+- Next: inert empty-target restore, typed references (including S5 links),
+  ordinary-store read-back and source/restored digest proof before integration.
