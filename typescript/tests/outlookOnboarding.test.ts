@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { request } from "node:http";
 import { describe, it } from "node:test";
 import { authorizeOutlookConnection } from "../src/auth/outlookOnboarding.js";
 import { resolveOutlookConnections } from "../src/auth/microsoftOutlookConnections.js";
@@ -32,6 +33,18 @@ describe("Outlook browser onboarding", () => {
               assert.equal(auth.searchParams.get("code_challenge_method"), "S256");
               assert.equal(auth.searchParams.get("prompt"), "select_account");
               const callback = new URL(auth.searchParams.get("redirect_uri")!);
+              const malformedStatus = await new Promise<number | undefined>((resolve, reject) => {
+                const req = request(
+                  { hostname: "127.0.0.1", port: callback.port, path: "http://[", method: "GET" },
+                  (res) => {
+                    res.resume();
+                    resolve(res.statusCode);
+                  },
+                );
+                req.once("error", reject);
+                req.end();
+              });
+              assert.equal(malformedStatus, 400);
               callback.searchParams.set("code", "test-code");
               callback.searchParams.set("state", "wrong");
               assert.equal((await fetch(callback)).status, 400);

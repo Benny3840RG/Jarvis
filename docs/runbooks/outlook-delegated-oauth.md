@@ -19,12 +19,12 @@ It does not add general outbound email.
 
 Outlook composition requires all of the following:
 
-| Variable | Requirement |
-| --- | --- |
-| `JARVIS_OUTLOOK_ENABLED` | Exact value `true`; absent or `false` keeps Outlook disabled |
-| `JARVIS_OUTLOOK_CLIENT_ID` | Microsoft app registration client ID for the approved personal-account delegated flow |
-| `JARVIS_OUTLOOK_MAILBOX` | Personal Outlook mailbox used by Graph |
-| `JARVIS_OUTLOOK_REFRESH_TOKEN_FILE` | Absolute path to the runtime refresh-token file |
+| Variable                            | Requirement                                                                           |
+| ----------------------------------- | ------------------------------------------------------------------------------------- |
+| `JARVIS_OUTLOOK_ENABLED`            | Exact value `true`; absent or `false` keeps Outlook disabled                          |
+| `JARVIS_OUTLOOK_CLIENT_ID`          | Microsoft app registration client ID for the approved personal-account delegated flow |
+| `JARVIS_OUTLOOK_MAILBOX`            | Personal Outlook mailbox used by Graph                                                |
+| `JARVIS_OUTLOOK_REFRESH_TOKEN_FILE` | Absolute path to the runtime refresh-token file                                       |
 
 Background reconciliation is independently disabled unless `JARVIS_RECONCILIATION_ENABLED=true` and its existing Convex/service-token configuration is complete. Enabling reconciliation without an Outlook adapter fails startup before the listener is ready.
 
@@ -99,11 +99,24 @@ The script installs locked Node dependencies without install scripts, then:
    Requests only delegated `offline_access Mail.ReadWrite Mail.Send` for Jarvis.
 5. Grants those delegated permissions for the business user using
    `consentType=Principal`; never `AllPrincipals` or application permissions.
-6. Saves non-secret setup progress immediately after each app creation under
-   `~/.config/jarvis/outlook/setup-state.json`. A retry checks the recorded app IDs
-   and grant instead of finding or adopting apps by display name. If a create call
-   succeeded remotely but its response/local save failed, inspect the tenant for
-   an orphan registration before retrying; remote creation is not transactional.
+6. Saves and flushes non-secret effect intent **before** each application,
+   service-principal or grant POST under
+   `~/.config/jarvis/outlook/setup-state.json`. A private process lock serializes
+   setup runs. Each new application has a persisted GUID marker in its display
+   name; recovery searches only that exact marker and requires one result with
+   the expected registration settings. Existing saved app IDs remain supported.
+   Principal and grant recovery uses their exact client/user/resource scope.
+   If a POST times out or its response/local save fails, rerunning performs
+   read-only reconciliation of that effect. Missing or ambiguous results stop
+   setup without another POST—even if the missing result might merely reflect
+   delayed provider visibility. Do not delete the state/intent to force a retry;
+   inspect the recorded operation in the tenant and resolve the uncertainty.
+   Legacy state without pre-effect intents can verify already existing objects,
+   but missing registrations, principals or grants require operator reconciliation
+   and are never recreated automatically.
+   Every collection read follows only same-resource Microsoft Graph pagination,
+   with limits of 20 pages and 1,000 rows; loops, foreign links and ambiguity stop
+   provisioning. Remote creation is not transactional.
 7. Opens neither tenant-wide user consent nor Security Defaults. A policy refusal
    remains a refusal; inspect the sign-in logs, do not weaken policy to proceed.
 8. Guides separate mailbox sign-ins through authorization-code + S256 PKCE with

@@ -88,7 +88,13 @@ export async function authorizeOutlookConnection(
   const server = createServer((req, res) => {
     res.setHeader("Cache-Control", "no-store");
     res.setHeader("Referrer-Policy", "no-referrer");
-    const url = new URL(req.url ?? "/", "http://localhost");
+    let url: URL;
+    try {
+      url = new URL(req.url ?? "/", "http://localhost");
+    } catch {
+      res.writeHead(400).end("Invalid callback.");
+      return;
+    }
     if (
       consumed ||
       req.method !== "GET" ||

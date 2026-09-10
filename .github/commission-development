@@ -1,7 +1,7 @@
 COMMISSION DEV
-request-id: phase1-totality-terra-model-20260905
-source: Phase 1 commissioning after binding Totality to the enabled deep-reasoning model
+request-id: issue-493-handover-20260910-2b70ed3
+source: Owner instruction to finish commissioning the reviewed Development handover controls
 scope: exact-main verification, authorised Convex development sync, self-cleaning smoke, HTTP/provider boundary checks, Totality probe, backup verification
-expected-main-baseline: merge commit containing reviewed trusted-model identity correction on current main
-issue: 54
+expected-main-baseline: reviewed PRs 499 and 497
+issue: 493
 production: not authorised
