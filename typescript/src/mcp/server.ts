@@ -386,6 +386,68 @@ const activityTimelineResultSchema = z.discriminatedUnion("status", [
   }),
 ]);
 
+// Read-only. Each node's `detail` is composed server-side (see
+// `src/development/liveWork.ts`) from render-safe fields only — subject state,
+// repository/branch, lease owner, Omega criteria counts — never a raw event
+// payload. A node whose data is not durably recorded is `"unavailable"`, never
+// a fabricated value.
+const liveWorkNodeSchema = z.object({
+  key: z.enum(["mission", "stage", "issue", "pr", "worker", "review", "ci", "merge", "omega"]),
+  label: z.string(),
+  status: z.enum(["done", "active", "pending", "blocked", "unavailable"]),
+  detail: z.string(),
+});
+
+const liveWorkPipelineSchema = z.object({
+  candidate: z
+    .object({
+      pullRequestNumber: z.number().int().positive(),
+      headSha: z.string(),
+      receiptId: z.string(),
+    })
+    .nullable(),
+  rail: z.array(
+    z.object({ state: z.string(), label: z.string(), status: liveWorkNodeSchema.shape.status }),
+  ),
+  completionLabel: z.string(),
+  omegaReadiness: z.object({ allowed: z.boolean(), failures: z.array(z.string()) }),
+  subjectVersion: z.number().nullable(),
+  orchestrationRunId: z.string().nullable(),
+  orchestrationNodeId: z.string().nullable(),
+  fencingToken: z.number().nullable(),
+  workerStep: z
+    .object({
+      nodeId: z.string(),
+      operationId: z.string().nullable().optional(),
+      state: z.string(),
+      leaseOwner: z.string().nullable().optional(),
+      leaseExpiresAt: z.number().nullable().optional(),
+    })
+    .nullable(),
+  subjectId: z.string(),
+  state: z.string(),
+  repository: z.string().nullable(),
+  branch: z.string().nullable(),
+  objective: z.string().nullable(),
+  missionInFlight: z.boolean(),
+  nodes: z.array(liveWorkNodeSchema),
+  events: z.array(
+    z.object({
+      eventId: z.string(),
+      evidenceIds: z.array(z.string()),
+      at: z.string(),
+      summary: z.string(),
+    }),
+  ),
+  updatedAt: z.string(),
+  generatedAt: z.string(),
+});
+
+const liveWorkResultSchema = z.discriminatedUnion("status", [
+  z.object({ status: z.literal("available"), pipeline: liveWorkPipelineSchema.nullable() }),
+  z.object({ status: z.literal("unavailable"), reason: z.string() }),
+]);
+
 const layerSchema = z.object({
   status: z.enum(["ready", "partial", "inactive", "blocked"]),
   reason: z.string().optional(),
@@ -463,6 +525,9 @@ const dashboardOutputSchema = {
   // "unavailable"}` — and must never be rendered as "nothing needs attention".
   inbox: operationsInboxSchema.nullable(),
   activity: activityTimelineResultSchema.nullable(),
+  // `null` means the live-work endpoint itself could not be reached — distinct
+  // from `{status: "unavailable"}` (no mission in flight / provider not Convex).
+  liveWork: liveWorkResultSchema.nullable(),
   counts: countsSchema,
 };
 
@@ -1493,6 +1558,37 @@ export function createJarvisMcpServer(client: JarvisApiClient): McpServer {
         return {
           content: [{ type: "text" as const, text: summary }],
           structuredContent: { activity },
+        };
+      } catch (error: unknown) {
+        return safeError(error);
+      }
+    },
+  );
+
+  registerAppTool(
+    server,
+    "get_development_live_work",
+    {
+      title: "Get the live-work pipeline",
+      description:
+        'Use this when Benny asks what Jarvis is building right now, which mission is in flight, or whether it\'s stuck on review, CI, merge, or ΩΣ completion. Read-only projection of the single in-flight development mission projected onto the canonical Development lifecycle rail with evidence detail cards. Individual nodes with no durable data report status "unavailable", never a fabricated value. When nothing is running the result is {status: "available", pipeline: null}; a provider/endpoint fault is {status: "unavailable", reason}.',
+      inputSchema: {},
+      outputSchema: { liveWork: liveWorkResultSchema },
+      annotations: readAnnotations,
+      _meta: { ui: { visibility: ["model"] } },
+    },
+    async () => {
+      try {
+        const liveWork = await client.getDevelopmentLiveWork();
+        const summary =
+          liveWork.status === "available"
+            ? liveWork.pipeline
+              ? `${liveWork.pipeline.objective ?? liveWork.pipeline.subjectId} — stage ${liveWork.pipeline.state}.`
+              : "NO MISSION IN FLIGHT"
+            : `Live-work pipeline unavailable: ${liveWork.reason}`;
+        return {
+          content: [{ type: "text" as const, text: summary }],
+          structuredContent: { liveWork },
         };
       } catch (error: unknown) {
         return safeError(error);

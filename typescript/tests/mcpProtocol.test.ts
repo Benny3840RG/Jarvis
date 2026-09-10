@@ -216,6 +216,7 @@ describe("Jarvis MCP preview protocol", () => {
         quoteRegister: { status: "ready", quotes: [] },
         inbox: null,
         activity: null,
+        liveWork: null,
         counts: {
           activeTasks: 1,
           completedTasks: 0,

@@ -222,3 +222,23 @@ The route remains HTTP-only (`x-mcp-tool.exposed=false`) until a governed action
 binding exists. This is not yet a client-ready invoice document generator,
 automatic invoice-number consumer, bank/payment-provider reconciliation, credit
 or adjustment ledger, Convex transaction, or issued-artifact immutability proof.
+
+## Production continuation — Development Live Work (2026-09-11)
+
+Base revision: `fae9949fc1f9d1ce15729608384a6d32ec40b8cb`.
+Candidate results and eventual merge identity are maintained in the
+[production completion ledger](../operations/production-completion-ledger.md).
+
+- JARVIS-001 / JARVIS-006 / JARVIS-018: the existing ΩΣ policy and persistence
+  transition remain completion authority; HTTP/MCP/HUD project one read model.
+- Selection regressions cover idle, terminal exclusion, ambiguous active subjects,
+  old active subjects behind terminal history, explicit ΩΣ binding, and bounded
+  latest-event reads. No mission is selected by recency alone.
+- Renderer and real MCP-process scenarios distinguish unavailable, idle, repair,
+  indeterminate, merged/not-ready, synthetic ready, and persisted-state COMPLETE
+  rendering. Synthetic snapshots are not live provider completion evidence.
+- Restore-marker regressions prove forged planned filenames and late non-file
+  entries are rejected before any destination content is removed.
+- Status remains partial: configured development Convex did not yet expose the new
+  query at initial inspection; production and external commissioning are not
+  established by local tests. The read model does not invent missing uncertainty.

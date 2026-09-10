@@ -358,6 +358,71 @@ describe("archive v4 restore — an interruption is recoverable, not just refuse
 });
 
 describe("archive v4 restore — recovery never touches what it did not write", () => {
+  for (const alteration of ["extra-file", "missing-file", "duplicate-file", "contract-version"]) {
+    it(`refuses a changed recovery marker (${alteration}) without deleting any files`, async () => {
+      const archive = await captureFixture();
+      const dir = await scratch();
+      const destination = path.join(dir, "restore");
+      await assert.rejects(
+        restoreArchiveV4(archive, destination, { allowPartial: true, injectAfterWrite: "state" }),
+        /Injected failure/,
+      );
+      const markerPath = path.join(destination, RESTORE_IN_PROGRESS_MARKER);
+      const marker = JSON.parse(await readFile(markerPath, "utf8")) as {
+        contractVersion: string;
+        plannedFiles: string[];
+      };
+      if (alteration === "extra-file") {
+        await writeFile(path.join(destination, "operator-notes.txt"), "do not delete", "utf8");
+        marker.plannedFiles.push("operator-notes.txt");
+      } else if (alteration === "missing-file") {
+        marker.plannedFiles.pop();
+      } else if (alteration === "duplicate-file") {
+        marker.plannedFiles.push(marker.plannedFiles[0]!);
+      } else {
+        marker.contractVersion = "unexpected-contract";
+      }
+      await writeFile(markerPath, JSON.stringify(marker), "utf8");
+      const before = await contentsOf(destination);
+      await assert.rejects(
+        restoreArchiveV4(archive, destination, { allowPartial: true, resume: true }),
+        /recovery marker does not match the archive/,
+      );
+      assert.deepEqual(await contentsOf(destination), before);
+    });
+  }
+
+  it("validates all entry types before deleting any interrupted restore output", async () => {
+    const archive = await captureFixture();
+    const dir = await scratch();
+    const destination = path.join(dir, "restore");
+    await assert.rejects(
+      restoreArchiveV4(archive, destination, { allowPartial: true, injectAfterWrite: "clients" }),
+      /Injected failure/,
+    );
+    const markerPath = path.join(destination, RESTORE_IN_PROGRESS_MARKER);
+    const markerBefore = await readFile(markerPath, "utf8");
+    const statePath = path.join(destination, "jarvis-state.json");
+    await rm(statePath);
+    await mkdir(statePath);
+    const namesBefore = (await readdir(destination)).sort();
+    const filesBefore = new Map<string, string>();
+    for (const name of namesBefore) {
+      if (name !== "jarvis-state.json")
+        filesBefore.set(name, await readFile(path.join(destination, name), "utf8"));
+    }
+    await assert.rejects(
+      restoreArchiveV4(archive, destination, { allowPartial: true, resume: true }),
+      /is not a regular file/,
+    );
+    assert.deepEqual((await readdir(destination)).sort(), namesBefore);
+    assert.equal(await readFile(markerPath, "utf8"), markerBefore);
+    for (const [name, content] of filesBefore) {
+      assert.equal(await readFile(path.join(destination, name), "utf8"), content);
+    }
+    assert.equal((await stat(statePath)).isDirectory(), true);
+  });
+
   it("refuses to resume a directory holding a file the restore did not write", async () => {
     const archive = await captureFixture();
     const dir = await scratch();

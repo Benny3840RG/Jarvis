@@ -526,7 +526,7 @@ export function createGitHubDevelopmentClientFromEnv(
   return token ? new FetchGitHubDevelopmentClient(token) : null;
 }
 
-const githubMergeArguments = z.object({
+export const githubMergeArguments = z.object({
   subjectId: z.string().trim().min(1).max(200),
   transitionId: z.literal("DEV_TRANSITION_READY_TO_MERGE_TO_MERGED"),
   repository: z.string().regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/),

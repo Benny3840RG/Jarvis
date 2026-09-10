@@ -202,3 +202,62 @@ export const developmentCommitOutcomeValidator = v.object({
     ),
   ),
 });
+
+/**
+ * Purpose-built projection for the operator HUD live-work pipeline
+ * (`src/development/liveWork.ts`). Deliberately not the raw documents: it
+ * carries only render-safe fields and, critically, never the orchestration
+ * `leaseToken`. Omega/orchestration enums are inlined (small, stable) rather
+ * than importing cross-domain validator modules.
+ */
+export const liveWorkSnapshotValidator = v.object({
+  candidate: v.union(
+    v.null(),
+    v.object({ pullRequestNumber: v.number(), headSha: v.string(), receiptId: v.string() }),
+  ),
+  omegaReadiness: v.object({ allowed: v.boolean(), failures: v.array(v.string()) }),
+  subject: v.object({
+    subjectVersion: v.number(),
+    orchestrationRunId: v.optional(v.string()),
+    orchestrationNodeId: v.optional(v.string()),
+    fencingToken: v.optional(v.number()),
+    subjectId: v.string(),
+    state: developmentStateValidator,
+    repository: v.optional(v.string()),
+    branch: v.optional(v.string()),
+    updatedAt: v.number(),
+  }),
+  events: v.array(
+    v.object({
+      eventId: v.string(),
+      eventType: developmentEventTypeValidator,
+      transitionId: v.optional(v.string()),
+      occurredAt: v.string(),
+      from: v.optional(v.string()),
+      to: v.optional(v.string()),
+      reasonCodes: v.array(v.string()),
+      hasMergeReceipt: v.boolean(),
+      evidenceIds: v.array(v.string()),
+    }),
+  ),
+  omegaMission: v.union(
+    v.null(),
+    v.object({
+      missionId: v.string(),
+      objective: v.string(),
+      state: v.string(),
+      acceptanceCriteria: v.array(v.object({ status: v.string() })),
+    }),
+  ),
+  workerStep: v.union(
+    v.null(),
+    v.object({
+      nodeId: v.string(),
+      operationId: v.union(v.string(), v.null()),
+      state: v.string(),
+      leaseOwner: v.union(v.string(), v.null()),
+      leaseExpiresAt: v.union(v.number(), v.null()),
+    }),
+  ),
+  generatedAt: v.string(),
+});

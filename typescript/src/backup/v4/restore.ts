@@ -198,12 +198,16 @@ async function discardInterruptedRestore(
   archive: ArchiveV4,
   marker: InProgressMarker,
 ): Promise<void> {
-  const removable = new Set<string>([
-    ...plannedFiles(archive).map((key) => FILENAMES[key]),
-    ...marker.plannedFiles,
-    MANIFEST_FILE,
-    RESTORE_IN_PROGRESS_MARKER,
-  ]);
+  const expectedFiles = plannedFiles(archive).map((key) => FILENAMES[key]);
+  if (
+    marker.contractVersion !== archive.manifest.contractVersion ||
+    !isDeepStrictEqual(marker.plannedFiles, expectedFiles)
+  ) {
+    throw new StrictBackupError(
+      `Refusing to resume the restore at ${dest}: its recovery marker does not match the archive. Inspect the directory; no files were removed.`,
+    );
+  }
+  const removable = new Set<string>([...expectedFiles, MANIFEST_FILE, RESTORE_IN_PROGRESS_MARKER]);
   const entries = await fs.readdir(dest, { withFileTypes: true });
   const foreign = entries.filter((entry) => !removable.has(entry.name)).map((entry) => entry.name);
   if (foreign.length > 0) {
@@ -217,6 +221,10 @@ async function discardInterruptedRestore(
         `Refusing to resume the restore at ${dest}: ${entry.name} is not a regular file.`,
       );
     }
+  }
+  // Validate the entire directory before removing anything: a later non-file
+  // must not strand earlier output without its recovery marker.
+  for (const entry of entries) {
     await fs.rm(path.join(dest, entry.name), { force: true });
   }
   await fsyncDir(dest);

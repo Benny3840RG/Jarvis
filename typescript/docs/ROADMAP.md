@@ -48,14 +48,22 @@ it at the end of every session.
   OIDC provider, production deployment approval). These need operator-supplied
   credentials/decisions and are not actionable by an autonomous coding session.
 
-## Archive v4 manifest review (2026-09-10)
+## Production reconciliation (2026-09-11)
 
-- S1 adds strict manifest parsing, coverage metadata and SHA-256 digest format
-  validation. Full recovery reparses the manifest and refuses forged completeness.
-- Every manifest remains partial until a real restore verifier is implemented;
-  group presence and reference descriptions do not prove recovery integrity.
-- Next: S2 core/memory capture and isolated restore, then S3 business records
-  and settings; complete recovery remains gated on the later domain/verifier work.
+Base: `fae9949fc1f9d1ce15729608384a6d32ec40b8cb` (PR #501).
+
+- Archive v4 captures core, memory, business records and settings. The isolated
+  restore verifier reads ordinary stores and verifies references and digests.
+  The old S1-only/S2-next status is superseded by merged #492 and #501.
+- Complete recovery remains unavailable: notes/evidence, durable orchestration,
+  quote aggregates/delivery history and artifact recovery still need capture,
+  domain-aware restoration and read-back proof. Group presence alone is not proof.
+- Development Live Work is being completed on the existing Convex/HTTP/MCP path.
+  Idle, unavailable and ambiguous selection are distinct; ΩΣ readiness cannot
+  commit COMPLETE. Current ΩΣ storage does not persist residual uncertainty,
+  so the read-only query honestly reports that missing readiness input.
+- Current evidence and remaining commissioning gates are recorded in
+  [the production ledger](../../docs/operations/production-completion-ledger.md).
 
 ## This session's work
 
@@ -112,17 +120,11 @@ rather than an occasional operator action.
 
 ## Next steps
 
-1. **Phase 2 of backup coverage: the cross-referenced business domains.**
-   Clients, quotes, invoices, projects, properties, enquiries, and errands
-   are NOT in the backup archive. These are harder than phase 1: they're
-   densely cross-referenced by id (a quote holds `clientId`; an invoice holds
-   `quoteId` and `clientId`; a project can hold both). Restoring them safely
-   needs the explicit reference inventory in
-   [the v4 contract](architecture/backup-v4-contract.md): preserve logical IDs
-   in an empty destination and translate platform-generated IDs, including
-   string-typed references, with table-scoped maps. Existing `add()` APIs do
-   not necessarily preserve IDs. Verify the complete reference graph rather
-   than applying an untyped global string replacement.
+1. **Complete remaining archive v4 domains.** Core/memory and cross-referenced
+   business records are implemented in v4. Next are notes/evidence and durable
+   orchestration, including replay identities and reference validation. Preserve
+   logical IDs in an empty destination; translate platform IDs with typed,
+   table-scoped maps. Follow [the v4 contract](architecture/backup-v4-contract.md).
 2. **Quote delivery / PDF artifact backup.** The delivery-attempt/outcome ledger
    is authoritative history, including failed and indeterminate outcomes;
    re-sending cannot restore it. PDF bytes are only conditionally regenerable
