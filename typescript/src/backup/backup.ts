@@ -104,7 +104,7 @@ function cloneJson<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
 }
 
-function parseTask(value: unknown, index: number): Task {
+export function parseTask(value: unknown, index: number): Task {
   if (!isRecord(value)) throw new Error(`Backup task ${index} must be an object.`);
   if (typeof value.id !== "string" || value.id.length === 0) {
     throw new Error(`Backup task ${index} has an invalid id.`);
@@ -130,7 +130,7 @@ function parseTask(value: unknown, index: number): Task {
   };
 }
 
-function parseReminder(value: unknown, index: number, version: 1 | 2): Reminder {
+export function parseReminder(value: unknown, index: number, version: 1 | 2): Reminder {
   if (!isRecord(value)) throw new Error(`Backup reminder ${index} must be an object.`);
   if (typeof value.id !== "string" || value.id.length === 0) {
     throw new Error(`Backup reminder ${index} has an invalid id.`);
@@ -206,7 +206,7 @@ function parseReminder(value: unknown, index: number, version: 1 | 2): Reminder 
   };
 }
 
-function parseBuild(value: unknown, index: number): Build {
+export function parseBuild(value: unknown, index: number): Build {
   if (!isRecord(value)) throw new Error(`Backup build ${index} must be an object.`);
   if (typeof value.id !== "string" || value.id.length === 0) {
     throw new Error(`Backup build ${index} has an invalid id.`);
@@ -254,7 +254,7 @@ function parseBuild(value: unknown, index: number): Build {
   };
 }
 
-function parseBuildLogEntry(value: unknown, index: number): BuildLogEntry {
+export function parseBuildLogEntry(value: unknown, index: number): BuildLogEntry {
   if (!isRecord(value)) throw new Error(`Backup build log ${index} must be an object.`);
   if (typeof value.id !== "string" || value.id.length === 0) {
     throw new Error(`Backup build log ${index} has an invalid id.`);
@@ -298,7 +298,7 @@ function parseBuildLogEntry(value: unknown, index: number): BuildLogEntry {
   };
 }
 
-function parseUpgrade(value: unknown, index: number): Upgrade {
+export function parseUpgrade(value: unknown, index: number): Upgrade {
   if (!isRecord(value)) throw new Error(`Backup upgrade ${index} must be an object.`);
   if (typeof value.id !== "string" || value.id.length === 0) {
     throw new Error(`Backup upgrade ${index} has an invalid id.`);
@@ -376,7 +376,7 @@ function parseUpgrade(value: unknown, index: number): Upgrade {
   };
 }
 
-function parseAsset(value: unknown, index: number): Asset {
+export function parseAsset(value: unknown, index: number): Asset {
   if (!isRecord(value)) throw new Error(`Backup asset ${index} must be an object.`);
   if (typeof value.id !== "string" || value.id.length === 0) {
     throw new Error(`Backup asset ${index} has an invalid id.`);
@@ -422,7 +422,7 @@ function parseAsset(value: unknown, index: number): Asset {
   };
 }
 
-function parsePreference(value: unknown, index: number): Preference {
+export function parsePreference(value: unknown, index: number): Preference {
   if (!isRecord(value)) throw new Error(`Backup preference ${index} must be an object.`);
   if (typeof value.id !== "string" || value.id.length === 0) {
     throw new Error(`Backup preference ${index} has an invalid id.`);
@@ -455,7 +455,7 @@ function parsePreference(value: unknown, index: number): Preference {
   };
 }
 
-function assertUniqueIds(records: Array<{ id: string }>, name: string): void {
+export function assertUniqueIds(records: Array<{ id: string }>, name: string): void {
   const ids = new Set<string>();
   for (const record of records) {
     if (ids.has(record.id))

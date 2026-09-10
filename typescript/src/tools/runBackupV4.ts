@@ -1,0 +1,135 @@
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+
+import {
+  buildArchiveV4,
+  readArchiveV4File,
+  writeArchiveV4File,
+  type ArchiveV4,
+} from "../backup/v4/archive.js";
+import { captureJsonGroups, resolveJsonSourceConfig } from "../backup/v4/jsonSource.js";
+import { restoreArchiveV4 } from "../backup/v4/restore.js";
+import { StrictBackupError } from "../backup/strictValues.js";
+import type { ArchiveManifest } from "../backup/archiveManifest.js";
+
+/**
+ * Archive v4 CLI surface, kept in its own module so the v1-v3 commands in
+ * `runBackup.ts` stay exactly as they were. v4 is additive in every sense: new
+ * subcommand names, its own argument shape, and no shared code path with the
+ * legacy export/verify/restore flow.
+ */
+
+const ARCHIVE_V4_COMMANDS = ["export-v4", "verify-v4", "restore-v4"] as const;
+
+export type ArchiveV4Command = (typeof ARCHIVE_V4_COMMANDS)[number];
+
+export function isArchiveV4Command(value: string): value is ArchiveV4Command {
+  return (ARCHIVE_V4_COMMANDS as readonly string[]).includes(value);
+}
+
+export function archiveV4Usage(): string[] {
+  return [
+    "  npm run backup -- export-v4 <file>",
+    "  npm run backup -- verify-v4 <file>",
+    "  npm run backup -- restore-v4 <file> <empty-destination-dir> [--allow-partial]",
+    "",
+    "Archive v4 is a separate, additive format. This stage covers the core and",
+    "memory groups from JSON storage only, so every v4 archive it writes is",
+    "coverage: partial — the full-recovery restore path refuses it, and a staged",
+    "restore must say --allow-partial to acknowledge it is not a recovery.",
+  ];
+}
+
+function describeCoverage(manifest: ArchiveManifest): string {
+  const absent = manifest.coverage.absent;
+  return (
+    `completeness=${manifest.completeness}` +
+    ` present=[${manifest.coverage.present.join(", ")}]` +
+    (absent.length > 0 ? ` absent=[${absent.join(", ")}]` : "")
+  );
+}
+
+function describeCounts(archive: ArchiveV4): string {
+  return archive.manifest.groups
+    .map(
+      (entry) =>
+        `${entry.group}{${Object.entries(entry.counts)
+          .map(([domain, count]) => `${domain}=${String(count)}`)
+          .join(", ")}}`,
+    )
+    .join(" ");
+}
+
+async function exportArchive(filePath: string): Promise<void> {
+  const paths = resolveJsonSourceConfig();
+  const capture = await captureJsonGroups(paths);
+  const archive = buildArchiveV4(capture, new Date());
+  await writeArchiveV4File(filePath, archive);
+  console.log(
+    `Archive v4 written: ${filePath} — ${describeCoverage(archive.manifest)}; ${describeCounts(archive)}.`,
+  );
+}
+
+/**
+ * Proves the archive restores, by materialising it into a throwaway directory
+ * and running the same two-way verification a real restore runs. The temporary
+ * directory is removed whether or not verification passed; live storage is never
+ * read or written.
+ */
+async function verifyArchive(filePath: string): Promise<void> {
+  const archive = await readArchiveV4File(filePath);
+  const scratch = await mkdtemp(path.join(tmpdir(), "jarvis-archive-v4-verify-"));
+  try {
+    await restoreArchiveV4(archive, path.join(scratch, "restore"), { allowPartial: true });
+  } finally {
+    await rm(scratch, { recursive: true, force: true });
+  }
+  console.log(
+    `Archive v4 verified in isolated storage: ${filePath} — ${describeCoverage(archive.manifest)}; ${describeCounts(archive)}.`,
+  );
+}
+
+async function restoreArchive(
+  filePath: string,
+  destination: string,
+  allowPartial: boolean,
+): Promise<void> {
+  const archive = await readArchiveV4File(filePath);
+  if (archive.manifest.completeness === "partial" && !allowPartial) {
+    throw new StrictBackupError(
+      `Archive ${filePath} is partial (absent: ${archive.manifest.coverage.absent.join(", ")}). ` +
+        "The full-recovery path refuses a partial archive. Re-run with --allow-partial only if you " +
+        "intend a staged development restore, which is not a recovery.",
+    );
+  }
+  const result = await restoreArchiveV4(archive, destination, { allowPartial });
+  console.log(
+    `Archive v4 restored into ${result.destination} — ${describeCoverage(result.manifest)}; ${describeCounts(archive)}.`,
+  );
+  console.log(`Completion marker: ${result.markerPath}`);
+  if (result.manifest.completeness === "partial") {
+    console.log(
+      "This restore is NOT a recovery: the archive was partial and was materialised under --allow-partial.",
+    );
+  }
+}
+
+export async function runArchiveV4Command(
+  command: ArchiveV4Command,
+  args: readonly string[],
+  usage: () => never,
+): Promise<void> {
+  if (command === "export-v4" || command === "verify-v4") {
+    const [filePath, ...extra] = args;
+    if (!filePath || extra.length > 0) usage();
+    if (command === "export-v4") await exportArchive(filePath);
+    else await verifyArchive(filePath);
+    return;
+  }
+
+  const [filePath, destination, ...flags] = args;
+  if (!filePath || !destination) usage();
+  if (flags.some((flag) => flag !== "--allow-partial")) usage();
+  await restoreArchive(filePath, destination, flags.includes("--allow-partial"));
+}
