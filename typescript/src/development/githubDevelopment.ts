@@ -75,11 +75,25 @@ function mainCheckVerdict(
     }
     if (check.conclusion !== "success") return "failed";
   }
+  // The completion observer consumes this verdict: counting its own previous
+  // failures creates a cycle (for example, while residual uncertainty is unset).
+  // Exempt only its exact authenticated producer; all other failures still block.
+  const isCompletionObserver = (check: GitHubCommitCheckObservation) =>
+    check.name === "observe" &&
+    check.appSlug === "github-actions" &&
+    Number.isSafeInteger(check.id) &&
+    check.id! > 0 &&
+    check.workflowPath === ".github/workflows/jarvis-development-completion.yml" &&
+    check.workflowBranch === baseBranch &&
+    ["workflow_run", "workflow_dispatch", "schedule", "pull_request"].includes(
+      check.workflowEvent ?? "",
+    );
   // Additional failed checks still invalidate completion; unrelated skipped
   // checks cannot supply missing required coverage.
   if (
     checks.some(
       (check) =>
+        !isCompletionObserver(check) &&
         check.status === "completed" &&
         !["success", "neutral", "skipped"].includes(check.conclusion ?? ""),
     )
@@ -440,7 +454,10 @@ export class FetchGitHubDevelopmentClient implements GitHubDevelopmentClient {
         let workflowPath: string | undefined;
         let workflowEvent: string | undefined;
         let workflowBranch: string | undefined;
-        if (requiredMainCheck(check.name) && check.app?.slug === "github-actions") {
+        if (
+          (requiredMainCheck(check.name) || check.name === "observe") &&
+          check.app?.slug === "github-actions"
+        ) {
           const url = new URL(check.details_url || check.html_url || "https://invalid.invalid");
           const match = /^\/([^/]+)\/([^/]+)\/actions\/runs\/(\d+)(?:\/|$)/.exec(url.pathname);
           if (

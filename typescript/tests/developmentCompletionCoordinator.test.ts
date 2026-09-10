@@ -283,3 +283,54 @@ test("failed then green observations do not leave an immutable failed completion
   await coordinator.observeAndRequestCompletion(input);
   assert.deepEqual(gateway.calls, ["proof:inconclusive", "proof:pass", "omega:complete"]);
 });
+
+for (const defect of [
+  "none",
+  "wrong-path",
+  "wrong-app",
+  "wrong-event",
+  "wrong-branch",
+  "wrong-name",
+  "missing-id",
+]) {
+  test(`completion cannot depend on its own observer, with exact provenance: ${defect}`, async () => {
+    const provider = github();
+    const checks = await provider.getCommitChecks({
+      repository: "Benny3840RG/Jarvis",
+      sha: mergeSha,
+      signal: new AbortController().signal,
+    });
+    provider.getCommitChecks = async () => [
+      ...checks,
+      {
+        id: defect === "missing-id" ? undefined : 100,
+        name: defect === "wrong-name" ? "other-check" : "observe",
+        status: "completed",
+        conclusion: "failure",
+        appSlug: defect === "wrong-app" ? "untrusted" : "github-actions",
+        workflowPath:
+          defect === "wrong-path"
+            ? ".github/workflows/other.yml"
+            : ".github/workflows/jarvis-development-completion.yml",
+        workflowEvent: defect === "wrong-event" ? "push" : "workflow_run",
+        workflowBranch: defect === "wrong-branch" ? "other" : "main",
+      },
+    ];
+    const gateway = new Gateway();
+    const result = await new GitHubDevelopmentCompletionCoordinator(
+      provider,
+      gateway,
+    ).observeAndRequestCompletion({
+      missionId: "mission-1",
+      repository: "Benny3840RG/Jarvis",
+      pullRequestNumber: 42,
+      baseBranch: "main",
+      reviewedHeadSha: headSha,
+      criterionId: "post-merge-ci",
+      residualUncertainty: 0.01,
+      signal: new AbortController().signal,
+    });
+    assert.equal(result.status, defect === "none" ? "passed" : "failed");
+    assert.equal(gateway.calls.includes("omega:complete"), defect === "none");
+  });
+}

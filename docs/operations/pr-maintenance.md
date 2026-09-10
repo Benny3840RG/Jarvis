@@ -195,3 +195,10 @@ the current version. Completion still requires an actual provider merge SHA,
 the exact reviewed head, the succeeded governed receipt and trusted main checks.
 A missing SHA is inconclusive evidence, never permission to infer a merge or
 replay it. See [GitHub breaking changes](https://docs.github.com/en/rest/about-the-rest-api/breaking-changes).
+
+Completion does not use its own observer job as build evidence. Only the exact
+`observe` job from the authenticated `jarvis-development-completion.yml` workflow,
+bound to the observed commit, main branch and a declared trigger, is excluded
+from additional failed checks. Required build/security checks and every unrelated
+failure still block completion. Earlier inconclusive proofs and failed workflow
+runs remain intact.
