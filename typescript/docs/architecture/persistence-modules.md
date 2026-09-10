@@ -6,6 +6,7 @@ runtime behaviour belongs in the focused modules below.
 | Module                 | Responsibility                                                        |
 | ---------------------- | --------------------------------------------------------------------- |
 | `types.ts`             | Shared records, provider contracts, snapshots, and restore results    |
+| `assistantState.ts`    | Shared assistant-state validation before provider state writes        |
 | `document.ts`          | JSON document versions, validation, migration, and defensive cloning  |
 | `jsonPersistence.ts`   | JSON CRUD plus atomic snapshot and empty-target restore               |
 | `jsonFileLock.ts`      | Cross-process JSON writer ownership, timeout, and stale-lock recovery |
@@ -24,8 +25,26 @@ runtime behaviour belongs in the focused modules below.
 ## Behavioural invariants
 
 - Existing version 1 and unversioned JSON documents remain readable.
+- Both provider classes reject null, arrays, and primitive assistant-state
+  inputs before any write or remote mutation. Empty objects and extensible
+  nested state remain supported, for example `saveState({ lastIntent: "help" })`.
+  The guard also rejects non-finite numbers in nested objects/arrays and
+  circular references before either provider writes. Repeated references to
+  the same non-circular object are allowed. This prevents JSON from silently
+  replacing non-finite numbers with null. It is not a complete serialization
+  validator and does not replace validation on direct Convex server calls.
+- JSON saves revalidate after their queued lock/read waits and capture serialized
+  bytes before filesystem writes yield, so pending caller mutations cannot slip
+  an unchecked non-finite value or cycle into the saved state.
 - Current writes use version 2 and preserve normalized reminder timezone data.
+- Numeric task/reminder creation timestamps must be finite in every document
+  version. Missing legacy timestamps still default to zero. Overflowing JSON
+  numbers (such as `1e400`) trigger the existing corrupt-file quarantine, which
+  preserves the original bytes for recovery.
 - JSON mutations reread the latest document after acquiring the cross-process lock.
+- Task completion remains idempotent: repeats return the completed task. The
+  JSON provider checks completion after its locked reread and returns a copy
+  without replacing the state file or migrating a legacy document on a repeat.
 - Convex calls use generated API references and service-token authentication.
 - Snapshot and restore operations remain provider-atomic.
 - Restore continues to refuse a non-empty target and remaps nested record IDs.

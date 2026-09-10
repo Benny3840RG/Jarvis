@@ -33,7 +33,25 @@ function github(checkConclusion = "success"): GitHubDevelopmentClient {
       return { sha: mergeSha };
     },
     async getCommitChecks() {
-      return [{ name: "test", status: "completed", conclusion: checkConclusion }];
+      return [
+        "automation-policy",
+        "typecheck-lint-format-test",
+        "jarvis-console-01-build",
+        ...["actions", "python", "ruby", "javascript-typescript"].map(
+          (language) => `Analyze (${language})`,
+        ),
+      ].map((name, index) => ({
+        id: index + 1,
+        name,
+        status: "completed" as const,
+        conclusion: checkConclusion,
+        appSlug: "github-actions",
+        workflowEvent: name.startsWith("Analyze") ? "dynamic" : "push",
+        workflowBranch: "main",
+        workflowPath: name.startsWith("Analyze")
+          ? "dynamic/github-code-scanning/codeql"
+          : ".github/workflows/typescript.yml",
+      }));
     },
   };
 }
@@ -85,5 +103,234 @@ test("failed post-merge CI is durable evidence but can never request completion"
   });
 
   assert.equal(result.status, "failed");
-  assert.deepEqual(gateway.calls, ["proof:fail"]);
+  assert.deepEqual(gateway.calls, ["proof:inconclusive"]);
 });
+
+for (const defect of [
+  "neutral",
+  "skipped",
+  "missing",
+  "missing-codeql",
+  "stale-success",
+  "wrong-app",
+  "wrong-path",
+  "wrong-event",
+  "wrong-branch",
+  "pending",
+  "legacy",
+  "commit-mismatch",
+]) {
+  test(`untrusted or incomplete ${defect} evidence cannot complete Omega`, async () => {
+    const provider = github();
+    const checks = await provider.getCommitChecks({
+      repository: "Benny3840RG/Jarvis",
+      sha: mergeSha,
+      signal: new AbortController().signal,
+    });
+    provider.getCommitChecks = async () =>
+      defect === "missing"
+        ? checks.slice(1)
+        : defect === "missing-codeql"
+          ? checks.slice(0, -1)
+          : defect === "stale-success"
+            ? [...checks, { ...checks[0]!, id: 100, conclusion: "failure" }]
+            : checks.map((check) => ({
+                ...check,
+                ...(["neutral", "skipped"].includes(defect) ? { conclusion: defect } : {}),
+                ...(defect === "wrong-app" ? { appSlug: "untrusted" } : {}),
+                ...(defect === "wrong-path"
+                  ? { workflowPath: ".github/workflows/attacker.yml" }
+                  : {}),
+                ...(defect === "wrong-event" ? { workflowEvent: "pull_request" } : {}),
+                ...(defect === "wrong-branch" ? { workflowBranch: "refs/pull/12/head" } : {}),
+                ...(defect === "pending" ? { status: "queued" as const } : {}),
+                ...(defect === "legacy" ? { appSlug: undefined, workflowPath: undefined } : {}),
+              }));
+    if (defect === "commit-mismatch") provider.getCommit = async () => ({ sha: "c".repeat(40) });
+    const gateway = new Gateway();
+    const result = await new GitHubDevelopmentCompletionCoordinator(
+      provider,
+      gateway,
+    ).observeAndRequestCompletion({
+      missionId: "mission-1",
+      repository: "Benny3840RG/Jarvis",
+      pullRequestNumber: 42,
+      baseBranch: "main",
+      reviewedHeadSha: headSha,
+      criterionId: "post-merge-ci",
+      residualUncertainty: 0,
+      signal: new AbortController().signal,
+    });
+    assert.notEqual(result.status, "passed");
+    assert.equal(gateway.calls.includes("omega:complete"), false);
+  });
+}
+
+test("parallel code-quality Analyze checks cannot replace required scanning producers", async () => {
+  const provider = github();
+  const original = await provider.getCommitChecks({
+    repository: "Benny3840RG/Jarvis",
+    sha: mergeSha,
+    signal: new AbortController().signal,
+  });
+  provider.getCommitChecks = async () => [
+    ...original,
+    ...original
+      .filter((check) => check.name.startsWith("Analyze"))
+      .map((check) => ({
+        ...check,
+        id: check.id! + 100,
+        workflowPath: "dynamic/github-code-quality/codeql",
+      })),
+  ];
+  const gateway = new Gateway();
+  const result = await new GitHubDevelopmentCompletionCoordinator(
+    provider,
+    gateway,
+  ).observeAndRequestCompletion({
+    missionId: "mission-1",
+    repository: "Benny3840RG/Jarvis",
+    pullRequestNumber: 42,
+    baseBranch: "main",
+    reviewedHeadSha: headSha,
+    criterionId: "post-merge-ci",
+    residualUncertainty: 0,
+    signal: new AbortController().signal,
+  });
+  assert.equal(result.status, "passed");
+});
+
+for (const metadata of [{ workflowEvent: "push" }, { workflowBranch: "refs/pull/12/head" }]) {
+  test("CodeQL requires a dynamic analysis on the actual merge base branch", async () => {
+    const provider = github();
+    const original = await provider.getCommitChecks({
+      repository: "Benny3840RG/Jarvis",
+      sha: mergeSha,
+      signal: new AbortController().signal,
+    });
+    provider.getCommitChecks = async () =>
+      original.map((check) =>
+        check.name.startsWith("Analyze") ? { ...check, ...metadata } : check,
+      );
+    const gateway = new Gateway();
+    const result = await new GitHubDevelopmentCompletionCoordinator(
+      provider,
+      gateway,
+    ).observeAndRequestCompletion({
+      missionId: "mission-1",
+      repository: "Benny3840RG/Jarvis",
+      pullRequestNumber: 42,
+      baseBranch: "main",
+      reviewedHeadSha: headSha,
+      criterionId: "post-merge-ci",
+      residualUncertainty: 0,
+      signal: new AbortController().signal,
+    });
+    assert.notEqual(result.status, "passed");
+    assert.equal(gateway.calls.includes("omega:complete"), false);
+  });
+}
+
+for (const metadata of [
+  { appSlug: "untrusted" },
+  { workflowPath: ".github/workflows/foreign.yml" },
+]) {
+  test("newer untrusted same-name success cannot fall back to older green evidence", async () => {
+    const provider = github();
+    const checks = await provider.getCommitChecks({
+      repository: "o/r",
+      sha: mergeSha,
+      signal: new AbortController().signal,
+    });
+    provider.getCommitChecks = async () => [
+      ...checks,
+      ...checks.map((check) => ({ ...check, id: check.id! + 100, ...metadata })),
+    ];
+    const gateway = new Gateway();
+    const result = await new GitHubDevelopmentCompletionCoordinator(
+      provider,
+      gateway,
+    ).observeAndRequestCompletion({
+      missionId: "mission-1",
+      repository: "o/r",
+      pullRequestNumber: 42,
+      baseBranch: "main",
+      reviewedHeadSha: headSha,
+      criterionId: "post-merge-ci",
+      residualUncertainty: 0,
+      signal: new AbortController().signal,
+    });
+    assert.equal(result.status, "failed");
+    assert.equal(gateway.calls.includes("omega:complete"), false);
+  });
+}
+test("failed then green observations do not leave an immutable failed completion proof", async () => {
+  const provider = github("failure");
+  const gateway = new Gateway();
+  const coordinator = new GitHubDevelopmentCompletionCoordinator(provider, gateway);
+  const input = {
+    missionId: "mission-1",
+    repository: "o/r",
+    pullRequestNumber: 42,
+    baseBranch: "main",
+    reviewedHeadSha: headSha,
+    criterionId: "post-merge-ci",
+    residualUncertainty: 0,
+    signal: new AbortController().signal,
+  };
+  await coordinator.observeAndRequestCompletion(input);
+  provider.getCommitChecks = github().getCommitChecks;
+  await coordinator.observeAndRequestCompletion(input);
+  assert.deepEqual(gateway.calls, ["proof:inconclusive", "proof:pass", "omega:complete"]);
+});
+
+for (const defect of [
+  "none",
+  "wrong-path",
+  "wrong-app",
+  "wrong-event",
+  "wrong-branch",
+  "wrong-name",
+  "missing-id",
+]) {
+  test(`completion cannot depend on its own observer, with exact provenance: ${defect}`, async () => {
+    const provider = github();
+    const checks = await provider.getCommitChecks({
+      repository: "Benny3840RG/Jarvis",
+      sha: mergeSha,
+      signal: new AbortController().signal,
+    });
+    provider.getCommitChecks = async () => [
+      ...checks,
+      {
+        id: defect === "missing-id" ? undefined : 100,
+        name: defect === "wrong-name" ? "other-check" : "observe",
+        status: "completed",
+        conclusion: "failure",
+        appSlug: defect === "wrong-app" ? "untrusted" : "github-actions",
+        workflowPath:
+          defect === "wrong-path"
+            ? ".github/workflows/other.yml"
+            : ".github/workflows/jarvis-development-completion.yml",
+        workflowEvent: defect === "wrong-event" ? "push" : "workflow_run",
+        workflowBranch: defect === "wrong-branch" ? "other" : "main",
+      },
+    ];
+    const gateway = new Gateway();
+    const result = await new GitHubDevelopmentCompletionCoordinator(
+      provider,
+      gateway,
+    ).observeAndRequestCompletion({
+      missionId: "mission-1",
+      repository: "Benny3840RG/Jarvis",
+      pullRequestNumber: 42,
+      baseBranch: "main",
+      reviewedHeadSha: headSha,
+      criterionId: "post-merge-ci",
+      residualUncertainty: 0.01,
+      signal: new AbortController().signal,
+    });
+    assert.equal(result.status, defect === "none" ? "passed" : "failed");
+    assert.equal(gateway.calls.includes("omega:complete"), defect === "none");
+  });
+}

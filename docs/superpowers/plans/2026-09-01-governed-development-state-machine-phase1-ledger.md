@@ -745,3 +745,49 @@ The remaining work is therefore split into two distinct classes:
 
 Historical failures, repairs, commissioning attempts, and the earlier #415
 publication record above are intentionally retained for audit continuity.
+
+## PR handover implementation (2026-09-10)
+
+Current work extends the existing Actions builder with independent advisory review
+and two-attempt same-PR repair. It does not claim the separate durable Development
+mission bridge is commissioned.
+
+- Added `jarvis-pr-maintenance.yml`, strict review/context/evidence helpers and
+  provider-run-based scheduling. The read-only reviewer and fresh publisher use
+  separate runners. Comments cannot create authority or suppress a review.
+- Extended `jarvis-autobuild.yml` with exact-head, original-run-authenticated repair
+  dispatch. Existing cumulative guards run before candidate checkout and after
+  editing; normal fast-forward publication updates the existing branch/PR.
+- Candidate CI now authenticates the exact PR/head and producer, including every
+  required CodeQL language. Held CI approval is confined to those producers.
+- Post-merge provider evidence now requires all maintained checks from trusted
+  producers; merged-head/commit mismatches cannot reconcile as success.
+- Verification on base `446094c`: `npm run check` passed (1,231 Node tests,
+  227 Convex tests, both typechecks, hygiene, ESLint, Prettier, OpenAPI lint).
+  All 135 automation tests passed with the pinned Codex socket fixture. Dependency
+  audit reported zero vulnerabilities. Independent workflow safety review found
+  no critical/high defect in the reviewed implementation; live settings remain
+  outside that local result.
+- Added `runDevelopmentCompletion.ts`: an executable development-only adapter
+  loads existing durable MERGED/event/receipt/approved-action bindings and calls
+  the existing GitHub observer and Omega gateway. It creates no authority.
+  Completed-state reruns are refused; live invocation needs the existing service,
+  independent-proof approval and GitHub credentials.
+- Real PR #490 GitHub check/run records (12 checks) passed the new candidate
+  verifier, including managed dynamic CodeQL and separate code-quality analyses.
+  This verifies real provider response compatibility, not a live repair run.
+- Activation remains pending the reviewed control-plane PR landing. The live
+  review/failing-safe-test/repair/re-review drill is specified in
+  `docs/operations/pr-maintenance.md` and has not been executed in this session.
+- Remaining full-lifecycle gap: Actions does not yet create/claim the existing
+  durable Development subject or advance its ToolAction stages and schedule the completion command. No direct
+  Actions merge or duplicate completion authority was introduced. This requires
+  a subsequent live development-runtime composition and its real credentials.
+
+
+### 2026-09-10 — Actions-to-durable Development bridge (PR #491 follow-up)
+
+- Preserved the existing review/repair implementation and composed durable issue admission, fenced worker claims, exact publication checkpoints, review/repair transitions, owner ToolAction staging and scheduled post-merge completion through existing authorities.
+- Independent review caught and fixed cross-PR CI attribution, repair feedback truncation/provenance, mutable checkpoint heads and missing checkpoint PR identity. Generated candidates wait for a matching durable checkpoint before spending review budget.
+- `npm run check` passed: 1,232 Node tests, 229 Convex tests, both typechecks, hygiene, lint, formatting and OpenAPI. All 141 automation tests passed using the pinned Codex action fixture. Four changed workflow YAML files parsed; `git diff --check` passed.
+- These are local regression results, not live lifecycle evidence. The new functions are not deployed. The approved-issue drill, owner-approved merge receipt, acceptance proofs and final durable completion remain outstanding. No completion was fabricated.

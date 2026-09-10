@@ -17,6 +17,91 @@ const SHA_PATTERN = /^[0-9a-f]{40}$/i;
 // unreasonable number of check runs rather than looping unboundedly.
 const MAX_CHECK_RUN_PAGES = 20;
 
+// Mirrors .github/automation/revision-health.mjs: completion must prove the
+// same maintained checks as the autonomous queue's main-health gate.
+const REQUIRED_MAIN_CHECKS: Readonly<Record<string, string>> = Object.freeze({
+  "automation-policy": ".github/workflows/typescript.yml",
+  "typecheck-lint-format-test": ".github/workflows/typescript.yml",
+  "jarvis-console-01-build": ".github/workflows/typescript.yml",
+  ...Object.fromEntries(
+    ["actions", "python", "ruby", "javascript-typescript"].map((language) => [
+      `Analyze (${language})`,
+      "dynamic/github-code-scanning/",
+    ]),
+  ),
+});
+
+function requiredMainCheck(name: string): boolean {
+  return Object.hasOwn(REQUIRED_MAIN_CHECKS, name);
+}
+
+function mainCheckVerdict(
+  checks: GitHubCommitCheckObservation[],
+  baseBranch: string,
+): "passed" | "failed" | "indeterminate" {
+  let pending = false;
+  for (const [name, path] of Object.entries(REQUIRED_MAIN_CHECKS)) {
+    const check = checks
+      .filter(
+        (entry) =>
+          entry.name === name &&
+          // GitHub's separate code-quality product reuses Analyze names.
+          // Exempt only its exact trusted producer, never arbitrary paths/apps.
+          !(
+            path.endsWith("/") &&
+            entry.appSlug === "github-actions" &&
+            entry.workflowPath?.startsWith("dynamic/github-code-quality/") &&
+            entry.workflowEvent === "dynamic" &&
+            entry.workflowBranch === baseBranch
+          ),
+      )
+      .sort((left, right) => (right.id ?? 0) - (left.id ?? 0))[0];
+    if (!check) {
+      pending = true;
+      continue;
+    }
+    if (
+      check.appSlug !== "github-actions" ||
+      !Number.isSafeInteger(check.id) ||
+      check.id! <= 0 ||
+      check.workflowBranch !== baseBranch ||
+      check.workflowEvent !== (path.endsWith("/") ? "dynamic" : "push") ||
+      !(path.endsWith("/") ? check.workflowPath?.startsWith(path) : check.workflowPath === path)
+    )
+      return "failed";
+    if (check.status !== "completed") {
+      pending = true;
+      continue;
+    }
+    if (check.conclusion !== "success") return "failed";
+  }
+  // The completion observer consumes this verdict: counting its own previous
+  // failures creates a cycle (for example, while residual uncertainty is unset).
+  // Exempt only its exact authenticated producer; all other failures still block.
+  const isCompletionObserver = (check: GitHubCommitCheckObservation) =>
+    check.name === "observe" &&
+    check.appSlug === "github-actions" &&
+    Number.isSafeInteger(check.id) &&
+    check.id! > 0 &&
+    check.workflowPath === ".github/workflows/jarvis-development-completion.yml" &&
+    check.workflowBranch === baseBranch &&
+    ["workflow_run", "workflow_dispatch", "schedule", "pull_request"].includes(
+      check.workflowEvent ?? "",
+    );
+  // Additional failed checks still invalidate completion; unrelated skipped
+  // checks cannot supply missing required coverage.
+  if (
+    checks.some(
+      (check) =>
+        !isCompletionObserver(check) &&
+        check.status === "completed" &&
+        !["success", "neutral", "skipped"].includes(check.conclusion ?? ""),
+    )
+  )
+    return "failed";
+  return pending ? "indeterminate" : "passed";
+}
+
 export type GitHubIssueObservation = {
   number: number;
   state: "open" | "closed";
@@ -32,6 +117,7 @@ export type GitHubPullRequestObservation = {
   merged: boolean;
   draft: boolean;
   baseBranch: string;
+  baseSha?: string;
   headSha: string;
   mergeCommitSha?: string;
 };
@@ -44,12 +130,24 @@ export type GitHubMergeObservation = {
 
 export type GitHubCommitObservation = { sha: string };
 export type GitHubCommitCheckObservation = {
+  // Optional for existing adapters; absent provenance can never prove completion.
+  id?: number;
+  appSlug?: string;
+  workflowPath?: string;
+  workflowEvent?: string;
+  workflowBranch?: string;
   name: string;
   status: "queued" | "in_progress" | "completed";
   conclusion: string | null;
 };
 
 export interface GitHubDevelopmentClient {
+  observeCandidate?(input: {
+    repository: string;
+    pullRequestNumber: number;
+    headSha: string;
+    signal: AbortSignal;
+  }): Promise<{ ok: boolean; fingerprint: string }>;
   getIssue(input: {
     repository: string;
     issueNumber: number;
@@ -195,13 +293,19 @@ export class FetchGitHubDevelopmentClient implements GitHubDevelopmentClient {
     const { owner, repo } = repositoryParts(input.repository);
     const body = (await this.request(
       `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/pulls/${input.pullRequestNumber}`,
-      { method: "GET", signal: input.signal },
+      {
+        method: "GET",
+        signal: input.signal,
+        // 2026-03-10 removed merge_commit_sha from PR responses. This read
+        // needs the provider's actual merge SHA for reconciliation/completion.
+        headers: { "X-GitHub-Api-Version": "2022-11-28" },
+      },
     )) as {
       number: number;
       state: "open" | "closed";
       merged: boolean;
       draft?: boolean;
-      base: { ref: string };
+      base: { ref: string; sha?: string };
       head: { sha: string };
       merge_commit_sha?: string | null;
     };
@@ -211,11 +315,60 @@ export class FetchGitHubDevelopmentClient implements GitHubDevelopmentClient {
       merged: body.merged,
       draft: body.draft === true,
       baseBranch: body.base.ref,
+      ...(body.base.sha ? { baseSha: requiredSha(body.base.sha, "GitHub base SHA") } : {}),
       headSha: requiredSha(body.head.sha, "GitHub pull request head"),
       ...(body.merge_commit_sha && SHA_PATTERN.test(body.merge_commit_sha)
         ? { mergeCommitSha: body.merge_commit_sha.toLowerCase() }
         : {}),
     };
+  }
+
+  async observeCandidate(input: {
+    repository: string;
+    pullRequestNumber: number;
+    headSha: string;
+    signal: AbortSignal;
+  }) {
+    const { collectCandidateChecks } =
+      await import("../../../.github/automation/pr-maintenance.mjs");
+    const { owner, repo } = repositoryParts(input.repository);
+    const prefix = `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`;
+    const github = {
+      rest: {
+        checks: {
+          listForRef: async ({
+            ref,
+            page,
+            per_page,
+          }: {
+            ref: string;
+            page: number;
+            per_page: number;
+          }) => ({
+            data: await this.request(
+              `${prefix}/commits/${ref}/check-runs?per_page=${per_page}&page=${page}`,
+              { method: "GET", signal: input.signal },
+            ),
+          }),
+        },
+        actions: {
+          getWorkflowRun: async ({ run_id }: { run_id: number }) => ({
+            data: await this.request(`${prefix}/actions/runs/${run_id}`, {
+              method: "GET",
+              signal: input.signal,
+            }),
+          }),
+        },
+      },
+    };
+    const evidence = await collectCandidateChecks({
+      github,
+      owner,
+      repo,
+      headSha: input.headSha,
+      pullNumber: input.pullRequestNumber,
+    });
+    return { ok: evidence.ci.ok, fingerprint: evidence.fingerprint };
   }
 
   async mergePullRequest(input: {
@@ -267,6 +420,7 @@ export class FetchGitHubDevelopmentClient implements GitHubDevelopmentClient {
     const sha = requiredSha(input.sha, "Commit SHA");
     const checks: GitHubCommitCheckObservation[] = [];
     const checkRunIds = new Set<number>();
+    const runPaths = new Map<number, { path: string; event: string; head_branch: string }>();
     let totalCount = Number.POSITIVE_INFINITY;
     for (let page = 1; checks.length < totalCount && page <= MAX_CHECK_RUN_PAGES; page++) {
       const body = (await this.request(
@@ -276,6 +430,9 @@ export class FetchGitHubDevelopmentClient implements GitHubDevelopmentClient {
         total_count: number;
         check_runs: Array<{
           id: number;
+          app?: { slug?: string };
+          details_url?: string;
+          html_url?: string;
           name: string;
           status: "queued" | "in_progress" | "completed";
           conclusion: string | null;
@@ -294,7 +451,63 @@ export class FetchGitHubDevelopmentClient implements GitHubDevelopmentClient {
           throw new Error("GitHub check-run evidence is incomplete.");
         }
         checkRunIds.add(check.id);
-        checks.push({ name: check.name, status: check.status, conclusion: check.conclusion });
+        let workflowPath: string | undefined;
+        let workflowEvent: string | undefined;
+        let workflowBranch: string | undefined;
+        if (
+          (requiredMainCheck(check.name) || check.name === "observe") &&
+          check.app?.slug === "github-actions"
+        ) {
+          const url = new URL(check.details_url || check.html_url || "https://invalid.invalid");
+          const match = /^\/([^/]+)\/([^/]+)\/actions\/runs\/(\d+)(?:\/|$)/.exec(url.pathname);
+          if (
+            url.origin !== "https://github.com" ||
+            !match ||
+            match[1]?.toLowerCase() !== owner.toLowerCase() ||
+            match[2]?.toLowerCase() !== repo.toLowerCase()
+          ) {
+            throw new Error("GitHub check-run producer evidence is invalid.");
+          }
+          const runId = Number(match[3]);
+          if (!Number.isSafeInteger(runId) || runId <= 0)
+            throw new Error("GitHub workflow run ID is invalid.");
+          if (!runPaths.has(runId)) {
+            const run = (await this.request(
+              `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/actions/runs/${runId}`,
+              { method: "GET", signal: input.signal },
+            )) as {
+              id: number;
+              head_sha: string;
+              path: string;
+              event: string;
+              head_branch: string;
+            };
+            if (
+              run.id !== runId ||
+              run.head_sha?.toLowerCase() !== sha ||
+              typeof run.path !== "string" ||
+              typeof run.event !== "string" ||
+              typeof run.head_branch !== "string"
+            ) {
+              throw new Error("GitHub workflow run is not bound to the observed commit.");
+            }
+            runPaths.set(runId, run);
+          }
+          const run = runPaths.get(runId)!;
+          workflowPath = run.path;
+          workflowEvent = run.event;
+          workflowBranch = run.head_branch;
+        }
+        checks.push({
+          id: check.id,
+          name: check.name,
+          status: check.status,
+          conclusion: check.conclusion,
+          ...(check.app?.slug ? { appSlug: check.app.slug } : {}),
+          ...(workflowPath ? { workflowPath } : {}),
+          ...(workflowEvent ? { workflowEvent } : {}),
+          ...(workflowBranch ? { workflowBranch } : {}),
+        });
       }
     }
     if (checks.length !== totalCount || checkRunIds.size !== totalCount) {
@@ -320,6 +533,11 @@ const githubMergeArguments = z.object({
   pullRequestNumber: z.number().int().positive(),
   baseBranch: z.string().trim().min(1).max(200),
   reviewedHeadSha: z.string().regex(SHA_PATTERN),
+  reviewedBaseSha: z.string().regex(SHA_PATTERN).optional(),
+  candidateEvidenceFingerprint: z
+    .string()
+    .regex(/^[a-f0-9]{64}$/)
+    .optional(),
   mergeMethod: z.enum(["merge", "squash", "rebase"]),
   authorityEnvelopeHash: z.string().trim().min(1),
   policyDecisionFingerprint: z.string().trim().min(1),
@@ -451,12 +669,18 @@ export class GitHubMergeReconciliationAdapter implements ProviderReconciliationA
           errorCode: "github-base-changed-new-execution-required",
         };
       }
+      if (pullRequest.headSha.toLowerCase() !== args.reviewedHeadSha.toLowerCase()) {
+        return { status: "failed", errorCode: "github-head-changed-new-execution-required" };
+      }
       if (pullRequest.merged && pullRequest.mergeCommitSha) {
         const commit = await this.client.getCommit({
           repository: args.repository,
           sha: pullRequest.mergeCommitSha,
           signal,
         });
+        if (commit.sha.toLowerCase() !== pullRequest.mergeCommitSha.toLowerCase()) {
+          return { status: "failed", errorCode: "github-merge-commit-mismatch" };
+        }
         return {
           status: "succeeded",
           outputDigest: observationDigest({
@@ -572,28 +796,28 @@ export async function observeGitHubPostMerge(
         signal: input.signal,
       }),
     ]);
+    if (requiredSha(commit.sha, "Observed merge commit SHA") !== mergeCommitSha) {
+      throw new Error("Observed commit does not match the merge commit.");
+    }
     const normalizedChecks = checks
       .map((check) => ({
+        ...(check.id !== undefined ? { id: check.id } : {}),
+        ...(check.appSlug !== undefined ? { appSlug: check.appSlug } : {}),
+        ...(check.workflowPath !== undefined ? { workflowPath: check.workflowPath } : {}),
+        ...(check.workflowEvent !== undefined ? { workflowEvent: check.workflowEvent } : {}),
+        ...(check.workflowBranch !== undefined ? { workflowBranch: check.workflowBranch } : {}),
         name: check.name,
         status: check.status,
         conclusion: check.conclusion,
       }))
       .sort((left, right) => left.name.localeCompare(right.name));
-    const pending = normalizedChecks.some((check) => check.status !== "completed");
-    const passingConclusions = new Set(["success", "neutral", "skipped"]);
-    const failed = normalizedChecks.some(
-      (check) =>
-        check.status === "completed" &&
-        (check.conclusion === null || !passingConclusions.has(check.conclusion)),
-    );
-    const status =
-      normalizedChecks.length === 0 || pending ? "indeterminate" : failed ? "failed" : "passed";
+    const status = mainCheckVerdict(normalizedChecks, input.baseBranch);
     const reason =
       normalizedChecks.length === 0
         ? "post-merge-ci-missing"
-        : pending
+        : status === "indeterminate"
           ? "post-merge-ci-pending"
-          : failed
+          : status === "failed"
             ? "post-merge-ci-failed"
             : undefined;
     const evidencePayload = {
@@ -647,6 +871,27 @@ export function createGitHubMergeToolDefinition(
         signal,
       });
       assertMergePreconditions(args, pullRequest);
+      if (args.reviewedBaseSha || args.candidateEvidenceFingerprint) {
+        if (
+          !args.reviewedBaseSha ||
+          pullRequest.baseSha !== args.reviewedBaseSha ||
+          !args.candidateEvidenceFingerprint ||
+          !client.observeCandidate
+        )
+          throw new ToolExecutionPreconditionError(
+            "Approved candidate base/evidence binding is unavailable or changed.",
+          );
+        const evidence = await client.observeCandidate({
+          repository: args.repository,
+          pullRequestNumber: args.pullRequestNumber,
+          headSha: args.reviewedHeadSha,
+          signal,
+        });
+        if (!evidence.ok || evidence.fingerprint !== args.candidateEvidenceFingerprint)
+          throw new ToolExecutionPreconditionError(
+            "Approved candidate evidence changed; fresh owner review is required.",
+          );
+      }
     },
     async execute(argumentsValue, signal, context) {
       const args = githubMergeArguments.parse(argumentsValue);
