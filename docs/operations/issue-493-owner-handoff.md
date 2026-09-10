@@ -5,26 +5,32 @@ an uncertainty budget of **0.05**, selected through
 `JARVIS_DEVELOPMENT_UNCERTAINTY_BUDGET_493`. This document grants no approval,
 does not set residual uncertainty, and does not authorise the resulting PR merge.
 
-## Control landing order
+## Current state and control landing order
 
-1. Review and owner-approve PR #496's final head (issue-specific admission,
-   intact reviewer prompt transport, isolated publisher permission).
-2. Review and owner-approve the accompanying handover-blocker repair PR's final
-   head after integration with #496 and fresh required checks. Resolve any merge
-   conflict in the TypeScript workflow test list by retaining both test entries.
-3. Commission the resulting exact `main` revision to the named `dev:` deployment
-   through the existing development commissioning gate. Verify the deployed
-   `developmentWorkerClaims:recoverExpired`, `developmentWorkerClaims:finalize`
-   and `developmentState:listPage` functions, matching deployment URL and existing
-   service/approval authentication. Do not print credentials or substitute local
-   Convex tests for deployment verification.
-4. Inspect #493 and current durable state before dispatch. It is already approved;
-   do not add a repository-wide budget, broaden approval, or create a second
-   mission. The first attempt reported admission failure before a worker started;
-   confirm that remains true rather than assuming no subsequent activity.
-5. Dispatch the existing governed queue against freshly verified current main.
-   Record the queue run and owning build run. Do not rerun an old workflow
-   revision or directly implement #493 as part of these control fixes.
+- PR #496 is merged. Issue #493 has already built PR #498 at
+  `3259fcd52cf1e4f9f45b8997983dd146364776d9` in run `34464212268`.
+  Its candidate verification passed. Do not dispatch a duplicate initial build.
+- Independent review stopped before model execution because the pinned action
+  received duplicate `--skip-git-repo-check` arguments. PR #499 removes the
+  duplicate. A failed review is not a review pass or a repair finding.
+
+1. Land owner-reviewed PR #499 through the normal protected merge path. Its
+   own advisory review is affected by the same trusted-main defect; never forge
+   a passing status or bypass a required protection to bootstrap the repair.
+2. Land the independently reviewed #497 after integration with current main and
+   fresh required CI. Both prompt-transport and worker-recovery tests must remain
+   in the workflow test list.
+3. Commission the exact resulting `main` to the named `dev:` deployment through
+   the existing commissioning gate. Verify `developmentWorkerClaims:recoverExpired`,
+   `developmentWorkerClaims:finalize`, `developmentState:listPage` and the updated
+   checkpoint pause binding, matching URL and existing service/approval authentication.
+   Do not display credentials or treat local Convex tests as deployment verification.
+4. Inspect the durable subject and checkpoint for #493/#498, then request a fresh
+   independent review using the corrected trusted-main workflow. Preserve the
+   existing issue-specific 0.05 budget; do not reset the mission or overwrite its
+   checkpoint, supply residual uncertainty, or broaden issue approval.
+5. Follow the evidence stages below. Approve only the concrete resulting owner
+   merge action after its review/head/base/CI binding has been inspected.
 
 ## Required evidence, in order
 

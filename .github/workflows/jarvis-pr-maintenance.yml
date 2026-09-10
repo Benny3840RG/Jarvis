@@ -43,7 +43,14 @@ jobs:
       actions: write
     outputs:
       selected: ${{ steps.prepare.outputs.selected }}
-      prompt: ${{ steps.prepare.outputs.prompt }}
+      prompt-ready: ${{ steps.prepare.outputs.prompt-ready }}
+      prompt-digest: ${{ steps.prepare.outputs.prompt-digest }}
+      prompt-0: ${{ steps.prepare.outputs.prompt-0 }}
+      prompt-1: ${{ steps.prepare.outputs.prompt-1 }}
+      prompt-2: ${{ steps.prepare.outputs.prompt-2 }}
+      prompt-3: ${{ steps.prepare.outputs.prompt-3 }}
+      prompt-4: ${{ steps.prepare.outputs.prompt-4 }}
+      prompt-5: ${{ steps.prepare.outputs.prompt-5 }}
     steps:
       - name: Check out trusted workflow revision only
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -84,12 +91,18 @@ jobs:
             }
             const identity = { pullNumber, headSha: process.env.HEAD_SHA, baseSha: process.env.BASE_SHA, fingerprint: process.env.EVIDENCE_FINGERPRINT };
             const prompt = await prepareReview({ github, owner, repo, identity, runId: context.runId, runAttempt: Number(process.env.RUN_ATTEMPT) });
-            core.setOutput('prompt', prompt);
+            const { encodePrompt } = await import(pathToFileURL(
+              `${process.env.GITHUB_WORKSPACE}/.github/automation/review-prompt-transport.mjs`,
+            ).href);
+            const encoded = encodePrompt(prompt);
+            encoded.chunks.forEach((chunk, i) => core.setOutput(`prompt-${i}`, chunk));
+            core.setOutput('prompt-digest', encoded.digest);
+            core.setOutput('prompt-ready', prompt !== '');
             core.setOutput('selected', 'true');
 
   review:
     needs: prepare
-    if: needs.prepare.outputs.selected == 'true' && needs.prepare.outputs.prompt != ''
+    if: needs.prepare.outputs.selected == 'true' && needs.prepare.outputs.prompt-ready == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -115,13 +128,23 @@ jobs:
           bundle="$actions_root/openai/codex-action/86365089eb2b84e0a8fb0717b304f8bdcb13b20e/dist/main.js"
           test -f "$bundle" && test ! -L "$bundle"
           node .github/automation/patch-codex-sockets.mjs "$bundle"
+      - name: Restore complete review context without oversized environment entries
+        env:
+          PROMPT_DIGEST: ${{ needs.prepare.outputs.prompt-digest }}
+          PROMPT_CHUNK_0: ${{ needs.prepare.outputs.prompt-0 }}
+          PROMPT_CHUNK_1: ${{ needs.prepare.outputs.prompt-1 }}
+          PROMPT_CHUNK_2: ${{ needs.prepare.outputs.prompt-2 }}
+          PROMPT_CHUNK_3: ${{ needs.prepare.outputs.prompt-3 }}
+          PROMPT_CHUNK_4: ${{ needs.prepare.outputs.prompt-4 }}
+          PROMPT_CHUNK_5: ${{ needs.prepare.outputs.prompt-5 }}
+        run: node .github/automation/review-prompt-transport.mjs "$RUNNER_TEMP/jarvis-independent-review/prompt.txt"
       - name: Review supplied evidence without executing candidate code
         id: reviewer
         timeout-minutes: 15
         uses: openai/codex-action@86365089eb2b84e0a8fb0717b304f8bdcb13b20e # v1
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
-          prompt: ${{ needs.prepare.outputs.prompt }}
+          prompt-file: ${{ runner.temp }}/jarvis-independent-review/prompt.txt
           working-directory: ${{ runner.temp }}/jarvis-independent-review
           permission-profile: ":read-only"
           safety-strategy: drop-sudo
@@ -139,7 +162,7 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: read
-      pull-requests: read
+      pull-requests: write
       issues: write
       actions: write
       checks: read

@@ -65,6 +65,31 @@ export type ArchiveExclusion = {
   recoveryMethod: string;
 };
 
+/**
+ * A reference in the captured data that points at a record the source does not
+ * hold. Recorded, not repaired and not a reason to refuse the capture: several
+ * domains permit deleting a referenced record (no cascade, no dependency
+ * guard), so a dangling reference is a legal state of live data, and a backup
+ * that refused to run on it would be useless exactly when it is needed. What
+ * the archive must guarantee is that it does not *introduce* one — so this list
+ * is re-derived from the restored data and compared during restore
+ * verification.
+ */
+export type ArchiveUnresolvedReference = {
+  /** Group holding the referencing record. */
+  group: ArchiveGroup;
+  /** Collection within that group, e.g. `buildLogs`. */
+  collection: string;
+  /** Id of the referencing record. */
+  recordId: string;
+  /** Field carrying the reference, e.g. `buildId`. */
+  field: string;
+  /** The id that does not resolve. */
+  value: string;
+  /** Collection the reference points into, e.g. `builds`. */
+  targetCollection: string;
+};
+
 export type ArchiveBlobIndexEntry = {
   /** Logical reference that points at this blob, e.g. `quotePdfArtifacts/<artifactId>`. */
   reference: string;
@@ -84,6 +109,12 @@ export type ArchiveManifest = {
   dependencies: ArchiveDependency[];
   exclusions: ArchiveExclusion[];
   blobs: ArchiveBlobIndexEntry[];
+  /**
+   * References the source itself could not resolve. Does not affect
+   * `completeness`, which describes group coverage, not the source's own
+   * consistency.
+   */
+  unresolvedReferences: ArchiveUnresolvedReference[];
   completeness: ArchiveCompleteness;
 };
 
@@ -175,6 +206,7 @@ export type BuildManifestInput = {
   dependencies?: ArchiveDependency[];
   exclusions?: ArchiveExclusion[];
   blobs?: ArchiveBlobIndexEntry[];
+  unresolvedReferences?: ArchiveUnresolvedReference[];
 };
 
 export function buildManifest(input: BuildManifestInput): ArchiveManifest {
@@ -196,6 +228,7 @@ export function buildManifest(input: BuildManifestInput): ArchiveManifest {
     dependencies,
     exclusions: input.exclusions ?? [],
     blobs: input.blobs ?? [],
+    unresolvedReferences: sortUnresolvedReferences(input.unresolvedReferences ?? []),
     completeness: deriveCompleteness(present, dependencies),
   };
 }
@@ -263,6 +296,36 @@ function parseBlob(value: unknown, index: number): ArchiveBlobIndexEntry {
   };
 }
 
+function parseUnresolvedReference(value: unknown, index: number): ArchiveUnresolvedReference {
+  const field = `manifest.unresolvedReferences[${index}]`;
+  if (!isRecord(value)) fail(`${field} must be an object.`);
+  assertNoUnknownKeys(
+    value,
+    ["group", "collection", "recordId", "field", "value", "targetCollection"],
+    field,
+  );
+  return {
+    group: group(value.group, `${field}.group`),
+    collection: text(value.collection, `${field}.collection`),
+    recordId: text(value.recordId, `${field}.recordId`),
+    field: text(value.field, `${field}.field`),
+    value: text(value.value, `${field}.value`),
+    targetCollection: text(value.targetCollection, `${field}.targetCollection`),
+  };
+}
+
+/**
+ * Total order, so two captures of the same data produce byte-identical lists and
+ * a re-derived list can be compared directly against the manifest's.
+ */
+export function sortUnresolvedReferences(
+  entries: readonly ArchiveUnresolvedReference[],
+): ArchiveUnresolvedReference[] {
+  const key = (entry: ArchiveUnresolvedReference): string =>
+    [entry.group, entry.collection, entry.recordId, entry.field, entry.value].join("\u0000");
+  return [...entries].sort((left, right) => (key(left) < key(right) ? -1 : 1));
+}
+
 function array(value: unknown, field: string): unknown[] {
   if (!Array.isArray(value)) fail(`${field} must be an array.`);
   return value;
@@ -285,6 +348,7 @@ export function parseManifest(value: unknown): ArchiveManifest {
       "dependencies",
       "exclusions",
       "blobs",
+      "unresolvedReferences",
       "completeness",
     ],
     "manifest",
@@ -305,6 +369,10 @@ export function parseManifest(value: unknown): ArchiveManifest {
   const dependencies = array(value.dependencies, "manifest.dependencies").map(parseDependency);
   const exclusions = array(value.exclusions, "manifest.exclusions").map(parseExclusion);
   const blobs = array(value.blobs, "manifest.blobs").map(parseBlob);
+  const unresolvedReferences = array(
+    value.unresolvedReferences,
+    "manifest.unresolvedReferences",
+  ).map(parseUnresolvedReference);
 
   if (!isRecord(value.coverage)) fail("manifest.coverage must be an object.");
   assertNoUnknownKeys(value.coverage, ["required", "present", "absent"], "manifest.coverage");
@@ -344,6 +412,7 @@ export function parseManifest(value: unknown): ArchiveManifest {
     dependencies,
     exclusions,
     blobs,
+    unresolvedReferences: sortUnresolvedReferences(unresolvedReferences),
     completeness,
   };
 }
