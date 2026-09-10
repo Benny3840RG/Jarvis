@@ -117,6 +117,11 @@ function redact(
   secrets: Array<string | undefined>,
   replacement = "[REDACTED]",
 ): string {
+  // A replacement marker is output too. If it contains any configured
+  // credential, substituting it would reproduce that credential verbatim.
+  // Suppress the whole field instead of trying to invent a second marker.
+  if (secrets.some((secret) => secret && replacement.includes(secret))) return "";
+
   let result = value;
   let remainingWork = MAX_REDACTION_WORK;
   for (const secret of secrets) {
