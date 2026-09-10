@@ -80,7 +80,7 @@ import { resolveHttpAppConfig, type HttpAppConfig } from "./config.js";
 import { evaluateRemoteGatewayRequest } from "./remoteGateway.js";
 import { createOidcVerifier, type OidcVerifier } from "./oidcVerifier.js";
 import { JarvisHttpModule } from "./jarvisHttpModule.js";
-import { configuredSecrets } from "./problemDetails.js";
+import { configuredSecrets, redactedRequestPath } from "./problemDetails.js";
 import { REQUEST_ID_HEADER, resolveRequestId } from "./requestId.js";
 import {
   captureHttpBoundary,
@@ -318,7 +318,7 @@ export async function createJarvisHttpApp(
           title: "Remote Gateway Request Rejected",
           status,
           detail: "The request did not satisfy the configured remote gateway policy.",
-          instance: request.url.split("?")[0] ?? "/",
+          instance: redactedRequestPath(request.url, config),
         });
     });
   }
