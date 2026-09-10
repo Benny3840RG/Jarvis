@@ -38,6 +38,8 @@ Its conclusion remains advisory; it is not a GitHub approving review.
 The prepared prompt travels in bounded base64 chunks with a SHA-256 digest
 and is reconstructed into a file on the isolated review runner. This preserves
 the full admitted context without exceeding per-environment-entry limits.
+The pinned Codex action already supplies `--skip-git-repo-check`; repeating
+that single-use flag in `codex-args` prevents the reviewer from starting.
 Only the separate trusted publisher has issue and pull-request write permissions
 for the advisory comment; the model runner retains read-only permissions.
 
