@@ -516,7 +516,7 @@ describe("archive v4 — business records restore", () => {
     assert.equal(marker, null);
     await assert.rejects(
       restoreArchiveV4(archive, destination, { allowPartial: true }),
-      /already exists; refusing to merge/,
+      /interrupted restore of this archive[\s\S]*--resume/,
     );
   });
 
