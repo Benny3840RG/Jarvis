@@ -125,6 +125,10 @@ test("workflow and template describe evidence rather than pretending to be a rev
   assert.doesNotMatch(template, /^# Copilot Review$/m);
   assert.doesNotMatch(template, /Tests & Checks:\s*\[\.\.\.\]/);
   assert.match(template, /AI review.*advisory/i);
-  assert.match(autobuild, /"pr-evidence"/);
+  assert.match(autobuild, /collectCandidateChecks/);
+  assert.match(
+    fs.readFileSync(new URL("./pr-maintenance.mjs", import.meta.url), "utf8"),
+    /"pr-evidence"/,
+  );
   assert.doesNotMatch(autobuild, /"copilot-review-section"/);
 });

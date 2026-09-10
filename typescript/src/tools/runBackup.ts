@@ -21,6 +21,7 @@ import { ConvexAssetStore } from "../assets/convexAssetStore.js";
 import { JsonPreferenceStore } from "../preferences/jsonPreferenceStore.js";
 import { ConvexPreferenceStore } from "../preferences/convexPreferenceStore.js";
 import { redactSecret } from "./convexSmoke.js";
+import { runArchiveV4Command, isArchiveV4Command, archiveV4Usage } from "./runBackupV4.js";
 
 function loadLocalEnvironment(): void {
   try {
@@ -62,6 +63,7 @@ function usage(): never {
       "  npm run backup -- export <file>",
       "  npm run backup -- verify <file>",
       "  npm run backup -- restore <file> --confirm-empty-target",
+      ...archiveV4Usage(),
       "",
       "Covers state, tasks, reminders, builds, build logs, upgrades, assets, and",
       "preferences. Restore refuses a target where any of those already hold data.",
@@ -73,7 +75,16 @@ function usage(): never {
 
 async function main(): Promise<void> {
   loadLocalEnvironment();
-  const [command, filePath, confirmation, ...extra] = process.argv.slice(2);
+  const argv = process.argv.slice(2);
+
+  // Archive v4 is additive: it has its own subcommands and its own argument
+  // shape, and it changes nothing about what `export`/`verify`/`restore` do.
+  if (argv[0] !== undefined && isArchiveV4Command(argv[0])) {
+    await runArchiveV4Command(argv[0], argv.slice(1), usage);
+    return;
+  }
+
+  const [command, filePath, confirmation, ...extra] = argv;
   if (!command || !filePath || extra.length > 0) usage();
 
   if (command === "export") {
