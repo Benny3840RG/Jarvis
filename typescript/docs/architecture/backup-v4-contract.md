@@ -137,6 +137,21 @@ captured outside the consistent boundary is recorded as such in the manifest.
 Groups are built and tested incrementally. `completeness: complete` is only
 reachable after S6 verifies, and only Jarvis decides whether it is accepted.
 
+## S1 implementation boundary
+
+`src/backup/archiveManifest.ts` supplies the manifest parser, coverage metadata,
+SHA-256 digest format checks and a full-recovery refusal gate. It does not yet
+capture domains or verify restored records. Group labels, dependency strings
+and `consistentSnapshot` declarations are metadata, not verification evidence.
+`deriveCompleteness` therefore returns `partial` even when every group is
+listed. `assertRecoverable` reparses its input and refuses full recovery until
+a later stage implements record-level verification; mutating `completeness`
+cannot bypass the gate. Staged capture can still describe partial coverage.
+
+Next stages must implement capture/restore and verify identity, references,
+snapshot consistency and restored blobs before enabling `complete`. Existing
+v1–v3 backup commands remain unchanged.
+
 ## Relationship to the parked archive-v4 prototype
 
 The original handoff describes a parked JSON-only prototype with empty-target

@@ -48,6 +48,15 @@ it at the end of every session.
   OIDC provider, production deployment approval). These need operator-supplied
   credentials/decisions and are not actionable by an autonomous coding session.
 
+## Archive v4 manifest review (2026-09-10)
+
+- S1 adds strict manifest parsing, coverage metadata and SHA-256 digest format
+  validation. Full recovery reparses the manifest and refuses forged completeness.
+- Every manifest remains partial until a real restore verifier is implemented;
+  group presence and reference descriptions do not prove recovery integrity.
+- Next: S2 core/memory capture and isolated restore, then S3 business records
+  and settings; complete recovery remains gated on the later domain/verifier work.
+
 ## This session's work
 
 **Backup/restore coverage gap (priority area 7).** `npm run backup` only ever
