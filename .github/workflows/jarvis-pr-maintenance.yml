@@ -148,7 +148,6 @@ jobs:
           working-directory: ${{ runner.temp }}/jarvis-independent-review
           permission-profile: ":read-only"
           safety-strategy: drop-sudo
-          codex-args: '["--skip-git-repo-check"]'
           output-schema: |
             {"type":"object","additionalProperties":false,"required":["verdict","summary","findings"],"properties":{"verdict":{"type":"string","enum":["pass","changes_requested","blocked"]},"summary":{"type":"string"},"findings":{"type":"array","items":{"type":"object","additionalProperties":false,"required":["file","line","severity","message"],"properties":{"file":{"type":"string"},"line":{"type":"integer"},"severity":{"type":"string","enum":["high","medium","low"]},"message":{"type":"string"}}}}}}
           allow-bot-users: github-actions[bot]
