@@ -1,8 +1,9 @@
+import { publicReconciliation } from "./publicEvidence.js";
 import { v } from "convex/values";
 
 import {
   externalReconciliationClaimValidator,
-  externalReconciliationDocumentValidator,
+  externalReconciliationPublicValidator,
   externalReconciliationEnvelopeValidator,
   externalReconciliationStateValidator,
 } from "./externalReconciliationValidators.js";
@@ -270,7 +271,7 @@ export const getByScope = query({
     if (!reconciliation) return null;
     assertEffect(reconciliation, scope.effectFingerprint);
     return {
-      reconciliation,
+      reconciliation: publicReconciliation(reconciliation),
       receipt: await findReceipt(ctx, ownerId, reconciliation.receiptKey),
     };
   },
@@ -282,7 +283,7 @@ export const listForOperator = query({
     state: v.optional(externalReconciliationStateValidator),
     limit: v.optional(v.number()),
   },
-  returns: v.array(externalReconciliationDocumentValidator),
+  returns: v.array(externalReconciliationPublicValidator),
   handler: async (ctx, args) => {
     const ownerId = requireOwner(args.serviceToken);
     const limit = args.limit ?? 50;
@@ -291,20 +292,24 @@ export const listForOperator = query({
     }
 
     if (args.state !== undefined) {
-      return ctx.db
-        .query("externalReconciliations")
-        .withIndex("by_owner_and_state_and_updated_at", (q) =>
-          q.eq("ownerId", ownerId).eq("state", args.state!),
-        )
-        .order("desc")
-        .take(limit);
+      return (
+        await ctx.db
+          .query("externalReconciliations")
+          .withIndex("by_owner_and_state_and_updated_at", (q) =>
+            q.eq("ownerId", ownerId).eq("state", args.state!),
+          )
+          .order("desc")
+          .take(limit)
+      ).map(publicReconciliation);
     }
 
-    return ctx.db
-      .query("externalReconciliations")
-      .withIndex("by_owner_and_updated_at", (q) => q.eq("ownerId", ownerId))
-      .order("desc")
-      .take(limit);
+    return (
+      await ctx.db
+        .query("externalReconciliations")
+        .withIndex("by_owner_and_updated_at", (q) => q.eq("ownerId", ownerId))
+        .order("desc")
+        .take(limit)
+    ).map(publicReconciliation);
   },
 });
 
@@ -317,7 +322,7 @@ export const getForOperator = query({
     const reconciliation = await findByReconciliationId(ctx, ownerId, reconciliationId);
     if (!reconciliation) return null;
     return {
-      reconciliation,
+      reconciliation: publicReconciliation(reconciliation),
       receipt: await findReceipt(ctx, ownerId, reconciliation.receiptKey),
     };
   },
@@ -337,7 +342,7 @@ export const registerAttempt = mutation({
     providerCorrelationId: v.string(),
     safetyBinding: v.optional(safetyBindingValidator),
   },
-  returns: externalReconciliationDocumentValidator,
+  returns: externalReconciliationPublicValidator,
   handler: async (ctx, args) => {
     const ownerId = requireOwner(args.serviceToken);
     const scope = cleanScope(args);
@@ -395,7 +400,7 @@ export const registerAttempt = mutation({
         });
         const resumed = await ctx.db.get("externalReconciliations", existing._id);
         if (!resumed) throw new Error("External reconciliation resume failed.");
-        return resumed;
+        return publicReconciliation(resumed);
       }
       throw new Error(
         "External execution operation already has an attempt in progress or resolved.",
@@ -431,7 +436,7 @@ export const registerAttempt = mutation({
     });
     const created = await ctx.db.get("externalReconciliations", id);
     if (!created) throw new Error("External reconciliation creation failed.");
-    return created;
+    return publicReconciliation(created);
   },
 });
 
@@ -508,7 +513,7 @@ export const markIndeterminate = mutation({
       assertProvider(reconciliation, expectedProvider);
       if (reconciliation.state === "resolved") {
         return {
-          reconciliation,
+          reconciliation: publicReconciliation(reconciliation),
           receipt: await findReceipt(ctx, ownerId, reconciliation.receiptKey),
         };
       }
@@ -546,7 +551,7 @@ export const markIndeterminate = mutation({
     });
     const updated = await ctx.db.get("externalReconciliations", reconciliation._id);
     if (!updated) throw new Error("Indeterminate reconciliation update failed.");
-    return { reconciliation: updated, receipt: boundReceipt };
+    return { reconciliation: publicReconciliation(updated), receipt: boundReceipt };
   },
 });
 
@@ -627,7 +632,7 @@ export const completeAttempt = mutation({
       }
       if (!reconciliation) throw new Error("Missing-reference escalation failed.");
       const receipt = await upsertReceipt(ctx, ownerId, receiptKey, indeterminateReceipt);
-      return { reconciliation, receipt };
+      return { reconciliation: publicReconciliation(reconciliation), receipt };
     }
 
     assertEffect(reconciliation, scope.effectFingerprint);
@@ -665,7 +670,7 @@ export const completeAttempt = mutation({
     });
     const updated = await ctx.db.get("externalReconciliations", reconciliation._id);
     if (!updated) throw new Error("Terminal reconciliation update failed.");
-    return { reconciliation: updated, receipt: boundReceipt };
+    return { reconciliation: publicReconciliation(updated), receipt: boundReceipt };
   },
 });
 
@@ -930,7 +935,7 @@ export const releaseClaim = mutation({
     nextAttemptAt: v.number(),
     maxAttempts: v.number(),
   },
-  returns: externalReconciliationDocumentValidator,
+  returns: externalReconciliationPublicValidator,
   handler: async (ctx, args) => {
     const ownerId = requireOwner(args.serviceToken);
     const reconciliationId = cleanRequiredText(args.reconciliationId, "Reconciliation ID");
@@ -965,7 +970,7 @@ export const releaseClaim = mutation({
     }
     const updated = await ctx.db.get("externalReconciliations", reconciliation._id);
     if (!updated) throw new Error("Reconciliation release failed.");
-    return updated;
+    return publicReconciliation(updated);
   },
 });
 
