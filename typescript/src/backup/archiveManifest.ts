@@ -1,15 +1,14 @@
 import { createHash } from "node:crypto";
 
 /**
- * Archive v4 manifest — see `docs/architecture/backup-v4-contract.md`.
+ * Archive v4 manifest — see `typescript/docs/architecture/backup-v4-contract.md`.
  *
  * The manifest is what makes an archive's own claims checkable. Two properties
  * matter most and are enforced here rather than trusted:
  *
- * 1. `completeness` is **derived**, never asserted. A manifest that declares
- *    `complete` while a required group is absent, or while a declared
- *    cross-group dependency points at an absent group, is rejected at parse
- *    time. An archive cannot lie about being a recovery image.
+ * 1. `completeness` is **derived**, never asserted. S1 has no record-level
+ *    restore verifier, so even a manifest listing every group remains partial.
+ *    Labels and dependency descriptions do not prove reference integrity.
  * 2. Every intentional exclusion must carry a recovery method. Recording an
  *    exclusion with no way to recover the excluded data is how a backup becomes
  *    silently incomplete, so the schema refuses it.
@@ -20,7 +19,7 @@ export const V4_CONTRACT_VERSION = "jarvis-archive-v4:1" as const;
 /**
  * Domain groups, in the staged order they land. Every group is *required* for a
  * complete archive: this list is the definition of "complete", so adding a group
- * here correctly invalidates any previously-complete archive that lacks it.
+ * here invalidates any archive that lacks it. Presence alone is not verification.
  */
 export const ARCHIVE_GROUPS = [
   "core",
@@ -105,6 +104,13 @@ function text(value: unknown, field: string): string {
   return value;
 }
 
+function digest(value: unknown, field: string): string {
+  if (typeof value !== "string" || !/^sha256:[0-9a-f]{64}$/.test(value)) {
+    fail(`${field} must be a SHA-256 digest (sha256: followed by 64 lowercase hex characters).`);
+  }
+  return value;
+}
+
 function group(value: unknown, field: string): ArchiveGroup {
   if (typeof value !== "string" || !(ARCHIVE_GROUPS as readonly string[]).includes(value)) {
     fail(`${field} must be one of: ${ARCHIVE_GROUPS.join(", ")}.`);
@@ -130,10 +136,12 @@ function assertNoUnknownKeys(
 }
 
 /**
- * The single definition of completeness. An archive is complete only when every
- * required group is present **and** every asserted cross-group dependency has
- * both endpoints present — a reference into an absent group means the archive
- * cannot restore that reference, so it is not a recovery image.
+ * The single definition of completeness. Required group and dependency coverage
+ * are necessary, but cannot establish record-level integrity, snapshot consistency
+ * or restored blob verification. S1 has no such verifier: every manifest remains
+ * partial, even if all labels are present. A later stage must implement that
+ * verification before this function can return complete; do not add a caller-
+ * asserted boolean to bypass it.
  */
 export function deriveCompleteness(
   present: readonly ArchiveGroup[],
@@ -146,7 +154,7 @@ export function deriveCompleteness(
   for (const dependency of dependencies) {
     if (!have.has(dependency.from) || !have.has(dependency.to)) return "partial";
   }
-  return "complete";
+  return "partial";
 }
 
 /** Stable digest of a JSON-serialisable payload, for a group checksum. */
@@ -215,7 +223,7 @@ function parseGroupEntry(value: unknown, index: number): ArchiveGroupEntry {
     group: group(value.group, `${field}.group`),
     schemaVersion: nonNegativeInteger(value.schemaVersion, `${field}.schemaVersion`),
     counts,
-    checksum: text(value.checksum, `${field}.checksum`),
+    checksum: digest(value.checksum, `${field}.checksum`),
     consistentSnapshot: value.consistentSnapshot,
   };
 }
@@ -250,7 +258,7 @@ function parseBlob(value: unknown, index: number): ArchiveBlobIndexEntry {
   assertNoUnknownKeys(value, ["reference", "digest", "byteLength"], field);
   return {
     reference: text(value.reference, `${field}.reference`),
-    digest: text(value.digest, `${field}.digest`),
+    digest: digest(value.digest, `${field}.digest`),
     byteLength: nonNegativeInteger(value.byteLength, `${field}.byteLength`),
   };
 }
@@ -344,8 +352,8 @@ export function parseManifest(value: unknown): ArchiveManifest {
  * Gate for the full-recovery path. A partial archive may exist for staged
  * development; it may never be mistaken for a recovery image.
  */
-export function assertRecoverable(manifest: ArchiveManifest): void {
-  if (manifest.completeness === "complete") return;
+export function assertRecoverable(value: unknown): void {
+  const manifest = parseManifest(value);
   const absent = manifest.coverage.absent;
   const unresolved = manifest.dependencies.filter(
     (dependency) =>
@@ -353,6 +361,7 @@ export function assertRecoverable(manifest: ArchiveManifest): void {
       !manifest.coverage.present.includes(dependency.to),
   );
   const reasons = [
+    "record-level restore verification is not implemented",
     absent.length > 0 ? `absent required group(s): ${absent.join(", ")}` : "",
     unresolved.length > 0
       ? `dependencies into absent groups: ${unresolved.map((entry) => entry.reference).join("; ")}`

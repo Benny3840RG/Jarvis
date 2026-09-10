@@ -38,8 +38,8 @@ describe("archive v4 manifest — completeness is derived, never asserted", () =
     assert.equal(manifest.coverage.absent.length, ARCHIVE_GROUPS.length - 1);
   });
 
-  it("is complete only once every required group is present", () => {
-    assert.equal(buildManifest({ createdAt: AT, groups: allGroups() }).completeness, "complete");
+  it("remains partial even with every group label until a verifier is implemented", () => {
+    assert.equal(buildManifest({ createdAt: AT, groups: allGroups() }).completeness, "partial");
   });
 
   it("is partial when a declared dependency points into an absent group", () => {
@@ -73,16 +73,16 @@ describe("archive v4 manifest — completeness is derived, never asserted", () =
 });
 
 describe("archive v4 manifest — deriveCompleteness is the single definition", () => {
-  it("requires every group, and both endpoints of every dependency", () => {
+  it("does not treat group and dependency labels as verification", () => {
     assert.equal(deriveCompleteness([], []), "partial");
     assert.equal(deriveCompleteness(ARCHIVE_GROUPS.slice(0, -1), []), "partial");
-    assert.equal(deriveCompleteness([...ARCHIVE_GROUPS], []), "complete");
+    assert.equal(deriveCompleteness([...ARCHIVE_GROUPS], []), "partial");
     assert.equal(
       deriveCompleteness(
         [...ARCHIVE_GROUPS],
         [{ from: "core", to: "memory", reference: "buildLogs.buildId -> builds.id" }],
       ),
-      "complete",
+      "partial",
     );
   });
 
@@ -113,7 +113,9 @@ describe("archive v4 manifest — parser rejects self-inconsistent archives", ()
           recoveryMethod: "re-render from quoteRevisions with the pinned rendererVersion",
         },
       ],
-      blobs: [{ reference: "quotePdfArtifacts/a-1", digest: "sha256:abc", byteLength: 12 }],
+      blobs: [
+        { reference: "quotePdfArtifacts/a-1", digest: groupChecksum("blob bytes"), byteLength: 12 },
+      ],
     });
     assert.deepEqual(parseManifest(JSON.parse(JSON.stringify(manifest))), manifest);
     assert.equal(manifest.contractVersion, V4_CONTRACT_VERSION);
@@ -142,6 +144,28 @@ describe("archive v4 manifest — parser rejects self-inconsistent archives", ()
         }),
       /coverage.absent disagrees with manifest.groups/,
     );
+  });
+
+  it("rejects malformed group and blob digests", () => {
+    const manifest = buildManifest({ createdAt: AT, groups: allGroups() });
+    for (const digest of ["not-a-digest", "sha256:abc", `sha256:${"g".repeat(64)}`]) {
+      assert.throws(
+        () =>
+          parseManifest({
+            ...manifest,
+            groups: allGroups().map((group) => ({ ...group, checksum: digest })),
+          }),
+        /checksum must be a SHA-256 digest/,
+      );
+      assert.throws(
+        () =>
+          parseManifest({
+            ...manifest,
+            blobs: [{ reference: "artifact/1", digest, byteLength: 1 }],
+          }),
+        /digest must be a SHA-256 digest/,
+      );
+    }
   });
 
   it("refuses an unknown contract version, unknown fields, and a repeated group", () => {
@@ -189,10 +213,29 @@ describe("archive v4 manifest — the full-recovery path refuses a partial archi
     assert.throws(() => assertRecoverable(manifest), /invoices\.quoteId -> quotes\.id/);
   });
 
-  it("permits recovery only from a complete archive", () => {
-    assert.doesNotThrow(() =>
-      assertRecoverable(buildManifest({ createdAt: AT, groups: allGroups() })),
+  it("refuses full recovery when group labels have no restore-verification evidence", () => {
+    const manifest = buildManifest({ createdAt: AT, groups: allGroups() });
+    assert.throws(() => assertRecoverable(manifest), /verification.*not implemented/);
+  });
+
+  it("revalidates a mutable completeness claim at the recovery boundary", () => {
+    const manifest = buildManifest({ createdAt: AT, groups: [entry("core")] });
+    manifest.completeness = "complete";
+    assert.throws(() => assertRecoverable(manifest), /claims "complete".*derives "partial"/);
+  });
+
+  it("cannot promote inconsistent groups and unverified reference labels to complete", () => {
+    const manifest = buildManifest({
+      createdAt: AT,
+      groups: allGroups().map((group) => ({ ...group, consistentSnapshot: false })),
+      dependencies: [{ from: "core", to: "memory", reference: "missing.id -> absent.id" }],
+    });
+    assert.equal(parseManifest(manifest).completeness, "partial");
+    assert.throws(
+      () => parseManifest({ ...manifest, completeness: "complete" }),
+      /derives "partial"/,
     );
+    assert.throws(() => assertRecoverable(manifest), /Refusing full recovery/);
   });
 
   it("today's archives are partial by construction — no group is implemented yet", () => {
