@@ -1,22 +1,30 @@
-# Archive v4 — core and memory groups (stage 2)
+# Archive v4 — core, memory and business record groups
 
 Archive v4 is a **separate, additive** backup format. It does not replace
 `npm run backup -- export|verify|restore`; those commands, and every v1/v2/v3
 archive already on disk, keep working exactly as before.
 
-This stage covers two of the six required groups, read directly from JSON
-storage:
+Three of the six required groups are covered, read directly from JSON storage:
 
-| Group    | Contents                                          | Source files                                                                                                                                     |
-| -------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `core`   | assistant state, tasks, reminders                 | `data/jarvis-state.json`                                                                                                                         |
-| `memory` | builds, build logs, upgrades, assets, preferences | `data/jarvis-builds.json`, `data/jarvis-build-logs.json`, `data/jarvis-upgrades.json`, `data/jarvis-assets.json`, `data/jarvis-preferences.json` |
+| Group             | Contents                                                                               | Source files                                                                                                                                                                                                                                   |
+| ----------------- | -------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `core`            | assistant state, tasks, reminders                                                      | `data/jarvis-state.json`                                                                                                                                                                                                                       |
+| `memory`          | builds, build logs, upgrades, assets, preferences                                      | `data/jarvis-builds.json`, `data/jarvis-build-logs.json`, `data/jarvis-upgrades.json`, `data/jarvis-assets.json`, `data/jarvis-preferences.json`                                                                                               |
+| `businessRecords` | clients, properties, projects, quotes, invoices, enquiries, errands, business settings | `data/jarvis-clients.json`, `data/jarvis-properties.json`, `data/jarvis-projects.json`, `data/jarvis-quotes.json`, `data/jarvis-invoices.json`, `data/jarvis-enquiries.json`, `data/jarvis-errands.json`, `data/jarvis-business-settings.json` |
 
-`businessRecords`, `notesAndEvidence`, `orchestration` and `quoteAggregate` are
-**not covered yet**, so **every archive this stage writes is
-`completeness: partial`** and is refused by the full-recovery restore path. That
-is the honest state, not an exclusion: the manifest lists the four groups as
-absent and claims no recovery method for them.
+`notesAndEvidence`, `orchestration` and `quoteAggregate` are **not covered
+yet**, so **every archive written today is `completeness: partial`** and is
+refused by the full-recovery restore path. That is the honest state, not an
+exclusion: the manifest lists the three groups as absent and claims no recovery
+method for them.
+
+Coverage is now the _only_ thing standing between an archive and `complete`.
+Every archive `export-v4` writes has already been restored into an isolated
+directory and read back, and carries the resulting per-group digests in
+`manifest.verification`. When the remaining three groups land, archives become
+`complete` on their own — nothing further has to be switched on. Until then,
+`verify-v4` and `restore-v4 --allow-partial` report which groups were verified
+alongside which are absent.
 
 ## Commands
 

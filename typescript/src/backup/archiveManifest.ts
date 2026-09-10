@@ -6,9 +6,12 @@ import { createHash } from "node:crypto";
  * The manifest is what makes an archive's own claims checkable. Two properties
  * matter most and are enforced here rather than trusted:
  *
- * 1. `completeness` is **derived**, never asserted. S1 has no record-level
- *    restore verifier, so even a manifest listing every group remains partial.
- *    Labels and dependency descriptions do not prove reference integrity.
+ * 1. `completeness` is **derived**, never asserted. Group coverage alone does
+ *    not earn it: an archive is complete only once a real verification pass has
+ *    restored it in isolation and re-derived every group's digest from the data
+ *    read back off disk. That evidence is recorded in `verification` and
+ *    re-checked here against the group checksums, so the claim is arithmetic
+ *    rather than a caller's word.
  * 2. Every intentional exclusion must carry a recovery method. Recording an
  *    exclusion with no way to recover the excluded data is how a backup becomes
  *    silently incomplete, so the schema refuses it.
@@ -19,7 +22,8 @@ export const V4_CONTRACT_VERSION = "jarvis-archive-v4:1" as const;
 /**
  * Domain groups, in the staged order they land. Every group is *required* for a
  * complete archive: this list is the definition of "complete", so adding a group
- * here invalidates any archive that lacks it. Presence alone is not verification.
+ * here invalidates any archive that lacks it. Presence alone is not verification;
+ * see `deriveCompleteness`.
  */
 export const ARCHIVE_GROUPS = [
   "core",
@@ -90,6 +94,44 @@ export type ArchiveUnresolvedReference = {
   targetCollection: string;
 };
 
+/**
+ * The one verification method that can earn `complete`. Named and versioned so
+ * that a future, stronger method is a different value rather than a silent
+ * change of meaning behind the same claim.
+ */
+export const VERIFICATION_METHOD = "isolated-restore-readback:1" as const;
+
+/** Per-group evidence produced by a verification pass. */
+export type ArchiveVerifiedGroup = {
+  group: ArchiveGroup;
+  /**
+   * Digest of this group re-derived from the documents read back off disk after
+   * an isolated restore — not copied from the group entry. `parseManifest`
+   * requires it to equal that entry's checksum, so a restore that round-trips
+   * anything but the captured bytes cannot produce a matching record.
+   */
+  restoredChecksum: string;
+};
+
+/**
+ * Evidence that this archive was actually restored and read back, which is what
+ * `completeness` requires beyond group coverage.
+ *
+ * This record is not a proof against a determined forger — someone editing the
+ * archive by hand could copy the group checksums into it. It does not need to
+ * be: forging it buys nothing, because `restoreArchiveV4` re-runs the same
+ * verification on every restore and fails loudly. What the record rules out is
+ * the failure that matters here — tooling that declares an archive recoverable
+ * without ever having restored it.
+ */
+export type ArchiveVerification = {
+  /** When the verification pass ran. */
+  verifiedAt: string;
+  method: typeof VERIFICATION_METHOD;
+  /** Evidence per group, one entry per group the archive carries. */
+  groups: ArchiveVerifiedGroup[];
+};
+
 export type ArchiveBlobIndexEntry = {
   /** Logical reference that points at this blob, e.g. `quotePdfArtifacts/<artifactId>`. */
   reference: string;
@@ -115,6 +157,13 @@ export type ArchiveManifest = {
    * consistency.
    */
   unresolvedReferences: ArchiveUnresolvedReference[];
+  /**
+   * Evidence of an isolated restore-and-read-back pass, or `null` when the
+   * archive has never been verified. An archive written before verification ran
+   * carries `null` and is therefore partial — which is the honest state, not a
+   * defect.
+   */
+  verification: ArchiveVerification | null;
   completeness: ArchiveCompleteness;
 };
 
@@ -167,16 +216,25 @@ function assertNoUnknownKeys(
 }
 
 /**
- * The single definition of completeness. Required group and dependency coverage
- * are necessary, but cannot establish record-level integrity, snapshot consistency
- * or restored blob verification. S1 has no such verifier: every manifest remains
- * partial, even if all labels are present. A later stage must implement that
- * verification before this function can return complete; do not add a caller-
- * asserted boolean to bypass it.
+ * The single definition of completeness, and the only place that may return
+ * `complete`.
+ *
+ * Three things must hold, in order. Every required group is present; every
+ * asserted cross-group dependency has both endpoints present, since a reference
+ * into an absent group cannot be restored; and a verification pass has actually
+ * restored the archive in isolation and re-derived a digest for every required
+ * group from the data it read back.
+ *
+ * The third condition is the one that keeps this honest. Coverage is a claim the
+ * capture makes about itself; verification is a claim only a completed restore
+ * can make. There is deliberately no parameter by which a caller can assert the
+ * result — the evidence is checked against the group checksums in
+ * `parseManifest`, and a caller who has not run a restore has nothing to pass.
  */
 export function deriveCompleteness(
   present: readonly ArchiveGroup[],
   dependencies: readonly ArchiveDependency[],
+  verification: ArchiveVerification | null,
 ): ArchiveCompleteness {
   const have = new Set(present);
   for (const required of ARCHIVE_GROUPS) {
@@ -185,7 +243,12 @@ export function deriveCompleteness(
   for (const dependency of dependencies) {
     if (!have.has(dependency.from) || !have.has(dependency.to)) return "partial";
   }
-  return "partial";
+  if (verification === null) return "partial";
+  const verified = new Set(verification.groups.map((entry) => entry.group));
+  for (const required of ARCHIVE_GROUPS) {
+    if (!verified.has(required)) return "partial";
+  }
+  return "complete";
 }
 
 /** Stable digest of a JSON-serialisable payload, for a group checksum. */
@@ -207,6 +270,11 @@ export type BuildManifestInput = {
   exclusions?: ArchiveExclusion[];
   blobs?: ArchiveBlobIndexEntry[];
   unresolvedReferences?: ArchiveUnresolvedReference[];
+  /**
+   * Evidence from a completed isolated restore. Omitted by a plain capture,
+   * which has not verified anything yet.
+   */
+  verification?: ArchiveVerification | null;
 };
 
 export function buildManifest(input: BuildManifestInput): ArchiveManifest {
@@ -216,6 +284,10 @@ export function buildManifest(input: BuildManifestInput): ArchiveManifest {
     fail(`manifest.groups repeats group "${duplicates[0]}".`);
   }
   const dependencies = input.dependencies ?? [];
+  const verification = input.verification ?? null;
+  if (verification !== null) {
+    assertVerificationMatchesGroups(verification, input.groups);
+  }
   return {
     contractVersion: V4_CONTRACT_VERSION,
     createdAt: input.createdAt.toISOString(),
@@ -229,8 +301,41 @@ export function buildManifest(input: BuildManifestInput): ArchiveManifest {
     exclusions: input.exclusions ?? [],
     blobs: input.blobs ?? [],
     unresolvedReferences: sortUnresolvedReferences(input.unresolvedReferences ?? []),
-    completeness: deriveCompleteness(present, dependencies),
+    verification,
+    completeness: deriveCompleteness(present, dependencies, verification),
   };
+}
+
+/**
+ * Ties the evidence to the payload it claims to be evidence for. Every verified
+ * group must be one this archive carries, must appear once, and must carry the
+ * digest that group's own entry carries. A verification pass over different
+ * bytes — or over a group the archive does not hold — is rejected rather than
+ * quietly counted toward completeness.
+ */
+function assertVerificationMatchesGroups(
+  verification: ArchiveVerification,
+  groups: readonly ArchiveGroupEntry[],
+): void {
+  const seen = new Set<ArchiveGroup>();
+  for (const entry of verification.groups) {
+    if (seen.has(entry.group)) {
+      fail(`manifest.verification.groups repeats group "${entry.group}".`);
+    }
+    seen.add(entry.group);
+    const carried = groups.find((candidate) => candidate.group === entry.group);
+    if (carried === undefined) {
+      fail(
+        `manifest.verification.groups names group "${entry.group}", which the archive does not carry.`,
+      );
+    }
+    if (carried.checksum !== entry.restoredChecksum) {
+      fail(
+        `manifest.verification.groups[${entry.group}].restoredChecksum is ${entry.restoredChecksum}, ` +
+          `but the group checksum is ${carried.checksum}: the restored data is not what was captured.`,
+      );
+    }
+  }
 }
 
 function parseGroupEntry(value: unknown, index: number): ArchiveGroupEntry {
@@ -326,6 +431,29 @@ export function sortUnresolvedReferences(
   return [...entries].sort((left, right) => (key(left) < key(right) ? -1 : 1));
 }
 
+function parseVerification(value: unknown): ArchiveVerification {
+  const field = "manifest.verification";
+  if (!isRecord(value)) fail(`${field} must be an object or null.`);
+  assertNoUnknownKeys(value, ["verifiedAt", "method", "groups"], field);
+  if (value.method !== VERIFICATION_METHOD) {
+    fail(`${field}.method must be "${VERIFICATION_METHOD}".`);
+  }
+  const verifiedAt = text(value.verifiedAt, `${field}.verifiedAt`);
+  if (Number.isNaN(Date.parse(verifiedAt))) {
+    fail(`${field}.verifiedAt must be an ISO-8601 timestamp.`);
+  }
+  const groups = array(value.groups, `${field}.groups`).map((entry, index) => {
+    const entryField = `${field}.groups[${index}]`;
+    if (!isRecord(entry)) fail(`${entryField} must be an object.`);
+    assertNoUnknownKeys(entry, ["group", "restoredChecksum"], entryField);
+    return {
+      group: group(entry.group, `${entryField}.group`),
+      restoredChecksum: digest(entry.restoredChecksum, `${entryField}.restoredChecksum`),
+    };
+  });
+  return { verifiedAt: new Date(verifiedAt).toISOString(), method: VERIFICATION_METHOD, groups };
+}
+
 function array(value: unknown, field: string): unknown[] {
   if (!Array.isArray(value)) fail(`${field} must be an array.`);
   return value;
@@ -349,6 +477,7 @@ export function parseManifest(value: unknown): ArchiveManifest {
       "exclusions",
       "blobs",
       "unresolvedReferences",
+      "verification",
       "completeness",
     ],
     "manifest",
@@ -397,7 +526,15 @@ export function parseManifest(value: unknown): ArchiveManifest {
     fail("manifest.coverage.absent disagrees with manifest.groups.");
   }
 
-  const completeness = deriveCompleteness(present, dependencies);
+  // Absent rather than null is accepted so archives written before verification
+  // existed still parse; both mean the same thing — never verified, so partial.
+  const verification =
+    value.verification === undefined || value.verification === null
+      ? null
+      : parseVerification(value.verification);
+  if (verification !== null) assertVerificationMatchesGroups(verification, groups);
+
+  const completeness = deriveCompleteness(present, dependencies, verification);
   if (value.completeness !== completeness) {
     fail(
       `manifest.completeness claims "${String(value.completeness)}" but the archive derives "${completeness}".`,
@@ -413,6 +550,7 @@ export function parseManifest(value: unknown): ArchiveManifest {
     exclusions,
     blobs,
     unresolvedReferences: sortUnresolvedReferences(unresolvedReferences),
+    verification,
     completeness,
   };
 }
@@ -422,19 +560,30 @@ export function parseManifest(value: unknown): ArchiveManifest {
  * development; it may never be mistaken for a recovery image.
  */
 export function assertRecoverable(value: unknown): void {
+  // Re-parsed rather than trusted: parsing is what re-derives `completeness`
+  // from the coverage and evidence actually present, so a manifest that says
+  // "complete" without earning it fails here rather than being believed.
   const manifest = parseManifest(value);
+  if (manifest.completeness === "complete") return;
+
   const absent = manifest.coverage.absent;
   const unresolved = manifest.dependencies.filter(
     (dependency) =>
       !manifest.coverage.present.includes(dependency.from) ||
       !manifest.coverage.present.includes(dependency.to),
   );
+  const verified = new Set((manifest.verification?.groups ?? []).map((entry) => entry.group));
+  const unverified = manifest.coverage.present.filter((entry) => !verified.has(entry));
   const reasons = [
-    "record-level restore verification is not implemented",
     absent.length > 0 ? `absent required group(s): ${absent.join(", ")}` : "",
     unresolved.length > 0
       ? `dependencies into absent groups: ${unresolved.map((entry) => entry.reference).join("; ")}`
       : "",
+    manifest.verification === null
+      ? "the archive has never been verified by an isolated restore"
+      : unverified.length > 0
+        ? `verification did not cover group(s): ${unverified.join(", ")}`
+        : "",
   ].filter(Boolean);
   throw new ArchiveManifestError(
     `Refusing full recovery from a partial archive — ${reasons.join(" and ")}.`,

@@ -18,7 +18,12 @@ import { JARVIS_DATA_DIR } from "../../persistence/jarvisDataPaths.js";
 import { JSONPersistence } from "../../persistence/persistence.js";
 import { JsonPreferenceStore } from "../../preferences/jsonPreferenceStore.js";
 import { JsonUpgradeStore } from "../../upgrades/jsonUpgradeStore.js";
-import { assertRecoverable, type ArchiveManifest } from "../archiveManifest.js";
+import {
+  assertRecoverable,
+  groupChecksum,
+  type ArchiveManifest,
+  type ArchiveVerifiedGroup,
+} from "../archiveManifest.js";
 import { StrictBackupError } from "../strictValues.js";
 import { unresolvedReferencesFor } from "./archive.js";
 import type { ArchiveV4 } from "./archive.js";
@@ -66,6 +71,12 @@ export type RestoreV4Result = {
   markerPath: string;
   /** True when this run continued an interrupted restore rather than starting one. */
   resumed: boolean;
+  /**
+   * Per-group digests re-derived from the restored documents. This is what a
+   * capture seals into its manifest to earn `complete`; on an ordinary restore it
+   * is simply the proof this run checked out.
+   */
+  verifiedGroups: ArchiveVerifiedGroup[];
 };
 
 type InProgressMarker = {
@@ -383,9 +394,23 @@ function compare(
  * then re-read the same files through fresh ordinary runtime stores. If normal
  * loading changes any recovered value — a false-success write, or runtime
  * normalisation — this fails rather than reporting success.
+ *
+ * Returns the evidence that a pass actually happened: for each group, the digest
+ * of the payload rebuilt from what the strict readers just read off disk. The
+ * digest is computed from that re-read value, never copied from the manifest, so
+ * it can only match when the round-trip really preserved the captured bytes.
+ * `sealVerifiedArchive` turns this into the manifest's `verification` record.
  */
-export async function verifyRestoredGroups(destDir: string, archive: ArchiveV4): Promise<void> {
+export async function verifyRestoredGroups(
+  destDir: string,
+  archive: ArchiveV4,
+): Promise<ArchiveVerifiedGroup[]> {
   const file = (key: keyof typeof FILENAMES): string => path.join(destDir, FILENAMES[key]);
+  const evidence: ArchiveVerifiedGroup[] = [];
+  // The payloads as rebuilt from disk. Everything below is derived from these
+  // rather than from `archive.groups`, so the checks are direct readings of what
+  // the restore actually produced instead of inferences from an earlier compare.
+  const restored: ArchiveV4["groups"] = {};
 
   if (archive.groups.core) {
     const strict = await readCoreGroup(file("state"));
@@ -405,6 +430,8 @@ export async function verifyRestoredGroups(destDir: string, archive: ArchiveV4):
     }
     compare("tasks", archive.groups.core.tasks, snapshot.tasks, "runtime store");
     compare("reminders", archive.groups.core.reminders, snapshot.reminders, "runtime store");
+    restored.core = strict;
+    evidence.push({ group: "core", restoredChecksum: groupChecksum(strict) });
   }
 
   if (archive.groups.memory) {
@@ -452,6 +479,8 @@ export async function verifyRestoredGroups(destDir: string, archive: ArchiveV4):
       await new JsonPreferenceStore(file("preferences"), QUIET).list(),
       "runtime store",
     );
+    restored.memory = strict;
+    evidence.push({ group: "memory", restoredChecksum: groupChecksum(strict) });
   }
 
   if (archive.groups.businessRecords) {
@@ -529,13 +558,15 @@ export async function verifyRestoredGroups(destDir: string, archive: ArchiveV4):
         );
       }
     }
+    restored.businessRecords = strict;
+    evidence.push({ group: "businessRecords", restoredChecksum: groupChecksum(strict) });
   }
 
   {
     // Derived from what was just read back off disk, not copied from the
     // manifest: this is what stops an archive from understating a broken edge it
     // carries, or claiming one it does not.
-    const rederived = unresolvedReferencesFor(archive.groups);
+    const rederived = unresolvedReferencesFor(restored);
     if (!isDeepStrictEqual(rederived, archive.manifest.unresolvedReferences)) {
       throw new StrictBackupError(
         `Restore verification failed: the manifest declares ${String(
@@ -544,6 +575,8 @@ export async function verifyRestoredGroups(destDir: string, archive: ArchiveV4):
       );
     }
   }
+
+  return evidence;
 }
 
 export type RestoreOptions = {
@@ -659,7 +692,7 @@ export async function restoreArchiveV4(
   await writeJson(path.join(destDir, "manifest.json"), archive.manifest);
   await fsyncDir(destDir);
 
-  await verifyRestoredGroups(destDir, archive);
+  const verifiedGroups = await verifyRestoredGroups(destDir, archive);
   if (options.injectAfterVerify) {
     throw new StrictBackupError(
       `Injected failure after verification; restore left incomplete at ${destDir}.`,
@@ -684,5 +717,5 @@ export async function restoreArchiveV4(
   await fs.rm(path.join(destDir, RESTORE_IN_PROGRESS_MARKER), { force: true });
   await fsyncDir(destDir);
 
-  return { destination: destDir, manifest: archive.manifest, markerPath, resumed };
+  return { destination: destDir, manifest: archive.manifest, markerPath, resumed, verifiedGroups };
 }

@@ -8,9 +8,11 @@ import {
   groupChecksum,
   parseManifest,
   sortUnresolvedReferences,
+  VERIFICATION_METHOD,
   type ArchiveGroupEntry,
   type ArchiveManifest,
   type ArchiveUnresolvedReference,
+  type ArchiveVerifiedGroup,
 } from "../archiveManifest.js";
 import { StrictBackupError } from "../strictValues.js";
 import { overLimitAdvice, resolveMaxArchiveBytes } from "./limits.js";
@@ -110,6 +112,37 @@ export function buildArchiveV4(capture: JsonCapture, createdAt: Date): ArchiveV4
       businessRecords: capture.businessRecords,
     },
   };
+}
+
+/**
+ * Records a completed verification pass against a capture, producing the archive
+ * that may finally claim to be a recovery image.
+ *
+ * The manifest is rebuilt through `buildManifest` rather than patched, so
+ * `completeness` is re-derived from the coverage and evidence now present. This
+ * function cannot make an archive complete on its own: hand it evidence that
+ * does not match the group checksums and `buildManifest` rejects it; hand it
+ * evidence covering only some required groups and the result stays partial.
+ */
+export function sealVerifiedArchive(
+  archive: ArchiveV4,
+  verifiedGroups: readonly ArchiveVerifiedGroup[],
+  verifiedAt: Date,
+): ArchiveV4 {
+  const manifest = buildManifest({
+    createdAt: new Date(archive.manifest.createdAt),
+    groups: archive.manifest.groups,
+    dependencies: archive.manifest.dependencies,
+    exclusions: archive.manifest.exclusions,
+    blobs: archive.manifest.blobs,
+    unresolvedReferences: archive.manifest.unresolvedReferences,
+    verification: {
+      verifiedAt: verifiedAt.toISOString(),
+      method: VERIFICATION_METHOD,
+      groups: [...verifiedGroups],
+    },
+  });
+  return { manifest, groups: archive.groups };
 }
 
 /**
