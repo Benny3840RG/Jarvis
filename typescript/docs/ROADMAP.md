@@ -59,6 +59,10 @@ it at the end of every session.
 
 ## This session's work
 
+**Development specification validation.** Empty or whitespace-only GitHub issue
+titles are now rejected with the machine-readable `TITLE_EMPTY` reason, while
+surrounding whitespace on valid titles remains normalized before hashing.
+
 **Backup/restore coverage gap (priority area 7).** `npm run backup` only ever
 covered `state`/`tasks`/`reminders` (`src/backup/backup.ts`), even though the
 app has grown 13 more JSON-backed domains living in their own files under

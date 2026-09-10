@@ -49,6 +49,7 @@ export type SpecValidationRejectionReason =
   | "no-acceptance-criteria"
   | "MISSING_REQUIRED_LABEL"
   | "BODY_TOO_SHORT"
+  | "TITLE_EMPTY"
   | "TITLE_TOO_LONG";
 
 export type SpecValidationResult =
@@ -110,6 +111,7 @@ export function validateGithubIssueSpecification(
   if (issue.body.trim().length < minBodyLength) reasons.push("BODY_TOO_SHORT");
 
   const maxTitleLength = policy.maxTitleLength ?? MAX_TITLE_LENGTH;
+  if (issue.title.trim().length === 0) reasons.push("TITLE_EMPTY");
   if (issue.title.length > maxTitleLength) reasons.push("TITLE_TOO_LONG");
 
   const requiredLabels = policy.requiredLabels ?? [];

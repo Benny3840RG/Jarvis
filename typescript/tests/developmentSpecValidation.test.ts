@@ -93,6 +93,30 @@ test("an issue with an excessively long title is rejected", () => {
   if (!result.valid) assert.ok(result.reasons.includes("TITLE_TOO_LONG"));
 });
 
+test("an issue with an empty title is rejected", () => {
+  for (const title of ["", "   ", "\t\n\t"]) {
+    const result = validateGithubIssueSpecification(issue({ title }), {});
+
+    assert.equal(result.valid, false);
+    if (!result.valid) assert.deepEqual(result.reasons, ["TITLE_EMPTY"]);
+  }
+});
+
+test("title surrounding whitespace is excluded from the specification hash", () => {
+  const trimmed = validateGithubIssueSpecification(issue({ title: "A normalized objective" }), {});
+  const padded = validateGithubIssueSpecification(
+    issue({ title: " \tA normalized objective\n" }),
+    {},
+  );
+
+  assert.equal(trimmed.valid, true);
+  assert.equal(padded.valid, true);
+  if (!trimmed.valid || !padded.valid) return;
+
+  assert.equal(padded.specification.objective, trimmed.specification.objective);
+  assert.equal(padded.specification.specHash, trimmed.specification.specHash);
+});
+
 test("deriveDevelopmentSubjectId is deterministic and stable for the same issue", () => {
   const a = deriveDevelopmentSubjectId({ owner: "Benny3840RG", repo: "Jarvis", issueNumber: 500 });
   const b = deriveDevelopmentSubjectId({ owner: "Benny3840RG", repo: "Jarvis", issueNumber: 500 });
