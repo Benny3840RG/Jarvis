@@ -5,6 +5,7 @@ import path from "node:path";
 import {
   buildArchiveV4,
   readArchiveV4File,
+  sealVerifiedArchive,
   writeArchiveV4File,
   type ArchiveV4,
 } from "../backup/v4/archive.js";
@@ -40,6 +41,11 @@ export function archiveV4Usage(): string[] {
     "coverage: partial — the full-recovery restore path refuses it, and a staged",
     "restore must say --allow-partial to acknowledge it is not a recovery.",
     "",
+    "export-v4 proves the archive before writing it: the capture is restored into",
+    "a throwaway directory and read back, and the resulting per-group digests are",
+    "sealed into the manifest. Coverage, not verification, is what still keeps an",
+    "archive partial.",
+    "",
     "An interrupted restore leaves the destination unmistakably incomplete. Re-run",
     "with --resume to discard that restore's own output and start again; a plain",
     "retry refuses it.",
@@ -51,7 +57,8 @@ function describeCoverage(manifest: ArchiveManifest): string {
   return (
     `completeness=${manifest.completeness}` +
     ` present=[${manifest.coverage.present.join(", ")}]` +
-    (absent.length > 0 ? ` absent=[${absent.join(", ")}]` : "")
+    (absent.length > 0 ? ` absent=[${absent.join(", ")}]` : "") +
+    ` verified=[${(manifest.verification?.groups ?? []).map((entry) => entry.group).join(", ")}]`
   );
 }
 
@@ -84,10 +91,36 @@ function describeCounts(archive: ArchiveV4): string {
     .join(" ");
 }
 
+/**
+ * Runs the archive through a full restore in a throwaway directory and returns
+ * it sealed with the evidence that pass produced. Live storage is never read or
+ * written, and the directory is removed whether or not verification passed.
+ *
+ * Sealing after the fact is sound because the evidence attests to the group
+ * payloads, which the seal does not touch — it only adds the record to the
+ * manifest that wraps them.
+ */
+async function sealByIsolatedRestore(archive: ArchiveV4): Promise<ArchiveV4> {
+  const scratch = await mkdtemp(path.join(tmpdir(), "jarvis-archive-v4-seal-"));
+  try {
+    const result = await restoreArchiveV4(archive, path.join(scratch, "restore"), {
+      // The archive is genuinely unverified at this moment — that is what this
+      // restore is about to establish — so it is materialised as the partial
+      // archive it still is.
+      allowPartial: true,
+    });
+    return sealVerifiedArchive(archive, result.verifiedGroups, new Date());
+  } finally {
+    await rm(scratch, { recursive: true, force: true });
+  }
+}
+
 async function exportArchive(filePath: string): Promise<void> {
   const paths = resolveJsonSourceConfig();
   const capture = await captureJsonGroups(paths);
-  const archive = buildArchiveV4(capture, new Date());
+  // Written only after it has been proven to restore, so an archive on disk has
+  // always survived a real read-back rather than merely having been serialised.
+  const archive = await sealByIsolatedRestore(buildArchiveV4(capture, new Date()));
   await writeArchiveV4File(filePath, archive);
   console.log(
     `Archive v4 written: ${filePath} — ${describeCoverage(archive.manifest)}; ${describeCounts(archive)}.`,
@@ -105,7 +138,12 @@ async function verifyArchive(filePath: string): Promise<void> {
   const archive = await readArchiveV4File(filePath);
   const scratch = await mkdtemp(path.join(tmpdir(), "jarvis-archive-v4-verify-"));
   try {
-    await restoreArchiveV4(archive, path.join(scratch, "restore"), { allowPartial: true });
+    await restoreArchiveV4(archive, path.join(scratch, "restore"), {
+      // A complete archive goes through the real recovery gate, so verifying one
+      // exercises the same refusal a genuine recovery would face. Only an archive
+      // that is still partial is materialised under the staged-development flag.
+      allowPartial: archive.manifest.completeness === "partial",
+    });
   } finally {
     await rm(scratch, { recursive: true, force: true });
   }

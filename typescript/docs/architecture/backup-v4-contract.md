@@ -103,16 +103,17 @@ A single v4 archive contract. Implementation lands in stages by domain group.
 
 Every archive carries a **versioned manifest**:
 
-| Manifest field    | Purpose                                                                                                      |
-| ----------------- | ------------------------------------------------------------------------------------------------------------ |
-| `contractVersion` | the v4 contract this archive claims                                                                          |
-| `groups[]`        | each domain group present, with its schema version                                                           |
-| `coverage`        | which required groups are present and which are absent                                                       |
-| `counts`          | per-domain record counts                                                                                     |
-| `checksums`       | per-group content digest, plus blob digests                                                                  |
-| `dependencies`    | cross-group reference edges this archive asserts                                                             |
-| `exclusions`      | every intentional exclusion, with its recorded recovery method                                               |
-| `completeness`    | `complete` only when every required group **and** every cross-domain reference verifies; otherwise `partial` |
+| Manifest field    | Purpose                                                                                                                                                              |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `contractVersion` | the v4 contract this archive claims                                                                                                                                  |
+| `groups[]`        | each domain group present, with its schema version                                                                                                                   |
+| `coverage`        | which required groups are present and which are absent                                                                                                               |
+| `counts`          | per-domain record counts                                                                                                                                             |
+| `checksums`       | per-group content digest, plus blob digests                                                                                                                          |
+| `dependencies`    | cross-group reference edges this archive asserts                                                                                                                     |
+| `exclusions`      | every intentional exclusion, with its recorded recovery method                                                                                                       |
+| `verification`    | evidence of an isolated restore-and-read-back pass, or `null` when the archive has never been verified                                                               |
+| `completeness`    | `complete` only when every required group is present, every cross-domain reference resolves, **and** `verification` covers every required group; otherwise `partial` |
 
 **A partial archive is unmistakably partial and is rejected by the
 full-recovery path.** It may exist for staged development; it may not be
@@ -135,22 +136,42 @@ captured outside the consistent boundary is recorded as such in the manifest.
 | S6    | Quote aggregate + blobs                          | `quotes` (Convex aggregate), quoteRevisions, quoteDeliveryAttempts, quoteMigrationRecords, quotePdfArtifacts + Convex file storage. Physical-id translation and blob verification from §1/§3 apply here.                                                                                                                     |
 
 Groups are built and tested incrementally. `completeness: complete` is only
-reachable after S6 verifies, and only Jarvis decides whether it is accepted.
+reachable after S6 lands and its capture verifies, and only Jarvis decides
+whether it is accepted.
 
-## S1 implementation boundary
+## The verification gate
 
 `src/backup/archiveManifest.ts` supplies the manifest parser, coverage metadata,
-SHA-256 digest format checks and a full-recovery refusal gate. It does not yet
-capture domains or verify restored records. Group labels, dependency strings
-and `consistentSnapshot` declarations are metadata, not verification evidence.
-`deriveCompleteness` therefore returns `partial` even when every group is
-listed. `assertRecoverable` reparses its input and refuses full recovery until
-a later stage implements record-level verification; mutating `completeness`
-cannot bypass the gate. Staged capture can still describe partial coverage.
+SHA-256 digest format checks and the full-recovery refusal gate. Group labels,
+dependency strings and `consistentSnapshot` declarations are metadata, not
+verification evidence, so coverage alone never earns `complete`.
 
-Next stages must implement capture/restore and verify identity, references,
-snapshot consistency and restored blobs before enabling `complete`. Existing
-v1–v3 backup commands remain unchanged.
+What earns it is a completed restore. `verifyRestoredGroups` materialises the
+archive into an isolated directory, re-reads every document with the strict
+readers and again through the ordinary runtime stores, and returns a digest per
+group **re-derived from what it read off disk**. `sealVerifiedArchive` records
+those digests in `manifest.verification`, rebuilding the manifest through
+`buildManifest` so `completeness` is re-derived rather than patched.
+`parseManifest` then requires each recorded digest to equal that group's own
+checksum, so evidence describing different bytes is rejected on the way back in.
+
+`export-v4` runs that pass before it writes anything: an archive on disk has
+always survived a real read-back. `assertRecoverable` reparses its input, so a
+manifest that claims `complete` without the evidence to derive it is refused
+rather than believed, and mutating `completeness` cannot bypass the gate.
+
+The record is not proof against a determined forger — someone editing the file
+by hand could copy the group checksums into it. It does not need to be. Forging
+it buys nothing, because every restore re-runs the same verification and fails
+loudly; what the record rules out is tooling that calls an archive recoverable
+without ever having restored it.
+
+The verification machinery is in place and runs on every capture and every
+restore. What remains before `complete` is reachable is coverage: S4, S5 and S6
+must capture `notesAndEvidence`, `orchestration` and `quoteAggregate`, including
+physical-id translation and blob verification for the last of them. Once they
+do, `deriveCompleteness` returns `complete` on its own — there is no separate
+switch to throw. Existing v1–v3 backup commands remain unchanged.
 
 ## Relationship to the parked archive-v4 prototype
 

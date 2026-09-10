@@ -15,6 +15,7 @@ import {
   buildArchiveV4,
   parseArchiveV4,
   readArchiveV4File,
+  sealVerifiedArchive,
   writeArchiveV4File,
   type ArchiveV4,
 } from "../src/backup/v4/archive.js";
@@ -640,6 +641,84 @@ describe("archive v4 — references the source itself cannot resolve", () => {
         assert.match(error.message, /must be one of/);
         return true;
       },
+    );
+  });
+});
+
+describe("archive v4 — completeness is earned by a real restore, not declared", () => {
+  it("seals a capture with evidence re-derived from the restored documents", async () => {
+    const archive = await captureFixture();
+    assert.equal(archive.manifest.verification, null);
+    assert.equal(archive.manifest.completeness, "partial");
+
+    const result = await restoreArchiveV4(archive, path.join(await scratch(), "out"), {
+      allowPartial: true,
+    });
+    const sealed = sealVerifiedArchive(archive, result.verifiedGroups, CREATED_AT);
+
+    // The evidence is the digest of what came back off disk, and it matches the
+    // captured group checksums — that is the whole claim.
+    assert.deepEqual(sealed.manifest.verification?.groups.map((entry) => entry.group).sort(), [
+      "businessRecords",
+      "core",
+      "memory",
+    ]);
+    for (const evidence of sealed.manifest.verification?.groups ?? []) {
+      const carried = sealed.manifest.groups.find((entry) => entry.group === evidence.group);
+      assert.equal(evidence.restoredChecksum, carried?.checksum);
+    }
+  });
+
+  it("stays partial for the absent groups, not for want of verification", async () => {
+    const archive = await captureFixture();
+    const result = await restoreArchiveV4(archive, path.join(await scratch(), "out"), {
+      allowPartial: true,
+    });
+    const sealed = sealVerifiedArchive(archive, result.verifiedGroups, CREATED_AT);
+
+    assert.equal(sealed.manifest.completeness, "partial");
+    assert.deepEqual([...sealed.manifest.coverage.absent].sort(), [...ABSENT_GROUPS].sort());
+    assert.throws(
+      () => {
+        assertRecoverable(sealed.manifest);
+      },
+      (error: unknown) =>
+        error instanceof Error &&
+        /absent required group\(s\)/.test(error.message) &&
+        !/never been verified/.test(error.message),
+    );
+  });
+
+  it("survives the file round trip with its evidence intact", async () => {
+    const archive = await captureFixture();
+    const result = await restoreArchiveV4(archive, path.join(await scratch(), "out"), {
+      allowPartial: true,
+    });
+    const sealed = sealVerifiedArchive(archive, result.verifiedGroups, CREATED_AT);
+
+    const target = path.join(await scratch(), "sealed.json");
+    await writeArchiveV4File(target, sealed);
+    const readBack = await readArchiveV4File(target);
+    assert.deepEqual(readBack.manifest.verification, sealed.manifest.verification);
+    assert.equal(readBack.manifest.completeness, "partial");
+  });
+
+  it("refuses an archive whose evidence was edited to claim a different restore", async () => {
+    const archive = await captureFixture();
+    const result = await restoreArchiveV4(archive, path.join(await scratch(), "out"), {
+      allowPartial: true,
+    });
+    const sealed = sealVerifiedArchive(archive, result.verifiedGroups, CREATED_AT);
+    const tampered = JSON.parse(JSON.stringify(sealed)) as {
+      manifest: { verification: { groups: { restoredChecksum: string }[] } };
+    };
+    tampered.manifest.verification.groups[0].restoredChecksum = `sha256:${"0".repeat(64)}`;
+
+    assert.throws(
+      () => parseArchiveV4(tampered),
+      (error: unknown) =>
+        error instanceof StrictBackupError &&
+        /restored data is not what was captured/.test(error.message),
     );
   });
 });

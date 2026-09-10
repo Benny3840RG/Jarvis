@@ -5,6 +5,7 @@ import {
   ARCHIVE_GROUPS,
   ArchiveManifestError,
   V4_CONTRACT_VERSION,
+  VERIFICATION_METHOD,
   assertRecoverable,
   buildManifest,
   deriveCompleteness,
@@ -12,6 +13,7 @@ import {
   parseManifest,
   type ArchiveGroup,
   type ArchiveGroupEntry,
+  type ArchiveVerification,
 } from "../src/backup/archiveManifest.js";
 
 const AT = new Date("2026-09-10T00:00:00.000Z");
@@ -30,6 +32,18 @@ function allGroups(): ArchiveGroupEntry[] {
   return ARCHIVE_GROUPS.map((group) => entry(group));
 }
 
+/** Evidence matching what `entry` checksums, i.e. a pass that really round-tripped. */
+function verificationFor(groups: readonly ArchiveGroup[]): ArchiveVerification {
+  return {
+    verifiedAt: AT.toISOString(),
+    method: VERIFICATION_METHOD,
+    groups: groups.map((group) => ({
+      group,
+      restoredChecksum: groupChecksum({ group, counts: {} }),
+    })),
+  };
+}
+
 describe("archive v4 manifest — completeness is derived, never asserted", () => {
   it("is partial while any required group is absent", () => {
     const manifest = buildManifest({ createdAt: AT, groups: [entry("core")] });
@@ -38,8 +52,56 @@ describe("archive v4 manifest — completeness is derived, never asserted", () =
     assert.equal(manifest.coverage.absent.length, ARCHIVE_GROUPS.length - 1);
   });
 
-  it("remains partial even with every group label until a verifier is implemented", () => {
-    assert.equal(buildManifest({ createdAt: AT, groups: allGroups() }).completeness, "partial");
+  it("remains partial with every group label but no verification pass", () => {
+    const manifest = buildManifest({ createdAt: AT, groups: allGroups() });
+    assert.equal(manifest.completeness, "partial");
+    assert.equal(manifest.verification, null);
+  });
+
+  it("is complete once a verification pass covers every present group", () => {
+    const manifest = buildManifest({
+      createdAt: AT,
+      groups: allGroups(),
+      verification: verificationFor(ARCHIVE_GROUPS),
+    });
+    assert.equal(manifest.completeness, "complete");
+    assert.doesNotThrow(() => {
+      assertRecoverable(manifest);
+    });
+  });
+
+  it("refuses evidence whose digest is not the group's own checksum", () => {
+    assert.throws(
+      () =>
+        buildManifest({
+          createdAt: AT,
+          groups: allGroups(),
+          verification: {
+            verifiedAt: AT.toISOString(),
+            method: VERIFICATION_METHOD,
+            groups: ARCHIVE_GROUPS.map((group) => ({
+              group,
+              restoredChecksum: groupChecksum({ group, counts: { tampered: 1 } }),
+            })),
+          },
+        }),
+      (error: unknown) =>
+        error instanceof ArchiveManifestError &&
+        /restored data is not what was captured/.test(error.message),
+    );
+  });
+
+  it("refuses evidence for a group the archive does not carry", () => {
+    assert.throws(
+      () =>
+        buildManifest({
+          createdAt: AT,
+          groups: [entry("core")],
+          verification: verificationFor(["core", "memory"]),
+        }),
+      (error: unknown) =>
+        error instanceof ArchiveManifestError && /the archive does not carry/.test(error.message),
+    );
   });
 
   it("is partial when a declared dependency points into an absent group", () => {
@@ -74,13 +136,45 @@ describe("archive v4 manifest — completeness is derived, never asserted", () =
 
 describe("archive v4 manifest — deriveCompleteness is the single definition", () => {
   it("does not treat group and dependency labels as verification", () => {
-    assert.equal(deriveCompleteness([], []), "partial");
-    assert.equal(deriveCompleteness(ARCHIVE_GROUPS.slice(0, -1), []), "partial");
-    assert.equal(deriveCompleteness([...ARCHIVE_GROUPS], []), "partial");
+    assert.equal(deriveCompleteness([], [], null), "partial");
+    assert.equal(deriveCompleteness(ARCHIVE_GROUPS.slice(0, -1), [], null), "partial");
+    assert.equal(deriveCompleteness([...ARCHIVE_GROUPS], [], null), "partial");
     assert.equal(
       deriveCompleteness(
         [...ARCHIVE_GROUPS],
         [{ from: "core", to: "memory", reference: "buildLogs.buildId -> builds.id" }],
+        null,
+      ),
+      "partial",
+    );
+  });
+
+  it("is complete only when every required group is both present and verified", () => {
+    assert.equal(
+      deriveCompleteness([...ARCHIVE_GROUPS], [], verificationFor(ARCHIVE_GROUPS)),
+      "complete",
+    );
+  });
+
+  it("stays partial when verification covers only some of the required groups", () => {
+    assert.equal(
+      deriveCompleteness([...ARCHIVE_GROUPS], [], verificationFor(ARCHIVE_GROUPS.slice(0, -1))),
+      "partial",
+    );
+  });
+
+  it("stays partial when a group is verified but absent from the archive", () => {
+    const present = ARCHIVE_GROUPS.slice(0, -1);
+    assert.equal(deriveCompleteness(present, [], verificationFor(ARCHIVE_GROUPS)), "partial");
+  });
+
+  it("stays partial when a dependency points into an absent group, however verified", () => {
+    const present = ARCHIVE_GROUPS.filter((group) => group !== "quoteAggregate");
+    assert.equal(
+      deriveCompleteness(
+        present,
+        [{ from: "businessRecords", to: "quoteAggregate", reference: "invoices.quoteId" }],
+        verificationFor(present),
       ),
       "partial",
     );
@@ -91,7 +185,7 @@ describe("archive v4 manifest — deriveCompleteness is the single definition", 
       const groups = ARCHIVE_GROUPS.slice(0, size);
       assert.equal(
         buildManifest({ createdAt: AT, groups: groups.map((group) => entry(group)) }).completeness,
-        deriveCompleteness(groups, []),
+        deriveCompleteness(groups, [], null),
         `prefix of ${size} group(s)`,
       );
     }
@@ -215,7 +309,7 @@ describe("archive v4 manifest — the full-recovery path refuses a partial archi
 
   it("refuses full recovery when group labels have no restore-verification evidence", () => {
     const manifest = buildManifest({ createdAt: AT, groups: allGroups() });
-    assert.throws(() => assertRecoverable(manifest), /verification.*not implemented/);
+    assert.throws(() => assertRecoverable(manifest), /never been verified by an isolated restore/);
   });
 
   it("revalidates a mutable completeness claim at the recovery boundary", () => {
@@ -238,11 +332,30 @@ describe("archive v4 manifest — the full-recovery path refuses a partial archi
     assert.throws(() => assertRecoverable(manifest), /Refusing full recovery/);
   });
 
-  it("today's archives are partial by construction — no group is implemented yet", () => {
-    // S1 ships the gate, not coverage. Until S2-S6 land, every archive this
-    // codebase can build is partial, and the recovery path must say so.
-    assert.equal(buildManifest({ createdAt: AT, groups: [] }).completeness, "partial");
-    assert.throws(() => assertRecoverable(buildManifest({ createdAt: AT, groups: [] })));
+  it("today's archives are partial by construction — three groups are unimplemented", () => {
+    // The verification gate is now real, so partiality has to come from the
+    // remaining coverage gap rather than from a missing verifier. `core`,
+    // `memory` and `businessRecords` are captured; the other three are not, so
+    // even a fully verified capture of what exists is still partial — and the
+    // refusal must name those groups rather than the verification.
+    const implemented: ArchiveGroup[] = ["core", "memory", "businessRecords"];
+    const manifest = buildManifest({
+      createdAt: AT,
+      groups: implemented.map((group) => entry(group)),
+      verification: verificationFor(implemented),
+    });
+    assert.equal(manifest.completeness, "partial");
+    assert.throws(
+      () => {
+        assertRecoverable(manifest);
+      },
+      (error: unknown) =>
+        error instanceof ArchiveManifestError &&
+        /absent required group\(s\): notesAndEvidence, orchestration, quoteAggregate/.test(
+          error.message,
+        ) &&
+        !/never been verified/.test(error.message),
+    );
   });
 });
 
@@ -258,5 +371,74 @@ describe("archive v4 manifest — group checksums", () => {
       groupChecksum({ outer: { y: 2, x: 1 } }),
     );
     assert.notEqual(groupChecksum({ outer: { x: 1 } }), groupChecksum({ outer: { x: 1, y: 2 } }));
+  });
+});
+
+describe("archive v4 manifest — verification survives the round trip", () => {
+  it("parses back a sealed manifest as complete", () => {
+    const sealed = buildManifest({
+      createdAt: AT,
+      groups: allGroups(),
+      verification: verificationFor(ARCHIVE_GROUPS),
+    });
+    const parsed = parseManifest(JSON.parse(JSON.stringify(sealed)));
+    assert.equal(parsed.completeness, "complete");
+    assert.equal(parsed.verification?.method, VERIFICATION_METHOD);
+    assert.deepEqual(parsed.verification?.groups, sealed.verification?.groups);
+  });
+
+  it("treats a manifest written before verification existed as partial", () => {
+    const sealed = buildManifest({ createdAt: AT, groups: allGroups() });
+    const legacy = JSON.parse(JSON.stringify(sealed)) as Record<string, unknown>;
+    delete legacy.verification;
+    const parsed = parseManifest(legacy);
+    assert.equal(parsed.verification, null);
+    assert.equal(parsed.completeness, "partial");
+  });
+
+  it("refuses a manifest that claims complete on fabricated evidence", () => {
+    const sealed = buildManifest({
+      createdAt: AT,
+      groups: allGroups(),
+      verification: verificationFor(ARCHIVE_GROUPS),
+    });
+    const forged = JSON.parse(JSON.stringify(sealed)) as {
+      verification: { groups: { group: string; restoredChecksum: string }[] };
+    };
+    forged.verification.groups[0].restoredChecksum = groupChecksum({ not: "the captured bytes" });
+    assert.throws(
+      () => parseManifest(forged),
+      (error: unknown) =>
+        error instanceof ArchiveManifestError &&
+        /restored data is not what was captured/.test(error.message),
+    );
+  });
+
+  it("refuses evidence from an unknown verification method", () => {
+    const sealed = buildManifest({
+      createdAt: AT,
+      groups: allGroups(),
+      verification: verificationFor(ARCHIVE_GROUPS),
+    });
+    const forged = JSON.parse(JSON.stringify(sealed)) as { verification: { method: string } };
+    forged.verification.method = "trust-me:1";
+    assert.throws(
+      () => parseManifest(forged),
+      (error: unknown) =>
+        error instanceof ArchiveManifestError && /verification.method must be/.test(error.message),
+    );
+  });
+
+  it("names the missing verification when refusing recovery", () => {
+    const manifest = buildManifest({ createdAt: AT, groups: allGroups() });
+    assert.throws(
+      () => {
+        assertRecoverable(manifest);
+      },
+      (error: unknown) =>
+        error instanceof ArchiveManifestError &&
+        /never been verified by an isolated restore/.test(error.message) &&
+        !/not implemented/.test(error.message),
+    );
   });
 });
