@@ -23,6 +23,7 @@ import { StrictBackupError } from "../strictValues.js";
 import { unresolvedReferencesFor } from "./archive.js";
 import type { ArchiveV4 } from "./archive.js";
 import { readBusinessGroup } from "./businessSource.js";
+import { MAX_MARKER_BYTES } from "./limits.js";
 import { readCoreGroup, readMemoryGroup } from "./jsonSource.js";
 
 export const RESTORE_MARKER = ".jarvis-archive-v4-complete.json";
@@ -122,6 +123,21 @@ function assertDestinationNotLive(destination: string, liveDir: string): void {
 }
 
 async function readMarker(target: string): Promise<Record<string, unknown> | null> {
+  // Markers are a handful of fields. Anything larger is not a marker this
+  // restore wrote, and must not be read wholly into memory to find that out.
+  const size = await fs.stat(target).then(
+    (entry) => entry.size,
+    (error: unknown) => {
+      if (isNodeError(error) && error.code === "ENOENT") return null;
+      throw error;
+    },
+  );
+  if (size === null) return null;
+  if (size > MAX_MARKER_BYTES) {
+    throw new StrictBackupError(
+      `Restore marker ${target} is ${String(size)} bytes, far larger than any marker this restore writes; refusing to read it.`,
+    );
+  }
   const raw = await fs.readFile(target, "utf8").catch((error: unknown) => {
     if (isNodeError(error) && error.code === "ENOENT") return null;
     throw error;
