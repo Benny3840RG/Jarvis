@@ -24,6 +24,7 @@ import {
   parseTask,
   parseUpgrade,
 } from "../backup.js";
+import { sortUnresolvedReferences, type ArchiveUnresolvedReference } from "../archiveManifest.js";
 import {
   assertArray,
   assertJsonSafe,
@@ -281,21 +282,43 @@ export async function readMemoryGroup(
     readArrayDocument(paths.assets, "entries", ASSET_KEYS, parseAsset, "asset"),
     readArrayDocument(paths.preferences, "entries", PREFERENCE_KEYS, parsePreference, "preference"),
   ]);
-  const buildIds = new Set(builds.map((build) => build.id));
-  for (const log of buildLogs) {
-    if (!buildIds.has(log.buildId)) {
-      fail(`buildLogs (${log.id})`, `references build ${log.buildId}, which is not in the source.`);
-    }
-  }
-  for (const upgrade of upgrades) {
-    if (!buildIds.has(upgrade.buildId)) {
-      fail(
-        `upgrades (${upgrade.id})`,
-        `references build ${upgrade.buildId}, which is not in the source.`,
-      );
-    }
-  }
   return { builds, buildLogs, upgrades, assets, preferences };
+}
+
+/**
+ * Build references that the source itself cannot resolve.
+ *
+ * Deleting a build does **not** cascade to its logs and upgrades, and no
+ * dependency guard prevents it (`buildController` matches an error message that
+ * nothing throws), so an orphaned log is a legal state of live data. Refusing
+ * to capture it would make the backup unusable after an ordinary deletion and
+ * would lose the orphaned rows, which are still authoritative. They are captured
+ * verbatim and the broken edge is recorded instead.
+ */
+export function memoryUnresolvedReferences(
+  payload: MemoryGroupPayload,
+): ArchiveUnresolvedReference[] {
+  const buildIds = new Set(payload.builds.map((build) => build.id));
+  const unresolved: ArchiveUnresolvedReference[] = [];
+  const check = (
+    collection: string,
+    rows: ReadonlyArray<{ id: string; buildId: string }>,
+  ): void => {
+    for (const row of rows) {
+      if (buildIds.has(row.buildId)) continue;
+      unresolved.push({
+        group: "memory",
+        collection,
+        recordId: row.id,
+        field: "buildId",
+        value: row.buildId,
+        targetCollection: "builds",
+      });
+    }
+  };
+  check("buildLogs", payload.buildLogs);
+  check("upgrades", payload.upgrades);
+  return sortUnresolvedReferences(unresolved);
 }
 
 /**

@@ -47,12 +47,32 @@ readers therefore **abort the whole capture** on:
 - malformed JSON (and, unlike the stores, they leave the file where it is),
 - an unsupported document version, an unknown field, or a missing array,
 - an invalid record, a duplicate id within a collection,
-- a build log or upgrade referencing a build that is not in the source,
 - a symlinked source file.
 
 Only a file that has genuinely never been created is reported as empty. Ids,
 timestamps and array order are preserved verbatim — nothing is renumbered,
 re-sorted or re-stamped.
+
+## References the source itself cannot resolve
+
+Deleting a build does not cascade to its logs and upgrades, and nothing enforces
+the dependency, so a log whose build is gone is a **legal state of live data**,
+not corruption. Refusing to capture it would make the backup unusable after an
+ordinary deletion, and would lose rows that are still authoritative.
+
+Such rows are therefore captured verbatim and the broken edge is recorded in the
+manifest's `unresolvedReferences`, printed by every command:
+
+```
+1 reference(s) in the source do not resolve. They are captured as-is, not repaired:
+  buildLogs/log-1.buildId -> builds/build-deleted (missing)
+```
+
+This does not change `completeness`, which describes group coverage rather than
+the source's own consistency. What the archive does guarantee is that it never
+_introduces_ a broken edge: the list is re-derived from the data read back off
+disk during restore verification and compared against the manifest's, so an
+archive cannot understate a broken edge it carries or claim one it does not.
 
 ## Restore semantics
 

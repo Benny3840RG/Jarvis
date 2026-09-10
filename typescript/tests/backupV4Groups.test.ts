@@ -296,13 +296,6 @@ describe("archive v4 — strict reads never silently drop data", () => {
       { builds: { version: 1, builds: [], extra: 1 } },
       /unsupported field "extra"/,
     ],
-    [
-      "a build log pointing at a build that is not in the source",
-      {
-        buildLogs: { version: 1, entries: [{ ...FIXTURE.buildLogs.entries[0], buildId: "gone" }] },
-      },
-      /references build gone/,
-    ],
   ];
 
   for (const [label, override, message] of cases) {
@@ -532,5 +525,109 @@ describe("archive v4 — CLI surface stays additive", () => {
   it("documents that this stage produces partial archives", () => {
     assert.match(archiveV4Usage().join("\n"), /partial/);
     assert.match(archiveV4Usage().join("\n"), /--allow-partial/);
+  });
+});
+
+describe("archive v4 — references the source itself cannot resolve", () => {
+  /**
+   * Deleting a build does not cascade to its logs and upgrades, and nothing
+   * enforces the dependency, so an orphaned row is a legal state of live data.
+   * The capture must not refuse it and must not drop it.
+   */
+  const orphaned = {
+    buildLogs: {
+      version: 1,
+      entries: [{ ...FIXTURE.buildLogs.entries[0], buildId: "build-deleted" }],
+    },
+    upgrades: {
+      version: 1,
+      entries: [{ ...FIXTURE.upgrades.entries[0], buildId: "build-deleted" }],
+    },
+  };
+
+  it("captures the orphaned records and records the broken edges", async () => {
+    const archive = await captureFixture(orphaned);
+    assert.equal(archive.groups.memory?.buildLogs.length, 1);
+    assert.equal(archive.groups.memory?.upgrades.length, 1);
+    assert.deepEqual(archive.manifest.unresolvedReferences, [
+      {
+        group: "memory",
+        collection: "buildLogs",
+        recordId: "log-1",
+        field: "buildId",
+        value: "build-deleted",
+        targetCollection: "builds",
+      },
+      {
+        group: "memory",
+        collection: "upgrades",
+        recordId: "upg-1",
+        field: "buildId",
+        value: "build-deleted",
+        targetCollection: "builds",
+      },
+    ]);
+  });
+
+  it("records none when every reference resolves", async () => {
+    const archive = await captureFixture();
+    assert.deepEqual(archive.manifest.unresolvedReferences, []);
+  });
+
+  it("carries the broken edges through restore without repairing them", async () => {
+    const archive = await captureFixture(orphaned);
+    const dir = await scratch();
+    const destination = path.join(dir, "restore");
+    await restoreArchiveV4(archive, destination, { allowPartial: true });
+    const restored = await readMemoryGroup({
+      builds: path.join(destination, "jarvis-builds.json"),
+      buildLogs: path.join(destination, "jarvis-build-logs.json"),
+      upgrades: path.join(destination, "jarvis-upgrades.json"),
+      assets: path.join(destination, "jarvis-assets.json"),
+      preferences: path.join(destination, "jarvis-preferences.json"),
+    });
+    assert.equal(restored.buildLogs[0]?.buildId, "build-deleted");
+    const marker = JSON.parse(await readFile(path.join(destination, RESTORE_MARKER), "utf8")) as {
+      unresolvedReferences: unknown[];
+    };
+    assert.equal(marker.unresolvedReferences.length, 2);
+  });
+
+  it("fails the restore when the manifest understates the broken edges it carries", async () => {
+    const archive = await captureFixture(orphaned);
+    const forged: ArchiveV4 = {
+      manifest: { ...archive.manifest, unresolvedReferences: [] },
+      groups: archive.groups,
+    };
+    const dir = await scratch();
+    await assert.rejects(
+      restoreArchiveV4(forged, path.join(dir, "restore"), { allowPartial: true }),
+      (error: unknown) => {
+        assert.ok(error instanceof StrictBackupError);
+        assert.match(
+          error.message,
+          /declares 0 unresolved reference\(s\), the restored data has 2/,
+        );
+        return true;
+      },
+    );
+  });
+
+  it("rejects an unresolved-reference entry naming an unknown group at parse time", async () => {
+    const archive = await captureFixture(orphaned);
+    const file = path.join(await scratch(), "archive.json");
+    await writeArchiveV4File(file, archive);
+    const raw = JSON.parse(await readFile(file, "utf8")) as {
+      manifest: { unresolvedReferences: Array<Record<string, unknown>> };
+    };
+    raw.manifest.unresolvedReferences[0]!.group = "notAGroup";
+    assert.throws(
+      () => parseArchiveV4(raw),
+      (error: unknown) => {
+        assert.ok(error instanceof StrictBackupError);
+        assert.match(error.message, /must be one of/);
+        return true;
+      },
+    );
   });
 });

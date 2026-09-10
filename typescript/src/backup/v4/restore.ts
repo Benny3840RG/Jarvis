@@ -11,6 +11,7 @@ import { JsonPreferenceStore } from "../../preferences/jsonPreferenceStore.js";
 import { JsonUpgradeStore } from "../../upgrades/jsonUpgradeStore.js";
 import { assertRecoverable, type ArchiveManifest } from "../archiveManifest.js";
 import { StrictBackupError } from "../strictValues.js";
+import { unresolvedReferencesFor } from "./archive.js";
 import type { ArchiveV4 } from "./archive.js";
 import { readCoreGroup, readMemoryGroup } from "./jsonSource.js";
 
@@ -183,6 +184,18 @@ export async function verifyRestoredGroups(destDir: string, archive: ArchiveV4):
     compare("assets", memory.assets, strict.assets, "strict re-read");
     compare("preferences", memory.preferences, strict.preferences, "strict re-read");
 
+    // Derived from what was just read back off disk, not copied from the
+    // manifest: this is what stops an archive from understating a broken edge it
+    // carries, or claiming one it does not.
+    const rederived = unresolvedReferencesFor({ memory: strict });
+    if (!isDeepStrictEqual(rederived, archive.manifest.unresolvedReferences)) {
+      throw new StrictBackupError(
+        `Restore verification failed: the manifest declares ${String(
+          archive.manifest.unresolvedReferences.length,
+        )} unresolved reference(s), the restored data has ${String(rederived.length)}.`,
+      );
+    }
+
     compare(
       "builds",
       memory.builds,
@@ -296,6 +309,7 @@ export async function restoreArchiveV4(
     restoredAt: (options.now ?? (() => new Date()))().toISOString(),
     groups: archive.manifest.coverage.present,
     absentGroups: archive.manifest.coverage.absent,
+    unresolvedReferences: archive.manifest.unresolvedReferences,
     files: written.map((key) => FILENAMES[key]),
   });
   await fsyncDir(destDir);

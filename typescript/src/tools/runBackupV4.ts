@@ -50,6 +50,24 @@ function describeCoverage(manifest: ArchiveManifest): string {
   );
 }
 
+/**
+ * Printed after every command, never as a warning suffix that scrolls away: a
+ * broken edge in the source is something the operator has to see, even though it
+ * is not a reason to refuse the capture.
+ */
+function reportUnresolvedReferences(manifest: ArchiveManifest): void {
+  const unresolved = manifest.unresolvedReferences;
+  if (unresolved.length === 0) return;
+  console.log(
+    `${String(unresolved.length)} reference(s) in the source do not resolve. They are captured as-is, not repaired:`,
+  );
+  for (const entry of unresolved) {
+    console.log(
+      `  ${entry.collection}/${entry.recordId}.${entry.field} -> ${entry.targetCollection}/${entry.value} (missing)`,
+    );
+  }
+}
+
 function describeCounts(archive: ArchiveV4): string {
   return archive.manifest.groups
     .map(
@@ -69,6 +87,7 @@ async function exportArchive(filePath: string): Promise<void> {
   console.log(
     `Archive v4 written: ${filePath} — ${describeCoverage(archive.manifest)}; ${describeCounts(archive)}.`,
   );
+  reportUnresolvedReferences(archive.manifest);
 }
 
 /**
@@ -88,6 +107,7 @@ async function verifyArchive(filePath: string): Promise<void> {
   console.log(
     `Archive v4 verified in isolated storage: ${filePath} — ${describeCoverage(archive.manifest)}; ${describeCounts(archive)}.`,
   );
+  reportUnresolvedReferences(archive.manifest);
 }
 
 async function restoreArchive(
@@ -108,6 +128,7 @@ async function restoreArchive(
     `Archive v4 restored into ${result.destination} — ${describeCoverage(result.manifest)}; ${describeCounts(archive)}.`,
   );
   console.log(`Completion marker: ${result.markerPath}`);
+  reportUnresolvedReferences(result.manifest);
   if (result.manifest.completeness === "partial") {
     console.log(
       "This restore is NOT a recovery: the archive was partial and was materialised under --allow-partial.",

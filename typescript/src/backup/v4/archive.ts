@@ -7,10 +7,13 @@ import {
   buildManifest,
   groupChecksum,
   parseManifest,
+  sortUnresolvedReferences,
   type ArchiveGroupEntry,
   type ArchiveManifest,
+  type ArchiveUnresolvedReference,
 } from "../archiveManifest.js";
 import { StrictBackupError } from "../strictValues.js";
+import { memoryUnresolvedReferences } from "./jsonSource.js";
 import type { CoreGroupPayload, JsonCapture, MemoryGroupPayload } from "./jsonSource.js";
 
 const MAX_ARCHIVE_BYTES = 10 * 1024 * 1024;
@@ -69,9 +72,22 @@ export function buildArchiveV4(capture: JsonCapture, createdAt: Date): ArchiveV4
     manifest: buildManifest({
       createdAt,
       groups: [coreEntry(capture.core), memoryEntry(capture.memory)],
+      unresolvedReferences: unresolvedReferencesFor({
+        core: capture.core,
+        memory: capture.memory,
+      }),
     }),
     groups: { core: capture.core, memory: capture.memory },
   };
+}
+
+/**
+ * The single derivation of an archive's unresolved references, used both when
+ * building a manifest and when re-deriving from restored data to check that the
+ * manifest was not overstated or understated.
+ */
+export function unresolvedReferencesFor(groups: ArchiveV4["groups"]): ArchiveUnresolvedReference[] {
+  return sortUnresolvedReferences(groups.memory ? memoryUnresolvedReferences(groups.memory) : []);
 }
 
 function verifyChecksums(archive: ArchiveV4): void {
