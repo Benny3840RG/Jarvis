@@ -51,7 +51,10 @@ function normalizeTask(value: unknown, index: number, strict: boolean): Task {
   if (strict && typeof value.category !== "string") {
     throw new StateDocumentError(`Task ${index} has an invalid category.`);
   }
-  if (strict && typeof value.createdAt !== "number") {
+  if (
+    (strict && typeof value.createdAt !== "number") ||
+    (typeof value.createdAt === "number" && !Number.isFinite(value.createdAt))
+  ) {
     throw new StateDocumentError(`Task ${index} has an invalid createdAt value.`);
   }
   return {
@@ -110,7 +113,10 @@ function normalizeReminder(
   if (typeof value.title !== "string" || value.title.length === 0) {
     throw new StateDocumentError(`Reminder ${index} has an invalid title.`);
   }
-  if (format !== "legacy" && typeof value.createdAt !== "number") {
+  if (
+    (format !== "legacy" && typeof value.createdAt !== "number") ||
+    (typeof value.createdAt === "number" && !Number.isFinite(value.createdAt))
+  ) {
     throw new StateDocumentError(`Reminder ${index} has an invalid createdAt value.`);
   }
 

@@ -15,6 +15,7 @@ import {
   type PersistedDocument,
 } from "./document.js";
 import { JsonFileLock } from "./jsonFileLock.js";
+import { assertAssistantState } from "./assistantState.js";
 import type {
   AssistantState,
   PersistenceProvider,
@@ -173,6 +174,8 @@ export class JSONPersistence implements PersistenceProvider {
   }
 
   private async writeDocument(document: PersistedDocument): Promise<void> {
+    // Capture bytes before filesystem awaits can expose caller-owned references to mutation.
+    const serialized = `${JSON.stringify(document, null, 2)}\n`;
     await fs.mkdir(path.dirname(this.filePath), { recursive: true });
     const tempPath = path.join(
       path.dirname(this.filePath),
@@ -181,7 +184,7 @@ export class JSONPersistence implements PersistenceProvider {
     let handle: FileHandle | undefined;
     try {
       handle = await fs.open(tempPath, "wx", 0o600);
-      await handle.writeFile(`${JSON.stringify(document, null, 2)}\n`, "utf8");
+      await handle.writeFile(serialized, "utf8");
       await handle.sync();
       await handle.close();
       handle = undefined;
@@ -202,10 +205,14 @@ export class JSONPersistence implements PersistenceProvider {
   }
 
   async saveState(state: AssistantState): Promise<void> {
+    assertAssistantState(state);
     await this.enqueue(() =>
       this.withWriteLock(async () => {
         const current = await this.readDocument();
-        await this.writeDocument({ ...current, state: { ...state } });
+        const nextState = { ...state };
+        // The caller may have mutated nested values while the save waited for its lock.
+        assertAssistantState(nextState);
+        await this.writeDocument({ ...current, state: nextState });
       }),
     );
   }
@@ -255,6 +262,7 @@ export class JSONPersistence implements PersistenceProvider {
         const current = await this.readDocument();
         const index = current.tasks.findIndex((task) => task.id === id);
         if (index < 0) return null;
+        if (current.tasks[index].completed) return cloneTask(current.tasks[index]);
         const task = { ...current.tasks[index], completed: true };
         const tasks = current.tasks.map((entry, taskIndex) => (taskIndex === index ? task : entry));
         await this.writeDocument({ ...current, tasks });

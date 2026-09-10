@@ -71,12 +71,129 @@ afterEach(async () => {
   await fs.rm(tempDir, { recursive: true, force: true });
 });
 
+describe("assistant-state write validation", () => {
+  it("rejects state that becomes invalid while a JSON save is pending", async () => {
+    const file = path.join(tempDir, "pending-state.json");
+    const provider = new JSONPersistence(file);
+    const original = { lastIntent: "retained" };
+    await provider.saveState(original);
+    const raw = await fs.readFile(file, "utf8");
+    for (const invalidate of [
+      (custom: Record<string, unknown>) => {
+        custom.score = Infinity;
+      },
+      (custom: Record<string, unknown>) => {
+        custom.self = custom;
+      },
+    ]) {
+      const custom: Record<string, unknown> = { score: 1 };
+      const pending = provider.saveState({ custom });
+      invalidate(custom);
+      await assert.rejects(pending, /Assistant state/);
+      assert.deepEqual(await provider.loadState(), original);
+      assert.equal(await fs.readFile(file, "utf8"), raw);
+    }
+  });
+
+  for (const kind of ["json", "convex"] as const) {
+    it(`${kind} rejects invalid state without replacing the previous state`, async () => {
+      const file = path.join(tempDir, "validated-state.json");
+      let stored: unknown = {};
+      let mutations = 0;
+      const provider =
+        kind === "json"
+          ? new JSONPersistence(file)
+          : new ConvexPersistence(
+              asConvexClient({
+                async query() {
+                  return { state: stored };
+                },
+                async mutation(_reference, args) {
+                  mutations += 1;
+                  stored = args.state;
+                  return "state-id";
+                },
+              }),
+              "test-service-token",
+            );
+      const shared = { score: 0, previous: -1, optional: null };
+      const original = {
+        lastIntent: "retained",
+        custom: { notes: ["Keep this"], first: shared, second: shared },
+      };
+      await provider.saveState(original);
+      const raw = kind === "json" ? await fs.readFile(file, "utf8") : undefined;
+      const cyclic: Record<string, unknown> = {};
+      cyclic.self = cyclic;
+      for (const invalid of [
+        null,
+        undefined,
+        [],
+        ["value"],
+        "text",
+        42,
+        true,
+        { custom: { score: NaN } },
+        { custom: { score: Infinity } },
+        { custom: { score: -Infinity } },
+        { history: [{ score: Infinity }] },
+        { custom: cyclic },
+      ]) {
+        await assert.rejects(
+          provider.saveState(invalid as unknown as AssistantState),
+          /Assistant state/,
+        );
+        assert.deepEqual(await provider.loadState(), original);
+      }
+      if (kind === "json") assert.equal(await fs.readFile(file, "utf8"), raw);
+      else assert.equal(mutations, 1, "Invalid state must never reach the Convex mutation");
+      await provider.saveState({});
+      assert.deepEqual(await provider.loadState(), {});
+    });
+  }
+});
+
 describe("JSONPersistence", () => {
   it("returns empty durable collections when the file is missing", async () => {
     const provider = new JSONPersistence(path.join(tempDir, "missing.json"));
     assert.deepEqual(await provider.loadState(), {});
     assert.deepEqual(await provider.listTasks(), []);
     assert.deepEqual(await provider.listReminders(), []);
+  });
+
+  it("does not rewrite an already completed legacy task on repeated completion", async () => {
+    const file = path.join(tempDir, "completed-legacy.json");
+    const task = {
+      id: "task-1",
+      title: "Finished task",
+      category: "personal",
+      completed: true,
+      createdAt: 1,
+    };
+    const raw = JSON.stringify({ version: 1, state: {}, tasks: [task], reminders: [] });
+    await fs.writeFile(file, raw, "utf8");
+    const provider = new JSONPersistence(file);
+    const result = await provider.completeTask(task.id);
+    assert.deepEqual(result, task);
+    assert.equal(await fs.readFile(file, "utf8"), raw);
+    assert(result);
+    result.title = "Caller mutation";
+    assert.deepEqual(await new JSONPersistence(file).completeTask(task.id), task);
+    assert.equal(await fs.readFile(file, "utf8"), raw);
+  });
+
+  it("persists first completion and leaves subsequent completion unchanged", async () => {
+    const file = path.join(tempDir, "completion.json");
+    const provider = new JSONPersistence(file);
+    const task = await provider.addTask("Finish once", "personal");
+    const completed = await provider.completeTask(task.id);
+    assert.deepEqual(completed, { ...task, completed: true });
+    const before = await fs.stat(file, { bigint: true });
+    assert.deepEqual(await new JSONPersistence(file).completeTask(task.id), completed);
+    const after = await fs.stat(file, { bigint: true });
+    assert.equal(after.ino, before.ino);
+    assert.equal(after.mtimeNs, before.mtimeNs);
+    assert.deepEqual(await provider.listTasks(), [completed]);
   });
 
   it("saves normalized reminder due data in the current versioned document", async () => {
@@ -201,6 +318,69 @@ describe("JSONPersistence", () => {
         }),
       /both dueAt and dueTimezone/,
     );
+  });
+
+  for (const version of [undefined, 1, 2]) {
+    for (const collection of ["tasks", "reminders"] as const) {
+      it(`rejects non-finite ${collection} creation timestamps in version ${String(version)}`, () => {
+        for (const createdAt of [NaN, Infinity, -Infinity]) {
+          assert.throws(
+            () =>
+              normalizeDocument({
+                ...(version === undefined ? {} : { version }),
+                state: {},
+                tasks: [],
+                reminders: [],
+                [collection]: [
+                  {
+                    id: "record-1",
+                    title: "Record",
+                    completed: false,
+                    category: "personal",
+                    createdAt,
+                  },
+                ],
+              }),
+            /invalid createdAt/,
+          );
+        }
+      });
+    }
+  }
+
+  it("preserves finite creation timestamps including zero in all document versions", () => {
+    for (const version of [undefined, 1, 2]) {
+      for (const createdAt of [0, -1, 1720000000000]) {
+        const document = normalizeDocument({
+          ...(version === undefined ? {} : { version }),
+          state: {},
+          tasks: [
+            { id: "task-1", title: "Task", completed: false, category: "personal", createdAt },
+          ],
+          reminders: [{ id: "reminder-1", title: "Reminder", createdAt }],
+        });
+        assert.equal(document.tasks[0].createdAt, createdAt);
+        assert.equal(document.reminders[0].createdAt, createdAt);
+      }
+    }
+  });
+
+  it("quarantines an overflowing JSON creation timestamp without rewriting its bytes", async () => {
+    const file = path.join(tempDir, "overflow.json");
+    const raw =
+      '{"version":2,"state":{},"tasks":[],"reminders":[{"id":"r-1","title":"Reminder","createdAt":1e400}]}';
+    await fs.writeFile(file, raw, "utf8");
+    const warnings: string[] = [];
+    const provider = new JSONPersistence(file, (message) => warnings.push(message));
+    assert.deepEqual(await provider.listReminders(), []);
+    assert.equal(warnings.length, 1);
+    const corrupt = (await fs.readdir(tempDir)).find((name) =>
+      name.startsWith("overflow.json.corrupt-"),
+    );
+    assert(corrupt);
+    assert.equal(await fs.readFile(path.join(tempDir, corrupt), "utf8"), raw);
+    await provider.addTask("Recovered", "personal");
+    assert.equal((await new JSONPersistence(file).listTasks())[0].title, "Recovered");
   });
 
   it("rejects a document that repeats a task or reminder id within one collection", () => {
