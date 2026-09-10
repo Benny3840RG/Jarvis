@@ -212,7 +212,7 @@ describe("HTTP secret output boundary", () => {
       encodeURIComponent(secret),
       encoded,
       encoded.toUpperCase(),
-      secret.replace("/", "%2f"),
+      secret.replaceAll("/", "%2f"),
     ]) {
       const response = await app.inject({
         method: "GET",
