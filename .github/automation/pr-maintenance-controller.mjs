@@ -1,3 +1,4 @@
+import { buildReviewPlan, aggregateSegments } from "./review-segments.mjs";
 import {
   DevelopmentMissions,
   convexDevelopmentClient,
@@ -8,6 +9,7 @@ import {
 import {
   collectCandidateChecks,
   collectReviewContext,
+  collectSegmentedReviewContext,
   parseReview,
   maintenanceDisposition,
 } from "./pr-maintenance.mjs";
@@ -281,6 +283,75 @@ export async function sweep({
   return null;
 }
 
+export async function prepareSegmentedReview(input) {
+  return prepareReview({ ...input, segmented: true });
+}
+
+export async function rebuildSegmentedReview({
+  github,
+  owner,
+  repo,
+  manifest,
+  expectedDigest,
+}) {
+  const files = await collectSegmentedReviewContext({
+    github,
+    owner,
+    repo,
+    headSha: manifest.identity.headSha,
+    baseSha: manifest.identity.baseSha,
+    changedFiles: manifest.files.length,
+    files: manifest.files.map((file) => ({
+      filename: file.filename,
+      status: file.status,
+      previous_filename: file.previousFilename,
+    })),
+  });
+  const plan = buildReviewPlan({
+    identity: manifest.identity,
+    repository: `${owner}/${repo}`,
+    ci: manifest.ci,
+    runId: manifest.runId,
+    runAttempt: manifest.runAttempt,
+    files,
+  });
+  if (
+    plan.digest !== expectedDigest ||
+    JSON.stringify(plan.manifest) !== JSON.stringify(manifest)
+  )
+    throw new Error("Review coverage manifest changed.");
+  return plan;
+}
+
+export async function publishSegmentedReview(input) {
+  let review = {
+    verdict: "blocked",
+    summary:
+      "Segmented review preparation or execution failed; no complete evidence.",
+    findings: [],
+  };
+  try {
+    if (input.reviewResult !== "success")
+      throw new Error("Segment execution failed.");
+    const plan = await rebuildSegmentedReview(input);
+    if (
+      JSON.stringify(plan.manifest.identity) !==
+        JSON.stringify(input.identity) ||
+      plan.manifest.runId !== input.runId ||
+      plan.manifest.runAttempt !== input.runAttempt
+    )
+      throw new Error("Segment run identity changed.");
+    review = aggregateSegments(plan, input.receipts);
+  } catch {
+    /* Existing publisher records blocked, never infers success. */
+  }
+  return publishReview({
+    ...input,
+    rawReview: JSON.stringify(review),
+    reviewResult: "success",
+  });
+}
+
 export async function prepareReview({
   github,
   owner,
@@ -288,6 +359,7 @@ export async function prepareReview({
   identity,
   runId,
   runAttempt,
+  segmented = false,
 }) {
   // A manual rerun is bounded; failed/cancelled first attempts are never swept
   // into an unbounded model retry. Each new candidate gets its own attempt.
@@ -315,7 +387,9 @@ export async function prepareReview({
   });
   let context;
   try {
-    context = await collectReviewContext({
+    context = await (
+      segmented ? collectSegmentedReviewContext : collectReviewContext
+    )({
       github,
       owner,
       repo,
@@ -324,9 +398,23 @@ export async function prepareReview({
       files,
       changedFiles: observation.pull.changed_files,
     });
-  } catch {
+  } catch (error) {
     // Still publish a blocked receipt on a fresh runner; no model invocation.
-    return "";
+    return segmented ? { blockedReason: error.message } : "";
+  }
+  if (segmented) {
+    try {
+      return buildReviewPlan({
+        identity,
+        repository: `${owner}/${repo}`,
+        ci: observation.evidence.ci,
+        runId,
+        runAttempt,
+        files: context,
+      });
+    } catch (error) {
+      return { blockedReason: error.message };
+    }
   }
   const prompt = [
     "You are an independent code reviewer for Jarvis. Review all changed files for concrete correctness, security and regression defects.",
