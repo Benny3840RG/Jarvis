@@ -232,3 +232,71 @@ export function guardCumulative(base, head, worktree = false) {
       `Cumulative candidate guard rejected: ${[...evaluation.reasons, ...patch.reasons].join("; ")}`,
     );
 }
+
+export async function collectRepairContext({
+  github,
+  owner,
+  repo,
+  pullNumber,
+  headSha,
+  reviewRunId,
+  reviewCommentId,
+}) {
+  if (
+    ![pullNumber, reviewRunId, reviewCommentId].every(positive) ||
+    !/^[a-f0-9]{40}$/.test(headSha)
+  )
+    throw new Error("Exact triggering review identity required.");
+  const { data: run } = await github.rest.actions.getWorkflowRun({
+    owner,
+    repo,
+    run_id: reviewRunId,
+  });
+  if (
+    run.id !== reviewRunId ||
+    run.path !== ".github/workflows/jarvis-pr-maintenance.yml" ||
+    run.event !== "workflow_dispatch" ||
+    run.head_branch !== "main" ||
+    !run.display_title?.startsWith(
+      `Jarvis PR review #${pullNumber} ${headSha} `,
+    )
+  )
+    throw new Error("Untrusted triggering review run.");
+  const { data: comment } = await github.rest.issues.getComment({
+    owner,
+    repo,
+    comment_id: reviewCommentId,
+  });
+  if (
+    comment.id !== reviewCommentId ||
+    comment.user?.login !== "github-actions[bot]" ||
+    comment.issue_url !==
+      `https://api.github.com/repos/${owner}/${repo}/issues/${pullNumber}` ||
+    !comment.body?.startsWith("<!-- jarvis-pr-maintenance:v1 -->") ||
+    !comment.body.includes(`Candidate: \`${headSha}\``) ||
+    !comment.body.includes(
+      `https://github.com/${owner}/${repo}/actions/runs/${reviewRunId}`,
+    ) ||
+    Buffer.byteLength(comment.body) > 32000
+  )
+    throw new Error("Complete identity-bound triggering review required.");
+  const { data } = await github.rest.checks.listForRef({
+    owner,
+    repo,
+    ref: headSha,
+    per_page: 100,
+  });
+  if (data.total_count > 100 || data.total_count !== data.check_runs.length)
+    throw new Error("Repair check context is incomplete.");
+  return JSON.stringify({
+    head: headSha,
+    review: comment.body,
+    reviewRunId,
+    reviewCommentId,
+    checks: data.check_runs.map((c) => ({
+      name: String(c.name).slice(0, 200),
+      conclusion: c.conclusion,
+      summary: String(c.output?.summary || "").slice(0, 250),
+    })),
+  });
+}

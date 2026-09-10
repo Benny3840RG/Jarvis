@@ -65,6 +65,7 @@ function fixture() {
               ? "pull_request"
               : "push",
           head_branch: target === head ? "refs/pull/12/head" : "main",
+          pull_requests: [{ number: 12, head: { sha: target } }],
           run_attempt: 1,
           status: "completed",
           conclusion: "success",
@@ -183,6 +184,9 @@ function fixture() {
         reviewResult,
         runId: 500,
         serverUrl: "https://github.com",
+        recordDevelopment: async (input) => {
+          writes.push({ kind: "development", ...input });
+        },
       });
     },
   };
@@ -272,6 +276,7 @@ test("unhealthy main prevents repair dispatch even with actionable review", asyn
 test("full sweep prepare publish cycle produces advisory owner gate and run-history dedupe", async () => {
   const f = fixture();
   const identity = await sweep({
+    candidateReady: async () => true,
     github: f.github,
     owner: "o",
     repo: "r",
@@ -300,9 +305,45 @@ test("full sweep prepare publish cycle produces advisory owner gate and run-hist
     head_branch: "main",
   });
   assert.equal(
-    await sweep({ github: f.github, owner: "o", repo: "r", core: f.core }),
+    await sweep({
+      candidateReady: async () => true,
+      github: f.github,
+      owner: "o",
+      repo: "r",
+      core: f.core,
+    }),
     null,
   );
   assert.equal(f.writes.filter((w) => w.kind === "dispatch").length, 1);
   // No mock approval/merge endpoint exists: invoking one fails this test.
+});
+
+test("durable scheduling defers mutable or foreign candidates before consuming review budget", async () => {
+  const { durableCandidateReady } =
+    await import("./pr-maintenance-controller.mjs");
+  const pull = {
+    number: 12,
+    head: { ref: "automation/issue-7/run-1", sha: "a".repeat(40) },
+  };
+  let state = "BUILDING",
+    number = 12,
+    head = pull.head.sha;
+  const call = async (_kind, name) =>
+    name === "developmentState:get"
+      ? { state }
+      : [
+          {
+            transitionId: "DEV_TRANSITION_BUILDING_TO_VERIFYING",
+            eventType: "DEV_TRANSITION_COMMITTED",
+            payload: { effectPayload: { pullNumber: number, headSha: head } },
+          },
+        ];
+  assert.equal(await durableCandidateReady(pull, "o/r", call), false);
+  state = "VERIFYING";
+  assert.equal(await durableCandidateReady(pull, "o/r", call), true);
+  number = 99;
+  assert.equal(await durableCandidateReady(pull, "o/r", call), false);
+  number = 12;
+  head = "b".repeat(40);
+  assert.equal(await durableCandidateReady(pull, "o/r", call), false);
 });

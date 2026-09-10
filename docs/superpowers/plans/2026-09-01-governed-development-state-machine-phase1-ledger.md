@@ -783,3 +783,11 @@ mission bridge is commissioned.
   durable Development subject or advance its ToolAction stages and schedule the completion command. No direct
   Actions merge or duplicate completion authority was introduced. This requires
   a subsequent live development-runtime composition and its real credentials.
+
+
+### 2026-09-10 — Actions-to-durable Development bridge (PR #491 follow-up)
+
+- Preserved the existing review/repair implementation and composed durable issue admission, fenced worker claims, exact publication checkpoints, review/repair transitions, owner ToolAction staging and scheduled post-merge completion through existing authorities.
+- Independent review caught and fixed cross-PR CI attribution, repair feedback truncation/provenance, mutable checkpoint heads and missing checkpoint PR identity. Generated candidates wait for a matching durable checkpoint before spending review budget.
+- `npm run check` passed: 1,232 Node tests, 229 Convex tests, both typechecks, hygiene, lint, formatting and OpenAPI. All 141 automation tests passed using the pinned Codex action fixture. Four changed workflow YAML files parsed; `git diff --check` passed.
+- These are local regression results, not live lifecycle evidence. The new functions are not deployed. The approved-issue drill, owner-approved merge receipt, acceptance proofs and final durable completion remain outstanding. No completion was fabricated.

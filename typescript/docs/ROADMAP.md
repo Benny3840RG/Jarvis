@@ -19,9 +19,13 @@ it at the end of every session.
 - Local validation is recorded in the Phase 1 working ledger. Live activation is
   pending this control-plane PR landing and the drill in
   `docs/operations/pr-maintenance.md`; no live completion is inferred here.
-- Next: observe a real review/repair cycle, then wire Actions missions to the
-  existing durable Development/ToolAction/Omega runtime using real development
-  credentials. Retain explicit exact-candidate owner merge approval.
+- Added durable Actions admission, isolated worker-lease supervision, head-bound
+  verification/review checkpoints, owner ToolAction proposal and post-merge
+  completion scheduling. Issue acceptance criteria stay unverified until real
+  independent evidence is recorded through the existing Omega authority.
+- Next: deploy the bridge to the authorised development runtime, configure its
+  credentials/explicit uncertainty decisions, and run an owner-approved live
+  issue through the full handover. Local tests do not close commissioning.
 
 ## Current state (2026-09-08)
 

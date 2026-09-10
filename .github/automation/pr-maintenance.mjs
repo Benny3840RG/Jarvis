@@ -95,7 +95,15 @@ export function candidateRunEventMatches(run, pullNumber) {
   const scanning =
     run?.path?.startsWith(TRUSTED_CODEQL_PATH_PREFIX) ||
     run?.path === "dynamic/github-code-quality/codeql";
-  if (!scanning) return run?.event === "pull_request";
+  if (!scanning)
+    return (
+      run?.event === "pull_request" &&
+      (pullNumber === undefined ||
+        run.pull_requests?.some(
+          (pull) =>
+            pull.number === pullNumber && pull.head?.sha === run.head_sha,
+        ))
+    );
   if (!["dynamic", "pull_request"].includes(run?.event)) return false;
   if (pullNumber !== undefined)
     return (

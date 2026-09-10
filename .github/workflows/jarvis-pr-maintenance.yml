@@ -54,6 +54,9 @@ jobs:
         id: prepare
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
+          CONVEX_DEPLOYMENT: ${{ vars.CONVEX_DEPLOYMENT }}
+          CONVEX_URL: ${{ vars.CONVEX_URL }}
+          JARVIS_SERVICE_TOKEN: ${{ secrets.JARVIS_SERVICE_TOKEN }}
           MODE: ${{ inputs.mode }}
           PR_NUMBER: ${{ inputs.pull_request_number }}
           HEAD_SHA: ${{ inputs.expected_head_sha }}
@@ -156,6 +159,9 @@ jobs:
           EVIDENCE_FINGERPRINT: ${{ inputs.evidence_fingerprint }}
           REVIEW_RESULT: ${{ needs.review.result }}
           REVIEW_JSON: ${{ needs.review.outputs.result }}
+          CONVEX_DEPLOYMENT: ${{ vars.CONVEX_DEPLOYMENT }}
+          CONVEX_URL: ${{ vars.CONVEX_URL }}
+          JARVIS_SERVICE_TOKEN: ${{ secrets.JARVIS_SERVICE_TOKEN }}
         with:
           script: |
             const { pathToFileURL } = require('node:url');

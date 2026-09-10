@@ -95,6 +95,7 @@ export type GitHubPullRequestObservation = {
   merged: boolean;
   draft: boolean;
   baseBranch: string;
+  baseSha?: string;
   headSha: string;
   mergeCommitSha?: string;
 };
@@ -119,6 +120,12 @@ export type GitHubCommitCheckObservation = {
 };
 
 export interface GitHubDevelopmentClient {
+  observeCandidate?(input: {
+    repository: string;
+    pullRequestNumber: number;
+    headSha: string;
+    signal: AbortSignal;
+  }): Promise<{ ok: boolean; fingerprint: string }>;
   getIssue(input: {
     repository: string;
     issueNumber: number;
@@ -270,7 +277,7 @@ export class FetchGitHubDevelopmentClient implements GitHubDevelopmentClient {
       state: "open" | "closed";
       merged: boolean;
       draft?: boolean;
-      base: { ref: string };
+      base: { ref: string; sha?: string };
       head: { sha: string };
       merge_commit_sha?: string | null;
     };
@@ -280,11 +287,60 @@ export class FetchGitHubDevelopmentClient implements GitHubDevelopmentClient {
       merged: body.merged,
       draft: body.draft === true,
       baseBranch: body.base.ref,
+      ...(body.base.sha ? { baseSha: requiredSha(body.base.sha, "GitHub base SHA") } : {}),
       headSha: requiredSha(body.head.sha, "GitHub pull request head"),
       ...(body.merge_commit_sha && SHA_PATTERN.test(body.merge_commit_sha)
         ? { mergeCommitSha: body.merge_commit_sha.toLowerCase() }
         : {}),
     };
+  }
+
+  async observeCandidate(input: {
+    repository: string;
+    pullRequestNumber: number;
+    headSha: string;
+    signal: AbortSignal;
+  }) {
+    const { collectCandidateChecks } =
+      await import("../../../.github/automation/pr-maintenance.mjs");
+    const { owner, repo } = repositoryParts(input.repository);
+    const prefix = `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`;
+    const github = {
+      rest: {
+        checks: {
+          listForRef: async ({
+            ref,
+            page,
+            per_page,
+          }: {
+            ref: string;
+            page: number;
+            per_page: number;
+          }) => ({
+            data: await this.request(
+              `${prefix}/commits/${ref}/check-runs?per_page=${per_page}&page=${page}`,
+              { method: "GET", signal: input.signal },
+            ),
+          }),
+        },
+        actions: {
+          getWorkflowRun: async ({ run_id }: { run_id: number }) => ({
+            data: await this.request(`${prefix}/actions/runs/${run_id}`, {
+              method: "GET",
+              signal: input.signal,
+            }),
+          }),
+        },
+      },
+    };
+    const evidence = await collectCandidateChecks({
+      github,
+      owner,
+      repo,
+      headSha: input.headSha,
+      pullNumber: input.pullRequestNumber,
+    });
+    return { ok: evidence.ci.ok, fingerprint: evidence.fingerprint };
   }
 
   async mergePullRequest(input: {
@@ -446,6 +502,11 @@ const githubMergeArguments = z.object({
   pullRequestNumber: z.number().int().positive(),
   baseBranch: z.string().trim().min(1).max(200),
   reviewedHeadSha: z.string().regex(SHA_PATTERN),
+  reviewedBaseSha: z.string().regex(SHA_PATTERN).optional(),
+  candidateEvidenceFingerprint: z
+    .string()
+    .regex(/^[a-f0-9]{64}$/)
+    .optional(),
   mergeMethod: z.enum(["merge", "squash", "rebase"]),
   authorityEnvelopeHash: z.string().trim().min(1),
   policyDecisionFingerprint: z.string().trim().min(1),
@@ -779,6 +840,27 @@ export function createGitHubMergeToolDefinition(
         signal,
       });
       assertMergePreconditions(args, pullRequest);
+      if (args.reviewedBaseSha || args.candidateEvidenceFingerprint) {
+        if (
+          !args.reviewedBaseSha ||
+          pullRequest.baseSha !== args.reviewedBaseSha ||
+          !args.candidateEvidenceFingerprint ||
+          !client.observeCandidate
+        )
+          throw new ToolExecutionPreconditionError(
+            "Approved candidate base/evidence binding is unavailable or changed.",
+          );
+        const evidence = await client.observeCandidate({
+          repository: args.repository,
+          pullRequestNumber: args.pullRequestNumber,
+          headSha: args.reviewedHeadSha,
+          signal,
+        });
+        if (!evidence.ok || evidence.fingerprint !== args.candidateEvidenceFingerprint)
+          throw new ToolExecutionPreconditionError(
+            "Approved candidate evidence changed; fresh owner review is required.",
+          );
+      }
     },
     async execute(argumentsValue, signal, context) {
       const args = githubMergeArguments.parse(argumentsValue);

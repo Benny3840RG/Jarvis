@@ -50,6 +50,7 @@ function checks() {
       id,
       head_sha: head,
       event: "pull_request",
+      pull_requests: [{ number: 490, head: { sha: head } }],
       path:
         name === "pr-evidence"
           ? ".github/workflows/copilot-check.yml"
@@ -195,6 +196,8 @@ test("real GitHub dynamic scanning checks bind the PR ref and ignore separate co
   const fixture = checks();
   fixture.pullNumber = 490;
   for (const run of fixture.runs.values())
+    run.pull_requests = [{ number: 490, head: { sha: head } }];
+  for (const run of fixture.runs.values())
     if (run.path.startsWith("dynamic/"))
       Object.assign(run, {
         event: "dynamic",
@@ -241,6 +244,8 @@ test("dynamic scanning rejects another PR ref and dynamic TypeScript producers",
   ]) {
     const fixture = checks();
     fixture.pullNumber = 490;
+    for (const run of fixture.runs.values())
+      run.pull_requests = [{ number: 490, head: { sha: head } }];
     for (const run of fixture.runs.values())
       if (run.path.startsWith("dynamic/"))
         Object.assign(run, {
@@ -297,4 +302,19 @@ test("collector retains raw real dynamic runs while binding its candidate verdic
   });
   assert.equal(wrong.ci.ok, false);
   assert.equal(wrong.runs.get(5).event, "dynamic");
+});
+
+test("ordinary candidate workflows cannot borrow evidence from another PR at the same SHA", () => {
+  const fixture = checks();
+  fixture.pullNumber = 490;
+  for (const run of fixture.runs.values())
+    run.pull_requests = [{ number: 490, head: { sha: head } }];
+  for (const run of fixture.runs.values()) {
+    run.pull_requests = [{ number: 99, head: { sha: head } }];
+    if (run.path.startsWith("dynamic/")) {
+      run.event = "dynamic";
+      run.head_branch = "refs/pull/490/head";
+    }
+  }
+  assert.equal(evaluateCandidateChecks(fixture).ok, false);
 });

@@ -37,7 +37,14 @@ test("reviewer never receives a write token or executes a candidate checkout", (
 
 test("publication is isolated from model execution and rechecks provider evidence", () => {
   assert.match(publishJob, /runs-on: ubuntu-latest/);
-  assert.doesNotMatch(publishJob, /secrets\.|codex-action|contents: write/);
+  assert.doesNotMatch(
+    publishJob,
+    /codex-action|contents: write|JARVIS_APPROVAL_TOKEN|OPENAI_API_KEY/,
+  );
+  assert.deepEqual(
+    [...publishJob.matchAll(/secrets\.([A-Z_]+)/g)].map((m) => m[1]),
+    ["JARVIS_SERVICE_TOKEN"],
+  );
   assert.match(publishJob, /publishReview/);
   assert.match(publishJob, /github.workflow_sha/);
   assert.doesNotMatch(

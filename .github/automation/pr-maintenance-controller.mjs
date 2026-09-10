@@ -1,3 +1,8 @@
+import {
+  DevelopmentMissions,
+  convexDevelopmentClient,
+  developmentMissionId,
+} from "./development-missions.mjs";
 // This is transport/worker scheduling, not Development or Omega authority.
 // Model output and GitHub comments never grant approval, merge or completion.
 import {
@@ -169,7 +174,43 @@ function assertIdentity(actual, expected) {
 
 // Dispatching records the exact candidate in GitHub's run metadata. A comment
 // that claims a successful review cannot suppress a real review or spend a repair.
-export async function sweep({ github, owner, repo, pullNumber, core }) {
+export async function durableCandidateReady(
+  pull,
+  repository,
+  call = convexDevelopmentClient(),
+) {
+  const match = /^automation\/issue-(\d+)\/run-\d+$/.exec(pull.head.ref);
+  if (!match) return true;
+  const subjectId = developmentMissionId(repository, Number(match[1]));
+  const subject = await call("query", "developmentState:get", { subjectId });
+  if (!subject || !["VERIFYING", "REVIEW"].includes(subject.state))
+    return false;
+  const events = await call("query", "developmentState:listEvents", {
+    subjectId,
+  });
+  const checkpoint = [...events]
+    .reverse()
+    .find(
+      (e) =>
+        e.transitionId === "DEV_TRANSITION_BUILDING_TO_VERIFYING" &&
+        e.eventType === "DEV_TRANSITION_COMMITTED",
+    );
+  return (
+    checkpoint?.payload.effectPayload?.headSha === pull.head.sha &&
+    checkpoint?.payload.effectPayload?.pullNumber === pull.number
+  );
+}
+export async function sweep({
+  github,
+  owner,
+  repo,
+  pullNumber,
+  core,
+  candidateReady = (pull) =>
+    /^automation\/issue-\d+\/run-\d+$/.test(pull.head.ref)
+      ? durableCandidateReady(pull, `${owner}/${repo}`)
+      : true,
+}) {
   let pulls;
   if (pullNumber)
     pulls = [
@@ -199,6 +240,7 @@ export async function sweep({ github, owner, repo, pullNumber, core }) {
       continue;
     }
     if (observation.evidence.ci.pending.length) continue;
+    if (!(await candidateReady(observation.pull))) continue;
     const history = await listWorkflowHistory(
       github,
       owner,
@@ -372,6 +414,8 @@ export async function publishReview({
   reviewResult,
   runId,
   serverUrl,
+  recordDevelopment = (input) =>
+    new DevelopmentMissions(convexDevelopmentClient()).review(input),
 }) {
   const observation = await current(github, owner, repo, identity.pullNumber);
   assertIdentity(observation.identity, identity);
@@ -418,6 +462,16 @@ export async function publishReview({
   if (disposition === "repair" && admission.active)
     disposition = "repair-in-progress";
   const runUrl = `${serverUrl}/${owner}/${repo}/actions/runs/${runId}`;
+  if (admission.issueNumber) {
+    await recordDevelopment({
+      repository: `${owner}/${repo}`,
+      issueNumber: admission.issueNumber,
+      identity,
+      review,
+      ci: observation.evidence.ci,
+      runUrl,
+    });
+  }
   const body = [
     "<!-- jarvis-pr-maintenance:v1 -->",
     "### Jarvis independent PR review",
@@ -435,7 +489,7 @@ export async function publishReview({
   ]
     .filter(Boolean)
     .join("\n\n");
-  await github.rest.issues.createComment({
+  const { data: reviewComment } = await github.rest.issues.createComment({
     owner,
     repo,
     issue_number: identity.pullNumber,
@@ -476,6 +530,8 @@ export async function publishReview({
           source_sha: identity.baseSha,
           pull_request_number: String(identity.pullNumber),
           expected_head_sha: identity.headSha,
+          review_run_id: String(runId),
+          review_comment_id: String(reviewComment.id),
         },
       });
       disposition = "repair-dispatched";

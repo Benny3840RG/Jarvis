@@ -607,3 +607,36 @@ it("does not reconcile an independently merged different candidate as the approv
     errorCode: "github-head-changed-new-execution-required",
   });
 });
+
+it("refuses a generated merge proposal when its approved CI fingerprint changed", async () => {
+  const definition = createGitHubMergeToolDefinition(
+    client({
+      async getPullRequest() {
+        return {
+          number: 42,
+          state: "open",
+          merged: false,
+          draft: false,
+          baseBranch: "main",
+          baseSha: "b".repeat(40),
+          headSha: reviewedHeadSha,
+        };
+      },
+      async observeCandidate() {
+        return { ok: true, fingerprint: "d".repeat(64) };
+      },
+    }),
+  );
+  await assert.rejects(
+    () =>
+      definition.preflight!(
+        {
+          ...action().arguments,
+          reviewedBaseSha: "b".repeat(40),
+          candidateEvidenceFingerprint: "c".repeat(64),
+        },
+        AbortSignal.timeout(1000),
+      ),
+    /evidence changed/,
+  );
+});

@@ -72,7 +72,7 @@ PR → exact-candidate CI → fresh review → owner gate. Observe the run IDs, 
 SHAs, unchanged forbidden files and finite attempt count. Local mock-API tests
 prove admission and refusal paths, not that this live drill has happened.
 
-## Remaining durable Development composition
+## Durable Development composition
 
 An executable post-merge entry point now reuses the existing coordinator and
 Convex Omega gateway. From `typescript/`:
@@ -99,12 +99,73 @@ Run only while the durable Development state is `MERGED`. After success, inspect
 the stored `COMPLETE`/Omega `complete` state instead of rerunning the command; a
 completed-state invocation is explicitly refused without new writes.
 
-The existing GitHub merge ToolAction and reconciliation adapter are registered
-in the runtime, but the Actions builder does not yet create/claim a durable
-Development subject, commit its stages, or schedule the completion command.
-Completing that bridge requires an authorised development runtime
-and live evidence. This workflow does not create a competing authority store or
-silently substitute a direct Actions merge for that bridge.
+The builder now waits for a trusted `mission` job. That job re-observes the
+approved issue and source revision, then composes the existing orchestration,
+Development and Omega APIs. The issue retains one subject ID across repairs.
+Its original checklist criteria and `post-merge-ci` start unverified. The
+recorded source SHA is forwarded to the worker; it is never resolved again
+from a blank dispatch input.
+
+An isolated `supervise` job renews the existing orchestration lease while the
+worker runs. No Convex or approval credential reaches the candidate worker.
+A separate trusted `checkpoint` job consumes the guarded build's published
+SHA and PR URL, rechecks the live PR identity, commits the PR-and-head-bound
+`BUILDING -> VERIFYING` checkpoint and pauses the claim, retaining its
+monotonic fence. The review sweep waits for that exact durable checkpoint
+before spending a review attempt. Failed supervision cancels the workflow. An expired lease
+is refused, not revived or interpreted as successful work. Admission is capped
+at three worker attempts (initial build plus two repairs).
+
+The fresh review publisher advances the existing verification/review gates
+using the exact candidate, CI fingerprint and review-run reference. A repair
+receives the exact triggering review comment/run, with no whole-document
+truncation. The next worker claims the same durable subject and repairs the
+same PR. Repeated stage events are idempotent. Changed issue specifications,
+foreign workers, stale heads and missing durable checkpoints fail closed.
+
+`jarvis-development-completion.yml` wakes after maintenance, main checks and
+merge events, and also sweeps every 15 minutes. For `READY_TO_MERGE` it stages
+an existing T3, destructive, single-use GitHub merge ToolAction. It never
+approves or executes that action. The owner uses the established approval and
+execution route; the proposal binds head, base and CI fingerprint, rechecked
+by the GitHub tool before execution. Changed evidence needs fresh owner review.
+The observer commits `MERGED` only from the existing authoritative succeeded
+receipt and reconciliation. A direct GitHub merge with no such receipt cannot
+be relabelled as a governed merge.
+
+For `MERGED`, the observer invokes the existing completion coordinator. The
+owner must separately record real acceptance evidence/proofs for every
+`issue-N` criterion through `omegaMissions.recordEvidence` and
+`omegaMissions.recordValidationProof`; independent proofs retain the existing
+approval-token gate. A model review verdict, test harness or green CI alone
+never satisfies those criteria. Missing acceptance proof leaves Omega
+incomplete even when post-merge CI passes. No completion claim is valid until
+the durable Development and Omega records both confirm it.
+
+### Development runtime configuration
+
+Trusted Actions jobs require repository variables `CONVEX_DEPLOYMENT=dev:<name>`
+and its exact `CONVEX_URL=https://<name>.convex.cloud`, the existing matching
+`JARVIS_SERVICE_TOKEN` secret, and an explicit
+`JARVIS_DEVELOPMENT_UNCERTAINTY_BUDGET` variable. Independent post-merge proof
+also requires the separate `JARVIS_APPROVAL_TOKEN` secret and explicit operator
+judgement in `JARVIS_DEVELOPMENT_RESIDUAL_UNCERTAINTY`. The GitHub observer uses
+the workflow's read-only token. Owner execution still uses the authorised
+runtime's GitHub token and approval path.
+
+The new `developmentWorkerClaims` functions must be deployed to that named
+development deployment before activation. No production deployment is part
+of this change. Missing runtime configuration blocks admission instead of
+falling back to an untracked build.
+
+### Commissioning evidence still required
+
+Local integration tests exercise the real Convex function composition under a
+test harness; they are not live commissioning. Record the real approved issue,
+original and repair run IDs, exact candidate SHAs, independent review run and
+findings, fresh CI, owner-approved ToolAction/receipt, restored post-merge
+observations, acceptance proof IDs and final durable states. Never backfill
+invented mission stages for an old PR merely to obtain a completion record.
 
 Post-merge provider observations have been hardened to require the maintained
 TypeScript checks and all four CodeQL analyses from trusted producers; missing,

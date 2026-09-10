@@ -1,0 +1,43 @@
+name: Jarvis durable Development completion
+on:
+  workflow_run:
+    workflows: [TypeScript checks, Jarvis PR maintenance]
+    types: [completed]
+  pull_request:
+    types: [closed]
+  schedule:
+    - cron: "11,26,41,56 * * * *"
+  workflow_dispatch:
+permissions: {}
+concurrency:
+  group: jarvis-development-completion
+  cancel-in-progress: false
+jobs:
+  observe:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: read
+      checks: read
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: "24"
+      - run: npm ci --prefix typescript --ignore-scripts
+      - name: Stage owner gate, reconcile approved merge, and observe post-merge evidence
+        working-directory: typescript
+        run: node --import tsx ../.github/automation/run-development-actions.mjs complete
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CONVEX_DEPLOYMENT: ${{ vars.CONVEX_DEPLOYMENT }}
+          CONVEX_URL: ${{ vars.CONVEX_URL }}
+          JARVIS_SERVICE_TOKEN: ${{ secrets.JARVIS_SERVICE_TOKEN }}
+          JARVIS_APPROVAL_TOKEN: ${{ secrets.JARVIS_APPROVAL_TOKEN }}
+          JARVIS_DEVELOPMENT_RESIDUAL_UNCERTAINTY: ${{ vars.JARVIS_DEVELOPMENT_RESIDUAL_UNCERTAINTY }}

@@ -47,6 +47,8 @@ jobs:
           .github/automation/pr-maintenance-controller.test.mjs
           .github/automation/pr-maintenance-integration.test.mjs
           .github/automation/pr-maintenance-workflow.test.mjs
+          .github/automation/repair-context.test.mjs
+          .github/automation/development-workflow.test.mjs
 
       - name: Check out the pinned socket compatibility fixture
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
