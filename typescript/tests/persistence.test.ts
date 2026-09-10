@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, it } from "node:test";
 
 import { getFunctionName } from "convex/server";
+import { StateDocumentError } from "../src/persistence/document.js";
 
 import {
   ConvexPersistence,
@@ -229,7 +230,7 @@ describe("JSONPersistence", () => {
         }),
       /reminder id reminder-1 appears more than once/,
     );
-    // Legacy and version 1 documents are held to the same rule.
+    // Legacy documents are held to the same rule.
     assert.throws(
       () =>
         normalizeDocument({
@@ -240,6 +241,43 @@ describe("JSONPersistence", () => {
           ],
         }),
       /Legacy task id dup appears more than once/,
+    );
+  });
+
+  it("rejects duplicate task and reminder ids in version 1 documents", () => {
+    const task = {
+      id: "task-v1",
+      title: "Legacy task",
+      completed: false,
+      category: "personal",
+      createdAt: 1,
+    };
+    const reminder = { id: "reminder-v1", title: "Legacy reminder", due: "Friday", createdAt: 2 };
+    for (const { tasks, reminders, noun, id } of [
+      { tasks: [task, { ...task }], reminders: [], noun: "task", id: task.id },
+      { tasks: [], reminders: [reminder, { ...reminder }], noun: "reminder", id: reminder.id },
+    ]) {
+      assert.throws(() => normalizeDocument({ version: 1, state: {}, tasks, reminders }), {
+        constructor: StateDocumentError,
+        message: `Version 1 ${noun} id ${id} appears more than once.`,
+      });
+    }
+  });
+
+  it("rejects duplicate reminder ids in legacy documents", () => {
+    assert.throws(
+      () =>
+        normalizeDocument({
+          state: {},
+          reminders: [
+            { id: "legacy-reminder", title: "First", due: "Friday" },
+            { id: "legacy-reminder", title: "Second", due: "Monday" },
+          ],
+        }),
+      {
+        constructor: StateDocumentError,
+        message: "Legacy reminder id legacy-reminder appears more than once.",
+      },
     );
   });
 
