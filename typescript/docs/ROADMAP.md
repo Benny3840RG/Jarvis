@@ -155,3 +155,7 @@ rather than an occasional operator action.
 - Business settings (`src/businessSettings/`) has no Convex-backed store yet
   (`JsonBusinessSettingsStore` only) — flag this if `PERSISTENCE_PROVIDER=convex`
   commissioning ever depends on it.
+
+- Repaired the post-merge #491 handover findings: exact completion bindings, trusted check selection, non-poisoning retry observations, issue-bound repair provenance, guarded failed checkpoints and independently observed unpublished-worker recovery.
+- Added stable completion pagination and finalisation after both durable authorities complete; retained explicit owner reconciliation for published/uncertain dead workers and stale, closed or terminal merge candidates. See `docs/operations/issue-493-owner-handoff.md`.
+- Next: owner-approved control landing with #496, exact development commissioning, then #493's real build/review and separately approved merge/post-merge acceptance proof. No live lifecycle completion is claimed from regression tests.

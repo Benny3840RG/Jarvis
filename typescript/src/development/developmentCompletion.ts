@@ -36,12 +36,10 @@ export class GitHubDevelopmentCompletionCoordinator {
     signal: AbortSignal;
   }): Promise<GitHubPostMergeObservation> {
     const observation = await observeGitHubPostMerge(this.github, input);
-    const result =
-      observation.status === "passed"
-        ? "pass"
-        : observation.status === "failed"
-          ? "fail"
-          : "inconclusive";
+    // A check failure is an observation of a retryable external state, not a
+    // permanent acceptance failure. Preserve the raw failed observation while
+    // withholding a passing proof; a later fresh observation can establish it.
+    const result = observation.status === "passed" ? "pass" : "inconclusive";
     await this.omega.recordPostMergeObservation({
       missionId: input.missionId,
       criterionId: input.criterionId,

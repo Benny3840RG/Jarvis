@@ -103,7 +103,7 @@ If a `pull_request:[closed]` event is missed, an issue can keep `automation-in-p
 
 ### Handoff to review and merge
 
-Every queue-generated candidate reaches a human the same way: a draft PR with `automation-generated`, `jarvis-autobuild/verify-candidate` plus trusted checks on the exact head, an independent advisory review, and CODEOWNERS review on `.github/**`. Neither `jarvis-autobuild.yml` nor `jarvis-queue-advance.yml` has `pull-requests` permission beyond commenting, and neither calls any merge, approve, review, or ready-for-review API — enforced by `validateQueueAdvanceContract` and the builder contract tests. This handoff is generic; it is not tied to any single issue or PR.
+Every queue-generated candidate reaches a human the same way: a draft PR with `automation-generated`, `jarvis-autobuild/verify-candidate` plus trusted checks on the exact head, an independent advisory review, and CODEOWNERS review on `.github/**`. The builder has bounded `pull-requests: write` permission to publish/manage its draft candidate; the queue does not. Neither calls any merge, approve, review, or ready-for-review API — enforced by `validateQueueAdvanceContract` and the builder contract tests. This handoff is generic; it is not tied to any single issue or PR.
 
 Held PR workflow runs are returned by GitHub with `status: completed` and
 `conclusion: action_required`. The verifier checks both fields before approving

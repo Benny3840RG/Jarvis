@@ -11,7 +11,11 @@ import {
   parseReview,
   maintenanceDisposition,
 } from "./pr-maintenance.mjs";
-import { evaluateRevisionHealth } from "./revision-health.mjs";
+import {
+  evaluateRevisionHealth,
+  runIdFromCheck,
+  REQUIRED_WORKFLOW_CHECKS,
+} from "./revision-health.mjs";
 import {
   evaluateDiff,
   evaluatePatch,
@@ -462,16 +466,6 @@ export async function publishReview({
   if (disposition === "repair" && admission.active)
     disposition = "repair-in-progress";
   const runUrl = `${serverUrl}/${owner}/${repo}/actions/runs/${runId}`;
-  if (admission.issueNumber) {
-    await recordDevelopment({
-      repository: `${owner}/${repo}`,
-      issueNumber: admission.issueNumber,
-      identity,
-      review,
-      ci: observation.evidence.ci,
-      runUrl,
-    });
-  }
   const body = [
     "<!-- jarvis-pr-maintenance:v1 -->",
     "### Jarvis independent PR review",
@@ -489,6 +483,25 @@ export async function publishReview({
   ]
     .filter(Boolean)
     .join("\n\n");
+  if (Buffer.byteLength(body) > 32000)
+    throw new Error(
+      "Rendered review exceeds repair context bound; no durable transition or publication made.",
+    );
+  const issueMatch = /^automation\/issue-([1-9][0-9]*)\/run-[1-9][0-9]*$/.exec(
+    observation.pull.head.ref,
+  );
+  // The durable bridge independently binds the PR/head to its checkpoint.
+  // Advisory labels and malformed model output cannot disable that binding.
+  if (issueMatch) {
+    await recordDevelopment({
+      repository: `${owner}/${repo}`,
+      issueNumber: Number(issueMatch[1]),
+      identity,
+      review,
+      ci: observation.evidence.ci,
+      runUrl,
+    });
+  }
   const { data: reviewComment } = await github.rest.issues.createComment({
     owner,
     repo,
@@ -514,7 +527,23 @@ export async function publishReview({
         ),
         runPathById,
       });
-      if (!health.ok)
+      const mainBound = source.checkRuns
+        .filter(
+          (check) =>
+            Object.hasOwn(REQUIRED_WORKFLOW_CHECKS, check.name) ||
+            /^Analyze \(/.test(check.name),
+        )
+        .every((check) => {
+          const run = source.runs.get(runIdFromCheck(check));
+          return (
+            run &&
+            run.head_sha === identity.baseSha &&
+            run.head_branch === "main" &&
+            run.event ===
+              (run.path?.startsWith("dynamic/") ? "dynamic" : "push")
+          );
+        });
+      if (!health.ok || !mainBound)
         throw new Error("Main is not healthy; repair dispatch refused.");
       assertIdentity(
         (await current(github, owner, repo, identity.pullNumber)).identity,

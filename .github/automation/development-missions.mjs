@@ -88,7 +88,14 @@ export class DevelopmentMissions {
       );
     return result.subject;
   }
-  async admit({ repository, issue, runId, sourceSha, uncertaintyBudget }) {
+  async admit({
+    repository,
+    issue,
+    runId,
+    sourceSha,
+    uncertaintyBudget,
+    observeUnpublishedWorker,
+  }) {
     if (
       issue.state !== "open" ||
       issue.pull_request ||
@@ -227,17 +234,74 @@ export class DevelopmentMissions {
       });
     if (["CLAIMED", "BUILDING"].includes(subject.state)) {
       const workerId = `github-actions:${runId}`;
-      const lease = await this.query("developmentWorkerClaims:get", {
-        subjectId,
-        workerId,
+      const existingSteps = await this.query("orchestrationState:listSteps", {
+        runId: orchestrationRunId,
       });
-      if (subject.state === "CLAIMED")
-        await this.transition(subjectId, "CLAIMED", "BUILDING", runId, {
+      const old = existingSteps.find((s) => s.nodeId === "development-worker");
+      if (old?.state === "running" && old.leaseExpiresAt <= Date.now()) {
+        if (!observeUnpublishedWorker)
+          throw new Error("Independent recovery observation required.");
+        await observeUnpublishedWorker(old.leaseOwner);
+        const lease = await this.mutate(
+          "developmentWorkerClaims:recoverExpired",
+          {
+            subjectId,
+            workerId,
+            previousWorkerId: old.leaseOwner,
+            expectedFencingToken: old.leaseFencingToken,
+          },
+        );
+        if (subject.state === "CLAIMED")
+          await this.transition(
+            subjectId,
+            "CLAIMED",
+            "BUILDING",
+            `recovery:${runId}`,
+            { workerId, lease },
+          );
+        await this.checkpoint({
+          subjectId,
           workerId,
-          lease,
-          effectPayload: { runId, sourceSha },
+          runId: Number(old.leaseOwner.split(":")[1]),
+          pullNumber: 0,
+          headSha: "",
+          success: false,
         });
-      return { subjectId, workerId };
+        subject = await this.get(subjectId);
+      } else {
+        const lease = await this.query("developmentWorkerClaims:get", {
+          subjectId,
+          workerId,
+        });
+        if (subject.state === "CLAIMED")
+          await this.transition(subjectId, "CLAIMED", "BUILDING", runId, {
+            workerId,
+            lease,
+            effectPayload: { runId, sourceSha },
+          });
+        return { subjectId, workerId };
+      }
+    }
+    if (subject.state === "REPAIR_REQUIRED") {
+      const events = await this.query("developmentState:listEvents", {
+        subjectId,
+      });
+      const checkpoint = [...events]
+        .reverse()
+        .find(
+          (e) =>
+            e.transitionId === "DEV_TRANSITION_BUILDING_TO_VERIFYING" &&
+            e.eventType === "DEV_TRANSITION_COMMITTED",
+        );
+      if (!checkpoint?.payload.effectPayload?.headSha) {
+        if (!observeUnpublishedWorker)
+          throw new Error(
+            "Independent recovery observation required before retrying an unbound publication.",
+          );
+        await observeUnpublishedWorker(
+          `github-actions:${checkpoint?.payload.effectPayload?.runId}`,
+        );
+      }
     }
     const steps = await this.query("orchestrationState:listSteps", {
       runId: orchestrationRunId,
@@ -311,14 +375,37 @@ export class DevelopmentMissions {
         },
       });
     }
-    if (!success && (await this.get(subjectId)).state === "VERIFYING")
+    const events = await this.query("developmentState:listEvents", {
+      subjectId,
+    });
+    const checkpoint = [...events]
+      .reverse()
+      .find(
+        (e) =>
+          e.eventType === "DEV_TRANSITION_COMMITTED" &&
+          e.transitionId === "DEV_TRANSITION_BUILDING_TO_VERIFYING",
+      );
+    if (
+      checkpoint?.payload.effectPayload?.runId !== runId ||
+      checkpoint.requestedBy?.actorId !== workerId
+    )
+      throw new Error("Checkpoint replay is not bound to the current worker.");
+    // Use the durable result, never a rerun's missing or contradictory outputs.
+    if (
+      checkpoint.payload.effectPayload.workerSucceeded === false &&
+      (await this.get(subjectId)).state === "VERIFYING"
+    )
       await this.transition(
         subjectId,
         "VERIFYING",
         "REPAIR_REQUIRED",
         `worker-failed:${runId}`,
       );
-    await this.mutate("developmentWorkerClaims:pause", { subjectId, workerId });
+    await this.mutate("developmentWorkerClaims:pause", {
+      subjectId,
+      workerId,
+      checkpointEventId: checkpoint.eventId,
+    });
   }
   async review({ repository, issueNumber, identity, review, ci, runUrl }) {
     const subjectId = developmentMissionId(repository, issueNumber);
@@ -333,6 +420,16 @@ export class DevelopmentMissions {
       )
     )
       throw new Error("Worker checkpoint has not been committed.");
+    // Missing/untrusted evidence is not an application defect. A new trusted
+    // snapshot can be reviewed without stranding the subject in repair.
+    if (
+      !ci.ok &&
+      ((ci.pending || []).length ||
+        (ci.problems || []).some((problem) =>
+          /untrusted|binding|invalid|incomplete/i.test(problem),
+        ))
+    )
+      return;
     const key = `${identity.headSha}:${identity.fingerprint}:${runUrl}`;
     const effectPayload = {
       headSha: identity.headSha,
@@ -423,7 +520,7 @@ export class DevelopmentMissions {
       throw new Error(
         "Owner gate candidate no longer matches the durable review.",
       );
-    const actionId = `development-merge:${hash([subjectId, binding.headSha])}`;
+    const actionId = `development-merge:${hash([subjectId, binding.pullNumber, binding.headSha, binding.baseSha, binding.ciFingerprint])}`;
     let action = await this.query("toolActions:get", {
       projectKey: subjectId,
       actionId,
@@ -493,9 +590,20 @@ export class DevelopmentMissions {
         proposedBy: "agent",
       });
     }
-    // Approval and execution belong to the existing owner/runtime route. Actions only observes its receipt.
-    if (!action.singleUseClaimId)
+    const requireLiveProposal = () => {
+      if (
+        ["rejected", "revoked", "expired"].includes(action.state) ||
+        action.isApprovalExpired
+      )
+        throw new Error(
+          "Owner merge proposal is terminal or expired; explicit owner reconciliation is required. No replacement approval inferred.",
+        );
+    };
+    // Reconcile succeeded effects even if their former approval TTL has elapsed.
+    if (!action.singleUseClaimId) {
+      requireLiveProposal();
       return { state: "READY_TO_MERGE", subjectId, actionId };
+    }
     const { fingerprintToolEffect } =
       await import("../../typescript/src/actions/toolExecution.ts");
     const envelope = await this.query("externalReconciliations:getByScope", {
@@ -508,8 +616,10 @@ export class DevelopmentMissions {
         projectId: subjectId,
       }),
     });
-    if (envelope?.receipt?.status !== "succeeded")
+    if (envelope?.receipt?.status !== "succeeded") {
+      requireLiveProposal();
       return { state: "READY_TO_MERGE", subjectId, actionId };
+    }
     return this.transition(
       subjectId,
       "READY_TO_MERGE",

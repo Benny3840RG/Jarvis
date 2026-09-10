@@ -23,6 +23,7 @@ export class DevelopmentMissions {
     runId: number;
     sourceSha: string;
     uncertaintyBudget: number;
+    observeUnpublishedWorker?: (workerId: string) => Promise<void>;
   }): Promise<{ subjectId: string; workerId: string }>;
   ownerGate(
     subjectId: string,
@@ -46,7 +47,7 @@ export class DevelopmentMissions {
       fingerprint: string;
     };
     review: { verdict: string };
-    ci: { ok: boolean };
+    ci: { ok: boolean; problems?: string[]; pending?: string[] };
     runUrl: string;
   }): Promise<void>;
 }

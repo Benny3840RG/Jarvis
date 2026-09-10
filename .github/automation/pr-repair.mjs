@@ -145,6 +145,8 @@ export async function readRepair({
   });
   if (
     Number(origin.id) !== originalRunId ||
+    origin.run_attempt !== 1 ||
+    origin.display_title !== `Jarvis build issue #${issueNumber}` ||
     origin.path !== ".github/workflows/jarvis-autobuild.yml" ||
     origin.head_branch !== "main" ||
     origin.event !== "workflow_dispatch" ||

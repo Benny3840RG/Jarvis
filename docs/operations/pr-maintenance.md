@@ -67,10 +67,15 @@ no Convex or deployment credentials. Required GitHub job permissions are declare
 in the workflow. Unavailable credentials/permissions remain explicit failures.
 
 Before calling the handover operational, observe a real generated candidate
-through review → one deliberately failing safe test → bounded repair on the same
+through review → a naturally occurring repairable finding → bounded repair on the same
 PR → exact-candidate CI → fresh review → owner gate. Observe the run IDs, candidate
 SHAs, unchanged forbidden files and finite attempt count. Local mock-API tests
-prove admission and refusal paths, not that this live drill has happened.
+prove admission and refusal paths, not that this live drill has happened. If no
+repairable finding occurs, record the repair demonstration as unproven; never
+insert a defect to manufacture it.
+
+The scoped [issue #493 owner handoff](issue-493-owner-handoff.md) records control
+landing order, evidence and recovery boundaries after the post-merge #491 review.
 
 ## Durable Development composition
 

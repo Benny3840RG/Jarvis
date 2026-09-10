@@ -51,6 +51,8 @@ const actionSchema = z.object({
     baseBranch: identifier,
     pullRequestNumber: z.number().int().positive().safe(),
     reviewedHeadSha: sha,
+    reviewedBaseSha: sha,
+    candidateEvidenceFingerprint: z.string().regex(/^[0-9a-f]{64}$/),
   }),
 });
 const eventsSchema = z.array(

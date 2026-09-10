@@ -59,6 +59,8 @@ function fixture() {
         baseBranch: "main",
         pullRequestNumber: 12,
         reviewedHeadSha: head,
+        reviewedBaseSha: "c".repeat(40),
+        candidateEvidenceFingerprint: "d".repeat(64),
         transitionId: "DEV_TRANSITION_READY_TO_MERGE_TO_MERGED",
       },
     },
@@ -243,3 +245,17 @@ test("configuration refuses production or mismatched dev endpoint and absent exp
     }),
   );
 });
+
+for (const field of ["reviewedBaseSha", "candidateEvidenceFingerprint"]) {
+  for (const value of [undefined, "", "malformed"]) {
+    test(`completion refuses absent or malformed ${field}: ${value}`, async () => {
+      const f = fixture();
+      (f.rows["toolActions:get"] as { arguments: Record<string, unknown> }).arguments[field] =
+        value;
+      await assert.rejects(
+        completeExistingDevelopmentMission({ ...request, client: f.client, github: f.github }),
+      );
+      assert.equal(f.mutations.length, 0);
+    });
+  }
+}
