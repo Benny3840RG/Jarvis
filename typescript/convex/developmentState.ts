@@ -16,7 +16,8 @@ import {
   type TransitionEvaluation,
   type TransitionRequest,
 } from "../src/development/stateMachine.js";
-import { githubMergeArguments } from "../src/development/githubDevelopment.js";
+import { githubMergeArguments } from "../src/development/githubMergeArguments.js";
+import { isLiveWorkMissionInFlight } from "../src/development/liveWork.js";
 import { DEVELOPMENT_TRANSITIONS } from "../src/development/transitionRegistry.js";
 import { fingerprintToolAction, fingerprintToolEffect } from "../src/actions/toolExecution.js";
 import type { ToolAction } from "../src/actions/toolActions.js";
@@ -478,7 +479,6 @@ export const listRecent = query({
   },
 });
 
-const LIVE_WORK_TERMINAL_STATES = new Set(["COMPLETE", "ABORTED", "FAILED", "CONTRADICTED"]);
 const LIVE_WORK_EVENT_TAIL = 40;
 
 function stringField(value: unknown): string | undefined {
@@ -591,7 +591,7 @@ export const liveWork = query({
         .withIndex("by_owner_and_updated_at", (q) => q.eq("ownerId", ownerId)),
       "Development live-work mission selection",
     );
-    const active = subjects.filter((row) => !LIVE_WORK_TERMINAL_STATES.has(row.state));
+    const active = subjects.filter((row) => isLiveWorkMissionInFlight(row.state));
     if (active.length > 1) throw new ConvexError({ code: "DEVELOPMENT_LIVE_WORK_AMBIGUOUS" });
     const subject = active[0];
     if (!subject) return null;

@@ -20,22 +20,22 @@
   `get_development_live_work` and `show_jarvis_dashboard.structuredContent.liveWork`.
   Active/repair/indeterminate/merged/ready/complete renderer scenarios are local
   synthetic tests, not external production commissioning.
-- EXTERNAL PROOF: Configured development Convex was reachable; its live-work
-  function was not yet deployed at inspection. No provider state was mutated.
+- EXTERNAL PROOF: Development Convex `dev:outgoing-ram-798` accepted the query after fixing a Node-only import in its bundle. The actual query returned available/idle, and both real MCP tools returned that same live read. No mission or customer records were mutated.
 - SECURITY: Bounded, validated projection strips unknown fields and lease secrets.
   Explicit ΩΣ binding only; completion still commits through existing ΩΣ transition.
   Restore regression reproduced unrelated-file deletion via a forged planned-file
   marker; exact archive-derived allowlist and marker matching now reject it.
 - REVIEW: Independent review found inferred ΩΣ binding, stale progress after repair,
   and full-history event scanning. Regression repairs completed.
-- PR / MERGE SHA: Pending.
+- PR: #502, initial head `5c36dd50640ce5042b0145416b4336f8f25403ee`. Merge pending.
+- CI REPAIR: Automated review preparation exceeded its complete-file context bound and skipped the reviewer. This is being repaired; the failed review gate is not bypassed.
 - BACKLOG/MATRIX UPDATE: ROADMAP archive status corrected against #492/#501.
 - RESIDUAL RISK: ΩΣ residual uncertainty is not persisted by existing authority;
   query reports `residual-uncertainty-not-recorded` instead of inventing zero.
   Terminal missions are not selected as current work. Synthetic COMPLETE rendering
   is not proof that a real mission completed.
 - WORKSPACE: Another owner session was confirmed active in `Jarvis-live`; this session moved all work to `Jarvis-production-20260911` without reverting the shared checkout.
-- NEXT ACTION: Finish exact candidate gates, inspect complete diff, land safely,
+- NEXT ACTION: Repair bounded review preparation; verify the updated exact candidate and land safely,
   verify main, then disposition stale PRs and complete remaining archive groups.
 
 ## Current external gates (not a claim that engineering is exhausted)
