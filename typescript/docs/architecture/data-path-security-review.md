@@ -6,7 +6,7 @@ For each, the review traces four boundaries — **ownership**, **parsing**,
 inferred; each "sound" entry names the mechanism that makes it sound so a later
 change that removes the mechanism is visibly a regression.
 
-Review date: 2026-09-10. Base: `main` @ `612d596`.
+Review date: 2026-09-10. Reviewed base: `main` @ `344554b98b818440e0484a8b336a9c3cb498e5e6`.
 
 ## Findings requiring remediation
 
