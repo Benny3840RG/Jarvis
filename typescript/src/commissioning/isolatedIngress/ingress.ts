@@ -67,16 +67,20 @@ export class CommissioningPrincipalError extends Error {}
 
 class AdmissionTimeoutError extends Error {}
 
-async function withAdmissionTimeout<T>(work: Promise<T>, timeoutMs: number): Promise<T> {
+async function withAdmissionTimeout<T>(
+  work: Promise<T>,
+  timeoutMs: number,
+  abort: AbortController,
+): Promise<T> {
   let timer: NodeJS.Timeout | undefined;
   try {
     return await Promise.race([
       work,
       new Promise<never>((_resolve, reject) => {
-        timer = setTimeout(
-          () => reject(new AdmissionTimeoutError("admission outcome unknown (timeout)")),
-          timeoutMs,
-        );
+        timer = setTimeout(() => {
+          abort.abort();
+          reject(new AdmissionTimeoutError("admission outcome unknown (timeout)"));
+        }, timeoutMs);
       }),
     ]);
   } finally {
@@ -96,8 +100,9 @@ function readString(record: Record<string, unknown>, key: string): string | unde
  * authority → a one-node read-only `commissioningProbe` graph →
  * `ConvexOrchestrationRunner.run`. Admission (`beginRun`) is the only gate: a
  * replay or a fingerprint conflict never reaches the executor, a transport
- * failure or a timeout is an *unknown* outcome (no local execution, no fresh
- * key), and every delivery is recorded in secret-free evidence so the drill can
+ * failure or a timeout is an *unknown* outcome (no fresh key). Late admission
+ * cannot start execution; already-started work may finish. Admitted deliveries
+ * are recorded in bounded evidence so the drill can
  * reconcile each logical delivery to one canonical run.
  */
 export class CommissioningIngressRunner {
@@ -113,6 +118,7 @@ export class CommissioningIngressRunner {
     if (principal === undefined) {
       throw new CommissioningPrincipalError("A verified authenticated principal is required.");
     }
+    this.deps.evidence.reserveDelivery();
     const workerId = authenticatedWorkerId(principal);
     const now = this.deps.now ?? (() => Date.now());
 
@@ -180,13 +186,20 @@ export class CommissioningIngressRunner {
     requestFingerprint: string,
   ): Promise<CommissioningIngressOutcome> {
     let result: Awaited<ReturnType<ConvexOrchestrationRunner["run"]>>;
+    const abort = new AbortController();
     try {
       result = await withAdmissionTimeout(
-        runner.run(graph, context, {
-          requestFingerprint,
-          maxRetries: this.deps.maxRetries ?? COMMISSIONING_MAX_RETRIES,
-        }),
+        runner.run(
+          graph,
+          context,
+          {
+            requestFingerprint,
+            maxRetries: this.deps.maxRetries ?? COMMISSIONING_MAX_RETRIES,
+          },
+          { signal: abort.signal },
+        ),
         this.deps.admissionTimeoutMs ?? DEFAULT_ADMISSION_TIMEOUT_MS,
+        abort,
       );
     } catch (error: unknown) {
       if (error instanceof AdmissionTimeoutError) {
@@ -194,14 +207,14 @@ export class CommissioningIngressRunner {
           disposition: "admission-unknown",
           status: 503,
           detail:
-            "The durable admission outcome is unknown (timeout). Retry with the same Idempotency-Key.",
+            "The admission or execution outcome is unknown (timeout); work already started may still finish. Retry with the same Idempotency-Key.",
         };
       }
       return {
         disposition: "admission-unknown",
         status: 503,
         detail:
-          "The durable admission backend is unavailable; no execution occurred. Retry with the same Idempotency-Key.",
+          "The admission or execution outcome is unknown; durable state could not be confirmed. Retry with the same Idempotency-Key.",
       };
     }
 
@@ -243,6 +256,15 @@ export class CommissioningIngressRunner {
         detail: "A new canonical run was created and the read-only probe completed.",
         runId: runResult.runId,
         ...(probe === undefined ? {} : { probe }),
+      };
+    }
+    if (runResult.failure.code === "audit_failure") {
+      return {
+        disposition: "admission-unknown",
+        status: 503,
+        runId: runResult.runId,
+        detail:
+          "The execution or durable completion outcome is unknown. Reconcile using the same Idempotency-Key.",
       };
     }
     return {

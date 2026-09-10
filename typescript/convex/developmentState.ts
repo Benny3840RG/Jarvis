@@ -1,4 +1,5 @@
 import { v } from "convex/values";
+import { paginationOptsValidator } from "convex/server";
 
 import {
   applyDevelopmentEvent,
@@ -470,6 +471,26 @@ export const listRecent = query({
       .withIndex("by_owner_and_updated_at", (q) => q.eq("ownerId", ownerId))
       .order("desc")
       .take(limit);
+  },
+});
+
+/** Stable-key pagination for lifecycle sweeps; unlike the HUD recent snapshot,
+ * updating a subject during observation cannot move it past the cursor. */
+export const listPage = query({
+  args: { serviceToken: v.string(), paginationOpts: paginationOptsValidator },
+  returns: v.object({
+    page: v.array(developmentSubjectDocumentValidator),
+    isDone: v.boolean(),
+    continueCursor: v.string(),
+  }),
+  handler: async (ctx, args) => {
+    const ownerId = requireOwner(args.serviceToken);
+    boundedMissionListLimit(args.paginationOpts.numItems);
+    const { page, isDone, continueCursor } = await ctx.db
+      .query("developmentSubjects")
+      .withIndex("by_owner_and_subject_id", (q) => q.eq("ownerId", ownerId))
+      .paginate(args.paginationOpts);
+    return { page, isDone, continueCursor };
   },
 });
 
@@ -1062,6 +1083,7 @@ export const commit = mutation({
           to: request.to,
           sourceSubjectVersion: subject.subjectVersion,
           resultingSubjectVersion: subject.subjectVersion + 1,
+          ...(request.effectPayload ? { effectPayload: request.effectPayload } : {}),
           ...(request.approval ? { approvalId: request.approval.approvalId } : {}),
           ...(request.lease ? { leaseFencingToken: request.lease.fencingToken } : {}),
           ...(mergeReceiptKey ? { mergeReceiptKey } : {}),

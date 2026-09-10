@@ -5,7 +5,10 @@ import { JarvisProblem } from "../../http/problemDetails.js";
 import { parseIdempotencyKey } from "../../http/taskRequest.js";
 import { CommissioningIngressRunner, CommissioningPrincipalError } from "./ingress.js";
 import { CommissioningRequestError, parseCommissioningIngressBody } from "./requestSchema.js";
-import type { CommissioningDeliveryClassification } from "./evidence.js";
+import {
+  CommissioningEvidenceCapacityError,
+  type CommissioningDeliveryClassification,
+} from "./evidence.js";
 
 export const COMMISSIONING_INGRESS_RUNNER = Symbol("COMMISSIONING_INGRESS_RUNNER");
 
@@ -67,6 +70,14 @@ export class CommissioningIngressController {
     try {
       outcome = await this.runner.admit(request, parsed, idempotencyKey, classification);
     } catch (error: unknown) {
+      if (error instanceof CommissioningEvidenceCapacityError) {
+        throw new JarvisProblem(
+          HttpStatus.SERVICE_UNAVAILABLE,
+          "commissioning-evidence-capacity",
+          "Commissioning Evidence Capacity",
+          error.message,
+        );
+      }
       if (error instanceof CommissioningPrincipalError) {
         throw new JarvisProblem(
           HttpStatus.UNAUTHORIZED,

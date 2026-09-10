@@ -41,20 +41,20 @@ The composition:
   schema rejects an `authority` field outright;
 - hashes the _validated canonical_ body for `requestFingerprint` — a whitespace
   or JSON key-order change replays, any semantic change conflicts — and retains
-  the secret-free canonical pre-image in evidence;
+  the canonical pre-image of the synthetic payload in evidence;
 - runs a one-node read-only `commissioningProbe` graph through
   `ConvexOrchestrationRunner` — admission (`beginRun`) is the only gate;
 - initialises **no** persistence, store, provider or business adapter.
 
 ### Response mapping
 
-| HTTP | Disposition          | Meaning                                                                                                                                                    |
-| ---- | -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 201  | `created-complete`   | new canonical run; probe executed once                                                                                                                     |
-| 200  | `terminal-replay`    | canonical run already terminal; not re-executed                                                                                                            |
-| 202  | `nonterminal-replay` | canonical run still in progress; not re-executed                                                                                                           |
-| 409  | `conflict`           | same key, semantically different request                                                                                                                   |
-| 503  | `admission-unknown`  | backend unavailable **or** admission timed out — the outcome is unknown; retry with the **same** Idempotency-Key, never a fresh key, never local execution |
+| HTTP | Disposition          | Meaning                                                                                                                                                                                                           |
+| ---- | -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 201  | `created-complete`   | new canonical run; probe executed once                                                                                                                                                                            |
+| 200  | `terminal-replay`    | canonical run already terminal; not re-executed                                                                                                                                                                   |
+| 202  | `nonterminal-replay` | canonical run still in progress; not re-executed                                                                                                                                                                  |
+| 409  | `conflict`           | same key, semantically different request                                                                                                                                                                          |
+| 503  | `admission-unknown`  | admission, execution, or durable completion could not be confirmed — reconcile/retry with the **same** Idempotency-Key; already-started work may finish. A late admission response cannot start the local runner. |
 
 ## Prerequisites for the recorded drill
 
@@ -84,7 +84,7 @@ prevents accidental collision, not isolation.
    - a redelivery after the run is terminal → 200;
    - the backend stopped → 503, then restarted and retried with the same key.
 3. Record, from the listener's evidence log (`{"kind":"delivery",...}` /
-   `{"kind":"step-outcome",...}` lines, all secret-free):
+   `{"kind":"step-outcome",...}` lines; synthetic payloads only):
    - **first-attempt outcomes separately** from bounded retries;
    - separate counts for immediate replays, explicitly-classified transient
      failures, and retries (`X-Commissioning-Attempt: retry`).
@@ -114,3 +114,28 @@ policy version, the `isolated-ingress-probe` trigger kind, and the exact campaig
 id, before deleting its steps, reconciliations and the run. A run that fails any
 check aborts the whole transaction — nothing is deleted. Use only the run ids the
 drill recorded.
+
+Review hardening: both bootstrap and cleanup require `CONVEX_DEPLOYMENT=dev:<name>`
+and the exact corresponding `https://<name>.convex.cloud` URL (optional trailing slash).
+Bootstrap constructs its client from that validated URL, including when an explicit
+environment is supplied. This checks target consistency; operator approval and real
+deployment identity still require commissioning evidence.
+
+Evidence is retained without eviction for at most 1,000 admitted deliveries per listener
+lifetime (at most one step outcome plus one delivery record per probe). The next
+request receives a 503 evidence-capacity problem before durable admission; it is not
+counted as an admitted delivery. Tallies are incremental. Permanently stalled calls
+also consume the admission budget. Preserve the complete log and reconcile unknown
+outcomes before restarting; process memory is not a durable evidence archive. Only
+synthetic non-secret payloads may be used because canonical payload values are logged.
+
+Timeout is a response deadline, not cancellation of already-started orchestration.
+A run admitted only after the deadline stays queued for canonical reconciliation;
+retrying its existing key observes that run and does not resume it automatically.
+An audit or durable-completion failure is also reported as unknown, never as proven
+non-execution or completion.
+
+Cleanup refuses queued, running, or indeterminate runs, nonterminal steps, and any
+unexpired step lease even if the run is terminal. Reconcile through the existing
+orchestration recovery path before retrying cleanup. Membership and terminal/lease
+checks run in the same bounded Convex transaction as deletion.

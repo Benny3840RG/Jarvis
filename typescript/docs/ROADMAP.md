@@ -4,6 +4,29 @@ This file is a living record for the autonomous engineering sessions working on
 Jarvis: current state, what changed recently, and what to pick up next. Update
 it at the end of every session.
 
+## PR handover work (2026-09-10)
+
+- Added trusted automatic advisory PR review with isolated reviewer/publication
+  jobs and exact head/base/CI evidence binding. Same-repository PRs receive review;
+  only authentic approved builder candidates receive automatic repair authority.
+- Extended the existing builder with two-attempt, same-PR repairs. Cumulative
+  forbidden-path/content guards, trusted controls, owner merge and queue locking
+  remain enforced. Candidate verification now authenticates every required producer.
+- Hardened post-merge GitHub evidence and merged-head reconciliation. Missing or
+  neutral/skipped checks, wrong producers and different reviewed heads fail closed.
+- Added a development-only executable post-merge completion command that loads
+  existing durable bindings before using the established Omega gateway.
+- Local validation is recorded in the Phase 1 working ledger. Live activation is
+  pending this control-plane PR landing and the drill in
+  `docs/operations/pr-maintenance.md`; no live completion is inferred here.
+- Added durable Actions admission, isolated worker-lease supervision, head-bound
+  verification/review checkpoints, owner ToolAction proposal and post-merge
+  completion scheduling. Issue acceptance criteria stay unverified until real
+  independent evidence is recorded through the existing Omega authority.
+- Next: deploy the bridge to the authorised development runtime, configure its
+  credentials/explicit uncertainty decisions, and run an owner-approved live
+  issue through the full handover. Local tests do not close commissioning.
+
 ## Current state (2026-09-08)
 
 - `npm run check` (hygiene + `tsc` + ESLint + Prettier + OpenAPI lint + Node
@@ -25,7 +48,20 @@ it at the end of every session.
   OIDC provider, production deployment approval). These need operator-supplied
   credentials/decisions and are not actionable by an autonomous coding session.
 
+## Archive v4 manifest review (2026-09-10)
+
+- S1 adds strict manifest parsing, coverage metadata and SHA-256 digest format
+  validation. Full recovery reparses the manifest and refuses forged completeness.
+- Every manifest remains partial until a real restore verifier is implemented;
+  group presence and reference descriptions do not prove recovery integrity.
+- Next: S2 core/memory capture and isolated restore, then S3 business records
+  and settings; complete recovery remains gated on the later domain/verifier work.
+
 ## This session's work
+
+**Development specification validation.** Empty or whitespace-only GitHub issue
+titles are now rejected with the machine-readable `TITLE_EMPTY` reason, while
+surrounding whitespace on valid titles remains normalized before hashing.
 
 **Backup/restore coverage gap (priority area 7).** `npm run backup` only ever
 covered `state`/`tasks`/`reminders` (`src/backup/backup.ts`), even though the
@@ -81,20 +117,19 @@ rather than an occasional operator action.
    are NOT in the backup archive. These are harder than phase 1: they're
    densely cross-referenced by id (a quote holds `clientId`; an invoice holds
    `quoteId` and `clientId`; a project can hold both). Restoring them safely
-   needs ONE consistent id-remap table applied across every domain at once
-   (extending the existing `remapIds` helper in `backup.ts`, which today only
-   remaps ids inside `assistantState`), not a per-domain copy loop. Recommend
-   tackling this as its own session: map the full foreign-key graph first
-   (grep each domain's type for `clientId`/`quoteId`/`projectId`/etc.), then
-   design the remap order (restore in dependency order: clients before
-   quotes/projects/properties/enquiries, quotes before invoices, etc.)
-   before writing any restore code.
-2. **Quote delivery / PDF artifact backup.** `quoteDeliveries` (Convex-only,
-   see `src/persistence/convexQuoteDeliveries.ts`) and
-   `quotePdfArtifactRepository` are also outside backup's reach. These are
-   lower priority than the core business records above since they're
-   regenerable/re-derivable (a delivery ledger, a rendered PDF) rather than
-   the only copy of user-entered data — but worth a note once phase 2 lands.
+   needs the explicit reference inventory in
+   [the v4 contract](architecture/backup-v4-contract.md): preserve logical IDs
+   in an empty destination and translate platform-generated IDs, including
+   string-typed references, with table-scoped maps. Existing `add()` APIs do
+   not necessarily preserve IDs. Verify the complete reference graph rather
+   than applying an untyped global string replacement.
+2. **Quote delivery / PDF artifact backup.** The delivery-attempt/outcome ledger
+   is authoritative history, including failed and indeterminate outcomes;
+   re-sending cannot restore it. PDF bytes are only conditionally regenerable
+   from the full aggregate/revision snapshot, stored issuer/client/generatedAt
+   and pinned renderer, with a verified digest. Blob backup remains in scope.
+   See the [domain inventory](architecture/authoritative-domain-inventory.md)
+   and [v4 contract](architecture/backup-v4-contract.md).
 3. **`personalTraitsService.ts` dead code.** `addNote` and `priorityRank` on
    `PersonalTraitsService` (`src/runtime/personalTraitsService.ts`) are
    unused anywhere in the codebase or tests (only `dailyBrief`/`motivation`
@@ -124,3 +159,16 @@ rather than an occasional operator action.
 - Business settings (`src/businessSettings/`) has no Convex-backed store yet
   (`JsonBusinessSettingsStore` only) — flag this if `PERSISTENCE_PROVIDER=convex`
   commissioning ever depends on it.
+
+- Repaired the post-merge #491 handover findings: exact completion bindings, trusted check selection, non-poisoning retry observations, issue-bound repair provenance, guarded failed checkpoints and independently observed unpublished-worker recovery.
+- Added stable completion pagination and finalisation after both durable authorities complete; retained explicit owner reconciliation for published/uncertain dead workers and stale, closed or terminal merge candidates. See `docs/operations/issue-493-owner-handoff.md`.
+- Next: owner-approved control landing with #496, exact development commissioning, then #493's real build/review and separately approved merge/post-merge acceptance proof. No live lifecycle completion is claimed from regression tests.
+- Development admission now selects an issue-specific uncertainty-budget variable; approving one issue cannot supply a default budget to another. Residual uncertainty and owner merge gates remain separate.
+- Live PR-maintenance failures led to bounded, digest-checked prompt-file transport and the isolated publisher permission required for PR comments; model execution remains read-only.
+- Removed the redundant reviewer `--skip-git-repo-check` argument after the live #493 review proved that the pinned Codex action already supplies it.
+
+## Development merge observation compatibility
+
+- Pin only GitHub PR-detail reads to API 2022-11-28 because 2026-03-10 removed `merge_commit_sha`; preserve actual provider SHA checks for reconciliation and completion. Other requests retain their current API version.
+- Issue #493 live proof exposed the mismatch after a succeeded governed merge. Preserve the inconclusive observation; retry only after a fresh provider observation includes the actual merge SHA.
+- Remove the completion observer self-dependency using exact workflow/app/commit/branch/event provenance; retain all required CI and unrelated-failure gates, plus prior inconclusive proofs.

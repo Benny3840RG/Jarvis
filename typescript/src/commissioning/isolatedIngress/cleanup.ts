@@ -1,4 +1,5 @@
 import { ConvexHttpClient } from "convex/browser";
+import { commissioningDevelopmentUrl } from "./developmentTarget.js";
 
 import { api } from "../../../convex/_generated/api.js";
 import type { ConvexClientLike } from "../../persistence/convexPersistence.js";
@@ -12,6 +13,7 @@ export type CommissioningCleanupResult = {
 export type CommissioningCleanupDeps = {
   serviceToken?: string;
   client?: ConvexClientLike;
+  env?: NodeJS.ProcessEnv;
 };
 
 /**
@@ -24,14 +26,14 @@ export async function purgeCommissioningRuns(
   deps: CommissioningCleanupDeps,
   input: { campaignId: string; runIds: readonly string[] },
 ): Promise<CommissioningCleanupResult> {
-  const serviceToken = deps.serviceToken ?? process.env.JARVIS_SERVICE_TOKEN;
+  const env = deps.env ?? process.env;
+  const convexUrl = commissioningDevelopmentUrl(env);
+  const serviceToken = deps.serviceToken ?? env.JARVIS_SERVICE_TOKEN;
   if (!serviceToken) {
     throw new Error("Commissioning cleanup requires JARVIS_SERVICE_TOKEN.");
   }
   let client = deps.client;
   if (!client) {
-    const convexUrl = process.env.CONVEX_URL;
-    if (!convexUrl) throw new Error("Commissioning cleanup requires CONVEX_URL.");
     client = new ConvexHttpClient(convexUrl);
   }
 

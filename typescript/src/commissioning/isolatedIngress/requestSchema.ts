@@ -44,7 +44,7 @@ export function parseCommissioningIngressBody(body: unknown): CommissioningIngre
     fail(`The commissioning ingress nonce must be at most ${MAX_NONCE_LENGTH} characters.`);
   }
 
-  const payload: Record<string, string | number | boolean> = {};
+  const payload: Record<string, string | number | boolean> = Object.create(null);
   if (body.payload !== undefined) {
     if (!isRecord(body.payload)) fail("The commissioning ingress payload must be a JSON object.");
     const keys = Object.keys(body.payload);

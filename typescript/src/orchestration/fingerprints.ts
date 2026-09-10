@@ -9,7 +9,7 @@ function canonicalize(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(canonicalize);
   if (value === null || typeof value !== "object") return value;
 
-  const result: Record<string, unknown> = {};
+  const result: Record<string, unknown> = Object.create(null);
   for (const key of Object.keys(value).sort()) {
     const entry = (value as Record<string, unknown>)[key];
     if (entry !== undefined) result[key] = canonicalize(entry);

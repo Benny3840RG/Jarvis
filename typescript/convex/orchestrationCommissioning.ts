@@ -42,6 +42,14 @@ async function deleteRunChildren(
     throw new Error(`Commissioning run ${runId} has more ${table} rows than cleanup permits.`);
   }
   for (const row of rows) {
+    if ("state" in row && row.state !== "succeeded" && row.state !== "failed")
+      throw new Error("Cleanup refuses a nonterminal step.");
+    if (
+      "leaseExpiresAt" in row &&
+      typeof row.leaseExpiresAt === "number" &&
+      row.leaseExpiresAt > Date.now()
+    )
+      throw new Error("Cleanup refuses an active lease.");
     await ctx.db.delete(table, row._id);
   }
   return rows.length;
@@ -98,6 +106,9 @@ export const purgeCommissioningRun = mutation({
           `Run ${runId} is not a member of commissioning campaign ${campaignId}; refusing to delete anything.`,
         );
       }
+
+      if (run.state !== "succeeded" && run.state !== "failed")
+        throw new Error("Cleanup refuses a nonterminal or unresolved run.");
 
       const steps = await deleteRunChildren(ctx, "orchestrationSteps", ownerId, runId);
       const reconciliations = await deleteRunChildren(

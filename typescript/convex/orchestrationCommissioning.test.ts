@@ -47,13 +47,29 @@ describe("purgeCommissioningRun", () => {
   it("deletes a campaign-matching commissioning run and its steps", async () => {
     const t = harness();
     await t.mutation(api.orchestrationState.beginRun, begin({ runId: "run-a" }));
-    await t.mutation(api.orchestrationState.markStepRunning, {
+    const lease = await t.mutation(api.orchestrationState.markStepRunning, {
       serviceToken: SERVICE_TOKEN,
       runId: "run-a",
       nodeId: "probe",
       operationId: "commissioningProbe",
       workerId: "worker-1",
       leaseTtlMs: 1_000,
+    });
+
+    await expect(
+      t.mutation(api.orchestrationCommissioning.purgeCommissioningRun, {
+        serviceToken: SERVICE_TOKEN,
+        campaignId: CAMPAIGN,
+        runIds: ["run-a"],
+      }),
+    ).rejects.toThrow(/nonterminal|active|lease/i);
+    await t.mutation(api.orchestrationState.recordStepSuccess, {
+      serviceToken: SERVICE_TOKEN,
+      runId: "run-a",
+      nodeId: "probe",
+      workerId: "worker-1",
+      leaseToken: lease.leaseToken,
+      fencingToken: lease.fencingToken,
     });
 
     const result = await t.mutation(api.orchestrationCommissioning.purgeCommissioningRun, {
@@ -120,3 +136,48 @@ describe("purgeCommissioningRun", () => {
     ).rejects.toThrow();
   });
 });
+
+it("preserves terminal runs carrying a live lease", async () => {
+  const t = harness();
+  await t.mutation(api.orchestrationState.beginRun, begin());
+  await t.run(async (ctx) => {
+    const run = await ctx.db.query("orchestrationRuns").first();
+    const step = await ctx.db.query("orchestrationSteps").first();
+    if (!run || !step) throw new Error("fixture missing");
+    await ctx.db.patch("orchestrationRuns", run._id, { state: "succeeded" });
+    await ctx.db.patch("orchestrationSteps", step._id, {
+      state: "succeeded",
+      leaseExpiresAt: Date.now() + 1_000,
+    });
+  });
+  await expect(
+    t.mutation(api.orchestrationCommissioning.purgeCommissioningRun, {
+      serviceToken: SERVICE_TOKEN,
+      campaignId: CAMPAIGN,
+      runIds: ["run-1"],
+    }),
+  ).rejects.toThrow(/active lease/);
+  expect(
+    await t.query(api.orchestrationState.getRun, { serviceToken: SERVICE_TOKEN, runId: "run-1" }),
+  ).not.toBeNull();
+});
+
+it.each(["queued", "running", "indeterminate"] as const)(
+  "preserves %s campaign runs",
+  async (state) => {
+    const t = harness();
+    await t.mutation(api.orchestrationState.beginRun, begin());
+    await t.run(async (ctx) => {
+      const run = await ctx.db.query("orchestrationRuns").first();
+      if (!run) throw new Error("missing");
+      await ctx.db.patch("orchestrationRuns", run._id, { state });
+    });
+    await expect(
+      t.mutation(api.orchestrationCommissioning.purgeCommissioningRun, {
+        serviceToken: SERVICE_TOKEN,
+        campaignId: CAMPAIGN,
+        runIds: ["run-1"],
+      }),
+    ).rejects.toThrow(/nonterminal|unresolved/);
+  },
+);

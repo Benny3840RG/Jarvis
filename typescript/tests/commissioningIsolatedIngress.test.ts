@@ -79,6 +79,8 @@ class FakeOrchestrationBackend {
   executorCalls = 0;
   failBeginRun = false;
   hangBeginRun = false;
+  beginBarrier?: Promise<void>;
+  failTerminal = false;
 
   allRunIds(): string[] {
     return [...this.runsById.keys()];
@@ -106,6 +108,7 @@ class FakeOrchestrationBackend {
 
   private async beginRun(args: Record<string, unknown>): Promise<unknown> {
     this.beginRunCalls += 1;
+    await this.beginBarrier;
     if (this.hangBeginRun) return new Promise(() => {});
     if (this.failBeginRun) throw new Error("Convex admission backend unavailable");
     const key = this.key(args.triggerSource, args.idempotencyKey);
@@ -166,6 +169,7 @@ class FakeOrchestrationBackend {
     args: Record<string, unknown>,
     terminal: "succeeded" | "failed",
   ): Promise<unknown> {
+    if (this.failTerminal) throw new Error("terminal transport failed");
     const step = this.steps.get(`${String(args.runId)} ${String(args.nodeId)}`);
     if (!step) throw new Error("Orchestration step not found.");
     step.state = terminal;
@@ -491,6 +495,7 @@ describe("isolated-ingress commissioning — bootstrap config", () => {
       JARVIS_OIDC_SUBJECT: SUBJECT,
       JARVIS_SERVICE_TOKEN: SERVICE_TOKEN,
       CONVEX_URL: "https://example.convex.cloud",
+      CONVEX_DEPLOYMENT: "dev:example",
     } as NodeJS.ProcessEnv;
 
     // The production resolver still reports service-token on a loopback host.
@@ -501,6 +506,16 @@ describe("isolated-ingress commissioning — bootstrap config", () => {
     return import("../src/commissioning/isolatedIngress/bootstrap.js").then(
       ({ resolveCommissioningBootstrapConfig }) => {
         const resolved = resolveCommissioningBootstrapConfig(env);
+        for (const target of [
+          { CONVEX_DEPLOYMENT: undefined },
+          { CONVEX_DEPLOYMENT: "prod:example" },
+          { CONVEX_URL: "https://other.convex.cloud" },
+          { CONVEX_URL: "https://example.convex.cloud/?x=1" },
+        ])
+          assert.throws(
+            () => resolveCommissioningBootstrapConfig({ ...env, ...target }),
+            /development|dev:/i,
+          );
         assert.equal(resolved.config.authMode, "oidc");
         assert.equal(resolved.host, "127.0.0.1");
         assert.equal(resolved.config.oidc.subject, SUBJECT);
@@ -521,4 +536,137 @@ describe("isolated-ingress commissioning — bootstrap config", () => {
     );
     assert.ok(commissioningPolicyFingerprint().startsWith("commissioning-policy:v1:sha256:"));
   });
+});
+
+describe("commissioning review regressions", () => {
+  it("retains special JSON keys in both parsed bodies and fingerprints", () => {
+    const a = JSON.parse('{"nonce":"n","payload":{"__proto__":"a","constructor":true}}');
+    const b = JSON.parse('{"nonce":"n","payload":{"__proto__":"b","constructor":true}}');
+    const parsed = parseCommissioningIngressBody(a);
+    assert.equal(Object.hasOwn(parsed.payload, "__proto__"), true);
+    assert.equal(parsed.payload["__proto__"], "a");
+    assert.notEqual(
+      orchestrationRequestFingerprint(a).fingerprint,
+      orchestrationRequestFingerprint(b).fingerprint,
+    );
+    assert.notEqual(
+      orchestrationRequestFingerprint(parsed).fingerprint,
+      orchestrationRequestFingerprint(parseCommissioningIngressBody(b)).fingerprint,
+    );
+  });
+
+  it("never starts a step after a timed-out beginRun later creates the run", async () => {
+    const backend = new FakeOrchestrationBackend();
+    const gate = deferred();
+    backend.beginBarrier = gate.promise;
+    const result = await ingress(backend, new CommissioningEvidenceLog()).admit(
+      authedRequest(),
+      parseCommissioningIngressBody({ nonce: "late" }),
+      "late-key-123",
+      "first-attempt",
+    );
+    assert.equal(result.status, 503);
+    gate.resolve();
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.equal(backend.allRunIds().length, 1);
+    assert.equal(backend.markStepRunningCalls, 0);
+  });
+
+  it("does not claim no execution when completion transport fails", async () => {
+    const backend = new FakeOrchestrationBackend();
+    backend.failTerminal = true;
+    const result = await ingress(backend, new CommissioningEvidenceLog()).admit(
+      authedRequest(),
+      parseCommissioningIngressBody({ nonce: "done" }),
+      "done-key-123",
+      "first-attempt",
+    );
+    assert.equal(backend.markStepRunningCalls, 1);
+    assert.equal(result.status, 503);
+    assert.doesNotMatch(result.detail, /no execution occurred/);
+    assert.match(result.detail, /unknown/);
+  });
+
+  it("caps lifetime admission before backend effects while retaining all admitted evidence", async () => {
+    const backend = new FakeOrchestrationBackend();
+    const evidence = new CommissioningEvidenceLog(undefined, undefined, 2);
+    const runner = ingress(backend, evidence);
+    for (let i = 0; i < 2; i++)
+      await runner.admit(
+        authedRequest(),
+        parseCommissioningIngressBody({ nonce: "cap" }),
+        `cap-key-${i}`,
+        "first-attempt",
+      );
+    await assert.rejects(
+      runner.admit(
+        authedRequest(),
+        parseCommissioningIngressBody({ nonce: "cap" }),
+        "cap-key-3",
+        "first-attempt",
+      ),
+      /evidence capacity/i,
+    );
+    assert.equal(backend.beginRunCalls, 2);
+    assert.equal(evidence.tally().deliveries, 2);
+    assert.equal(evidence.tally().stepOutcomes, 2);
+    assert.equal(evidence.snapshot().length, 4);
+  });
+
+  it("rejects missing, production and mismatched cleanup targets before effects", async () => {
+    const { purgeCommissioningRuns } =
+      await import("../src/commissioning/isolatedIngress/cleanup.js");
+    let calls = 0;
+    const client = {
+      query: async () => null,
+      mutation: async () => {
+        calls++;
+        return {};
+      },
+    } as ConvexClientLike;
+    for (const env of [
+      {},
+      { CONVEX_DEPLOYMENT: "prod:example", CONVEX_URL: "https://example.convex.cloud" },
+      { CONVEX_DEPLOYMENT: "dev:example", CONVEX_URL: "https://other.convex.cloud" },
+    ]) {
+      await assert.rejects(
+        purgeCommissioningRuns(
+          { client, serviceToken: SERVICE_TOKEN, env },
+          { campaignId: "c", runIds: ["r"] },
+        ),
+        /development|dev:/i,
+      );
+    }
+    assert.equal(calls, 0);
+  });
+});
+
+it("reports unknown while a probe already executing at timeout can finish", async () => {
+  const backend = new FakeOrchestrationBackend();
+  const evidence = new CommissioningEvidenceLog();
+  const entered = deferred();
+  const release = deferred();
+  const runner = new CommissioningIngressRunner({
+    campaignId: "c",
+    evidence,
+    serviceToken: SERVICE_TOKEN,
+    client: backend.client(),
+    admissionTimeoutMs: 200,
+    probeExecutor: barrierExecutor(entered.resolve, release.promise),
+  });
+  const resultPromise = runner.admit(
+    authedRequest(),
+    parseCommissioningIngressBody({ nonce: "lease" }),
+    "timeout-executing-key",
+    "first-attempt",
+  );
+  await entered.promise;
+  const result = await resultPromise;
+  assert.equal(result.status, 503);
+  assert.match(result.detail, /unknown/);
+  release.resolve();
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal(evidence.tally().stepOutcomes, 1);
+  assert.equal(evidence.tally().creations, 0);
+  assert.equal(evidence.tally().transientFailures, 1);
 });

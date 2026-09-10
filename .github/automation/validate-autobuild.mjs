@@ -275,6 +275,31 @@ export function validatePromptContract(prompt) {
 export function validateWorkflowContract(workflow) {
   const text = String(workflow ?? "");
   const requirements = [
+    [
+      "repair requires a main dispatch",
+      /github\.event_name == 'workflow_dispatch' && github\.ref == 'refs\/heads\/main'/,
+    ],
+    [
+      "repair requires immutable controls",
+      /sudo install -o root -g root -m 0444 \.github\/automation\/pr-repair\.mjs \/opt\/jarvis-autobuild\/pr-repair\.mjs/,
+    ],
+    [
+      "repair requires pre-worker budget validation",
+      /await requireRepairBudget\(\{\.\.\.args, runId:context\.runId\}\);/,
+    ],
+    [
+      "repair requires publication identity recheck",
+      /await readRepair\(args\);/,
+    ],
+    [
+      "repair requires cumulative publication guard",
+      /guardCumulative\(fs\.readFileSync\('\/opt\/jarvis-autobuild\/main\.sha'/,
+    ],
+    [
+      "repair requires cumulative pre-checkout guard",
+      /guardCumulative\(fs\.readFileSync\('\/opt\/jarvis-autobuild\/main\.sha','utf8'\)\.trim\(\), fs\.readFileSync/,
+    ],
+
     ["workflow must support manual dispatch", /workflow_dispatch:/i],
     ["workflow must require automation-approved", /automation-approved/i],
     ["workflow must define concurrency", /concurrency:/i],
@@ -409,9 +434,31 @@ export function validateWorkflowContract(workflow) {
 
   const checked = requirePatterns(text, requirements);
   const reasons = [...checked.reasons];
+  const preparation = text.indexOf(
+    "- name: Install locked dependencies before sandboxing",
+  );
+  const candidateCheckout = text.indexOf(
+    "- name: Guard cumulative candidate before checkout",
+  );
+  const worker = text.indexOf("- name: Run bounded Codex implementation");
+  if (
+    preparation < 0 ||
+    candidateCheckout < preparation ||
+    worker < candidateCheckout
+  ) {
+    reasons.push(
+      "repair must install trusted dependencies before guarded candidate checkout and worker",
+    );
+  }
+  if (/git push[^\n]*(?:--force|\s-f\b|\+HEAD)/.test(text))
+    reasons.push("repair must use ordinary fast-forward push");
+
   if (/^on:[\s\S]*?^\S/m.test(text)) {
     const onBlock = /^on:([\s\S]*?)^\S/m.exec(text)?.[1] ?? "";
-    if (/\bissues:/.test(onBlock) || /\bpull_request(?:_target)?:/.test(onBlock)) {
+    if (
+      /\bissues:/.test(onBlock) ||
+      /\bpull_request(?:_target)?:/.test(onBlock)
+    ) {
       reasons.push(
         "builder must be dispatch-only; approval routing belongs to jarvis-queue-advance.yml",
       );
@@ -419,8 +466,14 @@ export function validateWorkflowContract(workflow) {
   }
   const verifyCandidate = topLevelJobBody(text, "verify-candidate");
   if (verifyCandidate) {
-    if (!/github\.rest\.checks\.listForRef/i.test(verifyCandidate)) {
-      reasons.push("candidate verification must query check runs for the exact ref");
+    if (
+      !/collectCandidateChecks\(\{github,\.\.\.context\.repo,headSha:candidateSha,pullNumber\}\)/.test(
+        verifyCandidate,
+      )
+    ) {
+      reasons.push(
+        "candidate verification must query check runs for the exact ref",
+      );
     }
     if (!/actions:\s*write/i.test(verifyCandidate)) {
       reasons.push("candidate verification must approve held PR workflows");
@@ -435,7 +488,12 @@ export function validateWorkflowContract(workflow) {
         "candidate verification must approve held candidate PR runs",
       );
     }
-    if (/actions\/checkout@/i.test(verifyCandidate)) {
+    if (
+      !/ref: \$\{\{ needs\.build\.outputs\.source-sha \}\}/.test(
+        verifyCandidate,
+      ) ||
+      /ref:.*candidate-sha/.test(verifyCandidate)
+    ) {
       reasons.push(
         "candidate verification must not check out candidate content",
       );
@@ -450,19 +508,13 @@ export function validateWorkflowContract(workflow) {
         "candidate verification must not execute npm from candidate content",
       );
     }
-    for (const requiredCheck of [
-      "automation-policy",
-      "typecheck-lint-format-test",
-      "jarvis-console-01-build",
-      "pr-evidence",
-      "CodeQL",
-    ]) {
-      if (!verifyCandidate.includes(`"${requiredCheck}"`)) {
-        reasons.push(
-          `candidate verification must require the ${requiredCheck} check`,
-        );
-      }
-    }
+    if (
+      !/knownPath\(run\.path\)/.test(verifyCandidate) ||
+      !/pr\.head\?\.sha === candidateSha/.test(verifyCandidate)
+    )
+      reasons.push(
+        "candidate verification must bind held workflow approvals to trusted PR producers",
+      );
   }
   if (
     /\b(?:merge|deploy|commission)\b.*(?:--|run|create|execute)/i.test(text)
@@ -523,9 +575,7 @@ export function validateCiContract(workflow) {
   // workflow would never produce those checks, and the queue would stall waiting
   // for them. `pull_request` runs unconditionally, so every commit that reaches
   // `main` has already produced them at least once.
-  const pushSection = text.match(
-    /^\s{2}push:\s*$([\s\S]*?)(?=^\s{2}\S)/m,
-  )?.[1];
+  const pushSection = text.match(/^\s{2}push:\s*$([\s\S]*?)(?=^\s{2}\S)/m)?.[1];
   if (pushSection && /^\s{4}paths:/m.test(pushSection)) {
     reasons.push(
       "push CI must not use path filters (verify-main needs every main commit to produce the required checks)",
@@ -546,24 +596,72 @@ const QUEUE_ADVANCE_DISPATCH_TARGET =
 export function validateQueueAdvanceContract(workflow) {
   const text = String(workflow ?? "");
   const checked = requirePatterns(text, [
-    ["queue advance must route label approvals", /issues:\s*\n\s*types:\s*\[labeled\]/i],
-    ["queue advance must react to closed pull requests", /pull_request:\s*\n\s*types:\s*\[closed\]/i],
-    ["queue advance must run a recovery sweep", /schedule:\s*\n(?:\s*#.*\n)*\s*-\s*cron:/i],
+    [
+      "queue advance must route label approvals",
+      /issues:\s*\n\s*types:\s*\[labeled\]/i,
+    ],
+    [
+      "queue advance must react to closed pull requests",
+      /pull_request:\s*\n\s*types:\s*\[closed\]/i,
+    ],
+    [
+      "queue advance must run a recovery sweep",
+      /schedule:\s*\n(?:\s*#.*\n)*\s*-\s*cron:/i,
+    ],
     ["queue advance must support a manual sweep", /workflow_dispatch:/i],
-    ["queue advance must be repository-global", /group:\s*jarvis-queue-advance-\$\{\{\s*github\.repository\s*\}\}/i],
-    ["queue advance must not cancel a running advance", /cancel-in-progress:\s*false/i],
-    ["queue advance must have a finite timeout", /timeout-minutes:\s*[1-9]\d*/i],
-    ["queue advance must verify main before dispatch", /needs:\s*\[?\s*verify-main/i],
-    ["queue advance must gate label approvals on the labeler's permission", /getCollaboratorPermissionLevel/],
-    ["queue advance must read the labeler from the trusted event payload", /github\.event\.sender\.login/],
-    ["queue advance must resolve the current main revision", /rest\.repos\.getBranch/i],
-    ["queue advance must verify health via the shared revision-health module", /revision-health\.mjs/i],
+    [
+      "queue advance must be repository-global",
+      /group:\s*jarvis-queue-advance-\$\{\{\s*github\.repository\s*\}\}/i,
+    ],
+    [
+      "queue advance must not cancel a running advance",
+      /cancel-in-progress:\s*false/i,
+    ],
+    [
+      "queue advance must have a finite timeout",
+      /timeout-minutes:\s*[1-9]\d*/i,
+    ],
+    [
+      "queue advance must verify main before dispatch",
+      /needs:\s*\[?\s*verify-main/i,
+    ],
+    [
+      "queue advance must gate label approvals on the labeler's permission",
+      /getCollaboratorPermissionLevel/,
+    ],
+    [
+      "queue advance must read the labeler from the trusted event payload",
+      /github\.event\.sender\.login/,
+    ],
+    [
+      "queue advance must resolve the current main revision",
+      /rest\.repos\.getBranch/i,
+    ],
+    [
+      "queue advance must verify health via the shared revision-health module",
+      /revision-health\.mjs/i,
+    ],
     ["queue advance must evaluate revision health", /evaluateRevisionHealth/],
-    ["queue advance must dispatch only the bounded builder", QUEUE_ADVANCE_DISPATCH_TARGET],
-    ["queue advance must forward the verified revision to the builder", /inputs:\s*\{[^}]*source_sha/i],
-    ["queue advance must handle an unmerged candidate close", /merged\s*==\s*false|!\s*.*merged|pull_request\.merged\b/i],
-    ["queue advance must reconcile stale mission locks on sweeps", /reconcileLocks/],
-    ["queue advance must load the pinned selection module", /select-next-mission\.mjs/i],
+    [
+      "queue advance must dispatch only the bounded builder",
+      QUEUE_ADVANCE_DISPATCH_TARGET,
+    ],
+    [
+      "queue advance must forward the verified revision to the builder",
+      /inputs:\s*\{[^}]*source_sha/i,
+    ],
+    [
+      "queue advance must handle an unmerged candidate close",
+      /merged\s*==\s*false|!\s*.*merged|pull_request\.merged\b/i,
+    ],
+    [
+      "queue advance must reconcile stale mission locks on sweeps",
+      /reconcileLocks/,
+    ],
+    [
+      "queue advance must load the pinned selection module",
+      /select-next-mission\.mjs/i,
+    ],
   ]);
   const reasons = [...checked.reasons];
 
@@ -573,22 +671,38 @@ export function validateQueueAdvanceContract(workflow) {
     }
   }
   if (/contents:\s*write/i.test(text)) {
-    reasons.push("queue advance must never hold write access to repository contents");
+    reasons.push(
+      "queue advance must never hold write access to repository contents",
+    );
   }
-  if (/pulls\.merge|mergePullRequest|--merge\b|gh pr merge|--squash\b|--rebase\b/i.test(text)) {
+  if (
+    /pulls\.merge|mergePullRequest|--merge\b|gh pr merge|--squash\b|--rebase\b/i.test(
+      text,
+    )
+  ) {
     reasons.push("queue advance must never merge a pull request");
   }
-  if (/createReview|submitReview|--approve\b|event:\s*["']APPROVE["']/i.test(text)) {
+  if (
+    /createReview|submitReview|--approve\b|event:\s*["']APPROVE["']/i.test(text)
+  ) {
     reasons.push("queue advance must never approve a pull request");
   }
-  if (/markReady|ready_for_review|--ready\b|convertPullRequestToDraft/i.test(text)) {
+  if (
+    /markReady|ready_for_review|--ready\b|convertPullRequestToDraft/i.test(text)
+  ) {
     reasons.push("queue advance must never change pull-request draft state");
   }
   if (/\b(?:deploy|commission)\b/i.test(text)) {
     reasons.push("queue advance must never deploy or commission");
   }
-  if (/actions\/checkout@[0-9a-f]{40}[\s\S]{0,200}ref:\s*\$\{\{\s*github\.event\.pull_request\.head/i.test(text)) {
-    reasons.push("queue advance must never check out untrusted pull-request head content");
+  if (
+    /actions\/checkout@[0-9a-f]{40}[\s\S]{0,200}ref:\s*\$\{\{\s*github\.event\.pull_request\.head/i.test(
+      text,
+    )
+  ) {
+    reasons.push(
+      "queue advance must never check out untrusted pull-request head content",
+    );
   }
   return result([...new Set(reasons)]);
 }

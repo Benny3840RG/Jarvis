@@ -29,7 +29,7 @@ export type CommissioningEvidenceEntry =
       campaignId: string;
       idempotencyKey: string;
       requestFingerprint: string;
-      /** Canonical, secret-free pre-image of the validated request body. */
+      /** Canonical pre-image of the validated request body. */
       preImage: string;
       workerId: string;
       classification: CommissioningDeliveryClassification;
@@ -40,21 +40,59 @@ export type CommissioningEvidenceEntry =
     };
 
 /**
- * Append-only, secret-free commissioning evidence. Nothing here carries a
+ * Bounded append-only commissioning evidence. Use synthetic payloads only. Nothing here carries a
  * bearer token, an `Authorization` header, or any request header at all — only
  * the ids, fingerprints, dispositions and the canonical request pre-image the
  * drill needs to reconcile every logical delivery to one canonical run.
  */
+export class CommissioningEvidenceCapacityError extends Error {}
+
 export class CommissioningEvidenceLog {
   private readonly entries: CommissioningEvidenceEntry[] = [];
+
+  private admissions = 0;
+  private readonly counts = {
+    deliveries: 0,
+    byDisposition: {} as Record<string, number>,
+    firstAttempt: 0,
+    retries: 0,
+    transientFailures: 0,
+    creations: 0,
+    stepOutcomes: 0,
+  };
 
   constructor(
     private readonly sink: (entry: CommissioningEvidenceEntry) => void = () => {},
     private readonly clock: () => number = () => Date.now(),
-  ) {}
+    private readonly maxAdmissions = 1_000,
+  ) {
+    if (!Number.isSafeInteger(maxAdmissions) || maxAdmissions < 1 || maxAdmissions > 1_000)
+      throw new Error("Evidence admission limit must be 1..1000.");
+  }
+
+  reserveDelivery(): void {
+    if (this.admissions >= this.maxAdmissions)
+      throw new CommissioningEvidenceCapacityError(
+        "Commissioning evidence capacity exhausted; preserve evidence and stop the campaign.",
+      );
+    this.admissions++;
+  }
 
   private append(entry: CommissioningEvidenceEntry): void {
+    if (this.entries.length >= this.maxAdmissions * 2)
+      throw new CommissioningEvidenceCapacityError("Commissioning evidence capacity exhausted.");
     this.entries.push(entry);
+    const counts = this.counts;
+    if (entry.kind === "step-outcome") counts.stepOutcomes++;
+    else {
+      counts.deliveries++;
+      counts.byDisposition[entry.disposition] = (counts.byDisposition[entry.disposition] ?? 0) + 1;
+      if (entry.classification === "first-attempt") counts.firstAttempt++;
+      else counts.retries++;
+      if (entry.transient) counts.transientFailures++;
+      if (entry.disposition === "created-complete" || entry.disposition === "created-failed")
+        counts.creations++;
+    }
     this.sink(entry);
   }
 
@@ -99,35 +137,6 @@ export class CommissioningEvidenceLog {
     creations: number;
     stepOutcomes: number;
   } {
-    const byDisposition: Record<string, number> = {};
-    let deliveries = 0;
-    let firstAttempt = 0;
-    let retries = 0;
-    let transientFailures = 0;
-    let creations = 0;
-    let stepOutcomes = 0;
-    for (const entry of this.entries) {
-      if (entry.kind === "step-outcome") {
-        stepOutcomes += 1;
-        continue;
-      }
-      deliveries += 1;
-      byDisposition[entry.disposition] = (byDisposition[entry.disposition] ?? 0) + 1;
-      if (entry.classification === "first-attempt") firstAttempt += 1;
-      else retries += 1;
-      if (entry.transient) transientFailures += 1;
-      if (entry.disposition === "created-complete" || entry.disposition === "created-failed") {
-        creations += 1;
-      }
-    }
-    return {
-      deliveries,
-      byDisposition,
-      firstAttempt,
-      retries,
-      transientFailures,
-      creations,
-      stepOutcomes,
-    };
+    return { ...this.counts, byDisposition: { ...this.counts.byDisposition } };
   }
 }

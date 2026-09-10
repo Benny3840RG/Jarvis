@@ -1,4 +1,6 @@
 import { randomUUID } from "node:crypto";
+import { ConvexHttpClient } from "convex/browser";
+import { commissioningDevelopmentUrl } from "./developmentTarget.js";
 
 import { NestFactory } from "@nestjs/core";
 import { FastifyAdapter, type NestFastifyApplication } from "@nestjs/platform-fastify";
@@ -74,7 +76,7 @@ export function resolveCommissioningBootstrapConfig(
     port: listen.port,
     campaignId: env.JARVIS_COMMISSIONING_CAMPAIGN_ID?.trim() || `commissioning-${randomUUID()}`,
     serviceToken: required(env, "JARVIS_SERVICE_TOKEN"),
-    convexUrl: required(env, "CONVEX_URL"),
+    convexUrl: commissioningDevelopmentUrl(env),
   };
 }
 
@@ -98,6 +100,7 @@ export async function startCommissioningBootstrap(
     campaignId: resolved.campaignId,
     evidence,
     serviceToken: resolved.serviceToken,
+    client: new ConvexHttpClient(resolved.convexUrl),
   });
   const oidcVerifier = createOidcVerifier(resolved.config.oidc);
 

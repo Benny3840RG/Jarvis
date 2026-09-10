@@ -1,3 +1,4 @@
+import { createRequire } from "node:module";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
@@ -738,7 +739,7 @@ test("workflow contract requires safe triggers, isolation, draft output, and cle
     false,
   );
   const unrelatedFinalize = workflow.replace(
-    /\n    if: always\(\) && github\.event_name == 'workflow_dispatch'\n/,
+    /\n    if: always\(\) && github\.event_name == 'workflow_dispatch' && github\.ref == 'refs\/heads\/main'\n/,
     "\n    if: always()\n",
   );
   assert.equal(
@@ -778,66 +779,110 @@ test("workflow contract requires safe triggers, isolation, draft output, and cle
   );
 });
 
+const verificationSha = "a".repeat(40);
+const verificationNames = [
+  "automation-policy",
+  "typecheck-lint-format-test",
+  "jarvis-console-01-build",
+  "pr-evidence",
+  "Analyze (actions)",
+  "Analyze (python)",
+  "Analyze (ruby)",
+  "Analyze (javascript-typescript)",
+];
+function verificationSuccess() {
+  return verificationNames.map((name, index) => ({
+    id: index + 1,
+    name,
+    head_sha: verificationSha,
+    app: { slug: "github-actions" },
+    details_url: `https://github.com/owner/repo/actions/runs/${index + 101}/job/1`,
+    status: "completed",
+    conclusion: "success",
+  }));
+}
+function verificationRun(id) {
+  const index = id - 101;
+  return {
+    id,
+    head_sha: verificationSha,
+    event: index < 4 ? "pull_request" : "dynamic",
+    head_branch: index < 4 ? "candidate" : "refs/pull/12/head",
+    status: "completed",
+    conclusion: "success",
+    run_attempt: 1,
+    path:
+      index < 3
+        ? ".github/workflows/typescript.yml"
+        : index === 3
+          ? ".github/workflows/copilot-check.yml"
+          : "dynamic/github-code-scanning/codeql",
+    head_repository: { full_name: "owner/repo" },
+    pull_requests: [{ number: 12, head: { sha: verificationSha } }],
+  };
+}
 async function runCandidateVerification({
   runs = [],
-  checksByPoll,
+  checksByPoll = [verificationSuccess()],
   approveError,
+  producerOverrides = {},
+  pullHead = verificationSha,
 } = {}) {
   const workflow = fs.readFileSync(
     new URL("../workflows/jarvis-autobuild.yml", import.meta.url),
     "utf8",
   );
-  const start = workflow.indexOf("\n  verify-candidate:");
-  const end = workflow.indexOf("\n  finalize:", start);
-  const scriptBody = workflow
-    .slice(start, end)
+  const body = workflow
+    .slice(
+      workflow.indexOf("\n  verify-candidate:"),
+      workflow.indexOf("\n  finalize:"),
+    )
     .split("          script: |\n")[1];
-  assert.ok(scriptBody, "candidate verifier script must exist");
-  const script = scriptBody
+  const script = body
     .split("\n")
     .map((line) => line.slice(12))
     .join("\n");
-  const candidateSha = "a".repeat(40);
-  const success = [
-    "automation-policy",
-    "typecheck-lint-format-test",
-    "jarvis-console-01-build",
-    "pr-evidence",
-    "CodeQL",
-  ].map((name, index) => ({
-    id: index + 1,
-    name,
-    status: "completed",
-    conclusion: "success",
-  }));
-  const polls = checksByPoll ?? [success];
-  const approved = [];
-  const failures = [];
-  const messages = [];
-  let checkPoll = 0;
-  let now = 0;
-  const listWorkflowRunsForRepo = () => {};
-  const listForRef = () => {};
+  const approved = [],
+    failures = [],
+    messages = [];
+  let checkPoll = 0,
+    now = 0;
   const github = {
     rest: {
       actions: {
-        listWorkflowRunsForRepo,
+        listWorkflowRunsForRepo: () => {},
+        getWorkflowRun: async ({ run_id }) => ({
+          data: { ...verificationRun(run_id), ...producerOverrides[run_id] },
+        }),
         approveWorkflowRun: async ({ run_id }) => {
           if (approveError) throw approveError;
           approved.push(run_id);
         },
       },
-      checks: { listForRef },
+      checks: {
+        listForRef: async ({ ref }) => {
+          assert.equal(ref, verificationSha);
+          const check_runs =
+            checksByPoll[Math.min(checkPoll++, checksByPoll.length - 1)];
+          return { data: { total_count: check_runs.length, check_runs } };
+        },
+      },
+      pulls: {
+        get: async () => ({
+          data: {
+            number: 12,
+            state: "open",
+            base: { ref: "main" },
+            head: { sha: pullHead, repo: { full_name: "owner/repo" } },
+          },
+        }),
+      },
     },
     paginate: async (method, args) => {
-      if (method === listWorkflowRunsForRepo) {
-        assert.equal(args.head_sha, candidateSha);
-        assert.equal(args.event, "pull_request");
-        return runs;
-      }
-      assert.equal(method, listForRef);
-      assert.equal(args.ref, candidateSha);
-      return polls[Math.min(checkPoll++, polls.length - 1)];
+      assert.equal(method, github.rest.actions.listWorkflowRunsForRepo);
+      assert.equal(args.head_sha, verificationSha);
+      assert.equal(args.event, undefined);
+      return runs;
     },
   };
   await new Function(
@@ -847,242 +892,137 @@ async function runCandidateVerification({
     "process",
     "Date",
     "setTimeout",
-    `return (async () => {${script}\n})();`,
+    "require",
+    `return (async()=>{${script}\n})();`,
   )(
     github,
     { repo: { owner: "owner", repo: "repo" } },
+    { setFailed: (m) => failures.push(m), info: (m) => messages.push(m) },
     {
-      setFailed: (message) => failures.push(message),
-      info: (message) => messages.push(message),
+      env: {
+        CANDIDATE_SHA: verificationSha,
+        PR_URL: "https://github.com/owner/repo/pull/12",
+        GITHUB_WORKSPACE: path.resolve(
+          new URL("../..", import.meta.url).pathname,
+        ),
+      },
     },
-    { env: { CANDIDATE_SHA: candidateSha } },
     { now: () => now },
-    (callback, delay) => {
+    (cb, delay) => {
       now += delay;
-      callback();
+      cb();
     },
+    createRequire(import.meta.url),
   );
   return { approved, failures, messages, checkPoll };
 }
-
-test("candidate verification approves completed action-required runs once and excludes unrelated runs", async () => {
+test("candidate verifier approves only held known producers bound to the exact PR and head", async () => {
   const held = {
+    ...verificationRun(101),
     id: 1,
-    head_sha: "a".repeat(40),
-    event: "pull_request",
     status: "completed",
     conclusion: "action_required",
   };
-  const names = [
-    "automation-policy",
-    "typecheck-lint-format-test",
-    "jarvis-console-01-build",
-    "pr-evidence",
-    "CodeQL",
-  ];
-  const success = names.map((name, index) => ({
-    id: index + 1,
-    name,
-    status: "completed",
-    conclusion: "success",
-  }));
   const result = await runCandidateVerification({
     runs: [
       held,
-      { ...held, id: 2, head_sha: "b".repeat(40) },
-      { ...held, id: 3, event: "push" },
-      { ...held, id: 4, conclusion: "failure" },
-      { ...held, id: 5, conclusion: "success" },
-      { ...held, id: 6, status: "in_progress", conclusion: null },
+      { ...held, id: 2, path: ".github/workflows/untrusted.yml" },
+      { ...held, id: 3, head_sha: "b".repeat(40) },
+      { ...held, id: 4, event: "push" },
+      {
+        ...held,
+        id: 5,
+        pull_requests: [{ number: 99, head: { sha: verificationSha } }],
+      },
+      { ...held, id: 6, head_repository: { full_name: "fork/repo" } },
       { ...held, id: 7, status: "queued" },
     ],
-    checksByPoll: [success.slice(1), success],
+    checksByPoll: [verificationSuccess().slice(1), verificationSuccess()],
   });
   assert.deepEqual(result.approved, [1]);
   assert.equal(result.checkPoll, 2);
   assert.deepEqual(result.failures, []);
-  assert.ok(
-    result.messages.some((message) =>
-      message.startsWith("All required PR checks passed"),
-    ),
-  );
 });
-
-test("candidate verification does not report success for failed or missing required checks", async () => {
+test("candidate verifier requires all CodeQL analyses and trusted producer identity", async () => {
+  const checks = verificationSuccess();
+  for (const overrides of [
+    { 101: { path: ".github/workflows/evil.yml" } },
+    { 101: { head_sha: "b".repeat(40) } },
+    { 101: { event: "push" } },
+  ]) {
+    const result = await runCandidateVerification({
+      producerOverrides: overrides,
+    });
+    assert.match(result.failures[0], /untrusted|binding/);
+  }
+  const missing = await runCandidateVerification({
+    checksByPoll: [checks.slice(0, -1)],
+  });
+  assert.match(missing.failures[0], /Timed out/);
   const failed = await runCandidateVerification({
     checksByPoll: [
-      [
-        { id: 2, name: "CodeQL", status: "completed", conclusion: "failure" },
-        { id: 1, name: "CodeQL", status: "completed", conclusion: "success" },
-      ],
+      checks.map((c) =>
+        c.name === "Analyze (python)" ? { ...c, conclusion: "failure" } : c,
+      ),
     ],
   });
-  assert.match(failed.failures[0], /CodeQL:failure/);
-  assert.ok(
-    !failed.messages.some((message) =>
-      message.startsWith("All required PR checks passed"),
-    ),
-  );
-  const missing = await runCandidateVerification({ checksByPoll: [[]] });
-  assert.match(missing.failures[0], /Timed out/);
-  assert.ok(
-    !missing.messages.some((message) =>
-      message.startsWith("All required PR checks passed"),
-    ),
-  );
-});
-
-test("candidate verification waits for neutral CodeQL to become successful", async () => {
-  const success = [
-    "automation-policy",
-    "typecheck-lint-format-test",
-    "jarvis-console-01-build",
-    "pr-evidence",
-    "CodeQL",
-  ].map((name, index) => ({
-    id: index + 1,
-    name,
-    status: "completed",
-    conclusion: "success",
-  }));
-  const neutral = success.map((check) =>
-    check.name === "CodeQL" ? { ...check, conclusion: "neutral" } : check,
-  );
-  const result = await runCandidateVerification({
-    checksByPoll: [neutral, success],
-  });
-  assert.equal(result.checkPoll, 2);
-  assert.deepEqual(result.failures, []);
-  assert.ok(
-    result.messages.some((message) =>
-      message.startsWith("All required PR checks passed"),
-    ),
-  );
-
-  const unresolved = await runCandidateVerification({ checksByPoll: [neutral] });
-  assert.match(unresolved.failures[0], /Timed out/);
-  assert.ok(
-    !unresolved.messages.some((message) =>
-      message.startsWith("All required PR checks passed"),
-    ),
-  );
-});
-
-test("candidate verification still rejects neutral non-CodeQL checks", async () => {
-  const result = await runCandidateVerification({
-    checksByPoll: [
-      [
-        {
-          id: 1,
-          name: "automation-policy",
-          status: "completed",
-          conclusion: "neutral",
-        },
+  assert.match(failed.failures[0], /CodeQL\(python\):failure/);
+  for (const name of ["automation-policy", "Analyze (python)"]) {
+    const neutral = await runCandidateVerification({
+      checksByPoll: [
+        checks.map((c) =>
+          c.name === name ? { ...c, conclusion: "neutral" } : c,
+        ),
       ],
-    ],
-  });
-  assert.match(result.failures[0], /automation-policy:neutral/);
+    });
+    assert.match(neutral.failures[0], /neutral/);
+  }
 });
-
-test("candidate verification propagates an approval denial", async () => {
+test("candidate verifier refuses a moved PR before granting held workflow execution", async () => {
+  const result = await runCandidateVerification({
+    pullHead: "b".repeat(40),
+    runs: [{ ...verificationRun(101), conclusion: "action_required" }],
+  });
+  assert.deepEqual(result.approved, []);
+  assert.match(result.failures[0], /changed|binding/);
+});
+test("candidate verifier propagates held workflow approval denial", async () => {
   await assert.rejects(
     runCandidateVerification({
-      runs: [
-        {
-          id: 1,
-          head_sha: "a".repeat(40),
-          event: "pull_request",
-          status: "completed",
-          conclusion: "action_required",
-        },
-      ],
+      runs: [{ ...verificationRun(101), conclusion: "action_required" }],
       approveError: new Error("Approval denied"),
     }),
     /Approval denied/,
   );
 });
-
-test("candidate verification approves exact-head PR runs without executing candidate content", () => {
+test("candidate verification checks out trusted controls only and preserves execution isolation", () => {
   const workflow = fs.readFileSync(
     new URL("../workflows/jarvis-autobuild.yml", import.meta.url),
     "utf8",
   );
-  const verifyStart = workflow.indexOf("\n  verify-candidate:");
-  const finalizeStart = workflow.indexOf("\n  finalize:", verifyStart);
-  const verifyJob = workflow.slice(verifyStart, finalizeStart);
-
-  assert.match(verifyJob, /actions:\s*write/);
-  assert.match(verifyJob, /github\.rest\.actions\.listWorkflowRunsForRepo/);
-  assert.match(verifyJob, /head_sha:\s*candidateSha/);
-  assert.match(verifyJob, /event:\s*"pull_request"/);
-  assert.match(verifyJob, /run\.status !== "completed"/);
-  assert.match(verifyJob, /run\.conclusion !== "action_required"/);
-  assert.match(verifyJob, /github\.rest\.actions\.approveWorkflowRun/);
-  assert.match(verifyJob, /github\.rest\.checks\.listForRef/);
-  assert.match(verifyJob, /CANDIDATE_SHA/);
-  assert.doesNotMatch(verifyJob, /actions\/checkout@/);
-  assert.doesNotMatch(verifyJob, /actions\/setup-node@/);
-  assert.doesNotMatch(verifyJob, /\bnpm(?:\s|$)/m);
-  for (const requiredCheck of [
-    "automation-policy",
-    "typecheck-lint-format-test",
-    "jarvis-console-01-build",
-    "pr-evidence",
-    "CodeQL",
-  ]) {
-    assert.ok(verifyJob.includes(`"${requiredCheck}"`), requiredCheck);
-  }
-
-  assert.equal(
-    validateWorkflowContract(
-      workflow.replace(
-        verifyJob,
-        verifyJob.replace(
-          "github.rest.checks.listForRef",
-          "github.rest.checks.listSuitesForRef",
-        ),
-      ),
-    ).ok,
-    false,
-    "verification must query check runs for the candidate SHA",
+  const job = workflow.slice(
+    workflow.indexOf("\n  verify-candidate:"),
+    workflow.indexOf("\n  finalize:"),
   );
-  assert.equal(
-    validateWorkflowContract(
-      workflow.replace("actions: write", "actions: read"),
-    ).ok,
-    false,
-    "verification must have permission to approve held PR runs",
-  );
-  assert.equal(
-    validateWorkflowContract(
-      workflow.replace(
-        "github.rest.actions.listWorkflowRunsForRepo",
-        "github.rest.actions.getWorkflowRun",
-      ),
-    ).ok,
-    false,
-    "verification must discover held runs for the candidate SHA",
-  );
-  assert.equal(
-    validateWorkflowContract(
-      workflow.replace(
-        "github.rest.actions.approveWorkflowRun",
-        "github.rest.actions.getWorkflowRun",
-      ),
-    ).ok,
-    false,
-    "verification must approve held candidate PR runs",
-  );
-  assert.equal(
-    validateWorkflowContract(
-      workflow.replace(
-        "      - name: Wait for required PR-scoped checks",
-        "      - name: Unsafe candidate execution\n        run: npm ci\n\n      - name: Wait for required PR-scoped checks",
-      ),
-    ).ok,
-    false,
-    "verification must reject candidate npm execution",
-  );
+  assert.match(job, /ref: \$\{\{ needs.build.outputs.source-sha \}\}/);
+  assert.match(job, /contents: read/);
+  assert.match(job, /collectCandidateChecks/);
+  assert.doesNotMatch(job, /\bnpm(?:\s|$)/m);
+  for (const [from, to] of [
+    ["needs.build.outputs.source-sha", "needs.build.outputs.candidate-sha"],
+    ["collectCandidateChecks", "fakeChecks"],
+    [
+      "github.rest.actions.approveWorkflowRun",
+      "github.rest.actions.getWorkflowRun",
+    ],
+    ["actions: write", "actions: read"],
+  ])
+    assert.equal(
+      validateWorkflowContract(workflow.replace(job, job.replaceAll(from, to)))
+        .ok,
+      false,
+      from,
+    );
 });
 
 test("TypeScript CI independently enforces the automation policy", () => {
@@ -1128,7 +1068,10 @@ test("requires one repository-global serial builder and dispatch-only triggers",
     "group: jarvis-autobuild-${{ github.repository }}",
     "the concurrency group must be repository-wide so only one worker runs",
   );
-  assert.doesNotMatch(groupLine, /issue-|inputs\.issue_number|github\.event\.issue/);
+  assert.doesNotMatch(
+    groupLine,
+    /issue-|inputs\.issue_number|github\.event\.issue/,
+  );
   assert.match(workflow, /cancel-in-progress:\s*false/);
 
   // The builder must not be started by a label; that routing belongs to
@@ -1157,4 +1100,21 @@ test("requires one repository-global serial builder and dispatch-only triggers",
     false,
     "a per-issue concurrency group must fail the contract",
   );
+});
+
+test("candidate verifier approves dynamic managed scanning by exact PR ref without pull_requests entries", async () => {
+  const scanning = {
+    ...verificationRun(105),
+    pull_requests: [],
+    conclusion: "action_required",
+  };
+  const result = await runCandidateVerification({
+    runs: [
+      scanning,
+      { ...scanning, id: 205, head_branch: "refs/pull/13/head" },
+      { ...scanning, id: 305, path: "dynamic/github-code-quality/codeql" },
+    ],
+  });
+  assert.deepEqual(result.approved, [105]);
+  assert.deepEqual(result.failures, []);
 });

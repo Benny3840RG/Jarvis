@@ -31,6 +31,7 @@
     "commission:posthog": "node --import tsx src/tools/runPostHogCommissioning.ts",
     "commission:isolated-ingress": "node --import tsx src/tools/runIsolatedIngressCommissioning.ts",
     "backup": "tsx src/tools/runBackup.ts",
+    "restore-drill": "tsx src/tools/runRestoreDrill.ts",
     "import:convex": "tsx src/tools/runConvexImport.ts",
     "test:node": "node --import tsx --test tests/*.test.ts jarvis-console-01/tests/*.test.ts",
     "test:convex": "vitest run --config vitest.config.mts"
