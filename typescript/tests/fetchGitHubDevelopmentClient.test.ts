@@ -175,3 +175,63 @@ describe("FetchGitHubDevelopmentClient.getCommitChecks", () => {
     assert.equal(requests, 2);
   });
 });
+
+for (const defect of [
+  "none",
+  "wrong-sha",
+  "wrong-run",
+  "foreign-url",
+  "missing-url",
+  "lookup-failure",
+]) {
+  it(`binds required check producers to the observed commit: ${defect}`, async () => {
+    const sha = "a".repeat(40);
+    let runLookups = 0;
+    const client = new FetchGitHubDevelopmentClient("test-token", {
+      async fetch(input) {
+        const url = String(input);
+        if (url.includes("/actions/runs/")) {
+          runLookups++;
+          return jsonResponse(
+            {
+              id: defect === "wrong-run" ? 99 : 42,
+              head_sha: defect === "wrong-sha" ? "b".repeat(40) : sha,
+              path: ".github/workflows/typescript.yml",
+              event: "push",
+              head_branch: "main",
+            },
+            defect === "lookup-failure" ? 403 : 200,
+          );
+        }
+        return jsonResponse({
+          total_count: 2,
+          check_runs: ["automation-policy", "typecheck-lint-format-test"].map((name, index) => ({
+            id: index + 1,
+            name,
+            status: "completed",
+            conclusion: "success",
+            app: { slug: "github-actions" },
+            details_url:
+              defect === "missing-url"
+                ? undefined
+                : `https://github.com/${defect === "foreign-url" ? "attacker/other" : "Benny3840RG/Jarvis"}/actions/runs/42/job/1`,
+          })),
+        });
+      },
+    });
+    const operation = client.getCommitChecks({
+      repository: "Benny3840RG/Jarvis",
+      sha,
+      signal: new AbortController().signal,
+    });
+    if (defect === "none") {
+      const checks = await operation;
+      assert.equal(checks[0]?.workflowPath, ".github/workflows/typescript.yml");
+      assert.equal(checks[0]?.appSlug, "github-actions");
+      assert.equal(checks[0]?.workflowEvent, "push");
+      assert.equal(checks[0]?.workflowBranch, "main");
+      assert.equal(checks[0]?.id, 1);
+      assert.equal(runLookups, 1);
+    } else await assert.rejects(operation);
+  });
+}

@@ -187,9 +187,24 @@ function client(overrides: Partial<GitHubDevelopmentClient> = {}): GitHubDevelop
     },
     async getCommitChecks() {
       return [
-        { name: "test", status: "completed", conclusion: "success" },
-        { name: "security", status: "completed", conclusion: "success" },
-      ];
+        "automation-policy",
+        "typecheck-lint-format-test",
+        "jarvis-console-01-build",
+        ...["actions", "python", "ruby", "javascript-typescript"].map(
+          (language) => `Analyze (${language})`,
+        ),
+      ].map((name, index) => ({
+        id: index + 1,
+        name,
+        status: "completed" as const,
+        conclusion: "success",
+        appSlug: "github-actions",
+        workflowEvent: name.startsWith("Analyze") ? "dynamic" : "push",
+        workflowBranch: "main",
+        workflowPath: name.startsWith("Analyze")
+          ? "dynamic/github-code-scanning/codeql"
+          : ".github/workflows/typescript.yml",
+      }));
     },
     ...overrides,
   };
@@ -562,5 +577,33 @@ describe("GitHub governed development mission", () => {
 
     assert.equal(observation.status, "failed");
     assert.equal(observation.reason, "post-merge-ci-failed");
+  });
+});
+
+it("does not reconcile an independently merged different candidate as the approved merge", async () => {
+  const provider = client({
+    async getPullRequest() {
+      return {
+        number: 42,
+        state: "closed",
+        merged: true,
+        draft: false,
+        baseBranch: "main",
+        headSha: "c".repeat(40),
+        mergeCommitSha,
+      };
+    },
+  });
+  const result = await new GitHubMergeReconciliationAdapter(provider).reconcile(
+    {
+      provider: "github-rest-v1",
+      providerRequestId: `github-rest-v1:Benny3840RG/Jarvis:pull:42:base:main:sha:${reviewedHeadSha}`,
+      providerCorrelationId: "correlation-1",
+    },
+    new AbortController().signal,
+  );
+  assert.deepEqual(result, {
+    status: "failed",
+    errorCode: "github-head-changed-new-execution-required",
   });
 });

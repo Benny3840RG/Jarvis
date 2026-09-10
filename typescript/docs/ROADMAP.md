@@ -4,6 +4,25 @@ This file is a living record for the autonomous engineering sessions working on
 Jarvis: current state, what changed recently, and what to pick up next. Update
 it at the end of every session.
 
+## PR handover work (2026-09-10)
+
+- Added trusted automatic advisory PR review with isolated reviewer/publication
+  jobs and exact head/base/CI evidence binding. Same-repository PRs receive review;
+  only authentic approved builder candidates receive automatic repair authority.
+- Extended the existing builder with two-attempt, same-PR repairs. Cumulative
+  forbidden-path/content guards, trusted controls, owner merge and queue locking
+  remain enforced. Candidate verification now authenticates every required producer.
+- Hardened post-merge GitHub evidence and merged-head reconciliation. Missing or
+  neutral/skipped checks, wrong producers and different reviewed heads fail closed.
+- Added a development-only executable post-merge completion command that loads
+  existing durable bindings before using the established Omega gateway.
+- Local validation is recorded in the Phase 1 working ledger. Live activation is
+  pending this control-plane PR landing and the drill in
+  `docs/operations/pr-maintenance.md`; no live completion is inferred here.
+- Next: observe a real review/repair cycle, then wire Actions missions to the
+  existing durable Development/ToolAction/Omega runtime using real development
+  credentials. Retain explicit exact-candidate owner merge approval.
+
 ## Current state (2026-09-08)
 
 - `npm run check` (hygiene + `tsc` + ESLint + Prettier + OpenAPI lint + Node

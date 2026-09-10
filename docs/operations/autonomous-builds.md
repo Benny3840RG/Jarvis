@@ -1,6 +1,6 @@
 # Jarvis autonomous builds
 
-Jarvis implements **one bounded GitHub issue at a time, end to end**. The system creates a draft pull request; it cannot mark the PR ready, merge, commission, or deploy.
+Jarvis implements **one bounded GitHub issue at a time**. It creates a draft PR, then [PR maintenance](pr-maintenance.md) performs independent advisory review and can request at most two guarded repairs on the same PR. Owner approval, merge, commissioning and deployment remain separate gates.
 
 `jarvis-autobuild.yml` no longer runs on the `automation-approved` label. It has a single trigger, `workflow_dispatch`, and one repository-global concurrency group, so only one autonomous-build worker can ever run. `jarvis-queue-advance.yml` is the sole coordinator: it verifies `main` is healthy, then dispatches the builder for the next eligible approved issue. A mission occupies the queue from dispatch until its pull request is merged or closed — not just while the coding worker runs (see [Queue advance](#queue-advance)).
 
@@ -23,12 +23,12 @@ Adding `automation-approved` no longer starts a build. It records the authority 
 
 ## Labels
 
-| Label                    | Meaning                                                                                  |
-| ------------------------ | --------------------------------------------------------------------------------------- |
+| Label                    | Meaning                                                                                     |
+| ------------------------ | ------------------------------------------------------------------------------------------- |
 | `automation-approved`    | Owner or repository writer authorises one bounded attempt; the coordinator will dispatch it |
-| `automation-in-progress` | The mission lock. Held from dispatch until the candidate pull request is merged or closed |
-| `automation-blocked`     | The last attempt stopped and needs operator attention                                   |
-| `automation-generated`   | Branch or draft PR was produced by the autonomous builder                               |
+| `automation-in-progress` | The mission lock. Held from dispatch until the candidate pull request is merged or closed   |
+| `automation-blocked`     | The last attempt stopped and needs operator attention                                       |
+| `automation-generated`   | Branch or draft PR was produced by the autonomous builder                                   |
 
 `automation-approved` is what the coordinator reads to pick the next mission, so review each issue completely before applying it.
 
@@ -46,10 +46,10 @@ The operator's approval of an issue (`automation-approved`) is the authority rec
 
 The rule set lives in `.github/automation/revision-health.mjs` and is applied by both the coordinator and the builder. A revision is healthy only when all of these are `success` from their trusted producer:
 
-| Check | Trusted producer (workflow-run `path`) |
-| --- | --- |
-| `automation-policy`, `typecheck-lint-format-test`, `jarvis-console-01-build` | `.github/workflows/typescript.yml` |
-| `Analyze (actions)`, `Analyze (python)`, `Analyze (ruby)`, `Analyze (javascript-typescript)` | `dynamic/github-code-scanning/codeql` |
+| Check                                                                                        | Trusted producer (workflow-run `path`) |
+| -------------------------------------------------------------------------------------------- | -------------------------------------- |
+| `automation-policy`, `typecheck-lint-format-test`, `jarvis-console-01-build`                 | `.github/workflows/typescript.yml`     |
+| `Analyze (actions)`, `Analyze (python)`, `Analyze (ruby)`, `Analyze (javascript-typescript)` | `dynamic/github-code-scanning/codeql`  |
 
 There is no aggregate `CodeQL` check on `main` — only these individual per-language analyses. A missing, failed, cancelled, `neutral`, still-pending, or wrong-producer check blocks. `typescript.yml` therefore runs on **every** push to `main` with no paths filter: a docs-only or workflow-only commit that skipped it would leave `verify-main` polling for checks that never appear until its timeout, then failing and stalling the queue.
 
@@ -60,13 +60,13 @@ There is no aggregate `CodeQL` check on `main` — only these individual per-lan
 
 ### Triggers
 
-| Trigger | Behaviour |
-| --- | --- |
-| `automation-approved` applied to an issue | Confirm the labeler is a repository writer, verify `main`, then dispatch the next eligible mission if none is active. |
-| An `automation-generated` pull request is **merged** | Verify `main` (now the merge commit), release that mission's lock, then dispatch the next. |
-| An `automation-generated` pull request is **closed unmerged** | Label its issue `automation-blocked` and comment. Do **not** advance. |
-| `schedule` (every 6 hours) | Recovery sweep for missed events. |
-| `workflow_dispatch` | Manual sweep. |
+| Trigger                                                       | Behaviour                                                                                                             |
+| ------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `automation-approved` applied to an issue                     | Confirm the labeler is a repository writer, verify `main`, then dispatch the next eligible mission if none is active. |
+| An `automation-generated` pull request is **merged**          | Verify `main` (now the merge commit), release that mission's lock, then dispatch the next.                            |
+| An `automation-generated` pull request is **closed unmerged** | Label its issue `automation-blocked` and comment. Do **not** advance.                                                 |
+| `schedule` (every 6 hours)                                    | Recovery sweep for missed events.                                                                                     |
+| `workflow_dispatch`                                           | Manual sweep.                                                                                                         |
 
 ### One mission at a time
 
@@ -93,17 +93,17 @@ If a `pull_request:[closed]` event is missed, an issue can keep `automation-in-p
 4. Codex edits the isolated checkout under the repository policy.
 5. A trusted guard rejects forbidden or excessive changes.
 6. The builder pushes an attempt-specific `automation/issue-<number>/run-<run-id>` branch and opens one draft PR labelled `automation-generated`.
-7. A separate secret-free job waits on the exact candidate SHA for the PR-scoped `automation-policy`, TypeScript, Console, PR Evidence, and CodeQL checks. It does not check out or execute the candidate tree in the default-branch workflow. `GITHUB_TOKEN`-created draft PRs often leave those workflows waiting for approval; the verifier attempts to approve them so verification stays PR-scoped.
+7. A separate secret-free job waits on the exact candidate SHA for the PR-scoped `automation-policy`, TypeScript, Console, PR Evidence, and all four CodeQL language checks from authenticated producers. It checks out only the trusted source controls and never executes the candidate tree. `GITHUB_TOKEN`-created draft PRs often leave those workflows waiting for approval; the verifier attempts to approve them so verification stays PR-scoped.
 8. The builder publishes one namespaced `jarvis-autobuild/verify-candidate` status on the draft PR and blocks the issue if those required checks fail or time out.
 9. Ordinary TypeScript, Console, PR Evidence, and CodeQL checks keep their own names and remain authoritative. The autonomous verifier never impersonates or satisfies them.
 10. **The mission lock stays on the issue.** The queue does not advance while the draft PR is open.
-11. The owner (or a `@Benny3840` CODEOWNERS review) reviews the diff, Copilot's independent review, the checks, and remaining risk. Copilot and the builder cannot approve or merge; `.github/CODEOWNERS` requires human review of `.github/**`.
+11. The owner (or a `@Benny3840` CODEOWNERS review) reviews the diff, the independent PR maintenance review, the checks, and remaining risk. Copilot and the builder cannot approve or merge; `.github/CODEOWNERS` requires human review of `.github/**`.
 12. The owner marks the PR ready and squash-merges it. Only the owner may change draft state or merge.
 13. The merge closes the issue (`Closes #<n>`) and triggers the coordinator: it verifies the post-merge `main`, releases the lock, and dispatches the next mission.
 
 ### Handoff to review and merge
 
-Every queue-generated candidate reaches a human the same way: a draft PR with `automation-generated`, `jarvis-autobuild/verify-candidate` plus the five required checks on the exact head, a Copilot review, and CODEOWNERS review on `.github/**`. Neither `jarvis-autobuild.yml` nor `jarvis-queue-advance.yml` has `pull-requests` permission beyond commenting, and neither calls any merge, approve, review, or ready-for-review API — enforced by `validateQueueAdvanceContract` and the builder contract tests. This handoff is generic; it is not tied to any single issue or PR.
+Every queue-generated candidate reaches a human the same way: a draft PR with `automation-generated`, `jarvis-autobuild/verify-candidate` plus trusted checks on the exact head, an independent advisory review, and CODEOWNERS review on `.github/**`. Neither `jarvis-autobuild.yml` nor `jarvis-queue-advance.yml` has `pull-requests` permission beyond commenting, and neither calls any merge, approve, review, or ready-for-review API — enforced by `validateQueueAdvanceContract` and the builder contract tests. This handoff is generic; it is not tied to any single issue or PR.
 
 Held PR workflow runs are returned by GitHub with `status: completed` and
 `conclusion: action_required`. The verifier checks both fields before approving
@@ -115,7 +115,7 @@ Actions settings endpoint as an eligibility requirement.
 
 Use **Actions → Jarvis autonomous build → Run workflow**, enter the issue number, and leave `source_sha` blank (it defaults to `main` HEAD, which is verified before work) — only after correcting the recorded blocker. Remove a stale `automation-in-progress` label only after confirming no run is active, or let the next scheduled sweep reconcile it.
 
-The workflow does not retry automatically. This prevents repeated API spend and repeated unsafe edits. Agent-reported checks are advisory; the dispatched revision's health and the PR-scoped CI on the exact candidate SHA are machine-enforced.
+A failed build without a published candidate is not retried automatically. Published candidates may receive at most two repairs through [PR maintenance](pr-maintenance.md), under the same immutable scope guard. Agent-reported checks are advisory; the dispatched revision's health and the PR-scoped CI on the exact candidate SHA are machine-enforced.
 
 ## Hard stops
 

@@ -1,0 +1,172 @@
+name: Jarvis PR maintenance
+run-name: >-
+  ${{ inputs.mode == 'review' && format('Jarvis PR review #{0} {1} {2} {3}', inputs.pull_request_number, inputs.expected_head_sha, inputs.expected_base_sha, inputs.evidence_fingerprint) || 'Jarvis PR maintenance sweep' }}
+
+on:
+  workflow_run:
+    workflows: [TypeScript checks, PR Evidence Check, Jarvis autonomous build]
+    types: [completed]
+  schedule:
+    - cron: "7,22,37,52 * * * *"
+  workflow_dispatch:
+    inputs:
+      mode:
+        type: choice
+        options: [sweep, review]
+        default: sweep
+      pull_request_number:
+        description: Optional PR for a sweep; required for an exact-candidate review
+        type: string
+      expected_head_sha:
+        type: string
+      expected_base_sha:
+        type: string
+      evidence_fingerprint:
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: >-
+    jarvis-pr-maintenance-${{ github.repository }}-${{ inputs.mode == 'review' && format('pr-{0}', inputs.pull_request_number) || 'sweep' }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read
+      checks: read
+      actions: write
+    outputs:
+      selected: ${{ steps.prepare.outputs.selected }}
+      prompt: ${{ steps.prepare.outputs.prompt }}
+    steps:
+      - name: Check out trusted workflow revision only
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+      - name: Select or prepare an exact candidate
+        id: prepare
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          MODE: ${{ inputs.mode }}
+          PR_NUMBER: ${{ inputs.pull_request_number }}
+          HEAD_SHA: ${{ inputs.expected_head_sha }}
+          BASE_SHA: ${{ inputs.expected_base_sha }}
+          EVIDENCE_FINGERPRINT: ${{ inputs.evidence_fingerprint }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+        with:
+          script: |
+            const { pathToFileURL } = require('node:url');
+            const { sweep, prepareReview } = await import(pathToFileURL(
+              `${process.env.GITHUB_WORKSPACE}/.github/automation/pr-maintenance-controller.mjs`,
+            ).href);
+            const { owner, repo } = context.repo;
+            const pullNumber = process.env.PR_NUMBER ? Number(process.env.PR_NUMBER) : undefined;
+            if (pullNumber !== undefined && (!Number.isSafeInteger(pullNumber) || pullNumber < 1)) {
+              throw new Error('PR number must be a positive integer.');
+            }
+            if (context.eventName === 'workflow_dispatch' && context.actor !== 'github-actions[bot]') {
+              const { data } = await github.rest.repos.getCollaboratorPermissionLevel({ owner, repo, username: context.actor });
+              if (!['admin', 'maintain', 'write'].includes(data.permission)) throw new Error('Repository writer permission is required.');
+            }
+            if (process.env.MODE !== 'review') {
+              await sweep({ github, owner, repo, pullNumber, core });
+              return;
+            }
+            const identity = { pullNumber, headSha: process.env.HEAD_SHA, baseSha: process.env.BASE_SHA, fingerprint: process.env.EVIDENCE_FINGERPRINT };
+            const prompt = await prepareReview({ github, owner, repo, identity, runId: context.runId, runAttempt: Number(process.env.RUN_ATTEMPT) });
+            core.setOutput('prompt', prompt);
+            core.setOutput('selected', 'true');
+
+  review:
+    needs: prepare
+    if: needs.prepare.outputs.selected == 'true' && needs.prepare.outputs.prompt != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    outputs:
+      result: ${{ steps.reviewer.outputs.final-message }}
+    steps:
+      - name: Check out trusted socket compatibility control only
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+      - name: Prepare isolated review directory and worker socket isolation
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/jarvis-independent-review"
+          if [[ ! -x /usr/bin/getfacl || ! -x /usr/bin/setfacl ]]; then
+            sudo apt-get update
+            sudo apt-get install --no-install-recommends -y acl
+          fi
+          actions_root="$(dirname "$(realpath "$RUNNER_TEMP")")/_actions"
+          bundle="$actions_root/openai/codex-action/86365089eb2b84e0a8fb0717b304f8bdcb13b20e/dist/main.js"
+          test -f "$bundle" && test ! -L "$bundle"
+          node .github/automation/patch-codex-sockets.mjs "$bundle"
+      - name: Review supplied evidence without executing candidate code
+        id: reviewer
+        timeout-minutes: 15
+        uses: openai/codex-action@86365089eb2b84e0a8fb0717b304f8bdcb13b20e # v1
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          prompt: ${{ needs.prepare.outputs.prompt }}
+          working-directory: ${{ runner.temp }}/jarvis-independent-review
+          permission-profile: ":read-only"
+          safety-strategy: drop-sudo
+          codex-args: '["--skip-git-repo-check"]'
+          output-schema: |
+            {"type":"object","additionalProperties":false,"required":["verdict","summary","findings"],"properties":{"verdict":{"type":"string","enum":["pass","changes_requested","blocked"]},"summary":{"type":"string"},"findings":{"type":"array","items":{"type":"object","additionalProperties":false,"required":["file","line","severity","message"],"properties":{"file":{"type":"string"},"line":{"type":"integer"},"severity":{"type":"string","enum":["high","medium","low"]},"message":{"type":"string"}}}}}}
+          allow-bot-users: github-actions[bot]
+          model: gpt-5.6-luna
+          effort: high
+
+  publish:
+    needs: [prepare, review]
+    if: always() && needs.prepare.outputs.selected == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: write
+      actions: write
+      checks: read
+      statuses: write
+    steps:
+      - name: Check out trusted publication controls on a fresh runner
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+      - name: Recheck evidence, publish advisory review and request bounded repair
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          PR_NUMBER: ${{ inputs.pull_request_number }}
+          HEAD_SHA: ${{ inputs.expected_head_sha }}
+          BASE_SHA: ${{ inputs.expected_base_sha }}
+          EVIDENCE_FINGERPRINT: ${{ inputs.evidence_fingerprint }}
+          REVIEW_RESULT: ${{ needs.review.result }}
+          REVIEW_JSON: ${{ needs.review.outputs.result }}
+        with:
+          script: |
+            const { pathToFileURL } = require('node:url');
+            const { publishReview } = await import(pathToFileURL(
+              `${process.env.GITHUB_WORKSPACE}/.github/automation/pr-maintenance-controller.mjs`,
+            ).href);
+            const disposition = await publishReview({ github, ...context.repo,
+              identity: { pullNumber: Number(process.env.PR_NUMBER), headSha: process.env.HEAD_SHA,
+                baseSha: process.env.BASE_SHA, fingerprint: process.env.EVIDENCE_FINGERPRINT },
+              rawReview: process.env.REVIEW_JSON, reviewResult: process.env.REVIEW_RESULT,
+              runId: context.runId, serverUrl: context.serverUrl,
+            });
+            core.info(disposition);
+            if (['blocked', 'owner-repair-required'].includes(disposition)) core.setFailed(disposition);
