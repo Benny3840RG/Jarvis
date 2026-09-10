@@ -115,6 +115,10 @@ const BRIEF: DailyBrief = {
 
 const INBOX = { generatedAt: "2026-07-30T00:00:00.000Z", items: [], sources: [] };
 const ACTIVITY = { status: "available", events: [], cursor: "", isDone: true };
+const LIVE_WORK = {
+  status: "unavailable",
+  reason: "No development mission is currently in flight.",
+};
 
 describe("dashboard snapshot", () => {
   it("projects the daily brief through the existing authenticated dashboard read", async () => {
@@ -132,6 +136,8 @@ describe("dashboard snapshot", () => {
         return Response.json({ data: [LIFECYCLE_QUOTE], count: 1 });
       if (url.pathname === "/api/v1/operations/inbox") return Response.json({ data: INBOX });
       if (url.pathname === "/api/v1/operations/activity") return Response.json({ data: ACTIVITY });
+      if (url.pathname === "/api/v1/development/live-work")
+        return Response.json({ data: LIVE_WORK });
       return Response.json({ title: "Not Found" }, { status: 404 });
     }) as typeof fetch;
 
@@ -144,6 +150,7 @@ describe("dashboard snapshot", () => {
 
     assert.deepEqual(paths.sort(), [
       "/api/v1/brief",
+      "/api/v1/development/live-work",
       "/api/v1/operations/activity",
       "/api/v1/operations/inbox",
       "/api/v1/quotes",
@@ -152,6 +159,7 @@ describe("dashboard snapshot", () => {
       "/api/v1/tasks",
     ]);
     assert.deepEqual(snapshot.brief, BRIEF);
+    assert.deepEqual(snapshot.liveWork, LIVE_WORK);
     assert.deepEqual(snapshot.quoteRegister, {
       status: "ready",
       quotes: [LIFECYCLE_QUOTE],

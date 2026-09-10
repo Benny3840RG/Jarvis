@@ -3,6 +3,7 @@ import { performance } from "node:perf_hooks";
 
 import type { DailyBrief } from "../briefs/brief.js";
 import type { ActivityTimelineResult } from "../operations/activityTimeline.js";
+import type { LiveWorkResult } from "../development/liveWork.js";
 import type { OperationsInbox } from "../operations/operationsInbox.js";
 import type { Client, ClientInput, ClientUpdate } from "../clients/client.js";
 import type { Errand, ErrandInput, ErrandUpdate } from "../errands/errand.js";
@@ -40,6 +41,8 @@ export type DashboardSnapshot = {
   inbox: OperationsInbox | null;
   /** `null` means the activity endpoint itself could not be reached — distinct from `{status: "unavailable"}`. */
   activity: ActivityTimelineResult | null;
+  /** `null` means the live-work endpoint itself could not be reached — distinct from `{status: "unavailable"}`. */
+  liveWork: LiveWorkResult | null;
   counts: {
     activeTasks: number;
     completedTasks: number;
@@ -633,6 +636,12 @@ export class JarvisApiClient {
     ).data;
   }
 
+  async getDevelopmentLiveWork(): Promise<LiveWorkResult> {
+    return (
+      await this.request<DataResponse<LiveWorkResult>>("GET", "/api/v1/development/live-work")
+    ).data;
+  }
+
   async dashboard(): Promise<DashboardSnapshot> {
     const quoteRegister = this.listQuotes().then(
       (quotes) => ({ status: "ready" as const, quotes }),
@@ -650,6 +659,10 @@ export class JarvisApiClient {
       (value) => value,
       () => null,
     );
+    const liveWork = this.getDevelopmentLiveWork().then(
+      (value) => value,
+      () => null,
+    );
     const [
       status,
       tasks,
@@ -658,6 +671,7 @@ export class JarvisApiClient {
       resolvedQuoteRegister,
       resolvedInbox,
       resolvedActivity,
+      resolvedLiveWork,
     ] = await Promise.all([
       this.getStatus(),
       this.listTasks(),
@@ -666,6 +680,7 @@ export class JarvisApiClient {
       quoteRegister,
       inbox,
       activity,
+      liveWork,
     ]);
     return {
       status,
@@ -675,6 +690,7 @@ export class JarvisApiClient {
       quoteRegister: resolvedQuoteRegister,
       inbox: resolvedInbox,
       activity: resolvedActivity,
+      liveWork: resolvedLiveWork,
       counts: {
         activeTasks: tasks.filter((task) => !task.completed).length,
         completedTasks: tasks.filter((task) => task.completed).length,
