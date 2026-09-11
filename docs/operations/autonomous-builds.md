@@ -97,7 +97,7 @@ If a `pull_request:[closed]` event is missed, an issue can keep `automation-in-p
 8. The builder publishes one namespaced `jarvis-autobuild/verify-candidate` status on the draft PR and blocks the issue if those required checks fail or time out.
 9. Ordinary TypeScript, Console, PR Evidence, and CodeQL checks keep their own names and remain authoritative. The autonomous verifier never impersonates or satisfies them.
 10. **The mission lock stays on the issue.** The queue does not advance while the draft PR is open.
-11. The owner (or a `@Benny3840` CODEOWNERS review) reviews the diff, the independent PR maintenance review, the checks, and remaining risk. Copilot and the builder cannot approve or merge; `.github/CODEOWNERS` requires human review of `.github/**`.
+11. The owner (or a `@Benny3840` CODEOWNERS review) reviews the diff, the independent PR maintenance review, the checks, and remaining risk. Copilot and the builder cannot approve or merge. `.github/CODEOWNERS` assigns owner review for `.github/**` and runtime source; GitHub enforcement additionally requires active branch protection. The 2026-09-11 API audit found that enforcement absent; issue #398 tracks the owner-controlled settings and live verification.
 12. The owner marks the PR ready and squash-merges it. Only the owner may change draft state or merge.
 13. The merge closes the issue (`Closes #<n>`) and triggers the coordinator: it verifies the post-merge `main`, releases the lock, and dispatches the next mission.
 
