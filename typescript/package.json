@@ -34,7 +34,7 @@
     "restore-drill": "tsx src/tools/runRestoreDrill.ts",
     "import:convex": "tsx src/tools/runConvexImport.ts",
     "test:node": "node --import tsx --test tests/*.test.ts jarvis-console-01/tests/*.test.ts",
-    "test:convex": "vitest run --config vitest.config.mts"
+    "test:convex": "vitest run --config vitest.config.mts --maxWorkers=1"
   },
   "dependencies": {
     "@modelcontextprotocol/ext-apps": "^1.7.4",
