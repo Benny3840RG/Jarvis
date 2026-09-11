@@ -297,6 +297,11 @@ async function validateInterruptedRestore(
     );
     try {
       const metadata = await handle.stat();
+      if (metadata.nlink !== 1) {
+        throw new StrictBackupError(
+          `Restore output ${entry.name} has multiple links; no files were changed.`,
+        );
+      }
       if (!metadata.isFile() || metadata.size !== bytes.length) {
         throw new StrictBackupError(
           `Restore output ${entry.name} does not match the archive; no files were changed.`,

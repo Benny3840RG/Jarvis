@@ -9,6 +9,7 @@ import {
   writeFile,
   symlink,
   rename,
+  link,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -635,4 +636,27 @@ it("rejects a live descendant whose name merely starts with two dots", async () 
     /overlaps the live/,
   );
   assert.deepEqual(await readdir(live), []);
+});
+
+it("refuses byte-identical hard-linked output without modifying either link", async () => {
+  const archive = await captureFixture();
+  const root = await scratch();
+  const destination = path.join(root, "restore");
+  await assert.rejects(
+    restoreArchiveV4(archive, destination, { allowPartial: true, injectAfterWrite: "state" }),
+    /Injected failure/,
+  );
+  const target = path.join(destination, "jarvis-state.json");
+  const external = path.join(root, "external-state.json");
+  await rename(target, external);
+  await link(external, target);
+  const before = await contentsOf(destination);
+  const externalBytes = await readFile(external);
+  await assert.rejects(
+    restoreArchiveV4(archive, destination, { allowPartial: true, resume: true }),
+    /multiple links/,
+  );
+  assert.deepEqual(await contentsOf(destination), before);
+  assert.deepEqual(await readFile(external), externalBytes);
+  assert.equal((await stat(target)).ino, (await stat(external)).ino);
 });
