@@ -295,16 +295,21 @@ export function foldLiveWorkPipeline(snapshot: LiveWorkSnapshot): LiveWorkPipeli
     workerStep?.leaseExpiresAt != null &&
     workerStep.leaseExpiresAt <= Date.parse(snapshot.generatedAt);
   const workerStatus: LiveWorkNodeStatus =
-    workerActive && (!workerStep?.leaseOwner || workerStep.leaseExpiresAt == null)
-      ? "unavailable"
-      : workerActive && leaseExpired
-        ? "blocked"
-        : phaseStatus(order, reached, STATE_ORDER.CLAIMED, STATE_ORDER.VERIFYING, false);
-  const workerDetail = workerStep?.leaseOwner
-    ? `${workerStep.leaseOwner} · step ${workerStep.state}${leaseExpired ? " (lease expired)" : ""}`
-    : missionInFlight && workerActive
-      ? "Worker lease not recorded."
-      : NOT_RECORDED;
+    !missionInFlight && !isComplete
+      ? "blocked"
+      : workerActive && (!workerStep?.leaseOwner || workerStep.leaseExpiresAt == null)
+        ? "unavailable"
+        : workerActive && leaseExpired
+          ? "blocked"
+          : phaseStatus(order, reached, STATE_ORDER.CLAIMED, STATE_ORDER.VERIFYING, false);
+  const workerDetail =
+    !missionInFlight && !isComplete
+      ? `Development is ${subject.state}; this mission is terminal.`
+      : workerStep?.leaseOwner
+        ? `${workerStep.leaseOwner} · step ${workerStep.state}${leaseExpired ? " (lease expired)" : ""}`
+        : missionInFlight && workerActive
+          ? "Worker lease not recorded."
+          : NOT_RECORDED;
 
   const nodes: LiveWorkNode[] = [
     {
@@ -321,9 +326,9 @@ export function foldLiveWorkPipeline(snapshot: LiveWorkSnapshot): LiveWorkPipeli
     },
     {
       key: "issue",
-      label: "ISSUE",
+      label: "MISSION",
       status: phaseStatus(order, reached, STATE_ORDER.IDEA, STATE_ORDER.READY, false),
-      detail: repository ?? NOT_RECORDED,
+      detail: repository ? `${subject.subjectId} · ${repository}` : subject.subjectId,
     },
     {
       key: "pr",

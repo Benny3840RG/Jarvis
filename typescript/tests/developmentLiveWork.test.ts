@@ -102,13 +102,13 @@ describe("foldLiveWorkPipeline", () => {
     assert.equal(node(complete.nodes, "merge").status, "done");
   });
 
-  it("reports issue and PR detail honestly when the repository and branch are not recorded", () => {
+  it("reports the mission identity and absent PR honestly without repository or branch", () => {
     const pipeline = foldLiveWorkPipeline(
       snapshot({
         subject: { subjectId: "mission-1", state: "SPECIFIED", updatedAt: 0 },
       }),
     );
-    assert.match(node(pipeline.nodes, "issue").detail, /not recorded/i);
+    assert.equal(node(pipeline.nodes, "issue").detail, "mission-1");
     assert.match(node(pipeline.nodes, "pr").detail, /not recorded/i);
   });
 
@@ -365,4 +365,37 @@ it("does not carry previous candidate rail verification through a recorded repai
   assert.equal(result.rail.find((x) => x.state === "CLAIMED")?.status, "done");
   assert.equal(result.rail.find((x) => x.state === "VERIFYING")?.status, "pending");
   assert.equal(result.rail.find((x) => x.state === "REVIEW")?.status, "pending");
+});
+
+it("blocks terminal workers despite a recorded unexpired lease", () => {
+  for (const state of ["FAILED", "ABORTED", "CONTRADICTED"] as const) {
+    const base = snapshot();
+    const pipeline = foldLiveWorkPipeline(
+      snapshot({
+        subject: { ...base.subject, state },
+        workerStep: {
+          nodeId: "development",
+          state: "running",
+          leaseOwner: "worker-1",
+          leaseExpiresAt: Date.parse(base.generatedAt) + 60_000,
+        },
+      }),
+    );
+    assert.equal(node(pipeline.nodes, "worker").status, "blocked");
+    assert.match(node(pipeline.nodes, "worker").detail, new RegExp(state));
+    assert.equal(node(pipeline.nodes, "stage").detail, state);
+  }
+});
+
+it("labels the stable issue-key node as the recorded mission lifecycle", () => {
+  for (const repository of ["owner/repository", undefined]) {
+    const pipeline = foldLiveWorkPipeline(
+      snapshot({
+        subject: { ...snapshot().subject, subjectId: "subject-123", repository },
+      }),
+    );
+    const mission = node(pipeline.nodes, "issue");
+    assert.equal(mission.label, "MISSION");
+    assert.equal(mission.detail, repository ? `subject-123 · ${repository}` : "subject-123");
+  }
 });
