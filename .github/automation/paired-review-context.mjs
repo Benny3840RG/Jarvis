@@ -178,10 +178,13 @@ export function pairedUnits(files) {
 export function changedImportContext(files, fileIndices) {
   const wanted = new Set();
   const includeBackend = (moduleName) => {
-    const suffix = `/convex/${moduleName}.ts`;
+    const suffix = `convex/${moduleName}.ts`;
     const targets = files
       .map((file, fileIndex) => ({ file, fileIndex }))
-      .filter(({ file }) => file.filename.endsWith(suffix));
+      .filter(
+        ({ file }) =>
+          file.filename === suffix || file.filename.endsWith(`/${suffix}`),
+      );
     if (targets.length === 1 && !fileIndices.has(targets[0].fileIndex))
       wanted.add(targets[0].fileIndex);
   };

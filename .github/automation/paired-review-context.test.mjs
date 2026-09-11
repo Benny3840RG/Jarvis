@@ -505,3 +505,30 @@ test("compact supplemental context retains complete changed hunks with exact bou
           .toString("utf8"),
       );
 });
+
+test("root-level Convex context resolves uniquely without matching lookalike directories", async () => {
+  const { changedImportContext } = await import("./paired-review-context.mjs");
+  for (const after of [
+    'makeFunctionReference<"query">("developmentState:liveWork")',
+    'import { api } from "../convex/_generated/api.js"; const functions = api.developmentState;',
+  ]) {
+    const files = [
+      { filename: "src/adapter.ts", before: null, after },
+      { filename: "convex/developmentState.ts", before: "old", after: "new" },
+      {
+        filename: "notconvex/developmentState.ts",
+        before: "old",
+        after: "new",
+      },
+    ];
+    assert.deepEqual(changedImportContext(files, new Set([0])), [1]);
+    assert.deepEqual(
+      changedImportContext(
+        [...files, { ...files[1], filename: "app/convex/developmentState.ts" }],
+        new Set([0]),
+      ),
+      [],
+      "root and nested backend ambiguity must not be guessed",
+    );
+  }
+});
