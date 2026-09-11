@@ -409,7 +409,7 @@ describe("archive v4 restore — recovery never touches what it did not write", 
     });
   }
 
-  it("validates all entry types before deleting any interrupted restore output", async () => {
+  it("validates all entry types before opening any interrupted restore output", async () => {
     const archive = await captureFixture();
     const dir = await scratch();
     const destination = path.join(dir, "restore");
@@ -659,4 +659,27 @@ it("refuses byte-identical hard-linked output without modifying either link", as
   assert.deepEqual(await contentsOf(destination), before);
   assert.deepEqual(await readFile(external), externalBytes);
   assert.equal((await stat(target)).ino, (await stat(external)).ino);
+});
+
+it("refuses a same-byte output symlink before opening it and preserves external data", async () => {
+  const archive = await captureFixture();
+  const root = await scratch();
+  const destination = path.join(root, "restore");
+  await assert.rejects(
+    restoreArchiveV4(archive, destination, { allowPartial: true, injectAfterWrite: "state" }),
+    /Injected failure/,
+  );
+  const target = path.join(destination, "jarvis-state.json");
+  const external = path.join(root, "external-state.json");
+  await rename(target, external);
+  await symlink(external, target);
+  const before = await contentsOf(destination);
+  const externalBytes = await readFile(external);
+  // The existing Dirent check rejects links before the bounded O_NOFOLLOW read.
+  await assert.rejects(
+    restoreArchiveV4(archive, destination, { allowPartial: true, resume: true }),
+    /is not a regular file/,
+  );
+  assert.deepEqual(await contentsOf(destination), before);
+  assert.deepEqual(await readFile(external), externalBytes);
 });
