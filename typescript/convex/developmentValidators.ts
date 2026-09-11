@@ -189,10 +189,14 @@ export const developmentEventDocumentValidator = v.object({
   createdAt: v.number(),
 });
 
+export const developmentEventPublicValidator = developmentEventDocumentValidator.omit(
+  "canonicalRequestFingerprint",
+);
+
 export const developmentCommitOutcomeValidator = v.object({
   kind: v.union(v.literal("COMMITTED"), v.literal("REJECTED")),
   subject: developmentSubjectDocumentValidator,
-  event: developmentEventDocumentValidator,
+  event: developmentEventPublicValidator,
   reasons: v.array(v.string()),
   retryDisposition: v.optional(
     v.union(
