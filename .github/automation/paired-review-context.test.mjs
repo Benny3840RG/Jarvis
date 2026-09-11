@@ -393,3 +393,115 @@ test("valid fully covered root pointers add no repeated context", async () => {
     unresolved: [],
   });
 });
+
+test("supplemental changed hunks reuse overlapping exact source ranges", async () => {
+  const { supplementalUnits } = await import("./paired-review-context.mjs");
+  const before = Array.from(
+    { length: 120 },
+    (_, i) => `${i}: ${"x".repeat(400)}\n`,
+  ).join("");
+  const after = before
+    .replace("40: ", "changed40: ")
+    .replace("45: ", "changed45: ");
+  const file = { filename: "src/large.ts", before, after };
+  const parts = supplementalUnits([file], 0);
+  assert.ok(
+    parts.some((part) => part.otherSides?.length),
+    "identical revision context must carry both exact references once",
+  );
+  const expanded = parts.flatMap((part) => [
+    part,
+    ...(part.otherSides ?? []).map((reference) => ({
+      ...reference,
+      text: part.text,
+    })),
+  ]);
+  for (const side of ["before", "after"]) {
+    const ranges = expanded
+      .filter((part) => part.side === side)
+      .sort((a, b) => a.start - b.start);
+    assert.ok(ranges.length > 0);
+    for (let i = 0; i < ranges.length; i++) {
+      const part = ranges[i];
+      assert.equal(
+        part.text,
+        Buffer.from(file[side]).subarray(part.start, part.end).toString("utf8"),
+      );
+      if (i)
+        assert.ok(
+          ranges[i - 1].end <= part.start,
+          "overlapping source must be supplied once",
+        );
+    }
+    assert.ok(
+      ranges.some((part) =>
+        part.text.includes(side === "before" ? "40: " : "changed40: "),
+      ),
+    );
+    assert.ok(
+      ranges.some((part) =>
+        part.text.includes(side === "before" ? "45: " : "changed45: "),
+      ),
+    );
+  }
+});
+
+test("changed Convex call references include their exact query implementation as context", async () => {
+  const { changedImportContext } = await import("./paired-review-context.mjs");
+  const files = [
+    {
+      filename: "app/src/adapter.ts",
+      before: null,
+      after: 'makeFunctionReference<"query">("developmentState:liveWork")',
+    },
+    { filename: "app/convex/developmentState.ts", before: "old", after: "new" },
+  ];
+  assert.deepEqual(changedImportContext(files, new Set([0])), [1]);
+  assert.deepEqual(
+    changedImportContext(
+      [...files, { ...files[1], filename: "other/convex/developmentState.ts" }],
+      new Set([0]),
+    ),
+    [],
+    "ambiguous backend roots must not be guessed",
+  );
+});
+
+test("generated Convex API namespace references link the changed backend module", async () => {
+  const { changedImportContext } = await import("./paired-review-context.mjs");
+  const files = [
+    {
+      filename: "app/src/adapter.ts",
+      before: null,
+      after:
+        'import { api } from "../../convex/_generated/api.js"; const functions = api.developmentState;',
+    },
+    { filename: "app/convex/developmentState.ts", before: "old", after: "new" },
+  ];
+  assert.deepEqual(changedImportContext(files, new Set([0])), [1]);
+});
+
+test("compact supplemental context retains complete changed hunks with exact bounded surroundings", async () => {
+  const { supplementalUnits } = await import("./paired-review-context.mjs");
+  const before = Array.from(
+    { length: 90 },
+    (_, i) => `${i}: ${"x".repeat(120)}\n`,
+  ).join("");
+  const after = before.replace("40: ", "changed40: ");
+  const file = { filename: "src/app.ts", before, after };
+  const full = supplementalUnits([file], 0);
+  const compact = supplementalUnits([file], 0, true);
+  assert.ok(
+    Buffer.byteLength(JSON.stringify(compact)) <
+      Buffer.byteLength(JSON.stringify(full)) / 2,
+  );
+  assert.ok(compact.some((part) => part.text.includes("changed40: ")));
+  for (const part of compact)
+    for (const reference of [part, ...(part.otherSides ?? [])])
+      assert.equal(
+        part.text,
+        Buffer.from(file[reference.side])
+          .subarray(reference.start, reference.end)
+          .toString("utf8"),
+      );
+});

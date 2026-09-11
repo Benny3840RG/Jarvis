@@ -173,10 +173,18 @@ export function pairedUnits(files) {
   }
   return units;
 }
-// Bounded lexical hints for static from/side-effect imports only. Dynamic import,
+// Bounded lexical hints for static imports and literal typed Convex references. Dynamic import,
 // require, aliases and comment-separated syntax are not resolved. No source is fetched.
 export function changedImportContext(files, fileIndices) {
   const wanted = new Set();
+  const includeBackend = (moduleName) => {
+    const suffix = `/convex/${moduleName}.ts`;
+    const targets = files
+      .map((file, fileIndex) => ({ file, fileIndex }))
+      .filter(({ file }) => file.filename.endsWith(suffix));
+    if (targets.length === 1 && !fileIndices.has(targets[0].fileIndex))
+      wanted.add(targets[0].fileIndex);
+  };
   for (const index of fileIndices)
     for (const text of [files[index].before, files[index].after]) {
       for (const match of (text ?? "").matchAll(
@@ -192,6 +200,24 @@ export function changedImportContext(files, fileIndices) {
           .replace(/\.js$/, ".ts");
         const found = files.findIndex((f) => f.filename === resolved);
         if (found >= 0 && !fileIndices.has(found)) wanted.add(found);
+      }
+      // Typed Convex function references name a backend module rather than an
+      // import. Resolve only a unique module in the already fetched inventory.
+      for (const match of (text ?? "").matchAll(
+        /\bmakeFunctionReference(?:<[^>\n]{1,256}>)?\(\s*["']([A-Za-z0-9_/-]+):[A-Za-z0-9_]+["']/g,
+      )) {
+        includeBackend(match[1]);
+      }
+      const generatedApiImport = [
+        ...(text ?? "").matchAll(
+          /\bimport\s*{([^}]{0,2048})}\s*from\s*["'][^"']*\/_generated\/api\.js["']/g,
+        ),
+      ].some((match) =>
+        match[1].split(",").some((name) => name.trim() === "api"),
+      );
+      if (generatedApiImport) {
+        for (const match of (text ?? "").matchAll(/\bapi\.([A-Za-z0-9_]+)\b/g))
+          includeBackend(match[1]);
       }
     }
   return [...wanted].sort((a, b) => a - b);
@@ -311,19 +337,24 @@ export function relatedChangedContext(files, seeds) {
   return [...seen].sort((a, b) => a - b);
 }
 
-export function supplementalUnits(files, fileIndex) {
+export function supplementalUnits(files, fileIndex, compact = false) {
   const file = files[fileIndex];
   const units = pairedUnits([file]);
   const chosen =
-    units.reduce((n, u) => n + Buffer.byteLength(JSON.stringify(u)), 0) <=
+    !compact &&
+    (units.reduce((n, u) => n + Buffer.byteLength(JSON.stringify(u)), 0) <=
       24000 ||
-    file.before === null ||
-    file.after === null
+      file.before === null ||
+      file.after === null)
       ? units
       : (file.filename.endsWith(".json") ? units : lineUnits(file, 0)).filter(
           (u) => u.parts.some((p) => p.references.length === 1),
         );
   const selected = [];
+  const surroundingLines = compact ? 3 : 12;
+  const scope = compact
+    ? "complete changed hunks with three surrounding lines; further context is outside this segment"
+    : "paired changed hunk with surrounding lines; full file remains in coverage inventory";
   for (const unit of chosen)
     for (const p of unit.parts)
       for (const r of p.references) {
@@ -331,11 +362,11 @@ export function supplementalUnits(files, fileIndex) {
         let start = r.start,
           end = r.end;
         // Keep enclosing source context around a changed hunk; exact byte references remain explicit.
-        for (let n = 0; n < 12 && start > 0; n++) {
+        for (let n = 0; n < surroundingLines && start > 0; n++) {
           const found = source.lastIndexOf(10, Math.max(0, start - 2));
           start = found < 0 ? 0 : found + 1;
         }
-        for (let n = 0; n < 12 && end < source.length; n++) {
+        for (let n = 0; n < surroundingLines && end < source.length; n++) {
           const found = source.indexOf(10, end);
           end = found < 0 ? source.length : found + 1;
         }
@@ -345,11 +376,81 @@ export function supplementalUnits(files, fileIndex) {
           start,
           end,
           text: source.subarray(start, end).toString("utf8"),
-          scope:
-            "paired changed hunk with surrounding lines; full file remains in coverage inventory",
+          scope,
         });
       }
-  return selected;
+  const merged = [];
+  selected.sort(
+    (a, b) =>
+      a.side.localeCompare(b.side) || a.start - b.start || a.end - b.end,
+  );
+  for (const current of selected) {
+    const previous = merged.at(-1);
+    if (
+      previous &&
+      previous.side === current.side &&
+      current.start <= previous.end
+    ) {
+      previous.end = Math.max(previous.end, current.end);
+      previous.text = Buffer.from(file[current.side])
+        .subarray(previous.start, previous.end)
+        .toString("utf8");
+    } else merged.push({ ...current });
+  }
+  // Reuse the existing paired source alignment so identical surrounding text
+  // occupies prompt space once while retaining both exact revision references.
+  const clipped = [];
+  for (const unit of lineUnits(file, fileIndex)) {
+    for (const sourcePart of unit.parts) {
+      const windows = sourcePart.references.flatMap((reference) =>
+        merged
+          .filter((range) => range.side === reference.side)
+          .map((range) => ({
+            reference,
+            start: Math.max(range.start, reference.start) - reference.start,
+            end: Math.min(range.end, reference.end) - reference.start,
+          }))
+          .filter((range) => range.end > range.start),
+      );
+      const boundaries = [
+        ...new Set(windows.flatMap((range) => [range.start, range.end])),
+      ].sort((a, b) => a - b);
+      for (let index = 1; index < boundaries.length; index++) {
+        const start = boundaries[index - 1],
+          end = boundaries[index];
+        const references = windows
+          .filter((range) => range.start <= start && range.end >= end)
+          .map(({ reference }) => ({
+            fileIndex,
+            side: reference.side,
+            start: reference.start + start,
+            end: reference.start + end,
+          }));
+        if (!references.length) continue;
+        clipped.push({
+          label: unit.label,
+          parts: [
+            {
+              text: Buffer.from(sourcePart.text)
+                .subarray(start, end)
+                .toString("utf8"),
+              references,
+            },
+          ],
+        });
+      }
+    }
+  }
+  return coalescePairedUnits(clipped, files).flatMap((unit) =>
+    unit.parts.map((part) => ({
+      ...part.references[0],
+      text: part.text,
+      ...(part.references.length > 1
+        ? { otherSides: part.references.slice(1) }
+        : {}),
+      scope,
+    })),
+  );
 }
 
 /** Join adjacent complete units without introducing semantic cuts or repeating range metadata. */
