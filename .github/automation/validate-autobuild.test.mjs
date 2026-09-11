@@ -35,6 +35,12 @@ test("comment-only Claude action uses the scoped workflow token without OIDC exc
   assert.doesNotMatch(workflow, /^\s+id-token:\s+write/m);
   assert.doesNotMatch(workflow, /^\s+contents:\s+write/m);
   assert.match(workflow, /^\s+contents:\s+read/m);
+  const issueTypes = workflow.match(/^  issues:\n    types: \[([^\]]+)\]$/m);
+  assert.ok(issueTypes, "issues must declare an explicit bounded trigger list");
+  assert.deepEqual(
+    issueTypes[1].split(",").map((value) => value.trim()),
+    ["opened", "edited"],
+  );
 });
 
 async function runFinalize(overrides = {}) {
