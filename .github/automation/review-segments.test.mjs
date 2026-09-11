@@ -365,6 +365,21 @@ test("findings cannot borrow supplemental source or another segment's primary ra
       after: "export const helper = () => 2;\n",
     },
   ]);
+  for (const prompt of plan.prompts) {
+    const protocol = prompt.slice(0, prompt.indexOf("\n\n"));
+    assert.match(
+      protocol,
+      /Findings must cite a file and line covered by this segment's primary units\.parts\.references/,
+    );
+    assert.match(
+      protocol,
+      /Supplemental context may inform review but does not authorize finding locations/,
+    );
+    assert.match(
+      protocol,
+      /If essential primary source or context is missing, return blocked with contextRequests/,
+    );
+  }
   const payloads = plan.prompts.map((p) =>
     JSON.parse(p.slice(p.indexOf("\n\n") + 2)),
   );
@@ -393,7 +408,9 @@ test("findings cannot borrow supplemental source or another segment's primary ra
           : raw,
       ),
     );
-    assert.deepEqual(aggregateSegments(plan, receipts).findings, [finding]);
+    const result = aggregateSegments(plan, receipts);
+    assert.equal(result.verdict, "changes_requested");
+    assert.deepEqual(result.findings, [finding]);
   }
   const supplementalIndex = payloads.findIndex(
     (p) =>
