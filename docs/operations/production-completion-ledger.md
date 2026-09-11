@@ -202,3 +202,13 @@
 - REVIEW / CI: Initial trusted review correctly found root-level Convex context omission; red regression reproduced it and the matcher was repaired. Fresh review `34598473743` passed without findings or context requests. All 13 exact-head checks passed with no unresolved review threads. Post-merge TypeScript `34598974250` and CodeQL `34598972819` / `34598972922` passed.
 - RUNTIME / SECURITY: Trusted hosted review exercised the existing bounded planner. No provider capability, approval, execution or completion authority was added.
 - RESIDUAL RISK / NEXT ACTION: Essential unavailable context still blocks any candidate; this does not certify Live Work. Finish #510 hard-link restore review, integrate its landed ancestry so recovery changes leave #502, then rerun final Live Work proof and review. Continue remaining recovery and commissioning work.
+
+
+## Lockfile review preparation — PR #512
+
+- BASE SHA: `8eb2ec9928e7fb959601da1bad4aa2c356ae4f7f`. Exact candidate `c02b955f93316a6849e7862f27bc7213642f676e`; merge `29451edbded96015a62360ed59ba425965ad3004` has identical tree.
+- GOAL / FILES: Two existing automation files split the npm lockfile packages map into complete semantic package entries. The 201 KB dependency lockfile previously exceeded the single-unit context bound. Source bytes, escaping, scoped pointers, paired references and all existing limits remain enforced.
+- TESTS: 36 focused tests, 184 automation passes (six existing local fixture skips), full gate 1,394 Node / 241 Convex. Logs `/tmp/jarvis-lockfile-map-{red,green,policy,full}.log`; the red reproduced missing package semantics, and a missing fixture status field was corrected before final green verification.
+- REVIEW / CI: Trusted review `34601630734` passed with no findings or missing context; 13 exact-head checks passed and no unresolved threads. Post-merge TypeScript `34602452511`, CodeQL `34602452398` / `34602452311`, maintenance/completion `34602649776` / `34602649817` / `34602676858` all passed.
+- SECURITY / RUNTIME: No source was omitted, bound enlarged or new execution/approval authority introduced. Trusted hosted review exercised the existing planner; this is not provider commissioning.
+- NEXT ACTION / RESIDUAL RISK: Finish #510 current-base review and #502 Live Work proof. Hold unrelated merges while those reviews run to avoid stale-base invalidation. Continue remaining security/recovery PRs and operator commissioning; production completion is not claimed.
