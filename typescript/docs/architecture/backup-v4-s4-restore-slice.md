@@ -53,11 +53,14 @@ transaction rollback and safe retry. This is local adapter evidence only.
 
 The second increment admits projectRecords only for the existing memory definition
 kinds: fact, assumption, measurement and decision. Wrapper kind/recordId must match
-its definition; logical IDs are unique per project. Each project/kind group is
+its definition; project-record logical IDs are unique per project. Each project/kind group is
 limited to the ordinary query's 100-row maximum, with complete readback required.
 Component relationships, arbitrary attributes and other record kinds stay refused.
 
-Only applied and rejected change sets are admitted. Definitions are validated by
+Only applied and rejected change sets are admitted. Change-set IDs remain unique
+per owner, matching the existing producer and `by_owner_and_change_set_id` ordinary
+read index. Project binding is checked separately; accepting the same change-set
+ID in two projects would make ordinary unique reads ambiguous. Definitions are validated by
 the existing `normalizeMemoryRecords` and measurement uniqueness logic, and must
 already match the producer's canonical values. Applied definitions resolve their
 logical record IDs, but are not overwritten with newer current record values.

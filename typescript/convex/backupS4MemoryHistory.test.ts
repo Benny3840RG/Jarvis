@@ -369,3 +369,97 @@ it.each(["", " No "])(
     expect(insertions).toBe(0);
   },
 );
+
+it("preserves owner-wide change-set identity while restoring multiple projects", async () => {
+  const { source } = await sourceFixture();
+  await source.mutation(anyApi.projects.upsert, {
+    serviceToken,
+    projectKey: "q",
+    projectName: "Other project",
+    projectType: "test",
+    status: "active",
+    createdAt: "2026-09-11T00:00:00.000Z",
+    updatedAt: "2026-09-11T00:00:00.000Z",
+    revision: 3,
+    domains: ["workshop"],
+    summary: "",
+    preferences: {
+      outputStyle: "brief",
+      communicationTone: "plain",
+      detailLevel: "normal",
+      unitSystem: "metric",
+      locale: "en-AU",
+    },
+  });
+  const proposal = {
+    serviceToken,
+    projectKey: "q",
+    changeSetId: "change",
+    requestId: "q-request",
+    expectedRevision: 3,
+    records,
+    rationale: "Other project history",
+    proposedBy: "agent",
+  };
+  await expect(source.mutation(anyApi.memoryChangeSets.stage, proposal)).rejects.toThrow(
+    /ID already exists with different contents/,
+  );
+  await source.mutation(anyApi.memoryChangeSets.stage, { ...proposal, changeSetId: "q-change" });
+  await source.mutation(anyApi.memoryChangeSets.reject, {
+    serviceToken,
+    projectKey: "q",
+    changeSetId: "q-change",
+    reason: "No",
+  });
+  const capture = await source.query(anyApi.backupS4.capture, { serviceToken, approvalToken });
+  const target = convexTest(schema, modules);
+  const ids = await target.run((ctx) =>
+    restoreS4ProjectNotes(ctx, { ...capture, serviceToken, approvalToken }),
+  );
+  const proof = await verifyRestoredS4ProjectNotes(
+    capture,
+    ids,
+    clientFor(target),
+    serviceToken,
+    approvalToken,
+  );
+  expect(proof.restoredChecksum).toBe(proof.sourceChecksum);
+  expect(proof.verifiedGroups).toEqual([]);
+  expect(
+    await target.query(anyApi.memoryChangeSets.get, {
+      serviceToken,
+      projectKey: "q",
+      changeSetId: "change",
+    }),
+  ).toBeNull();
+  expect(
+    (
+      await target.query(anyApi.memoryChangeSets.get, {
+        serviceToken,
+        projectKey: "q",
+        changeSetId: "q-change",
+      })
+    )?.state,
+  ).toBe("rejected");
+
+  // A raw capture can contain rows that the producer forbids. Reject them before insertion.
+  const payload = JSON.parse(capture.payloadJson);
+  const rows = (table: string) =>
+    payload.tables.find((entry: { table: string }) => entry.table === table).documents;
+  rows("memoryChangeSets").find(
+    (row: { projectKey: string }) => row.projectKey === "q",
+  ).changeSetId = "change";
+  for (const event of rows("auditEvents"))
+    if (event.scopeKey === "q") event.payload.changeSetId = "change";
+  const emptyTarget = convexTest(schema, modules);
+  await expect(
+    emptyTarget.run((ctx) =>
+      restoreS4ProjectNotes(ctx, {
+        ...encodeS4Payload(payload),
+        serviceToken,
+        approvalToken,
+      }),
+    ),
+  ).rejects.toThrow(/duplicate memory change set project reference/);
+  expect(await emptyTarget.run((ctx) => ctx.db.query("projects").collect())).toEqual([]);
+});
