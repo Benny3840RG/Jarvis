@@ -538,6 +538,7 @@ describe("archive v4 — CLI surface stays additive", () => {
   it("documents that this stage produces partial archives", () => {
     assert.match(archiveV4Usage().join("\n"), /partial/);
     assert.match(archiveV4Usage().join("\n"), /--allow-partial/);
+    assert.match(archiveV4Usage().join("\n"), /retain verified output/);
   });
 });
 

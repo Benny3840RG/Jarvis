@@ -149,16 +149,23 @@ unmistakably incomplete and says so.
 npm run backup -- restore-v4 archive.json /srv/restore --allow-partial --resume
 ```
 
-`--resume` discards that restore's own partial output and restores again. It is
-safe because everything the restore wrote is inside the directory it reserved and
-is named in the marker it wrote first:
+`--resume` validates every existing output file against the exact bytes derived
+from the archive, retains matching files, and writes only missing files:
 
-- The set of files a resume may delete is computed from the **archive**, not from
-  what happens to be on disk, so a forged or stale marker cannot widen it.
-- If the directory holds **any** entry the restore did not write, the resume
-  refuses and deletes nothing.
-- If the marker's fingerprint does not match the archive being restored, the
-  resume refuses: a different archive was being materialised there.
+- The expected filenames and serialization come from the **archive**, not from
+  the marker. A forged marker cannot expand that scope.
+- Any unexpected entry, non-regular or hard-linked file, non-private permissions, changed bytes or truncated output makes
+  resume refuse before writing anything. Existing data and manifest files are
+  never deleted during resume. Preserve and inspect refused output; use a fresh
+  isolated destination when the incomplete files cannot be verified.
+- The marker must identify this same archive and its exact planned file list, and pass the same private-file and byte checks. Retained files must be owner-readable with no group/other access, matching the existing secure token-store policy. Fresh files are created with mode `0600`.
+- Live-directory exclusion compares both lexical and physical paths, resolving
+  existing ancestors so symlink aliases cannot conceal overlap. Dangling symlinks
+  in either path are refused before destination creation, including ancestor links.
+
+Keep the destination and its ancestors exclusive to this restore until verification
+finishes. These checks do not protect against another process concurrently changing
+the filesystem under the restore.
 
 Recovery is always an explicit operator decision — a plain retry never resumes
 silently.
