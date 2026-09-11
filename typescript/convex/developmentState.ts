@@ -1,3 +1,4 @@
+import { publicDevelopmentEvent } from "./publicEvidence.js";
 import { v } from "convex/values";
 import { paginationOptsValidator } from "convex/server";
 
@@ -27,7 +28,7 @@ import {
   developmentApprovalValidator,
   developmentCapabilityEnvelopeValidator,
   developmentCommitOutcomeValidator,
-  developmentEventDocumentValidator,
+  developmentEventPublicValidator,
   developmentLeaseValidator,
   developmentMergeEvidenceValidator,
   developmentReconciliationEvidenceValidator,
@@ -496,19 +497,21 @@ export const listPage = query({
 
 export const listEvents = query({
   args: { serviceToken: v.string(), subjectId: v.string() },
-  returns: v.array(developmentEventDocumentValidator),
+  returns: v.array(developmentEventPublicValidator),
   handler: async (ctx, args) => {
     const ownerId = requireOwner(args.serviceToken);
     const subjectId = args.subjectId.trim();
-    return collectBounded(
-      ctx.db
-        .query("developmentEvents")
-        .withIndex("by_owner_and_subject_id_and_created_at", (q) =>
-          q.eq("ownerId", ownerId).eq("subjectId", subjectId),
-        )
-        .order("asc"),
-      "Development event history",
-    );
+    return (
+      await collectBounded(
+        ctx.db
+          .query("developmentEvents")
+          .withIndex("by_owner_and_subject_id_and_created_at", (q) =>
+            q.eq("ownerId", ownerId).eq("subjectId", subjectId),
+          )
+          .order("asc"),
+        "Development event history",
+      )
+    ).map(publicDevelopmentEvent);
   },
 });
 
@@ -539,7 +542,7 @@ export const recordModelInvocation = mutation({
     escalationReason: v.optional(v.string()),
     workerId: v.optional(v.string()),
   },
-  returns: developmentEventDocumentValidator,
+  returns: developmentEventPublicValidator,
   handler: async (ctx, args) => {
     const ownerId = requireOwner(args.serviceToken);
     const subjectId = cleanRequired(args.subjectId, "Development subject ID");
@@ -608,7 +611,7 @@ export const recordModelInvocation = mutation({
       if (existing.canonicalRequestFingerprint !== canonicalRequestFingerprint) {
         throw new Error("Model invocation event ID already exists with different contents.");
       }
-      return existing;
+      return publicDevelopmentEvent(existing);
     }
 
     const now = Date.now();
@@ -644,7 +647,7 @@ export const recordModelInvocation = mutation({
     });
     const created = await ctx.db.get("developmentEvents", id);
     if (!created) throw new Error("Model invocation event persistence failed.");
-    return created;
+    return publicDevelopmentEvent(created);
   },
 });
 
@@ -735,7 +738,7 @@ export const commit = mutation({
             ? "COMMITTED"
             : "REJECTED") as "COMMITTED" | "REJECTED",
           subject,
-          event: existingEvent,
+          event: publicDevelopmentEvent(existingEvent),
           reasons: (existingEvent.payload.reasonCodes as string[] | undefined) ?? [],
           retryDisposition: existingEvent.payload.retryDisposition as
             "RESUME_SAME_OPERATION" | "NEW_EXECUTION_REQUIRED" | "NO_RETRY" | undefined,
@@ -754,7 +757,7 @@ export const commit = mutation({
       return {
         kind: "REJECTED" as const,
         subject,
-        event: existingEvent,
+        event: publicDevelopmentEvent(existingEvent),
         reasons: ["IDEMPOTENCY_EVENT_ID_CONFLICT"],
       };
     }
@@ -788,7 +791,7 @@ export const commit = mutation({
           ? "COMMITTED"
           : "REJECTED") as "COMMITTED" | "REJECTED",
         subject,
-        event: existingRequest,
+        event: publicDevelopmentEvent(existingRequest),
         reasons: (existingRequest.payload.reasonCodes as string[] | undefined) ?? [],
         retryDisposition: existingRequest.payload.retryDisposition as
           "RESUME_SAME_OPERATION" | "NEW_EXECUTION_REQUIRED" | "NO_RETRY" | undefined,
@@ -808,7 +811,7 @@ export const commit = mutation({
       return {
         kind: "REJECTED" as const,
         subject,
-        event: existingRequest,
+        event: publicDevelopmentEvent(existingRequest),
         reasons: ["IDEMPOTENCY_REQUEST_ID_CONFLICT"],
       };
     }
@@ -1159,7 +1162,7 @@ export const commit = mutation({
     return {
       kind: (evaluation.allowed ? "COMMITTED" : "REJECTED") as "COMMITTED" | "REJECTED",
       subject: updatedSubject,
-      event: insertedEvent,
+      event: publicDevelopmentEvent(insertedEvent),
       reasons: [...evaluation.reasons],
       retryDisposition: evaluation.retryDisposition,
     };
