@@ -4,6 +4,7 @@ import { makeFunctionReference } from "convex/server";
 import { api } from "../../../convex/_generated/api.js";
 import type { Doc } from "../../../convex/_generated/dataModel.js";
 import { ConvexMemoryChangeSetService } from "../../persistence/convexMemoryChangeSets.js";
+import { ConvexToolActionService } from "../../persistence/convexToolActions.js";
 import { ConvexNoteStore } from "../../persistence/convexNotes.js";
 import { ConvexTotalityJournal } from "../../persistence/convexTotalityJournal.js";
 import type { ConvexClientLike } from "../../persistence/convexPersistence.js";
@@ -46,10 +47,12 @@ export async function verifyRestoredS4ProjectNotes(
     notes: [] as Doc<"notes">[],
     projectRecords: [] as Doc<"projectRecords">[],
     memoryChangeSets: [] as Doc<"memoryChangeSets">[],
+    toolActions: [] as Doc<"toolActions">[],
     auditEvents: [] as Doc<"auditEvents">[],
   };
   const projects = new ConvexTotalityJournal(client, serviceToken),
     notes = new ConvexNoteStore(client, serviceToken);
+  const actions = new ConvexToolActionService(client, serviceToken);
   const memory = new ConvexMemoryChangeSetService(client, serviceToken);
   const recordGroups = new Map<string, Doc<"projectRecords">[]>();
   const auditRequests = new Map<string, Doc<"auditEvents">[]>();
@@ -215,6 +218,50 @@ export async function verifyRestoredS4ProjectNotes(
           _id: original._id,
           _creationTime: original._creationTime,
         });
+      } else if (table === "toolActions") {
+        const original = source.toolActions[i]!;
+        const view = (await client.query(api.toolActions.get, {
+          serviceToken,
+          projectKey: original.projectKey,
+          actionId: original.actionId,
+        })) as (Doc<"toolActions"> & { isApprovalExpired: boolean }) | null;
+        if (!view || view._id !== mapping.targetId || view.isApprovalExpired !== false)
+          throw new Error("Restored rejected action read mismatch.");
+        const { isApprovalExpired: _expiry, ...row } = view;
+        if (
+          !isDeepStrictEqual(
+            row,
+            actual.toolActions.find((value) => value._id === row._id),
+          )
+        )
+          throw new Error("Restored rejected action changed during readback.");
+        const normal = await actions.get({
+          projectId: original.projectKey,
+          actionId: original.actionId,
+        });
+        const {
+          _id: _physicalId,
+          _creationTime: _physicalTime,
+          ownerId: _owner,
+          projectKey,
+          ...values
+        } = row;
+        if (
+          !isDeepStrictEqual(normal, {
+            ...values,
+            projectId: projectKey,
+            createdAt: new Date(row.createdAt).toISOString(),
+            updatedAt: new Date(row.updatedAt).toISOString(),
+            rejectedAt: new Date(row.rejectedAt!).toISOString(),
+            isApprovalExpired: false,
+          })
+        )
+          throw new Error("Ordinary rejected action service read mismatch.");
+        restored.toolActions.push({
+          ...row,
+          _id: original._id,
+          _creationTime: original._creationTime,
+        });
       } else {
         const original = source.auditEvents[i]!;
         const requestId = original.requestId!;
@@ -254,6 +301,7 @@ export async function verifyRestoredS4ProjectNotes(
     restoredChecksum,
     referenceCount:
       restored.notes.length +
+      restored.toolActions.length +
       restored.projectRecords.length +
       restored.memoryChangeSets.length +
       restored.auditEvents.length +

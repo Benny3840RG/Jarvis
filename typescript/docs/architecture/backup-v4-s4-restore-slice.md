@@ -11,7 +11,7 @@ mutation. No deployment, CLI, automatic import, or provider connection is added.
 Its caller must provide a single mutation transaction on an isolated database.
 It requires existing owner and independent approval credentials, validates the
 source owner, and refuses any nonempty application table, including foreign-owner
-rows. It inserts only projects, notes, supported projectRecords, terminal memoryChangeSets and their typed auditEvents through the existing persisted schemas;
+rows. It inserts only projects, notes, supported projectRecords, terminal memoryChangeSets, never-approved rejected notes.create ToolActions and their typed auditEvents through the existing persisted schemas;
 it never invokes ordinary create/approval/reconciliation operations. Failure
 rolls back the transaction; retry starts with an empty target.
 
@@ -80,7 +80,32 @@ including ordering, before tagged digest comparison. Tests build real histories
 through stage/approve/apply/reject. Applied replay creates no rows, changes no
 revision and adds no audit events; rejected apply refuses without changing data.
 An older applied definition remains distinct from a later replacement record.
-No live effect, approval, receipt or worker table has gained restore support.
+No live effect, approval, receipt or worker state has gained restore support.
+
+## Closed rejected note proposals
+
+The next increment admits only never-approved rejected `notes.create` proposals,
+with T1 authority classification and `destructive: false`. Exact row keys exclude
+all approval, expiry, revocation, consumption and claim fields. Existing note
+argument validation and ToolAction canonical argument normalization validate the
+original payload without rewriting it. The existing ToolAction stage safety-binding
+producer is reused to check the stored binding; it is not recomputed into new authority.
+Only exact `tool.action.proposed` and `tool.action.rejected` audits are admitted,
+with matching logical action/request/project references, payloads, actors and clocks.
+Action IDs and owner-wide proposal idempotency keys must be unique. Audit request
+bounds apply across both memory and action history, not separately per producer.
+
+Normal `toolActions.get` and fresh `ConvexToolActionService.get` readback join the
+existing typed identity maps and tagged digest proof. Approval remains refused;
+matching stage/reject replay keeps the action and all history unchanged. An
+intentional denied execution drill occurs only **after** restore verification:
+the existing executor adds its expected blocked decision receipt, while no tool
+runs and all business/action/audit rows stay unchanged. This preserves existing
+audit behavior; denial is not falsely described as a read-only operation. Such a
+post-drill capture contains an unsupported receipt and cannot be reverified as
+this closed slice. Existing fingerprints and opaque argument values are preserved.
+Task/reminder create proposals and all target-ID operations, approved/revoked/expired
+histories, receipts, reconciliations and worker state remain unsupported.
 
 ## Remaining S4 graph classification
 

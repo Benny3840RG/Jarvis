@@ -1,4 +1,5 @@
 import { jsonToConvex } from "convex/values";
+import { validateS4RejectedActions } from "./s4RejectedActions.js";
 import { validateS4MemoryHistory } from "./s4MemoryHistory.js";
 import type { Doc, Id } from "../../../convex/_generated/dataModel.js";
 import { sha256Hex } from "../../actions/sha256.js";
@@ -16,6 +17,7 @@ export const S4_RESTORE_TABLES = [
   "projectRecords",
   "notes",
   "memoryChangeSets",
+  "toolActions",
   "auditEvents",
 ] as const;
 export type S4RestoreTable = (typeof S4_RESTORE_TABLES)[number];
@@ -68,6 +70,7 @@ export function readS4ProjectNotes(capture: S4EncodedCapture): S4ProjectNotesSou
     notes: [],
     projectRecords: [],
     memoryChangeSets: [],
+    toolActions: [],
     auditEvents: [],
   };
   let totalRows = 0;
@@ -116,6 +119,7 @@ export function readS4ProjectNotes(capture: S4EncodedCapture): S4ProjectNotesSou
       result.projectRecords = entry.documents as Doc<"projectRecords">[];
     else if (table === "memoryChangeSets")
       result.memoryChangeSets = entry.documents as Doc<"memoryChangeSets">[];
+    else if (table === "toolActions") result.toolActions = entry.documents as Doc<"toolActions">[];
     else result.auditEvents = entry.documents as Doc<"auditEvents">[];
   }
   const projects = new Set<string>();
@@ -143,6 +147,17 @@ export function readS4ProjectNotes(capture: S4EncodedCapture): S4ProjectNotesSou
     if (receipts.has(key)) throw new Error("Duplicate note idempotency scope.");
     receipts.add(key);
   }
-  validateS4MemoryHistory(result);
+  const requestCounts = new Map<string, number>();
+  for (const event of result.auditEvents) {
+    if (typeof event.requestId !== "string") throw new Error("Audit request ID is required.");
+    const count = (requestCounts.get(event.requestId) ?? 0) + 1;
+    requestCounts.set(event.requestId, count);
+    if (count > 100) throw new Error("Audit request exceeds ordinary read limit of 100.");
+  }
+  const actionEvents = validateS4RejectedActions(result);
+  validateS4MemoryHistory({
+    ...result,
+    auditEvents: result.auditEvents.filter((event) => !actionEvents.has(event)),
+  });
   return result;
 }

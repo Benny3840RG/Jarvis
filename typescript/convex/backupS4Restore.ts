@@ -27,6 +27,7 @@ export async function restoreS4ProjectNotes(
     notes: [],
     projectRecords: [],
     memoryChangeSets: [],
+    toolActions: [],
     auditEvents: [],
   };
   for (const row of source.projects) {
@@ -59,6 +60,13 @@ export async function restoreS4ProjectNotes(
       targetId,
       sourceCreationTime: _creationTime,
     });
+  }
+  for (const row of source.toolActions) {
+    const { _id, _creationTime, ...fields } = row;
+    if (!ctx.db.normalizeId("toolActions", _id))
+      throw new Error("Invalid toolActions source physical ID.");
+    const targetId = await ctx.db.insert("toolActions", fields);
+    identities.toolActions.push({ sourceId: _id, targetId, sourceCreationTime: _creationTime });
   }
   for (const row of source.auditEvents) {
     const { _id, _creationTime, ...fields } = row;
