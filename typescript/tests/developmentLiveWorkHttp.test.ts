@@ -169,3 +169,26 @@ it("OpenAPI worker step rejects empty and undocumented records", () => {
     assert.equal(validate(value), false);
   }
 });
+
+it("OpenAPI pipeline rejects undocumented top-level fields on the actual read model", async () => {
+  const contract = JSON.parse(
+    readFileSync(new URL("../openapi/jarvis.openapi.json", import.meta.url), "utf8"),
+  );
+  const validate = new Ajv2020.default({ strict: false, validateFormats: false }).compile({
+    $ref: "#/components/schemas/LiveWorkPipeline",
+    components: contract.components,
+  });
+  const app = await makeApp({ readLiveWorkSnapshot: async () => sampleSnapshot() });
+  const response = await app.inject({
+    method: "GET",
+    url: "/api/v1/development/live-work",
+    headers: AUTH,
+  });
+  const pipeline = response.json().data.pipeline;
+  assert.equal(validate(pipeline), true, JSON.stringify(validate.errors));
+  for (const extra of [
+    { leaseToken: "not-public" },
+    { rawProviderPayload: { body: "not-public" } },
+  ])
+    assert.equal(validate({ ...pipeline, ...extra }), false);
+});

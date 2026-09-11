@@ -378,6 +378,26 @@ it("projects candidate identity only from the current committed owner's merge ac
       updatedAt: 1,
     });
   });
+  const { ConvexToolActionService } = await import("../src/persistence/convexToolActions.js");
+  const { fingerprintToolAction } = await import("../src/actions/toolExecution.js");
+  const service = new ConvexToolActionService(
+    {
+      query: t.query as import("../src/persistence/convexPersistence.js").ConvexClientLike["query"],
+      mutation: async () => {
+        throw new Error("Read-only action fixture");
+      },
+    },
+    SERVICE_TOKEN,
+  );
+  const executedAction = await service.get({ projectId: "merged", actionId: "action-1" });
+  if (!executedAction) throw new Error("Missing executed action");
+  await t.run(async (ctx) => {
+    const receipt = await ctx.db.query("toolExecutionReceipts").first();
+    if (!receipt) throw new Error("Missing receipt");
+    await ctx.db.patch("toolExecutionReceipts", receipt._id, {
+      actionFingerprint: fingerprintToolAction(executedAction),
+    });
+  });
   const snapshot = await t.query(api.developmentState.liveWork, { serviceToken: SERVICE_TOKEN });
   expect(snapshot?.candidate).toEqual({
     pullRequestNumber: 42,
@@ -385,6 +405,19 @@ it("projects candidate identity only from the current committed owner's merge ac
     receiptId: "receipt-1",
   });
   expect(snapshot?.events[0]?.evidenceIds).toEqual(["evidence-1"]);
+  for (const changed of [{ pullRequestNumber: 43 }, { reviewedHeadSha: "b".repeat(40) }]) {
+    await t.run((ctx) =>
+      ctx.db.patch("toolActions", actionId, {
+        arguments: { ...executedAction.arguments, ...changed },
+      }),
+    );
+    expect(
+      (await t.query(api.developmentState.liveWork, { serviceToken: SERVICE_TOKEN }))?.candidate,
+    ).toBeNull();
+  }
+  await t.run((ctx) =>
+    ctx.db.patch("toolActions", actionId, { arguments: executedAction.arguments }),
+  );
   // The shared argument schema pins the original merge action transition.
   // Reconciliation may commit INDETERMINATE -> MERGED using that same action.
   await t.run(async (ctx) => {

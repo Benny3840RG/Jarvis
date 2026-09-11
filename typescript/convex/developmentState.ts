@@ -536,7 +536,8 @@ async function liveWorkCandidate(ctx: QueryCtx, subject: Doc<"developmentSubject
     action.approvedBy !== "user" ||
     action.requiredAuthority !== "T3" ||
     !action.destructive ||
-    action.consumptionPolicy !== "single-use"
+    action.consumptionPolicy !== "single-use" ||
+    receipt.actionFingerprint !== fingerprintToolAction(toolActionForFingerprint(action))
   )
     return null;
   const parsed = githubMergeArguments.safeParse(action.arguments);
