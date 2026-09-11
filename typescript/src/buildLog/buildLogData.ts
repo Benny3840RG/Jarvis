@@ -36,6 +36,7 @@ export function cloneBuildLogEntry(entry: BuildLogEntry): BuildLogEntry {
 
 /** Builds a fully-formed build-log entry from input. */
 export function createBuildLogEntry(input: BuildLogInput): BuildLogEntry {
+  const createdAt = Date.now();
   return {
     id: randomUUID(),
     buildId: requiredText(input.buildId, "Build log buildId"),
@@ -43,8 +44,8 @@ export function createBuildLogEntry(input: BuildLogInput): BuildLogEntry {
     title: requiredText(input.title, "Build log title"),
     ...(input.body && input.body.trim() ? { body: input.body.trim() } : {}),
     ...(input.occurredAt === undefined ? {} : { occurredAt: validTimestamp(input.occurredAt) }),
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
+    createdAt,
+    updatedAt: createdAt,
   };
 }
 
