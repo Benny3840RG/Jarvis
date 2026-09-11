@@ -1,0 +1,268 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { pairedUnits } from "./paired-review-context.mjs";
+
+test("pairs semantic OpenAPI entries without dropping formatting or splitting objects", () => {
+  const before = JSON.stringify(
+    {
+      openapi: "3.1.0",
+      paths: {
+        "/a": { get: { description: "é".repeat(40000) } },
+        "/b": { get: {} },
+      },
+      components: { schemas: { Thing: { type: "string" } } },
+    },
+    null,
+    2,
+  );
+  const after = before.replace('"type": "string"', '"type": "number"');
+  const units = pairedUnits([{ filename: "api.json", before, after }]);
+  for (const side of ["before", "after"]) {
+    const ranges = units
+      .flatMap((u) =>
+        u.parts.flatMap((p) =>
+          p.references
+            .filter((r) => r.side === side)
+            .map((r) => ({ ...r, text: p.text })),
+        ),
+      )
+      .sort((a, b) => a.start - b.start);
+    assert.equal(ranges[0].start, 0);
+    for (let i = 1; i < ranges.length; i++)
+      assert.equal(ranges[i - 1].end, ranges[i].start);
+    assert.equal(
+      ranges.map((r) => r.text).join(""),
+      side === "before" ? before : after,
+    );
+  }
+  const path = units.find((u) => u.label === "/paths/~1a");
+  assert.ok(path);
+  assert.ok(path.parts[0].text.includes('"get"'));
+  assert.equal(path.parts[0].references.length, 2);
+  const schema = units.find((u) => u.label === "/components/schemas/Thing");
+  assert.equal(schema.parts.length, 2);
+});
+
+test("pairs whole files and deduplicates identical source with both exact references", () => {
+  const units = pairedUnits([
+    { filename: "a.ts", before: "const x=1;\n", after: "const x=1;\n" },
+  ]);
+  assert.equal(units.length, 1);
+  assert.equal(units[0].parts.length, 1);
+  assert.deepEqual(
+    units[0].parts[0].references.map((r) => r.side),
+    ["before", "after"],
+  );
+});
+
+test("added and removed files retain their one-sided coverage", () => {
+  const units = pairedUnits([
+    { filename: "new.ts", before: null, after: "é" },
+    { filename: "old.ts", before: "old", after: null },
+  ]);
+  assert.deepEqual(
+    units.flatMap((u) =>
+      u.parts.flatMap((p) => p.references.map((r) => r.side)),
+    ),
+    ["after", "before"],
+  );
+});
+
+test("changed import context only resolves already-fetched direct relative modules", async () => {
+  const { changedImportContext } = await import("./paired-review-context.mjs");
+  const files = [
+    {
+      filename: "src/a.ts",
+      before: null,
+      after:
+        'import {schema} from "./schema.js"; import x from "external"; import y from "./absent.js";',
+    },
+    {
+      filename: "src/schema.ts",
+      before: null,
+      after: 'export const schema = "literal";',
+    },
+  ];
+  assert.deepEqual(changedImportContext(files, new Set([0])), [1]);
+});
+
+test("large source preserves paired unchanged runs between separate small edits", () => {
+  const before = Array.from(
+    { length: 12000 },
+    (_, i) => `const value${i} = ${i};\n`,
+  ).join("");
+  const after = before
+    .replace("value300 = 300", "value300 = 301")
+    .replace("value11000 = 11000", "value11000 = 11001");
+  const units = pairedUnits([{ filename: "server.ts", before, after }]);
+  const changed = units.filter((u) =>
+    u.parts.some((p) => p.references.length === 1),
+  );
+  assert.ok(
+    changed.reduce(
+      (n, u) => n + u.parts.reduce((m, p) => m + Buffer.byteLength(p.text), 0),
+      0,
+    ) < 1000,
+  );
+});
+
+test("related changed wiring includes reverse importer and controller sharing the contract", async () => {
+  const { relatedChangedContext, supplementalUnits } =
+    await import("./paired-review-context.mjs");
+  const files = [
+    {
+      filename: "src/client.ts",
+      before: null,
+      after: 'import {Contract} from "./contract.js";',
+    },
+    {
+      filename: "src/contract.ts",
+      before: null,
+      after: "export type Contract = string;",
+    },
+    {
+      filename: "src/server.ts",
+      before: null,
+      after: 'import {client} from "./client.js";',
+    },
+    {
+      filename: "src/controller.ts",
+      before: null,
+      after: 'import {Contract} from "./contract.js";',
+    },
+  ];
+  assert.deepEqual(relatedChangedContext(files, new Set([0])), [0, 1, 2, 3]);
+  for (const ref of supplementalUnits(files, 3))
+    assert.equal(
+      Buffer.from(files[3][ref.side]).subarray(ref.start, ref.end).toString(),
+      ref.text,
+    );
+});
+
+test("same-file JSON references supply later schemas and terminate cycles", async () => {
+  const { jsonReferenceContext } = await import("./paired-review-context.mjs");
+  const source = JSON.stringify(
+    {
+      paths: { "/a": { get: { $ref: "#/components/schemas/A" } } },
+      components: {
+        schemas: {
+          A: { $ref: "#/components/schemas/B" },
+          B: { $ref: "#/components/schemas/A", type: "object" },
+        },
+      },
+    },
+    null,
+    2,
+  );
+  const units = [
+    {
+      label: "endpoint",
+      parts: [
+        {
+          text: '"$ref":"#/components/schemas/A"',
+          references: [
+            { fileIndex: 0, side: "after", start: 0, end: 0, lineStart: 1 },
+          ],
+        },
+      ],
+    },
+  ];
+  const result = jsonReferenceContext(
+    [{ filename: "api.json", before: null, after: source }],
+    units,
+  );
+  assert.equal(result.unresolved.length, 0);
+  assert.equal(result.contexts.length, 2);
+  assert.ok(result.contexts.some((c) => c.pointer.endsWith("/B")));
+  for (const context of result.contexts)
+    for (const ref of context.parts)
+      assert.equal(
+        Buffer.from(source).subarray(ref.start, ref.end).toString(),
+        ref.text,
+      );
+});
+
+test("local reference closure reports missing targets and bounded traversal overflow", async () => {
+  const { jsonReferenceContext } = await import("./paired-review-context.mjs");
+  const schemas = Object.fromEntries(
+    Array.from({ length: 129 }, (_, i) => ["S" + i, { type: "string" }]),
+  );
+  const source = JSON.stringify({ components: { schemas } });
+  const text = JSON.stringify(
+    Array.from({ length: 129 }, (_, i) => ({
+      $ref: "#/components/schemas/S" + i,
+    })),
+  );
+  const unit = (text) => [
+    {
+      label: "refs",
+      parts: [
+        {
+          text,
+          references: [
+            { fileIndex: 0, side: "after", start: 0, end: 0, lineStart: 1 },
+          ],
+        },
+      ],
+    },
+  ];
+  const files = [{ filename: "api.json", before: null, after: source }];
+  const result = jsonReferenceContext(files, unit(text));
+  assert.equal(result.contexts.length, 128);
+  assert.ok(result.unresolved.some((item) => item.reason.includes("128")));
+  const missing = jsonReferenceContext(
+    files,
+    unit('{"$ref":"#/components/schemas/missing"}'),
+  );
+  assert.equal(missing.contexts.length, 0);
+  assert.equal(missing.unresolved.length, 1);
+});
+
+test("JSON reference context validates nested pointers and binds both identical sides", async () => {
+  const { jsonReferenceContext } = await import("./paired-review-context.mjs");
+  const source = JSON.stringify({
+    components: {
+      schemas: { "A/B~C": { properties: { value: { type: "string" } } } },
+    },
+  });
+  const files = [{ filename: "api.json", before: source, after: source }];
+  const units = (ref) => [
+    {
+      label: "refs",
+      parts: [
+        {
+          text: JSON.stringify({ $ref: ref }),
+          references: [
+            { fileIndex: 0, side: "before", start: 0, end: 0, lineStart: 1 },
+            { fileIndex: 0, side: "after", start: 0, end: 0, lineStart: 1 },
+          ],
+        },
+      ],
+    },
+  ];
+  const result = jsonReferenceContext(
+    files,
+    units("#/components/schemas/A~1B~0C/properties/value"),
+  );
+  assert.equal(result.unresolved.length, 0);
+  assert.equal(result.contexts.length, 1);
+  const part = result.contexts[0].parts[0];
+  assert.equal(part.otherSides.length, 1);
+  assert.equal(part.otherSides[0].side, "after");
+  assert.equal(
+    Buffer.from(source)
+      .subarray(part.otherSides[0].start, part.otherSides[0].end)
+      .toString(),
+    part.text,
+  );
+  for (const ref of [
+    "#not-a-pointer",
+    "#/%zz",
+    "#/components/schemas/A~1B~0C/missing",
+    "#/components/schemas/A~2",
+  ]) {
+    const invalid = jsonReferenceContext(files, units(ref));
+    assert.equal(invalid.contexts.length, 0);
+    assert.ok(invalid.unresolved.length > 0);
+  }
+});
