@@ -297,12 +297,21 @@ async function validateInterruptedRestore(
     );
     try {
       const metadata = await handle.stat();
+      if (!metadata.isFile()) {
+        throw new StrictBackupError(`Restore output ${entry.name} is not a regular file.`);
+      }
+      // Match the existing token-store policy: owner-readable, no group/other access.
+      if ((metadata.mode & 0o077) !== 0 || (metadata.mode & 0o400) === 0) {
+        throw new StrictBackupError(
+          `Restore output ${entry.name} does not have private owner-readable permissions; no files were changed.`,
+        );
+      }
       if (metadata.nlink !== 1) {
         throw new StrictBackupError(
           `Restore output ${entry.name} has multiple links; no files were changed.`,
         );
       }
-      if (!metadata.isFile() || metadata.size !== bytes.length) {
+      if (metadata.size !== bytes.length) {
         throw new StrictBackupError(
           `Restore output ${entry.name} does not match the archive; no files were changed.`,
         );

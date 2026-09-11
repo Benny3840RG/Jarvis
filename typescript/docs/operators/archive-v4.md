@@ -154,11 +154,11 @@ from the archive, retains matching files, and writes only missing files:
 
 - The expected filenames and serialization come from the **archive**, not from
   the marker. A forged marker cannot expand that scope.
-- Any unexpected entry, non-regular or hard-linked file, changed bytes or truncated output makes
+- Any unexpected entry, non-regular or hard-linked file, non-private permissions, changed bytes or truncated output makes
   resume refuse before writing anything. Existing data and manifest files are
   never deleted during resume. Preserve and inspect refused output; use a fresh
   isolated destination when the incomplete files cannot be verified.
-- The marker must identify this same archive and its exact planned file list.
+- The marker must identify this same archive and its exact planned file list, and pass the same private-file and byte checks. Retained files must be owner-readable with no group/other access, matching the existing secure token-store policy. Fresh files are created with mode `0600`.
 - Live-directory exclusion compares both lexical and physical paths, resolving
   existing ancestors so symlink aliases cannot conceal overlap.
 
