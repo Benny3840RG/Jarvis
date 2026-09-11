@@ -5,6 +5,7 @@
  *   npm run monitor -- --once       # print one frame and exit (pipe-friendly)
  *   npm run monitor -- --interval 2 # refresh every 2s
  *   npm run monitor -- --no-color --width 100
+ *   npm run monitor -- --timeout 15 # give a slow link longer before UNAVAILABLE
  *
  * Reads the same `GET /api/v1/development/live-work` endpoint the browser HUD
  * uses (`JARVIS_API_BASE_URL` + `JARVIS_SERVICE_TOKEN`, from `.env.local`).
@@ -28,11 +29,22 @@ const HOME_AND_CLEAR = `${ESC}[H${ESC}[2J`;
 
 const SPINNER = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 
+/**
+ * `JarvisApiClient`'s underlying `fetch` has no timeout of its own — a host
+ * that accepts the connection but never responds (dead server, silently
+ * dropped packets, wrong port left open) would otherwise leave `await
+ * fetchLiveWork(...)` pending forever, which looks exactly like the monitor
+ * "hanging" on the first frame. `fetchLiveWork` below always settles within
+ * `timeoutMs`.
+ */
+const DEFAULT_TIMEOUT_MS = 8000;
+
 export interface MonitorArgs {
   readonly once: boolean;
   readonly intervalMs: number;
   readonly color: boolean;
   readonly width?: number;
+  readonly timeoutMs: number;
 }
 
 function errorMessage(error: unknown): string {
@@ -53,6 +65,7 @@ export function parseMonitorArgs(argv: readonly string[]): MonitorArgs {
   let color = true;
   let intervalSeconds = 5;
   let width: number | undefined;
+  let timeoutSeconds = DEFAULT_TIMEOUT_MS / 1000;
 
   const readValue = (
     flag: string,
@@ -98,22 +111,53 @@ export function parseMonitorArgs(argv: readonly string[]): MonitorArgs {
         width = columns;
         break;
       }
+      case "--timeout": {
+        const seconds = Number(readValue(flag, inline, cursor));
+        if (!Number.isFinite(seconds) || seconds < 1 || seconds > 120) {
+          throw new Error("--timeout must be a number of seconds between 1 and 120.");
+        }
+        timeoutSeconds = seconds;
+        break;
+      }
       default:
         throw new Error(`Unknown option: ${flag}`);
     }
   }
 
-  return { once, color, intervalMs: Math.round(intervalSeconds * 1000), width };
+  return {
+    once,
+    color,
+    intervalMs: Math.round(intervalSeconds * 1000),
+    width,
+    timeoutMs: Math.round(timeoutSeconds * 1000),
+  };
 }
 
-/** Fetches one snapshot, mapping any transport failure to a truthful UNAVAILABLE. */
-export async function fetchLiveWork(client: {
-  getDevelopmentLiveWork(): Promise<LiveWorkResult>;
-}): Promise<LiveWorkResult> {
+/**
+ * Fetches one snapshot. Always settles within `timeoutMs` and maps any
+ * transport failure — including a request that never responds — to a
+ * truthful UNAVAILABLE, never leaving the caller awaiting forever.
+ */
+export async function fetchLiveWork(
+  client: { getDevelopmentLiveWork(): Promise<LiveWorkResult> },
+  timeoutMs = DEFAULT_TIMEOUT_MS,
+): Promise<LiveWorkResult> {
+  let timer: NodeJS.Timeout | undefined;
   try {
-    return await client.getDevelopmentLiveWork();
+    return await Promise.race([
+      client.getDevelopmentLiveWork(),
+      new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(
+          () =>
+            reject(new Error(`Jarvis did not respond within ${Math.round(timeoutMs / 1000)}s.`)),
+          timeoutMs,
+        );
+      }),
+    ]);
   } catch (error: unknown) {
     return { status: "unavailable", reason: `Could not reach Jarvis: ${errorMessage(error)}` };
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -122,7 +166,7 @@ function resolveWidth(args: MonitorArgs): number | undefined {
 }
 
 async function runOnce(client: JarvisApiClient, args: MonitorArgs): Promise<void> {
-  const result = await fetchLiveWork(client);
+  const result = await fetchLiveWork(client, args.timeoutMs);
   process.stdout.write(
     `${renderLiveWorkTerminal(result, { color: args.color, width: resolveWidth(args) })}\n`,
   );
@@ -143,7 +187,7 @@ async function runLoop(client: JarvisApiClient, args: MonitorArgs): Promise<void
   const seconds = Math.round(args.intervalMs / 1000);
   try {
     for (let tick = 0; !abort.signal.aborted; tick += 1) {
-      const result = await fetchLiveWork(client);
+      const result = await fetchLiveWork(client, args.timeoutMs);
       if (abort.signal.aborted) break;
       const footer = `${SPINNER[tick % SPINNER.length]}  refreshing every ${seconds}s   ·   Ctrl+C to exit`;
       const frame = renderLiveWorkTerminal(result, {

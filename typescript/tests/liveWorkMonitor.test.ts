@@ -5,36 +5,50 @@ import type { LiveWorkResult } from "../src/development/liveWork.js";
 import { fetchLiveWork, parseMonitorArgs } from "../src/tools/runLiveWorkMonitor.js";
 
 describe("parseMonitorArgs", () => {
-  it("defaults to a 5s colour loop", () => {
+  it("defaults to a 5s colour loop with an 8s fetch timeout", () => {
     assert.deepEqual(parseMonitorArgs([]), {
       once: false,
       color: true,
       intervalMs: 5000,
       width: undefined,
+      timeoutMs: 8000,
     });
   });
 
-  it("parses --once, --no-color, and --interval / --width in both forms", () => {
+  it("parses --once, --no-color, and --interval / --width / --timeout in both forms", () => {
     assert.deepEqual(
-      parseMonitorArgs(["--once", "--no-color", "--interval", "2", "--width", "100"]),
+      parseMonitorArgs([
+        "--once",
+        "--no-color",
+        "--interval",
+        "2",
+        "--width",
+        "100",
+        "--timeout",
+        "15",
+      ]),
       {
         once: true,
         color: false,
         intervalMs: 2000,
         width: 100,
+        timeoutMs: 15000,
       },
     );
-    assert.deepEqual(parseMonitorArgs(["--interval=1.5", "--width=72"]), {
+    assert.deepEqual(parseMonitorArgs(["--interval=1.5", "--width=72", "--timeout=3"]), {
       once: false,
       color: true,
       intervalMs: 1500,
       width: 72,
+      timeoutMs: 3000,
     });
   });
 
   it("rejects out-of-range and unknown options", () => {
     assert.throws(() => parseMonitorArgs(["--interval", "0"]), /between 1 and 3600/);
     assert.throws(() => parseMonitorArgs(["--width", "10"]), /between 40 and 200/);
+    assert.throws(() => parseMonitorArgs(["--timeout", "0"]), /between 1 and 120/);
+    assert.throws(() => parseMonitorArgs(["--timeout", "121"]), /between 1 and 120/);
     assert.throws(() => parseMonitorArgs(["--interval"]), /needs a value/);
     assert.throws(() => parseMonitorArgs(["--frequency", "2"]), /Unknown option/);
   });
@@ -57,5 +71,17 @@ describe("fetchLiveWork", () => {
       result.status === "unavailable" ? result.reason : "",
       /Could not reach Jarvis: connect ECONNREFUSED/,
     );
+  });
+
+  it("never hangs: a request that never resolves still settles as UNAVAILABLE", async () => {
+    const result = await fetchLiveWork(
+      // Simulates a host that accepts the connection but never answers —
+      // the underlying fetch has no timeout of its own, so this promise
+      // deliberately never settles.
+      { getDevelopmentLiveWork: () => new Promise(() => {}) },
+      20,
+    );
+    assert.equal(result.status, "unavailable");
+    assert.match(result.status === "unavailable" ? result.reason : "", /did not respond within/);
   });
 });
