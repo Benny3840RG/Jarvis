@@ -1,8 +1,8 @@
-# S4 projects and notes: isolated restore adapter increment
+# S4 project memory: isolated restore adapter increments
 
 This extends the existing v4 restore module with `verifyRestoredS4ProjectNotes`.
 It uses the existing verification method and `groupChecksum`, but returns
-`completeness: partial` and `verifiedGroups: []`. A two-table slice cannot seal
+`completeness: partial` and `verifiedGroups: []`. This closed slice cannot seal
 `notesAndEvidence`, even when every captured table is empty. Existing archive
 coverage and full-recovery refusal remain unchanged.
 
@@ -11,12 +11,12 @@ mutation. No deployment, CLI, automatic import, or provider connection is added.
 Its caller must provide a single mutation transaction on an isolated database.
 It requires existing owner and independent approval credentials, validates the
 source owner, and refuses any nonempty application table, including foreign-owner
-rows. It inserts only projects and notes through the existing persisted schemas;
+rows. It inserts only projects, notes, supported projectRecords, terminal memoryChangeSets and their typed auditEvents through the existing persisted schemas;
 it never invokes ordinary create/approval/reconciliation operations. Failure
 rolls back the transaction; retry starts with an empty target.
 
 The source must be a canonical, checksummed S4 capture with the exact 17-table
-inventory and existing byte/row bounds. Every other table must be empty. Project
+inventory and existing byte/row bounds. Every unsupported table must be empty. The total across all supported tables remains capped at 2,000 rows. Project
 keys and note project scopes must form a closed graph: each `notes.projectId`
 resolves to a captured `projects.projectKey`. The normal note API permits scopes
 without a project aggregate, so such captures are deliberately refused by this
@@ -35,7 +35,8 @@ maps remain necessary for interpreting this partial verification result.
 Verification reuses `backupS4.capture` with owner and approval credentials to
 check the full destination S4 inventory and counts, then reads each restored
 project/note through existing queries and fresh `ConvexTotalityJournal` /
-`ConvexNoteStore` instances. It compares ordinary reads with the strict capture
+`ConvexNoteStore` instances. Project records use the existing `listByKind` query;
+change sets use `ConvexMemoryChangeSetService.get`; audit history uses `listByRequest`. It compares ordinary reads with the strict capture
 and computes a new checksum from the lossless tagged encoding of those actual rows, checking logical project
 edges, typed physical maps, duplicates and exact preserved fields. An extra row,
 missing row, changed value or changed row between those reads fails verification.
@@ -48,9 +49,42 @@ matching digests, duplicate-note replay protection, rejection of ambiguous or
 unsupported captures, nonempty-target refusal, existing-schema rejection,
 transaction rollback and safe retry. This is local adapter evidence only.
 
+## Closed terminal memory history
+
+The second increment admits projectRecords only for the existing memory definition
+kinds: fact, assumption, measurement and decision. Wrapper kind/recordId must match
+its definition; logical IDs are unique per project. Each project/kind group is
+limited to the ordinary query's 100-row maximum, with complete readback required.
+Component relationships, arbitrary attributes and other record kinds stay refused.
+
+Only applied and rejected change sets are admitted. Definitions are validated by
+the existing `normalizeMemoryRecords` and measurement uniqueness logic, and must
+already match the producer's canonical values. Applied definitions resolve their
+logical record IDs, but are not overwritten with newer current record values.
+Rejected definitions are proposals; they do not invent references to records that
+were never applied. Project revision, terminal timestamp and actor/history fields
+are checked. Proposed and approved change sets remain unsupported because they
+can become actionable through ordinary apply/approval operations.
+
+Only the four `memory.change_set.proposed`, `.approved`, `.applied`, `.rejected`
+audit producers are admitted, with exact payload shapes and matching change-set,
+request, project, record IDs, revision, actor and timestamp data. Each terminal
+change set must retain its required proposal/decision/application history. Other
+audit events, missing history, unknown payload fields and duplicate history events
+fail closed. Audit rows per request are limited to the ordinary reader's 100-row
+maximum. Legacy history lacking these fields is refused by this increment rather
+than silently repaired. Audit approval events are inert evidence, never replayed.
+
+Ordinary grouped reads are compared completely with the captured restored rows,
+including ordering, before tagged digest comparison. Tests build real histories
+through stage/approve/apply/reject. Applied replay creates no rows, changes no
+revision and adds no audit events; rejected apply refuses without changing data.
+An older applied definition remains distinct from a later replacement record.
+No live effect, approval, receipt or worker table has gained restore support.
+
 ## Remaining S4 graph classification
 
-The following inventory extends the capture contract. These tables remain
+The following inventory extends the capture contract. The closed memory subset below is now supported; other tables and producer forms remain
 unsupported by the restore slice. Logical relationships are preserved by typed
 scope, not by replacing strings matching a physical-ID map. Unclassified payloads
 are explicit blockers to group verification.
@@ -73,8 +107,7 @@ are explicit blockers to group verification.
 | omegaValidationProofs         | `recordValidationProof` resolves criterion IDs and evidenceRefs within the mission; proof ID is logical.                                                                                      | Restore these edges together and retain historical validation without asserting present completion.                                                                                                                                                                      |
 | omegaContradictionResolutions | Resolution writer verifies both mission-scoped evidence IDs and the actual contradiction edge.                                                                                                | Retain decision actor/time and edge; never invoke the approval-token resolution mutation during restore.                                                                                                                                                                 |
 
-The next closed increment should classify projectRecords kinds and their nested
-references, then add them with memoryChangeSets as a connected revision/history
-unit. Action/receipt/reconciliation restore needs an explicit inert operational
+The next increment must classify the remaining projectRecords kinds and their nested
+references. The terminal four-kind memory/history unit above is now supported. Action/receipt/reconciliation restore needs an explicit inert operational
 representation before it is safe. Development bindings cannot be called verified
 until S5 is present. None of these remaining edges is waived by this document.

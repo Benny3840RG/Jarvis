@@ -1,23 +1,37 @@
 import { jsonToConvex } from "convex/values";
+import { validateS4MemoryHistory } from "./s4MemoryHistory.js";
 import type { Doc, Id } from "../../../convex/_generated/dataModel.js";
 import { sha256Hex } from "../../actions/sha256.js";
 import {
   encodeS4Payload,
   S4_CAPTURE_VERSION,
   S4_MAX_PAYLOAD_BYTES,
+  S4_MAX_TOTAL_ROWS,
   S4_TABLES,
 } from "./convexCapture.js";
 
 export type S4EncodedCapture = { payloadJson: string; payloadSha256: string };
-export type S4ProjectNotesSource = {
-  ownerId: string;
-  projects: Doc<"projects">[];
-  notes: Doc<"notes">[];
+export const S4_RESTORE_TABLES = [
+  "projects",
+  "projectRecords",
+  "notes",
+  "memoryChangeSets",
+  "auditEvents",
+] as const;
+export type S4RestoreTable = (typeof S4_RESTORE_TABLES)[number];
+export type S4ProjectNotesSource = { ownerId: string } & {
+  [Table in S4RestoreTable]: Doc<Table>[];
 };
 export type S4ProjectNotesIdentities = {
-  projects: Array<{ sourceId: string; targetId: Id<"projects">; sourceCreationTime: number }>;
-  notes: Array<{ sourceId: string; targetId: Id<"notes">; sourceCreationTime: number }>;
+  [Table in S4RestoreTable]: Array<{
+    sourceId: string;
+    targetId: Id<Table>;
+    sourceCreationTime: number;
+  }>;
 };
+function supported(table: string): table is S4RestoreTable {
+  return S4_RESTORE_TABLES.some((value) => value === table);
+}
 function record(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
@@ -48,7 +62,15 @@ export function readS4ProjectNotes(capture: S4EncodedCapture): S4ProjectNotesSou
     decoded.tables.length !== S4_TABLES.length
   )
     throw new Error("Invalid S4 capture envelope or inventory.");
-  const result: S4ProjectNotesSource = { ownerId: decoded.ownerId, projects: [], notes: [] };
+  const result: S4ProjectNotesSource = {
+    ownerId: decoded.ownerId,
+    projects: [],
+    notes: [],
+    projectRecords: [],
+    memoryChangeSets: [],
+    auditEvents: [],
+  };
+  let totalRows = 0;
   for (let index = 0; index < S4_TABLES.length; index++) {
     const table = S4_TABLES[index];
     const entry = decoded.tables[index];
@@ -60,7 +82,9 @@ export function readS4ProjectNotes(capture: S4EncodedCapture): S4ProjectNotesSou
       entry.documents.length > 1000
     )
       throw new Error("Invalid S4 table inventory or row bound.");
-    if (table !== "projects" && table !== "notes") {
+    totalRows += entry.documents.length;
+    if (totalRows > S4_MAX_TOTAL_ROWS) throw new Error("S4 capture total row limit exceeded.");
+    if (!supported(table)) {
       if (entry.documents.length) throw new Error(`Unsupported nonempty S4 table: ${table}.`);
       continue;
     }
@@ -87,7 +111,12 @@ export function readS4ProjectNotes(capture: S4EncodedCapture): S4ProjectNotesSou
       previous = { time: row._creationTime, id: row._id };
     }
     if (table === "projects") result.projects = entry.documents as Doc<"projects">[];
-    else result.notes = entry.documents as Doc<"notes">[];
+    else if (table === "notes") result.notes = entry.documents as Doc<"notes">[];
+    else if (table === "projectRecords")
+      result.projectRecords = entry.documents as Doc<"projectRecords">[];
+    else if (table === "memoryChangeSets")
+      result.memoryChangeSets = entry.documents as Doc<"memoryChangeSets">[];
+    else result.auditEvents = entry.documents as Doc<"auditEvents">[];
   }
   const projects = new Set<string>();
   for (const row of result.projects) {
@@ -114,5 +143,6 @@ export function readS4ProjectNotes(capture: S4EncodedCapture): S4ProjectNotesSou
     if (receipts.has(key)) throw new Error("Duplicate note idempotency scope.");
     receipts.add(key);
   }
+  validateS4MemoryHistory(result);
   return result;
 }

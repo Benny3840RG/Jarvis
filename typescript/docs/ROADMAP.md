@@ -189,3 +189,10 @@ rather than an occasional operator action.
   Remaining S4 logical/physical/opaque references are classified in
   `architecture/backup-v4-s4-restore-slice.md`; project memory and effect-history
   inertness plus S5 bindings remain required before whole-group coverage.
+
+- S4 terminal project-memory increment: same isolated adapter now supports the four
+  existing memory-record kinds, applied/rejected change sets and their exact typed
+  memory audit history. Ordinary grouped/service reads and tagged digests verify
+  restoration; replay tests prove no new records, revisions or audit writes. Active
+  proposals, arbitrary payloads and effect/worker histories remain unsupported;
+  whole-group coverage remains partial with no verified group.
