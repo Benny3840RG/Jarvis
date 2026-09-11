@@ -595,3 +595,120 @@ test("compact context reaches every related changed module before expanding one 
     );
   validateReviewPlan(plan);
 });
+
+test("JSON segments retain bounded inserted entries between their paired source ranges", () => {
+  const entries = Array.from({ length: 220 }, (_, i) => [
+    `/api/v1/existing${i}`,
+    { get: { description: `existing${i} ${"x".repeat(450)}` } },
+  ]);
+  const inserted = [
+    "/api/v1/inserted",
+    { get: { description: `新🙂 ${"z".repeat(1800)}` } },
+  ];
+  const before = JSON.stringify(
+    { paths: Object.fromEntries(entries), components: { schemas: {} } },
+    null,
+    2,
+  );
+  const after = JSON.stringify(
+    {
+      paths: Object.fromEntries([
+        ...entries.slice(0, 60),
+        inserted,
+        ...entries.slice(60),
+      ]),
+      components: {
+        schemas: Object.fromEntries(
+          Array.from({ length: 65 }, (_, i) => [
+            `New${i}`,
+            { description: "y".repeat(1900) },
+          ]),
+        ),
+      },
+    },
+    null,
+    2,
+  );
+  const plan = make([
+    { filename: "api.json", status: "modified", before, after },
+  ]);
+  const source = Buffer.from(after);
+  const marker = source.indexOf(Buffer.from('"/api/v1/inserted"'));
+  let witnessed = false;
+  for (const prompt of plan.prompts) {
+    const payload = JSON.parse(prompt.split("\n\n")[1]);
+    const ranges = payload.manifest.segments[
+      payload.segmentIndex
+    ].ranges.filter((range) => range.side === "after");
+    for (let i = 1; i < ranges.length; i++) {
+      const start = ranges[i - 1].end,
+        end = ranges[i].start;
+      if (start <= marker && end > marker) {
+        witnessed = true;
+        assert.ok(
+          payload.supplemental.some((context) =>
+            context.parts.some(
+              (part) =>
+                part.side === "after" &&
+                part.start === start &&
+                part.end === end &&
+                part.text === source.subarray(start, end).toString("utf8"),
+            ),
+          ),
+          "inserted semantic entry missing between paired neighboring ranges",
+        );
+      }
+    }
+    assert.ok(Buffer.byteLength(prompt) <= 160 * 1024);
+  }
+  assert.equal(witnessed, true);
+  validateReviewPlan(plan);
+});
+
+test("oversized intervening JSON source stays explicitly unavailable within existing limits", () => {
+  const entries = Array.from({ length: 100 }, (_, i) => [
+    `/api/v1/existing${i}`,
+    { get: { description: "x".repeat(450) } },
+  ]);
+  const additions = Array.from({ length: 100 }, (_, i) => [
+    `/api/v1/inserted${i}`,
+    { get: { description: "y".repeat(1900) } },
+  ]);
+  const before = JSON.stringify(
+    { paths: Object.fromEntries(entries) },
+    null,
+    2,
+  );
+  const after = JSON.stringify(
+    {
+      paths: Object.fromEntries([
+        ...entries.slice(0, 50),
+        ...additions,
+        ...entries.slice(50),
+      ]),
+    },
+    null,
+    2,
+  );
+  const plan = make([
+    { filename: "api.json", status: "modified", before, after },
+  ]);
+  const payloads = plan.prompts.map((prompt) =>
+    JSON.parse(prompt.split("\n\n")[1]),
+  );
+  assert.ok(
+    payloads.some((payload) =>
+      payload.unavailableContext.some(
+        (context) =>
+          context.side === "after" &&
+          context.end > context.start &&
+          context.reason.includes("intervening JSON source exceeds"),
+      ),
+    ),
+  );
+  assert.ok(
+    plan.prompts.every((prompt) => Buffer.byteLength(prompt) <= 160 * 1024),
+  );
+  assert.ok(plan.prompts.length <= 16);
+  validateReviewPlan(plan);
+});

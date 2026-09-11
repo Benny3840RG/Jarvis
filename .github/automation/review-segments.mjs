@@ -202,13 +202,55 @@ export function buildReviewPlan(input) {
     const render = () =>
       `${instructions}\n\n${JSON.stringify({ manifest, manifestDigest: digest, segmentIndex: index, units, supplemental, unavailableContext, omittedContextDetails })}`;
     const covered = manifest.segments[index].ranges;
+    const supplied = [...covered];
+    // Paired JSON neighbors may straddle an added/deleted semantic entry.
+    // Repeat that exact intervening source without changing primary coverage.
+    for (let position = 1; position < covered.length; position++) {
+      const previous = covered[position - 1],
+        next = covered[position];
+      if (
+        previous.fileIndex !== next.fileIndex ||
+        previous.side !== next.side ||
+        previous.end >= next.start ||
+        !files[next.fileIndex].filename.endsWith(".json")
+      )
+        continue;
+      const reference = {
+        fileIndex: next.fileIndex,
+        side: next.side,
+        start: previous.end,
+        end: next.start,
+      };
+      const source = Buffer.from(files[next.fileIndex][next.side]);
+      supplemental.push({
+        fileIndex: next.fileIndex,
+        side: next.side,
+        role: "complete intervening JSON source between supplied neighboring ranges",
+        parts: [
+          {
+            ...reference,
+            text: source
+              .subarray(reference.start, reference.end)
+              .toString("utf8"),
+          },
+        ],
+      });
+      if (Buffer.byteLength(render()) > CONTEXT_BYTES - 2048) {
+        supplemental.pop();
+        unavailable({
+          ...reference,
+          reason:
+            "intervening JSON source exceeds remaining bounded context; request it if essential",
+        });
+      } else supplied.push(reference);
+    }
     const jsonContext = jsonReferenceContext(files, units);
     jsonContext.unresolved.forEach(unavailable);
     for (const context of jsonContext.contexts) {
       context.parts = context.parts.filter(
         (part) =>
           ![part, ...(part.otherSides ?? [])].every((reference) =>
-            covered.some(
+            supplied.some(
               (range) =>
                 range.fileIndex === reference.fileIndex &&
                 range.side === reference.side &&
@@ -243,7 +285,7 @@ export function buildReviewPlan(input) {
           .filter(
             (part) =>
               ![part, ...(part.otherSides ?? [])].every((reference) =>
-                covered.some(
+                supplied.some(
                   (range) =>
                     range.fileIndex === fileIndex &&
                     range.side === reference.side &&
@@ -284,7 +326,7 @@ export function buildReviewPlan(input) {
           .filter(
             (part) =>
               ![part, ...(part.otherSides ?? [])].every((reference) =>
-                covered.some(
+                supplied.some(
                   (range) =>
                     range.fileIndex === fileIndex &&
                     range.side === reference.side &&
