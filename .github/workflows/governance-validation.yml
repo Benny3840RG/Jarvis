@@ -10,23 +10,31 @@ on:
   pull_request:
     paths:
       - "docs/governance/guardrails.md"
+      - "docs/requirements/requirements.yaml"
       - "docs/traceability/action-family-registry.yaml"
       - "docs/traceability/action-map.generated.md"
       - "docs/registries/**"
       - "docs/validators/**"
       - "scripts/generate-action-map.rb"
       - "typescript/scripts/validate-action-map.mjs"
+      - "typescript/package.json"
+      - "typescript/package-lock.json"
+      - "typescript/.nvmrc"
       - ".github/workflows/governance-validation.yml"
   push:
     branches: [main]
     paths:
       - "docs/governance/guardrails.md"
+      - "docs/requirements/requirements.yaml"
       - "docs/traceability/action-family-registry.yaml"
       - "docs/traceability/action-map.generated.md"
       - "docs/registries/**"
       - "docs/validators/**"
       - "scripts/generate-action-map.rb"
       - "typescript/scripts/validate-action-map.mjs"
+      - "typescript/package.json"
+      - "typescript/package-lock.json"
+      - "typescript/.nvmrc"
       - ".github/workflows/governance-validation.yml"
 
 permissions:
