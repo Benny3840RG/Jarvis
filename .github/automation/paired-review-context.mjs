@@ -62,6 +62,7 @@ function jsonSpans(text, includeContainers = false) {
       node.children.length &&
       (node.location === "" ||
         node.location === "/paths" ||
+        node.location === "/packages" ||
         node.location === "/components" ||
         /^\/components\/[^/]+$/.test(node.location))
     ) {
