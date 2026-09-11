@@ -517,6 +517,50 @@ class FakeReconciliationStore implements ExternalReconciliationStore {
 }
 
 describe("AM-013 send quote tool", () => {
+  it("binds the approved sender and rejects missing selection before any delivery record", async () => {
+    const key = `business:${"a".repeat(64)}`;
+    class BoundProvider extends RecordingEmailProvider {
+      validateSender(value: string | undefined) {
+        if (value !== key) throw new Error("outlook-sender-connection-invalid");
+      }
+    }
+    const provider = new BoundProvider();
+    const deliveries = new InMemoryQuoteDeliveryRepository();
+    const service = new ToolExecutionService(
+      [
+        createQuoteSendToolDefinition(
+          quoteRepositoryStub(snapshot()),
+          provider,
+          deliveries,
+          quotePdfArtifactsStub(),
+        ),
+      ],
+      undefined,
+      new FakeReconciliationStore(),
+    );
+    const missing = await service.execute({
+      action: action(),
+      authority: "T2",
+      idempotencyKey: "missing-sender",
+    });
+    assert.notEqual(missing.status, "succeeded");
+    assert.equal(provider.calls.length, 0);
+    assert.deepEqual(await deliveries.listForQuote({ quoteId: "quote-1" }), []);
+    const selected = action();
+    selected.arguments = { ...selected.arguments, senderConnection: key };
+    const result = await service.execute({
+      action: selected,
+      authority: "T2",
+      idempotencyKey: "selected-sender",
+    });
+    assert.equal(result.status, "indeterminate");
+    assert.equal(provider.calls[0].senderConnection, key);
+    const changed = action({ actionId: "changed-sender" });
+    changed.arguments = { ...changed.arguments, senderConnection: `personal:${"b".repeat(64)}` };
+    await service.execute({ action: changed, authority: "T2", idempotencyKey: "changed-sender" });
+    assert.equal(provider.calls.length, 1);
+  });
+
   it("sends a finalized quote, registers the provider attempt, and records the delivery ledger", async () => {
     const provider = new RecordingEmailProvider();
     const quotes = quoteRepositoryStub(snapshot());

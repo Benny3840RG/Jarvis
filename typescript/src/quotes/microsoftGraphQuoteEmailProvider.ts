@@ -99,6 +99,10 @@ export class MicrosoftGraphQuoteEmailProvider {
     this.graphOrigin = options.graphOrigin ?? GRAPH_ORIGIN;
   }
 
+  validateSender(senderConnection: string | undefined): void {
+    if (senderConnection !== undefined) fail("outlook-sender-connection-invalid");
+  }
+
   private async token(signal: AbortSignal): Promise<string> {
     try {
       return accessToken(await this.getAccessToken(signal));

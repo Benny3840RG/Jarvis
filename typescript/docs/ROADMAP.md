@@ -48,6 +48,19 @@ it at the end of every session.
   OIDC provider, production deployment approval). These need operator-supplied
   credentials/decisions and are not actionable by an autonomous coding session.
 
+## Outlook separate connections (2026-09-09)
+
+- Added opt-in named personal/business Outlook connections with separate app IDs,
+  tenant-pinned business authority, token files and per-connection caches.
+- Quote approvals explicitly bind the sender configuration; durable references
+  route sends/reconciliation to the same account after restart. No fallback.
+- Added browser PKCE onboarding, read-only verification and an operator setup
+  script for separate registrations and single-user business consent. It does not
+  relax tenant policy, enable the runtime, send customer email or deploy.
+- Live Microsoft provisioning, both mailbox sign-ins, and per-account governed
+  draft/send/reconciliation evidence remain outstanding (#293/#294/#297).
+- See `docs/runbooks/outlook-delegated-oauth.md` for setup and migration boundaries.
+
 ## Archive v4 manifest review (2026-09-10)
 
 - S1 adds strict manifest parsing, coverage metadata and SHA-256 digest format
