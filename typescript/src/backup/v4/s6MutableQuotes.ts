@@ -86,6 +86,8 @@ export function readS6MutableQuotes(
     decoded.businessChecksum !== s6BusinessChecksum(business)
   )
     throw new Error("Invalid S6 inventory or business archive binding.");
+  // Composition requires a fully restorable closed S4 subset, not merely a
+  // serializable capture. Never drop unrelated audit/evidence domains here.
   const shared = composedS4 === undefined ? undefined : readS4ProjectNotes(composedS4);
   if (
     shared &&

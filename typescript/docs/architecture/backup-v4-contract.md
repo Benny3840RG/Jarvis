@@ -242,3 +242,11 @@ The caller must keep both isolated destinations quiescent throughout preflight,
 restore and verification; independent provider transactions do not prevent a concurrent
 writer between reads. No manifest group is sealed, no full recovery is claimed, and
 no finalized numbering, PDF, delivery or historical state is reconstructed by inference.
+
+Composed S4/S6 validation requires the entire supplied S4 capture to satisfy its
+closed restore subset. Capture can preserve a broader raw inventory; serialization
+alone never establishes restorability. Unrelated audit producers, including Omega
+events, remain explicitly unsupported and must make both S6 composition decoding
+and the joint restore refuse before insertion. They are never ignored or removed
+to make shared-action comparison pass. Broader evidence recovery remains work in
+the same authoritative archive path.

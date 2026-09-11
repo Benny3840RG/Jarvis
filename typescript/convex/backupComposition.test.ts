@@ -416,3 +416,48 @@ it("the union reader reads each owner table exactly once", async () => {
   expect(calls).toEqual(tables);
   expect(new Set(calls).size).toBe(22);
 });
+
+it("refuses unrelated audit domains in a captured composition without dropping history", async () => {
+  const source = await sourceFixture();
+  await source.mutation(anyApi.auditEvents.append, {
+    serviceToken,
+    projectKey: "p",
+    requestId: "unrelated-audit",
+    actor: "user",
+    eventType: "omega.mission.created",
+    payload: { missionId: "unrelated-mission" },
+  });
+  const material = await capture(source);
+  const s4 = JSON.parse(material.s4.payloadJson);
+  expect(
+    s4.tables
+      .find((entry: { table: string }) => entry.table === "auditEvents")
+      .documents.some(
+        (event: { eventType: string }) => event.eventType === "omega.mission.created",
+      ),
+  ).toBe(true);
+  const { readS6MutableQuotes } = await import("../src/backup/v4/s6MutableQuotes.js");
+  expect(() => readS6MutableQuotes(material.s6, business, material.s4)).toThrow(/audit|Audit/);
+  const { restoreS4S6 } = await import("./backupComposition.js");
+  const target = convexTest(schema, modules);
+  let insertions = 0;
+  await expect(
+    target.run((ctx) =>
+      restoreS4S6(
+        {
+          ...ctx,
+          db: {
+            ...ctx.db,
+            insert: async () => {
+              insertions++;
+              throw new Error("Unexpected insertion");
+            },
+          },
+        },
+        { ...material, business, serviceToken, approvalToken },
+      ),
+    ),
+  ).rejects.toThrow(/audit|Audit/);
+  expect(insertions).toBe(0);
+  expect((await capture(source)).s4.payloadJson).toContain("omega.mission.created");
+});
