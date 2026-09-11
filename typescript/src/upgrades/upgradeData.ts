@@ -36,6 +36,7 @@ export function cloneUpgrade(entry: Upgrade): Upgrade {
 
 /** Builds a fully-formed upgrade entry from input. */
 export function createUpgrade(input: UpgradeInput): Upgrade {
+  const createdAt = Date.now();
   const parts = input.parts === undefined ? undefined : normalizeParts(input.parts);
   return {
     id: randomUUID(),
@@ -50,8 +51,8 @@ export function createUpgrade(input: UpgradeInput): Upgrade {
     ...(parts ? { parts } : {}),
     ...(input.version && input.version.trim() ? { version: input.version.trim() } : {}),
     ...(input.occurredAt === undefined ? {} : { occurredAt: validTimestamp(input.occurredAt) }),
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
+    createdAt,
+    updatedAt: createdAt,
   };
 }
 
