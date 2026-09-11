@@ -192,3 +192,13 @@
 - REVIEW / CI: All three trusted review segments passed without findings or missing context in run `34597192627`; 13 exact-head checks passed, no unresolved threads. Post-merge TypeScript `34597635179`, CodeQL `34597634308` / `34597634596`, maintenance/completion `34597790272` / `34597790359` / `34597815168` all passed.
 - RUNTIME / EXTERNAL PROOF: Regression proof only; no provider writes or production deployment.
 - RESIDUAL RISK / NEXT ACTION: This closes the reviewed public-reader credential exposure. It does not commission integrations or exhaust security work. Integrate the landed projection into Live Work, finish bounded review context and isolated restore hardening, then continue remaining engineering.
+
+
+## Bounded review context — PR #509
+
+- BASE SHA: `dc12364c6c284d3a93c8c0414a529d5343897960`. Exact candidate `c4cfd5adabd5e0c6ebcd0bd7d41715226da052f6`; merge `8eb2ec9928e7fb959601da1bad4aa2c356ae4f7f` has identical tree.
+- GOAL / FILES: Four existing automation files deduplicate overlapping/identical context, reserve compact changed-hunk context across related modules, and resolve bounded literal/generated Convex references in root or nested paths. Original source coverage, digests, prompt/segment bounds and mandatory missing-context blocking remain enforced.
+- TESTS: 35 focused tests, 183 automation tests (six existing local fixture skips), full gate 1,394 Node / 241 Convex. Exact-head evidence `/tmp/jarvis-pr509-c4c-full.log`, `/tmp/jarvis-pr509-final-policy.log`, `/tmp/jarvis-pr509-root-convex-green.log`.
+- REVIEW / CI: Initial trusted review correctly found root-level Convex context omission; red regression reproduced it and the matcher was repaired. Fresh review `34598473743` passed without findings or context requests. All 13 exact-head checks passed with no unresolved review threads. Post-merge TypeScript `34598974250` and CodeQL `34598972819` / `34598972922` passed.
+- RUNTIME / SECURITY: Trusted hosted review exercised the existing bounded planner. No provider capability, approval, execution or completion authority was added.
+- RESIDUAL RISK / NEXT ACTION: Essential unavailable context still blocks any candidate; this does not certify Live Work. Finish #510 hard-link restore review, integrate its landed ancestry so recovery changes leave #502, then rerun final Live Work proof and review. Continue remaining recovery and commissioning work.
