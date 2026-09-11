@@ -53,6 +53,7 @@ jobs:
           .github/automation/development-worker-recovery.test.mjs
           .github/automation/review-prompt-transport.test.mjs
           .github/automation/review-segments.test.mjs
+          .github/automation/paired-review-context.test.mjs
 
       - name: Check out the pinned socket compatibility fixture
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
