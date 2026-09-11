@@ -593,6 +593,7 @@ describe("archive v4 restore — physical isolation and unchanged resume output"
         changedFile === "jarvis-state.json"
           ? "X".repeat((await stat(path.join(destination, changedFile))).size)
           : "operator replacement; never remove",
+        { mode: 0o600 },
       );
       await rename(replacement, path.join(destination, changedFile));
       const before = await contentsOf(destination);
@@ -601,7 +602,7 @@ describe("archive v4 restore — physical isolation and unchanged resume output"
           allowPartial: true,
           resume: true,
         }),
-        /does not match|changed|unmodified/,
+        /does not match the archive/,
       );
       assert.deepEqual(await contentsOf(destination), before);
     });
