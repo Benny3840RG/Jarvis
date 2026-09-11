@@ -30,6 +30,17 @@ afterEach(async () => {
 
 for (const { name, make } of stores()) {
   describe(name, () => {
+    it("uses one creation instant even when the clock advances between reads", async (t) => {
+      let now = 1_700_000_000_000;
+      t.mock.method(Date, "now", () => now++);
+      const store = make();
+      const entry = await store.add({ buildId: "b1", title: "One creation instant" });
+      assert.equal(entry.updatedAt, entry.createdAt);
+      const persisted = await store.get(entry.id);
+      assert.equal(persisted?.createdAt, entry.createdAt);
+      assert.equal(persisted?.updatedAt, entry.createdAt);
+    });
+
     it("adds a minimal upgrade and trims text", async () => {
       const store = make();
       const entry = await store.add({ buildId: "b1", title: "  New servo  " });
