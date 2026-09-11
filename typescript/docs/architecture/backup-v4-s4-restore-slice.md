@@ -66,7 +66,10 @@ already match the producer's canonical values. Applied definitions resolve their
 logical record IDs, but are not overwritten with newer current record values.
 Rejected definitions are proposals; they do not invent references to records that
 were never applied. Project revision, terminal timestamp and actor/history fields
-are checked. Proposed and approved change sets remain unsupported because they
+are checked. Creation, optional approval and terminal timestamps must be
+nondecreasing; equal instants are allowed. History affected by a clock rollback
+is refused by this partial slice and is never silently rewritten. Proposed and
+approved change sets remain unsupported because they
 can become actionable through ordinary apply/approval operations.
 
 Only the four `memory.change_set.proposed`, `.approved`, `.applied`, `.rejected`

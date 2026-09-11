@@ -101,6 +101,12 @@ export function validateS4MemoryHistory(source: S4ProjectNotesSource): void {
           (row.approvedBy !== "user" || !Number.isFinite(row.approvedAt))))
     )
       throw new Error("Invalid rejected memory history.");
+    if (
+      row.updatedAt < row.createdAt ||
+      (row.approvedAt !== undefined &&
+        (row.approvedAt < row.createdAt || row.approvedAt > row.updatedAt))
+    )
+      throw new Error("Invalid memory history timestamp order.");
     changes.set(row.changeSetId, row);
   }
   const histories = new Map<string, Set<string>>();

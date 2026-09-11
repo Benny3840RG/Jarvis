@@ -463,3 +463,86 @@ it("preserves owner-wide change-set identity while restoring multiple projects",
   ).rejects.toThrow(/duplicate memory change set project reference/);
   expect(await emptyTarget.run((ctx) => ctx.db.query("projects").collect())).toEqual([]);
 });
+
+it.each(["applied", "rejected", "rejected-after-approval"] as const)(
+  "requires ordered terminal timestamps for %s history",
+  async (state) => {
+    const { source } = await sourceFixture(
+      state === "rejected-after-approval" ? "approved" : state,
+    );
+    if (state === "rejected-after-approval")
+      await source.mutation(anyApi.memoryChangeSets.reject, {
+        serviceToken,
+        projectKey: "p",
+        changeSetId: "change",
+        reason: "No",
+      });
+    const capture = await source.query(anyApi.backupS4.capture, { serviceToken, approvalToken });
+    for (const variant of [
+      "equal",
+      "ordered",
+      "terminal-before-creation",
+      ...(state === "rejected" ? [] : ["approval-before-creation", "approval-after-terminal"]),
+    ]) {
+      const payload = JSON.parse(capture.payloadJson);
+      const rows = (table: string) =>
+        payload.tables.find((entry: { table: string }) => entry.table === table).documents;
+      const change = rows("memoryChangeSets")[0];
+      change.createdAt = 1000;
+      change.updatedAt =
+        variant === "equal" ? 1000 : variant === "terminal-before-creation" ? 500 : 3000;
+      if (change.approvedAt !== undefined)
+        change.approvedAt =
+          variant === "equal"
+            ? 1000
+            : variant === "approval-before-creation"
+              ? 500
+              : variant === "approval-after-terminal"
+                ? 4000
+                : 2000;
+      if (change.state === "applied") change.appliedAt = change.updatedAt;
+      else change.rejectedAt = change.updatedAt;
+      for (const event of rows("auditEvents")) {
+        event.createdAt = event.eventType.endsWith(".proposed")
+          ? change.createdAt
+          : event.eventType.endsWith(".approved")
+            ? change.approvedAt
+            : change.updatedAt;
+      }
+      const material = encodeS4Payload(payload);
+      const target = convexTest(schema, modules);
+      if (variant === "equal" || variant === "ordered") {
+        const ids = await target.run((ctx) =>
+          restoreS4ProjectNotes(ctx, { ...material, serviceToken, approvalToken }),
+        );
+        await verifyRestoredS4ProjectNotes(
+          material,
+          ids,
+          clientFor(target),
+          serviceToken,
+          approvalToken,
+        );
+      } else {
+        let insertions = 0;
+        await expect(
+          target.run((ctx) =>
+            restoreS4ProjectNotes(
+              {
+                ...ctx,
+                db: {
+                  ...ctx.db,
+                  insert: async () => {
+                    insertions++;
+                    throw new Error("Unexpected insertion");
+                  },
+                },
+              },
+              { ...material, serviceToken, approvalToken },
+            ),
+          ),
+        ).rejects.toThrow(/memory history timestamp order/);
+        expect(insertions).toBe(0);
+      }
+    }
+  },
+);
