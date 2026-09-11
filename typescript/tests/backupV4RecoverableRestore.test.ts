@@ -683,3 +683,24 @@ it("refuses a same-byte output symlink before opening it and preserves external 
   assert.deepEqual(await contentsOf(destination), before);
   assert.deepEqual(await readFile(external), externalBytes);
 });
+
+it("refuses a hard-linked in-progress marker without writing missing archive files", async () => {
+  const archive = await captureFixture();
+  const root = await scratch();
+  const destination = path.join(root, "restore");
+  await assert.rejects(
+    restoreArchiveV4(archive, destination, { allowPartial: true, injectAfterWrite: "state" }),
+    /Injected failure/,
+  );
+  const marker = path.join(destination, RESTORE_IN_PROGRESS_MARKER);
+  const external = path.join(root, "external-marker.json");
+  await link(marker, external);
+  const before = await contentsOf(destination);
+  const markerBytes = await readFile(external);
+  await assert.rejects(
+    restoreArchiveV4(archive, destination, { allowPartial: true, resume: true }),
+    /multiple links/,
+  );
+  assert.deepEqual(await contentsOf(destination), before);
+  assert.deepEqual(await readFile(external), markerBytes);
+});

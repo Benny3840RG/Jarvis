@@ -286,10 +286,10 @@ async function validateInterruptedRestore(
     archiveDocuments(archive).map(([key, document]) => [FILENAMES[key], document]),
   );
   expected.set(MANIFEST_FILE, archive.manifest);
+  expected.set(RESTORE_IN_PROGRESS_MARKER, marker);
   // Validate every document before any write. Names establish scope, not ownership.
   // Matching files are retained, so resume never deletes same-name replacements.
   for (const entry of entries) {
-    if (entry.name === RESTORE_IN_PROGRESS_MARKER) continue;
     const bytes = Buffer.from(serializeJson(expected.get(entry.name)), "utf8");
     const handle = await fs.open(
       path.join(dest, entry.name),
