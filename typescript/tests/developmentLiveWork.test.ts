@@ -79,7 +79,7 @@ describe("foldLiveWorkPipeline", () => {
     );
     assert.equal(node(pipeline.nodes, "review").status, "blocked");
     assert.equal(node(pipeline.nodes, "stage").status, "blocked");
-    assert.equal(node(pipeline.nodes, "ci").status, "done");
+    assert.equal(node(pipeline.nodes, "ci").status, "pending");
   });
 
   it("blocks the merge node on an indeterminate merge outcome", () => {

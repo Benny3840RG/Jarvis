@@ -204,12 +204,16 @@ function reachedPipelineOrder(events: readonly LiveWorkEventRow[], currentOrder:
   let attemptStart = 0;
   for (let index = 0; index < events.length; index++) {
     const event = events[index];
-    if (event?.eventType === "DEV_TRANSITION_COMMITTED" && event.to === "BUILDING")
+    if (
+      event?.eventType === "DEV_TRANSITION_COMMITTED" &&
+      (event.to === "BUILDING" || event.to === "REPAIR_REQUIRED")
+    )
       attemptStart = index;
   }
   for (const event of events.slice(Math.max(0, attemptStart))) {
     if (event.eventType !== "DEV_TRANSITION_COMMITTED") continue;
-    for (const label of [event.from, event.to]) {
+    const labels = event.to === "REPAIR_REQUIRED" ? [event.to] : [event.from, event.to];
+    for (const label of labels) {
       if (label !== undefined && label in STATE_ORDER) {
         reached = Math.max(reached, STATE_ORDER[label as DevelopmentState]);
       }

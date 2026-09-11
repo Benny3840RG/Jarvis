@@ -323,6 +323,10 @@ describe("archive v4 restore — an interruption is recoverable, not just refuse
         now: () => CREATED_AT,
       });
       assert.equal(result.resumed, true);
+      const completion = JSON.parse(await readFile(result.markerPath, "utf8")) as {
+        files: string[];
+      };
+      assert.deepEqual(completion.files, RESTORE_ORDER);
       assert.equal(await exists(path.join(destination, RESTORE_IN_PROGRESS_MARKER)), false);
 
       const reference = path.join(await scratch(), "reference");
@@ -364,6 +368,8 @@ describe("archive v4 restore — an interruption is recoverable, not just refuse
       resume: true,
     });
     assert.equal(result.resumed, true);
+    const completion = JSON.parse(await readFile(result.markerPath, "utf8")) as { files: string[] };
+    assert.deepEqual(completion.files, RESTORE_ORDER);
   });
 });
 
