@@ -10,6 +10,7 @@ import {
   symlink,
   rename,
   link,
+  chmod,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -704,3 +705,23 @@ it("refuses a hard-linked in-progress marker without writing missing archive fil
   assert.deepEqual(await contentsOf(destination), before);
   assert.deepEqual(await readFile(external), markerBytes);
 });
+
+for (const filename of ["jarvis-state.json", "manifest.json", RESTORE_IN_PROGRESS_MARKER]) {
+  it(`refuses non-private retained ${filename} without changing any output`, async () => {
+    const archive = await captureFixture();
+    const destination = path.join(await scratch(), "restore");
+    await assert.rejects(
+      restoreArchiveV4(archive, destination, { allowPartial: true, injectAfterVerify: true }),
+      /Injected failure/,
+    );
+    const target = path.join(destination, filename);
+    await chmod(target, 0o644);
+    const before = await contentsOf(destination);
+    await assert.rejects(
+      restoreArchiveV4(archive, destination, { allowPartial: true, resume: true }),
+      /private.*permissions/,
+    );
+    assert.deepEqual(await contentsOf(destination), before);
+    assert.equal((await stat(target)).mode & 0o777, 0o644);
+  });
+}
