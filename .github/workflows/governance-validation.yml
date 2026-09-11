@@ -10,6 +10,7 @@ on:
   pull_request:
     paths:
       - "docs/governance/guardrails.md"
+      - "docs/requirements/requirements.yaml"
       - "docs/traceability/action-family-registry.yaml"
       - "docs/traceability/action-map.generated.md"
       - "docs/registries/**"
@@ -21,6 +22,7 @@ on:
     branches: [main]
     paths:
       - "docs/governance/guardrails.md"
+      - "docs/requirements/requirements.yaml"
       - "docs/traceability/action-family-registry.yaml"
       - "docs/traceability/action-map.generated.md"
       - "docs/registries/**"
