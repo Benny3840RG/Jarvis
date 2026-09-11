@@ -1,3 +1,4 @@
+import type { S4EncodedCapture } from "./s4ProjectNotes.js";
 import { isDeepStrictEqual } from "node:util";
 import { makeFunctionReference } from "convex/server";
 import type { ConvexClientLike } from "../../persistence/convexPersistence.js";
@@ -14,6 +15,7 @@ export async function prepareS6MutableRestore(
   capture: S6Capture,
   archiveInput: unknown,
   destination: string,
+  composedS4?: S4EncodedCapture,
 ) {
   const archive = parseArchiveV4(archiveInput);
   const business = archive.groups.businessRecords;
@@ -24,7 +26,7 @@ export async function prepareS6MutableRestore(
     throw new Error("S6 actual business readback evidence is missing.");
   if (businessUnresolvedReferences(business).length)
     throw new Error("S6 requires a closed business reference graph.");
-  const source = readS6MutableQuotes(capture, business);
+  const source = readS6MutableQuotes(capture, business, composedS4);
   return {
     source,
     business,
@@ -41,8 +43,14 @@ export async function verifyRestoredS6MutableQuotes(input: {
   client: ConvexClientLike;
   serviceToken: string;
   approvalToken: string;
+  composedS4?: { source: S4EncodedCapture; restored: S4EncodedCapture };
 }) {
-  const prepared = await prepareS6MutableRestore(input.capture, input.archive, input.destination);
+  const prepared = await prepareS6MutableRestore(
+    input.capture,
+    input.archive,
+    input.destination,
+    input.composedS4?.source,
+  );
   const { source, business } = prepared;
   const actualCapture = (await input.client.query(
     makeFunctionReference<"query">("backupS6:capture"),
@@ -52,7 +60,7 @@ export async function verifyRestoredS6MutableQuotes(input: {
       businessChecksum: prepared.businessChecksum,
     },
   )) as S6Capture;
-  const actual = readS6MutableQuotes(actualCapture, business);
+  const actual = readS6MutableQuotes(actualCapture, business, input.composedS4?.restored);
   const restored = {
     ...actual,
     quotes: [...actual.quotes],
@@ -121,7 +129,12 @@ export async function verifyRestoredS6MutableQuotes(input: {
   if (!isDeepStrictEqual([...list].sort(byId), expectedList.sort(byId)))
     throw new Error("S6 normal quote list mismatch.");
   // Repeat S3 proof at the end; caller must keep both isolated destinations quiescent.
-  await prepareS6MutableRestore(input.capture, input.archive, input.destination);
+  await prepareS6MutableRestore(
+    input.capture,
+    input.archive,
+    input.destination,
+    input.composedS4?.source,
+  );
   return {
     completeness: "partial" as const,
     verifiedGroups: [] as ArchiveVerifiedGroup[],

@@ -6,6 +6,7 @@ import type { BusinessRecordsPayload } from "../src/backup/v4/businessSource.js"
 import {
   readS6MutableQuotes,
   type S6Capture,
+  type S6Source,
   type S6Identities,
 } from "../src/backup/v4/s6MutableQuotes.js";
 
@@ -25,11 +26,18 @@ export async function restoreS6MutableQuotes(
   for (const table of Object.keys(schema.tables) as TableNames[])
     if ((await ctx.db.query(table).take(1)).length)
       throw new Error("S6 isolated restore requires an empty application database.");
+  validateS6PhysicalIds(ctx, source);
+  return insertS6Rows(ctx, source);
+}
+export function validateS6PhysicalIds(ctx: Pick<MutationCtx, "db">, source: S6Source): void {
   for (const row of source.quotes)
     if (!ctx.db.normalizeId("quotes", row._id)) throw new Error("Invalid quote physical identity.");
   for (const row of source.quoteRevisions)
     if (!ctx.db.normalizeId("quoteRevisions", row._id))
       throw new Error("Invalid revision physical identity.");
+}
+/** Typed insertion only; complete preflight and empty-target guard belong to its calling transaction. */
+export async function insertS6Rows(ctx: MutationCtx, source: S6Source): Promise<S6Identities> {
   const identities: S6Identities = { quotes: [], quoteRevisions: [] };
   for (const row of source.quotes) {
     const { _id, _creationTime, ...fields } = row;

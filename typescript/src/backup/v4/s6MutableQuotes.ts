@@ -1,3 +1,4 @@
+import { readS4ProjectNotes, type S4EncodedCapture } from "./s4ProjectNotes.js";
 import { jsonToConvex } from "convex/values";
 import type { Doc, Id } from "../../../convex/_generated/dataModel.js";
 import { buildInitialQuoteRecords } from "../../../convex/quoteValidators.js";
@@ -55,6 +56,7 @@ export function s6BusinessChecksum(business: BusinessRecordsPayload): string {
 export function readS6MutableQuotes(
   capture: S6Capture,
   business: BusinessRecordsPayload,
+  composedS4?: S4EncodedCapture,
 ): S6Source {
   if (
     typeof capture.payloadJson !== "string" ||
@@ -84,6 +86,13 @@ export function readS6MutableQuotes(
     decoded.businessChecksum !== s6BusinessChecksum(business)
   )
     throw new Error("Invalid S6 inventory or business archive binding.");
+  const shared = composedS4 === undefined ? undefined : readS4ProjectNotes(composedS4);
+  if (
+    shared &&
+    (shared.ownerId !== decoded.ownerId ||
+      JSON.parse(composedS4!.payloadJson).capturedAt !== decoded.capturedAt)
+  )
+    throw new Error("S4/S6 owner or capture timestamp mismatch.");
   const source: S6Source = {
     ownerId: decoded.ownerId,
     businessChecksum: decoded.businessChecksum as string,
@@ -102,7 +111,14 @@ export function readS6MutableQuotes(
     )
       throw new Error("Invalid S6 table inventory or bound.");
     if (table !== "quotes" && table !== "quoteRevisions") {
-      if (entry.documents.length) throw new Error(`Unsupported nonempty S6 dependency: ${table}.`);
+      if (table === "toolActions" && shared) {
+        if (
+          encodeS4Payload(entry.documents).payloadJson !==
+          encodeS4Payload(shared.toolActions).payloadJson
+        )
+          throw new Error("S4/S6 shared action inventory mismatch.");
+      } else if (entry.documents.length)
+        throw new Error(`Unsupported nonempty S6 dependency: ${table}.`);
       continue;
     }
     const ids = new Set<string>();
