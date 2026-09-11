@@ -21,6 +21,33 @@ afterEach(() => {
 });
 
 describe("build log updatedAt", () => {
+  it("persists identical creation timestamps when the clock advances between reads", async () => {
+    const t = harness();
+    const build = await t.mutation(api.builds.create, {
+      serviceToken: SERVICE_TOKEN,
+      name: "Advancing clock build",
+      kind: "test",
+    });
+    let now = 1_700_000_000_000;
+    const clock = vi.spyOn(Date, "now").mockImplementation(() => now++);
+    try {
+      const created = await t.mutation(api.buildLogs.create, {
+        serviceToken: SERVICE_TOKEN,
+        buildId: build._id,
+        title: "One creation instant",
+      });
+      expect(created.updatedAt).toBe(created.createdAt);
+      const persisted = await t.query(api.buildLogs.get, {
+        serviceToken: SERVICE_TOKEN,
+        id: created._id,
+      });
+      expect(persisted?.createdAt).toBe(created.createdAt);
+      expect(persisted?.updatedAt).toBe(created.createdAt);
+    } finally {
+      clock.mockRestore();
+    }
+  });
+
   it("stamps updatedAt on create and bumps it on update", async () => {
     const t = harness();
     const build = await t.mutation(api.builds.create, {
