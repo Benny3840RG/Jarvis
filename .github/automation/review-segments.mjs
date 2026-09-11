@@ -272,10 +272,8 @@ export function buildReviewPlan(input) {
         });
       }
     }
-    const direct = new Set([
-      ...indices,
-      ...changedImportContext(files, indices),
-    ]);
+    const directImports = changedImportContext(files, indices, true);
+    const direct = new Set([...indices, ...directImports]);
     const contexts = relatedChangedContext(files, indices)
       .map((fileIndex) => {
         if (!contextCache.has(fileIndex))
@@ -366,28 +364,51 @@ export function buildReviewPlan(input) {
     // modules over optional surrounding-hunk expansions. Full source includes
     // unchanged imported declarations and all their same-module dependencies.
     const completedImports = new Set();
-    for (const fileIndex of changedImportContext(files, indices)) {
+    for (const fileIndex of directImports) {
       const position = relatedPositions.get(fileIndex);
-      if (position === undefined) continue;
       const key = `complete:${fileIndex}`;
       if (!contextCache.has(key))
         contextCache.set(key, supplementalUnits(files, fileIndex, false, true));
       const context = {
         fileIndex,
         role: "complete direct-import module including same-module dependencies",
-        parts: contextCache.get(key),
+        parts: contextCache
+          .get(key)
+          .filter(
+            (part) =>
+              ![part, ...(part.otherSides ?? [])].every((reference) =>
+                supplied.some(
+                  (range) =>
+                    range.fileIndex === fileIndex &&
+                    range.side === reference.side &&
+                    range.start <= reference.start &&
+                    range.end >= reference.end,
+                ),
+              ),
+          ),
       };
-      if (Buffer.byteLength(JSON.stringify(context)) > 48 * 1024) continue;
-      const previous = supplemental[position];
-      supplemental[position] = context;
+      if (!context.parts.length) continue;
+      if (Buffer.byteLength(JSON.stringify(context)) > 48 * 1024) {
+        unavailable({
+          fileIndex,
+          reason:
+            "complete direct-import supplement exceeds 48 KiB bound; request missing declarations if essential",
+        });
+        continue;
+      }
+      const previous =
+        position === undefined ? undefined : supplemental[position];
+      const targetPosition = position ?? supplemental.length;
+      supplemental[targetPosition] = context;
       if (Buffer.byteLength(render()) > CONTEXT_BYTES - 2048) {
-        supplemental[position] = previous;
+        if (position === undefined) supplemental.pop();
+        else supplemental[position] = previous;
         unavailable({
           fileIndex,
           reason:
             "complete direct-import module exceeds remaining bounded context; request missing declarations if essential",
         });
-      } else completedImports.add(position);
+      } else completedImports.add(targetPosition);
     }
     for (const context of contexts.filter(
       (context) => !direct.has(context.fileIndex),
