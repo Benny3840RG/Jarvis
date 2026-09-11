@@ -160,7 +160,8 @@ from the archive, retains matching files, and writes only missing files:
   isolated destination when the incomplete files cannot be verified.
 - The marker must identify this same archive and its exact planned file list, and pass the same private-file and byte checks. Retained files must be owner-readable with no group/other access, matching the existing secure token-store policy. Fresh files are created with mode `0600`.
 - Live-directory exclusion compares both lexical and physical paths, resolving
-  existing ancestors so symlink aliases cannot conceal overlap.
+  existing ancestors so symlink aliases cannot conceal overlap. Dangling symlinks
+  in either path are refused before destination creation, including ancestor links.
 
 Keep the destination and its ancestors exclusive to this restore until verification
 finishes. These checks do not protect against another process concurrently changing

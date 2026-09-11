@@ -167,6 +167,15 @@ async function physicalPath(target: string): Promise<string> {
     return await fs.realpath(absolute);
   } catch (error: unknown) {
     if (!isNodeError(error) || error.code !== "ENOENT") throw error;
+    const entry = await fs.lstat(absolute).catch((statError: unknown) => {
+      if (isNodeError(statError) && statError.code === "ENOENT") return null;
+      throw statError;
+    });
+    if (entry?.isSymbolicLink()) {
+      throw new StrictBackupError(
+        `Cannot establish restore isolation through dangling symbolic link ${absolute}.`,
+      );
+    }
     const parent = path.dirname(absolute);
     if (parent === absolute) throw error;
     return path.join(await physicalPath(parent), path.basename(absolute));
