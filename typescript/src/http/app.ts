@@ -80,6 +80,7 @@ import { resolveHttpAppConfig, type HttpAppConfig } from "./config.js";
 import { evaluateRemoteGatewayRequest } from "./remoteGateway.js";
 import { createOidcVerifier, type OidcVerifier } from "./oidcVerifier.js";
 import { JarvisHttpModule } from "./jarvisHttpModule.js";
+import { configuredSecrets, redactedRequestPath } from "./problemDetails.js";
 import { REQUEST_ID_HEADER, resolveRequestId } from "./requestId.js";
 import {
   captureHttpBoundary,
@@ -277,11 +278,11 @@ export async function createJarvisHttpApp(
     options.noteStore ?? (usesEnvironment ? new ConvexNoteStore() : new InMemoryNoteStore());
   const adapter = new FastifyAdapter({
     bodyLimit: remoteGateway?.maxRequestBytes ?? 1_048_576,
+    // A caller-supplied request id is echoed back in `X-Request-Id` and lands in
+    // logs, so no configured bearer credential may be accepted as one — the
+    // approval tokens included, not just the service tokens.
     genReqId: (request: IncomingMessage) =>
-      resolveRequestId(request.headers[REQUEST_ID_HEADER], [
-        config.currentToken,
-        config.previousToken,
-      ]),
+      resolveRequestId(request.headers[REQUEST_ID_HEADER], configuredSecrets(config)),
   });
   if (remoteGateway !== undefined) {
     adapter.getInstance().addHook("onRequest", async (request, reply) => {
@@ -317,7 +318,7 @@ export async function createJarvisHttpApp(
           title: "Remote Gateway Request Rejected",
           status,
           detail: "The request did not satisfy the configured remote gateway policy.",
-          instance: request.url.split("?")[0] ?? "/",
+          instance: redactedRequestPath(request.url, config),
         });
     });
   }

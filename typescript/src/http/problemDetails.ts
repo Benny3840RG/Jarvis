@@ -86,9 +86,9 @@ export class JarvisProblem extends HttpException {
   }
 }
 
-function requestPath(url: string): string {
+export function redactedRequestPath(url: string, config: HttpAppConfig): string {
   const path = url.split("?", 1)[0];
-  return path.startsWith("/") ? path : "/";
+  return redact(path.startsWith("/") ? path : "/", configuredSecrets(config), "redacted");
 }
 
 function safeStatus(exception: unknown): number {
@@ -108,16 +108,79 @@ function definitionFor(exception: unknown, status: number): ProblemDefinition {
   return DEFAULT_PROBLEMS[status] ?? INTERNAL_PROBLEM;
 }
 
+// A response must not spend unbounded work matching caller-controlled text.
+// On exhaustion suppress the whole field, never return potentially secret text.
+const MAX_REDACTION_WORK = 100_000;
+
 function redact(
   value: string,
   secrets: Array<string | undefined>,
   replacement = "[REDACTED]",
 ): string {
+  // A replacement marker is output too. If it contains any configured
+  // credential, substituting it would reproduce that credential verbatim.
+  // Suppress the whole field instead of trying to invent a second marker.
+  if (secrets.some((secret) => secret && replacement.includes(secret))) return "";
+
   let result = value;
+  let remainingWork = MAX_REDACTION_WORK;
   for (const secret of secrets) {
-    if (secret !== undefined) result = result.split(secret).join(replacement);
+    if (!secret) continue;
+    remainingWork -= result.length + secret.length;
+    if (remainingWork < 0) return replacement;
+    const characters = [...secret].map((literal) => ({
+      literal,
+      encoded: [...Buffer.from(literal)]
+        .map((byte) => `%${byte.toString(16).padStart(2, "0")}`)
+        .join(""),
+    }));
+    let copiedThrough = 0;
+    const output: string[] = [];
+    for (let start = 0; start < result.length; start++) {
+      // Keep all possible offsets when a literal percent also begins an
+      // encoded character. Explicit work accounting bounds that ambiguity.
+      let positions = new Set([start]);
+      for (const { literal, encoded } of characters) {
+        const next = new Set<number>();
+        for (const position of positions) {
+          if (--remainingWork < 0) return replacement;
+          if (result.startsWith(literal, position)) next.add(position + literal.length);
+          if (
+            result[position] === "%" &&
+            result.slice(position, position + encoded.length).toLowerCase() === encoded
+          )
+            next.add(position + encoded.length);
+        }
+        positions = next;
+        if (positions.size === 0) break;
+      }
+      if (positions.size === 0) continue;
+      let end = start;
+      for (const position of positions) end = Math.max(end, position);
+      output.push(result.slice(copiedThrough, start), replacement);
+      copiedThrough = end;
+      start = end - 1;
+    }
+    output.push(result.slice(copiedThrough));
+    result = output.join("");
   }
   return result;
+}
+
+/**
+ * Every bearer credential this config carries, so no response body can echo one
+ * back. The approval tokens gate tool *execution* approval
+ * (`toolActionController.ts`), so omitting them from redaction while redacting
+ * the service tokens protected the lower-value credential and not the higher-value
+ * one. Anything added to `HttpAppConfig` that is a secret belongs here too.
+ */
+export function configuredSecrets(config: HttpAppConfig): string[] {
+  return [
+    config.currentToken,
+    config.previousToken,
+    config.currentApprovalToken,
+    config.previousApprovalToken,
+  ].filter((secret): secret is string => typeof secret === "string" && secret.length > 0);
 }
 
 @Catch()
@@ -135,12 +198,8 @@ export class ProblemDetailsFilter implements ExceptionFilter {
       type: `urn:jarvis:problem:${definition.slug}`,
       title: definition.title,
       status,
-      detail: redact(definition.detail, [this.config.currentToken, this.config.previousToken]),
-      instance: redact(
-        requestPath(request.url),
-        [this.config.currentToken, this.config.previousToken],
-        "redacted",
-      ),
+      detail: redact(definition.detail, configuredSecrets(this.config)),
+      instance: redactedRequestPath(request.url, this.config),
       requestId,
     };
 
