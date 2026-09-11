@@ -239,3 +239,90 @@ it("preserves older applied definitions alongside a later replacement record", a
   });
   expect(current[0].record.statement).toBe("Later observation");
 });
+
+it.each(["rejectedBy", "rejectedAt", "rejectedReason"])(
+  "refuses applied history with %s before insertion",
+  async (field) => {
+    const { capture } = await sourceFixture();
+    const payload = JSON.parse(capture.payloadJson);
+    const change = payload.tables.find(
+      (entry: { table: string }) => entry.table === "memoryChangeSets",
+    ).documents[0];
+    change[field] =
+      field === "rejectedAt" ? change.updatedAt : field === "rejectedBy" ? "user" : "No";
+    const target = convexTest(schema, modules);
+    let insertions = 0;
+    await expect(
+      target.run((ctx) =>
+        restoreS4ProjectNotes(
+          {
+            ...ctx,
+            db: {
+              ...ctx.db,
+              insert: async () => {
+                insertions++;
+                throw new Error("Unexpected insertion");
+              },
+            },
+          },
+          { ...encodeS4Payload(payload), serviceToken, approvalToken },
+        ),
+      ),
+    ).rejects.toThrow(/Invalid applied memory history/);
+    expect(insertions).toBe(0);
+  },
+);
+
+it.each(["valid", "missing-actor", "missing-time", "invalid-time"])(
+  "validates approved-then-rejected metadata: %s",
+  async (variant) => {
+    const { source } = await sourceFixture("approved");
+    await source.mutation(anyApi.memoryChangeSets.reject, {
+      serviceToken,
+      projectKey: "p",
+      changeSetId: "change",
+      reason: "No",
+    });
+    const capture = await source.query(anyApi.backupS4.capture, { serviceToken, approvalToken });
+    const payload = JSON.parse(capture.payloadJson);
+    const change = payload.tables.find(
+      (entry: { table: string }) => entry.table === "memoryChangeSets",
+    ).documents[0];
+    if (variant === "missing-actor") delete change.approvedBy;
+    if (variant === "missing-time") delete change.approvedAt;
+    if (variant === "invalid-time") change.approvedAt = "invalid";
+    const target = convexTest(schema, modules);
+    if (variant === "valid") {
+      const identities = await target.run((ctx) =>
+        restoreS4ProjectNotes(ctx, { ...encodeS4Payload(payload), serviceToken, approvalToken }),
+      );
+      await verifyRestoredS4ProjectNotes(
+        encodeS4Payload(payload),
+        identities,
+        clientFor(target),
+        serviceToken,
+        approvalToken,
+      );
+    } else {
+      let insertions = 0;
+      await expect(
+        target.run((ctx) =>
+          restoreS4ProjectNotes(
+            {
+              ...ctx,
+              db: {
+                ...ctx.db,
+                insert: async () => {
+                  insertions++;
+                  throw new Error("Unexpected insertion");
+                },
+              },
+            },
+            { ...encodeS4Payload(payload), serviceToken, approvalToken },
+          ),
+        ),
+      ).rejects.toThrow(/Invalid rejected memory history/);
+      expect(insertions).toBe(0);
+    }
+  },
+);

@@ -82,7 +82,10 @@ export function validateS4MemoryHistory(source: S4ProjectNotesSource): void {
         row.approvedBy !== "user" ||
         !Number.isFinite(row.approvedAt) ||
         !Number.isFinite(row.appliedAt) ||
-        row.appliedAt !== row.updatedAt)
+        row.appliedAt !== row.updatedAt ||
+        row.rejectedBy !== undefined ||
+        row.rejectedAt !== undefined ||
+        row.rejectedReason !== undefined)
     )
       throw new Error("Invalid applied memory history revision or terminal timestamp.");
     if (
@@ -92,7 +95,9 @@ export function validateS4MemoryHistory(source: S4ProjectNotesSource): void {
         row.rejectedAt !== row.updatedAt ||
         typeof row.rejectedReason !== "string" ||
         row.appliedAt !== undefined ||
-        row.appliedRevision !== undefined)
+        row.appliedRevision !== undefined ||
+        ((row.approvedBy !== undefined || row.approvedAt !== undefined) &&
+          (row.approvedBy !== "user" || !Number.isFinite(row.approvedAt))))
     )
       throw new Error("Invalid rejected memory history.");
     changes.set(row.changeSetId, row);
