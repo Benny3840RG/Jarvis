@@ -532,3 +532,70 @@ test("root-level Convex context resolves uniquely without matching lookalike dir
     );
   }
 });
+
+test("large npm lockfiles preserve complete package-entry semantics within review bounds", async () => {
+  const { buildReviewPlan, validateReviewPlan } =
+    await import("./review-segments.mjs");
+  const packages = { "": { devDependencies: { "js-yaml": "^4.3.1" } } };
+  for (let i = 0; i < 500; i++)
+    packages[`node_modules/@scope/package-${i}`] = {
+      version: "1.0.0",
+      integrity: "sha512-" + "a".repeat(380),
+      dependencies: { dependency: "^2.0.0" },
+    };
+  const before = JSON.stringify({ lockfileVersion: 3, packages }, null, 2);
+  const after = before.replace('"^4.3.1"', '"^4.3.2"');
+  const files = [
+    {
+      filename: "typescript/package-lock.json",
+      status: "modified",
+      before,
+      after,
+    },
+  ];
+  const units = pairedUnits(files);
+  const entry = units.find(
+    (unit) => unit.label === "/packages/node_modules~1@scope~1package-7",
+  );
+  assert.ok(entry, "each package retains its complete semantic object");
+  assert.equal(entry.parts.length, 1);
+  assert.deepEqual(
+    entry.parts[0].references.map((ref) => ref.side),
+    ["before", "after"],
+  );
+  assert.deepEqual(JSON.parse("{" + entry.parts[0].text + "}"), {
+    "node_modules/@scope/package-7": packages["node_modules/@scope/package-7"],
+  });
+  for (const side of ["before", "after"]) {
+    const parts = units
+      .flatMap((unit) =>
+        unit.parts.flatMap((part) =>
+          part.references
+            .filter((ref) => ref.side === side)
+            .map((ref) => ({ ...ref, text: part.text })),
+        ),
+      )
+      .sort((a, b) => a.start - b.start);
+    assert.equal(parts[0].start, 0);
+    for (let i = 1; i < parts.length; i++)
+      assert.equal(parts[i - 1].end, parts[i].start);
+    assert.equal(parts.map((part) => part.text).join(""), files[0][side]);
+  }
+  const plan = buildReviewPlan({
+    identity: {
+      pullNumber: 485,
+      headSha: "a".repeat(40),
+      baseSha: "b".repeat(40),
+      fingerprint: "c".repeat(64),
+    },
+    repository: "Benny3840RG/Jarvis",
+    runId: 1,
+    runAttempt: 1,
+    files,
+  });
+  validateReviewPlan(plan);
+  assert.ok(plan.prompts.length > 1 && plan.prompts.length <= 16);
+  assert.ok(
+    plan.prompts.every((prompt) => Buffer.byteLength(prompt) <= 160 * 1024),
+  );
+});
