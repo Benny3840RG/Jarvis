@@ -232,3 +232,14 @@
 - MERGE / GOVERNANCE: Normal guarded landing used exact head matching and the existing all-checks policy; no bypass or settings change. Fetched main matches the reviewed tree. Post-merge CI is pending at this entry; it must pass before dependent landing.
 - RUNTIME / RESIDUAL RISK: Isolated filesystem recovery regressions only. No live restore or production deployment. Destination and ancestors require exclusive ownership during restore; no hostile concurrent-filesystem guarantee is claimed. Authoritative recovery coverage remains partial.
 - BACKLOG / NEXT ACTION: Restore hardening is removed from the Live Work diff through normal ancestry. Complete current-main Live Work verification and hosted review, then continue partial recovery and remaining engineering.
+
+
+## Intervening review context — PR #513 landed
+
+- BASE SHA: `d7ee18199f702b105a685d0ba7abdaebc000954f`. Exact candidate `db520d12420f7b37456b63db737322d986a54187`; merge `66e9c36e1e999a41c4d8d7ab3ac877f13e6898c4` has identical tree.
+- GOAL / FILES: Two existing review-planner files supply bounded intervening JSON source between paired neighboring ranges. Primary coverage, source digests, 160 KiB context, 16 segments and 32 KiB manifest limits remain enforced; unavailable essential context still blocks review.
+- TESTS / REVIEW: 38 focused tests, 186 automation passes (six existing fixture skips), full gate 1,415 Node / 241 Convex. Trusted review `34611865680` passed without findings or context requests; all 13 exact-head checks passed and no unresolved thread remained. Evidence `/tmp/jarvis-review-gap-{red,green,policy,full}.log` and `/tmp/jarvis-pr513-db520-review`.
+- RUNTIME / SECURITY: Actual Live Work review-plan replay supplies the previously requested JSON bytes 168156–170207. No model authority or source-coverage waiver was added. No provider mutation or deployment occurred.
+- CI / BACKLOG: Fetched merge tree verified; post-merge CI pending at this entry. Earlier #510 post-merge TypeScript `34607641486`, code analysis `34607640132` / `34607640588`, maintenance/completion `34607837019` / `34607837086` / `34607864523` all passed.
+- LIVE WORK REPAIRS: Candidate `9d25f4b9b3273ef7d14acef28a86214116f3917d` removes unvalidated merge-receipt pointers from non-MERGED transitions and legacy projection, represents authoritative CONTRADICTED state despite stale readiness, and activates existing mission-copy positioning/grid CSS. Regressions reproduced both authority-display defects. Focused 38 Node / 12 Convex and both type checks passed. No browser surface is available; no visual inspection is claimed.
+- RESIDUAL RISK / NEXT ACTION: Verify integrated Live Work full gate, repeat exact-candidate MCP proof and fresh trusted review before landing. Active cloud lifecycle commissioning, complete recovery coverage and production commissioning remain open engineering or external work; no production-completion claim.
