@@ -137,7 +137,6 @@ references. The terminal four-kind memory/history unit above is now supported. A
 representation before it is safe. Development bindings cannot be called verified
 until S5 is present. None of these remaining edges is waived by this document.
 
-
 ## Joint S4 and mutable-quote proof (2026-09-11)
 
 The existing backup surface now exposes `backupS4.captureJoint`: owner and separate
