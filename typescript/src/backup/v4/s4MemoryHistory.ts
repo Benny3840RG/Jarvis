@@ -1,5 +1,7 @@
 import {
   normalizeMemoryRecords,
+  normalizeMemoryRecord,
+  type MemoryRecord,
   assertUniqueMeasurementKeys,
 } from "../../../convex/memoryChangeSetLogic.js";
 import { encodeS4Payload } from "./convexCapture.js";
@@ -25,6 +27,7 @@ export function validateS4MemoryHistory(source: S4ProjectNotesSource): void {
   const projects = new Map(source.projects.map((row) => [row.projectKey, row]));
   const records = new Map<string, (typeof source.projectRecords)[number]>();
   const groups = new Map<string, number>();
+  const currentByProject = new Map<string, MemoryRecord[]>();
   for (const row of source.projectRecords) {
     if (
       !projects.has(row.projectKey) ||
@@ -37,11 +40,20 @@ export function validateS4MemoryHistory(source: S4ProjectNotesSource): void {
     const identity = key(row.projectKey, row.recordId);
     if (records.has(identity)) throw new Error("Duplicate project record logical identity.");
     records.set(identity, row);
+    // The storage validator and the four-kind check above establish this subset.
+    const definition = row.record as MemoryRecord;
+    const normalized = normalizeMemoryRecord(definition);
+    if (encodeS4Payload(normalized).payloadJson !== encodeS4Payload(definition).payloadJson)
+      throw new Error("Current memory record does not match its canonical producer value.");
+    const current = currentByProject.get(row.projectKey) ?? [];
+    current.push(definition);
+    currentByProject.set(row.projectKey, current);
     const group = key(row.projectKey, row.kind);
     const count = (groups.get(group) ?? 0) + 1;
     groups.set(group, count);
     if (count > 100) throw new Error("Project record group exceeds ordinary read limit of 100.");
   }
+  for (const current of currentByProject.values()) assertUniqueMeasurementKeys(current);
   const changes = new Map<string, (typeof source.memoryChangeSets)[number]>();
   for (const row of source.memoryChangeSets) {
     const project = projects.get(row.projectKey);

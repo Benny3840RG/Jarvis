@@ -411,6 +411,24 @@ it("preserves owner-wide change-set identity while restoring multiple projects",
     changeSetId: "q-change",
     reason: "No",
   });
+  // Identical measurement names/units in different projects remain valid.
+  await source.mutation(anyApi.memoryChangeSets.stage, {
+    ...proposal,
+    changeSetId: "q-current",
+    requestId: "q-current-request",
+  });
+  await source.mutation(anyApi.memoryChangeSets.approve, {
+    serviceToken,
+    projectKey: "q",
+    changeSetId: "q-current",
+    expectedRevision: 3,
+  });
+  await source.mutation(anyApi.memoryChangeSets.apply, {
+    serviceToken,
+    projectKey: "q",
+    changeSetId: "q-current",
+    expectedRevision: 3,
+  });
   const capture = await source.query(anyApi.backupS4.capture, { serviceToken, approvalToken });
   const target = convexTest(schema, modules);
   const ids = await target.run((ctx) =>
@@ -546,3 +564,50 @@ it.each(["applied", "rejected", "rejected-after-approval"] as const)(
     }
   },
 );
+
+it.each([
+  "invalid-confidence",
+  "authoritative-inference",
+  "noncanonical-statement",
+  "invalid-timestamp",
+  "duplicate-measurement",
+])("refuses %s in current project records before insertion", async (variant) => {
+  const { source } = await sourceFixture();
+  if (variant === "duplicate-measurement") {
+    await source.mutation(anyApi.projectRecords.upsert, {
+      serviceToken,
+      projectKey: "p",
+      record: { ...records[2], recordId: "duplicate-measurement", name: "width", unit: "MM" },
+    });
+  }
+  const capture = await source.query(anyApi.backupS4.capture, { serviceToken, approvalToken });
+  const payload = JSON.parse(capture.payloadJson);
+  const current = payload.tables.find(
+    (entry: { table: string }) => entry.table === "projectRecords",
+  ).documents;
+  const fact = current.find((row: { kind: string }) => row.kind === "fact").record;
+  if (variant === "invalid-confidence") fact.confidence = 2;
+  if (variant === "authoritative-inference") fact.source = "inference";
+  if (variant === "noncanonical-statement") fact.statement = " Observed ";
+  if (variant === "invalid-timestamp") fact.recordedAt = "2026-09-11";
+  const target = convexTest(schema, modules);
+  let insertions = 0;
+  await expect(
+    target.run((ctx) =>
+      restoreS4ProjectNotes(
+        {
+          ...ctx,
+          db: {
+            ...ctx.db,
+            insert: async () => {
+              insertions++;
+              throw new Error("Unexpected insertion");
+            },
+          },
+        },
+        { ...encodeS4Payload(payload), serviceToken, approvalToken },
+      ),
+    ),
+  ).rejects.toThrow(/confidence|authoritative|canonical|measurement key/);
+  expect(insertions).toBe(0);
+});

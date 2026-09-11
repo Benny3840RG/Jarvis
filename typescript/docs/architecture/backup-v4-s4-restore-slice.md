@@ -55,6 +55,10 @@ The second increment admits projectRecords only for the existing memory definiti
 kinds: fact, assumption, measurement and decision. Wrapper kind/recordId must match
 its definition; project-record logical IDs are unique per project. Each project/kind group is
 limited to the ordinary query's 100-row maximum, with complete readback required.
+Current definitions also pass the existing single-record canonical normalizer
+without silently changing values. Measurement name/unit keys must be unique
+within each project; identical keys in separate projects remain valid. The
+change-set limit of 20 definitions does not limit the whole current inventory.
 Component relationships, arbitrary attributes and other record kinds stay refused.
 
 Only applied and rejected change sets are admitted. Change-set IDs remain unique
