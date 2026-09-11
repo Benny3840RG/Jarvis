@@ -182,3 +182,13 @@
 - CI / RUNTIME PROOF: Fourteen hosted checks passed, including actual Ruby action-map generation; the conditional Claude job was skipped. No provider runtime or production change occurred.
 - MERGE SHA: `ffb50b6b862910ca530809f0c7a4bb3be0a4c6bd`, landed through the normal helper with exact-head matching. Fetched main equals the reviewed tree. Post-merge TypeScript `34595854514`, governance `34595854541` and CodeQL `34595854147` / `34595853926` passed.
 - BACKLOG / NEXT ACTION: Requirements matrix and runbooks now distinguish ownership assignment from live enforcement. Continue #502 context repair and the existing security/recovery queue; no production-ready claim is made.
+
+
+## Public evidence security — PR #505
+
+- BASE SHA: `ffb50b6b862910ca530809f0c7a4bb3be0a4c6bd`. Exact candidate `acf5d3426c4c3243011d4d2f575ae6f56761f8bc`; merge `dc12364c6c284d3a93c8c0414a529d5343897960` has identical tree.
+- GOAL / FILES: Existing Convex public-evidence projections remove lease credentials and raw canonical request fingerprints from non-claim responses, Development history, and rejected audit payloads. Nine files; raw persistence, idempotency comparisons and rightful claim responses retain their existing authority.
+- TESTS: Exact-candidate complete gate passed, 1,394 Node / 241 Convex. Evidence `/tmp/jarvis-pr505-acf-full.log`.
+- REVIEW / CI: All three trusted review segments passed without findings or missing context in run `34597192627`; 13 exact-head checks passed, no unresolved threads. Post-merge TypeScript `34597635179`, CodeQL `34597634308` / `34597634596`, maintenance/completion `34597790272` / `34597790359` / `34597815168` all passed.
+- RUNTIME / EXTERNAL PROOF: Regression proof only; no provider writes or production deployment.
+- RESIDUAL RISK / NEXT ACTION: This closes the reviewed public-reader credential exposure. It does not commission integrations or exhaust security work. Integrate the landed projection into Live Work, finish bounded review context and isolated restore hardening, then continue remaining engineering.
