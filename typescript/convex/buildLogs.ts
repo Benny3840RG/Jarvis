@@ -95,6 +95,7 @@ export const create = mutation({
     const ownerId = requireOwner(args.serviceToken);
     const buildId = await requireOwnedBuildId(ctx, ownerId, args.buildId);
     const body = cleanOptionalText(args.body, "Build log body");
+    const createdAt = Date.now();
     const id = await ctx.db.insert("buildLogs", {
       ownerId,
       buildId,
@@ -102,8 +103,8 @@ export const create = mutation({
       title: requireText(args.title, "Build log title"),
       ...(body === undefined ? {} : { body }),
       ...(args.occurredAt === undefined ? {} : { occurredAt: args.occurredAt }),
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
+      createdAt,
+      updatedAt: createdAt,
     });
     const entry = await ctx.db.get("buildLogs", id);
     if (!entry) throw new Error("Build log creation failed.");

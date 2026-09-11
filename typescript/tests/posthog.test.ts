@@ -187,15 +187,15 @@ describe("PostHog runtime telemetry", () => {
     };
     const telemetry = createPostHogTelemetryFromEnv(developmentEnv(), fetchImpl);
 
-    const startedAt = Date.now();
-    captureHttpBoundary(telemetry, {
+    const result = captureHttpBoundary(telemetry, {
       method: "GET",
       statusCode: 200,
       durationMs: 1,
     });
-    const elapsedMs = Date.now() - startedAt;
-
-    assert.ok(elapsedMs < 20);
+    // Prove the request boundary returns synchronously while transport remains
+    // unresolved. Wall-clock thresholds also measure unrelated host scheduling.
+    assert.equal(result, undefined);
+    assert.equal(aborted, false);
     await telemetry.flush();
     assert.equal(aborted, true);
     // One HTTP boundary emits operator-action, latency, and usage events.
