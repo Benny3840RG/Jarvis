@@ -725,3 +725,24 @@ for (const filename of ["jarvis-state.json", "manifest.json", RESTORE_IN_PROGRES
     assert.equal((await stat(target)).mode & 0o777, 0o644);
   });
 }
+
+for (const relative of [false, true]) {
+  for (const nested of [false, true]) {
+    it(`refuses a dangling ${relative ? "relative" : "absolute"} live symlink${nested ? " ancestor" : ""} before creating output`, async () => {
+      const archive = await captureFixture();
+      const root = await scratch();
+      const destination = path.join(root, "restore");
+      const alias = path.join(root, "live");
+      await symlink(relative ? "restore" : destination, alias);
+      await assert.rejects(
+        restoreArchiveV4(archive, destination, {
+          allowPartial: true,
+          liveDataDir: nested ? path.join(alias, "nested") : alias,
+        }),
+        /dangling symbolic link|overlaps the live/,
+      );
+      assert.deepEqual(await readdir(root), ["live"]);
+      assert.equal(await exists(destination), false);
+    });
+  }
+}
