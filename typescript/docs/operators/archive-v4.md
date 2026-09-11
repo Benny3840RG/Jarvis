@@ -154,7 +154,7 @@ from the archive, retains matching files, and writes only missing files:
 
 - The expected filenames and serialization come from the **archive**, not from
   the marker. A forged marker cannot expand that scope.
-- Any unexpected entry, non-regular file, changed bytes or truncated output makes
+- Any unexpected entry, non-regular or hard-linked file, changed bytes or truncated output makes
   resume refuse before writing anything. Existing data and manifest files are
   never deleted during resume. Preserve and inspect refused output; use a fresh
   isolated destination when the incomplete files cannot be verified.

@@ -9,6 +9,7 @@ import {
   writeFile,
   symlink,
   rename,
+  link,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -408,7 +409,7 @@ describe("archive v4 restore — recovery never touches what it did not write", 
     });
   }
 
-  it("validates all entry types before deleting any interrupted restore output", async () => {
+  it("validates all entry types before opening any interrupted restore output", async () => {
     const archive = await captureFixture();
     const dir = await scratch();
     const destination = path.join(dir, "restore");
@@ -635,4 +636,71 @@ it("rejects a live descendant whose name merely starts with two dots", async () 
     /overlaps the live/,
   );
   assert.deepEqual(await readdir(live), []);
+});
+
+it("refuses byte-identical hard-linked output without modifying either link", async () => {
+  const archive = await captureFixture();
+  const root = await scratch();
+  const destination = path.join(root, "restore");
+  await assert.rejects(
+    restoreArchiveV4(archive, destination, { allowPartial: true, injectAfterWrite: "state" }),
+    /Injected failure/,
+  );
+  const target = path.join(destination, "jarvis-state.json");
+  const external = path.join(root, "external-state.json");
+  await rename(target, external);
+  await link(external, target);
+  const before = await contentsOf(destination);
+  const externalBytes = await readFile(external);
+  await assert.rejects(
+    restoreArchiveV4(archive, destination, { allowPartial: true, resume: true }),
+    /multiple links/,
+  );
+  assert.deepEqual(await contentsOf(destination), before);
+  assert.deepEqual(await readFile(external), externalBytes);
+  assert.equal((await stat(target)).ino, (await stat(external)).ino);
+});
+
+it("refuses a same-byte output symlink before opening it and preserves external data", async () => {
+  const archive = await captureFixture();
+  const root = await scratch();
+  const destination = path.join(root, "restore");
+  await assert.rejects(
+    restoreArchiveV4(archive, destination, { allowPartial: true, injectAfterWrite: "state" }),
+    /Injected failure/,
+  );
+  const target = path.join(destination, "jarvis-state.json");
+  const external = path.join(root, "external-state.json");
+  await rename(target, external);
+  await symlink(external, target);
+  const before = await contentsOf(destination);
+  const externalBytes = await readFile(external);
+  // The existing Dirent check rejects links before the bounded O_NOFOLLOW read.
+  await assert.rejects(
+    restoreArchiveV4(archive, destination, { allowPartial: true, resume: true }),
+    /is not a regular file/,
+  );
+  assert.deepEqual(await contentsOf(destination), before);
+  assert.deepEqual(await readFile(external), externalBytes);
+});
+
+it("refuses a hard-linked in-progress marker without writing missing archive files", async () => {
+  const archive = await captureFixture();
+  const root = await scratch();
+  const destination = path.join(root, "restore");
+  await assert.rejects(
+    restoreArchiveV4(archive, destination, { allowPartial: true, injectAfterWrite: "state" }),
+    /Injected failure/,
+  );
+  const marker = path.join(destination, RESTORE_IN_PROGRESS_MARKER);
+  const external = path.join(root, "external-marker.json");
+  await link(marker, external);
+  const before = await contentsOf(destination);
+  const markerBytes = await readFile(external);
+  await assert.rejects(
+    restoreArchiveV4(archive, destination, { allowPartial: true, resume: true }),
+    /multiple links/,
+  );
+  assert.deepEqual(await contentsOf(destination), before);
+  assert.deepEqual(await readFile(external), markerBytes);
 });
