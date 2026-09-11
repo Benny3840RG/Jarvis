@@ -1,6 +1,6 @@
 # Branch protection for `main`
 
-Branch protection on `main` cannot be configured from a pull request or workflow file. It must be applied by the repository owner through GitHub's repository settings.
+Committing this document does not configure protection. Apply the owner-approved configuration through GitHub repository settings or the authenticated rulesets API.
 
 ## Required settings
 
