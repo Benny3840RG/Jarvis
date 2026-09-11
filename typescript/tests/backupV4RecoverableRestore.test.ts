@@ -1,5 +1,15 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  rm,
+  stat,
+  writeFile,
+  symlink,
+  rename,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, describe, it } from "node:test";
@@ -313,6 +323,10 @@ describe("archive v4 restore — an interruption is recoverable, not just refuse
         now: () => CREATED_AT,
       });
       assert.equal(result.resumed, true);
+      const completion = JSON.parse(await readFile(result.markerPath, "utf8")) as {
+        files: string[];
+      };
+      assert.deepEqual(completion.files, RESTORE_ORDER);
       assert.equal(await exists(path.join(destination, RESTORE_IN_PROGRESS_MARKER)), false);
 
       const reference = path.join(await scratch(), "reference");
@@ -354,10 +368,77 @@ describe("archive v4 restore — an interruption is recoverable, not just refuse
       resume: true,
     });
     assert.equal(result.resumed, true);
+    const completion = JSON.parse(await readFile(result.markerPath, "utf8")) as { files: string[] };
+    assert.deepEqual(completion.files, RESTORE_ORDER);
   });
 });
 
 describe("archive v4 restore — recovery never touches what it did not write", () => {
+  for (const alteration of ["extra-file", "missing-file", "duplicate-file", "contract-version"]) {
+    it(`refuses a changed recovery marker (${alteration}) without deleting any files`, async () => {
+      const archive = await captureFixture();
+      const dir = await scratch();
+      const destination = path.join(dir, "restore");
+      await assert.rejects(
+        restoreArchiveV4(archive, destination, { allowPartial: true, injectAfterWrite: "state" }),
+        /Injected failure/,
+      );
+      const markerPath = path.join(destination, RESTORE_IN_PROGRESS_MARKER);
+      const marker = JSON.parse(await readFile(markerPath, "utf8")) as {
+        contractVersion: string;
+        plannedFiles: string[];
+      };
+      if (alteration === "extra-file") {
+        await writeFile(path.join(destination, "operator-notes.txt"), "do not delete", "utf8");
+        marker.plannedFiles.push("operator-notes.txt");
+      } else if (alteration === "missing-file") {
+        marker.plannedFiles.pop();
+      } else if (alteration === "duplicate-file") {
+        marker.plannedFiles.push(marker.plannedFiles[0]!);
+      } else {
+        marker.contractVersion = "unexpected-contract";
+      }
+      await writeFile(markerPath, JSON.stringify(marker), "utf8");
+      const before = await contentsOf(destination);
+      await assert.rejects(
+        restoreArchiveV4(archive, destination, { allowPartial: true, resume: true }),
+        /recovery marker does not match the archive/,
+      );
+      assert.deepEqual(await contentsOf(destination), before);
+    });
+  }
+
+  it("validates all entry types before deleting any interrupted restore output", async () => {
+    const archive = await captureFixture();
+    const dir = await scratch();
+    const destination = path.join(dir, "restore");
+    await assert.rejects(
+      restoreArchiveV4(archive, destination, { allowPartial: true, injectAfterWrite: "clients" }),
+      /Injected failure/,
+    );
+    const markerPath = path.join(destination, RESTORE_IN_PROGRESS_MARKER);
+    const markerBefore = await readFile(markerPath, "utf8");
+    const statePath = path.join(destination, "jarvis-state.json");
+    await rm(statePath);
+    await mkdir(statePath);
+    const namesBefore = (await readdir(destination)).sort();
+    const filesBefore = new Map<string, string>();
+    for (const name of namesBefore) {
+      if (name !== "jarvis-state.json")
+        filesBefore.set(name, await readFile(path.join(destination, name), "utf8"));
+    }
+    await assert.rejects(
+      restoreArchiveV4(archive, destination, { allowPartial: true, resume: true }),
+      /is not a regular file/,
+    );
+    assert.deepEqual((await readdir(destination)).sort(), namesBefore);
+    assert.equal(await readFile(markerPath, "utf8"), markerBefore);
+    for (const [name, content] of filesBefore) {
+      assert.equal(await readFile(path.join(destination, name), "utf8"), content);
+    }
+    assert.equal((await stat(statePath)).isDirectory(), true);
+  });
+
   it("refuses to resume a directory holding a file the restore did not write", async () => {
     const archive = await captureFixture();
     const dir = await scratch();
@@ -469,4 +550,89 @@ describe("archive v4 restore — no effect outside the destination", () => {
     await restoreArchiveV4(archive, path.join(parent, "restore"), { allowPartial: true });
     assert.deepEqual(await readdir(parent), ["restore"]);
   });
+});
+
+describe("archive v4 restore — physical isolation and unchanged resume output", () => {
+  for (const aliasTarget of ["destination-parent", "live-directory"] as const) {
+    it(`rejects physical live overlap through a symlinked ${aliasTarget}`, async () => {
+      const archive = await captureFixture();
+      const root = await scratch();
+      const live = path.join(root, "live");
+      const alias = path.join(root, "alias");
+      await mkdir(live);
+      await symlink(live, alias);
+      const destination = path.join(aliasTarget === "destination-parent" ? alias : live, "restore");
+      await assert.rejects(
+        restoreArchiveV4(archive, destination, {
+          allowPartial: true,
+          liveDataDir: aliasTarget === "live-directory" ? alias : live,
+        }),
+        /overlaps the live|symbolic link/,
+      );
+      assert.deepEqual(await readdir(live), []);
+    });
+  }
+
+  for (const changedFile of ["jarvis-state.json", "manifest.json"] as const) {
+    it(`preserves every file when ${changedFile} was replaced after interruption`, async () => {
+      const archive = await captureFixture();
+      const root = await scratch();
+      const destination = path.join(root, "restore");
+      await assert.rejects(
+        restoreArchiveV4(archive, destination, {
+          allowPartial: true,
+          injectAfterVerify: true,
+        }),
+        /Injected failure/,
+      );
+      const replacement = path.join(root, "replacement");
+      await writeFile(
+        replacement,
+        changedFile === "jarvis-state.json"
+          ? "X".repeat((await stat(path.join(destination, changedFile))).size)
+          : "operator replacement; never remove",
+      );
+      await rename(replacement, path.join(destination, changedFile));
+      const before = await contentsOf(destination);
+      await assert.rejects(
+        restoreArchiveV4(archive, destination, {
+          allowPartial: true,
+          resume: true,
+        }),
+        /does not match|changed|unmodified/,
+      );
+      assert.deepEqual(await contentsOf(destination), before);
+    });
+  }
+});
+
+it("retains exact matching output files when resuming missing writes", async () => {
+  const archive = await captureFixture();
+  const destination = path.join(await scratch(), "restore");
+  await assert.rejects(
+    restoreArchiveV4(archive, destination, {
+      allowPartial: true,
+      injectAfterWrite: "state",
+    }),
+    /Injected failure/,
+  );
+  const target = path.join(destination, "jarvis-state.json");
+  const before = await stat(target);
+  await restoreArchiveV4(archive, destination, { allowPartial: true, resume: true });
+  const after = await stat(target);
+  assert.equal(after.ino, before.ino);
+  assert.equal(after.mtimeMs, before.mtimeMs);
+});
+
+it("rejects a live descendant whose name merely starts with two dots", async () => {
+  const archive = await captureFixture();
+  const live = await scratch();
+  await assert.rejects(
+    restoreArchiveV4(archive, path.join(live, "..restore"), {
+      allowPartial: true,
+      liveDataDir: live,
+    }),
+    /overlaps the live/,
+  );
+  assert.deepEqual(await readdir(live), []);
 });

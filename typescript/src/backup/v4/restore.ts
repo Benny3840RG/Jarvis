@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import fs, { type FileHandle } from "node:fs/promises";
+import { constants } from "node:fs";
 import path from "node:path";
 import { isDeepStrictEqual } from "node:util";
 
@@ -38,8 +39,8 @@ export const RESTORE_MARKER = ".jarvis-archive-v4-complete.json";
  * verified and completed. Its presence is what makes an interrupted restore
  * *recoverable* rather than merely refused: it names the archive being
  * materialised and every file that restore intends to write, so a resume can
- * prove it is continuing the same work and can discard exactly what it wrote —
- * never a file it did not put there.
+ * prove it is continuing the same work and can verify existing bytes against the archive and retain matching output.
+ * A filename alone does not establish ownership.
  */
 export const RESTORE_IN_PROGRESS_MARKER = ".jarvis-archive-v4-in-progress.json";
 
@@ -101,31 +102,90 @@ export function archiveFingerprint(archive: ArchiveV4): string {
 }
 
 /** Every file this archive will write, in order. Recorded before the first write. */
-function plannedFiles(archive: ArchiveV4): Array<keyof typeof FILENAMES> {
-  const planned: Array<keyof typeof FILENAMES> = [];
-  if (archive.groups.core) planned.push("state");
+function archiveDocuments(archive: ArchiveV4): Array<[keyof typeof FILENAMES, unknown]> {
+  const output: Array<[keyof typeof FILENAMES, unknown]> = [];
+  if (archive.groups.core) {
+    output.push([
+      "state",
+      {
+        version: 2,
+        state: archive.groups.core.state,
+        tasks: archive.groups.core.tasks,
+        reminders: archive.groups.core.reminders,
+      },
+    ]);
+  }
+
   if (archive.groups.memory) {
-    planned.push("builds", "buildLogs", "upgrades", "assets", "preferences");
+    const memory = archive.groups.memory;
+    const documents: Array<[keyof typeof FILENAMES, unknown]> = [
+      ["builds", { version: 1, builds: memory.builds }],
+      ["buildLogs", { version: 1, entries: memory.buildLogs }],
+      ["upgrades", { version: 1, entries: memory.upgrades }],
+      ["assets", { version: 1, entries: memory.assets }],
+      ["preferences", { version: 1, entries: memory.preferences }],
+    ];
+    output.push(...documents);
   }
   if (archive.groups.businessRecords) {
-    planned.push("clients", "properties", "projects", "quotes", "invoices", "enquiries", "errands");
-    if (archive.groups.businessRecords.businessSettings !== null) planned.push("businessSettings");
+    const business = archive.groups.businessRecords;
+    const documents: Array<[keyof typeof FILENAMES, unknown]> = [
+      ["clients", { version: 1, clients: business.clients }],
+      ["properties", { version: 1, properties: business.properties }],
+      ["projects", { version: 1, projects: business.projects }],
+      ["quotes", { version: 1, quotes: business.quotes }],
+      ["invoices", { version: 1, invoices: business.invoices }],
+      ["enquiries", { version: 1, enquiries: business.enquiries }],
+      ["errands", { version: 1, errands: business.errands }],
+      // Settings that were never written stay unwritten: the store synthesises
+      // defaults on read, so writing a defaults file here would turn "never
+      // configured" into "configured with defaults".
+      ...(business.businessSettings === null
+        ? []
+        : ([["businessSettings", { version: 1, settings: business.businessSettings }]] as Array<
+            [keyof typeof FILENAMES, unknown]
+          >)),
+    ];
+    output.push(...documents);
   }
-  return planned;
+
+  return output;
+}
+
+function plannedFiles(archive: ArchiveV4): Array<keyof typeof FILENAMES> {
+  return archiveDocuments(archive).map(([key]) => key);
 }
 
 function isNodeError(error: unknown): error is NodeJS.ErrnoException {
   return error instanceof Error && "code" in error;
 }
 
+/** Resolve existing ancestors even when the final destination/live directory is absent. */
+async function physicalPath(target: string): Promise<string> {
+  const absolute = path.resolve(target);
+  try {
+    return await fs.realpath(absolute);
+  } catch (error: unknown) {
+    if (!isNodeError(error) || error.code !== "ENOENT") throw error;
+    const parent = path.dirname(absolute);
+    if (parent === absolute) throw error;
+    return path.join(await physicalPath(parent), path.basename(absolute));
+  }
+}
+
 function assertDestinationNotLive(destination: string, liveDir: string): void {
   const dest = path.resolve(destination);
   const live = path.resolve(liveDir);
   const relToLive = path.relative(live, dest);
-  const inside = relToLive === "" || (!relToLive.startsWith("..") && !path.isAbsolute(relToLive));
+  const inside =
+    relToLive === "" ||
+    (relToLive !== ".." && !relToLive.startsWith(`..${path.sep}`) && !path.isAbsolute(relToLive));
   const relFromDest = path.relative(dest, live);
   const contains =
-    relFromDest === "" || (!relFromDest.startsWith("..") && !path.isAbsolute(relFromDest));
+    relFromDest === "" ||
+    (relFromDest !== ".." &&
+      !relFromDest.startsWith(`..${path.sep}`) &&
+      !path.isAbsolute(relFromDest));
   if (inside || contains) {
     throw new StrictBackupError(
       `Refusing to restore into ${dest}: it overlaps the live Jarvis data directory ${live}.`,
@@ -186,29 +246,33 @@ function parseInProgressMarker(value: Record<string, unknown>, target: string): 
 }
 
 /**
- * Discards exactly what an interrupted restore wrote, and nothing else.
+ * Validates archive-derived bytes for every existing output before resuming.
  *
  * The allowed set is computed from the archive being resumed, not from what
  * happens to be on disk, so a forged or stale marker cannot widen it. Any other
  * entry in the directory means this is not purely a leftover restore, and the
- * resume refuses rather than deleting something it did not create.
+ * resume refuses. Matching regular files are retained; changed files are refused.
  */
-async function discardInterruptedRestore(
+async function validateInterruptedRestore(
   dest: string,
   archive: ArchiveV4,
   marker: InProgressMarker,
-): Promise<void> {
-  const removable = new Set<string>([
-    ...plannedFiles(archive).map((key) => FILENAMES[key]),
-    ...marker.plannedFiles,
-    MANIFEST_FILE,
-    RESTORE_IN_PROGRESS_MARKER,
-  ]);
+): Promise<Set<string>> {
+  const expectedFiles = plannedFiles(archive).map((key) => FILENAMES[key]);
+  if (
+    marker.contractVersion !== archive.manifest.contractVersion ||
+    !isDeepStrictEqual(marker.plannedFiles, expectedFiles)
+  ) {
+    throw new StrictBackupError(
+      `Refusing to resume the restore at ${dest}: its recovery marker does not match the archive. Inspect the directory; no files were removed.`,
+    );
+  }
+  const removable = new Set<string>([...expectedFiles, MANIFEST_FILE, RESTORE_IN_PROGRESS_MARKER]);
   const entries = await fs.readdir(dest, { withFileTypes: true });
   const foreign = entries.filter((entry) => !removable.has(entry.name)).map((entry) => entry.name);
   if (foreign.length > 0) {
     throw new StrictBackupError(
-      `Refusing to resume the restore at ${dest}: it holds ${String(foreign.length)} file(s) this restore did not write (${foreign.join(", ")}). Inspect the directory; a resume only ever discards its own output.`,
+      `Refusing to resume the restore at ${dest}: it holds ${String(foreign.length)} file(s) this restore did not write (${foreign.join(", ")}). Inspect the directory; a resume only retains verified output and writes missing files.`,
     );
   }
   for (const entry of entries) {
@@ -217,9 +281,45 @@ async function discardInterruptedRestore(
         `Refusing to resume the restore at ${dest}: ${entry.name} is not a regular file.`,
       );
     }
-    await fs.rm(path.join(dest, entry.name), { force: true });
   }
-  await fsyncDir(dest);
+  const expected = new Map<string, unknown>(
+    archiveDocuments(archive).map(([key, document]) => [FILENAMES[key], document]),
+  );
+  expected.set(MANIFEST_FILE, archive.manifest);
+  // Validate every document before any write. Names establish scope, not ownership.
+  // Matching files are retained, so resume never deletes same-name replacements.
+  for (const entry of entries) {
+    if (entry.name === RESTORE_IN_PROGRESS_MARKER) continue;
+    const bytes = Buffer.from(serializeJson(expected.get(entry.name)), "utf8");
+    const handle = await fs.open(
+      path.join(dest, entry.name),
+      constants.O_RDONLY | constants.O_NOFOLLOW,
+    );
+    try {
+      const metadata = await handle.stat();
+      if (!metadata.isFile() || metadata.size !== bytes.length) {
+        throw new StrictBackupError(
+          `Restore output ${entry.name} does not match the archive; no files were changed.`,
+        );
+      }
+      // One extra byte detects growth while bounding reads to the expected output.
+      const actual = Buffer.alloc(bytes.length + 1);
+      let length = 0;
+      while (length < actual.length) {
+        const read = await handle.read(actual, length, actual.length - length, length);
+        if (read.bytesRead === 0) break;
+        length += read.bytesRead;
+      }
+      if (length !== bytes.length || !actual.subarray(0, length).equals(bytes)) {
+        throw new StrictBackupError(
+          `Restore output ${entry.name} does not match the archive; no files were changed.`,
+        );
+      }
+    } finally {
+      await handle.close();
+    }
+  }
+  return new Set(entries.map((entry) => entry.name));
 }
 
 export type DestinationState =
@@ -270,7 +370,7 @@ async function prepareDestination(
   destination: string,
   archive: ArchiveV4,
   resume: boolean,
-): Promise<{ dest: string; resumed: boolean }> {
+): Promise<{ dest: string; resumed: boolean; retainedFiles: Set<string> }> {
   const dest = path.resolve(destination);
   const state = await inspectDestination(dest);
 
@@ -293,11 +393,11 @@ async function prepareDestination(
     }
     if (!resume) {
       throw new StrictBackupError(
-        `Restore destination ${dest} holds an interrupted restore of this archive, started ${state.marker.startedAt}. It is incomplete and must not be used as recovered data. Re-run with --resume to discard the partial output and restore again, or remove the directory.`,
+        `Restore destination ${dest} holds an interrupted restore of this archive, started ${state.marker.startedAt}. It is incomplete and must not be used as recovered data. Re-run with --resume to verify existing output and restore missing files, or remove the directory.`,
       );
     }
-    await discardInterruptedRestore(dest, archive, state.marker);
-    return { dest, resumed: true };
+    const retainedFiles = await validateInterruptedRestore(dest, archive, state.marker);
+    return { dest, resumed: true, retainedFiles };
   }
 
   try {
@@ -315,7 +415,7 @@ async function prepareDestination(
     }
     throw error;
   }
-  return { dest, resumed: false };
+  return { dest, resumed: false, retainedFiles: new Set() };
 }
 
 /**
@@ -327,9 +427,12 @@ async function writeDocuments(
   documents: ReadonlyArray<[keyof typeof FILENAMES, unknown]>,
   written: Array<keyof typeof FILENAMES>,
   options: Pick<RestoreOptions, "injectAfterWrite">,
+  retainedFiles: ReadonlySet<string>,
 ): Promise<void> {
   for (const [key, document] of documents) {
-    await writeJson(path.join(destDir, FILENAMES[key]), document);
+    if (!retainedFiles.has(FILENAMES[key])) {
+      await writeJson(path.join(destDir, FILENAMES[key]), document);
+    }
     written.push(key);
     if (options.injectAfterWrite === key) {
       throw new StrictBackupError(
@@ -339,11 +442,15 @@ async function writeDocuments(
   }
 }
 
+function serializeJson(document: unknown): string {
+  return `${JSON.stringify(document, null, 2)}\n`;
+}
+
 async function writeJson(target: string, document: unknown): Promise<void> {
   let handle: FileHandle | undefined;
   try {
     handle = await fs.open(target, "wx", 0o600);
-    await handle.writeFile(`${JSON.stringify(document, null, 2)}\n`, "utf8");
+    await handle.writeFile(serializeJson(document), "utf8");
     await handle.sync();
   } finally {
     await handle?.close().catch(() => undefined);
@@ -588,8 +695,8 @@ export type RestoreOptions = {
    */
   allowPartial?: boolean;
   /**
-   * Continues an interrupted restore of this same archive: discards the partial
-   * output it left behind and restores again. Refuses anything else.
+   * Continues an interrupted restore of this same archive: retains exact matching
+   * output and writes missing files. Changed or truncated files are refused.
    */
   resume?: boolean;
   /** Drill hook: throw after this file is written. */
@@ -606,9 +713,10 @@ export type RestoreOptions = {
  *
  * A failure at any point leaves an unmistakably incomplete directory: the
  * in-progress marker is still there and the completion marker is not. A plain
- * retry refuses it by name; `resume` discards exactly that restore's own output
- * and starts again, which is safe precisely because everything it wrote is
- * inside the directory it reserved and is named in the marker it wrote first.
+ * retry refuses it by name; `resume` validates all existing output against the
+ * archive and retains matching files before writing missing ones. Physical path
+ * checks prevent static symlink aliases; callers must keep the destination and
+ * its ancestors exclusive against concurrent filesystem modification.
  */
 export async function restoreArchiveV4(
   archive: ArchiveV4,
@@ -620,13 +728,23 @@ export async function restoreArchiveV4(
     assertRecoverable(archive.manifest);
   }
 
-  assertDestinationNotLive(destination, options.liveDataDir ?? JARVIS_DATA_DIR);
+  const liveDirectory = options.liveDataDir ?? JARVIS_DATA_DIR;
+  assertDestinationNotLive(destination, liveDirectory);
+  const finalEntry = await fs.lstat(path.resolve(destination)).catch((error: unknown) => {
+    if (isNodeError(error) && error.code === "ENOENT") return null;
+    throw error;
+  });
+  if (finalEntry?.isSymbolicLink()) {
+    throw new StrictBackupError(`Restore destination ${destination} is a symbolic link; refusing.`);
+  }
+  const physicalDestination = await physicalPath(destination);
+  assertDestinationNotLive(physicalDestination, await physicalPath(liveDirectory));
   const now = options.now ?? ((): Date => new Date());
-  const { dest: destDir, resumed } = await prepareDestination(
-    destination,
-    archive,
-    options.resume ?? false,
-  );
+  const {
+    dest: destDir,
+    resumed,
+    retainedFiles,
+  } = await prepareDestination(physicalDestination, archive, options.resume ?? false);
 
   // Written before the first document, so an interruption at any point after
   // this leaves a directory that says what it is and what it was going to hold.
@@ -636,60 +754,17 @@ export async function restoreArchiveV4(
     startedAt: now().toISOString(),
     plannedFiles: plannedFiles(archive).map((key) => FILENAMES[key]),
   };
-  await writeJson(path.join(destDir, RESTORE_IN_PROGRESS_MARKER), inProgress);
+  if (!resumed) await writeJson(path.join(destDir, RESTORE_IN_PROGRESS_MARKER), inProgress);
   await fsyncDir(destDir);
 
   const written: Array<keyof typeof FILENAMES> = [];
-  if (archive.groups.core) {
-    await writeJson(path.join(destDir, FILENAMES.state), {
-      version: 2,
-      state: archive.groups.core.state,
-      tasks: archive.groups.core.tasks,
-      reminders: archive.groups.core.reminders,
-    });
-    written.push("state");
-    if (options.injectAfterWrite === "state") {
-      throw new StrictBackupError(
-        `Injected failure after writing state; restore left incomplete at ${destDir}.`,
-      );
-    }
-  }
-  if (archive.groups.memory) {
-    const memory = archive.groups.memory;
-    const documents: Array<[keyof typeof FILENAMES, unknown]> = [
-      ["builds", { version: 1, builds: memory.builds }],
-      ["buildLogs", { version: 1, entries: memory.buildLogs }],
-      ["upgrades", { version: 1, entries: memory.upgrades }],
-      ["assets", { version: 1, entries: memory.assets }],
-      ["preferences", { version: 1, entries: memory.preferences }],
-    ];
-    await writeDocuments(destDir, documents, written, options);
-  }
-  if (archive.groups.businessRecords) {
-    const business = archive.groups.businessRecords;
-    const documents: Array<[keyof typeof FILENAMES, unknown]> = [
-      ["clients", { version: 1, clients: business.clients }],
-      ["properties", { version: 1, properties: business.properties }],
-      ["projects", { version: 1, projects: business.projects }],
-      ["quotes", { version: 1, quotes: business.quotes }],
-      ["invoices", { version: 1, invoices: business.invoices }],
-      ["enquiries", { version: 1, enquiries: business.enquiries }],
-      ["errands", { version: 1, errands: business.errands }],
-      // Settings that were never written stay unwritten: the store synthesises
-      // defaults on read, so writing a defaults file here would turn "never
-      // configured" into "configured with defaults".
-      ...(business.businessSettings === null
-        ? []
-        : ([["businessSettings", { version: 1, settings: business.businessSettings }]] as Array<
-            [keyof typeof FILENAMES, unknown]
-          >)),
-    ];
-    await writeDocuments(destDir, documents, written, options);
-  }
+  await writeDocuments(destDir, archiveDocuments(archive), written, options, retainedFiles);
 
   // The restored directory is self-describing: the manifest travels with it, so
   // a partial restore cannot later be mistaken for a recovery image.
-  await writeJson(path.join(destDir, "manifest.json"), archive.manifest);
+  if (!retainedFiles.has(MANIFEST_FILE)) {
+    await writeJson(path.join(destDir, MANIFEST_FILE), archive.manifest);
+  }
   await fsyncDir(destDir);
 
   const verifiedGroups = await verifyRestoredGroups(destDir, archive);
