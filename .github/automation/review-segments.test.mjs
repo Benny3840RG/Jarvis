@@ -472,3 +472,79 @@ test("empty sides and end-exclusive newline boundaries do not authorize findings
     assert.equal(aggregateSegments(plan, receipts).verdict, "blocked");
   }
 });
+
+test("side-effect registration context is actually packed within the unchanged prompt bound", () => {
+  const text =
+    'import "./registration.js";\n' +
+    Array.from({ length: 6500 }, (_, i) => `const item${i} = "🙂";\n`).join("");
+  const plan = make([
+    {
+      filename: "main.ts",
+      status: "modified",
+      before: text,
+      after: text + "start();\n",
+    },
+    {
+      filename: "registration.ts",
+      status: "modified",
+      before: "register(oldHandler);",
+      after: "register(newHandler);",
+    },
+  ]);
+  const first = JSON.parse(plan.prompts[0].split("\n\n")[1]);
+  assert.ok(
+    first.supplemental.some(
+      (context) =>
+        context.fileIndex === 1 &&
+        context.parts.some((part) =>
+          part.text.includes("register(newHandler)"),
+        ),
+    ),
+  );
+  validateReviewPlan(plan);
+  assert.ok(
+    plan.prompts.every((prompt) => Buffer.byteLength(prompt) <= 160 * 1024),
+  );
+});
+
+test("oversized intermediate JSON reference context remains explicitly unavailable without cutting it", () => {
+  const source = JSON.stringify(
+    {
+      paths: { "/lookup": { get: { $ref: "#/components/schemas" } } },
+      components: {
+        schemas: Object.fromEntries(
+          ["A", "B", "C"].map((name) => [
+            name,
+            { description: "x".repeat(60000) },
+          ]),
+        ),
+      },
+    },
+    null,
+    2,
+  );
+  const plan = make([
+    { filename: "api.json", status: "modified", before: source, after: source },
+  ]);
+  const payloads = plan.prompts.map((p) => JSON.parse(p.split("\n\n")[1]));
+  assert.ok(
+    payloads.some((p) =>
+      p.unavailableContext.some(
+        (item) =>
+          item.pointer === "/components/schemas" &&
+          item.reason.includes("bounded"),
+      ),
+    ),
+  );
+  assert.ok(
+    payloads.every(
+      (p) =>
+        !p.supplemental.some((item) => item.pointer === "/components/schemas"),
+    ),
+  );
+  assert.ok(plan.prompts.length <= 16);
+  assert.ok(
+    plan.prompts.every((prompt) => Buffer.byteLength(prompt) <= 160 * 1024),
+  );
+  validateReviewPlan(plan);
+});

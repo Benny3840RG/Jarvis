@@ -5,7 +5,7 @@ const size = (text) => Buffer.byteLength(JSON.stringify(text));
 const pointer = (key) => key.replaceAll("~", "~0").replaceAll("/", "~1");
 
 // Parse positions only. Source text (including whitespace) is never rewritten.
-function jsonSpans(text) {
+function jsonSpans(text, includeContainers = false) {
   JSON.parse(text);
   let at = 0;
   const whitespace = () => {
@@ -55,7 +55,8 @@ function jsonSpans(text) {
     return { start, end: at, location, children };
   };
   const root = value("");
-  const leaves = [];
+  const leaves = [],
+    containers = [];
   const walk = (node) => {
     if (
       node.children.length &&
@@ -64,6 +65,11 @@ function jsonSpans(text) {
         node.location === "/components" ||
         /^\/components\/[^/]+$/.test(node.location))
     ) {
+      containers.push({
+        start: node.start,
+        end: node.end,
+        label: node.location,
+      });
       node.children.forEach(walk);
     } else leaves.push(node);
   };
@@ -82,7 +88,7 @@ function jsonSpans(text) {
   }
   if (end < text.length)
     spans.push({ start: end, end: text.length, label: "structure:end" });
-  return spans;
+  return includeContainers ? [...spans, ...containers] : spans;
 }
 function part(text, fileIndex, side, start, end) {
   return {
@@ -167,12 +173,14 @@ export function pairedUnits(files) {
   }
   return units;
 }
+// Bounded lexical hints for static from/side-effect imports only. Dynamic import,
+// require, aliases and comment-separated syntax are not resolved. No source is fetched.
 export function changedImportContext(files, fileIndices) {
   const wanted = new Set();
   for (const index of fileIndices)
     for (const text of [files[index].before, files[index].after]) {
       for (const match of (text ?? "").matchAll(
-        /\bfrom\s*["'](\.{1,2}\/[^"']+)["']/g,
+        /\b(?:from|import)\s*["'](\.{1,2}\/[^"']+)["']/g,
       )) {
         const resolved = path.posix
           .normalize(
@@ -409,7 +417,7 @@ export function jsonReferenceContext(files, units) {
     if (!registries.has(key))
       registries.set(
         key,
-        jsonSpans(source)
+        jsonSpans(source, true)
           .filter((s) => !s.label.startsWith("structure:"))
           .map((span) => ({
             ...span,
@@ -418,6 +426,42 @@ export function jsonReferenceContext(files, units) {
           })),
       );
     return registries.get(key);
+  };
+  const resolve = (fileIndex, side, ref) => {
+    const source = files[fileIndex][side];
+    const pointer = decodeURIComponent(ref.slice(1));
+    if (pointer !== "" && !pointer.startsWith("/"))
+      throw Error("not a JSON pointer");
+    const span =
+      pointer === ""
+        ? {
+            start: 0,
+            end: source.length,
+            byteStart: 0,
+            byteEnd: Buffer.byteLength(source),
+            label: "",
+          }
+        : registry(fileIndex, side)
+            .filter(
+              (s) => pointer === s.label || pointer.startsWith(s.label + "/"),
+            )
+            .sort((a, b) => b.label.length - a.label.length)[0];
+    if (!span) throw Error("no semantic target");
+    // Resolve the pointer itself, so a nonexistent nested field cannot masquerade as a valid parent.
+    let target = JSON.parse(source);
+    if (pointer)
+      for (const token of pointer.slice(1).split("/")) {
+        if (/~(?![01])/.test(token)) throw Error("invalid pointer escape");
+        const key = token.replaceAll("~1", "/").replaceAll("~0", "~");
+        if (
+          target === null ||
+          typeof target !== "object" ||
+          !Object.hasOwn(target, key)
+        )
+          throw Error("missing pointer");
+        target = target[key];
+      }
+    return { pointer, span };
   };
   const enqueue = (fileIndex, side, text) => {
     if (!files[fileIndex].filename.endsWith(".json")) return;
@@ -428,12 +472,7 @@ export function jsonReferenceContext(files, units) {
       if (seen.has(key)) continue;
       seen.add(key);
       try {
-        const pointer = decodeURIComponent(ref.slice(1));
-        const span = registry(fileIndex, side)
-          .filter(
-            (s) => pointer === s.label || pointer.startsWith(s.label + "/"),
-          )
-          .sort((a, b) => b.label.length - a.label.length)[0];
+        const { span } = resolve(fileIndex, side, ref);
         if (
           span &&
           primaryRanges.some(
@@ -476,32 +515,7 @@ export function jsonReferenceContext(files, units) {
     const { fileIndex, side, ref } = queue[index],
       source = files[fileIndex][side];
     try {
-      const pointer = decodeURIComponent(ref.slice(1));
-      if (pointer !== "" && !pointer.startsWith("/"))
-        throw Error("not a JSON pointer");
-      const span =
-        pointer === ""
-          ? { start: 0, end: source.length, label: "" }
-          : registry(fileIndex, side)
-              .filter(
-                (s) => pointer === s.label || pointer.startsWith(s.label + "/"),
-              )
-              .sort((a, b) => b.label.length - a.label.length)[0];
-      if (!span) throw Error("no semantic target");
-      // Resolve the pointer itself, so a nonexistent nested field cannot masquerade as a valid parent.
-      let target = JSON.parse(source);
-      if (pointer)
-        for (const token of pointer.slice(1).split("/")) {
-          if (/~(?![01])/.test(token)) throw Error("invalid pointer escape");
-          const key = token.replaceAll("~1", "/").replaceAll("~0", "~");
-          if (
-            target === null ||
-            typeof target !== "object" ||
-            !Object.hasOwn(target, key)
-          )
-            throw Error("missing pointer");
-          target = target[key];
-        }
+      const { pointer, span } = resolve(fileIndex, side, ref);
       const text = source.slice(span.start, span.end);
       const range = {
         fileIndex,

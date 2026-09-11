@@ -266,3 +266,130 @@ test("JSON reference context validates nested pointers and binds both identical 
     assert.ok(invalid.unresolved.length > 0);
   }
 });
+
+test("static side-effect imports supply already-fetched related modules", async () => {
+  const { changedImportContext, relatedChangedContext } =
+    await import("./paired-review-context.mjs");
+  const files = [
+    {
+      filename: "src/main.ts",
+      before: "import './register.js';\n",
+      after:
+        'import "./register.js";\nimport("./dynamic.js");\nrequire("./common.js");\nimport "./absent.js";',
+    },
+    {
+      filename: "src/register.ts",
+      before: "register(oldHandler);",
+      after: "register(newHandler);",
+    },
+    { filename: "src/dynamic.ts", before: "dynamic();", after: "dynamic();" },
+    { filename: "src/common.ts", before: "common();", after: "common();" },
+  ];
+  assert.deepEqual(changedImportContext(files, new Set([0])), [1]);
+  assert.deepEqual(relatedChangedContext(files, new Set([0])), [0, 1]);
+});
+
+test("local JSON pointers to intermediate objects receive the complete exact object", async () => {
+  const { jsonReferenceContext } = await import("./paired-review-context.mjs");
+  const before = JSON.stringify(
+    {
+      components: {
+        schemas: {
+          A: { description: "🙂", type: "string" },
+          B: { type: "number" },
+        },
+      },
+    },
+    null,
+    2,
+  );
+  const after = before.replace('"number"', '"boolean"');
+  const files = [{ filename: "api.json", before, after }];
+  const units = [
+    {
+      label: "reference",
+      parts: [
+        {
+          text: '{"$ref":"#/components/schemas"}',
+          references: ["before", "after"].map((side) => ({
+            fileIndex: 0,
+            side,
+            start: 0,
+            end: 0,
+            lineStart: 1,
+          })),
+        },
+      ],
+    },
+  ];
+  const result = jsonReferenceContext(files, units);
+  assert.equal(result.unresolved.length, 0);
+  assert.equal(result.contexts.length, 2);
+  for (const context of result.contexts) {
+    assert.equal(context.pointer, "/components/schemas");
+    const part = context.parts[0];
+    assert.equal(
+      Buffer.from(files[0][part.side])
+        .subarray(part.start, part.end)
+        .toString(),
+      part.text,
+    );
+    assert.deepEqual(JSON.parse("{" + part.text + "}"), {
+      schemas: JSON.parse(files[0][part.side]).components.schemas,
+    });
+  }
+});
+
+test("fully supplied JSON still reports nonexistent and malformed local pointers", async () => {
+  const { jsonReferenceContext } = await import("./paired-review-context.mjs");
+  for (const ref of [
+    "#/missing",
+    "#/components/missing",
+    "#not-a-pointer",
+    "#/%zz",
+    "#/components/~2",
+  ]) {
+    const source = JSON.stringify({
+      $ref: ref,
+      components: { schemas: { A: { type: "string" } } },
+    });
+    const files = [{ filename: "api.json", before: source, after: source }];
+    const result = jsonReferenceContext(files, pairedUnits(files));
+    assert.ok(result.unresolved.length > 0, ref);
+  }
+  const source = JSON.stringify({
+    $ref: "#/components/schemas",
+    components: { schemas: { A: { type: "string" } } },
+  });
+  const files = [{ filename: "api.json", before: source, after: source }];
+  const result = jsonReferenceContext(files, [
+    {
+      label: "whole",
+      parts: [
+        {
+          text: source,
+          references: [
+            {
+              fileIndex: 0,
+              side: "after",
+              start: 0,
+              end: Buffer.byteLength(source),
+              lineStart: 1,
+            },
+          ],
+        },
+      ],
+    },
+  ]);
+  assert.deepEqual(result, { contexts: [], unresolved: [] });
+});
+
+test("valid fully covered root pointers add no repeated context", async () => {
+  const { jsonReferenceContext } = await import("./paired-review-context.mjs");
+  const source = '{"$ref":"#","title":"🙂"}';
+  const files = [{ filename: "api.json", before: source, after: source }];
+  assert.deepEqual(jsonReferenceContext(files, pairedUnits(files)), {
+    contexts: [],
+    unresolved: [],
+  });
+});
