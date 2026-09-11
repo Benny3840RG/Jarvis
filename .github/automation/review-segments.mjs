@@ -96,12 +96,12 @@ export function buildReviewPlan(input) {
   const packs = [];
   let pack = [];
   let encodedBytes = 0;
-  let packLimit = 100 * 1024;
+  let packLimit = 90 * 1024;
   const flush = () => {
     if (pack.length) packs.push(pack);
     pack = [];
     encodedBytes = 0;
-    packLimit = 100 * 1024;
+    packLimit = 90 * 1024;
     if (packs.length > MAX_SEGMENTS) fail("Review segment budget exceeded.");
   };
   for (const unit of coalescePairedUnits(pairedUnits(files), files)) {
@@ -112,7 +112,7 @@ export function buildReviewPlan(input) {
       unit.parts[0].references[0].fileIndex
     ].filename.endsWith(".json")
       ? 64 * 1024
-      : 100 * 1024;
+      : 90 * 1024;
     if (encodedBytes + bytes > Math.min(packLimit, unitLimit)) flush();
     packLimit = Math.min(packLimit, unitLimit);
     pack.push(unit);
@@ -242,12 +242,14 @@ export function buildReviewPlan(input) {
           .get(fileIndex)
           .filter(
             (part) =>
-              !covered.some(
-                (range) =>
-                  range.fileIndex === fileIndex &&
-                  range.side === part.side &&
-                  range.start <= part.start &&
-                  range.end >= part.end,
+              ![part, ...(part.otherSides ?? [])].every((reference) =>
+                covered.some(
+                  (range) =>
+                    range.fileIndex === fileIndex &&
+                    range.side === reference.side &&
+                    range.start <= reference.start &&
+                    range.end >= reference.end,
+                ),
               ),
           );
         return {
@@ -259,17 +261,47 @@ export function buildReviewPlan(input) {
       .filter((context) => context.parts.length)
       .sort(
         (a, b) =>
-          (direct.has(a.fileIndex) ? 0 : 1) -
-            (direct.has(b.fileIndex) ? 0 : 1) ||
           (/\.test\./.test(files[a.fileIndex].filename) ? 1 : 0) -
             (/\.test\./.test(files[b.fileIndex].filename) ? 1 : 0) ||
+          (indices.has(a.fileIndex) ? 0 : 1) -
+            (indices.has(b.fileIndex) ? 0 : 1) ||
+          (direct.has(a.fileIndex) ? 0 : 1) -
+            (direct.has(b.fileIndex) ? 0 : 1) ||
           Buffer.byteLength(JSON.stringify(a)) -
             Buffer.byteLength(JSON.stringify(b)) ||
           a.fileIndex - b.fileIndex,
       );
+    const upgrades = [];
     for (const context of contexts) {
       const { fileIndex } = context;
-      supplemental.push(context);
+      const compactKey = `compact:${fileIndex}`;
+      if (!contextCache.has(compactKey))
+        contextCache.set(compactKey, supplementalUnits(files, fileIndex, true));
+      const compact = {
+        ...context,
+        parts: contextCache
+          .get(compactKey)
+          .filter(
+            (part) =>
+              ![part, ...(part.otherSides ?? [])].every((reference) =>
+                covered.some(
+                  (range) =>
+                    range.fileIndex === fileIndex &&
+                    range.side === reference.side &&
+                    range.start <= reference.start &&
+                    range.end >= reference.end,
+                ),
+              ),
+          ),
+        role: "compact changed-hunk context; full enclosing source may remain outside this segment",
+      };
+      const candidate =
+        compact.parts.length &&
+        Buffer.byteLength(JSON.stringify(compact)) <
+          Buffer.byteLength(JSON.stringify(context))
+          ? compact
+          : context;
+      supplemental.push(candidate);
       if (Buffer.byteLength(render()) > CONTEXT_BYTES - 2048) {
         supplemental.pop();
         unavailable({
@@ -277,7 +309,16 @@ export function buildReviewPlan(input) {
           reason:
             "related changed source exceeds remaining bounded context; request it if essential",
         });
-      }
+      } else if (candidate === compact)
+        upgrades.push({ index: supplemental.length - 1, context });
+    }
+    // Reserve each related changed module's bounded context first. Expanding one
+    // module must not evict the only supplied context for another dependency.
+    for (const { index: position, context } of upgrades) {
+      const compact = supplemental[position];
+      supplemental[position] = context;
+      if (Buffer.byteLength(render()) > CONTEXT_BYTES - 2048)
+        supplemental[position] = compact;
     }
     const prompt = render();
     if (Buffer.byteLength(prompt) > Math.min(PROMPT_BYTES, CONTEXT_BYTES))

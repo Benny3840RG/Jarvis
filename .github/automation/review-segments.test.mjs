@@ -548,3 +548,50 @@ test("oversized intermediate JSON reference context remains explicitly unavailab
   );
   validateReviewPlan(plan);
 });
+
+test("compact context reaches every related changed module before expanding one module", () => {
+  const imports = Array.from(
+    { length: 12 },
+    (_, i) => `import { value${i} } from "./module${i}.js";\n`,
+  ).join("");
+  const large = Array.from(
+    { length: 80 },
+    (_, i) => `// unique${i} ${"x".repeat(950)}\n`,
+  ).join("");
+  const modules = Array.from({ length: 12 }, (_, i) => {
+    const before =
+      Array.from(
+        { length: 130 },
+        (_, j) => `// module${i}-${j} ${"y".repeat(120)}\n`,
+      ).join("") + `export const value${i} = 0;\n`;
+    return {
+      filename: `src/module${i}.ts`,
+      status: "modified",
+      before,
+      after: before.replace(`value${i} = 0`, `value${i} = 1`),
+    };
+  });
+  const plan = make([
+    {
+      filename: "src/entry.ts",
+      status: "modified",
+      before: imports + large + "old();\n",
+      after: imports + large + "ENTRY_CHANGED();\n",
+    },
+    ...modules,
+  ]);
+  const prompt = plan.prompts
+    .map((text) => JSON.parse(text.split("\n\n")[1]))
+    .find((entry) =>
+      entry.units.some((unit) =>
+        unit.parts.some((part) => part.text.includes("ENTRY_CHANGED")),
+      ),
+    );
+  assert.ok(prompt);
+  for (let i = 1; i <= 12; i++)
+    assert.ok(
+      prompt.supplemental.some((context) => context.fileIndex === i),
+      `missing changed module${i - 1}`,
+    );
+  validateReviewPlan(plan);
+});
