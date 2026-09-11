@@ -11361,7 +11361,7 @@
                 "const": "not-commissioned"
               }
             },
-            "required": ["reason"]
+            "required": ["stage", "status", "reason"]
           },
           {
             "properties": {
@@ -11372,7 +11372,7 @@
                 "const": "commissioned"
               }
             },
-            "required": ["reason"]
+            "required": ["stage", "status", "reason"]
           },
           {
             "properties": {
@@ -11382,7 +11382,8 @@
               "status": {
                 "const": "commissioned"
               }
-            }
+            },
+            "required": ["stage", "status"]
           }
         ]
       },
