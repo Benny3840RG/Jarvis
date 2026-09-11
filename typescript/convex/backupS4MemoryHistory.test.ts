@@ -155,6 +155,13 @@ it("restores rejected definitions without inventing applied record references", 
       expectedRevision: 3,
     }),
   ).rejects.toThrow(/approved/);
+  const replay = await target.mutation(anyApi.memoryChangeSets.reject, {
+    serviceToken,
+    projectKey: "p",
+    changeSetId: "change",
+    reason: " No ",
+  });
+  expect(replay.rejectedReason).toBe("No");
   const after = await target.query(anyApi.backupS4.capture, { serviceToken, approvalToken });
   expect(JSON.parse(after.payloadJson).tables).toEqual(JSON.parse(before.payloadJson).tables);
   expect(await target.run((ctx) => ctx.db.query("projectRecords").collect())).toEqual([]);
@@ -324,5 +331,41 @@ it.each(["valid", "missing-actor", "missing-time", "invalid-time"])(
       ).rejects.toThrow(/Invalid rejected memory history/);
       expect(insertions).toBe(0);
     }
+  },
+);
+
+it.each(["", " No "])(
+  "refuses noncanonical rejection reason %j before insertion",
+  async (reason) => {
+    const { capture } = await sourceFixture("rejected");
+    const payload = JSON.parse(capture.payloadJson);
+    payload.tables.find(
+      (entry: { table: string }) => entry.table === "memoryChangeSets",
+    ).documents[0].rejectedReason = reason;
+    payload.tables
+      .find((entry: { table: string }) => entry.table === "auditEvents")
+      .documents.find(
+        (event: { eventType: string }) => event.eventType === "memory.change_set.rejected",
+      ).payload.reason = reason;
+    const target = convexTest(schema, modules);
+    let insertions = 0;
+    await expect(
+      target.run((ctx) =>
+        restoreS4ProjectNotes(
+          {
+            ...ctx,
+            db: {
+              ...ctx.db,
+              insert: async () => {
+                insertions++;
+                throw new Error("Unexpected insertion");
+              },
+            },
+          },
+          { ...encodeS4Payload(payload), serviceToken, approvalToken },
+        ),
+      ),
+    ).rejects.toThrow(/Invalid rejected memory history/);
+    expect(insertions).toBe(0);
   },
 );

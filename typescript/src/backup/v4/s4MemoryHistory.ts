@@ -94,6 +94,7 @@ export function validateS4MemoryHistory(source: S4ProjectNotesSource): void {
         !Number.isFinite(row.rejectedAt) ||
         row.rejectedAt !== row.updatedAt ||
         typeof row.rejectedReason !== "string" ||
+        !logical(row.rejectedReason) ||
         row.appliedAt !== undefined ||
         row.appliedRevision !== undefined ||
         ((row.approvedBy !== undefined || row.approvedAt !== undefined) &&
