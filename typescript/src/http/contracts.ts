@@ -63,22 +63,19 @@ export type LifecycleStage =
   /** A human has approved production use. */
   | "production-approved";
 
-export type IntegrationStatus = {
-  name: string;
-  /**
-   * The highest stage with recorded evidence. Never inferred upward.
-   */
-  stage: LifecycleStage;
-  /**
-   * Retained for existing consumers. Derived, never independently asserted:
-   * `"commissioned"` only when `stage` is `commissioned` or `production-approved`.
-   */
-  status: "commissioned" | "not-commissioned";
-  /** Why this integration is not further along. Present unless production-approved. */
-  reason?: string;
-};
+/** Legal integration states; registration cannot produce a commissioned status. */
+export type IntegrationStatus = { name: string } & (
+  | { stage: "implemented" | "configured"; status: "not-commissioned"; reason: string }
+  | { stage: "commissioned"; status: "commissioned"; reason: string }
+  | { stage: "production-approved"; status: "commissioned"; reason?: string }
+);
 
-/** Derives the legacy two-value field so the two can never disagree. */
+/** Derives the legacy field while retaining the literal result for known stages. */
+export function integrationStatusFromStage(stage: "implemented" | "configured"): "not-commissioned";
+export function integrationStatusFromStage(
+  stage: "commissioned" | "production-approved",
+): "commissioned";
+export function integrationStatusFromStage(stage: LifecycleStage): IntegrationStatus["status"];
 export function integrationStatusFromStage(stage: LifecycleStage): IntegrationStatus["status"] {
   return stage === "commissioned" || stage === "production-approved"
     ? "commissioned"
