@@ -136,3 +136,38 @@ The next increment must classify the remaining projectRecords kinds and their ne
 references. The terminal four-kind memory/history unit above is now supported. Action/receipt/reconciliation restore needs an explicit inert operational
 representation before it is safe. Development bindings cannot be called verified
 until S5 is present. None of these remaining edges is waived by this document.
+
+
+## Joint S4 and mutable-quote proof (2026-09-11)
+
+The existing backup surface now exposes `backupS4.captureJoint`: owner and separate
+approval credentials authorize a single bounded Convex query over the union of
+22 tables. Shared tables are read once and retain the smaller 100-row quote-side
+bound. Both existing encoded materials use those exact arrays and one capture
+timestamp. The JSON business digest binds the quote material to its source;
+this is not a claim of an atomic snapshot across JSON and Convex.
+
+The unregistered `restoreS4S6` primitive validates both supported sources, source
+owners, typed physical identities and the exact shared action inventory before
+inserting any row. It checks every application table is empty, including foreign
+owner rows, then uses the existing typed insertion helpers within one Convex
+transaction. A later quote insertion failure rolls back earlier S4 rows. The
+standalone restore wrappers keep their original empty-target and unsupported-data
+checks. Only the existing strict rejected-note-action classifier can admit shared
+actions; receipts, reconciliations, active approvals and all other action forms
+remain unsupported.
+
+`verifyRestoredS4S6` reuses the ordinary S4/S6 store verifiers, a single joint
+provider recapture, table-scoped identity maps, exact restored digests, and actual
+JSON business-store verification before and after the proof. Equal capture
+timestamps are a consistency check, not independent provenance. Corrupt rows,
+identity maps, business references or normal reads fail verification. JSON and
+Convex projects remain distinct namespaces even when their logical IDs match.
+
+This is an isolated primitive and drill, not a public restore mutation or an
+archive completion path. It returns `completeness: partial` and no whole-group
+verification entries. The canonical archive payload and marker coordinator still
+need integration before these materials can travel and recover as one archive.
+Historical quote revisions, finalized quotes, PDFs, delivery ledgers, remaining
+S4 evidence and S5 orchestration remain unsupported. No live restore, provider
+commissioning, approval replay or new completion authority is introduced.

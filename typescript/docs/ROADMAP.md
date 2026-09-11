@@ -4,6 +4,17 @@ This file is a living record for the autonomous engineering sessions working on
 Jarvis: current state, what changed recently, and what to pick up next. Update
 it at the end of every session.
 
+## Recovery engineering update (2026-09-11)
+
+The bounded recovery candidate now captures existing S4 evidence and mutable-quote
+inventories and proves the supported closed subset through ordinary stores. Its
+joint primitive uses one Convex transaction, exact shared rows, typed identities,
+and actual JSON business digests. It remains partial and unregistered for restore.
+The archive payload/marker coordinator, remaining effect/history domains, blobs
+and real provider recovery drills are still engineering work; external account
+gates do not make these local gaps complete. See
+`docs/architecture/backup-v4-s4-restore-slice.md` for exact support and limits.
+
 ## PR handover work (2026-09-10)
 
 - Added trusted automatic advisory PR review with isolated reviewer/publication
