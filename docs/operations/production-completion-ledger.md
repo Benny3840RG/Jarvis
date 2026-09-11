@@ -136,3 +136,21 @@
 - Live Work incorporated that main commit by a normal merge at `0b268c8fe721313ffe29a1e2da67477324b0e715`. Final integrated verification and hosted review are still required. The shared `/home/benny3840/Jarvis-live` checkout remains untouched because the owner confirmed another session is editing it.
 - S4 isolated restore increment `a1de3c503ad1484bcad33f36606300a0654e776a` passed the full gate (1,375 Node / 272 Convex) and 27 focused tests. It covers projects, notes, four flat memory-record kinds, terminal applied/rejected change sets and strictly validated related audit history. Replay tests preserve records, revisions and audit rows. Coverage remains partial: active/effect/worker histories are rejected and no complete recovery group is claimed. Independent review and landing remain outstanding.
 - NEXT ACTION: Finish the paired review-context prerequisite, reverify Live Work, reconcile the preserved terminal-monitor addition, and continue typed recovery work. Current-release external commissioning and exact-release production approval remain outstanding.
+
+## Telemetry test reliability — PR #507
+
+- BASE SHA: `db1b7153348de349fcfde019f4b5eb5deaa21dbc`.
+- GOAL / CURRENT TRUTH: A request-boundary telemetry test could fail under host scheduling delays despite returning before transport settled. Replace its wall-clock threshold with a synchronous-return assertion while preserving pending-transport, flush/abort and event-count checks.
+- FILES CHANGED: `typescript/tests/posthog.test.ts`; runtime telemetry behavior is unchanged.
+- TESTS / REVIEW: Exact head `e1fd7c732e050fbdf4f952b1bfc6dac6c111989e` passed nine focused tests and the full gate (1,390 Node / 237 Convex). Independent review found no blocking issue. Actual maintenance review `34546204414` passed; all 13 hosted checks passed with no unresolved threads.
+- PR / MERGE SHA: #507 merged through the normal fail-closed landing helper as `6d478809715b7d7e09885d9b71f6252ec86a3761`. Fetched main has the exact reviewed tree. Post-merge TypeScript `34548049201` and CodeQL `34548043440` / `34548043448` passed.
+- RUNTIME / EXTERNAL PROOF: Mock transport regression only; this does not commission PostHog or prove current-release provider ingestion. Issue #302 remains open.
+- SECURITY / RESIDUAL RISK: No permissions, runtime capture behavior, event allowlist or privacy controls changed.
+- BACKLOG / NEXT ACTION: Continue PR #506 review-context repairs and the final Live Work candidate. Its gate also exposed separate double-clock creation timestamps; those are being repaired rather than treating a successful retry as resolution.
+
+## Additional verification, still awaiting integration and landing
+
+- Monitor `a6500c00dff232778e226351f2e9cd09177117d4` passed the full gate (1,462 Node / 250 Convex), plus an actual `npm run monitor -- --once --no-color` read through isolated HTTP and the existing development Convex query. It displayed NO MISSION IN FLIGHT without terminal controls. No data mutation or shared-checkout edit occurred.
+- S4 `906486d42ad1f969d96bdc8c878e5b7189e04551` passed 1,390 Node / 281 Convex and all static checks after rejecting contradictory terminal metadata and noncanonical rejection reasons before insertion. The five-table subset remains partial.
+- S6 `ee0669cdfee881f98495250e53b96a2b6d7f81ab` passed 1,390 Node / 265 Convex and all static checks. Its closed first mutable quote revision restores typed references to actual restored S3 business records and verifies normal quote reads, complete summaries and digests. Finalized/history/blob/delivery/migration/effect records remain unsupported; no complete recovery group is claimed.
+- GitHub APIs and a fresh npm audit reported zero current open security findings. Issue #398 was reopened after effective main protection was found absent; disabled rulesets and empty selectors do not enforce review. No repository protection or production setting was changed.
