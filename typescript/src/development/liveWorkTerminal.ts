@@ -50,7 +50,7 @@ const GLYPH: Record<LiveWorkNodeStatus, string> = {
 const NODE_LABEL: Record<LiveWorkNodeKey, string> = {
   mission: "MISSION",
   stage: "STAGE",
-  issue: "ISSUE",
+  issue: "MISSION",
   pr: "PR",
   worker: "WORKER",
   review: "REVIEW",

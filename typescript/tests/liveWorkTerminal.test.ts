@@ -101,7 +101,7 @@ describe("renderLiveWorkTerminal", () => {
     for (const label of [
       "MISSION",
       "STAGE",
-      "ISSUE",
+      "MISSION",
       "PR",
       "WORKER",
       "REVIEW",
@@ -149,7 +149,8 @@ describe("renderLiveWorkTerminal", () => {
     const text = stripAnsi(
       renderLiveWorkTerminal({ status: "available", pipeline: bare }, { now: NOW }),
     );
-    assert.match(text, /ISSUE +Not recorded by the mission yet\./);
+    assert.match(text, /MISSION +mission-x/);
+    assert.doesNotMatch(text, /ISSUE/);
     assert.match(text, /PR +Not recorded by the mission yet\./);
     assert.match(text, /No mission events recorded yet\./);
   });
