@@ -9,7 +9,9 @@ They do not mutate missions, grant approval, or commit completion.
 - Available Convex with no non-terminal subject: `status: available`, `pipeline: null`;
   the dashboard displays `NO MISSION IN FLIGHT`.
 - Exactly one active subject: its persisted Development state controls the rail.
-  Repair and indeterminate states remain explicit. Subject version, repository,
+  Repair and indeterminate states remain explicit. On a branch state, earlier
+  rail phases require committed transition evidence from the current attempt;
+  missing or rejected history remains pending, and repair resets candidate verification. Subject version, repository,
   branch, receipt-bound PR/SHA identity, orchestration binding, lease information and recent event/evidence IDs are projected
   only when recorded. Lease tokens and unknown row fields are excluded.
 - Multiple active subjects: bounded unavailable response explaining ambiguity.

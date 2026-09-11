@@ -321,3 +321,48 @@ it("keeps authoritative contradiction blocked despite stale Omega readiness", ()
   assert.match(node(pipeline.nodes, "merge").detail, /CONTRADICTED/);
   assert.equal(pipeline.completionLabel, "CONTRADICTED");
 });
+
+it("retains demonstrated earlier rail phases on an indeterminate branch without inferring progress from blocked labels", () => {
+  const base = snapshot();
+  const blocked = { ...base.subject, state: "INDETERMINATE" as const };
+  const evidence = {
+    eventId: "uncertain",
+    eventType: "DEV_TRANSITION_COMMITTED",
+    occurredAt: base.generatedAt,
+    from: "READY_TO_MERGE",
+    to: "INDETERMINATE",
+    reasonCodes: [],
+    hasMergeReceipt: false,
+  };
+  const result = foldLiveWorkPipeline(snapshot({ subject: blocked, events: [evidence] }));
+  assert.equal(result.rail.find((x) => x.state === "SPECIFIED")?.status, "done");
+  assert.equal(result.rail.find((x) => x.state === "REVIEW")?.status, "done");
+  assert.equal(result.rail.find((x) => x.state === "MERGED")?.status, "pending");
+  assert.equal(result.rail.find((x) => x.state === "INDETERMINATE")?.status, "blocked");
+  for (const events of [[], [{ ...evidence, eventType: "DEV_TRANSITION_REJECTED" }]]) {
+    const unknown = foldLiveWorkPipeline(snapshot({ subject: blocked, events }));
+    assert.equal(unknown.rail.find((x) => x.state === "REVIEW")?.status, "pending");
+  }
+});
+it("does not carry previous candidate rail verification through a recorded repair", () => {
+  const base = snapshot();
+  const result = foldLiveWorkPipeline(
+    snapshot({
+      subject: { ...base.subject, state: "REPAIR_REQUIRED" },
+      events: [
+        {
+          eventId: "repair",
+          eventType: "DEV_TRANSITION_COMMITTED",
+          occurredAt: base.generatedAt,
+          from: "REVIEW",
+          to: "REPAIR_REQUIRED",
+          reasonCodes: [],
+          hasMergeReceipt: false,
+        },
+      ],
+    }),
+  );
+  assert.equal(result.rail.find((x) => x.state === "CLAIMED")?.status, "done");
+  assert.equal(result.rail.find((x) => x.state === "VERIFYING")?.status, "pending");
+  assert.equal(result.rail.find((x) => x.state === "REVIEW")?.status, "pending");
+});

@@ -195,7 +195,7 @@ function phaseStatus(
  * The furthest pipeline position this mission has demonstrably reached,
  * derived from the `from`/`to` states of its recorded transition events (not
  * just the current state, which off-track states pin backwards). Bounded by
- * the event tail the query returns, which is ample for a real mission.
+ * the event tail the query returns; omitted history never supplies evidence.
  */
 function reachedPipelineOrder(events: readonly LiveWorkEventRow[], currentOrder: number): number {
   let reached = currentOrder;
@@ -214,7 +214,11 @@ function reachedPipelineOrder(events: readonly LiveWorkEventRow[], currentOrder:
     if (event.eventType !== "DEV_TRANSITION_COMMITTED") continue;
     const labels = event.to === "REPAIR_REQUIRED" ? [event.to] : [event.from, event.to];
     for (const label of labels) {
-      if (label !== undefined && label in STATE_ORDER) {
+      if (
+        label !== undefined &&
+        label in STATE_ORDER &&
+        (!BLOCKED_STATES.has(label as DevelopmentState) || label === "REPAIR_REQUIRED")
+      ) {
         reached = Math.max(reached, STATE_ORDER[label as DevelopmentState]);
       }
     }
@@ -433,17 +437,19 @@ export function foldLiveWorkPipeline(snapshot: LiveWorkSnapshot): LiveWorkPipeli
     allowed: false,
     failures: ["omega-readiness-unavailable"],
   };
+  const railOrder = stateBlocked ? reachedPipelineOrder(events, 0) : order;
   const rail: LiveWorkRailNode[] = LIVE_WORK_RAIL_STATES.map((state) => ({
     state,
     label: state === "IDEA" ? "MISSION" : state === "COMPLETE" ? "ΩΣ" : state.replaceAll("_", " "),
     // Highlight only the persisted state. Past phases are a lifecycle position,
-    // not fabricated verification or provider receipts.
+    // not fabricated verification or provider receipts. Off-rail history must
+    // come from committed events in the current candidate attempt.
     status:
       state === subject.state
         ? isComplete
           ? "done"
           : "active"
-        : !stateBlocked && STATE_ORDER[state] < order
+        : STATE_ORDER[state] < railOrder
           ? "done"
           : "pending",
   }));
