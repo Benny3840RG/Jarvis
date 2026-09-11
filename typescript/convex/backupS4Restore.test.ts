@@ -1,4 +1,4 @@
-import { anyApi } from "convex/server";
+import { anyApi, getFunctionName } from "convex/server";
 import { convexTest } from "convex-test";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import schema from "./schema.js";
@@ -317,4 +317,69 @@ it("rejects changed restored ordering even when mapped row contents still match"
   await expect(
     verifyRestoredS4ProjectNotes(capture, ids, clientFor(target), serviceToken, approvalToken),
   ).rejects.toThrow(/order/);
+});
+
+it("verifies tied target creation times without requiring source physical-ID order", async () => {
+  const { source } = await captured();
+  await source.run((ctx) =>
+    ctx.db.insert("notes", { ...note, idempotencyKey: "second-note", title: "Second" }),
+  );
+  const capture = await source.query(anyApi.backupS4.capture, { serviceToken, approvalToken });
+  const target = convexTest(schema, modules);
+  const identities = await target.run((ctx) =>
+    restoreS4ProjectNotes(ctx, { ...capture, serviceToken, approvalToken }),
+  );
+  // Use real stored rows with a valid, differently ordered physical-ID mapping.
+  // Captures retain their canonical clock/ID sort; no capture bytes are shuffled.
+  await target.run(async (ctx) => {
+    const first = await ctx.db.get("notes", identities.notes[0]!.targetId);
+    const second = await ctx.db.get("notes", identities.notes[1]!.targetId);
+    const { _id: firstId, _creationTime: _firstTime, ...firstFields } = first!;
+    const { _id: secondId, _creationTime: _secondTime, ...secondFields } = second!;
+    await ctx.db.patch("notes", firstId, secondFields);
+    await ctx.db.patch("notes", secondId, firstFields);
+  });
+  const firstTarget = identities.notes[0]!.targetId;
+  identities.notes[0]!.targetId = identities.notes[1]!.targetId;
+  identities.notes[1]!.targetId = firstTarget;
+  const client = clientFor(target);
+  const ordinaryQuery = client.query;
+  const targetIds = new Set<string>(identities.notes.map((mapping) => mapping.targetId));
+  // convex-test deliberately makes insertion clocks unique. This adapter models
+  // tied provider system clocks while retaining all actual business fields/IDs.
+  const tiedTime = 1000;
+  const withTiedTime = (row: unknown) => {
+    if (
+      row === null ||
+      typeof row !== "object" ||
+      !("_id" in row) ||
+      typeof row._id !== "string" ||
+      !targetIds.has(row._id)
+    )
+      return row;
+    return { ...row, _creationTime: tiedTime };
+  };
+  client.query = async (ref, args) => {
+    const result = await ordinaryQuery(ref, args);
+    if (getFunctionName(ref) === "backupS4:capture") {
+      const payload = JSON.parse(result.payloadJson);
+      const entry = payload.tables.find((value: { table: string }) => value.table === "notes");
+      entry.documents = entry.documents
+        .map(withTiedTime)
+        .sort((a: { _id: string }, b: { _id: string }) =>
+          a._id < b._id ? -1 : a._id > b._id ? 1 : 0,
+        );
+      return { ...result, ...encodeS4Payload(payload) };
+    }
+    return Array.isArray(result) ? result.map(withTiedTime) : withTiedTime(result);
+  };
+  const proof = await verifyRestoredS4ProjectNotes(
+    capture,
+    identities,
+    client,
+    serviceToken,
+    approvalToken,
+  );
+  expect(proof.restoredChecksum).toBe(proof.sourceChecksum);
+  expect(proof.verifiedGroups).toEqual([]);
 });

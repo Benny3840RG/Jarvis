@@ -25,7 +25,7 @@ physical IDs, or scoped note idempotency keys are refused.
 
 Source physical IDs are represented by separate typed projects/notes maps.
 Source `_creationTime` remains in that map; Convex owns the new system clock.
-Insertion follows captured creation-time order; verification requires the destination capture to retain that relative order. No logical ID, opaque note body,
+Insertion follows captured creation-time order; verification requires nondecreasing target creation times in source-map order. Equal target clocks may sort differently by regenerated ID; identity membership and normal reads still verify every row. No logical ID, opaque note body,
 fingerprint, replay key, timestamp, revision, or other document field is rewritten.
 System-ID/creation-time normalization is applied only to each restored row's own
 metadata when comparing the restored semantic payload with the source. This does

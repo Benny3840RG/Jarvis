@@ -57,13 +57,8 @@ export async function verifyRestoredS4ProjectNotes(
   const recordGroups = new Map<string, Doc<"projectRecords">[]>();
   const auditRequests = new Map<string, Doc<"auditEvents">[]>();
   for (const table of S4_RESTORE_TABLES) {
-    if (
-      !isDeepStrictEqual(
-        actual[table].map((row) => row._id),
-        identities[table].map((row) => row.targetId),
-      )
-    )
-      throw new Error("S4 restored source ordering mismatch.");
+    // Preserve insertion-time order without treating regenerated ID tie order as source truth.
+    let previousTargetTime = Number.NEGATIVE_INFINITY;
     const targets = new Set<string>();
     for (let i = 0; i < source[table].length; i++) {
       const expected = source[table][i]!;
@@ -75,8 +70,11 @@ export async function verifyRestoredS4ProjectNotes(
       )
         throw new Error("Invalid or duplicate S4 identity map.");
       targets.add(mapping.targetId);
-      if (!actual[table].some((row) => row._id === mapping.targetId))
-        throw new Error("S4 target identity missing from restored capture.");
+      const targetRow = actual[table].find((row) => row._id === mapping.targetId);
+      if (!targetRow) throw new Error("S4 target identity missing from restored capture.");
+      if (targetRow._creationTime < previousTargetTime)
+        throw new Error("S4 restored source ordering mismatch.");
+      previousTargetTime = targetRow._creationTime;
       if (table === "projects") {
         const project = source.projects[i]!;
         const row = (await client.query(api.projects.get, {
