@@ -239,6 +239,8 @@ Candidate results and eventual merge identity are maintained in the
   rendering. Synthetic snapshots are not live provider completion evidence.
 - Restore-marker regressions prove forged planned filenames and late non-file
   entries are rejected before any destination content is removed.
-- Status remains partial: configured development Convex did not yet expose the new
-  query at initial inspection; production and external commissioning are not
-  established by local tests. The read model does not invent missing uncertainty.
+- Current runtime evidence: both MCP tools read available/idle from the configured
+  development Convex query. This read-only check does not attest its deployed
+  revision or commission an active lifecycle. Synthetic scenarios remain labeled.
+  Production and external commissioning remain unproven, and the read model does
+  not invent missing uncertainty. Exact integration results are recorded in the ledger.
