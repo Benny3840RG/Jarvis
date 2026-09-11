@@ -341,24 +341,32 @@ export function relatedChangedContext(files, seeds) {
   return [...seen].sort((a, b) => a - b);
 }
 
-export function supplementalUnits(files, fileIndex, compact = false) {
+export function supplementalUnits(
+  files,
+  fileIndex,
+  compact = false,
+  complete = false,
+) {
   const file = files[fileIndex];
   const units = pairedUnits([file]);
   const chosen =
-    !compact &&
-    (units.reduce((n, u) => n + Buffer.byteLength(JSON.stringify(u)), 0) <=
-      24000 ||
-      file.before === null ||
-      file.after === null)
+    complete ||
+    (!compact &&
+      (units.reduce((n, u) => n + Buffer.byteLength(JSON.stringify(u)), 0) <=
+        24000 ||
+        file.before === null ||
+        file.after === null))
       ? units
       : (file.filename.endsWith(".json") ? units : lineUnits(file, 0)).filter(
           (u) => u.parts.some((p) => p.references.length === 1),
         );
   const selected = [];
   const surroundingLines = compact ? 3 : 12;
-  const scope = compact
-    ? "complete changed hunks with three surrounding lines; further context is outside this segment"
-    : "paired changed hunk with surrounding lines; full file remains in coverage inventory";
+  const scope = complete
+    ? "complete module source including unchanged declarations and same-module dependencies"
+    : compact
+      ? "complete changed hunks with three surrounding lines; further context is outside this segment"
+      : "paired changed hunk with surrounding lines; full file remains in coverage inventory";
   for (const unit of chosen)
     for (const p of unit.parts)
       for (const r of p.references) {

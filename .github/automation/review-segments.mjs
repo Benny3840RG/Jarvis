@@ -314,7 +314,8 @@ export function buildReviewPlan(input) {
           a.fileIndex - b.fileIndex,
       );
     const upgrades = [];
-    for (const context of contexts) {
+    const relatedPositions = new Map();
+    const appendCompact = (context) => {
       const { fileIndex } = context;
       const compactKey = `compact:${fileIndex}`;
       if (!contextCache.has(compactKey))
@@ -351,12 +352,51 @@ export function buildReviewPlan(input) {
           reason:
             "related changed source exceeds remaining bounded context; request it if essential",
         });
-      } else if (candidate === compact)
-        upgrades.push({ index: supplemental.length - 1, context });
+      } else {
+        relatedPositions.set(fileIndex, supplemental.length - 1);
+        if (candidate === compact)
+          upgrades.push({ index: supplemental.length - 1, context });
+      }
+    };
+    for (const context of contexts.filter((context) =>
+      direct.has(context.fileIndex),
+    ))
+      appendCompact(context);
+    // Keep every direct module's compact evidence, then prefer complete direct
+    // modules over optional surrounding-hunk expansions. Full source includes
+    // unchanged imported declarations and all their same-module dependencies.
+    const completedImports = new Set();
+    for (const fileIndex of changedImportContext(files, indices)) {
+      const position = relatedPositions.get(fileIndex);
+      if (position === undefined) continue;
+      const key = `complete:${fileIndex}`;
+      if (!contextCache.has(key))
+        contextCache.set(key, supplementalUnits(files, fileIndex, false, true));
+      const context = {
+        fileIndex,
+        role: "complete direct-import module including same-module dependencies",
+        parts: contextCache.get(key),
+      };
+      if (Buffer.byteLength(JSON.stringify(context)) > 48 * 1024) continue;
+      const previous = supplemental[position];
+      supplemental[position] = context;
+      if (Buffer.byteLength(render()) > CONTEXT_BYTES - 2048) {
+        supplemental[position] = previous;
+        unavailable({
+          fileIndex,
+          reason:
+            "complete direct-import module exceeds remaining bounded context; request missing declarations if essential",
+        });
+      } else completedImports.add(position);
     }
+    for (const context of contexts.filter(
+      (context) => !direct.has(context.fileIndex),
+    ))
+      appendCompact(context);
     // Reserve each related changed module's bounded context first. Expanding one
     // module must not evict the only supplied context for another dependency.
     for (const { index: position, context } of upgrades) {
+      if (completedImports.has(position)) continue;
       const compact = supplemental[position];
       supplemental[position] = context;
       if (Buffer.byteLength(render()) > CONTEXT_BYTES - 2048)
