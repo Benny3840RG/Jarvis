@@ -54,8 +54,13 @@ export const externalReconciliationDocumentValidator = v.object({
   safetyBinding: v.optional(safetyBindingValidator),
 });
 
+export const externalReconciliationPublicValidator = externalReconciliationDocumentValidator.omit(
+  "leaseOwner",
+  "leaseToken",
+);
+
 export const externalReconciliationEnvelopeValidator = v.object({
-  reconciliation: externalReconciliationDocumentValidator,
+  reconciliation: externalReconciliationPublicValidator,
   receipt: v.union(toolExecutionReceiptDocumentValidator, v.null()),
 });
 
