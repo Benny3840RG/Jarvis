@@ -614,7 +614,11 @@ export const liveWork = query({
       reasonCodes: Array.isArray(event.payload.reasonCodes)
         ? event.payload.reasonCodes.filter((code): code is string => typeof code === "string")
         : [],
-      hasMergeReceipt: typeof event.payload.mergeReceiptKey === "string",
+      hasMergeReceipt:
+        event.eventType === "DEV_TRANSITION_COMMITTED" &&
+        event.payload.to === "MERGED" &&
+        typeof event.payload.mergeReceiptKey === "string" &&
+        event.payload.mergeReceiptKey.trim().length > 0,
       evidenceIds: liveWorkEvidenceIds(event.evidenceIds),
     }));
 
@@ -1077,7 +1081,8 @@ export const commit = mutation({
           }
         : undefined;
     const activeTrustedLease = leaseRequired ? trustedLease : undefined;
-    const mergeReceiptKey = args.mergeReceiptKey?.trim();
+    // A receipt pointer is authoritative only on the validated merge path.
+    const mergeReceiptKey = args.to === "MERGED" ? args.mergeReceiptKey?.trim() : undefined;
     const mergeReceipt =
       args.to === "MERGED" && mergeReceiptKey
         ? await ctx.db

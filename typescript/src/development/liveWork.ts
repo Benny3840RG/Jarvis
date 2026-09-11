@@ -381,35 +381,41 @@ export function foldLiveWorkPipeline(snapshot: LiveWorkSnapshot): LiveWorkPipeli
       status:
         subject.state === "MERGED" || isComplete
           ? "done"
-          : blocked === "merge"
+          : blocked === "merge" || blocked === "omega"
             ? "blocked"
             : phaseStatus(order, reached, STATE_ORDER.READY_TO_MERGE, STATE_ORDER.MERGED, false),
       detail:
-        subject.state === "INDETERMINATE"
-          ? "Merge outcome indeterminate; reconciliation open."
-          : subject.state === "FAILED"
-            ? "Development failed; inspect recorded transition evidence."
-            : subject.state === "MERGED" || isComplete
-              ? "Merged and reconciled."
-              : order === STATE_ORDER.READY_TO_MERGE
-                ? "Ready to merge."
-                : "Awaiting merge.",
+        subject.state === "CONTRADICTED"
+          ? "Development is CONTRADICTED; inspect durable evidence."
+          : subject.state === "INDETERMINATE"
+            ? "Merge outcome indeterminate; reconciliation open."
+            : subject.state === "FAILED"
+              ? "Development failed; inspect recorded transition evidence."
+              : subject.state === "MERGED" || isComplete
+                ? "Merged and reconciled."
+                : order === STATE_ORDER.READY_TO_MERGE
+                  ? "Ready to merge."
+                  : "Awaiting merge.",
     },
     {
       key: "omega",
       label: "ΩΣ",
       status: isComplete
         ? "done"
-        : omegaMission?.state === "blocked" || omegaMission?.state === "degraded"
+        : blocked === "omega" ||
+            omegaMission?.state === "blocked" ||
+            omegaMission?.state === "degraded"
           ? "blocked"
           : subject.state === "MERGED"
             ? "active"
             : "pending",
       detail: isComplete
         ? "COMPLETE"
-        : snapshot.omegaReadiness?.allowed
-          ? "ΩΣ READY — awaiting authoritative completion"
-          : `ΩΣ NOT READY: ${(snapshot.omegaReadiness?.failures ?? ["omega-readiness-unavailable"]).join(", ")}`,
+        : subject.state === "CONTRADICTED"
+          ? "CONTRADICTED — completion evidence requires reconciliation."
+          : snapshot.omegaReadiness?.allowed
+            ? "ΩΣ READY — awaiting authoritative completion"
+            : `ΩΣ NOT READY: ${(snapshot.omegaReadiness?.failures ?? ["omega-readiness-unavailable"]).join(", ")}`,
     },
   ];
 

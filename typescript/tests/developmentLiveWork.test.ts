@@ -307,3 +307,17 @@ it("does not claim an active worker without a recorded live lease", () => {
     );
   }
 });
+
+it("keeps authoritative contradiction blocked despite stale Omega readiness", () => {
+  const pipeline = foldLiveWorkPipeline(
+    snapshot({
+      subject: { ...snapshot().subject, state: "CONTRADICTED" },
+      omegaReadiness: { allowed: true, failures: [] },
+    }),
+  );
+  assert.equal(node(pipeline.nodes, "omega").status, "blocked");
+  assert.match(node(pipeline.nodes, "omega").detail, /CONTRADICTED/);
+  assert.equal(node(pipeline.nodes, "merge").status, "blocked");
+  assert.match(node(pipeline.nodes, "merge").detail, /CONTRADICTED/);
+  assert.equal(pipeline.completionLabel, "CONTRADICTED");
+});

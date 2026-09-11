@@ -229,7 +229,7 @@ describe("developmentState.liveWork", () => {
         from: "REVIEW",
         to: "READY_TO_MERGE",
         reasonCodes: [],
-        hasMergeReceipt: true,
+        hasMergeReceipt: false,
         evidenceIds: [],
       },
     ]);
@@ -457,4 +457,29 @@ it("projects candidate identity only from the current committed owner's merge ac
   expect(
     (await t.query(api.developmentState.liveWork, { serviceToken: SERVICE_TOKEN }))?.candidate,
   ).toBeNull();
+});
+
+it("does not attach unvalidated merge receipts to a non-merge transition", async () => {
+  const t = harness();
+  await insertSubject(t, { subjectId: "receipt-scope", state: "IDEA", updatedAt: 1000 });
+  const result = await t.mutation(api.developmentState.commit, {
+    serviceToken: SERVICE_TOKEN,
+    subjectId: "receipt-scope",
+    eventId: "scope-event",
+    requestId: "scope-request",
+    correlationId: "scope-correlation",
+    transitionId: "DEV_TRANSITION_IDEA_TO_SPECIFIED",
+    to: "SPECIFIED",
+    requestedBy: { actorType: "controller", actorId: "caller" },
+    committedBy: { actorType: "controller", actorId: "caller" },
+    mergeReceiptKey: "unvalidated-merge-receipt",
+  });
+  expect(result.kind).toBe("COMMITTED");
+  expect(result.subject.state).toBe("SPECIFIED");
+  expect(result.event.evidenceIds).not.toContain("unvalidated-merge-receipt");
+  expect(result.event.payload).not.toHaveProperty("mergeReceiptKey");
+  const snapshot = await t.query(api.developmentState.liveWork, { serviceToken: SERVICE_TOKEN });
+  expect(
+    snapshot?.events.find((event) => event.eventId === result.event.eventId)?.hasMergeReceipt,
+  ).toBe(false);
 });
