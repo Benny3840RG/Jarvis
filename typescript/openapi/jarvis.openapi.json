@@ -5570,6 +5570,46 @@
         }
       }
     },
+    "/api/v1/development/live-work": {
+      "get": {
+        "operationId": "getDevelopmentLiveWork",
+        "summary": "Get the read-only development live-work pipeline",
+        "description": "The single most-recently-updated development mission (falling back to the most recent overall), folded into the operator HUD pipeline CURRENT MISSION → STAGE → ISSUE → PR → WORKER → REVIEW → CI → MERGE → ΩΣ. Like the Operations Activity Timeline, this endpoint has exactly one source, so a read failure, an owner with no development missions, or a deployment whose persistence provider is not Convex are all reported as {status: \"unavailable\", reason} in the 200 body — never a thrown error and never a fabricated empty pipeline. Each node's detail is composed only from render-safe fields (subject state, repository/branch, orchestration lease owner, Omega acceptance-criteria counts); the orchestration lease token is never returned. Nodes whose data the domain does not yet record durably (issue and PR numbers, CI run identity) report status \"unavailable\". Read-only: nothing is mutated from this endpoint.",
+        "tags": ["Operations"],
+        "x-mcp-tool": {
+          "exposed": true,
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The current development live-work pipeline, or a truthful unavailable status.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DevelopmentLiveWorkResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
+    },
     "/api/v1/business-settings": {
       "get": {
         "operationId": "getBusinessSettings",
@@ -11326,6 +11366,243 @@
           }
         }
       },
+      "LiveWorkNode": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["key", "label", "status", "detail"],
+        "properties": {
+          "key": {
+            "type": "string",
+            "enum": ["mission", "stage", "issue", "pr", "worker", "review", "ci", "merge", "omega"]
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1
+          },
+          "status": {
+            "type": "string",
+            "enum": ["done", "active", "pending", "blocked", "unavailable"]
+          },
+          "detail": {
+            "type": "string",
+            "description": "Composed server-side from render-safe fields only — never a raw event payload. \"Not recorded by the mission yet.\" when the domain does not durably record this node's data."
+          }
+        }
+      },
+      "LiveWorkEvent": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["eventId", "at", "summary"],
+        "properties": {
+          "eventId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "summary": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Built only from a fixed, known-safe subset of the development event's fields — never the raw payload."
+          }
+        }
+      },
+      "LiveWorkPipeline": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "subjectId",
+          "state",
+          "repository",
+          "branch",
+          "objective",
+          "missionInFlight",
+          "nodes",
+          "events",
+          "updatedAt",
+          "generatedAt",
+          "rail",
+          "completionLabel",
+          "omegaReadiness",
+          "subjectVersion",
+          "orchestrationRunId",
+          "orchestrationNodeId",
+          "fencingToken",
+          "workerStep"
+        ],
+        "properties": {
+          "subjectId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "state": {
+            "type": "string",
+            "minLength": 1
+          },
+          "repository": {
+            "type": ["string", "null"]
+          },
+          "branch": {
+            "type": ["string", "null"]
+          },
+          "objective": {
+            "type": ["string", "null"]
+          },
+          "missionInFlight": {
+            "type": "boolean"
+          },
+          "nodes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LiveWorkNode"
+            }
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LiveWorkEvent"
+            }
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "generatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "rail": {
+            "type": "array",
+            "maxItems": 11,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["state", "label", "status"],
+              "properties": {
+                "state": {
+                  "type": "string"
+                },
+                "label": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string",
+                  "enum": ["done", "active", "pending", "blocked", "unavailable"]
+                }
+              }
+            }
+          },
+          "completionLabel": {
+            "type": "string"
+          },
+          "omegaReadiness": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["allowed", "failures"],
+            "properties": {
+              "allowed": {
+                "type": "boolean"
+              },
+              "failures": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "subjectVersion": {
+            "type": ["integer", "null"]
+          },
+          "orchestrationRunId": {
+            "type": ["string", "null"]
+          },
+          "orchestrationNodeId": {
+            "type": ["string", "null"]
+          },
+          "fencingToken": {
+            "type": ["integer", "null"]
+          },
+          "workerStep": {
+            "type": ["object", "null"],
+            "properties": {
+              "nodeId": {
+                "type": "string"
+              },
+              "operationId": {
+                "type": ["string", "null"]
+              },
+              "state": {
+                "type": "string"
+              },
+              "leaseOwner": {
+                "type": ["string", "null"]
+              },
+              "leaseExpiresAt": {
+                "type": ["number", "null"]
+              }
+            }
+          }
+        }
+      },
+      "LiveWorkAvailable": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["status", "pipeline"],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": ["available"]
+          },
+          "pipeline": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/LiveWorkPipeline"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "LiveWorkUnavailable": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["status", "reason"],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": ["unavailable"]
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "LiveWorkResult": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/LiveWorkAvailable"
+          },
+          {
+            "$ref": "#/components/schemas/LiveWorkUnavailable"
+          }
+        ]
+      },
+      "DevelopmentLiveWorkResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["data"],
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/LiveWorkResult"
+          }
+        }
+      },
       "IntegrationStatus": {
         "type": "object",
         "additionalProperties": false,
@@ -11356,10 +11633,27 @@
             "description": "\"configured\" means the provider's API key env var is present -- never that the provider has been reached with a live call."
           },
           "provider": {
-            "oneOf": [{ "type": "string", "enum": ["openai", "gemini"] }, { "type": "null" }]
+            "oneOf": [
+              {
+                "type": "string",
+                "enum": ["openai", "gemini"]
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "model": {
-            "oneOf": [{ "type": "string", "minLength": 1, "maxLength": 128 }, { "type": "null" }]
+            "oneOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "reason": {
             "type": "string",

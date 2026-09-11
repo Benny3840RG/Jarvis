@@ -65,6 +65,8 @@ import { createMemoryChangeSetServiceFromEnv } from "../memory/memoryChangeSetFa
 import type { MemoryChangeSetService } from "../memory/memoryChangeSets.js";
 import { createActivityEventReaderFromEnv } from "../operations/activityTimelineFactory.js";
 import type { ActivityEventReader } from "../operations/activityTimeline.js";
+import { createDevelopmentLiveWorkSourceFromEnv } from "../development/liveWorkFactory.js";
+import type { DevelopmentLiveWorkSource } from "../development/liveWork.js";
 import {
   createPersistenceFromEnv,
   resolvePersistenceProviderName,
@@ -129,6 +131,7 @@ export type CreateJarvisHttpAppOptions = (
   preferenceStore?: PreferenceStore;
   noteStore?: NoteStore;
   activityEventReader?: ActivityEventReader | null;
+  developmentLiveWorkSource?: DevelopmentLiveWorkSource | null;
   telemetry?: PostHogTelemetry;
   /**
    * Invoked once per Fastify route as it is registered. Exposed so contract
@@ -209,6 +212,12 @@ export async function createJarvisHttpApp(
       ? options.activityEventReader
       : usesEnvironment
         ? createActivityEventReaderFromEnv()
+        : null;
+  const developmentLiveWorkSource =
+    options.developmentLiveWorkSource !== undefined
+      ? options.developmentLiveWorkSource
+      : usesEnvironment
+        ? createDevelopmentLiveWorkSourceFromEnv()
         : null;
   const businessSettingsStore =
     options.businessSettingsStore ??
@@ -374,6 +383,7 @@ export async function createJarvisHttpApp(
       preferenceStore,
       noteStore,
       activityEventReader,
+      developmentLiveWorkSource,
     }),
     adapter,
     { logger: options.logger, abortOnError: false },
