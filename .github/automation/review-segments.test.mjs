@@ -289,3 +289,186 @@ test("client review includes complete related contract/controller and changed se
   assert.ok(text.includes("export type Contract"));
   assert.ok(text.includes("export const controller"));
 });
+
+test("valid findings on either paired side and identical UTF8 spans retain changes_requested", () => {
+  const plan = make([
+    {
+      filename: "added.ts",
+      status: "added",
+      before: null,
+      after: "🙂 added\nintroduced();\n",
+    },
+    {
+      filename: "removed.ts",
+      status: "removed",
+      before: "é removed\nremovedGuard();\n",
+      after: null,
+    },
+    {
+      filename: "paired.ts",
+      status: "modified",
+      before: "old();\n",
+      after: "new();\nadded();\n",
+    },
+    {
+      filename: "identical.ts",
+      status: "modified",
+      before: "🙂 unchanged\nexisting();",
+      after: "🙂 unchanged\nexisting();",
+    },
+  ]);
+  for (const [file, line] of [
+    ["added.ts", 2],
+    ["removed.ts", 2],
+    ["paired.ts", 2],
+    ["identical.ts", 2],
+  ]) {
+    const finding = {
+      file,
+      line,
+      severity: "high",
+      message: "Introduced change requires correction.",
+    };
+    const receipts = plan.prompts.map((_, index) =>
+      segmentReceipt(
+        plan,
+        index,
+        JSON.stringify({
+          verdict: "changes_requested",
+          summary: "Concrete defect.",
+          findings: [finding],
+          contextRequests: [],
+        }),
+      ),
+    );
+    const result = aggregateSegments(plan, receipts);
+    assert.equal(result.verdict, "changes_requested", file);
+    assert.deepEqual(result.findings, [finding]);
+  }
+});
+
+test("findings cannot borrow supplemental source or another segment's primary ranges", () => {
+  const text =
+    'import { helper } from "./helper.js";\n' +
+    Array.from({ length: 6500 }, (_, i) => `const item${i} = "🙂";\n`).join("");
+  const plan = make([
+    {
+      filename: "main.ts",
+      status: "modified",
+      before: text,
+      after: text + "helper();\n",
+    },
+    {
+      filename: "helper.ts",
+      status: "modified",
+      before: "export const helper = () => 1;\n",
+      after: "export const helper = () => 2;\n",
+    },
+  ]);
+  const payloads = plan.prompts.map((p) =>
+    JSON.parse(p.slice(p.indexOf("\n\n") + 2)),
+  );
+  for (const [index, payload] of payloads.entries()) {
+    const reference = payload.units
+      .flatMap((u) => u.parts.flatMap((part) => part.references))
+      .find((r) => r.fileIndex === 0 && r.lineStart > 1);
+    if (!reference) continue;
+    const finding = {
+      file: "main.ts",
+      line: reference.lineStart,
+      severity: "high",
+      message: "Supplied UTF8 source at its actual line.",
+    };
+    const receipts = plan.prompts.map((_, i) =>
+      segmentReceipt(
+        plan,
+        i,
+        i === index
+          ? JSON.stringify({
+              verdict: "changes_requested",
+              summary: "Concrete defect.",
+              findings: [finding],
+              contextRequests: [],
+            })
+          : raw,
+      ),
+    );
+    assert.deepEqual(aggregateSegments(plan, receipts).findings, [finding]);
+  }
+  const supplementalIndex = payloads.findIndex(
+    (p) =>
+      p.supplemental.some((c) => c.fileIndex === 1) &&
+      !p.units.some((u) =>
+        u.parts.some((part) => part.references.some((r) => r.fileIndex === 1)),
+      ),
+  );
+  assert.ok(supplementalIndex >= 0);
+  const lateIndex = payloads.findIndex((p) =>
+    p.units.every((u) =>
+      u.parts.every((part) =>
+        part.references.every((r) => r.fileIndex !== 0 || r.lineStart > 1),
+      ),
+    ),
+  );
+  assert.ok(lateIndex >= 0);
+  for (const [index, file, line] of [
+    [supplementalIndex, "helper.ts", 1],
+    [lateIndex, "main.ts", 1],
+    [0, "main.ts", 999999],
+  ]) {
+    const receipts = plan.prompts.map((_, i) =>
+      segmentReceipt(
+        plan,
+        i,
+        i === index
+          ? JSON.stringify({
+              verdict: "changes_requested",
+              summary: "Outside primary coverage.",
+              findings: [
+                { file, line, severity: "high", message: "Not supplied here." },
+              ],
+              contextRequests: [],
+            })
+          : raw,
+      ),
+    );
+    assert.equal(aggregateSegments(plan, receipts).verdict, "blocked");
+  }
+});
+
+test("empty sides and end-exclusive newline boundaries do not authorize findings", () => {
+  const plan = make([
+    { filename: "empty.ts", status: "added", before: null, after: "" },
+    {
+      filename: "line.ts",
+      status: "modified",
+      before: "before;\n",
+      after: "after;\n",
+    },
+  ]);
+  for (const [file, line] of [
+    ["empty.ts", 1],
+    ["line.ts", 2],
+  ]) {
+    const receipts = [
+      segmentReceipt(
+        plan,
+        0,
+        JSON.stringify({
+          verdict: "changes_requested",
+          summary: "No source bytes on this line.",
+          findings: [
+            {
+              file,
+              line,
+              severity: "high",
+              message: "Outside primary source.",
+            },
+          ],
+          contextRequests: [],
+        }),
+      ),
+    ];
+    assert.equal(aggregateSegments(plan, receipts).verdict, "blocked");
+  }
+});

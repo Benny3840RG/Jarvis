@@ -357,28 +357,29 @@ export function aggregateSegments(plan, receipts) {
         const fileIndex = plan.manifest.files.findIndex(
           (f) => f.filename === finding.file,
         );
-        const ranges = plan.manifest.segments[receipt.index].ranges;
+        const supplied = JSON.parse(
+          plan.prompts[receipt.index].slice(
+            plan.prompts[receipt.index].indexOf("\n\n") + 2,
+          ),
+        );
+        // Only primary source units authorize finding locations. Supplemental
+        // context and coalesced manifest ranges cannot extend this segment.
         if (
           fileIndex < 0 ||
-          !ranges.some(
-            (r) =>
-              r.fileIndex === fileIndex &&
-              finding.line >= r.lineStart &&
-              finding.line <=
-                r.lineStart +
-                  JSON.parse(
-                    plan.prompts[receipt.index].slice(
-                      plan.prompts[receipt.index].indexOf("\n\n") + 2,
-                    ),
-                  )
-                    .parts.find(
-                      (p) =>
-                        p.fileIndex === r.fileIndex &&
-                        p.side === r.side &&
-                        p.start === r.start,
-                    )
-                    .text.split("\n").length -
-                  1,
+          !supplied.units.some((unit) =>
+            unit.parts.some((part) =>
+              part.references.some(
+                (reference) =>
+                  reference.fileIndex === fileIndex &&
+                  reference.end > reference.start &&
+                  finding.line >= reference.lineStart &&
+                  finding.line <=
+                    reference.lineStart +
+                      part.text.split("\n").length -
+                      1 -
+                      (part.text.endsWith("\n") ? 1 : 0),
+              ),
+            ),
           )
         )
           return blocked;
