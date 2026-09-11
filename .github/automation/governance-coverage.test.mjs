@@ -39,7 +39,7 @@ test("runtime source has explicit control-plane ownership", () => {
   );
 });
 
-test("both governance triggers cover every canonical reference registry", () => {
+test("both governance triggers cover canonical registries and validator runtime inputs", () => {
   const rules = read("docs/validators/jarvis-action-map.rules.yaml");
   const references = [...rules.matchAll(/^  \w+: (docs\/[^\s]+)$/gm)].map(
     (m) => m[1],
@@ -49,6 +49,12 @@ test("both governance triggers cover every canonical reference registry", () => 
     "canonical reference registries must be discovered",
   );
   const workflow = read(".github/workflows/governance-validation.yml");
+  const inputs = [
+    ...references,
+    "typescript/package.json",
+    "typescript/package-lock.json",
+    "typescript/.nvmrc",
+  ];
   const blocks = [
     workflow.match(/\n  pull_request:\n([\s\S]*?)\n  push:/)?.[1],
     workflow.match(/\n  push:\n([\s\S]*?)\npermissions:/)?.[1],
@@ -58,7 +64,7 @@ test("both governance triggers cover every canonical reference registry", () => 
     const patterns = [...block.matchAll(/^\s+- "([^"\n]+)"$/gm)].map(
       (m) => m[1],
     );
-    for (const reference of references) {
+    for (const reference of inputs) {
       assert.ok(
         patterns.some((pattern) => matchesGlob(reference, pattern)),
         `${reference} does not trigger governance validation`,
