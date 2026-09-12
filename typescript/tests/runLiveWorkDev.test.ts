@@ -5,6 +5,7 @@ import { describe, it } from "node:test";
 import {
   assertConsistentEndpoint,
   checkPortAvailability,
+  classifyBindError,
   probeLiveWork,
   runLiveWorkDev,
   stopChild,
@@ -74,6 +75,28 @@ describe("probeLiveWork", () => {
     assert.match((outcome as { detail: string }).detail, /not.*expected Jarvis live-work payload/);
   });
 
+  it("reports not-ready on an available status missing its pipeline field", async () => {
+    const fetchImpl = (async () =>
+      jsonResponse(200, { data: { status: "available" } })) as typeof fetch;
+    const outcome = await probeLiveWork(api(), fetchImpl);
+    assert.equal(outcome.kind, "not-ready");
+  });
+
+  it("reports not-ready on an unavailable status missing its reason field", async () => {
+    const fetchImpl = (async () =>
+      jsonResponse(200, { data: { status: "unavailable" } })) as typeof fetch;
+    const outcome = await probeLiveWork(api(), fetchImpl);
+    assert.equal(outcome.kind, "not-ready");
+  });
+
+  it("reports not-ready on a non-200 2xx status, since the route only ever returns exactly 200", async () => {
+    const fetchImpl = (async () =>
+      jsonResponse(201, { data: { status: "available", pipeline: null } })) as typeof fetch;
+    const outcome = await probeLiveWork(api(), fetchImpl);
+    assert.equal(outcome.kind, "not-ready");
+    assert.match((outcome as { detail: string }).detail, /HTTP 201/);
+  });
+
   it("reports not-ready on a 200 with invalid JSON", async () => {
     const fetchImpl = (async () => new Response("not json", { status: 200 })) as typeof fetch;
     const outcome = await probeLiveWork(api(), fetchImpl);
@@ -116,6 +139,27 @@ describe("checkPortAvailability", () => {
   });
 });
 
+describe("classifyBindError", () => {
+  it("classifies EADDRINUSE as occupied", () => {
+    const error = Object.assign(new Error("in use"), { code: "EADDRINUSE" });
+    assert.deepEqual(classifyBindError(error), { kind: "occupied", code: "EADDRINUSE" });
+  });
+
+  it("classifies any other bind error as check-failed, not occupied", () => {
+    for (const code of ["EACCES", "EADDRNOTAVAIL", "ENOTFOUND"]) {
+      const error = Object.assign(new Error(code), { code });
+      assert.deepEqual(classifyBindError(error), { kind: "check-failed", code });
+    }
+  });
+
+  it("falls back to UNKNOWN when the error carries no code", () => {
+    assert.deepEqual(classifyBindError(new Error("mystery")), {
+      kind: "check-failed",
+      code: "UNKNOWN",
+    });
+  });
+});
+
 describe("assertConsistentEndpoint", () => {
   it("accepts a matching host and port", () => {
     assert.doesNotThrow(() =>
@@ -151,7 +195,13 @@ describe("assertConsistentEndpoint", () => {
   });
 });
 
-function fakeChild(): ChildProcessLike {
+interface FakeChild extends ChildProcessLike {
+  /** Test-only: simulates the process exiting on its own (e.g. a crash), firing any `once("exit")` listeners. */
+  crash(exitCode: number): void;
+}
+
+function fakeChild(): FakeChild {
+  const exitListeners: (() => void)[] = [];
   return {
     exitCode: null,
     signalCode: null,
@@ -160,7 +210,15 @@ function fakeChild(): ChildProcessLike {
       this.exitCode = 0;
       this.signalCode = (signal ?? "SIGTERM") as NodeJS.Signals;
       this.killed = true;
+      queueMicrotask(() => exitListeners.splice(0).forEach((listener) => listener()));
       return true;
+    },
+    once(event, listener) {
+      if (event === "exit") exitListeners.push(listener);
+    },
+    crash(exitCode) {
+      this.exitCode = exitCode;
+      exitListeners.splice(0).forEach((listener) => listener());
     },
   };
 }
@@ -234,6 +292,24 @@ describe("waitForHttpReady", () => {
       waitForHttpReady(api(), child, 10, probeFn),
       /did not become ready.*still starting up/s,
     );
+  });
+
+  it("rejects immediately if the child exits while a probe is still pending, without waiting for it to settle", async () => {
+    const child = fakeChild();
+    let probeSettled = false;
+    const probeFn = (async () => {
+      // Never resolves within the test — proves the race, not the probe, wins.
+      await new Promise(() => undefined);
+      probeSettled = true;
+      return { kind: "ready" } as const;
+    }) as typeof probeLiveWork;
+
+    const resultPromise = waitForHttpReady(api(), child, 5000, probeFn);
+    await new Promise((resolve) => setImmediate(resolve));
+    child.crash(1);
+
+    await assert.rejects(resultPromise, /exited before it became ready/);
+    assert.equal(probeSettled, false);
   });
 });
 
@@ -332,6 +408,27 @@ describe("runLiveWorkDev", () => {
     assert.equal(deps.monitorCalls.length, 0);
   });
 
+  it("a port check that fails for a reason other than EADDRINUSE is reported distinctly, not as an occupied port", async () => {
+    let spawnCount = 0;
+    const deps = baseDeps({
+      checkPort: (async () => ({
+        kind: "check-failed",
+        code: "EACCES",
+      })) as typeof checkPortAvailability,
+      spawnHttp: () => {
+        spawnCount += 1;
+        return { child: fakeChild(), tail: () => "" };
+      },
+    });
+
+    await assert.rejects(runLiveWorkDev(deps), /Could not determine whether.*EACCES/s);
+    await assert.rejects(runLiveWorkDev(deps), (error: Error) => {
+      assert.doesNotMatch(error.message, /already in use by another process/);
+      return true;
+    });
+    assert.equal(spawnCount, 0);
+  });
+
   it("child cleanup: a startup failure after spawning still stops the child it started", async () => {
     const child = fakeChild();
     const deps = baseDeps({
@@ -346,13 +443,16 @@ describe("runLiveWorkDev", () => {
     assert.equal(deps.monitorCalls.length, 0);
   });
 
-  it("registers an early signal handler that stops a started child, and removes it once the monitor takes over", async () => {
+  it("keeps the signal handler registered through the monitor call, removing it only once the monitor returns", async () => {
     const child = fakeChild();
     const deps = baseDeps({
       spawnHttp: () => ({ child, tail: () => "" }),
       runMonitor: async () => {
-        // While the monitor "runs", the early startup handler must already be gone.
-        assert.equal(deps.signalHandlers.length, 0);
+        // `--once` installs no signal handler of its own at all (only the
+        // default loop mode does, for its terminal restore) — this
+        // launcher's own handler must still be active throughout, so a
+        // Ctrl+C during a one-shot request still cleans up the child.
+        assert.equal(deps.signalHandlers.length, 1);
       },
     });
 

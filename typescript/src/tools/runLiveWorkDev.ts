@@ -65,12 +65,21 @@ function errorMessage(error: unknown): string {
 export type LiveWorkProbeOutcome =
   { readonly kind: "ready" } | { readonly kind: "not-ready"; readonly detail: string };
 
+/**
+ * Matches `LiveWorkResult`'s actual union shape — `{status:"available",
+ * pipeline}` or `{status:"unavailable", reason}` — not just a recognized
+ * `status` value, so a stale or incompatible service that happens to return
+ * one of those two literal strings without the rest of the required shape
+ * still fails closed instead of being treated as reachable.
+ */
 function isLiveWorkEnvelope(value: unknown): value is { data: { status: unknown } } {
   if (typeof value !== "object" || value === null) return false;
   const data = (value as { data?: unknown }).data;
   if (typeof data !== "object" || data === null) return false;
-  const status = (data as { status?: unknown }).status;
-  return status === "available" || status === "unavailable";
+  const record = data as Record<string, unknown>;
+  if (record.status === "available") return "pipeline" in record;
+  if (record.status === "unavailable") return typeof record.reason === "string";
+  return false;
 }
 
 /**
@@ -104,7 +113,10 @@ export async function probeLiveWork(
       detail: `${url.origin} rejected the configured JARVIS_SERVICE_TOKEN (HTTP ${response.status})`,
     };
   }
-  if (!response.ok) {
+  if (response.status !== 200) {
+    // Exact 200, not `response.ok`'s whole 2xx range: the route only ever
+    // returns 200, so accepting e.g. 201/206 could reuse an unrelated
+    // service that coincidentally returns a 2xx with a status-shaped body.
     return {
       kind: "not-ready",
       detail: `${url.pathname} returned HTTP ${response.status} on ${url.origin}`,
@@ -129,14 +141,28 @@ export async function probeLiveWork(
 }
 
 export type PortAvailability =
-  { readonly kind: "free" } | { readonly kind: "occupied"; readonly code: string };
+  | { readonly kind: "free" }
+  | { readonly kind: "occupied"; readonly code: "EADDRINUSE" }
+  | { readonly kind: "check-failed"; readonly code: string };
+
+/**
+ * Only `EADDRINUSE` proves another process holds the port. Anything else
+ * (`EACCES`, `EADDRNOTAVAIL`, ...) is a distinct configuration/permission
+ * problem and must not be reported as "another process owns this port" —
+ * that would point the operator at the wrong fix and imply refusing to
+ * touch a process that was never actually found.
+ */
+export function classifyBindError(error: NodeJS.ErrnoException): PortAvailability {
+  if (error.code === "EADDRINUSE") return { kind: "occupied", code: "EADDRINUSE" };
+  return { kind: "check-failed", code: error.code ?? "UNKNOWN" };
+}
 
 /** Real TCP-level check: attempts to bind the configured host/port and immediately releases it. */
 export function checkPortAvailability(host: string, port: number): Promise<PortAvailability> {
   return new Promise((resolve) => {
     const probe = createServer();
     probe.once("error", (error: NodeJS.ErrnoException) => {
-      resolve({ kind: "occupied", code: error.code ?? "UNKNOWN" });
+      resolve(classifyBindError(error));
     });
     probe.once("listening", () => {
       probe.close(() => resolve({ kind: "free" }));
@@ -185,6 +211,7 @@ export interface ChildProcessLike {
   signalCode: NodeJS.Signals | null;
   killed: boolean;
   kill(signal?: NodeJS.Signals): boolean;
+  once(event: "exit", listener: () => void): void;
 }
 
 export function stopChild(child: ChildProcessLike): void {
@@ -212,6 +239,33 @@ function spawnHttpRuntime(env: NodeJS.ProcessEnv): { child: ChildProcessLike; ta
   return { child, tail: () => lines.join("\n") };
 }
 
+function exitedError(child: ChildProcessLike): Error {
+  return new Error(
+    `Jarvis HTTP runtime exited before it became ready ` +
+      `(code ${String(child.exitCode)}${child.signalCode ? `, signal ${child.signalCode}` : ""}).`,
+  );
+}
+
+/**
+ * Rejects the moment `child` exits — checked at creation (it may have
+ * already exited) and via a listener for any exit after that — so racing it
+ * against an in-flight probe or delay reports a child crash immediately,
+ * rather than only after that probe/delay happens to settle on its own
+ * (which, for a probe with no response, could be its full timeout or
+ * longer).
+ */
+function childExited(child: ChildProcessLike): Promise<never> {
+  const promise = new Promise<never>((_resolve, reject) => {
+    if (child.exitCode !== null || child.signalCode !== null) {
+      reject(exitedError(child));
+      return;
+    }
+    child.once("exit", () => reject(exitedError(child)));
+  });
+  promise.catch(() => undefined); // never an unhandled rejection if nothing races it in time
+  return promise;
+}
+
 /** Polls `probeFn` until it reports `ready`, the child exits, or `timeoutMs` elapses. */
 export async function waitForHttpReady(
   api: JarvisApiConfig,
@@ -221,18 +275,13 @@ export async function waitForHttpReady(
 ): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   const attempts: string[] = ["no probe attempted yet"];
+  const exited = childExited(child);
   for (;;) {
-    if (child.exitCode !== null || child.signalCode !== null) {
-      throw new Error(
-        `Jarvis HTTP runtime exited before it became ready ` +
-          `(code ${String(child.exitCode)}${child.signalCode ? `, signal ${child.signalCode}` : ""}).`,
-      );
-    }
-    const probe = await probeFn(api);
+    const probe = await Promise.race([probeFn(api), exited]);
     if (probe.kind === "ready") return;
     attempts.push(probe.detail);
     if (Date.now() >= deadline) break;
-    await delay(PROBE_INTERVAL_MS);
+    await Promise.race([delay(PROBE_INTERVAL_MS), exited]);
   }
   throw new Error(
     `Jarvis HTTP runtime did not become ready within ${Math.round(timeoutMs / 1000)}s ` +
@@ -267,7 +316,7 @@ export async function runLiveWorkDev(deps: LiveWorkDevDeps): Promise<void> {
   // `rejectIfCancelled()` after every await in that phase below, since the
   // handler itself can't unwind an in-flight `await` on its own.
   let cancelled: Error | null = null;
-  const removeEarlySignalHandler = deps.onSignal(() => {
+  const removeSignalHandler = deps.onSignal(() => {
     cancelled ??= new Error(
       "Cancelled before the Jarvis HTTP runtime was ready — no live-work monitor was started.",
     );
@@ -285,6 +334,13 @@ export async function runLiveWorkDev(deps: LiveWorkDevDeps): Promise<void> {
     } else {
       const availability = await deps.checkPort(deps.listen.host, deps.listen.port);
       rejectIfCancelled();
+      if (availability.kind === "check-failed") {
+        throw new Error(
+          `Could not determine whether ${deps.listen.host}:${deps.listen.port} is free ` +
+            `(${availability.code}). Check that JARVIS_HTTP_HOST/JARVIS_HTTP_PORT are valid and this ` +
+            `process has permission to bind them.`,
+        );
+      }
       if (availability.kind === "occupied") {
         throw new Error(
           `${deps.listen.host}:${deps.listen.port} is already in use by another process ` +
@@ -318,20 +374,22 @@ export async function runLiveWorkDev(deps: LiveWorkDevDeps): Promise<void> {
     }
   } catch (error: unknown) {
     if (child) stopChild(child);
-    removeEarlySignalHandler();
+    removeSignalHandler();
     throw error;
   }
 
-  // From here the monitor (in its default loop mode) owns Ctrl+C for its own
-  // terminal restore; the early startup-only handler above is no longer
-  // needed. Once mode or loop mode alike, the `finally` below always cleans
-  // up a child *we* started the moment the monitor returns control.
-  removeEarlySignalHandler();
-
+  // The handler stays registered through the monitor itself, not just
+  // startup: `--once` mode installs no signal handler of its own at all (only
+  // the default loop mode does, for its terminal restore), so removing ours
+  // beforehand would leave a Ctrl+C during a one-shot request free to kill
+  // this process before the `finally` below ever runs, orphaning a child we
+  // started. Coexisting with the loop mode's own handler is harmless — this
+  // one only stops our child and never touches the terminal or calls exit.
   try {
     await deps.runMonitor(deps.argv);
   } finally {
     if (child) stopChild(child);
+    removeSignalHandler();
   }
 }
 
