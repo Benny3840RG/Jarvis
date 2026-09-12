@@ -117,9 +117,15 @@ describe("checkPortAvailability", () => {
 });
 
 describe("assertConsistentEndpoint", () => {
-  it("accepts matching ports", () => {
+  it("accepts a matching host and port", () => {
     assert.doesNotThrow(() =>
       assertConsistentEndpoint(api("http://127.0.0.1:3000/"), listen(3000)),
+    );
+  });
+
+  it("accepts an IPv6 loopback URL against the same unbracketed listen host", () => {
+    assert.doesNotThrow(() =>
+      assertConsistentEndpoint(api("http://[::1]:3000/"), listen(3000, "::1")),
     );
   });
 
@@ -127,6 +133,20 @@ describe("assertConsistentEndpoint", () => {
     assert.throws(
       () => assertConsistentEndpoint(api("http://127.0.0.1:4000/"), listen(3000)),
       /do not agree/,
+    );
+  });
+
+  it("rejects a mismatched host", () => {
+    assert.throws(
+      () => assertConsistentEndpoint(api("http://localhost:3000/"), listen(3000, "127.0.0.1")),
+      /do not agree/,
+    );
+  });
+
+  it("rejects an https API URL, since the spawned runtime only ever speaks plain HTTP", () => {
+    assert.throws(
+      () => assertConsistentEndpoint(api("https://127.0.0.1:3000/"), listen(3000)),
+      /only ever speaks plain HTTP/,
     );
   });
 });
@@ -338,6 +358,59 @@ describe("runLiveWorkDev", () => {
 
     await runLiveWorkDev(deps);
     assert.equal(deps.signalHandlers.length, 0);
+  });
+
+  it("a signal during the initial probe cancels startup before anything is spawned", async () => {
+    let spawnCount = 0;
+    let resolveProbe!: (outcome: LiveWorkProbeOutcome) => void;
+    const probePromise = new Promise<LiveWorkProbeOutcome>((resolve) => {
+      resolveProbe = resolve;
+    });
+    const deps = baseDeps({
+      probe: (() => probePromise) as unknown as typeof probeLiveWork,
+      spawnHttp: () => {
+        spawnCount += 1;
+        return { child: fakeChild(), tail: () => "" };
+      },
+    });
+
+    const runPromise = runLiveWorkDev(deps);
+    assert.equal(
+      deps.signalHandlers.length,
+      1,
+      "the early handler must be registered synchronously",
+    );
+    deps.signalHandlers[0](); // simulate Ctrl+C arriving while the probe is still in flight
+    resolveProbe({ kind: "not-ready", detail: "no runtime yet" });
+
+    await assert.rejects(runPromise, /Cancelled before the Jarvis HTTP runtime was ready/);
+    assert.equal(spawnCount, 0, "must not spawn after cancellation");
+    assert.equal(deps.monitorCalls.length, 0);
+  });
+
+  it("a signal while waiting for the spawned HTTP runtime stops that child and cancels startup", async () => {
+    const child = fakeChild();
+    let resolveWait!: () => void;
+    const waitPromise = new Promise<void>((resolve) => {
+      resolveWait = resolve;
+    });
+    const deps = baseDeps({
+      spawnHttp: () => ({ child, tail: () => "" }),
+      waitForReady: () => waitPromise,
+    });
+
+    const runPromise = runLiveWorkDev(deps);
+    // Flush past the (already-resolved) probe/port-check/spawn steps so
+    // control is parked on the controlled `waitForReady` promise below.
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(deps.signalHandlers.length, 1);
+
+    deps.signalHandlers[0](); // simulate Ctrl+C while waiting for readiness
+    assert.equal(child.killed, true, "the handler must stop the child it started immediately");
+    resolveWait();
+
+    await assert.rejects(runPromise, /Cancelled before the Jarvis HTTP runtime was ready/);
+    assert.equal(deps.monitorCalls.length, 0);
   });
 
   it("argument forwarding: passes argv through to the monitor unchanged, including in the reuse path", async () => {

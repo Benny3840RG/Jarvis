@@ -145,12 +145,36 @@ export function checkPortAvailability(host: string, port: number): Promise<PortA
   });
 }
 
+function normalizeHost(host: string): string {
+  const trimmed = host.trim();
+  const unbracketed =
+    trimmed.startsWith("[") && trimmed.endsWith("]") ? trimmed.slice(1, -1) : trimmed;
+  return unbracketed.toLowerCase();
+}
+
+/**
+ * `src/http/main.ts` only ever speaks plain HTTP and binds exactly one
+ * host/port — if `JARVIS_API_BASE_URL` names a different host, a different
+ * port, or `https:`, the launcher would spawn a runtime the probe can never
+ * reach (an https probe against a plain-HTTP listener, or a probe aimed at
+ * an address nothing is bound to) and spin until the startup timeout with an
+ * unhelpful "no response" detail instead of rejecting the mismatch upfront.
+ */
 export function assertConsistentEndpoint(api: JarvisApiConfig, listen: HttpListenConfig): void {
-  const apiPort = api.baseUrl.port || (api.baseUrl.protocol === "https:" ? "443" : "80");
-  if (apiPort !== String(listen.port)) {
+  if (api.baseUrl.protocol !== "http:") {
     throw new Error(
-      `JARVIS_API_BASE_URL (${api.baseUrl.origin}) and the HTTP runtime's configured port ` +
-        `(${listen.port}, from JARVIS_HTTP_PORT) do not agree. Point them at the same port before retrying.`,
+      `JARVIS_API_BASE_URL (${api.baseUrl.origin}) uses ${api.baseUrl.protocol.replace(":", "")}, ` +
+        `but the Jarvis HTTP runtime this launcher may start only ever speaks plain HTTP. ` +
+        `Point JARVIS_API_BASE_URL at an http:// URL before retrying.`,
+    );
+  }
+  const apiHost = normalizeHost(api.baseUrl.hostname);
+  const apiPort = api.baseUrl.port || "80";
+  if (apiHost !== normalizeHost(listen.host) || apiPort !== String(listen.port)) {
+    throw new Error(
+      `JARVIS_API_BASE_URL (${api.baseUrl.origin}) and the HTTP runtime's configured address ` +
+        `(${listen.host}:${listen.port}, from JARVIS_HTTP_HOST/JARVIS_HTTP_PORT) do not agree. ` +
+        `Point them at the same host and port before retrying.`,
     );
   }
 }
@@ -238,16 +262,29 @@ export async function runLiveWorkDev(deps: LiveWorkDevDeps): Promise<void> {
   assertConsistentEndpoint(deps.api, deps.listen);
 
   let child: ChildProcessLike | null = null;
+  // A signal during the initial probe/port-check/wait phase must actually
+  // stop startup, not just be silently absorbed — checked with
+  // `rejectIfCancelled()` after every await in that phase below, since the
+  // handler itself can't unwind an in-flight `await` on its own.
+  let cancelled: Error | null = null;
   const removeEarlySignalHandler = deps.onSignal(() => {
+    cancelled ??= new Error(
+      "Cancelled before the Jarvis HTTP runtime was ready — no live-work monitor was started.",
+    );
     if (child) stopChild(child);
   });
+  const rejectIfCancelled = (): void => {
+    if (cancelled) throw cancelled;
+  };
 
   try {
     const initialProbe = await deps.probe(deps.api);
+    rejectIfCancelled();
     if (initialProbe.kind === "ready") {
       deps.log(`Reusing an already healthy Jarvis HTTP runtime at ${deps.api.baseUrl.origin}.`);
     } else {
       const availability = await deps.checkPort(deps.listen.host, deps.listen.port);
+      rejectIfCancelled();
       if (availability.kind === "occupied") {
         throw new Error(
           `${deps.listen.host}:${deps.listen.port} is already in use by another process ` +
@@ -259,6 +296,11 @@ export async function runLiveWorkDev(deps: LiveWorkDevDeps): Promise<void> {
 
       const spawned = deps.spawnHttp();
       child = spawned.child;
+      // No `await` since `spawnHttp()` returned, so a signal could not have
+      // interleaved before this check — but one may have arrived while
+      // `child` was still null (during the probe/port-check above), in which
+      // case the handler above never got to stop *this* child.
+      rejectIfCancelled();
       deps.log(
         `Starting the Jarvis HTTP runtime on http://${deps.listen.host}:${deps.listen.port} ...`,
       );
@@ -271,6 +313,7 @@ export async function runLiveWorkDev(deps: LiveWorkDevDeps): Promise<void> {
           { cause: error },
         );
       }
+      rejectIfCancelled();
       deps.log("Jarvis HTTP runtime is ready.");
     }
   } catch (error: unknown) {
