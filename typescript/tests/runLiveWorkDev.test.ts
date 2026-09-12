@@ -386,6 +386,20 @@ describe("runLiveWorkDev", () => {
     assert.ok(deps.logs.some((line) => /Reusing/.test(line)));
   });
 
+  it("reuses a healthy runtime even when its endpoint doesn't match the local listen config, since nothing gets spawned", async () => {
+    // Endpoint consistency only matters on the spawn path — a probe that's
+    // already `ready` must be reused regardless of how JARVIS_API_BASE_URL
+    // compares to JARVIS_HTTP_HOST/PORT.
+    const deps = baseDeps({
+      api: api("http://127.0.0.1:9999/"),
+      listen: listen(3000),
+      probe: (async () => ({ kind: "ready" })) as typeof probeLiveWork,
+    });
+
+    await assert.doesNotReject(runLiveWorkDev(deps));
+    assert.equal(deps.monitorCalls.length, 1);
+  });
+
   it("incompatible/404 runtime with the port occupied: fails closed, never spawns, never runs the monitor", async () => {
     let spawnCount = 0;
     const deps = baseDeps({
@@ -427,6 +441,21 @@ describe("runLiveWorkDev", () => {
       return true;
     });
     assert.equal(spawnCount, 0);
+  });
+
+  it("rejects a mismatched endpoint before spawning, when there is no healthy runtime to reuse", async () => {
+    let spawnCount = 0;
+    const deps = baseDeps({
+      api: api("http://127.0.0.1:9999/"),
+      listen: listen(3000),
+      spawnHttp: () => {
+        spawnCount += 1;
+        return { child: fakeChild(), tail: () => "" };
+      },
+    });
+
+    await assert.rejects(runLiveWorkDev(deps), /do not agree/);
+    assert.equal(spawnCount, 0, "must not spawn against a config it already knows is inconsistent");
   });
 
   it("child cleanup: a startup failure after spawning still stops the child it started", async () => {

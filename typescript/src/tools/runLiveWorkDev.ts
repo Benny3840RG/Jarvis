@@ -308,8 +308,6 @@ export interface LiveWorkDevDeps {
  * terminal, so every path is directly testable.
  */
 export async function runLiveWorkDev(deps: LiveWorkDevDeps): Promise<void> {
-  assertConsistentEndpoint(deps.api, deps.listen);
-
   let child: ChildProcessLike | null = null;
   // A signal during the initial probe/port-check/wait phase must actually
   // stop startup, not just be silently absorbed — checked with
@@ -332,6 +330,12 @@ export async function runLiveWorkDev(deps: LiveWorkDevDeps): Promise<void> {
     if (initialProbe.kind === "ready") {
       deps.log(`Reusing an already healthy Jarvis HTTP runtime at ${deps.api.baseUrl.origin}.`);
     } else {
+      // Endpoint consistency only matters once we're about to spawn our own
+      // runtime — it exists to catch us spawning a server our own probe
+      // could never reach. A healthy pre-existing runtime is reused above
+      // regardless of how its host/port/scheme compares to the local listen
+      // config, since nothing gets spawned in that case.
+      assertConsistentEndpoint(deps.api, deps.listen);
       const availability = await deps.checkPort(deps.listen.host, deps.listen.port);
       rejectIfCancelled();
       if (availability.kind === "check-failed") {
