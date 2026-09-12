@@ -2,7 +2,9 @@
 
 ## Scope and method
 
-Exact scanned revision: `8ef963ff83578f85a51e8a85b1bac899cfc81423` (branch `claude/jarvis-complete-audit-j1g2qi`, which at this commit is `main` at PR #517's merge plus this audit's own commit removing a stale workflow — see "Changes made during this audit" below).
+Exact scanned revision: `8ef963ff83578f85a51e8a85b1bac899cfc81423` (branch `claude/jarvis-complete-audit-j1g2qi`, which at this commit is `main` at PR #517's merge plus this audit's own commit removing a stale workflow — see "Changes made during this audit" below). All build verification, security/architecture/test/dependency research, and file:line citations in this report were produced against that exact tree.
+
+This report is committed on top of that revision as one or more further commits that add or amend only this document under `docs/security/` and do not alter any file the report describes. Consequently the pull request's current head commit will differ from the "exact scanned revision" above by exactly that documentation change — this is expected, not a discrepancy in what was audited, and is noted here so a reviewer diffing the PR head against this line doesn't need to re-ask.
 
 This is a broader audit than the prior security-only scans in this directory (`2026-08-04`, `2026-08-08`, `2026-08-26`). It covers five areas: build/lint/test health (verified directly, not by claim), security drift since the last scan, architecture/governance-guarantee alignment in the core modules, test coverage and CI workflow health, and dependency/documentation consistency.
 
