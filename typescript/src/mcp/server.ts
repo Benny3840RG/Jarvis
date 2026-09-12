@@ -461,11 +461,26 @@ const statusSchema = z.object({
     lastErrorCode: z.string().optional(),
   }),
   integrations: z.array(
-    z.object({
-      name: z.string(),
-      status: z.enum(["commissioned", "not-commissioned"]),
-      reason: z.string().optional(),
-    }),
+    z.discriminatedUnion("stage", [
+      z.object({
+        name: z.string().min(1),
+        stage: z.enum(["implemented", "configured"]),
+        status: z.literal("not-commissioned"),
+        reason: z.string().min(1),
+      }),
+      z.object({
+        name: z.string().min(1),
+        stage: z.literal("commissioned"),
+        status: z.literal("commissioned"),
+        reason: z.string().min(1),
+      }),
+      z.object({
+        name: z.string().min(1),
+        stage: z.literal("production-approved"),
+        status: z.literal("commissioned"),
+        reason: z.string().min(1).optional(),
+      }),
+    ]),
   ),
   // Never a live-verified state -- "configured" means the provider API key
   // env var is present, not that the provider has ever been reached. See

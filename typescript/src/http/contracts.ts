@@ -44,11 +44,43 @@ export type ProviderStatus = {
   deploymentVersion: string | null;
 };
 
-export type IntegrationStatus = {
-  name: string;
-  status: "commissioned" | "not-commissioned";
-  reason?: string;
-};
+/**
+ * How far a capability has actually progressed, from code existing to a human
+ * approving production use. Each stage is a strictly stronger claim than the one
+ * before it and must be backed by evidence *of that kind* — a stronger stage is
+ * never inferred from a weaker one. In particular, registering a tool proves its
+ * dependencies are wired (`configured`); it proves nothing about whether the
+ * real external system has ever been exercised (`commissioned`) or whether an
+ * operator has approved production use (`production-approved`).
+ */
+export type LifecycleStage =
+  /** Code exists and is covered by offline tests. Full deployment wiring is not established. */
+  | "implemented"
+  /** Every dependency/credential this deployment needs is present and wired. */
+  | "configured"
+  /** Exercised against the real external system, with the result recorded as evidence. */
+  | "commissioned"
+  /** A human has approved production use. */
+  | "production-approved";
+
+/** Legal integration states; registration cannot produce a commissioned status. */
+export type IntegrationStatus = { name: string } & (
+  | { stage: "implemented" | "configured"; status: "not-commissioned"; reason: string }
+  | { stage: "commissioned"; status: "commissioned"; reason: string }
+  | { stage: "production-approved"; status: "commissioned"; reason?: string }
+);
+
+/** Derives the legacy field while retaining the literal result for known stages. */
+export function integrationStatusFromStage(stage: "implemented" | "configured"): "not-commissioned";
+export function integrationStatusFromStage(
+  stage: "commissioned" | "production-approved",
+): "commissioned";
+export function integrationStatusFromStage(stage: LifecycleStage): IntegrationStatus["status"];
+export function integrationStatusFromStage(stage: LifecycleStage): IntegrationStatus["status"] {
+  return stage === "commissioned" || stage === "production-approved"
+    ? "commissioned"
+    : "not-commissioned";
+}
 
 // Never a live-verified state -- "configured" means the required provider API
 // key env var is present, not that the provider has ever been reached. See

@@ -137,8 +137,10 @@ and has produced a fresh successful cycle with no released or escalated work. A 
 stale, or never-completed worker cannot be reported as healthy. `/healthz` remains liveness-only.
 
 Status also reports `integrations`: an array of evidence-backed integration-commissioning line items
-(`{name, status: "commissioned" | "not-commissioned", reason?}`), never a percentage and never inferred
-from an environment variable simply being set. See
+(`{name, stage, status: "commissioned" | "not-commissioned", reason?}`), never a percentage and never inferred
+from an environment variable simply being set. Tool registration establishes `stage: configured`
+and `status: not-commissioned`; the status reader does not inspect commissioning or production-approval
+evidence. See
 [Operations Inbox, Activity Timeline & Integration Health](./operations-inbox.md) for the full source-of-
 truth map, including the read-only Operations Inbox (`GET /api/v1/operations/inbox`) and Activity Timeline
 (`GET /api/v1/operations/activity`) endpoints.
