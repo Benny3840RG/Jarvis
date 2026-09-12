@@ -35,6 +35,7 @@ import type * as omegaMissions from "../omegaMissions.js";
 import type * as omegaReconciliation from "../omegaReconciliation.js";
 import type * as omegaSchema from "../omegaSchema.js";
 import type * as omegaValidators from "../omegaValidators.js";
+import type * as orchestrationCommissioning from "../orchestrationCommissioning.js";
 import type * as orchestrationState from "../orchestrationState.js";
 import type * as orchestrationValidators from "../orchestrationValidators.js";
 import type * as preferences from "../preferences.js";
@@ -98,6 +99,7 @@ declare const fullApi: ApiFromModules<{
   omegaReconciliation: typeof omegaReconciliation;
   omegaSchema: typeof omegaSchema;
   omegaValidators: typeof omegaValidators;
+  orchestrationCommissioning: typeof orchestrationCommissioning;
   orchestrationState: typeof orchestrationState;
   orchestrationValidators: typeof orchestrationValidators;
   preferences: typeof preferences;

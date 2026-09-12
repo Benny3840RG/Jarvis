@@ -86,7 +86,7 @@ function validHost(host: string): boolean {
   );
 }
 
-function isLoopbackHost(host: string): boolean {
+export function isLoopbackHost(host: string): boolean {
   const normalized = host.toLowerCase();
   return normalized === "localhost" || normalized === "127.0.0.1" || normalized === "::1";
 }
@@ -114,7 +114,10 @@ function secureUrl(value: string | undefined, field: string): string | undefined
   return parsed.toString();
 }
 
-function resolveOidcConfig(env: JarvisEnvironment, required: boolean): OidcConfig | undefined {
+export function resolveOidcConfig(
+  env: JarvisEnvironment,
+  required: boolean,
+): OidcConfig | undefined {
   const issuer = secureUrl(env.JARVIS_OIDC_ISSUER, "JARVIS_OIDC_ISSUER");
   const jwksUrl = secureUrl(env.JARVIS_OIDC_JWKS_URL, "JARVIS_OIDC_JWKS_URL");
   const audience = optionalText(env.JARVIS_OIDC_AUDIENCE);

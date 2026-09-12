@@ -84,6 +84,7 @@ export class ConvexOrchestrationRunner {
     graph: OrchestrationGraph,
     context: OrchestrationContext,
     metadata: ConvexOrchestrationRunMetadata,
+    execution: { signal?: AbortSignal } = {},
   ): Promise<ConvexOrchestrationRunResult> {
     const begun: ConvexOrchestrationBeginRunResult = await this.state.beginRun({
       ...metadata,
@@ -96,6 +97,9 @@ export class ConvexOrchestrationRunner {
     if (begun.status !== "created") {
       return { status: begun.status, run: begun.run };
     }
+    // A timed-out admission may have committed. Preserve that run for reconciliation,
+    // but never start new local execution after the caller abandoned admission.
+    execution.signal?.throwIfAborted();
     return { status: "created", result: await this.runner.run(graph, context) };
   }
 }

@@ -27,10 +27,34 @@ export type ReasonWithTotalityCommand = {
   input: TotalityReasonRequestBody;
 };
 
-export type OrchestrationCommand =
-  CreateTaskCommand | CompleteTaskCommand | CreateReminderCommand | ReasonWithTotalityCommand;
+/**
+ * A read-only, side-effect-free probe used only by the isolated-ingress
+ * commissioning bootstrap (issue #324). It is deliberately NOT part of
+ * `IMPLEMENTED_CAPABILITIES` / the OpenAPI contract / `/api/v1/help`: it is
+ * admitted to a run purely through the runner's `additionalCapabilities` seam,
+ * and its only executor (`commissioningProbeExecutor`) constructs no persistence,
+ * provider or business adapter.
+ */
+export type CommissioningProbeCommand = {
+  operationId: "commissioningProbe";
+  input: { nonce: string };
+};
 
-export type OrchestrationValue = Task | Reminder | TotalityResponse<unknown>;
+export type CommissioningProbeValue = {
+  probe: "ok";
+  nonce: string;
+  observedAt: number;
+};
+
+export type OrchestrationCommand =
+  | CreateTaskCommand
+  | CompleteTaskCommand
+  | CreateReminderCommand
+  | ReasonWithTotalityCommand
+  | CommissioningProbeCommand;
+
+export type OrchestrationValue =
+  Task | Reminder | TotalityResponse<unknown> | CommissioningProbeValue;
 
 export type DomainFailureCode =
   | "blocked"
