@@ -75,13 +75,33 @@ describe("fetchLiveWork", () => {
 
   it("never hangs: a request that never resolves still settles as UNAVAILABLE", async () => {
     const result = await fetchLiveWork(
-      // Simulates a host that accepts the connection but never answers —
-      // the underlying fetch has no timeout of its own, so this promise
-      // deliberately never settles.
+      // Simulates a client that ignores the abort signal entirely — the
+      // backstop below must still guarantee this settles, independent of
+      // whether the client honours cancellation.
       { getDevelopmentLiveWork: () => new Promise(() => {}) },
       20,
     );
     assert.equal(result.status, "unavailable");
     assert.match(result.status === "unavailable" ? result.reason : "", /did not respond within/);
+  });
+
+  it("hands the client an abort signal that fires on timeout, so a real request can cancel itself", async () => {
+    let receivedSignal: AbortSignal | undefined;
+    const result = await fetchLiveWork(
+      {
+        getDevelopmentLiveWork: (signal) =>
+          new Promise((_resolve, reject) => {
+            receivedSignal = signal;
+            signal?.addEventListener("abort", () => reject(new Error("upstream request aborted")));
+          }),
+      },
+      20,
+    );
+    assert.equal(result.status, "unavailable");
+    assert.equal(
+      receivedSignal?.aborted,
+      true,
+      "the client must have received a signal, and it must have fired",
+    );
   });
 });

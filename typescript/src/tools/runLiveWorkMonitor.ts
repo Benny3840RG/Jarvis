@@ -139,19 +139,27 @@ export function parseMonitorArgs(argv: readonly string[]): MonitorArgs {
  * truthful UNAVAILABLE, never leaving the caller awaiting forever.
  */
 export async function fetchLiveWork(
-  client: { getDevelopmentLiveWork(): Promise<LiveWorkResult> },
+  client: { getDevelopmentLiveWork(signal?: AbortSignal): Promise<LiveWorkResult> },
   timeoutMs = DEFAULT_TIMEOUT_MS,
 ): Promise<LiveWorkResult> {
+  // The controller's signal is handed to the client so a real request can
+  // actually cancel itself on timeout (rather than being merely outraced and
+  // left running — in `runLoop`, an uncancelled request would otherwise pile
+  // up with every subsequent poll); the `setTimeout` below is the backstop
+  // that guarantees this function still settles within `timeoutMs` even
+  // against a client that ignores the signal entirely.
+  const controller = new AbortController();
   let timer: NodeJS.Timeout | undefined;
   try {
     return await Promise.race([
-      client.getDevelopmentLiveWork(),
+      // `Promise.race` attaches its own handler to each candidate, so a
+      // losing promise that later rejects is never "unhandled".
+      client.getDevelopmentLiveWork(controller.signal),
       new Promise<never>((_resolve, reject) => {
-        timer = setTimeout(
-          () =>
-            reject(new Error(`Jarvis did not respond within ${Math.round(timeoutMs / 1000)}s.`)),
-          timeoutMs,
-        );
+        timer = setTimeout(() => {
+          controller.abort();
+          reject(new Error(`Jarvis did not respond within ${Math.round(timeoutMs / 1000)}s.`));
+        }, timeoutMs);
       }),
     ]);
   } catch (error: unknown) {
