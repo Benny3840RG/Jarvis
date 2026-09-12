@@ -13,7 +13,7 @@ on:
   pull_request_review_comment:
     types: [created]
   issues:
-    types: [opened, assigned]
+    types: [opened, edited]
   pull_request_review:
     types: [submitted]
 
@@ -32,7 +32,6 @@ jobs:
       contents: read
       pull-requests: write
       issues: write
-      id-token: write
       actions: read # lets Claude read CI results on the PR it is responding to
 
     steps:
@@ -55,3 +54,5 @@ jobs:
         uses: anthropics/claude-code-action@5ccc3a35a6367cdb8e6fbd0728287467540ecfe2 # v1.0.219
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # Keep GitHub access within this job's explicit comment/review permissions.
+          github_token: ${{ github.token }}
