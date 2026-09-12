@@ -206,9 +206,16 @@ async function runLoop(client: JarvisApiClient, args: MonitorArgs): Promise<void
   }
 }
 
-async function main(): Promise<void> {
+/**
+ * Runs the monitor for one process lifetime, exactly as the `npm run
+ * monitor` CLI entry point below does. Exported so other launchers (the
+ * one-command dev runtime in `runLiveWorkDev.ts`) can start the same
+ * monitor, with the same flags, in-process — rather than re-implementing
+ * or forking its argument parsing, polling, or terminal handling.
+ */
+export async function main(argv: readonly string[] = process.argv.slice(2)): Promise<void> {
   loadLocalEnvironment();
-  const args = parseMonitorArgs(process.argv.slice(2));
+  const args = parseMonitorArgs(argv);
   const client = new JarvisApiClient(resolveJarvisMcpConfig().api);
   if (args.once) {
     await runOnce(client, args);

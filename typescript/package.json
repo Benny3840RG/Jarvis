@@ -13,6 +13,7 @@
     "start:preview": "node --import tsx src/preview/main.ts",
     "paddock": "node --import tsx src/tools/runPaddock.ts",
     "monitor": "node --import tsx src/tools/runLiveWorkMonitor.ts",
+    "dev:live-work": "node --import tsx src/tools/runLiveWorkDev.ts",
     "agent:check": "node --import tsx src/agent/main.ts",
     "agent:repl": "node --import tsx src/agent/replMain.ts",
     "test": "npm run test:node && npm run test:convex",
