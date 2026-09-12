@@ -194,13 +194,24 @@ export function assertConsistentEndpoint(api: JarvisApiConfig, listen: HttpListe
         `Point JARVIS_API_BASE_URL at an http:// URL before retrying.`,
     );
   }
-  const apiHost = normalizeHost(api.baseUrl.hostname);
   const apiPort = api.baseUrl.port || "80";
-  if (apiHost !== normalizeHost(listen.host) || apiPort !== String(listen.port)) {
+  if (apiPort !== String(listen.port)) {
     throw new Error(
-      `JARVIS_API_BASE_URL (${api.baseUrl.origin}) and the HTTP runtime's configured address ` +
-        `(${listen.host}:${listen.port}, from JARVIS_HTTP_HOST/JARVIS_HTTP_PORT) do not agree. ` +
-        `Point them at the same host and port before retrying.`,
+      `JARVIS_API_BASE_URL (${api.baseUrl.origin}) and the HTTP runtime's configured port ` +
+        `(${listen.port}, from JARVIS_HTTP_PORT) do not agree. Point them at the same port before retrying.`,
+    );
+  }
+  const listenHost = normalizeHost(listen.host);
+  // A wildcard bind (0.0.0.0 / ::) serves every local address, loopback
+  // included — JARVIS_API_BASE_URL naming a specific one (typically
+  // 127.0.0.1, since that's all resolveApiBaseUrl itself ever allows) is
+  // valid and reachable, not a mismatch, so only a non-wildcard host is
+  // checked for equality.
+  const isWildcardBind = listenHost === "0.0.0.0" || listenHost === "::";
+  if (!isWildcardBind && normalizeHost(api.baseUrl.hostname) !== listenHost) {
+    throw new Error(
+      `JARVIS_API_BASE_URL (${api.baseUrl.origin}) and the HTTP runtime's configured host ` +
+        `(${listen.host}, from JARVIS_HTTP_HOST) do not agree. Point them at the same host before retrying.`,
     );
   }
 }
@@ -278,7 +289,14 @@ export async function waitForHttpReady(
   const exited = childExited(child);
   for (;;) {
     const probe = await Promise.race([probeFn(api), exited]);
-    if (probe.kind === "ready") return;
+    if (probe.kind === "ready") {
+      // A probe can itself take close to its own timeout, so it's possible
+      // to receive `ready` only after the overall deadline already passed —
+      // don't silently accept a startup that ran longer than `timeoutMs`.
+      if (Date.now() < deadline) return;
+      attempts.push("became ready only after the timeout had already elapsed");
+      break;
+    }
     attempts.push(probe.detail);
     if (Date.now() >= deadline) break;
     await Promise.race([delay(PROBE_INTERVAL_MS), exited]);

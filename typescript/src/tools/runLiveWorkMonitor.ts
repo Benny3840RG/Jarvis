@@ -154,9 +154,33 @@ export async function fetchLiveWork(
   // leaving the process waiting out the full timeout.
   const controller = new AbortController();
   let timer: NodeJS.Timeout | undefined;
-  const onExternalAbort = (): void => controller.abort();
-  externalSignal?.addEventListener("abort", onExternalAbort, { once: true });
-  const raceCandidates: Promise<LiveWorkResult>[] = [
+  // Set only if a real listener is actually registered below, so `finally`
+  // never removes a listener that was never added (the already-aborted case
+  // aborts `controller` directly instead, without touching `externalSignal`).
+  let onExternalAbort: (() => void) | undefined;
+  const raceCandidates: Promise<LiveWorkResult>[] = [];
+
+  if (externalSignal) {
+    raceCandidates.push(
+      new Promise<never>((_resolve, reject) => {
+        const onAbort = (): void => {
+          controller.abort();
+          reject(new Error("Cancelled before Jarvis responded."));
+        };
+        if (externalSignal.aborted) {
+          // Cancelled before this call even started: abort `controller` now,
+          // before `client.getDevelopmentLiveWork` below is ever invoked, so
+          // a signal-respecting client never starts the request at all.
+          onAbort();
+          return;
+        }
+        onExternalAbort = onAbort;
+        externalSignal.addEventListener("abort", onAbort, { once: true });
+      }),
+    );
+  }
+
+  raceCandidates.push(
     // `Promise.race` attaches its own handler to each candidate, so a losing
     // promise that later rejects is never "unhandled".
     client.getDevelopmentLiveWork(controller.signal),
@@ -166,23 +190,15 @@ export async function fetchLiveWork(
         reject(new Error(`Jarvis did not respond within ${Math.round(timeoutMs / 1000)}s.`));
       }, timeoutMs);
     }),
-  ];
-  if (externalSignal) {
-    raceCandidates.push(
-      new Promise<never>((_resolve, reject) => {
-        const onAbort = (): void => reject(new Error("Cancelled before Jarvis responded."));
-        if (externalSignal.aborted) onAbort();
-        else externalSignal.addEventListener("abort", onAbort, { once: true });
-      }),
-    );
-  }
+  );
+
   try {
     return await Promise.race(raceCandidates);
   } catch (error: unknown) {
     return { status: "unavailable", reason: `Could not reach Jarvis: ${errorMessage(error)}` };
   } finally {
     clearTimeout(timer);
-    externalSignal?.removeEventListener("abort", onExternalAbort);
+    if (onExternalAbort) externalSignal?.removeEventListener("abort", onExternalAbort);
   }
 }
 

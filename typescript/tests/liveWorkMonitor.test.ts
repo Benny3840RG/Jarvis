@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { getEventListeners } from "node:events";
 import { describe, it } from "node:test";
 
 import type { LiveWorkResult } from "../src/development/liveWork.js";
@@ -139,5 +140,42 @@ describe("fetchLiveWork", () => {
     await resultPromise;
 
     assert.equal(receivedSignal?.aborted, true);
+  });
+
+  it("aborts the controller before ever calling the client, when the external signal is already aborted", async () => {
+    const externalController = new AbortController();
+    externalController.abort();
+    let receivedSignal: AbortSignal | undefined;
+    const result = await fetchLiveWork(
+      {
+        getDevelopmentLiveWork: (signal) => {
+          receivedSignal = signal;
+          return new Promise(() => {});
+        },
+      },
+      10_000,
+      externalController.signal,
+    );
+    assert.equal(result.status, "unavailable");
+    assert.equal(
+      receivedSignal?.aborted,
+      true,
+      "the client must receive an already-aborted signal, not a live one",
+    );
+  });
+
+  it("removes its abort listener from a long-lived external signal once a request completes normally", async () => {
+    const externalController = new AbortController();
+    const result: LiveWorkResult = { status: "available", pipeline: null };
+    await fetchLiveWork(
+      { getDevelopmentLiveWork: async () => result },
+      10_000,
+      externalController.signal,
+    );
+    assert.equal(
+      getEventListeners(externalController.signal, "abort").length,
+      0,
+      "a long-lived signal (e.g. reused across polls) must not accumulate listeners from past requests",
+    );
   });
 });

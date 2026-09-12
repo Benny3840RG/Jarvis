@@ -193,6 +193,25 @@ describe("assertConsistentEndpoint", () => {
       /only ever speaks plain HTTP/,
     );
   });
+
+  it("accepts a loopback API URL against a wildcard IPv4 bind (0.0.0.0 serves every local address)", () => {
+    assert.doesNotThrow(() =>
+      assertConsistentEndpoint(api("http://127.0.0.1:3000/"), listen(3000, "0.0.0.0")),
+    );
+  });
+
+  it("accepts a loopback API URL against a wildcard IPv6 bind (:: serves every local address)", () => {
+    assert.doesNotThrow(() =>
+      assertConsistentEndpoint(api("http://[::1]:3000/"), listen(3000, "::")),
+    );
+  });
+
+  it("still enforces the port even against a wildcard bind", () => {
+    assert.throws(
+      () => assertConsistentEndpoint(api("http://127.0.0.1:4000/"), listen(3000, "0.0.0.0")),
+      /do not agree/,
+    );
+  });
 });
 
 interface FakeChild extends ChildProcessLike {
@@ -291,6 +310,21 @@ describe("waitForHttpReady", () => {
     await assert.rejects(
       waitForHttpReady(api(), child, 10, probeFn),
       /did not become ready.*still starting up/s,
+    );
+  });
+
+  it("rejects a probe that resolves ready only after the overall deadline has already passed", async () => {
+    const child = fakeChild();
+    const slowButEventuallyReadyProbe = (async () => {
+      // Slower than the configured overall timeout, even though this
+      // individual probe call does eventually succeed.
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      return { kind: "ready" } as const;
+    }) as typeof probeLiveWork;
+
+    await assert.rejects(
+      waitForHttpReady(api(), child, 10, slowButEventuallyReadyProbe),
+      /did not become ready.*timeout had already elapsed/s,
     );
   });
 
