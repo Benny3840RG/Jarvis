@@ -298,7 +298,7 @@ export interface LiveWorkDevDeps {
   readonly checkPort: typeof checkPortAvailability;
   readonly spawnHttp: () => { child: ChildProcessLike; tail: () => string };
   readonly waitForReady: (api: JarvisApiConfig, child: ChildProcessLike) => Promise<void>;
-  readonly runMonitor: (argv: readonly string[]) => Promise<void>;
+  readonly runMonitor: (argv: readonly string[], signal?: AbortSignal) => Promise<void>;
   readonly onSignal: (handler: () => void) => () => void;
 }
 
@@ -314,11 +314,16 @@ export async function runLiveWorkDev(deps: LiveWorkDevDeps): Promise<void> {
   // `rejectIfCancelled()` after every await in that phase below, since the
   // handler itself can't unwind an in-flight `await` on its own.
   let cancelled: Error | null = null;
+  // Handed to the monitor so an operator's Ctrl+C during `--once` (which
+  // installs no signal handler of its own) cancels its in-flight request
+  // immediately, instead of waiting out the full request timeout.
+  const monitorAbort = new AbortController();
   const removeSignalHandler = deps.onSignal(() => {
     cancelled ??= new Error(
       "Cancelled before the Jarvis HTTP runtime was ready — no live-work monitor was started.",
     );
     if (child) stopChild(child);
+    monitorAbort.abort();
   });
   const rejectIfCancelled = (): void => {
     if (cancelled) throw cancelled;
@@ -390,7 +395,7 @@ export async function runLiveWorkDev(deps: LiveWorkDevDeps): Promise<void> {
   // started. Coexisting with the loop mode's own handler is harmless — this
   // one only stops our child and never touches the terminal or calls exit.
   try {
-    await deps.runMonitor(deps.argv);
+    await deps.runMonitor(deps.argv, monitorAbort.signal);
   } finally {
     if (child) stopChild(child);
     removeSignalHandler();

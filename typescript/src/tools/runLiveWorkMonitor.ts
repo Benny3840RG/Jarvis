@@ -141,31 +141,48 @@ export function parseMonitorArgs(argv: readonly string[]): MonitorArgs {
 export async function fetchLiveWork(
   client: { getDevelopmentLiveWork(signal?: AbortSignal): Promise<LiveWorkResult> },
   timeoutMs = DEFAULT_TIMEOUT_MS,
+  externalSignal?: AbortSignal,
 ): Promise<LiveWorkResult> {
   // The controller's signal is handed to the client so a real request can
   // actually cancel itself on timeout (rather than being merely outraced and
   // left running — in `runLoop`, an uncancelled request would otherwise pile
   // up with every subsequent poll); the `setTimeout` below is the backstop
   // that guarantees this function still settles within `timeoutMs` even
-  // against a client that ignores the signal entirely.
+  // against a client that ignores the signal entirely. `externalSignal` (used
+  // by `--once`, which installs no SIGINT handler of its own) lets an
+  // operator's Ctrl+C cancel an in-flight request immediately too, instead of
+  // leaving the process waiting out the full timeout.
   const controller = new AbortController();
   let timer: NodeJS.Timeout | undefined;
-  try {
-    return await Promise.race([
-      // `Promise.race` attaches its own handler to each candidate, so a
-      // losing promise that later rejects is never "unhandled".
-      client.getDevelopmentLiveWork(controller.signal),
+  const onExternalAbort = (): void => controller.abort();
+  externalSignal?.addEventListener("abort", onExternalAbort, { once: true });
+  const raceCandidates: Promise<LiveWorkResult>[] = [
+    // `Promise.race` attaches its own handler to each candidate, so a losing
+    // promise that later rejects is never "unhandled".
+    client.getDevelopmentLiveWork(controller.signal),
+    new Promise<never>((_resolve, reject) => {
+      timer = setTimeout(() => {
+        controller.abort();
+        reject(new Error(`Jarvis did not respond within ${Math.round(timeoutMs / 1000)}s.`));
+      }, timeoutMs);
+    }),
+  ];
+  if (externalSignal) {
+    raceCandidates.push(
       new Promise<never>((_resolve, reject) => {
-        timer = setTimeout(() => {
-          controller.abort();
-          reject(new Error(`Jarvis did not respond within ${Math.round(timeoutMs / 1000)}s.`));
-        }, timeoutMs);
+        const onAbort = (): void => reject(new Error("Cancelled before Jarvis responded."));
+        if (externalSignal.aborted) onAbort();
+        else externalSignal.addEventListener("abort", onAbort, { once: true });
       }),
-    ]);
+    );
+  }
+  try {
+    return await Promise.race(raceCandidates);
   } catch (error: unknown) {
     return { status: "unavailable", reason: `Could not reach Jarvis: ${errorMessage(error)}` };
   } finally {
     clearTimeout(timer);
+    externalSignal?.removeEventListener("abort", onExternalAbort);
   }
 }
 
@@ -173,8 +190,12 @@ function resolveWidth(args: MonitorArgs): number | undefined {
   return args.width ?? (process.stdout.columns ? process.stdout.columns - 1 : undefined);
 }
 
-async function runOnce(client: JarvisApiClient, args: MonitorArgs): Promise<void> {
-  const result = await fetchLiveWork(client, args.timeoutMs);
+async function runOnce(
+  client: JarvisApiClient,
+  args: MonitorArgs,
+  signal?: AbortSignal,
+): Promise<void> {
+  const result = await fetchLiveWork(client, args.timeoutMs, signal);
   process.stdout.write(
     `${renderLiveWorkTerminal(result, { color: args.color, width: resolveWidth(args) })}\n`,
   );
@@ -220,13 +241,21 @@ async function runLoop(client: JarvisApiClient, args: MonitorArgs): Promise<void
  * one-command dev runtime in `runLiveWorkDev.ts`) can start the same
  * monitor, with the same flags, in-process — rather than re-implementing
  * or forking its argument parsing, polling, or terminal handling.
+ *
+ * `signal`, if given, lets that caller cancel a `--once` request early —
+ * `--once` installs no SIGINT/SIGTERM handler of its own (only the default
+ * loop mode does, for its own terminal restore), so without this an external
+ * Ctrl+C would otherwise have to wait out the full request timeout.
  */
-export async function main(argv: readonly string[] = process.argv.slice(2)): Promise<void> {
+export async function main(
+  argv: readonly string[] = process.argv.slice(2),
+  signal?: AbortSignal,
+): Promise<void> {
   loadLocalEnvironment();
   const args = parseMonitorArgs(argv);
   const client = new JarvisApiClient(resolveJarvisMcpConfig().api);
   if (args.once) {
-    await runOnce(client, args);
+    await runOnce(client, args, signal);
     return;
   }
   await runLoop(client, args);

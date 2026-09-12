@@ -104,4 +104,40 @@ describe("fetchLiveWork", () => {
       "the client must have received a signal, and it must have fired",
     );
   });
+
+  it("settles immediately on an externally-aborted signal, without waiting for the request timeout", async () => {
+    const externalController = new AbortController();
+    const resultPromise = fetchLiveWork(
+      { getDevelopmentLiveWork: () => new Promise(() => {}) }, // never resolves on its own
+      10_000, // a timeout far longer than this test should ever take
+      externalController.signal,
+    );
+    externalController.abort();
+
+    const result = await resultPromise;
+    assert.equal(result.status, "unavailable");
+    assert.match(
+      result.status === "unavailable" ? result.reason : "",
+      /Cancelled before Jarvis responded/,
+    );
+  });
+
+  it("propagates external cancellation into the client's own signal too, not just the race", async () => {
+    const externalController = new AbortController();
+    let receivedSignal: AbortSignal | undefined;
+    const resultPromise = fetchLiveWork(
+      {
+        getDevelopmentLiveWork: (signal) => {
+          receivedSignal = signal;
+          return new Promise(() => {});
+        },
+      },
+      10_000,
+      externalController.signal,
+    );
+    externalController.abort();
+    await resultPromise;
+
+    assert.equal(receivedSignal?.aborted, true);
+  });
 });

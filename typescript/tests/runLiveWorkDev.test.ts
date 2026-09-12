@@ -489,6 +489,30 @@ describe("runLiveWorkDev", () => {
     assert.equal(deps.signalHandlers.length, 0);
   });
 
+  it("aborts the monitor's own signal on Ctrl+C, so a one-shot request in-flight is cancelled immediately", async () => {
+    let receivedSignal: AbortSignal | undefined;
+    let resolveMonitor!: () => void;
+    const monitorPromise = new Promise<void>((resolve) => {
+      resolveMonitor = resolve;
+    });
+    const deps = baseDeps({
+      runMonitor: async (_argv, signal) => {
+        receivedSignal = signal;
+        await monitorPromise;
+      },
+    });
+
+    const runPromise = runLiveWorkDev(deps);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(deps.signalHandlers.length, 1);
+
+    deps.signalHandlers[0](); // simulate Ctrl+C while the one-shot request is in flight
+    assert.equal(receivedSignal?.aborted, true, "the monitor's signal must fire immediately");
+    resolveMonitor();
+
+    await runPromise;
+  });
+
   it("a signal during the initial probe cancels startup before anything is spawned", async () => {
     let spawnCount = 0;
     let resolveProbe!: (outcome: LiveWorkProbeOutcome) => void;
