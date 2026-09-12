@@ -143,6 +143,16 @@ export async function fetchLiveWork(
   timeoutMs = DEFAULT_TIMEOUT_MS,
   externalSignal?: AbortSignal,
 ): Promise<LiveWorkResult> {
+  // Cancelled before this call even started: settle immediately without ever
+  // invoking `client.getDevelopmentLiveWork` — an already-cancelled request
+  // must not still reach the client (and, transitively, the network).
+  if (externalSignal?.aborted) {
+    return {
+      status: "unavailable",
+      reason: "Could not reach Jarvis: Cancelled before Jarvis responded.",
+    };
+  }
+
   // The controller's signal is handed to the client so a real request can
   // actually cancel itself on timeout (rather than being merely outraced and
   // left running — in `runLoop`, an uncancelled request would otherwise pile
@@ -154,36 +164,30 @@ export async function fetchLiveWork(
   // leaving the process waiting out the full timeout.
   const controller = new AbortController();
   let timer: NodeJS.Timeout | undefined;
-  // Set only if a real listener is actually registered below, so `finally`
-  // never removes a listener that was never added (the already-aborted case
-  // aborts `controller` directly instead, without touching `externalSignal`).
   let onExternalAbort: (() => void) | undefined;
   const raceCandidates: Promise<LiveWorkResult>[] = [];
 
   if (externalSignal) {
     raceCandidates.push(
       new Promise<never>((_resolve, reject) => {
-        const onAbort = (): void => {
+        onExternalAbort = (): void => {
           controller.abort();
           reject(new Error("Cancelled before Jarvis responded."));
         };
-        if (externalSignal.aborted) {
-          // Cancelled before this call even started: abort `controller` now,
-          // before `client.getDevelopmentLiveWork` below is ever invoked, so
-          // a signal-respecting client never starts the request at all.
-          onAbort();
-          return;
-        }
-        onExternalAbort = onAbort;
-        externalSignal.addEventListener("abort", onAbort, { once: true });
+        externalSignal.addEventListener("abort", onExternalAbort, { once: true });
       }),
     );
   }
 
   raceCandidates.push(
+    // Wrapped in an async IIFE so a client that throws synchronously (rather
+    // than returning a rejected promise) still becomes a rejected race
+    // candidate instead of throwing out of `fetchLiveWork` itself, which
+    // would bypass the try/catch below and break this function's contract of
+    // always settling with a result, never throwing.
     // `Promise.race` attaches its own handler to each candidate, so a losing
     // promise that later rejects is never "unhandled".
-    client.getDevelopmentLiveWork(controller.signal),
+    (async () => client.getDevelopmentLiveWork(controller.signal))(),
     new Promise<never>((_resolve, reject) => {
       timer = setTimeout(() => {
         controller.abort();

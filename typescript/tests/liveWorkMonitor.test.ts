@@ -142,14 +142,14 @@ describe("fetchLiveWork", () => {
     assert.equal(receivedSignal?.aborted, true);
   });
 
-  it("aborts the controller before ever calling the client, when the external signal is already aborted", async () => {
+  it("settles immediately without ever calling the client, when the external signal is already aborted", async () => {
     const externalController = new AbortController();
     externalController.abort();
-    let receivedSignal: AbortSignal | undefined;
+    let clientCalled = false;
     const result = await fetchLiveWork(
       {
-        getDevelopmentLiveWork: (signal) => {
-          receivedSignal = signal;
+        getDevelopmentLiveWork: () => {
+          clientCalled = true;
           return new Promise(() => {});
         },
       },
@@ -157,10 +157,23 @@ describe("fetchLiveWork", () => {
       externalController.signal,
     );
     assert.equal(result.status, "unavailable");
-    assert.equal(
-      receivedSignal?.aborted,
-      true,
-      "the client must receive an already-aborted signal, not a live one",
+    assert.match(
+      result.status === "unavailable" ? result.reason : "",
+      /Cancelled before Jarvis responded/,
+    );
+    assert.equal(clientCalled, false, "an already-cancelled request must never reach the client");
+  });
+
+  it("maps a synchronous throw from the client to UNAVAILABLE too, not just a rejected promise", async () => {
+    const result = await fetchLiveWork({
+      getDevelopmentLiveWork: () => {
+        throw new Error("boom");
+      },
+    });
+    assert.equal(result.status, "unavailable");
+    assert.match(
+      result.status === "unavailable" ? result.reason : "",
+      /Could not reach Jarvis: boom/,
     );
   });
 
