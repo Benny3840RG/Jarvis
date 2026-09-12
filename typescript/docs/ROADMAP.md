@@ -4,6 +4,17 @@ This file is a living record for the autonomous engineering sessions working on
 Jarvis: current state, what changed recently, and what to pick up next. Update
 it at the end of every session.
 
+## Recovery engineering update (2026-09-11)
+
+The bounded recovery candidate now captures existing S4 evidence and mutable-quote
+inventories and proves the supported closed subset through ordinary stores. Its
+joint primitive uses one Convex transaction, exact shared rows, typed identities,
+and actual JSON business digests. It remains partial and unregistered for restore.
+The archive payload/marker coordinator, remaining effect/history domains, blobs
+and real provider recovery drills are still engineering work; external account
+gates do not make these local gaps complete. See
+`docs/architecture/backup-v4-s4-restore-slice.md` for exact support and limits.
+
 ## PR handover work (2026-09-10)
 
 - Added trusted automatic advisory PR review with isolated reviewer/publication
@@ -172,3 +183,27 @@ rather than an occasional operator action.
 - Pin only GitHub PR-detail reads to API 2022-11-28 because 2026-03-10 removed `merge_commit_sha`; preserve actual provider SHA checks for reconciliation and completion. Other requests retain their current API version.
 - Issue #493 live proof exposed the mismatch after a succeeded governed merge. Preserve the inconclusive observation; retry only after a fresh provider observation includes the actual merge SHA.
 - Remove the completion observer self-dependency using exact workflow/app/commit/branch/event provenance; retain all required CI and unrelated-failure gates, plus prior inconclusive proofs.
+
+## S4 bounded capture primitive (2026-09-11)
+
+- Added owner-scoped, one-transaction raw Convex capture for all 17 S4 tables,
+  preserving complete source rows and tagged Convex values with lossless checks.
+- This is capture material only: no `notesAndEvidence` archive coverage or
+  restored verification is credited. See [the S4 capture boundary](architecture/backup-v4-s4-capture.md).
+- Next: inert empty-target restore, typed references (including S5 links),
+  ordinary-store read-back and source/restored digest proof before integration.
+
+- S4 isolated restore increment: projects/notes-only typed adapter, exact capture
+  integrity/inventory checks, fresh application-database refusal, atomic schema-backed
+  insertion, typed source-ID metadata and ordinary-store/digest readback. All other
+  nonempty S4 tables fail closed; verification returns partial with no verified group.
+  Remaining S4 logical/physical/opaque references are classified in
+  `architecture/backup-v4-s4-restore-slice.md`; project memory and effect-history
+  inertness plus S5 bindings remain required before whole-group coverage.
+
+- S4 terminal project-memory increment: same isolated adapter now supports the four
+  existing memory-record kinds, applied/rejected change sets and their exact typed
+  memory audit history. Ordinary grouped/service reads and tagged digests verify
+  restoration; replay tests prove no new records, revisions or audit writes. Active
+  proposals, arbitrary payloads and effect/worker histories remain unsupported;
+  whole-group coverage remains partial with no verified group.

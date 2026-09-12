@@ -202,3 +202,51 @@ An archive is accepted only on proof of all of:
 
 The existing ΩΣ completion authority and required human approvals are unchanged
 by this contract. Neither worker may close this gate.
+
+### S6 first mutable quote adapter (partial)
+
+`convex/backupS6.ts:capture` performs one bounded owner-scoped read transaction,
+requiring the existing service token and independent approval token. It captures
+all five quote tables and the action, execution receipt and external reconciliation
+inventories through the existing lossless v4 Convex codec. Limits are 100 rows per
+table and 512 KiB encoded payload; overflow aborts, never truncates. The supplied
+S3 business checksum binds the material to an archive payload; it does not prove
+that a filesystem was read in the Convex transaction. No cross-provider atomic
+snapshot is claimed.
+
+The unregistered `restoreS6MutableQuotes` primitive supports only each aggregate's
+first current `draft` or `reviewed` revision, with open commercial state, matching
+versions and clocks, and no predecessor, finalized fingerprint or migration source.
+It reuses the authoritative quote builder to validate normalized content and totals,
+then inserts the exact logical documents into an entirely empty application database.
+It preserves quote numbers and logical identities; only physical Convex IDs are
+mapped. It never calls create, review, finalize, fork, migration, delivery or action
+execution. Nonempty artifact, delivery, migration, action, receipt or reconciliation
+inventories are refused, even when an unrelated record might eventually be safe.
+Historical revisions and PDF regeneration are outside this slice.
+
+The existing v4 Node layer's `prepareS6MutableRestore` first parses the same archive
+and calls `verifyRestoredGroups` on its actual isolated destination. The canonical
+strict business decoder and ordinary JSON stores must reproduce the archived digest;
+missing client/project edges or any unresolved business reference abort. Callers may
+not substitute an independent set of IDs. The Convex primitive alone proves only
+logical closure against its supplied business payload, never physical S3 restoration.
+It has no public mutation or CLI entrypoint.
+
+`verifyRestoredS6MutableQuotes` repeats that filesystem proof, captures actual restored
+Convex rows, checks table-scoped physical maps and exact documents, reads every quote
+through `ConvexQuoteRepository.getQuote` and its bounded ordinary list, and derives
+both digests from source and actual restored documents. It repeats S3 readback before
+returning an explicitly partial subset report with no `ArchiveVerifiedGroup` entries.
+The caller must keep both isolated destinations quiescent throughout preflight,
+restore and verification; independent provider transactions do not prevent a concurrent
+writer between reads. No manifest group is sealed, no full recovery is claimed, and
+no finalized numbering, PDF, delivery or historical state is reconstructed by inference.
+
+Composed S4/S6 validation requires the entire supplied S4 capture to satisfy its
+closed restore subset. Capture can preserve a broader raw inventory; serialization
+alone never establishes restorability. Unrelated audit producers, including Omega
+events, remain explicitly unsupported and must make both S6 composition decoding
+and the joint restore refuse before insertion. They are never ignored or removed
+to make shared-action comparison pass. Broader evidence recovery remains work in
+the same authoritative archive path.
