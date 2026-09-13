@@ -106,7 +106,7 @@ export class JarvisApiClient {
   private async request<T>(
     method: string,
     path: string,
-    options: { body?: unknown; idempotencyKey?: string } = {},
+    options: { body?: unknown; idempotencyKey?: string; signal?: AbortSignal } = {},
   ): Promise<T> {
     const startedAt = performance.now();
     const route = stableRoute(path);
@@ -127,6 +127,7 @@ export class JarvisApiClient {
           method,
           headers,
           ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }),
+          ...(options.signal === undefined ? {} : { signal: options.signal }),
         });
         statusCode = response.status;
       } catch (error: unknown) {
@@ -643,9 +644,11 @@ export class JarvisApiClient {
     ).data;
   }
 
-  async getDevelopmentLiveWork(): Promise<LiveWorkResult> {
+  async getDevelopmentLiveWork(signal?: AbortSignal): Promise<LiveWorkResult> {
     return (
-      await this.request<DataResponse<LiveWorkResult>>("GET", "/api/v1/development/live-work")
+      await this.request<DataResponse<LiveWorkResult>>("GET", "/api/v1/development/live-work", {
+        ...(signal === undefined ? {} : { signal }),
+      })
     ).data;
   }
 

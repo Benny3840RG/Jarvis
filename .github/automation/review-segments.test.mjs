@@ -729,3 +729,194 @@ test("oversized intervening JSON source stays explicitly unavailable within exis
   assert.ok(plan.prompts.length <= 16);
   validateReviewPlan(plan);
 });
+
+test("direct imports retain unchanged declarations and same-module dependencies before optional hunks", () => {
+  const helper =
+    'export const TERMINAL = ["COMPLETE", "FAILED"];\n' +
+    "export function isInFlight(state) { return !TERMINAL.includes(state); }\n";
+  const padding = "// unchanged module context é\n".repeat(550);
+  const source = helper + padding + "export const changed = 1;\n";
+  const plan = make([
+    {
+      filename: "src/selection.ts",
+      status: "modified",
+      before: "export const selected = true;\n",
+      after:
+        'import { isInFlight } from "./helper.js";\nexport const selected = isInFlight("READY");\n' +
+        "// primary source\n".repeat(5000),
+    },
+    {
+      filename: "src/helper.ts",
+      status: "modified",
+      before: source,
+      after: source.replace("changed = 1", "changed = 2"),
+    },
+    {
+      filename: "src/optional.ts",
+      status: "added",
+      before: null,
+      after:
+        'import { selected } from "./selection.js";\n' +
+        "// optional reverse-importer source\n".repeat(1400),
+    },
+  ]);
+  const payload = JSON.parse(plan.prompts[0].split("\n\n")[1]);
+  const related = payload.supplemental.filter((c) => c.fileIndex === 1);
+  assert.ok(
+    payload.unavailableContext.some((context) => context.fileIndex === 2),
+  );
+  assert.ok(!payload.supplemental.some((context) => context.fileIndex === 2));
+  assert.ok(JSON.stringify(related).includes("export function isInFlight"));
+  assert.ok(JSON.stringify(related).includes("export const TERMINAL"));
+  assert.ok(
+    related.some(
+      (c) =>
+        c.role ===
+        "complete direct-import module including same-module dependencies",
+    ),
+  );
+  for (const side of ["before", "after"]) {
+    const ranges = related
+      .flatMap((c) => c.parts)
+      .flatMap((part) =>
+        [part, ...(part.otherSides ?? [])]
+          .filter((r) => r.side === side)
+          .map((r) => ({ ...r, text: part.text })),
+      )
+      .sort((a, b) => a.start - b.start);
+    assert.equal(ranges.map((r) => r.text).join(""), plan.input.files[1][side]);
+    for (const r of ranges)
+      assert.equal(
+        Buffer.from(plan.input.files[1][side])
+          .subarray(r.start, r.end)
+          .toString(),
+        r.text,
+      );
+  }
+  assert.ok(plan.prompts.every((p) => Buffer.byteLength(p) <= 160 * 1024));
+  validateReviewPlan(plan);
+});
+
+test("oversized imported modules keep bounded partial context and cannot waive essential requests", () => {
+  const source =
+    'export const hidden = "essential";\n' +
+    "// unrelated unchanged content\n".repeat(2200) +
+    "export const changed = 1;\n";
+  const plan = make([
+    {
+      filename: "src/a.ts",
+      status: "modified",
+      before: "export const old = true;",
+      after:
+        'import {hidden} from "./large.js";\nimport {absent} from "./unfetched.js";\n' +
+        "// caller\n".repeat(8500),
+    },
+    {
+      filename: "src/large.ts",
+      status: "modified",
+      before: source,
+      after: source.replace("changed = 1", "changed = 2"),
+    },
+  ]);
+  const payload = JSON.parse(plan.prompts[0].split("\n\n")[1]);
+  assert.ok(
+    !payload.supplemental.some(
+      (c) =>
+        c.role ===
+        "complete direct-import module including same-module dependencies",
+    ),
+  );
+  assert.ok(
+    payload.unavailableContext.some(
+      (context) => context.fileIndex === 1 && context.reason.includes("48 KiB"),
+    ),
+  );
+  assert.equal(plan.manifest.files.length, 2);
+  assert.ok(plan.prompts.every((p) => Buffer.byteLength(p) <= 160 * 1024));
+  validateReviewPlan(plan);
+  const receipts = plan.prompts.map((_, index) =>
+    segmentReceipt(
+      plan,
+      index,
+      index === 0
+        ? JSON.stringify({
+            verdict: "blocked",
+            summary: "Essential imported context missing.",
+            findings: [],
+            contextRequests: ["Supply hidden declaration."],
+          })
+        : raw,
+    ),
+  );
+  assert.equal(aggregateSegments(plan, receipts).verdict, "blocked");
+});
+
+test("partial primary ranges do not suppress complete imported declarations", () => {
+  const helper =
+    "export const changed = 1;\n" +
+    Array.from({ length: 1400 }, (_, i) => `// module padding${i} é\n`).join(
+      "",
+    ) +
+    'export const TERMINAL = ["COMPLETE", "FAILED"];\nexport function isInFlight(state) { return !TERMINAL.includes(state); }\n';
+  const plan = make([
+    {
+      filename: "src/entry.ts",
+      status: "added",
+      before: null,
+      after:
+        'import { isInFlight } from "./helper.js";\n' +
+        "// primary padding\n".repeat(4400),
+    },
+    {
+      filename: "src/helper.ts",
+      status: "modified",
+      before: helper,
+      after: helper.replace("changed = 1", "changed = 2"),
+    },
+  ]);
+  const payload = JSON.parse(plan.prompts[0].split("\n\n")[1]);
+  assert.ok(
+    payload.units.some((u) =>
+      u.parts.some((p) => p.references.some((r) => r.fileIndex === 1)),
+    ),
+  );
+  assert.ok(
+    !JSON.stringify(payload.units).includes("export function isInFlight"),
+  );
+  const supplement = payload.supplemental.filter((c) => c.fileIndex === 1);
+  assert.ok(JSON.stringify(supplement).includes("export function isInFlight"));
+  assert.ok(JSON.stringify(supplement).includes("export const TERMINAL"));
+  for (const context of supplement)
+    for (const part of context.parts)
+      for (const r of [part, ...(part.otherSides ?? [])])
+        assert.equal(
+          Buffer.from(plan.input.files[1][r.side])
+            .subarray(r.start, r.end)
+            .toString(),
+          part.text,
+        );
+  const receipts = plan.prompts.map((_, index) =>
+    segmentReceipt(
+      plan,
+      index,
+      index === 0
+        ? JSON.stringify({
+            verdict: "changes_requested",
+            summary: "Supplement-only location must not be accepted.",
+            contextRequests: [],
+            findings: [
+              {
+                file: "src/helper.ts",
+                line: helper.split("\n").length - 2,
+                severity: "medium",
+                message:
+                  "This line is only supplied as supplemental context here.",
+              },
+            ],
+          })
+        : raw,
+    ),
+  );
+  assert.equal(aggregateSegments(plan, receipts).verdict, "blocked");
+  validateReviewPlan(plan);
+});

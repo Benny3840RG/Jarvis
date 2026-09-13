@@ -272,10 +272,8 @@ export function buildReviewPlan(input) {
         });
       }
     }
-    const direct = new Set([
-      ...indices,
-      ...changedImportContext(files, indices),
-    ]);
+    const directImports = changedImportContext(files, indices, true);
+    const direct = new Set([...indices, ...directImports]);
     const contexts = relatedChangedContext(files, indices)
       .map((fileIndex) => {
         if (!contextCache.has(fileIndex))
@@ -314,7 +312,8 @@ export function buildReviewPlan(input) {
           a.fileIndex - b.fileIndex,
       );
     const upgrades = [];
-    for (const context of contexts) {
+    const relatedPositions = new Map();
+    const appendCompact = (context) => {
       const { fileIndex } = context;
       const compactKey = `compact:${fileIndex}`;
       if (!contextCache.has(compactKey))
@@ -351,12 +350,74 @@ export function buildReviewPlan(input) {
           reason:
             "related changed source exceeds remaining bounded context; request it if essential",
         });
-      } else if (candidate === compact)
-        upgrades.push({ index: supplemental.length - 1, context });
+      } else {
+        relatedPositions.set(fileIndex, supplemental.length - 1);
+        if (candidate === compact)
+          upgrades.push({ index: supplemental.length - 1, context });
+      }
+    };
+    for (const context of contexts.filter((context) =>
+      direct.has(context.fileIndex),
+    ))
+      appendCompact(context);
+    // Keep every direct module's compact evidence, then prefer complete direct
+    // modules over optional surrounding-hunk expansions. Full source includes
+    // unchanged imported declarations and all their same-module dependencies.
+    const completedImports = new Set();
+    for (const fileIndex of directImports) {
+      const position = relatedPositions.get(fileIndex);
+      const key = `complete:${fileIndex}`;
+      if (!contextCache.has(key))
+        contextCache.set(key, supplementalUnits(files, fileIndex, false, true));
+      const context = {
+        fileIndex,
+        role: "complete direct-import module including same-module dependencies",
+        parts: contextCache
+          .get(key)
+          .filter(
+            (part) =>
+              ![part, ...(part.otherSides ?? [])].every((reference) =>
+                supplied.some(
+                  (range) =>
+                    range.fileIndex === fileIndex &&
+                    range.side === reference.side &&
+                    range.start <= reference.start &&
+                    range.end >= reference.end,
+                ),
+              ),
+          ),
+      };
+      if (!context.parts.length) continue;
+      if (Buffer.byteLength(JSON.stringify(context)) > 48 * 1024) {
+        unavailable({
+          fileIndex,
+          reason:
+            "complete direct-import supplement exceeds 48 KiB bound; request missing declarations if essential",
+        });
+        continue;
+      }
+      const previous =
+        position === undefined ? undefined : supplemental[position];
+      const targetPosition = position ?? supplemental.length;
+      supplemental[targetPosition] = context;
+      if (Buffer.byteLength(render()) > CONTEXT_BYTES - 2048) {
+        if (position === undefined) supplemental.pop();
+        else supplemental[position] = previous;
+        unavailable({
+          fileIndex,
+          reason:
+            "complete direct-import module exceeds remaining bounded context; request missing declarations if essential",
+        });
+      } else completedImports.add(targetPosition);
     }
+    for (const context of contexts.filter(
+      (context) => !direct.has(context.fileIndex),
+    ))
+      appendCompact(context);
     // Reserve each related changed module's bounded context first. Expanding one
     // module must not evict the only supplied context for another dependency.
     for (const { index: position, context } of upgrades) {
+      if (completedImports.has(position)) continue;
       const compact = supplemental[position];
       supplemental[position] = context;
       if (Buffer.byteLength(render()) > CONTEXT_BYTES - 2048)

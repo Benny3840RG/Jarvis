@@ -176,7 +176,11 @@ export function pairedUnits(files) {
 }
 // Bounded lexical hints for static imports and literal typed Convex references. Dynamic import,
 // require, aliases and comment-separated syntax are not resolved. No source is fetched.
-export function changedImportContext(files, fileIndices) {
+export function changedImportContext(
+  files,
+  fileIndices,
+  includePrimary = false,
+) {
   const wanted = new Set();
   const includeBackend = (moduleName) => {
     const suffix = `convex/${moduleName}.ts`;
@@ -186,7 +190,10 @@ export function changedImportContext(files, fileIndices) {
         ({ file }) =>
           file.filename === suffix || file.filename.endsWith(`/${suffix}`),
       );
-    if (targets.length === 1 && !fileIndices.has(targets[0].fileIndex))
+    if (
+      targets.length === 1 &&
+      (includePrimary || !fileIndices.has(targets[0].fileIndex))
+    )
       wanted.add(targets[0].fileIndex);
   };
   for (const index of fileIndices)
@@ -203,7 +210,8 @@ export function changedImportContext(files, fileIndices) {
           )
           .replace(/\.js$/, ".ts");
         const found = files.findIndex((f) => f.filename === resolved);
-        if (found >= 0 && !fileIndices.has(found)) wanted.add(found);
+        if (found >= 0 && (includePrimary || !fileIndices.has(found)))
+          wanted.add(found);
       }
       // Typed Convex function references name a backend module rather than an
       // import. Resolve only a unique module in the already fetched inventory.
@@ -341,24 +349,32 @@ export function relatedChangedContext(files, seeds) {
   return [...seen].sort((a, b) => a - b);
 }
 
-export function supplementalUnits(files, fileIndex, compact = false) {
+export function supplementalUnits(
+  files,
+  fileIndex,
+  compact = false,
+  complete = false,
+) {
   const file = files[fileIndex];
   const units = pairedUnits([file]);
   const chosen =
-    !compact &&
-    (units.reduce((n, u) => n + Buffer.byteLength(JSON.stringify(u)), 0) <=
-      24000 ||
-      file.before === null ||
-      file.after === null)
+    complete ||
+    (!compact &&
+      (units.reduce((n, u) => n + Buffer.byteLength(JSON.stringify(u)), 0) <=
+        24000 ||
+        file.before === null ||
+        file.after === null))
       ? units
       : (file.filename.endsWith(".json") ? units : lineUnits(file, 0)).filter(
           (u) => u.parts.some((p) => p.references.length === 1),
         );
   const selected = [];
   const surroundingLines = compact ? 3 : 12;
-  const scope = compact
-    ? "complete changed hunks with three surrounding lines; further context is outside this segment"
-    : "paired changed hunk with surrounding lines; full file remains in coverage inventory";
+  const scope = complete
+    ? "complete module source including unchanged declarations and same-module dependencies"
+    : compact
+      ? "complete changed hunks with three surrounding lines; further context is outside this segment"
+      : "paired changed hunk with surrounding lines; full file remains in coverage inventory";
   for (const unit of chosen)
     for (const p of unit.parts)
       for (const r of p.references) {

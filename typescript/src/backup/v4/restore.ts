@@ -817,3 +817,6 @@ export async function restoreArchiveV4(
 
   return { destination: destDir, manifest: archive.manifest, markerPath, resumed, verifiedGroups };
 }
+
+// Staged Convex adapter; partial slice evidence never seals a whole v4 group.
+export { verifyRestoredS4ProjectNotes } from "./verifyS4ProjectNotes.js";
