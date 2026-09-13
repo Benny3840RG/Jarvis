@@ -13,11 +13,12 @@ Jarvis uses one active implementation mission at a time:
 
 1. One agent is the **builder**.
 2. The other agent is the **independent reviewer**.
-3. The roles flip only after the mission is terminal: Benny merges or closes the
+3. Jarvis independently gates the exact reviewed candidate after the peer review.
+4. The roles flip only after the mission is terminal: Benny merges or closes the
    draft PR, or explicitly abandons the mission.
-4. The first mission after this protocol is adopted assigns **Codex as builder**
+5. The first mission after this protocol is adopted assigns **Codex as builder**
    and **Claude as reviewer**. The next mission reverses those roles.
-5. A restarted session does not advance the rotation.
+6. A restarted session does not advance the rotation.
 
 The reviewer remains read-only for that mission. It does not repair the
 candidate
@@ -47,6 +48,12 @@ Neither agent may:
 
 Every merge and deployment requires a fresh, explicit decision from Benny
 against the exact candidate or release.
+
+Jarvis supplies a required machine gate, not owner approval. A candidate is not
+eligible for Benny's merge decision until the exact head has all required trusted
+CI and a successful `jarvis-pr-maintenance/review` status. Missing, pending,
+failed, stale or differently bound evidence blocks. A new commit or base change
+invalidates the prior peer review and Jarvis PASS.
 
 ## Source of truth and mission claim
 
@@ -147,6 +154,29 @@ The reviewer starts only after the builder supplies an exact head SHA.
 A reviewer must block rather than guess when essential context, provenance or
 test evidence is unavailable.
 
+## Jarvis gate
+
+After the peer reviewer reports a clean exact head, Jarvis must independently
+observe that same candidate through `jarvis-pr-maintenance`:
+
+1. Re-read the PR number, base SHA, head SHA and complete required-check evidence.
+2. Accept only trusted successful TypeScript, PR Evidence and CodeQL producers.
+3. Run the isolated read-only review and bind its result to the exact candidate.
+4. Publish `jarvis-pr-maintenance/review = success` only for a clean review and
+   trusted green CI.
+5. Publish failure or remain non-success for missing context, real findings,
+   untrusted evidence, stale identity or incomplete execution.
+
+The Jarvis PASS must be a required `main` merge status. It does not approve,
+merge, deploy, commission, close an issue or satisfy Omega evidence. Only Benny
+may act after the gate passes.
+
+This operating model is not enforced merely because this document is merged.
+Activation requires live GitHub protection for `main` that names the Jarvis
+status as a required check, followed by API readback and an ordinary-PR refusal
+and success drill. Until that evidence exists, treat the gate as configured but
+unenforced.
+
 ## Handoff format
 
 Each builder-to-reviewer handoff must include:
@@ -178,6 +208,10 @@ Required smallest repair:
 Merge authorised: NO
 Deployment authorised: NO
 ```
+
+`OWNER DECISION REQUIRED` is valid only when the exact reviewed candidate also
+has `jarvis-pr-maintenance/review = success`. Otherwise the verdict remains
+`BLOCKED` or `REPAIR REQUIRED`.
 
 ## Terminal transition
 
