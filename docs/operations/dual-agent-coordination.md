@@ -116,11 +116,11 @@ builder, stop. Do not infer ownership.
 6. Run from `typescript/`:
    - `npm run check`;
    - `npm run openapi:lint` when the API contract changes;
-   - `npm run smoke:convex` only against an authorised `dev:` deployment when       when Convex behaviour changes.
+   - `npm run smoke:convex` only against an authorised `dev:` deployment when Convex behaviour changes.
 7. Commit small coherent steps. Record exact commands and results.
 8. Push the branch and open or update one **draft** PR.
 9. Hand the exact head SHA, diff scope, test evidence, known limitations and
-   unresolved   unresolved risks to the reviewer.
+   unresolved risks to the reviewer.
 
 Green tests do not prove live commissioning, production safety or completion of
 an external gate.
