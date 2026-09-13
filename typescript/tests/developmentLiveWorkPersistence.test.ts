@@ -122,3 +122,18 @@ it("accepts bounded multiline Omega objectives supported by the authoritative st
   };
   assert.deepEqual(await source(row).readLiveWorkSnapshot(), row);
 });
+
+it("rejects unsafe control characters in multiline Omega objectives", async () => {
+  for (const objective of ["Build safely\n\u001b[31mspoofed", "Build safely\u0000hidden"]) {
+    const row = {
+      ...snapshot(),
+      omegaMission: {
+        missionId: "mission",
+        objective,
+        state: "active",
+        acceptanceCriteria: [],
+      },
+    };
+    await assert.rejects(source(row).readLiveWorkSnapshot(), /Invalid live-work snapshot/);
+  }
+});
