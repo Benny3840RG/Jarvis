@@ -4105,7 +4105,7 @@
       "get": {
         "operationId": "listNotes",
         "summary": "List notes",
-        "description": "Returns the authoritative, owner+project-scoped list of durable notes. Note creation is not exposed here: it stays on the governed tool-actions execute path (POST /api/v1/projects/{projectId}/tool-actions), which is where the mandatory idempotency/fingerprint contract on note creation is actually enforced.",
+        "description": "Returns the authoritative, owner+project-scoped list of durable notes. Note creation is not exposed here: it stays on the governed tool-actions execute path (POST /api/v1/projects/{projectId}/tool-actions/{actionId}/execute), which is where the mandatory idempotency/fingerprint contract on note creation is actually enforced.",
         "tags": ["Notes"],
         "parameters": [
           {
@@ -5574,7 +5574,7 @@
       "get": {
         "operationId": "getDevelopmentLiveWork",
         "summary": "Get the read-only development live-work pipeline",
-        "description": "The single most-recently-updated development mission (falling back to the most recent overall), folded into the operator HUD pipeline CURRENT MISSION → STAGE → ISSUE → PR → WORKER → REVIEW → CI → MERGE → ΩΣ. Like the Operations Activity Timeline, this endpoint has exactly one source, so a read failure, an owner with no development missions, or a deployment whose persistence provider is not Convex are all reported as {status: \"unavailable\", reason} in the 200 body — never a thrown error and never a fabricated empty pipeline. Each node's detail is composed only from render-safe fields (subject state, repository/branch, orchestration lease owner, Omega acceptance-criteria counts); the orchestration lease token is never returned. Nodes whose data the domain does not yet record durably (issue and PR numbers, CI run identity) report status \"unavailable\". Read-only: nothing is mutated from this endpoint.",
+        "description": "Projects the sole non-terminal Development subject through the existing owner-scoped read model. No active subject returns {status: \"available\", pipeline: null}; unsupported persistence, failed reads or ambiguous multiple active subjects return {status: \"unavailable\", reason} in the 200 body. COMPLETE, FAILED, ABORTED and CONTRADICTED subjects are excluded from current work; MERGED remains visible until authoritative completion. Persisted Development state controls the HUD, and Omega readiness never implies COMPLETE. Only durable or derivable fields are exposed, including validated candidate receipts and orchestration metadata when present. The numeric fencingToken is a non-secret lease-generation counter; the secret string leaseToken is never returned. Unknown values remain null or unavailable. Read-only: nothing is mutated.",
         "tags": ["Operations"],
         "x-mcp-tool": {
           "exposed": true,
@@ -11392,7 +11392,7 @@
       "LiveWorkEvent": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["eventId", "at", "summary"],
+        "required": ["eventId", "at", "summary", "evidenceIds"],
         "properties": {
           "eventId": {
             "type": "string",
@@ -11406,6 +11406,13 @@
             "type": "string",
             "minLength": 1,
             "description": "Built only from a fixed, known-safe subset of the development event's fields — never the raw payload."
+          },
+          "evidenceIds": {
+            "type": "array",
+            "maxItems": 128,
+            "items": {
+              "type": "string"
+            }
           }
         }
       },
@@ -11430,7 +11437,8 @@
           "orchestrationRunId",
           "orchestrationNodeId",
           "fencingToken",
-          "workerStep"
+          "workerStep",
+          "candidate"
         ],
         "properties": {
           "subjectId": {
@@ -11523,10 +11531,13 @@
             "type": ["string", "null"]
           },
           "fencingToken": {
+            "description": "Non-secret lease-generation counter; not the secret leaseToken and not execution authority.",
             "type": ["integer", "null"]
           },
           "workerStep": {
             "type": ["object", "null"],
+            "additionalProperties": false,
+            "required": ["nodeId", "state"],
             "properties": {
               "nodeId": {
                 "type": "string"
@@ -11542,6 +11553,24 @@
               },
               "leaseExpiresAt": {
                 "type": ["number", "null"]
+              }
+            }
+          },
+          "candidate": {
+            "type": ["object", "null"],
+            "required": ["pullRequestNumber", "headSha", "receiptId"],
+            "additionalProperties": false,
+            "properties": {
+              "pullRequestNumber": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "headSha": {
+                "type": "string",
+                "pattern": "^[a-fA-F0-9]{40}$"
+              },
+              "receiptId": {
+                "type": "string"
               }
             }
           }

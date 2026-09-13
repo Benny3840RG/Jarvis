@@ -399,6 +399,13 @@ const liveWorkNodeSchema = z.object({
 });
 
 const liveWorkPipelineSchema = z.object({
+  candidate: z
+    .object({
+      pullRequestNumber: z.number().int().positive(),
+      headSha: z.string(),
+      receiptId: z.string(),
+    })
+    .nullable(),
   rail: z.array(
     z.object({ state: z.string(), label: z.string(), status: liveWorkNodeSchema.shape.status }),
   ),
@@ -424,7 +431,14 @@ const liveWorkPipelineSchema = z.object({
   objective: z.string().nullable(),
   missionInFlight: z.boolean(),
   nodes: z.array(liveWorkNodeSchema),
-  events: z.array(z.object({ eventId: z.string(), at: z.string(), summary: z.string() })),
+  events: z.array(
+    z.object({
+      eventId: z.string(),
+      evidenceIds: z.array(z.string()),
+      at: z.string(),
+      summary: z.string(),
+    }),
+  ),
   updatedAt: z.string(),
   generatedAt: z.string(),
 });
@@ -1428,9 +1442,9 @@ export function createJarvisMcpServer(client: JarvisApiClient): McpServer {
       annotations: readAnnotations,
       _meta: { ui: { visibility: ["model"] } },
     },
-    async ({ projectId }) => {
+    async ({ projectId, state, limit }) => {
       try {
-        const actions: ToolAction[] = await client.listToolActions(projectId);
+        const actions: ToolAction[] = await client.listToolActions(projectId, { state, limit });
         return {
           content: [
             { type: "text" as const, text: `Found ${actions.length} tool-action proposals.` },
@@ -1572,7 +1586,7 @@ export function createJarvisMcpServer(client: JarvisApiClient): McpServer {
     {
       title: "Get the live-work pipeline",
       description:
-        'Use this when Benny asks what Jarvis is building right now, which mission is in flight, or whether it\'s stuck on review, CI, merge, or ΩΣ completion. Read-only projection of the single in-flight development mission folded into MISSION → STAGE → ISSUE → PR → WORKER → REVIEW → CI → MERGE → ΩΣ. Individual nodes with no durable data report status "unavailable", never a fabricated value. When nothing is running the result is {status: "available", pipeline: null}; a provider/endpoint fault is {status: "unavailable", reason}.',
+        'Use this when Benny asks what Jarvis is building right now, which mission is in flight, or whether it\'s stuck on review, CI, merge, or ΩΣ completion. Read-only projection of the single in-flight development mission projected onto the canonical Development lifecycle rail with evidence detail cards. Individual nodes with no durable data report status "unavailable", never a fabricated value. When nothing is running the result is {status: "available", pipeline: null}; a provider/endpoint fault is {status: "unavailable", reason}.',
       inputSchema: {},
       outputSchema: { liveWork: liveWorkResultSchema },
       annotations: readAnnotations,

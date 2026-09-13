@@ -215,6 +215,10 @@ export const developmentCommitOutcomeValidator = v.object({
  * than importing cross-domain validator modules.
  */
 export const liveWorkSnapshotValidator = v.object({
+  candidate: v.union(
+    v.null(),
+    v.object({ pullRequestNumber: v.number(), headSha: v.string(), receiptId: v.string() }),
+  ),
   omegaReadiness: v.object({ allowed: v.boolean(), failures: v.array(v.string()) }),
   subject: v.object({
     subjectVersion: v.number(),
@@ -237,6 +241,7 @@ export const liveWorkSnapshotValidator = v.object({
       to: v.optional(v.string()),
       reasonCodes: v.array(v.string()),
       hasMergeReceipt: v.boolean(),
+      evidenceIds: v.array(v.string()),
     }),
   ),
   omegaMission: v.union(

@@ -1,0 +1,274 @@
+# Jarvis production completion ledger
+
+## Development Live Work and restore marker hardening — 2026-09-11
+
+- BASE SHA: `fae9949fc1f9d1ce15729608384a6d32ec40b8cb` (fetched origin/main).
+- GOAL: Finish the existing read model and dashboard; preserve completion authority.
+- CURRENT TRUTH: An uncommitted draft existed. It confused idle/unavailable,
+  selected terminal or arbitrary current missions, reused stale attempt progress,
+  inferred unbound ΩΣ identity and did not evaluate current completion inputs.
+- FILES CHANGED: Development read model/factory; existing Convex development query
+  and shared ΩΣ derivation; HTTP/OpenAPI/MCP/dashboard wiring; corresponding tests.
+  Restore marker validation and its regressions are a separate security fix.
+- TESTS: 35 focused Node tests pass (domain, adapter, HTTP, actual widget functions).
+  Eleven focused Convex query tests pass; 18 ΩΣ integrity/projection tests pass.
+  The isolated exact candidate `bb95e45a4539196aaaba3887bd2970657fc6dd07` passed typecheck, static/OpenAPI/hygiene, 1,415 Node tests and 250 Convex tests.
+- CI: Base main TypeScript run `34476444437` and CodeQL `34476443315` passed.
+  Candidate TypeScript/build run `34539056082`, PR evidence `34539056044`, and CodeQL runs `34539047336`/`34539047360` passed. Automated review run `34539248627` is blocked by context preparation; it is not a passing gate.
+- RUNTIME PROOF: Actual `npm run start:mcp` subprocess against an isolated JSON
+  HTTP runtime returned the exact unavailable response from both
+  `get_development_live_work` and `show_jarvis_dashboard.structuredContent.liveWork`.
+  Active/repair/indeterminate/merged/ready/complete renderer scenarios are local
+  synthetic tests, not external production commissioning.
+- EXTERNAL PROOF: Development Convex `dev:outgoing-ram-798` accepted the query after fixing a Node-only import in its bundle. The actual query returned available/idle, and both real MCP tools returned that same live read. No mission or customer records were mutated.
+- SECURITY: Bounded, validated projection strips unknown fields and lease secrets.
+  Explicit ΩΣ binding only; completion still commits through existing ΩΣ transition.
+  Restore regression reproduced unrelated-file deletion via a forged planned-file
+  marker; exact archive-derived allowlist and marker matching now reject it.
+- REVIEW: Independent review found inferred ΩΣ binding, stale progress after repair,
+  and full-history event scanning. Regression repairs completed.
+- PR: #502, verified implementation head `bb95e45a4539196aaaba3887bd2970657fc6dd07`. Merge pending.
+- CI REPAIR: Automated review preparation exceeded its complete-file context bound and skipped the reviewer. This is being repaired; the failed review gate is not bypassed.
+- BACKLOG/MATRIX UPDATE: ROADMAP archive status corrected against #492/#501.
+- RESIDUAL RISK: ΩΣ residual uncertainty is not persisted by existing authority;
+  query reports `residual-uncertainty-not-recorded` instead of inventing zero.
+  Terminal missions are not selected as current work. Synthetic COMPLETE rendering
+  is not proof that a real mission completed.
+- WORKSPACE: Another owner session was confirmed active in `Jarvis-live`; this session moved all work to `Jarvis-production-20260911` without reverting the shared checkout.
+- NEXT ACTION: Repair bounded review preparation; verify the updated exact candidate and land safely,
+  verify main, then disposition stale PRs and complete remaining archive groups.
+
+## Current external gates (not a claim that engineering is exhausted)
+
+### Open engineering gap — Live ΩΣ readiness assessment
+
+- Slice: Live Work commissioning.
+- Missing: Durable residual uncertainty input from the existing completion path.
+- Why required: `evaluateOmegaCompletion` needs this input; models/HUD cannot invent it.
+- Exact operator action: No operator request yet; reconcile the existing assessment
+  contract before designing any additive persistence change.
+- Evidence that will clear it: Governed durable assessment usable by the same policy.
+- Dependent work: Real pre-completion ΩΣ READY proof.
+- Independent work still available: Read model hardening, all other production slices.
+
+### Commissioning evidence still to inspect
+
+- Slice: Outlook, Sentry, PostHog, OIDC/gateway, durable orchestration, production.
+- Missing: Current-release live provider evidence and scoped production authority.
+- Why required: Offline tests and old telemetry cannot commission external effects.
+- Exact operator action: To be narrowed by provider inspection; tracked issues
+  #293/#294/#297, #302, #303, #306, #307 and #324 remain evidence work.
+- Evidence that will clear it: Current-release receipts, identity denial/allow tests,
+  alert/telemetry reads, recovery/rollback drills, exact-release production approval.
+- Dependent work: Production release and production-safe smoke verification.
+- Independent work still available: Open PR repairs, archive S4–S6, local security fixes.
+
+## Existing PR reconciliation — 2026-09-11
+
+- PR #485: preserved current-main Hono 4.13.7 instead of its vulnerable downgrade;
+  raised js-yaml minimum and corrected Claude mention triggers. Independent review
+  of the pinned action found removal of OIDC permission alone broke authentication.
+  Explicit `github.token` now preserves the job's scoped permissions. Regression
+  reproduced, 43 automation/evidence tests pass, and exact `7eabd92` full check
+  passes (1,375 Node / 237 Convex). Published to existing branch; CI/review pending.
+- PR #486: corrected configured-versus-commissioned status and current architecture
+  descriptions. The reader reports missing evidence access without claiming that
+  no real delivery/approval exists. Exact `92be4d0` full check passes (1,376 Node /
+  237 Convex). Published to existing branch; CI/review pending.
+- PR #487: isolated review reproduced slow credential redaction on percent-heavy
+  input. Bounded deterministic scanner fails closed on exhausted work; it preserves
+  normal unaffected text. Integrated `a1d96f8` passes full check (1,388 Node /
+  237 Convex). Not yet published or merged.
+- PR #482: reconciliation underway in its own worktree. Malformed OAuth callback
+  reproduced an uncaught URL error; it now returns 400 while successful and denied
+  mailbox tests still pass. Provisioning retry behavior remains under review.
+- No production deployment, mailbox consent, customer send or owner approval is
+  implied by these offline repairs. Other session's shared checkout is untouched.
+
+## Bounded independent review prerequisite — PR #503
+
+- BASE SHA: `fae9949fc1f9d1ce15729608384a6d32ec40b8cb`.
+- GOAL: Repair complete-file review context preparation without skipping coverage.
+- CURRENT TRUTH: PR #502 exceeded the existing 160 KiB aggregate context limit;
+  the reviewer never ran and the existing publisher correctly blocked it.
+- FILES CHANGED: Existing automation collector/controller/workflow and tests;
+  bounded UTF-8 segment manifest/aggregation helper.
+- TESTS: 153 automation tests pass (six existing local socket-fixture skips);
+  full gate passes with 1,375 Node / 237 Convex and all static checks.
+- CI: TypeScript/build `34540369685`, evidence `34540369591`, CodeQL
+  `34540367442` and `34540367824` passed on exact head `55c1b954`.
+- REVIEW: Independent lead review plus old trusted reviewer run `34540569749`
+  passed. No unresolved blocking threads; no review or permission gate bypassed.
+- PR: #503. MERGE SHA: `344554b98b818440e0484a8b336a9c3cb498e5e6`.
+  Fetched main tree exactly equals the reviewed head; main TypeScript `34541036703`, CodeQL `34541035987`/`34541036053` and completion/sweep runs passed.
+- SECURITY: Existing owner/approval/completion authority unchanged. Every bounded
+  segment and exact run/attempt binding is required; essential missing-context
+  requests block aggregation. No claim of holistic context or approval from a model.
+- RUNTIME/EXTERNAL PROOF: Bootstrap passed the previous workflow. Actual segmented
+  workflow commissioning against PR #502 remains required after integration.
+- BACKLOG UPDATE: This prerequisite clears the preparation implementation defect;
+  it does not yet establish Live Work review success or production completion.
+- NEXT ACTION: Verify main CI, integrate current main and exercise segmented review.
+
+## Exact-candidate reconciliation and review repairs — 2026-09-11
+
+- Live Work #502 integrated main at `a1f9c07a0f140da2747a5c77dbabd5864f41e7ac`; full check passed (1,415 Node / 250 Convex), hosted TypeScript `34541710656`, evidence `34541710237`, CodeQL `34541705514`/`34541705524` passed. Actual MCP read against the existing development Convex again returned available/idle from both tools; no redeployment or mission mutation.
+- Actual segmented review `34541896077` ran all 15 segments but did **not** pass. Several lacked paired before/after OpenAPI or cross-file wiring context. Complete byte coverage alone did not provide sufficient review context. The bounded planner is being repaired without waiving context requests or increasing permissions.
+- Review regressions reproduced and repaired the permissive worker-step OpenAPI object, ignored MCP tool-action state/limit inputs, and repeated dashboard mascot overlays/styles. Focused tests pass; these uncommitted repairs still require the final full gate and independent review. A regression also confirms the existing shared merge-argument schema rejects a wrong action transition while accepting the original action after indeterminate reconciliation; the reported missing validation was not present.
+- Restore review reproduced physical-path overlap through symlinked ancestors and deletion of replaced same-name files during resume, using temporary fixtures only. Physical-path checks and archive-derived byte validation now reject these cases; resume retains matching files and writes only missing files. Six new regressions and all 33 focused restore tests pass. The earlier marker allowlist fix did not address these cases; final candidate verification remains required.
+- PR #481 exact `cb317a811875039a4cf59106b519e6eda963a220` passed full check (1,392 Node / 245 Convex) and independent review after admission-timeout, bounded evidence, fingerprint and cleanup repairs. Published to its existing branch; real OIDC/orchestration commissioning and final hosted review remain outstanding.
+- PR #482 exact `5c3ba86537b200418dcc2923254e9c88183e63dc` passed full check (1,384 Node / 237 Convex) and 27 offline PowerShell setup/recovery scenarios. Published; no real Microsoft call or consent performed. Segmented review remains blocked by context.
+- CodeQL alert [#7](https://github.com/Benny3840RG/Jarvis/security/code-scanning/7) on #482 was statically triaged and dismissed as false positive. The cited SHA-256 input is a closed public connection identity (ID, client GUID, mailbox, public token endpoint), not a password; refresh/access token contents and token path are excluded. GitHub's exact-head aggregate CodeQL check now reports success. No scanner rule, credential handling or authority was weakened.
+- PR #486 integrated main at `a563ef4b46e743af24a961dc25ce90d14fe38426`, passed full check (1,376 Node / 237 Convex), and was published. Both old review threads were addressed with evidence and resolved. New hosted checks/review remain pending.
+- PR #487 was published after the earlier entry; another session subsequently added marker-collision repairs and CodeQL/documentation corrections. Those commits are preserved and require current-head reconciliation; the old local candidate is not authoritative.
+- S4 capture `483934b574a212a72654b46820d194e71e10e381` passes 1,375 Node / 245 Convex plus all static checks; independent review found no blocking capture defect. It requires owner and separate approval credentials and retains `restoreVerified: false`. Typed isolated project/note restore verification is in progress; full S4–S6 recovery remains incomplete.
+- Non-claim lease-secret reader repair `9d55b9a3425a1161d808622f0bc4d9cac37072a0` passes 1,375 Node / 240 Convex plus all static checks. Raw persisted replay fingerprints and rightful claim responses are preserved; public projections are redacted. Independent review/landing remains pending.
+- Production deployment remains unapproved. Independent engineering remains available; no external-gates-only claim is made.
+
+- Repository reconciliation found overlapping Live Work PR #504 (`78d6b7e1`) from the other session. Its terminal monitor is additional work to preserve, but its read model predates #502 candidate/evidence and worker-state hardening. Neither overlapping implementation may be landed in a way that removes those controls or creates a second truth source.
+- Public-evidence reader repair is now PR #505; hosted CI/review pending.
+
+- Existing ΩΣ assessment extension `95c1e772692a31dfc7284ae0ca1adc3d32d76023` passed its full gate (1,415 Node / 265 Convex) and a local governed MCP proof. Actual authenticated Convex functions recorded a bounded, context-bound assessment; MCP showed MERGED / ΩΣ READY without completing Development. The existing authoritative complete mutation then persisted the explicitly bound, differently named subject as COMPLETE; both MCP surfaces subsequently reported idle because terminal subjects are excluded. This used seeded synthetic evidence and convex-test, not live provider or production commissioning. No new completion authority was introduced.
+
+## Security landing and isolated recovery verification — 2026-09-11
+
+- PR #487 final head `01c04fe5b6991678f05702076ecdd62a127cdc00` includes the other session's marker-collision repairs. Complete diff review, full check (1,390 Node / 237 Convex), exact-head hosted checks and actual maintenance review `34543247264` passed with no unresolved blocking threads. The normal landing helper merged it as `db1b7153348de349fcfde019f4b5eb5deaa21dbc`; fetched main has the reviewed tree. Post-merge TypeScript `34544527352` and CodeQL `34544526697` / `34544526539` passed. No production deployment occurred.
+- Live Work incorporated that main commit by a normal merge at `0b268c8fe721313ffe29a1e2da67477324b0e715`. Final integrated verification and hosted review are still required. The shared `/home/benny3840/Jarvis-live` checkout remains untouched because the owner confirmed another session is editing it.
+- S4 isolated restore increment `a1de3c503ad1484bcad33f36606300a0654e776a` passed the full gate (1,375 Node / 272 Convex) and 27 focused tests. It covers projects, notes, four flat memory-record kinds, terminal applied/rejected change sets and strictly validated related audit history. Replay tests preserve records, revisions and audit rows. Coverage remains partial: active/effect/worker histories are rejected and no complete recovery group is claimed. Independent review and landing remain outstanding.
+- NEXT ACTION: Finish the paired review-context prerequisite, reverify Live Work, reconcile the preserved terminal-monitor addition, and continue typed recovery work. Current-release external commissioning and exact-release production approval remain outstanding.
+
+## Telemetry test reliability — PR #507
+
+- BASE SHA: `db1b7153348de349fcfde019f4b5eb5deaa21dbc`.
+- GOAL / CURRENT TRUTH: A request-boundary telemetry test could fail under host scheduling delays despite returning before transport settled. Replace its wall-clock threshold with a synchronous-return assertion while preserving pending-transport, flush/abort and event-count checks.
+- FILES CHANGED: `typescript/tests/posthog.test.ts`; runtime telemetry behavior is unchanged.
+- TESTS / REVIEW: Exact head `e1fd7c732e050fbdf4f952b1bfc6dac6c111989e` passed nine focused tests and the full gate (1,390 Node / 237 Convex). Independent review found no blocking issue. Actual maintenance review `34546204414` passed; all 13 hosted checks passed with no unresolved threads.
+- PR / MERGE SHA: #507 merged through the normal fail-closed landing helper as `6d478809715b7d7e09885d9b71f6252ec86a3761`. Fetched main has the exact reviewed tree. Post-merge TypeScript `34548049201` and CodeQL `34548043440` / `34548043448` passed.
+- RUNTIME / EXTERNAL PROOF: Mock transport regression only; this does not commission PostHog or prove current-release provider ingestion. Issue #302 remains open.
+- SECURITY / RESIDUAL RISK: No permissions, runtime capture behavior, event allowlist or privacy controls changed.
+- BACKLOG / NEXT ACTION: Continue PR #506 review-context repairs and the final Live Work candidate. Its gate also exposed separate double-clock creation timestamps; those are being repaired rather than treating a successful retry as resolution.
+
+## Additional verification, still awaiting integration and landing
+
+- Monitor `a6500c00dff232778e226351f2e9cd09177117d4` passed the full gate (1,462 Node / 250 Convex), plus an actual `npm run monitor -- --once --no-color` read through isolated HTTP and the existing development Convex query. It displayed NO MISSION IN FLIGHT without terminal controls. No data mutation or shared-checkout edit occurred.
+- S4 `906486d42ad1f969d96bdc8c878e5b7189e04551` passed 1,390 Node / 281 Convex and all static checks after rejecting contradictory terminal metadata and noncanonical rejection reasons before insertion. The five-table subset remains partial.
+- S6 `ee0669cdfee881f98495250e53b96a2b6d7f81ab` passed 1,390 Node / 265 Convex and all static checks. Its closed first mutable quote revision restores typed references to actual restored S3 business records and verifies normal quote reads, complete summaries and digests. Finalized/history/blob/delivery/migration/effect records remain unsupported; no complete recovery group is claimed.
+- GitHub CodeQL, Dependabot and secret-scanning APIs reported zero open alerts; a fresh npm audit reported zero dependency vulnerabilities. Manual security and commissioning requirements remain open. Issue #398 was reopened after effective main protection was found absent; disabled rulesets and empty selectors do not enforce review. No repository protection or production setting was changed.
+
+
+## Review prerequisite and closed-action recovery — 2026-09-11
+
+- PR #506 exact `ffadcee8eed72ca7a859986f7a5726319278cd15` passed the full gate (1,394 Node / 238 Convex), 175 automation checks with six existing local fixture skips, and independent lead review. The current trusted planner supplies all ten changed files in one complete 132,576-byte prompt. All 13 hosted checks and actual review `34549611842` passed with no findings or context requests. Normal landing merged #506 as `70ebfe40be8ac65587a50a534114f0a6af34d041`; fetched main exactly matches the reviewed tree. Post-merge CI remains in progress.
+- Its actual earlier reviews found stale finding-location mapping, missed side-effect imports and intermediate JSON references. Regressions reproduced these defects. Pointer existence is now validated before context shortcuts. Complete byte coverage, limits and missing-context blocking remain enforced.
+- The full gate also reproduced different creation timestamps from separate clock reads. Convex build-log and shared build-log/upgrade constructors now capture one instant; advancing-clock tests cover Convex and all four JSON/in-memory variants through normal reads. A diagnostic retry was not treated as a repair.
+- S4 closed-action increment `199f44f41de8f4c377e51a28fd6a44c08f1eff01` passed its full gate (1,390 Node / 303 Convex), focused producer-driven regressions and independent review. It adds only never-approved rejected notes.create proposals with exact producer audits. Physical IDs change through typed maps while logical identities and action/effect hashes remain unchanged. Normal reads and digests verify before a separate denied-execution drill appends the expected blocked receipt and proves zero note effects.
+- Recovery remains partial and unregistered, with no whole-group verification claims. Joint S4/S6 restoration still needs one authenticated empty-target transaction and exact overlapping-table validation; sequential standalone calls cannot compose. The existing v4 coordinator remains the integration target.
+- The owner reconfirmed that another session edits `/home/benny3840/Jarvis-live`. All work remains in isolated checkouts; the shared tree and other session's PR #504 are preserved.
+- NEXT ACTION: Verify #506 post-merge CI and fully verify integrated #502. Continue the existing typed recovery path and remaining security PRs. No production deployment or external commissioning is implied.
+
+## Live Work current-head review reconciliation
+
+- Exact #502 candidate `4cd23ce9ec0d440a7c62f065c06f82eb6002f48e` passed the full gate (1,442 Node / 251 Convex), 37 focused Node / 11 Convex tests, independent source review, and actual MCP JSON/synthetic/development-idle proofs. Hosted tests and CodeQL also passed. Actual review `34550549909` remained blocked; no merge or completion is claimed.
+- Regression reproduced stale CI highlighting while REPAIR_REQUIRED. Committed repair transitions now reset prior attempt progress immediately, while the originating review/CI node remains blocked. MCP operation-binding coverage now actually invokes the new tool with the real HTTP envelope and verifies its authenticated declared operation.
+- The review's restore-marker omission claim was not reproduced: `writeDocuments` already appends retained filenames outside the conditional write. New assertions prove complete inventories after every interrupted-write point and after verification. No production restore behavior was changed for that finding.
+- OpenAPI contained stale most-recent/no-mission prose. It now documents deterministic single-active selection, explicit available/idle, ambiguity/unavailable, persisted completion, and the distinction between the non-secret numeric fencing counter and excluded secret leaseToken. Requiring non-null idle or dropping fencing observability would contradict the accepted contract.
+- Focused repair verification passed 52 tests; both type checks and static checks passed. Final full verification is still required after review-context integration. Remaining actual review requests need dashboard/backend wiring within the same bounded prompts; the existing planner is being extended without dropping coverage or increasing limits.
+
+## Runtime ownership and governance triggers — PR #508
+
+- BASE SHA: `70ebfe40be8ac65587a50a534114f0a6af34d041`. GOAL: cover runtime authority with the existing CODEOWNERS rule and run governance checks when canonical requirements or validator runtime inputs change.
+- FILES / SECURITY: Existing CODEOWNERS, two workflow files, one regression file and three governance documents. No GitHub settings, bypass actors, execution authority or reviewer policy changed. Issue #398 remains open because effective enforcement and the alternate-reviewer decision are still owner gates.
+- TESTS / REVIEW: Exact `8c36425414bf614b5e913a403956ff6e5502adde` passed the full gate (1,394 Node / 238 Convex). Earlier integrated automation coverage passed 177 tests with six existing local fixture skips; the final delta corrected one word. Independent lead review and fresh actual review `34595506026` passed. The only review thread was fixed and resolved.
+- CI / RUNTIME PROOF: Fourteen hosted checks passed, including actual Ruby action-map generation; the conditional Claude job was skipped. No provider runtime or production change occurred.
+- MERGE SHA: `ffb50b6b862910ca530809f0c7a4bb3be0a4c6bd`, landed through the normal helper with exact-head matching. Fetched main equals the reviewed tree. Post-merge TypeScript `34595854514`, governance `34595854541` and CodeQL `34595854147` / `34595853926` passed.
+- BACKLOG / NEXT ACTION: Requirements matrix and runbooks now distinguish ownership assignment from live enforcement. Continue #502 context repair and the existing security/recovery queue; no production-ready claim is made.
+
+
+## Public evidence security — PR #505
+
+- BASE SHA: `ffb50b6b862910ca530809f0c7a4bb3be0a4c6bd`. Exact candidate `acf5d3426c4c3243011d4d2f575ae6f56761f8bc`; merge `dc12364c6c284d3a93c8c0414a529d5343897960` has identical tree.
+- GOAL / FILES: Existing Convex public-evidence projections remove lease credentials and raw canonical request fingerprints from non-claim responses, Development history, and rejected audit payloads. Nine files; raw persistence, idempotency comparisons and rightful claim responses retain their existing authority.
+- TESTS: Exact-candidate complete gate passed, 1,394 Node / 241 Convex. Evidence `/tmp/jarvis-pr505-acf-full.log`.
+- REVIEW / CI: All three trusted review segments passed without findings or missing context in run `34597192627`; 13 exact-head checks passed, no unresolved threads. Post-merge TypeScript `34597635179`, CodeQL `34597634308` / `34597634596`, maintenance/completion `34597790272` / `34597790359` / `34597815168` all passed.
+- RUNTIME / EXTERNAL PROOF: Regression proof only; no provider writes or production deployment.
+- RESIDUAL RISK / NEXT ACTION: This closes the reviewed public-reader credential exposure. It does not commission integrations or exhaust security work. Integrate the landed projection into Live Work, finish bounded review context and isolated restore hardening, then continue remaining engineering.
+
+
+## Bounded review context — PR #509
+
+- BASE SHA: `dc12364c6c284d3a93c8c0414a529d5343897960`. Exact candidate `c4cfd5adabd5e0c6ebcd0bd7d41715226da052f6`; merge `8eb2ec9928e7fb959601da1bad4aa2c356ae4f7f` has identical tree.
+- GOAL / FILES: Four existing automation files deduplicate overlapping/identical context, reserve compact changed-hunk context across related modules, and resolve bounded literal/generated Convex references in root or nested paths. Original source coverage, digests, prompt/segment bounds and mandatory missing-context blocking remain enforced.
+- TESTS: 35 focused tests, 183 automation tests (six existing local fixture skips), full gate 1,394 Node / 241 Convex. Exact-head evidence `/tmp/jarvis-pr509-c4c-full.log`, `/tmp/jarvis-pr509-final-policy.log`, `/tmp/jarvis-pr509-root-convex-green.log`.
+- REVIEW / CI: Initial trusted review correctly found root-level Convex context omission; red regression reproduced it and the matcher was repaired. Fresh review `34598473743` passed without findings or context requests. All 13 exact-head checks passed with no unresolved review threads. Post-merge TypeScript `34598974250` and CodeQL `34598972819` / `34598972922` passed.
+- RUNTIME / SECURITY: Trusted hosted review exercised the existing bounded planner. No provider capability, approval, execution or completion authority was added.
+- RESIDUAL RISK / NEXT ACTION: Essential unavailable context still blocks any candidate; this does not certify Live Work. Finish #510 hard-link restore review, integrate its landed ancestry so recovery changes leave #502, then rerun final Live Work proof and review. Continue remaining recovery and commissioning work.
+
+
+## Lockfile review preparation — PR #512
+
+- BASE SHA: `8eb2ec9928e7fb959601da1bad4aa2c356ae4f7f`. Exact candidate `c02b955f93316a6849e7862f27bc7213642f676e`; merge `29451edbded96015a62360ed59ba425965ad3004` has identical tree.
+- GOAL / FILES: Two existing automation files split the npm lockfile packages map into complete semantic package entries. The 201 KB dependency lockfile previously exceeded the single-unit context bound. Source bytes, escaping, scoped pointers, paired references and all existing limits remain enforced.
+- TESTS: 36 focused tests, 184 automation passes (six existing local fixture skips), full gate 1,394 Node / 241 Convex. Logs `/tmp/jarvis-lockfile-map-{red,green,policy,full}.log`; the red reproduced missing package semantics, and a missing fixture status field was corrected before final green verification.
+- REVIEW / CI: Trusted review `34601630734` passed with no findings or missing context; 13 exact-head checks passed and no unresolved threads. Post-merge TypeScript `34602452511`, CodeQL `34602452398` / `34602452311`, maintenance/completion `34602649776` / `34602649817` / `34602676858` all passed.
+- SECURITY / RUNTIME: No source was omitted, bound enlarged or new execution/approval authority introduced. Trusted hosted review exercised the existing planner; this is not provider commissioning.
+- NEXT ACTION / RESIDUAL RISK: Finish #510 current-base review and #502 Live Work proof. Hold unrelated merges while those reviews run to avoid stale-base invalidation. Continue remaining security/recovery PRs and operator commissioning; production completion is not claimed.
+
+
+## Live Work integration and restore review — current evidence
+
+- BASE SHA: `29451edbded96015a62360ed59ba425965ad3004`. Live Work integration `4d90d3473c1082323f83009884154e9dd7e14dd4` includes the isolated #510 candidate `647c6981e4c96917a50ea387917ce2992dede8d1`; neither is recorded as merged here.
+- TESTS: Integrated full gate passed 1,452 Node / 254 Convex, including both type checks, static, hygiene and OpenAPI. Focused Live Work passed 37 Node / 11 Convex. Evidence: `/tmp/jarvis-livework-final-restore-full.log` and `/tmp/jarvis-livework-4d90-{focused,convex}.log`.
+- RUNTIME PROOF: Real `npm run start:mcp` processes, HTTP and JSON persistence returned the exact unavailable model in both tools. Seven explicit synthetic adapter scenarios passed idle, BUILDING, REPAIR_REQUIRED, INDETERMINATE, MERGED, READY-without-COMPLETE and persisted-state COMPLETE rendering. Actual read-only development Convex returned available/idle in both tools. Logs `/tmp/jarvis-livework-4d90-{json-proof,scenarios-proof,dev-convex-proof}.log` record the candidate SHA. No deployment or mutation was performed; the idle read does not attest the deployed backend revision or commission an active lifecycle.
+- SECURITY: Latest GitHub queries returned no open CodeQL, Dependabot or secret-scanning alerts; the installed dependency audit returned zero vulnerabilities. This is current scan evidence, not a blanket security or production-completion claim.
+- REVIEW / REPAIR: Restore resume now rejects external hard links (including its marker), non-private retained files and dangling physical-path symlinks. Regressions reproduced each accepted defect. The latest replacement-file test uses explicit private permissions and requires the exact archive-mismatch refusal; a broad error match had previously hidden the wrong rejection reason. #510 passes 110 focused archive tests and full 1,415 Node / 241 Convex. All three Copilot threads were addressed; fresh trusted review remains pending.
+- BACKLOG / NEXT ACTION: Land and verify #510 after fresh review, then verify and publish the narrowed Live Work candidate. #485 and #486 have passed current-base hosted review but their merges are held to preserve this base. #511 remains partial recovery infrastructure under review. Other-session `/home/benny3840/Jarvis-live` and terminal-monitor changes remain untouched. Production approval, external commissioning and remaining engineering are still open.
+
+
+## Safe restore resume — PR #510 landed
+
+- BASE SHA: `29451edbded96015a62360ed59ba425965ad3004`. Exact candidate `647c6981e4c96917a50ea387917ce2992dede8d1`; merge `d7ee18199f702b105a685d0ba7abdaebc000954f` has identical tree.
+- GOAL / FILES: Five existing restore, CLI, test and runbook files retain verified output, reject forged inventory, unsafe physical overlap, external hard links and weak file permissions, and preserve the full completion inventory. No recovery domain or authority was added.
+- TESTS / REVIEW: 110 focused archive tests and full gate 1,415 Node / 241 Convex. Actual trusted review `34607196155` passed both segments without findings or missing context; all 13 hosted checks passed and no review thread remained unresolved. Logs `/tmp/jarvis-pr510-replacement-mode-{red,green,full}.log`; the red specifically reproduced the masked byte-mismatch assertion.
+- MERGE / GOVERNANCE: Normal guarded landing used exact head matching and the existing all-checks policy; no bypass or settings change. Fetched main matches the reviewed tree. Post-merge CI is pending at this entry; it must pass before dependent landing.
+- RUNTIME / RESIDUAL RISK: Isolated filesystem recovery regressions only. No live restore or production deployment. Destination and ancestors require exclusive ownership during restore; no hostile concurrent-filesystem guarantee is claimed. Authoritative recovery coverage remains partial.
+- BACKLOG / NEXT ACTION: Restore hardening is removed from the Live Work diff through normal ancestry. Complete current-main Live Work verification and hosted review, then continue partial recovery and remaining engineering.
+
+
+## Intervening review context — PR #513 landed
+
+- BASE SHA: `d7ee18199f702b105a685d0ba7abdaebc000954f`. Exact candidate `db520d12420f7b37456b63db737322d986a54187`; merge `66e9c36e1e999a41c4d8d7ab3ac877f13e6898c4` has identical tree.
+- GOAL / FILES: Two existing review-planner files supply bounded intervening JSON source between paired neighboring ranges. Primary coverage, source digests, 160 KiB context, 16 segments and 32 KiB manifest limits remain enforced; unavailable essential context still blocks review.
+- TESTS / REVIEW: 38 focused tests, 186 automation passes (six existing fixture skips), full gate 1,415 Node / 241 Convex. Trusted review `34611865680` passed without findings or context requests; all 13 exact-head checks passed and no unresolved thread remained. Evidence `/tmp/jarvis-review-gap-{red,green,policy,full}.log` and `/tmp/jarvis-pr513-db520-review`.
+- RUNTIME / SECURITY: Actual Live Work review-plan replay supplies the previously requested JSON bytes 168156–170207. No model authority or source-coverage waiver was added. No provider mutation or deployment occurred.
+- CI / BACKLOG: Fetched merge tree verified; post-merge CI pending at this entry. Earlier #510 post-merge TypeScript `34607641486`, code analysis `34607640132` / `34607640588`, maintenance/completion `34607837019` / `34607837086` / `34607864523` all passed.
+- LIVE WORK REPAIRS: Candidate `9d25f4b9b3273ef7d14acef28a86214116f3917d` removes unvalidated merge-receipt pointers from non-MERGED transitions and legacy projection, represents authoritative CONTRADICTED state despite stale readiness, and activates existing mission-copy positioning/grid CSS. Regressions reproduced both authority-display defects. Focused 38 Node / 12 Convex and both type checks passed. No browser surface is available; no visual inspection is claimed.
+- RESIDUAL RISK / NEXT ACTION: Verify integrated Live Work full gate, repeat exact-candidate MCP proof and fresh trusted review before landing. Active cloud lifecycle commissioning, complete recovery coverage and production commissioning remain open engineering or external work; no production-completion claim.
+
+
+## Live Work reconciliation after PR #504
+
+- BASE / CURRENT TRUTH: Other-session PR #504 merged as `2b1517b52f9dca76383fb5d25d665f803624dee4`. Normal integration `c965227ed0300dc42eadc41afb2e963fab08a04d` preserves its terminal monitor and the independently reviewed Live Work hardening. The shared live checkout remains untouched. #502 now hardens this landed implementation.
+- REVIEW / REPAIR: Review `34614784092` exposed candidate arguments no longer matching the execution receipt fingerprint. The existing execution fingerprint converter now validates that binding before projecting PR/head identity. A regression reproduced changed PR/head arguments being displayed under an old receipt. The pipeline additional-properties finding was false: the schema already rejects them; a new actual-response Ajv regression proves this. The old changed HTTP-registration context request is obsolete because those files are identical to the new main. No review gate is waived.
+- TESTS: Focused 41 Node / 12 Convex and both type checks passed after integration and fingerprint repair. Logs `/tmp/jarvis-livework-candidate-fingerprint-{red,green}.log`, `/tmp/jarvis-livework-merged504-{focused,types}.log`. Full verification and fresh exact-candidate hosted review remain required.
+- CI: #513 post-merge TypeScript `34612323147`, analysis `34612320849` / `34612320751`, maintenance/completion `34612569150` / `34612569225` / `34612582983` passed. #504's ordinary checks passed, but its trusted review `34615140725` failed; the merge itself is not accepted as certification.
+- EXTERNAL PROOF: Existing PostHog commissioning helper sent three development events from exact source `a5da78087d55dcd226eedd4c08c9ca4f48b827fe`; actual project 538962 readback confirmed operator_action, usage and boundary_latency, exact release, GeoIP disabled and no location properties. Provider-added `$ip` remained present. Owner approval to enable project IP discarding is pending; retention remains 12 months configured but unenforced. This is success-path evidence only, not current final-release commissioning. No customer content, production deployment or privacy-setting mutation was performed.
+- NEXT ACTION / RISK: Complete #502 exact-candidate gates and runtime proofs; continue isolated telemetry, terminal-monitor, recovery and remaining commissioning work. Active cloud lifecycle, final-release external evidence and production approval remain unproven.
+
+
+## Integrated Live Work review repair
+
+- CANDIDATE / TESTS: `954b78bf92841d412d53f03531bed119b4256e8c` passed complete gate (1,472 Node / 255 Convex), independent source review and 22-file exact-byte bounded review preparation (15 segments). All three actual MCP proof paths passed again at that SHA. Logs `/tmp/jarvis-livework-main504-final-full.log`, `/tmp/jarvis-livework-954-{json-proof,scenarios-proof,dev-convex-proof}.log`; replay `/tmp/jarvis-pr502-954-replay-report.json`.
+- REVIEW: All 14 #504 review artifacts were inspected. Its publication failed after the PR had merged, not because review workers failed. Secret-fencing findings conflate the numeric generation counter with the separate secret lease token. PR identity, contradiction and MCP invocation findings are repaired. Two segments lacked essential context; fresh hosted review remains mandatory.
+- REPAIR: `d5f74e333c66268a032ddc973bbcd6e65c9f99a1` makes terminal state override a stale worker lease and relabels the existing mission-phase node honestly in model and HUD. Red regressions passed after repair; 32 focused tests and both type checks passed. Evidence `/tmp/livework-residual-{red,green,types}.log`. Final complete gate and exact-head runtime proof are required again.
+- OWNER / EXTERNAL GATE: Future-IP discarding for PostHog project 538962 was explicitly approved, then deferred by the owner ("skip for now"). No setting changed: connector lacks project-setting writes and no browser is available. Resume only when owner resumes this action; privacy commissioning remains open. Historical data and retention are unchanged.
+- NEXT ACTION: Land #502 only after current-candidate review/CI, verify merged main and continue telemetry, monitor, recovery, repository and commissioning work. No production completion or active-provider lifecycle proof is claimed.
+
+
+## Review primary-source protocol — PR #515 landed
+
+- BASE / MERGE: `2b1517b52f9dca76383fb5d25d665f803624dee4`; reviewed candidate `9558f8d2e6f713030e21a318a5f4f9521f59f81f`; merge `e8db2f75dc279ba6b4af5c5bd3014cbd2f2ef651` has the identical tree.
+- GOAL / FILES: Two existing review automation files make the existing primary-range finding restriction explicit. The #502 publisher correctly rejected two supplemental-only finding locations; complete primary source coverage was independently reconstructed. Both application claims were also disproven against canonical persisted schema and original-action reconciliation semantics. No validator, bound, coverage or authority changed.
+- TESTS / CI / REVIEW: 19 focused and 186 broader automation tests passed (six existing local fixture skips); hygiene and formatting passed. Exact-head hosted typecheck/lint/format/OpenAPI/coverage/Convex and automation gate `34622420676`, analyses `34622414386` / `34622414568`, and trusted review `34622669011` passed. All13checks, zero unresolved threads. Raw review `/tmp/jarvis-pr515-review/`; landing `/tmp/jarvis-pr515-land-{plan,result}.json`. Post-merge CI remains to be recorded.
+- LIVE WORK VERIFICATION: Exact `c1bae9ff36e90d24502cd147f6c34203dec24dfb` passed complete local gate 1,475 Node /255 Convex, both types/static/hygiene/OpenAPI at `/tmp/jarvis-livework-c1b-bounded-full.log`. CPU affinity0,1 bounded runner concurrency; unchanged five-second test limits remain. Earlier contended failures and isolated44-test pass are retained. Three actual MCP proof paths passed at c1b; normal merge `8e78015a683074f5e3a783b60e7d047a99e56e8f` changes only the two reviewed automation files. Fresh exact-candidate verification/review is required.
+- VISUAL PROOF: Existing c1b widget and actual fold rendered seven explicit synthetic states through a local MCP-message bridge in a real isolated browser. Desktop1440x1000 and narrow390x844 rendering had no browser errors or horizontal overflow. Screenshots/DOM evidence `/tmp/jarvis-livework-visual-proof/README.md`; root inspected BUILDING, MERGED/READY and COMPLETE. Browser profile/network were isolated to127.0.0.1; Chrome required --no-sandbox without host-setting changes. This is synthetic rendering proof, not cloud lifecycle, production browser isolation or provider completion evidence.
+- SECURITY / EXTERNAL / NEXT: Fresh GitHub CodeQL, dependency and secret-scanning queries returned zero open alerts. No production or provider mutation; deferred PostHog privacy action stays deferred. Continue #502 valid review, exact-head runtime proof and safe landing, then remaining telemetry, monitor, recovery and security work.

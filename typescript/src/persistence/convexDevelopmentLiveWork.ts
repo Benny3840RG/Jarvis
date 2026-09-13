@@ -36,6 +36,18 @@ const text = (max = 512) =>
           (character) => character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127,
         ),
     );
+const multilineText = (max = 4096) =>
+  z
+    .string()
+    .min(1)
+    .max(max)
+    .refine(
+      (value) =>
+        ![...value].some((character) => {
+          const code = character.charCodeAt(0);
+          return (code < 32 && code !== 10) || code === 127;
+        }),
+    );
 const count = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
 const timestamp = z.number().finite().nonnegative().max(8.64e15);
 const dateTime = z
@@ -45,6 +57,14 @@ const dateTime = z
   .refine((value) => Number.isFinite(Date.parse(value)));
 // Object schemas explicitly project allowed fields; unknown credentials and payloads are stripped.
 const snapshotSchema = z.object({
+  candidate: z
+    .object({
+      pullRequestNumber: count.positive(),
+      headSha: z.string().regex(/^[a-f0-9]{40}$/i),
+      receiptId: text(),
+    })
+    .nullable()
+    .optional(),
   subject: z.object({
     subjectId: text(),
     state: developmentState,
@@ -60,6 +80,7 @@ const snapshotSchema = z.object({
     .array(
       z.object({
         eventId: text(),
+        evidenceIds: z.array(text()).max(128).optional(),
         eventType: text(),
         transitionId: text().optional(),
         occurredAt: dateTime,
@@ -73,7 +94,7 @@ const snapshotSchema = z.object({
   omegaMission: z
     .object({
       missionId: text(),
-      objective: text(4096),
+      objective: multilineText(),
       state: text(64),
       acceptanceCriteria: z.array(z.object({ status: text(64) })).max(64),
     })

@@ -109,3 +109,31 @@ describe("Convex live-work projection validation", () => {
     }
   });
 });
+
+it("accepts bounded multiline Omega objectives supported by the authoritative store", async () => {
+  const row = {
+    ...snapshot(),
+    omegaMission: {
+      missionId: "mission",
+      objective: "Build safely\nVerify independently",
+      state: "active",
+      acceptanceCriteria: [],
+    },
+  };
+  assert.deepEqual(await source(row).readLiveWorkSnapshot(), row);
+});
+
+it("rejects unsafe control characters in multiline Omega objectives", async () => {
+  for (const objective of ["Build safely\n\u001b[31mspoofed", "Build safely\u0000hidden"]) {
+    const row = {
+      ...snapshot(),
+      omegaMission: {
+        missionId: "mission",
+        objective,
+        state: "active",
+        acceptanceCriteria: [],
+      },
+    };
+    await assert.rejects(source(row).readLiveWorkSnapshot(), /Invalid live-work snapshot/);
+  }
+});

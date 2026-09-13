@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import Ajv2020 from "ajv/dist/2020.js";
 import { afterEach, describe, it } from "node:test";
 
 import type { NestFastifyApplication } from "@nestjs/platform-fastify";
@@ -147,4 +149,46 @@ describe("development live-work HTTP boundary", () => {
     const body = response.json() as { data: { status: string } };
     assert.equal(body.data.status, "unavailable");
   });
+});
+
+// An absent worker is null; a present worker identifies its persisted node/state.
+it("OpenAPI worker step rejects empty and undocumented records", () => {
+  const contract = JSON.parse(
+    readFileSync(new URL("../openapi/jarvis.openapi.json", import.meta.url), "utf8"),
+  );
+  const schema = contract.components.schemas.LiveWorkPipeline.properties.workerStep;
+  const validate = new Ajv2020.default({ strict: false }).compile(schema);
+  assert.equal(validate(null), true);
+  assert.equal(validate({ nodeId: "node-1", state: "running" }), true);
+  for (const value of [
+    {},
+    { nodeId: "node-1" },
+    { state: "running" },
+    { nodeId: "node-1", state: "running", leaseToken: "not-public" },
+  ]) {
+    assert.equal(validate(value), false);
+  }
+});
+
+it("OpenAPI pipeline rejects undocumented top-level fields on the actual read model", async () => {
+  const contract = JSON.parse(
+    readFileSync(new URL("../openapi/jarvis.openapi.json", import.meta.url), "utf8"),
+  );
+  const validate = new Ajv2020.default({ strict: false, validateFormats: false }).compile({
+    $ref: "#/components/schemas/LiveWorkPipeline",
+    components: contract.components,
+  });
+  const app = await makeApp({ readLiveWorkSnapshot: async () => sampleSnapshot() });
+  const response = await app.inject({
+    method: "GET",
+    url: "/api/v1/development/live-work",
+    headers: AUTH,
+  });
+  const pipeline = response.json().data.pipeline;
+  assert.equal(validate(pipeline), true, JSON.stringify(validate.errors));
+  for (const extra of [
+    { leaseToken: "not-public" },
+    { rawProviderPayload: { body: "not-public" } },
+  ])
+    assert.equal(validate({ ...pipeline, ...extra }), false);
 });

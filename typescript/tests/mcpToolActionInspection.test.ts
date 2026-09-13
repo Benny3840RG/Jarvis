@@ -45,6 +45,8 @@ describe("MCP tool-action consent-lifecycle inspection (read-only)", () => {
       const url = new URL(String(input));
       paths.push(url.pathname + url.search);
       if (url.pathname === "/api/v1/projects/project-1/tool-actions") {
+        if (url.searchParams.get("state") === "approved" && url.searchParams.get("limit") === "1")
+          return Response.json([APPROVED_ACTION]);
         return Response.json([PROPOSED_ACTION, APPROVED_ACTION]);
       }
       if (url.pathname === "/api/v1/projects/project-1/tool-actions/action-2") {
@@ -72,6 +74,8 @@ describe("MCP tool-action consent-lifecycle inspection (read-only)", () => {
     const fetchImpl = (async (input: string | URL | Request) => {
       const url = new URL(String(input));
       if (url.pathname === "/api/v1/projects/project-1/tool-actions") {
+        if (url.searchParams.get("state") === "approved" && url.searchParams.get("limit") === "1")
+          return Response.json([APPROVED_ACTION]);
         return Response.json([PROPOSED_ACTION, APPROVED_ACTION]);
       }
       if (url.pathname === "/api/v1/projects/project-1/tool-actions/action-2") {
@@ -123,6 +127,12 @@ describe("MCP tool-action consent-lifecycle inspection (read-only)", () => {
         actions: [PROPOSED_ACTION, APPROVED_ACTION],
         count: 2,
       });
+
+      const filtered = await client.callTool({
+        name: "list_tool_actions",
+        arguments: { projectId: "project-1", state: "approved", limit: 1 },
+      });
+      assert.deepEqual(filtered.structuredContent, { actions: [APPROVED_ACTION], count: 1 });
 
       const inspected = await client.callTool({
         name: "get_tool_action",

@@ -24,6 +24,7 @@ export interface LiveWorkNode {
 }
 
 export interface LiveWorkEvent {
+  readonly evidenceIds: readonly string[];
   readonly eventId: string;
   readonly at: string;
   readonly summary: string;
@@ -35,7 +36,14 @@ export interface LiveWorkRailNode {
   readonly status: LiveWorkNodeStatus;
 }
 
+export interface LiveWorkCandidate {
+  readonly pullRequestNumber: number;
+  readonly headSha: string;
+  readonly receiptId: string;
+}
+
 export interface LiveWorkPipeline {
+  readonly candidate: LiveWorkCandidate | null;
   readonly rail: readonly LiveWorkRailNode[];
   /**
    * State + ΩΣ-readiness headline, e.g. `"MERGED — ΩΣ READY"`. Never claims
@@ -96,6 +104,7 @@ export interface LiveWorkSubjectRow {
 
 /** Raw event projection (safe fields only — never the full payload). */
 export interface LiveWorkEventRow {
+  readonly evidenceIds?: readonly string[];
   readonly eventId: string;
   readonly eventType: string;
   readonly transitionId?: string;
@@ -122,6 +131,7 @@ export interface LiveWorkWorkerStepRow {
 }
 
 export interface LiveWorkSnapshot {
+  readonly candidate?: LiveWorkCandidate | null;
   readonly omegaReadiness?: OmegaCompletionDecision;
   readonly subject: LiveWorkSubjectRow;
   readonly events: readonly LiveWorkEventRow[];
@@ -185,7 +195,7 @@ function phaseStatus(
  * The furthest pipeline position this mission has demonstrably reached,
  * derived from the `from`/`to` states of its recorded transition events (not
  * just the current state, which off-track states pin backwards). Bounded by
- * the event tail the query returns, which is ample for a real mission.
+ * the event tail the query returns; omitted history never supplies evidence.
  */
 function reachedPipelineOrder(events: readonly LiveWorkEventRow[], currentOrder: number): number {
   let reached = currentOrder;
@@ -194,13 +204,21 @@ function reachedPipelineOrder(events: readonly LiveWorkEventRow[], currentOrder:
   let attemptStart = 0;
   for (let index = 0; index < events.length; index++) {
     const event = events[index];
-    if (event?.eventType === "DEV_TRANSITION_COMMITTED" && event.to === "BUILDING")
+    if (
+      event?.eventType === "DEV_TRANSITION_COMMITTED" &&
+      (event.to === "BUILDING" || event.to === "REPAIR_REQUIRED")
+    )
       attemptStart = index;
   }
   for (const event of events.slice(Math.max(0, attemptStart))) {
     if (event.eventType !== "DEV_TRANSITION_COMMITTED") continue;
-    for (const label of [event.from, event.to]) {
-      if (label !== undefined && label in STATE_ORDER) {
+    const labels = event.to === "REPAIR_REQUIRED" ? [event.to] : [event.from, event.to];
+    for (const label of labels) {
+      if (
+        label !== undefined &&
+        label in STATE_ORDER &&
+        (!BLOCKED_STATES.has(label as DevelopmentState) || label === "REPAIR_REQUIRED")
+      ) {
         reached = Math.max(reached, STATE_ORDER[label as DevelopmentState]);
       }
     }
@@ -277,14 +295,21 @@ export function foldLiveWorkPipeline(snapshot: LiveWorkSnapshot): LiveWorkPipeli
     workerStep?.leaseExpiresAt != null &&
     workerStep.leaseExpiresAt <= Date.parse(snapshot.generatedAt);
   const workerStatus: LiveWorkNodeStatus =
-    workerActive && leaseExpired
+    !missionInFlight && !isComplete
       ? "blocked"
-      : phaseStatus(order, reached, STATE_ORDER.CLAIMED, STATE_ORDER.VERIFYING, false);
-  const workerDetail = workerStep?.leaseOwner
-    ? `${workerStep.leaseOwner} · step ${workerStep.state}${leaseExpired ? " (lease expired)" : ""}`
-    : missionInFlight && workerActive
-      ? "No worker lease is held."
-      : NOT_RECORDED;
+      : workerActive && (!workerStep?.leaseOwner || workerStep.leaseExpiresAt == null)
+        ? "unavailable"
+        : workerActive && leaseExpired
+          ? "blocked"
+          : phaseStatus(order, reached, STATE_ORDER.CLAIMED, STATE_ORDER.VERIFYING, false);
+  const workerDetail =
+    !missionInFlight && !isComplete
+      ? `Development is ${subject.state}; this mission is terminal.`
+      : workerStep?.leaseOwner
+        ? `${workerStep.leaseOwner} · step ${workerStep.state}${leaseExpired ? " (lease expired)" : ""}`
+        : missionInFlight && workerActive
+          ? "Worker lease not recorded."
+          : NOT_RECORDED;
 
   const nodes: LiveWorkNode[] = [
     {
@@ -301,15 +326,19 @@ export function foldLiveWorkPipeline(snapshot: LiveWorkSnapshot): LiveWorkPipeli
     },
     {
       key: "issue",
-      label: "ISSUE",
+      label: "MISSION",
       status: phaseStatus(order, reached, STATE_ORDER.IDEA, STATE_ORDER.READY, false),
-      detail: repository ?? NOT_RECORDED,
+      detail: repository ? `${subject.subjectId} · ${repository}` : subject.subjectId,
     },
     {
       key: "pr",
       label: "PR",
-      status: phaseStatus(order, reached, STATE_ORDER.CLAIMED, STATE_ORDER.READY_TO_MERGE, false),
-      detail: branch ? `${repository ?? "repository"} · ${branch}` : NOT_RECORDED,
+      status: snapshot.candidate
+        ? phaseStatus(order, reached, STATE_ORDER.CLAIMED, STATE_ORDER.READY_TO_MERGE, false)
+        : "unavailable",
+      detail: snapshot.candidate
+        ? `PR #${snapshot.candidate.pullRequestNumber} · ${snapshot.candidate.headSha} · ${snapshot.candidate.receiptId}`
+        : NOT_RECORDED,
     },
     {
       key: "worker",
@@ -361,58 +390,71 @@ export function foldLiveWorkPipeline(snapshot: LiveWorkSnapshot): LiveWorkPipeli
       status:
         subject.state === "MERGED" || isComplete
           ? "done"
-          : blocked === "merge"
+          : blocked === "merge" || blocked === "omega"
             ? "blocked"
             : phaseStatus(order, reached, STATE_ORDER.READY_TO_MERGE, STATE_ORDER.MERGED, false),
       detail:
-        subject.state === "INDETERMINATE"
-          ? "Merge outcome indeterminate; reconciliation open."
-          : subject.state === "FAILED"
-            ? "Development failed; inspect recorded transition evidence."
-            : subject.state === "MERGED" || isComplete
-              ? "Merged and reconciled."
-              : order === STATE_ORDER.READY_TO_MERGE
-                ? "Ready to merge."
-                : "Awaiting merge.",
+        subject.state === "CONTRADICTED"
+          ? "Development is CONTRADICTED; inspect durable evidence."
+          : subject.state === "INDETERMINATE"
+            ? "Merge outcome indeterminate; reconciliation open."
+            : subject.state === "FAILED"
+              ? "Development failed; inspect recorded transition evidence."
+              : subject.state === "MERGED" || isComplete
+                ? "Merged and reconciled."
+                : order === STATE_ORDER.READY_TO_MERGE
+                  ? "Ready to merge."
+                  : "Awaiting merge.",
     },
     {
       key: "omega",
       label: "ΩΣ",
       status: isComplete
         ? "done"
-        : omegaMission?.state === "blocked" || omegaMission?.state === "degraded"
+        : blocked === "omega" ||
+            omegaMission?.state === "blocked" ||
+            omegaMission?.state === "degraded"
           ? "blocked"
           : subject.state === "MERGED"
             ? "active"
             : "pending",
       detail: isComplete
         ? "COMPLETE"
-        : snapshot.omegaReadiness?.allowed
-          ? "ΩΣ READY — awaiting authoritative completion"
-          : `ΩΣ NOT READY: ${(snapshot.omegaReadiness?.failures ?? ["omega-readiness-unavailable"]).join(", ")}`,
+        : subject.state === "CONTRADICTED"
+          ? "CONTRADICTED — completion evidence requires reconciliation."
+          : snapshot.omegaReadiness?.allowed
+            ? "ΩΣ READY — awaiting authoritative completion"
+            : `ΩΣ NOT READY: ${(snapshot.omegaReadiness?.failures ?? ["omega-readiness-unavailable"]).join(", ")}`,
     },
   ];
 
   const foldedEvents: LiveWorkEvent[] = [...events]
     .reverse()
     .slice(0, 12)
-    .map((row) => ({ eventId: row.eventId, at: row.occurredAt, summary: summariseEvent(row) }));
+    .map((row) => ({
+      eventId: row.eventId,
+      evidenceIds: row.evidenceIds ?? [],
+      at: row.occurredAt,
+      summary: summariseEvent(row),
+    }));
 
   const omegaReadiness = snapshot.omegaReadiness ?? {
     allowed: false,
     failures: ["omega-readiness-unavailable"],
   };
+  const railOrder = stateBlocked ? reachedPipelineOrder(events, 0) : order;
   const rail: LiveWorkRailNode[] = LIVE_WORK_RAIL_STATES.map((state) => ({
     state,
     label: state === "IDEA" ? "MISSION" : state === "COMPLETE" ? "ΩΣ" : state.replaceAll("_", " "),
     // Highlight only the persisted state. Past phases are a lifecycle position,
-    // not fabricated verification or provider receipts.
+    // not fabricated verification or provider receipts. Off-rail history must
+    // come from committed events in the current candidate attempt.
     status:
       state === subject.state
         ? isComplete
           ? "done"
           : "active"
-        : !stateBlocked && STATE_ORDER[state] < order
+        : STATE_ORDER[state] < railOrder
           ? "done"
           : "pending",
   }));
@@ -423,6 +465,7 @@ export function foldLiveWorkPipeline(snapshot: LiveWorkSnapshot): LiveWorkPipeli
       ? `MERGED — ΩΣ ${omegaReadiness.allowed ? "READY" : "NOT READY"}`
       : subject.state;
   return {
+    candidate: snapshot.candidate ?? null,
     rail,
     completionLabel,
     omegaReadiness,
