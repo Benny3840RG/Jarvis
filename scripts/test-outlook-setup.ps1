@@ -92,8 +92,9 @@ function Invoke-MgGraphRequest { param($Method, $Uri, $ContentType, $Body, $Outp
     if ($Uri -match '/servicePrincipals\?') {
         if ($global:outlookSetupTestFixture.hidePrincipal) { return @{ value = @() } }
         if ($Scenario -eq 'principal-page') {
-            if ($Uri -match 'skiptoken') { return @{ value = @(@{ id = 'second-principal' }) } }
-            return @{ value = @(@{ id = 'first-principal' }); '@odata.nextLink' = "$Uri&`$skiptoken=second" }
+            $businessAppId = @($global:outlookSetupTestFixture.apps.Values | Where-Object { $_.signInAudience -eq 'AzureADMyOrg' })[0].appId
+            if ($Uri -match 'skiptoken') { return @{ value = @(@{ id = 'second-principal'; appId = $businessAppId }) } }
+            return @{ value = @(@{ id = 'first-principal'; appId = $businessAppId }); '@odata.nextLink' = "$Uri&`$skiptoken=second" }
         }
         return @{ value = @($global:outlookSetupTestFixture.principal | Where-Object { $null -ne $_ }) }
     }
@@ -101,8 +102,9 @@ function Invoke-MgGraphRequest { param($Method, $Uri, $ContentType, $Body, $Outp
     if ($Uri -match '/oauth2PermissionGrants\?') {
         if ($global:outlookSetupTestFixture.hideGrant) { return @{ value = @() } }
         if ($Scenario -eq 'grant-page') {
-            if ($Uri -match 'skiptoken') { return @{ value = @(@{ consentType = 'AllPrincipals' }) } }
-            return @{ value = @(@{ consentType = 'Principal' }); '@odata.nextLink' = "$Uri&`$skiptoken=second" }
+            $matchingGrant = @{ id = 'first-grant'; clientId = $global:outlookSetupTestFixture.principal.id; resourceId = $global:outlookSetupTestFixture.resource.id; consentType = 'Principal'; principalId = 'business-user'; scope = ($names -join ' ') }
+            if ($Uri -match 'skiptoken') { return @{ value = @(@{ id = 'second-grant'; clientId = $matchingGrant.clientId; resourceId = $matchingGrant.resourceId; consentType = 'AllPrincipals'; principalId = $null; scope = $matchingGrant.scope }) } }
+            return @{ value = @($matchingGrant); '@odata.nextLink' = "$Uri&`$skiptoken=second" }
         }
         if ($Scenario -eq 'broad-grant') { return @{ value = @(@{ consentType = 'AllPrincipals' }) } }
         return @{ value = @($global:outlookSetupTestFixture.grant | Where-Object { $null -ne $_ }) }
@@ -170,6 +172,13 @@ try {
         exit 0
     }
     if ($Scenario -ne 'success') {
+        if ($Scenario -in @('principal-page', 'grant-page')) {
+            $collection = if ($Scenario -eq 'principal-page') { 'servicePrincipals' } else { 'oauth2PermissionGrants' }
+            $secondPageRequests = @($global:outlookSetupTestFixture.requestedUris | Where-Object { $_ -match "/$collection\?" -and $_ -match 'skiptoken=second' })
+            if ($secondPageRequests.Count -eq 0) { throw 'Ambiguous collection rejected without observing its second page.' }
+            if (Test-Path (Join-Path $testDir 'connections.json')) { throw 'Ambiguous collection produced an activated configuration.' }
+            if ($Scenario -eq 'principal-page' -and @($global:outlookSetupTestFixture.requestedUris | Where-Object { $_ -match '/oauth2PermissionGrants' }).Count -ne 0) { throw 'Ambiguous principals reached grant selection.' }
+        }
         if ($Scenario -eq 'relative-directory' -and ((Test-Path (Join-Path $testDir 'relative')) -or $global:outlookSetupTestFixture.requestedUris.Count -ne 0)) { throw 'Relative setup path reached filesystem or provider effects.' }
         if ($Scenario -eq 'foreign-next-link' -and $global:outlookSetupTestFixture.requestedUris.Contains('https://attacker.example/collect')) { throw 'Foreign pagination target was invoked before rejection.' }
         $expectedPosts = if ($Scenario -in @('relative-directory', 'wrong-tenant', 'foreign-next-link', 'pagination-loop', 'pagination-bound', 'collection-bound', 'setup-lock', 'legacy-partial', 'unknown-intent-version')) { 0 } elseif ($Scenario -eq 'principal-page') { 2 } elseif ($Scenario -in @('duplicate-app-scope', 'wrong-token-version', 'fallback-public-client', 'remote-web-redirect', 'remote-spa-redirect', 'implicit-grant')) { 1 } else { 3 }

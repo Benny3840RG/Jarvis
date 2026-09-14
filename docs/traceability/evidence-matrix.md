@@ -2,10 +2,14 @@
 
 ## Outlook integration evidence — 2026-09-14
 
-Existing PR #482 integrates main `40393d04` without changing its Outlook runtime
-implementation. The package conflict preserves both onboarding and main's
-bounded Convex test scheduling. Fifty-two focused Outlook tests and all 27
-mocked PowerShell provisioning scenarios pass, including uncertain-create
+The cumulative PR #482 adds separate personal/business Outlook runtime,
+authentication, provider routing, browser onboarding and provisioning paths.
+Its integration merge `cbcb09b` imported main `40393d04` while preserving the
+then-existing Outlook source and both package scripts. Subsequent review repairs
+change setup validation, onboarding diagnostics and regression coverage; these
+are part of the cumulative candidate and require independent review. Earlier
+integration evidence included 52 focused Outlook tests and 27 mocked PowerShell
+scenarios, including uncertain-create
 reconciliation, missing visibility, intent versioning, sender isolation and
 registration drift. This is offline integration proof, not Microsoft consent,
 mail delivery or live provider reconciliation. The existing PR records the exact

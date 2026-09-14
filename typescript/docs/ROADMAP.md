@@ -31,6 +31,15 @@ unsupported. The owner/private-directory guard is preserved. Regressions prove
 both rejections occur before external actions; full verification and reviews
 are recorded against the resulting PR head.
 
+Further review exposed two pagination-test false positives: incomplete first-page
+principal/grant records rejected even when later pages were ignored. The fixtures
+now put complete exact records on the first page and ambiguity on the second,
+assert the second-page request and reject configuration/grant advancement.
+Ignoring every nextLink passes both old tests and fails both strengthened tests;
+normal pagination passes. The evidence matrix distinguishes the integration merge
+from the cumulative Outlook implementation and later repairs. Runtime ambiguous
+collection rejection is unchanged.
+
 ## Recovery engineering update (2026-09-11)
 
 The bounded recovery candidate now captures existing S4 evidence and mutable-quote
