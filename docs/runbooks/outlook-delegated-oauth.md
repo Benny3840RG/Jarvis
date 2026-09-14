@@ -122,11 +122,22 @@ The script installs locked Node dependencies without install scripts, then:
 8. Guides separate mailbox sign-ins through authorization-code + S256 PKCE with
    random state and a three-minute loopback-only callback listener. Open each
    printed URL on the same computer. The business user may differ from the admin.
+   The registered `localhost` redirect keeps Microsoft's ephemeral-port matching.
+   The callback binds `127.0.0.1` and `::1` on the same port, without a wildcard
+   listener. An unavailable IPv6 socket is omitted only when localhost does not
+   resolve to IPv6; other binding failures close all sockets before consent.
 9. Exchanges and refreshes tokens in memory, then performs a read-only inbox-folder
    ID probe against the exact configured mailbox. No message contents, drafts or
    sends are needed. Only after this succeeds is the refresh token written to a new
    `0600` file in the private setup directory. Existing tokens are never overwritten
    by onboarding; reruns refresh/verify them. Reconnection uses a new private path.
+   Initial publication reuses `FileRefreshTokenStore`: write and fsync a private
+   temporary file, atomically link it to the absent final path, remove the temporary
+   link, and fsync the directory. The link refuses an existing target, including a
+   competing successful onboarding. Write/fsync failures before publication leave
+   no final token; a process crash can leave a private temporary file. A failure
+   after publication may leave a complete final token and requires verification,
+   never overwriting or deleting it to force another consent attempt.
 
 Administrator provisioning needs `Application.ReadWrite.All`,
 `DelegatedPermissionGrant.ReadWrite.All` and `User.ReadBasic.All` on the Microsoft
@@ -137,7 +148,9 @@ provisioning. OAuth consent for each mailbox remains a human Microsoft sign-in.
 Individual commands (run from `typescript/`):
 
 The automated `setup-outlook.sh` / PowerShell flow targets Linux or WSL and uses
-Unix `chmod` and `sync -f`. A custom `-SetupDirectory` must be an absolute
+Unix `chmod` and `sync -f`. It explicitly rejects non-Linux platforms before
+filesystem changes or Graph authentication, even if Unix tools are installed.
+A custom `-SetupDirectory` must be an absolute
 filesystem path; relative paths reject before directories or provider calls.
 Browser onboarding requires POSIX ownership/mode checks (Linux, macOS or WSL).
 Native Windows onboarding is unsupported until an ACL-based credential-store

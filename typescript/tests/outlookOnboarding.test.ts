@@ -1,13 +1,67 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
+import { mkdtemp, open, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { request } from "node:http";
+import { request, Server } from "node:http";
 import { describe, it } from "node:test";
 import { authorizeOutlookConnection } from "../src/auth/outlookOnboarding.js";
 import { resolveOutlookConnections } from "../src/auth/microsoftOutlookConnections.js";
 
 describe("Outlook browser onboarding", () => {
+  it("closes the first loopback listener and avoids consent if the second bind fails", async (t) => {
+    const directory = await mkdtemp(join(tmpdir(), "outlook-bind-"));
+    const connection = resolveOutlookConnections({
+      JARVIS_OUTLOOK_CONNECTIONS_JSON: JSON.stringify([
+        {
+          id: "personal",
+          clientId: "aaaaaaaa-2222-3333-4444-555555555555",
+          mailbox: "test@outlook.com",
+          refreshTokenFile: join(directory, "refresh.token"),
+        },
+      ]),
+    })[0];
+    let port = 0;
+    let effects = 0;
+    const originalListen = Server.prototype.listen;
+    t.mock.method(Server.prototype, "listen", function (this: Server, ...args: unknown[]) {
+      const options = args[0] as { host?: string };
+      if (options.host === "::1") {
+        queueMicrotask(() =>
+          this.emit(
+            "error",
+            Object.assign(new Error("synthetic bind failure"), { code: "EADDRINUSE" }),
+          ),
+        );
+        return this;
+      }
+      this.once("listening", () => {
+        const address = this.address();
+        if (address && typeof address !== "string") port = address.port;
+      });
+      return Reflect.apply(originalListen, this, args) as Server;
+    });
+    try {
+      await assert.rejects(
+        authorizeOutlookConnection(connection, {
+          async showAuthorizationUrl() {
+            effects += 1;
+          },
+          fetch: async () => {
+            effects += 1;
+            return new Response(null);
+          },
+        }),
+        /synthetic bind failure/u,
+      );
+      assert.ok(port > 0);
+      assert.equal(effects, 0);
+      await assert.rejects(fetch(`http://127.0.0.1:${port}/`));
+      assert.deepEqual(await readdir(directory), []);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   it("rejects unsupported ownership checks before opening consent or making requests", async (t) => {
     const descriptor = Object.getOwnPropertyDescriptor(process, "getuid")!;
     Object.defineProperty(process, "getuid", { ...descriptor, value: undefined });
@@ -38,13 +92,32 @@ describe("Outlook browser onboarding", () => {
     assert.equal(effects, 0);
   });
 
-  for (const denied of [false, true])
+  for (const outcome of ["success", "denied", "partial-write", "file-sync"] as const)
     it(
-      denied
+      outcome === "denied"
         ? "does not persist credentials for a rejected mailbox"
-        : "uses PKCE and state, verifies access and persists rotation without sending",
-      async () => {
+        : outcome === "success"
+          ? "uses PKCE and both localhost address families, verifies access and persists rotation"
+          : `does not publish an initial credential after ${outcome} failure`,
+      async (t) => {
         const dir = await mkdtemp(join(tmpdir(), "outlook-onboard-"));
+        if (outcome === "partial-write" || outcome === "file-sync") {
+          const probe = await open(join(dir, "probe"), "wx", 0o600);
+          const prototype = Object.getPrototypeOf(probe) as typeof probe;
+          await probe.close();
+          await rm(join(dir, "probe"));
+          if (outcome === "partial-write") {
+            const originalWrite = prototype.writeFile;
+            t.mock.method(prototype, "writeFile", async function (this: typeof probe) {
+              await originalWrite.call(this, "partial-credential");
+              throw new Error("synthetic disk write failure");
+            });
+          } else {
+            t.mock.method(prototype, "sync", async () => {
+              throw new Error("synthetic file sync failure");
+            });
+          }
+        }
         const connection = resolveOutlookConnections({
           JARVIS_OUTLOOK_CONNECTIONS_JSON: JSON.stringify([
             {
@@ -77,8 +150,12 @@ describe("Outlook browser onboarding", () => {
               assert.equal(malformedStatus, 400);
               callback.searchParams.set("code", "test-code");
               callback.searchParams.set("state", "wrong");
-              assert.equal((await fetch(callback)).status, 400);
+              for (const host of ["127.0.0.1", "[::1]"]) {
+                callback.hostname = host;
+                assert.equal((await fetch(callback)).status, 400);
+              }
               callback.searchParams.set("state", auth.searchParams.get("state")!);
+              callback.hostname = outcome === "success" ? "127.0.0.1" : "[::1]";
               assert.equal((await fetch(callback)).status, 200);
             },
             fetch: async (url, init) => {
@@ -100,13 +177,16 @@ describe("Outlook browser onboarding", () => {
               }
               assert.equal(init?.method, "GET");
               assert.match(String(url), /users\/test%40outlook.com\/mailFolders\/inbox/u);
-              return denied
+              return outcome === "denied"
                 ? new Response(null, { status: 403 })
                 : new Response(JSON.stringify({ id: "inbox-id" }));
             },
           });
-          if (denied) {
+          if (outcome === "denied") {
             await assert.rejects(run, /mailbox-probe-rejected-403/u);
+            assert.deepEqual(await readdir(dir), []);
+          } else if (outcome !== "success") {
+            await assert.rejects(run, /synthetic|persist-failed/u);
             assert.deepEqual(await readdir(dir), []);
           } else {
             await run;

@@ -40,6 +40,17 @@ normal pagination passes. The evidence matrix distinguishes the integration merg
 from the cumulative Outlook implementation and later repairs. Runtime ambiguous
 collection rejection is unchanged.
 
+The next runtime hardening increment explicitly rejects unsupported setup
+platforms before filesystem/Graph effects, serves the registered localhost OAuth
+callback through both IPv4/IPv6 loopback sockets, and closes partially bound
+listeners before consent. Initial credentials now use the existing token store's
+private temporary-file/fsync mechanism with atomic no-clobber publication (the
+same hard-link pattern already used by JSON locking). Regression tests reproduce
+partial-write/fsync leftovers before the repair and prove their absence after it,
+plus concurrent creation, both callback families and partial listener cleanup.
+All live provider and production gates remain open; exact-SHA full/review evidence
+is recorded on the PR.
+
 ## Recovery engineering update (2026-09-11)
 
 The bounded recovery candidate now captures existing S4 evidence and mutable-quote

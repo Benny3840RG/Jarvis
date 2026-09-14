@@ -5,6 +5,7 @@ $graph = 'https://graph.microsoft.com/v1.0'
 $connected = $false
 $setupLock = $null
 try {
+    if (-not $IsLinux) { throw 'Outlook setup requires Linux or WSL with POSIX filesystem permissions.' }
     if (-not [IO.Path]::IsPathFullyQualified($SetupDirectory)) { throw 'SetupDirectory must be an absolute filesystem path.' }
     $setupDir = $SetupDirectory
     if (Test-Path -LiteralPath $setupDir) {

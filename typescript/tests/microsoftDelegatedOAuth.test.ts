@@ -61,6 +61,25 @@ describe("Microsoft delegated OAuth configuration", () => {
 });
 
 describe("FileRefreshTokenStore", () => {
+  it("atomically creates one complete credential without clobbering a competing create", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "jarvis-outlook-create-"));
+    const tokenPath = join(directory, "refresh-token");
+    try {
+      const store = new FileRefreshTokenStore(tokenPath);
+      const results = await Promise.allSettled([store.create("first"), store.create("second")]);
+      assert.equal(results.filter(({ status }) => status === "fulfilled").length, 1);
+      assert.equal(results.filter(({ status }) => status === "rejected").length, 1);
+      const value = await store.read();
+      assert.ok(value === "first" || value === "second");
+      await assert.rejects(store.create("replacement"));
+      assert.equal(await store.read(), value);
+      assert.equal((await stat(tokenPath)).mode & 0o777, 0o600);
+      assert.deepEqual(await readdir(directory), ["refresh-token"]);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   it("reads an owner-only regular file and atomically replaces rotations", async () => {
     const directory = await mkdtemp(join(tmpdir(), "jarvis-outlook-token-"));
     const tokenPath = join(directory, "refresh-token");

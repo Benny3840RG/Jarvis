@@ -28,6 +28,14 @@ missing POSIX ownership support reject before filesystem/provider or consent
 effects. The suite now includes 28 mocked PowerShell scenarios. Native Windows
 credential ACL support and all live Microsoft commissioning remain unproven.
 
+Subsequent platform/runtime hardening adds the 29th mocked PowerShell scenario:
+unsupported setup platforms reject before filesystem/provider effects. Real
+local callback tests cover IPv4 and IPv6 plus partial bind cleanup before consent.
+Injected write and file-fsync failures reproduce incomplete final token files on
+the prior implementation; the existing token store now publishes a complete
+private file atomically without clobbering another credential. These are offline
+regressions, not live OAuth, delivery, provider-state or production evidence.
+
 **Specification:** Jarvis Requirements v2.2  
 **Rule:** Evidence must be immutable or durably addressable and must identify the verified revision.
 

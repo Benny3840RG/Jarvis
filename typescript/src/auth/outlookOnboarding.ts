@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
-import { createServer } from "node:http";
-import { lstat, open } from "node:fs/promises";
+import { lookup } from "node:dns/promises";
+import { createServer, type RequestListener, type Server } from "node:http";
+import { lstat } from "node:fs/promises";
 import { dirname } from "node:path";
 import {
   APPROVED_SCOPES,
@@ -85,7 +86,7 @@ export async function authorizeOutlookConnection(
   // Attach immediately so a timeout while the browser launches cannot be unhandled.
   void codePromise.catch(() => undefined);
   let consumed = false;
-  const server = createServer((req, res) => {
+  const handleCallback: RequestListener = (req, res) => {
     res.setHeader("Cache-Control", "no-store");
     res.setHeader("Referrer-Policy", "no-referrer");
     let url: URL;
@@ -121,21 +122,51 @@ export async function authorizeOutlookConnection(
       .writeHead(200, { "Content-Type": "text/plain" })
       .end("Sign-in received. Return to the terminal for verification.");
     resolveCode(code);
-  });
+  };
+  const servers: Server[] = [];
   const timeout = setTimeout(
     () => rejectCode(new Error("outlook-onboarding-sign-in-timeout")),
     180_000,
   );
   try {
-    await new Promise<void>((resolve, reject) => {
-      server.once("error", reject);
-      server.listen(0, "127.0.0.1", resolve);
-    });
-    const address = server.address();
-    if (!address || typeof address === "string")
-      throw new Error("outlook-onboarding-listener-failed");
+    const localhost = await lookup("localhost", { all: true });
+    if (
+      localhost.length === 0 ||
+      localhost.some(({ address }) => address !== "127.0.0.1" && address !== "::1")
+    ) {
+      throw new Error("outlook-onboarding-localhost-must-resolve-to-loopback");
+    }
+    let port = 0;
+    for (const host of ["127.0.0.1", "::1"]) {
+      const server = createServer(handleCallback);
+      servers.push(server);
+      try {
+        await new Promise<void>((resolve, reject) => {
+          server.once("error", reject);
+          server.listen({ port, host }, () => {
+            server.off("error", reject);
+            server.on("error", rejectCode);
+            resolve();
+          });
+        });
+      } catch (error: unknown) {
+        // IPv4-only hosts need no IPv6 socket when localhost cannot resolve to it.
+        const code = (error as NodeJS.ErrnoException).code;
+        if (
+          host === "::1" &&
+          !localhost.some(({ address }) => address === "::1") &&
+          (code === "EAFNOSUPPORT" || code === "EADDRNOTAVAIL")
+        )
+          continue;
+        throw error;
+      }
+      const address = server.address();
+      if (!address || typeof address === "string")
+        throw new Error("outlook-onboarding-listener-failed");
+      port = address.port;
+    }
     // Microsoft ignores the ephemeral port for registered native localhost redirects.
-    const redirectUri = `http://localhost:${address.port}`;
+    const redirectUri = `http://localhost:${port}`;
     const authorize = new URL(connection.config.tokenEndpoint.replace(/\/token$/u, "/authorize"));
     authorize.search = new URLSearchParams({
       client_id: connection.config.clientId,
@@ -194,22 +225,14 @@ export async function authorizeOutlookConnection(
     });
     await probeOutlookMailbox(connection, await supplier.getAccessToken(signal), signal, request);
     await assertPrivateDirectory(directory);
-    const handle = await open(connection.config.refreshTokenFile, "wx", 0o600);
-    try {
-      await handle.writeFile(`${token}\n`);
-      await handle.sync();
-    } finally {
-      await handle.close();
-    }
-    const directoryHandle = await open(directory, "r");
-    try {
-      await directoryHandle.sync();
-    } finally {
-      await directoryHandle.close();
-    }
+    await new FileRefreshTokenStore(connection.config.refreshTokenFile).create(token);
   } finally {
     clearTimeout(timeout);
-    server.closeAllConnections();
-    await new Promise<void>((resolve) => server.close(() => resolve()));
+    await Promise.all(
+      servers.map(async (server) => {
+        server.closeAllConnections();
+        await new Promise<void>((resolve) => server.close(() => resolve()));
+      }),
+    );
   }
 }

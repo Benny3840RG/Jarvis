@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { constants } from "node:fs";
-import { lstat, open, rename, rm } from "node:fs/promises";
+import { link, lstat, open, rename, rm } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join } from "node:path";
 
 const MAX_REFRESH_TOKEN_BYTES = 64 * 1024;
@@ -56,6 +56,15 @@ export class FileRefreshTokenStore {
   }
 
   async replace(value: string): Promise<void> {
+    await this.persist(value, false);
+  }
+
+  /** Publish a complete initial token without replacing any existing directory entry. */
+  async create(value: string): Promise<void> {
+    await this.persist(value, true);
+  }
+
+  private async persist(value: string, createOnly: boolean): Promise<void> {
     const token = validateToken(value);
     const directory = dirname(this.path);
     const temporary = join(directory, `.${basename(this.path)}.${randomUUID()}.tmp`);
@@ -65,9 +74,19 @@ export class FileRefreshTokenStore {
       if (!directoryMetadata.isDirectory() || (directoryMetadata.mode & 0o022) !== 0) {
         throw storeError("microsoft-oauth-refresh-token-directory-insecure");
       }
-      const targetMetadata = await lstat(this.path);
-      if (!targetMetadata.isFile()) throw storeError("microsoft-oauth-refresh-token-not-regular");
-      assertSecureMode(targetMetadata.mode);
+      if (createOnly) {
+        if (
+          typeof process.getuid !== "function" ||
+          directoryMetadata.uid !== process.getuid() ||
+          (directoryMetadata.mode & 0o077) !== 0
+        ) {
+          throw storeError("microsoft-oauth-refresh-token-directory-insecure");
+        }
+      } else {
+        const targetMetadata = await lstat(this.path);
+        if (!targetMetadata.isFile()) throw storeError("microsoft-oauth-refresh-token-not-regular");
+        assertSecureMode(targetMetadata.mode);
+      }
 
       handle = await open(
         temporary,
@@ -78,7 +97,14 @@ export class FileRefreshTokenStore {
       await handle.sync();
       await handle.close();
       handle = undefined;
-      await rename(temporary, this.path);
+      if (createOnly) {
+        // Like JsonFileLock publication, a hard link is atomic and fails on an
+        // existing target. Rename would clobber a concurrently created token.
+        await link(temporary, this.path);
+        await rm(temporary);
+      } else {
+        await rename(temporary, this.path);
+      }
       const directoryHandle = await open(directory, constants.O_RDONLY);
       try {
         await directoryHandle.sync();
