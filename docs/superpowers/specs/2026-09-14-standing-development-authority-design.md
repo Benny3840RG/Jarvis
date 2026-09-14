@@ -34,13 +34,12 @@ Merge and deployment remain owner-only.
 
 The owner approves a standing default uncertainty budget of `0.05` for ordinary Development missions.
 
-Admission resolves the budget in this order:
+Admission resolves the budget as follows:
 
-1. issue-specific repository variable `JARVIS_DEVELOPMENT_UNCERTAINTY_BUDGET_<issue>` when deliberately supplied;
-2. repository-wide `JARVIS_DEVELOPMENT_UNCERTAINTY_BUDGET` when configured;
-3. the owner-approved built-in default `0.05`.
+1. an issue-specific repository variable `JARVIS_DEVELOPMENT_UNCERTAINTY_BUDGET_<issue>` is used when deliberately supplied;
+2. otherwise durable Development admission uses the owner-approved built-in default `0.05`.
 
-This removes per-issue configuration while preserving an explicit override mechanism. The resolved value is still passed through the existing durable Development admission and validation path. No merge, approval or deployment authority is implied.
+This removes routine per-issue configuration while preserving an explicit per-mission override for exceptional cases. The resolved value is still passed through the existing durable Development admission and validation path. No merge, approval or deployment authority is implied.
 
 ### Candidate-code scope
 
@@ -52,7 +51,7 @@ The autonomous worker may modify ordinary application code, including:
 - ordinary `typescript/convex/` implementation files;
 - other normal TypeScript source and matching tests.
 
-The worker must still satisfy bounded diff size, binary/symlink restrictions, test-area matching and semantic patch scanning.
+Sensitive application areas remain test-gated. The worker must also satisfy bounded diff size, binary/symlink restrictions, test-area matching and semantic patch scanning.
 
 ### Locked control plane
 
@@ -77,15 +76,15 @@ Failures are split into two classes.
 
 ### Retryable operational failures
 
-A run that owned the mission but failed because of a transient dependency/worker/check condition should release `automation-in-progress` and remain queue-eligible for a bounded automatic retry. It must not immediately require Benny to clear `automation-blocked` or manually dispatch the workflow.
+A run that owned the mission but failed before publication because of a transient dependency/worker condition should remain queue-eligible for a bounded automatic retry. The trusted recovery workflow may clear `automation-blocked` only after binding itself to the exact completed builder run and its bot-authored diagnostic receipt.
 
-Automatic retry must be finite. Repeated failures for the same mission/stage must eventually stop and produce an actionable blocked receipt.
+Automatic retry is finite: at most two automatic retries after the initial failed attempt. Repeated failure then stops and produces an actionable hard block.
 
 ### Hard policy failures
 
-A post-agent policy-guard failure, immutable-control failure, credential/permission failure, invalid mission identity, or exhausted retry budget remains fail-closed.
+A post-agent policy-guard failure, invalid/ambiguous diagnostic evidence, stale mission lock, non-retryable failure, or exhausted retry budget remains fail-closed.
 
-For a hard block, the receipt must state the failing stage and practical reason. Where an alternate agent/reviewer can inspect the failure without gaining authority, the system should hand the evidence to that path automatically. No alternate path may bypass the same control-plane restrictions.
+For a hard block, the system keeps `automation-blocked` and automatically asks the existing read-only Claude path to inspect the exact run evidence and advise the smallest repair. Claude receives no content-write, approval, merge or deployment authority from this handoff.
 
 ## Review and merge flow
 
@@ -110,13 +109,13 @@ Production deployment/commissioning remains separately owner-controlled.
 ## Acceptance criteria
 
 - A newly approved ordinary Development issue can enter admission without creating an issue-specific uncertainty-budget variable.
-- An explicit issue-specific budget still overrides the standing default.
-- A repository-wide standing budget can override the built-in `0.05` default.
-- A bounded repair touching reconciliation, persistence, integrations or ordinary Convex implementation files is not rejected solely because of its path.
+- An explicit issue-specific budget still overrides the standing `0.05` default.
+- A bounded repair touching reconciliation, persistence, integrations or ordinary Convex implementation files is not rejected solely because of its path when matching tests are present.
 - Automation controls, workflows, dependency manifests, schema/config authority and deployment/governance controls remain forbidden to unattended workers.
 - Authority-sensitive patch content remains rejected.
-- Retryable owned failures can be retried automatically without requiring the owner to clear `automation-blocked` or manually rerun checks.
+- Retryable pre-publication failures can be retried automatically without requiring the owner to clear `automation-blocked` or manually rerun checks.
 - Hard policy failures still stop automatically and publish actionable evidence.
+- Hard blocks automatically request read-only Claude advice without granting implementation or merge authority.
 - Automatic retries are finite.
 - Independent review and exact-head CI remain required before Jarvis PASS.
 - No autonomous merge or deployment authority is added.
