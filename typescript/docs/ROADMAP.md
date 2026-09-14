@@ -267,3 +267,15 @@ rather than an occasional operator action.
   restoration; replay tests prove no new records, revisions or audit writes. Active
   proposals, arbitrary payloads and effect/worker histories remain unsupported;
   whole-group coverage remains partial with no verified group.
+
+### Outlook verification boundary follow-up — 2026-09-14
+
+PR #482 now checks private current-user directory ownership before `verify`
+reads or refreshes an existing credential, with failure-first coverage for
+shared/writable and wrong-owner directories and a valid rotation control.
+The runbook uses complete legacy environment-variable names. OpenAPI clarifies
+that generic staging and tool-specific execution validation are separate;
+named sender identity is checked against the active provider manifest at
+execution, while legacy mode omits it. Microsoft SDK source confirms the
+explicit Graph `HashTable` output is supported; that review finding is false.
+Live Outlook commissioning and Benny's merge remain separate gates.

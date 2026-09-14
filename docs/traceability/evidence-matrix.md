@@ -258,3 +258,18 @@ The route remains HTTP-only (`x-mcp-tool.exposed=false`) until a governed action
 binding exists. This is not yet a client-ready invoice document generator,
 automatic invoice-number consumer, bank/payment-provider reconciliation, credit
 or adjustment ledger, Convex transaction, or issued-artifact immutability proof.
+
+#### Outlook existing-credential verification repair (PR #482)
+
+The existing onboarding directory authority check now also guards `verify`
+before token access or Microsoft calls. Regression cases cover group-writable,
+other-writable and wrong-owner directories plus successful private-directory
+refresh/rotation. Contract descriptions distinguish generic staging from
+runtime provider-specific execution validation and give the exact sender key
+format. No new authority or live-provider evidence is introduced. Full names
+of the four conflicting legacy environment variables are documented.
+
+The Graph output-type finding from run 34800513674 is contradicted by Microsoft
+SDK source: `OutputType.HashTable` is its declared default and an implemented
+response branch at immutable commit `11d2801bd3d9043c7b1d074f7442f98c2347aeaa`.
+This evidence rejects the finding without changing supported SDK behaviour.

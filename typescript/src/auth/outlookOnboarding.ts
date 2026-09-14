@@ -50,6 +50,7 @@ export async function probeOutlookMailbox(
 }
 
 export async function verifyOutlookConnection(connection: OutlookConnection): Promise<void> {
+  await assertPrivateDirectory(dirname(connection.config.refreshTokenFile));
   const signal = AbortSignal.timeout(30_000);
   const supplier = new MicrosoftDelegatedAccessTokenSupplier({
     ...connection.config,

@@ -1,13 +1,74 @@
 import assert from "node:assert/strict";
-import { mkdtemp, open, readFile, readdir, rm } from "node:fs/promises";
+import { chmod, mkdtemp, open, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { request, Server } from "node:http";
 import { describe, it } from "node:test";
-import { authorizeOutlookConnection } from "../src/auth/outlookOnboarding.js";
+import {
+  authorizeOutlookConnection,
+  verifyOutlookConnection,
+} from "../src/auth/outlookOnboarding.js";
 import { resolveOutlookConnections } from "../src/auth/microsoftOutlookConnections.js";
 
 describe("Outlook browser onboarding", () => {
+  for (const boundary of ["group-writable", "other-writable", "wrong-owner", "private"] as const)
+    it(`verifies only an owned private token directory: ${boundary}`, async (t) => {
+      const directory = await mkdtemp(join(tmpdir(), "outlook-verify-"));
+      const tokenPath = join(directory, "refresh.token");
+      const connection = resolveOutlookConnections({
+        JARVIS_OUTLOOK_CONNECTIONS_JSON: JSON.stringify([
+          {
+            id: "personal",
+            clientId: "aaaaaaaa-2222-3333-4444-555555555555",
+            mailbox: "test@outlook.com",
+            refreshTokenFile: tokenPath,
+          },
+        ]),
+      })[0];
+      await writeFile(tokenPath, "synthetic-initial\n", { mode: 0o600 });
+      if (boundary === "group-writable") await chmod(directory, 0o770);
+      if (boundary === "other-writable") await chmod(directory, 0o707);
+      if (boundary === "wrong-owner") {
+        const actualUid = process.getuid!();
+        const descriptor = Object.getOwnPropertyDescriptor(process, "getuid")!;
+        Object.defineProperty(process, "getuid", { ...descriptor, value: () => actualUid + 1 });
+        t.after(() => Object.defineProperty(process, "getuid", descriptor));
+      }
+      const requests: string[] = [];
+      t.mock.method(globalThis, "fetch", async (url: string | URL | Request) => {
+        requests.push(String(url));
+        return new Response(
+          JSON.stringify(
+            String(url).endsWith("/token")
+              ? {
+                  token_type: "Bearer",
+                  access_token: "synthetic-access",
+                  refresh_token: "synthetic-rotated",
+                  expires_in: 3600,
+                  scope: "Mail.ReadWrite Mail.Send",
+                }
+              : { id: "inbox-id" },
+          ),
+        );
+      });
+      try {
+        if (boundary === "private") {
+          await verifyOutlookConnection(connection);
+          assert.equal(requests.length, 2);
+          assert.equal(await readFile(tokenPath, "utf8"), "synthetic-rotated\n");
+        } else {
+          await assert.rejects(
+            verifyOutlookConnection(connection),
+            /directory-must-be-private-and-owned/u,
+          );
+          assert.deepEqual(requests, []);
+          assert.equal(await readFile(tokenPath, "utf8"), "synthetic-initial\n");
+        }
+      } finally {
+        await rm(directory, { recursive: true, force: true });
+      }
+    });
+
   it("closes the first loopback listener and avoids consent if the second bind fails", async (t) => {
     const directory = await mkdtemp(join(tmpdir(), "outlook-bind-"));
     const connection = resolveOutlookConnections({

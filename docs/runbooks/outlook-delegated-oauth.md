@@ -75,8 +75,9 @@ The named-connection mode supports up to two independent registrations. Set
 - `tenantId`: business tenant GUID; omit only for the personal `/consumers/` flow;
 - `refreshTokenFile`: a distinct absolute owner-only token path.
 
-Do not mix this mode with the legacy `JARVIS_OUTLOOK_CLIENT_ID`, `MAILBOX`,
-`REFRESH_TOKEN_FILE` or `TENANT_ID` variables. The same global enabled flag and
+Do not mix this mode with the legacy `JARVIS_OUTLOOK_CLIENT_ID`,
+`JARVIS_OUTLOOK_MAILBOX`, `JARVIS_OUTLOOK_REFRESH_TOKEN_FILE` or
+`JARVIS_OUTLOOK_TENANT_ID` variables. The same global enabled flag and
 reconciliation pairing gate still apply. Configuration alone does not activate it.
 Legacy single-mailbox configuration remains supported; an optional
 `JARVIS_OUTLOOK_TENANT_ID` pins that configuration to a business tenant.
@@ -214,3 +215,11 @@ Microsoft references:
 - [Native localhost redirect matching](https://learn.microsoft.com/en-us/entra/identity-platform/reply-url)
 - [Single-user delegated consent](https://learn.microsoft.com/en-us/entra/identity/enterprise-apps/grant-consent-single-user)
 - [Tenant user consent settings](https://learn.microsoft.com/en-us/entra/identity/enterprise-apps/configure-user-consent)
+
+### Verification directory boundary
+
+The `verify` command applies the same current-user ownership and owner-only
+POSIX directory check as onboarding, before reading or refreshing a credential.
+A valid mode-0600 token does not make a shared or differently owned parent
+directory safe. Rejected verification makes no Microsoft request and preserves
+the existing token. Supported private directories still permit token rotation.
