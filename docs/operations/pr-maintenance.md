@@ -49,14 +49,25 @@ for the advisory comment; the model runner retains read-only permissions.
 | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Automatic review spend             | At most two invocations per candidate head across CI/base changes and manual reruns; sweeps never retry an identical attempted snapshot.         |
 | Automatic repair spend             | At most two owning builder runs per PR; failures/cancellations consume attempts and repair reruns are refused.                                   |
+| Initial-build operational retry    | At most two trusted automatic retries after the initial failed attempt, and only for classified pre-publication dependency/worker failures.      |
 | Review context                     | At most 40 changed files and 160 KiB decoded before/after content; no silent truncation. Oversized/binary/symlinked context blocks model review. |
 | CI evidence                        | Bounded complete pagination, unique IDs, exact SHA, authenticated repository/run URL and producer; missing/untrusted data cannot pass.           |
 | History                            | Queried from the PR's creation time; incomplete or over-limit history fails closed.                                                              |
 | Existing manually authored PR      | Advisory review only. Opening a PR does not confer the approved-issue repair authority.                                                          |
-| Forbidden/security/control changes | Owner repair required. Existing immutable forbidden-path/content rules are retained.                                                             |
+| Control-plane changes              | Owner repair required. Workflow/automation controls, dependency manifests, env/secrets, schema/config authority and deployment/governance stay hard-blocked. |
+| Sensitive application source       | Allowed only with matching area tests and still subject to authority-sensitive patch scanning and cumulative diff limits.                        |
 | New commits or changed base/checks | Old review discarded; no stale push or stale pass.                                                                                               |
 | Main moved or unhealthy            | No repair dispatch. Repair claims are not inferred from the request comment.                                                                     |
 | Provider timeout during dispatch   | Unconfirmed result; inspect owning run history before retrying.                                                                                  |
+
+A completed initial builder failure is observed by
+`jarvis-autobuild-recovery.yml` from trusted default-branch workflow code. The
+recovery job binds the exact run to its bot-authored diagnostic receipt. A
+classified retry removes `automation-blocked` and re-enters only through
+`jarvis-queue-advance.yml`; it never dispatches a side-channel worker. Guard
+failures, invalid/ambiguous evidence, stale locks and exhausted retry budgets stay
+blocked and automatically request read-only `@claude` advice. That advisory path
+has no content-write, approval, merge or deployment authority.
 
 The namespaced `jarvis-pr-maintenance/review` status is a handover aid. It never
 impersonates TypeScript, PR Evidence or CodeQL checks and cannot satisfy the
@@ -157,22 +168,22 @@ the durable Development and Omega records both confirm it.
 ### Development runtime configuration
 
 Trusted Actions jobs require repository variables `CONVEX_DEPLOYMENT=dev:<name>`
-and its exact `CONVEX_URL=https://<name>.convex.cloud`, the existing matching
-`JARVIS_SERVICE_TOKEN` secret, and an explicit
-`JARVIS_DEVELOPMENT_UNCERTAINTY_BUDGET_<issue-number>` variable (for example,
-`JARVIS_DEVELOPMENT_UNCERTAINTY_BUDGET_493=0.05` only after owner approval
-for issue #493). Admission reads only the dispatched issue's variable; no
-repository-wide budget fallback exists. Missing issue-specific approval
-configuration blocks both initial admission and repair. Independent post-merge proof
-also requires the separate `JARVIS_APPROVAL_TOKEN` secret and explicit operator
-judgement in `JARVIS_DEVELOPMENT_RESIDUAL_UNCERTAINTY`. The GitHub observer uses
-the workflow's read-only token. Owner execution still uses the authorised
-runtime's GitHub token and approval path.
+and its exact `CONVEX_URL=https://<name>.convex.cloud`, plus the existing matching
+`JARVIS_SERVICE_TOKEN` secret. Ordinary approved Development admission uses the
+owner-approved standing uncertainty budget `0.05`. An issue-specific repository
+variable `JARVIS_DEVELOPMENT_UNCERTAINTY_BUDGET_<issue-number>` may override that
+default when the owner deliberately assigns a different bounded budget. Missing
+issue-specific configuration no longer blocks an ordinary approved mission.
+Independent post-merge proof still requires the separate `JARVIS_APPROVAL_TOKEN`
+secret and explicit operator judgement in
+`JARVIS_DEVELOPMENT_RESIDUAL_UNCERTAINTY`. The GitHub observer uses the workflow's
+read-only token. Owner execution still uses the authorised runtime's GitHub token
+and approval path.
 
-The new `developmentWorkerClaims` functions must be deployed to that named
+The `developmentWorkerClaims` functions must be deployed to that named
 development deployment before activation. No production deployment is part
-of this change. Missing runtime configuration blocks admission instead of
-falling back to an untracked build.
+of this change. Missing required runtime configuration still blocks admission
+instead of falling back to an untracked build.
 
 ### Commissioning evidence still required
 
