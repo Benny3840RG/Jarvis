@@ -136,6 +136,13 @@ provisioning. OAuth consent for each mailbox remains a human Microsoft sign-in.
 
 Individual commands (run from `typescript/`):
 
+The automated `setup-outlook.sh` / PowerShell flow targets Linux or WSL and uses
+Unix `chmod` and `sync -f`. A custom `-SetupDirectory` must be an absolute
+filesystem path; relative paths reject before directories or provider calls.
+Browser onboarding requires POSIX ownership/mode checks (Linux, macOS or WSL).
+Native Windows onboarding is unsupported until an ACL-based credential-store
+boundary exists; it fails before consent instead of skipping ownership checks.
+
 ```bash
 npm run outlook -- inspect --config "$HOME/.config/jarvis/outlook/connections.json"
 npm run outlook -- connect --config "$HOME/.config/jarvis/outlook/connections.json" --connection personal

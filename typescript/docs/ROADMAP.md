@@ -23,6 +23,14 @@ guard passes. Collection reads also select `HashTable` explicitly. The Microsoft
 SDK already defaults to that type; the review's claimed `PSCustomObject` default
 was incorrect. Fresh exact-head full verification and re-review remain required.
 
+The next review found relative setup paths and an unclear unsupported-platform
+failure. Setup now rejects non-absolute paths before filesystem/provider effects.
+Browser onboarding explicitly requires POSIX ownership support before inspecting
+the credential directory or starting consent; native Windows ACL storage remains
+unsupported. The owner/private-directory guard is preserved. Regressions prove
+both rejections occur before external actions; full verification and reviews
+are recorded against the resulting PR head.
+
 ## Recovery engineering update (2026-09-11)
 
 The bounded recovery candidate now captures existing S4 evidence and mutable-quote

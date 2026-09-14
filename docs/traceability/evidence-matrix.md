@@ -19,6 +19,11 @@ test fails it and passes the intact guard. Collection requests explicitly select
 the SDK's `HashTable` output contract. This adds offline boundary evidence only;
 the existing PR carries the new tested SHA and independent review result.
 
+Setup-path and platform regressions additionally prove relative directories and
+missing POSIX ownership support reject before filesystem/provider or consent
+effects. The suite now includes 28 mocked PowerShell scenarios. Native Windows
+credential ACL support and all live Microsoft commissioning remain unproven.
+
 **Specification:** Jarvis Requirements v2.2  
 **Rule:** Evidence must be immutable or durably addressable and must identify the verified revision.
 

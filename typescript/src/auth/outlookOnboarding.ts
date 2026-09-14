@@ -10,12 +10,12 @@ import {
 import type { OutlookConnection } from "./microsoftOutlookConnections.js";
 
 async function assertPrivateDirectory(path: string): Promise<void> {
+  if (typeof process.getuid !== "function") {
+    throw new Error("outlook-onboarding-requires-posix-ownership-use-linux-macos-or-wsl");
+  }
+  const ownerId = process.getuid();
   const metadata = await lstat(path);
-  if (
-    !metadata.isDirectory() ||
-    (metadata.mode & 0o077) !== 0 ||
-    metadata.uid !== process.getuid?.()
-  ) {
+  if (!metadata.isDirectory() || (metadata.mode & 0o077) !== 0 || metadata.uid !== ownerId) {
     throw new Error("outlook-onboarding-directory-must-be-private-and-owned");
   }
 }

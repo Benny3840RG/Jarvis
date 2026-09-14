@@ -8,6 +8,36 @@ import { authorizeOutlookConnection } from "../src/auth/outlookOnboarding.js";
 import { resolveOutlookConnections } from "../src/auth/microsoftOutlookConnections.js";
 
 describe("Outlook browser onboarding", () => {
+  it("rejects unsupported ownership checks before opening consent or making requests", async (t) => {
+    const descriptor = Object.getOwnPropertyDescriptor(process, "getuid")!;
+    Object.defineProperty(process, "getuid", { ...descriptor, value: undefined });
+    t.after(() => Object.defineProperty(process, "getuid", descriptor));
+    const connection = resolveOutlookConnections({
+      JARVIS_OUTLOOK_CONNECTIONS_JSON: JSON.stringify([
+        {
+          id: "personal",
+          clientId: "aaaaaaaa-2222-3333-4444-555555555555",
+          mailbox: "test@outlook.com",
+          refreshTokenFile: join(tmpdir(), "unused-onboarding-token"),
+        },
+      ]),
+    })[0];
+    let effects = 0;
+    await assert.rejects(
+      authorizeOutlookConnection(connection, {
+        async showAuthorizationUrl() {
+          effects += 1;
+        },
+        fetch: async () => {
+          effects += 1;
+          return new Response(null);
+        },
+      }),
+      /outlook-onboarding-requires-posix-ownership/u,
+    );
+    assert.equal(effects, 0);
+  });
+
   for (const denied of [false, true])
     it(
       denied

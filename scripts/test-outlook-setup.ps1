@@ -1,5 +1,5 @@
 # Offline provisioning regression test. All Microsoft calls are replaced by mocks.
-param([ValidateSet('success', 'wrong-tenant', 'broad-grant', 'app-timeout-visible', 'app-timeout-missing', 'principal-timeout', 'grant-timeout', 'ambiguous-app-page', 'foreign-next-link', 'pagination-loop', 'principal-page', 'grant-page', 'principal-timeout-missing', 'grant-timeout-missing', 'pagination-bound', 'collection-bound', 'setup-lock', 'legacy-partial', 'legacy-principal', 'legacy-grant', 'unknown-intent-version', 'duplicate-app-scope', 'wrong-token-version', 'fallback-public-client', 'remote-web-redirect', 'remote-spa-redirect', 'implicit-grant')][string]$Scenario = 'success')
+param([ValidateSet('success', 'wrong-tenant', 'broad-grant', 'app-timeout-visible', 'app-timeout-missing', 'principal-timeout', 'grant-timeout', 'ambiguous-app-page', 'foreign-next-link', 'pagination-loop', 'principal-page', 'grant-page', 'principal-timeout-missing', 'grant-timeout-missing', 'pagination-bound', 'collection-bound', 'setup-lock', 'legacy-partial', 'legacy-principal', 'legacy-grant', 'unknown-intent-version', 'duplicate-app-scope', 'wrong-token-version', 'fallback-public-client', 'remote-web-redirect', 'remote-spa-redirect', 'implicit-grant', 'relative-directory')][string]$Scenario = 'success')
 $ErrorActionPreference = 'Stop'
 $testDir = Join-Path ([IO.Path]::GetTempPath()) ([guid]::NewGuid().ToString())
 $global:outlookSetupTestFixture = @{}
@@ -114,7 +114,15 @@ function Invoke-MgGraphRequest { param($Method, $Uri, $ContentType, $Body, $Outp
     throw "Unexpected Microsoft request: $Method $Uri"
 }
 $heldLock = $null
+$changedLocation = $false
 try {
+    $suppliedSetupDirectory = $testDir
+    if ($Scenario -eq 'relative-directory') {
+        New-Item -ItemType Directory -Path $testDir | Out-Null
+        Push-Location $testDir
+        $changedLocation = $true
+        $suppliedSetupDirectory = 'relative/outlook'
+    }
     if ($Scenario -in @('legacy-partial', 'unknown-intent-version')) {
         New-Item -ItemType Directory -Path $testDir | Out-Null
         $legacyState = @{ tenantId = $tenant; business = 'business@example.com'; personal = 'personal@outlook.com'; apps = @{} }
@@ -125,7 +133,7 @@ try {
         New-Item -ItemType Directory -Path $testDir | Out-Null
         $heldLock = [IO.File]::Open((Join-Path $testDir '.setup.lock'), [IO.FileMode]::OpenOrCreate, [IO.FileAccess]::ReadWrite, [IO.FileShare]::None)
     }
-    & "$PSScriptRoot/setup-outlook.ps1" -SetupDirectory $testDir
+    & "$PSScriptRoot/setup-outlook.ps1" -SetupDirectory $suppliedSetupDirectory
     if ($Scenario -in @('legacy-principal', 'legacy-grant')) {
         $statePath = Join-Path $testDir 'setup-state.json'
         $record = Get-Content -Raw $statePath | ConvertFrom-Json -AsHashtable
@@ -162,8 +170,9 @@ try {
         exit 0
     }
     if ($Scenario -ne 'success') {
+        if ($Scenario -eq 'relative-directory' -and ((Test-Path (Join-Path $testDir 'relative')) -or $global:outlookSetupTestFixture.requestedUris.Count -ne 0)) { throw 'Relative setup path reached filesystem or provider effects.' }
         if ($Scenario -eq 'foreign-next-link' -and $global:outlookSetupTestFixture.requestedUris.Contains('https://attacker.example/collect')) { throw 'Foreign pagination target was invoked before rejection.' }
-        $expectedPosts = if ($Scenario -in @('wrong-tenant', 'foreign-next-link', 'pagination-loop', 'pagination-bound', 'collection-bound', 'setup-lock', 'legacy-partial', 'unknown-intent-version')) { 0 } elseif ($Scenario -eq 'principal-page') { 2 } elseif ($Scenario -in @('duplicate-app-scope', 'wrong-token-version', 'fallback-public-client', 'remote-web-redirect', 'remote-spa-redirect', 'implicit-grant')) { 1 } else { 3 }
+        $expectedPosts = if ($Scenario -in @('relative-directory', 'wrong-tenant', 'foreign-next-link', 'pagination-loop', 'pagination-bound', 'collection-bound', 'setup-lock', 'legacy-partial', 'unknown-intent-version')) { 0 } elseif ($Scenario -eq 'principal-page') { 2 } elseif ($Scenario -in @('duplicate-app-scope', 'wrong-token-version', 'fallback-public-client', 'remote-web-redirect', 'remote-spa-redirect', 'implicit-grant')) { 1 } else { 3 }
         if ($LASTEXITCODE -ne 1 -or $global:outlookSetupTestFixture.posts -ne $expectedPosts) { throw 'Expected fail-closed rejection before the grant.' }
         if ($Scenario -eq 'pagination-bound' -and $global:outlookSetupTestFixture.collectionReads -ne 20) { throw 'Pagination did not stop at its read bound.' }
         Write-Host "PASS: $Scenario refused without creating a consent grant."
@@ -176,6 +185,7 @@ try {
     if ($connections.Count -ne 2 -or $connections[0].clientId -eq $connections[1].clientId -or $connections[0].refreshTokenFile -eq $connections[1].refreshTokenFile -or $connections[1].tenantId -ne $tenant) { throw 'Connections are not isolated.' }
     Write-Host 'PASS: separate registrations, single-user scopes, retry without duplicates, isolated configuration.'
 } finally {
+    if ($changedLocation) { Pop-Location }
     if ($heldLock) { $heldLock.Dispose() }
     Remove-Item -LiteralPath $testDir -Recurse -Force -ErrorAction SilentlyContinue
 }

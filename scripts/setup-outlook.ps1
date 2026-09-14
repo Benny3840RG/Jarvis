@@ -5,6 +5,7 @@ $graph = 'https://graph.microsoft.com/v1.0'
 $connected = $false
 $setupLock = $null
 try {
+    if (-not [IO.Path]::IsPathFullyQualified($SetupDirectory)) { throw 'SetupDirectory must be an absolute filesystem path.' }
     $setupDir = $SetupDirectory
     if (Test-Path -LiteralPath $setupDir) {
         $item = Get-Item -Force -LiteralPath $setupDir
