@@ -229,7 +229,8 @@ describe("developmentState.liveWork", () => {
         from: "REVIEW",
         to: "READY_TO_MERGE",
         reasonCodes: [],
-        hasMergeReceipt: true,
+        hasMergeReceipt: false,
+        evidenceIds: [],
       },
     ]);
   });
@@ -292,4 +293,226 @@ describe("developmentState.liveWork", () => {
     expect(snapshot?.workerStep?.operationId).toBe("github-development-worker");
     expect(JSON.stringify(snapshot)).not.toContain("secret-lease-token");
   });
+});
+
+it("projects candidate identity only from the current committed owner's merge action", async () => {
+  const t = harness();
+  await insertSubject(t, {
+    subjectId: "merged",
+    state: "MERGED",
+    updatedAt: 1,
+    repository: "owner/repo",
+    branch: "main",
+  });
+  const actionId = await t.run(async (ctx) => {
+    const subject = await ctx.db.query("developmentSubjects").first();
+    if (!subject) throw new Error("Missing subject");
+    await ctx.db.patch("developmentSubjects", subject._id, { lastEventId: "merged-event" });
+    await ctx.db.insert("developmentEvents", {
+      ownerId: "jarvis-cli",
+      subjectId: "merged",
+      eventId: "merged-event",
+      requestId: "request",
+      canonicalRequestFingerprint: "request-fingerprint",
+      canonicalEventFingerprint: "event-fingerprint",
+      eventType: "DEV_TRANSITION_COMMITTED",
+      eventSchemaVersion: 1,
+      transitionId: "DEV_TRANSITION_READY_TO_MERGE_TO_MERGED",
+      occurredAt: new Date(1).toISOString(),
+      recordedAt: new Date(1).toISOString(),
+      evidenceIds: ["evidence-1"],
+      correlationId: "correlation",
+      reducerVersion: "DevelopmentReducer/v1",
+      payload: {
+        to: "MERGED",
+        mergeReceiptKey: "merge-receipt",
+        effectPayload: { pullRequestNumber: 999 },
+      },
+      createdAt: 1,
+    });
+    await ctx.db.insert("toolExecutionReceipts", {
+      ownerId: "jarvis-cli",
+      receiptKey: "merge-receipt",
+      receiptId: "receipt-1",
+      actionId: "action-1",
+      projectId: "merged",
+      idempotencyKey: "execution",
+      actionFingerprint: "fingerprint",
+      tool: "github",
+      operation: "merge-pull-request",
+      provider: "github-rest-v1",
+      status: "succeeded",
+      startedAt: 1,
+      completedAt: 2,
+      createdAt: 2,
+    });
+    return ctx.db.insert("toolActions", {
+      ownerId: "jarvis-cli",
+      actionId: "action-1",
+      requestId: "request",
+      projectKey: "merged",
+      baseRevision: 1,
+      state: "approved",
+      tool: "github",
+      operation: "merge-pull-request",
+      arguments: {
+        subjectId: "merged",
+        transitionId: "DEV_TRANSITION_READY_TO_MERGE_TO_MERGED",
+        repository: "owner/repo",
+        baseBranch: "main",
+        pullRequestNumber: 42,
+        reviewedHeadSha: "a".repeat(40),
+        mergeMethod: "squash",
+        authorityEnvelopeHash: "authority",
+        policyDecisionFingerprint: "policy",
+        effectiveRisk: 4,
+      },
+      rationale: "merge",
+      requiredAuthority: "T3",
+      destructive: true,
+      consumptionPolicy: "single-use",
+      idempotencyKey: "action-key",
+      proposedBy: "agent",
+      approvedBy: "user",
+      createdAt: 1,
+      updatedAt: 1,
+    });
+  });
+  const { ConvexToolActionService } = await import("../src/persistence/convexToolActions.js");
+  const { fingerprintToolAction } = await import("../src/actions/toolExecution.js");
+  const service = new ConvexToolActionService(
+    {
+      query: t.query as import("../src/persistence/convexPersistence.js").ConvexClientLike["query"],
+      mutation: async () => {
+        throw new Error("Read-only action fixture");
+      },
+    },
+    SERVICE_TOKEN,
+  );
+  const executedAction = await service.get({ projectId: "merged", actionId: "action-1" });
+  if (!executedAction) throw new Error("Missing executed action");
+  await t.run(async (ctx) => {
+    const receipt = await ctx.db.query("toolExecutionReceipts").first();
+    if (!receipt) throw new Error("Missing receipt");
+    await ctx.db.patch("toolExecutionReceipts", receipt._id, {
+      actionFingerprint: fingerprintToolAction(executedAction),
+    });
+  });
+  const snapshot = await t.query(api.developmentState.liveWork, { serviceToken: SERVICE_TOKEN });
+  expect(snapshot?.candidate).toEqual({
+    pullRequestNumber: 42,
+    headSha: "a".repeat(40),
+    receiptId: "receipt-1",
+  });
+  expect(snapshot?.events[0]?.evidenceIds).toEqual(["evidence-1"]);
+  for (const changed of [{ pullRequestNumber: 43 }, { reviewedHeadSha: "b".repeat(40) }]) {
+    await t.run((ctx) =>
+      ctx.db.patch("toolActions", actionId, {
+        arguments: { ...executedAction.arguments, ...changed },
+      }),
+    );
+    expect(
+      (await t.query(api.developmentState.liveWork, { serviceToken: SERVICE_TOKEN }))?.candidate,
+    ).toBeNull();
+  }
+  await t.run((ctx) =>
+    ctx.db.patch("toolActions", actionId, { arguments: executedAction.arguments }),
+  );
+  // The shared argument schema pins the original merge action transition.
+  // Reconciliation may commit INDETERMINATE -> MERGED using that same action.
+  await t.run(async (ctx) => {
+    const action = await ctx.db.get("toolActions", actionId);
+    if (!action) throw new Error("Missing action");
+    await ctx.db.patch("toolActions", actionId, {
+      arguments: { ...action.arguments, transitionId: "DEV_TRANSITION_REVIEW_TO_READY_TO_MERGE" },
+    });
+  });
+  expect(
+    (await t.query(api.developmentState.liveWork, { serviceToken: SERVICE_TOKEN }))?.candidate,
+  ).toBeNull();
+  await t.run(async (ctx) => {
+    const action = await ctx.db.get("toolActions", actionId);
+    const event = await ctx.db.query("developmentEvents").first();
+    if (!action || !event) throw new Error("Missing fixture");
+    await ctx.db.patch("toolActions", actionId, {
+      arguments: { ...action.arguments, transitionId: "DEV_TRANSITION_READY_TO_MERGE_TO_MERGED" },
+    });
+    await ctx.db.patch("developmentEvents", event._id, {
+      transitionId: "DEV_TRANSITION_INDETERMINATE_TO_MERGED",
+    });
+  });
+  expect(
+    (await t.query(api.developmentState.liveWork, { serviceToken: SERVICE_TOKEN }))?.candidate,
+  ).toEqual(snapshot?.candidate);
+  await t.run(async (ctx) => {
+    const action = await ctx.db.get("toolActions", actionId);
+    if (!action) throw new Error("Missing action");
+    await ctx.db.patch("toolActions", actionId, {
+      arguments: { ...action.arguments, repository: "other/repo" },
+    });
+  });
+  expect(
+    (await t.query(api.developmentState.liveWork, { serviceToken: SERVICE_TOKEN }))?.candidate,
+  ).toBeNull();
+  await t.run(async (ctx) => {
+    const action = await ctx.db.get("toolActions", actionId);
+    if (!action) throw new Error("Missing action");
+    await ctx.db.patch("toolActions", actionId, {
+      arguments: { ...action.arguments, repository: "owner/repo" },
+      projectKey: "different-subject",
+    });
+  });
+  expect(
+    (await t.query(api.developmentState.liveWork, { serviceToken: SERVICE_TOKEN }))?.candidate,
+  ).toBeNull();
+  await t.run(async (ctx) => {
+    await ctx.db.patch("toolActions", actionId, { projectKey: "merged", ownerId: "other-owner" });
+  });
+  expect(
+    (await t.query(api.developmentState.liveWork, { serviceToken: SERVICE_TOKEN }))?.candidate,
+  ).toBeNull();
+  await t.run(async (ctx) => {
+    await ctx.db.patch("toolActions", actionId, { ownerId: "jarvis-cli" });
+    const receipt = await ctx.db.query("toolExecutionReceipts").first();
+    if (!receipt) throw new Error("Missing receipt");
+    await ctx.db.patch("toolExecutionReceipts", receipt._id, { projectId: "different-subject" });
+  });
+  expect(
+    (await t.query(api.developmentState.liveWork, { serviceToken: SERVICE_TOKEN }))?.candidate,
+  ).toBeNull();
+  await t.run(async (ctx) => {
+    const receipt = await ctx.db.query("toolExecutionReceipts").first();
+    const subject = await ctx.db.query("developmentSubjects").first();
+    if (!receipt || !subject) throw new Error("Missing fixture");
+    await ctx.db.patch("toolExecutionReceipts", receipt._id, { projectId: "merged" });
+    await ctx.db.patch("developmentSubjects", subject._id, { lastEventId: "later-generation" });
+  });
+  expect(
+    (await t.query(api.developmentState.liveWork, { serviceToken: SERVICE_TOKEN }))?.candidate,
+  ).toBeNull();
+});
+
+it("does not attach unvalidated merge receipts to a non-merge transition", async () => {
+  const t = harness();
+  await insertSubject(t, { subjectId: "receipt-scope", state: "IDEA", updatedAt: 1000 });
+  const result = await t.mutation(api.developmentState.commit, {
+    serviceToken: SERVICE_TOKEN,
+    subjectId: "receipt-scope",
+    eventId: "scope-event",
+    requestId: "scope-request",
+    correlationId: "scope-correlation",
+    transitionId: "DEV_TRANSITION_IDEA_TO_SPECIFIED",
+    to: "SPECIFIED",
+    requestedBy: { actorType: "controller", actorId: "caller" },
+    committedBy: { actorType: "controller", actorId: "caller" },
+    mergeReceiptKey: "unvalidated-merge-receipt",
+  });
+  expect(result.kind).toBe("COMMITTED");
+  expect(result.subject.state).toBe("SPECIFIED");
+  expect(result.event.evidenceIds).not.toContain("unvalidated-merge-receipt");
+  expect(result.event.payload).not.toHaveProperty("mergeReceiptKey");
+  const snapshot = await t.query(api.developmentState.liveWork, { serviceToken: SERVICE_TOKEN });
+  expect(
+    snapshot?.events.find((event) => event.eventId === result.event.eventId)?.hasMergeReceipt,
+  ).toBe(false);
 });
