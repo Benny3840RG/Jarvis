@@ -1,5 +1,41 @@
 # Jarvis Evidence Matrix
 
+## Outlook integration evidence — 2026-09-14
+
+The cumulative PR #482 adds separate personal/business Outlook runtime,
+authentication, provider routing, browser onboarding and provisioning paths.
+Its integration merge `cbcb09b` imported main `40393d04` while preserving the
+then-existing Outlook source and both package scripts. Subsequent review repairs
+change setup validation, onboarding diagnostics and regression coverage; these
+are part of the cumulative candidate and require independent review. Earlier
+integration evidence included 52 focused Outlook tests and 27 mocked PowerShell
+scenarios, including uncertain-create
+reconciliation, missing visibility, intent versioning, sender isolation and
+registration drift. This is offline integration proof, not Microsoft consent,
+mail delivery or live provider reconciliation. The existing PR records the exact
+final head, full gate, independent Claude review and Jarvis result; #293/#294/#297
+remain open until their provider evidence exists.
+
+The foreign-pagination regression now observes requested URIs, so an attempted
+foreign GET cannot masquerade as safe rejection merely because setup exits with
+no POSTs. The old test passed a temporary guard-bypass mutation; the strengthened
+test fails it and passes the intact guard. Collection requests explicitly select
+the SDK's `HashTable` output contract. This adds offline boundary evidence only;
+the existing PR carries the new tested SHA and independent review result.
+
+Setup-path and platform regressions additionally prove relative directories and
+missing POSIX ownership support reject before filesystem/provider or consent
+effects. The suite now includes 28 mocked PowerShell scenarios. Native Windows
+credential ACL support and all live Microsoft commissioning remain unproven.
+
+Subsequent platform/runtime hardening adds the 29th mocked PowerShell scenario:
+unsupported setup platforms reject before filesystem/provider effects. Real
+local callback tests cover IPv4 and IPv6 plus partial bind cleanup before consent.
+Injected write and file-fsync failures reproduce incomplete final token files on
+the prior implementation; the existing token store now publishes a complete
+private file atomically without clobbering another credential. These are offline
+regressions, not live OAuth, delivery, provider-state or production evidence.
+
 ## Sentry commissioning preparation — #303 (2026-09-14)
 
 The development commissioning command exercises the existing API client against
@@ -238,6 +274,42 @@ binding exists. This is not yet a client-ready invoice document generator,
 automatic invoice-number consumer, bank/payment-provider reconciliation, credit
 or adjustment ledger, Convex transaction, or issued-artifact immutability proof.
 
+#### Outlook existing-credential verification repair (PR #482)
+
+The existing onboarding directory authority check now also guards `verify`
+before token access or Microsoft calls. Regression cases cover group-writable,
+other-writable and wrong-owner directories plus successful private-directory
+refresh/rotation. Contract descriptions distinguish generic staging from
+runtime provider-specific execution validation and give the exact sender key
+format. No new authority or live-provider evidence is introduced. Full names
+of the four conflicting legacy environment variables are documented.
+
+The Graph output-type finding from run 34800513674 is contradicted by Microsoft
+SDK source: `OutputType.HashTable` is its declared default and an implemented
+response branch at immutable commit `11d2801bd3d9043c7b1d074f7442f98c2347aeaa`.
+This evidence rejects the finding without changing supported SDK behaviour.
+
+#### Outlook serialized-token size boundary (PR #482)
+
+Failure-first tests reproduce a successful maximum-size token write followed
+by a rejected read. FileRefreshTokenStore now allows its one-byte newline
+serialization overhead while retaining the 65,536-byte token payload bound.
+Both ASCII and multibyte payloads are proven through initial create, rotation
+and readback; oversized create/replace/read paths still reject. The legacy
+configuration table now includes tenant-pinned business accounts and keeps
+named connection mode separate. No provider or activation evidence is claimed.
+
+#### Outlook single-stack callback evidence (PR #482)
+
+An actual-socket test with controlled localhost resolution reproduced successful
+IPv4-only onboarding and failed IPv6-only onboarding before repair. The shared
+listener loop now treats unavailable, non-resolved families symmetrically.
+Both single-stack cases complete callback/probe/persistence and close their
+listener; unavailable or occupied required-family failures remain pre-consent
+rejections with cleanup. PowerShell's child-script `exit 1` was independently
+executed and observed by the caller via `$LASTEXITCODE`; it does not bypass
+the existing setup-test assertions. No provider request or activation is claimed.
+
 ## Production continuation — Development Live Work (2026-09-11)
 
 Review repair 2026-09-14, PR #502: regression coverage now proves that CRLF
@@ -269,6 +341,10 @@ Candidate results and eventual merge identity are maintained in the
   revision or commission an active lifecycle. Synthetic scenarios remain labeled.
   Production and external commissioning remain unproven, and the read model does
   not invent missing uncertainty. Exact integration results are recorded in the ledger.
+
+## Outlook sign-in deadline review repair
+
+Jarvis review of #482 at `c5521a3` identified a stalled browser-launch callback that could outlive the sign-in deadline. The repair races both launcher completion and authorization-code receipt against an independent deadline, so a received code cannot neutralize the timeout while the launcher remains stalled. Existing listener cleanup runs on expiry. Two failure-first regressions establish bounded rejection and no provider or credential effects. Fresh candidate verification, independent review and actual Jarvis PASS remain required.
 
 ## Single-artifact review publication compatibility
 
