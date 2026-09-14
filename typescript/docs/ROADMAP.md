@@ -279,3 +279,14 @@ named sender identity is checked against the active provider manifest at
 execution, while legacy mode omits it. Microsoft SDK source confirms the
 explicit Graph `HashTable` output is supported; that review finding is false.
 Live Outlook commissioning and Benny's merge remain separate gates.
+
+### Outlook serialized-token boundary repair — 2026-09-14
+
+PR #482 repairs the shared token store's size mismatch: its existing 64 KiB
+payload limit is preserved while the file-read bound now accounts for the
+single newline appended by initial publication and rotation. ASCII and
+multibyte maximum-size tokens round-trip; one-byte-over payloads remain
+rejected without replacing an existing credential. The runbook distinguishes
+legacy personal/business tenant settings from named connection configuration.
+This remains offline repository proof; live commissioning and merge gates
+are unchanged.

@@ -4,6 +4,8 @@ import { link, lstat, open, rename, rm } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join } from "node:path";
 
 const MAX_REFRESH_TOKEN_BYTES = 64 * 1024;
+// persist appends one LF; payload validation below still enforces 64 KiB.
+const MAX_REFRESH_TOKEN_FILE_BYTES = MAX_REFRESH_TOKEN_BYTES + 1;
 
 function storeError(code: string): Error {
   const error = new Error(code);
@@ -41,7 +43,7 @@ export class FileRefreshTokenStore {
       const metadata = await handle.stat();
       if (!metadata.isFile()) throw storeError("microsoft-oauth-refresh-token-not-regular");
       assertSecureMode(metadata.mode);
-      if (metadata.size < 1 || metadata.size > MAX_REFRESH_TOKEN_BYTES) {
+      if (metadata.size < 1 || metadata.size > MAX_REFRESH_TOKEN_FILE_BYTES) {
         throw storeError("microsoft-oauth-refresh-token-invalid");
       }
       return validateToken(await handle.readFile("utf8"));

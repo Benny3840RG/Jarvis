@@ -17,14 +17,19 @@ It does not add general outbound email.
 
 ## Required configuration
 
-Outlook composition requires all of the following:
+Set `JARVIS_OUTLOOK_ENABLED=true` to enable composition; absent or `false`
+keeps it disabled. Choose either the legacy single-mailbox variables below or
+`JARVIS_OUTLOOK_CONNECTIONS_JSON` from [Separate personal and business connections](#separate-personal-and-business-connections).
+Do not combine these two configuration modes.
 
-| Variable                            | Requirement                                                                           |
-| ----------------------------------- | ------------------------------------------------------------------------------------- |
-| `JARVIS_OUTLOOK_ENABLED`            | Exact value `true`; absent or `false` keeps Outlook disabled                          |
-| `JARVIS_OUTLOOK_CLIENT_ID`          | Microsoft app registration client ID for the approved personal-account delegated flow |
-| `JARVIS_OUTLOOK_MAILBOX`            | Personal Outlook mailbox used by Graph                                                |
-| `JARVIS_OUTLOOK_REFRESH_TOKEN_FILE` | Absolute path to the runtime refresh-token file                                       |
+For legacy single-mailbox mode:
+
+| Variable                            | Requirement                                                                                                        |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `JARVIS_OUTLOOK_CLIENT_ID`          | Client ID of the approved delegated Microsoft app registration for the selected personal or business account       |
+| `JARVIS_OUTLOOK_MAILBOX`            | Exact personal Outlook or Microsoft 365 business mailbox used by Graph                                             |
+| `JARVIS_OUTLOOK_REFRESH_TOKEN_FILE` | Absolute path to that mailbox's owner-only refresh-token file                                                      |
+| `JARVIS_OUTLOOK_TENANT_ID`          | Business tenant GUID for tenant-pinned Microsoft 365 authentication; omit only for the personal `/consumers/` flow |
 
 Background reconciliation is independently disabled unless `JARVIS_RECONCILIATION_ENABLED=true` and its existing Convex/service-token configuration is complete. Enabling reconciliation without an Outlook adapter fails startup before the listener is ready.
 
@@ -38,6 +43,9 @@ The refresh token is a runtime secret, never repository configuration.
 - Store the token in a regular file, not a symbolic link.
 - Set the file to owner-readable only (for example mode `0600`).
 - Keep the path absolute.
+- The token payload is bounded to 65,536 UTF-8 bytes; the serialized file may
+  contain one additional newline byte. Both initial publication and rotation
+  remain readable at that boundary, and larger payloads are rejected.
 - Do not put the file in Git, application logs, backups, screenshots, or support bundles.
 
 Jarvis reads the file without following symbolic links. Microsoft refresh-token rotation is written to an owner-only temporary file, flushed, atomically renamed, and directory-synced before the new access token is returned. Access tokens remain in process memory only.
@@ -54,7 +62,7 @@ Invalid booleans, incomplete enabled configuration, insecure token files, missin
 
 Before any live activation:
 
-1. Register or select a Microsoft application that permits the personal account.
+1. Register or select a Microsoft application that permits the intended personal or tenant-pinned business account.
 2. Review and grant only `Mail.ReadWrite`, `Mail.Send`, and `offline_access`.
 3. Provision the refresh token through a separately approved consent workflow.
 4. Install it at the configured owner-only path.

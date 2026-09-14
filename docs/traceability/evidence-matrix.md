@@ -273,3 +273,13 @@ The Graph output-type finding from run 34800513674 is contradicted by Microsoft
 SDK source: `OutputType.HashTable` is its declared default and an implemented
 response branch at immutable commit `11d2801bd3d9043c7b1d074f7442f98c2347aeaa`.
 This evidence rejects the finding without changing supported SDK behaviour.
+
+#### Outlook serialized-token size boundary (PR #482)
+
+Failure-first tests reproduce a successful maximum-size token write followed
+by a rejected read. FileRefreshTokenStore now allows its one-byte newline
+serialization overhead while retaining the 65,536-byte token payload bound.
+Both ASCII and multibyte payloads are proven through initial create, rotation
+and readback; oversized create/replace/read paths still reject. The legacy
+configuration table now includes tenant-pinned business accounts and keeps
+named connection mode separate. No provider or activation evidence is claimed.
