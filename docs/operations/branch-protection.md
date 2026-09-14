@@ -88,6 +88,42 @@ ordinary reviewed PR can land without bypass while failed or missing checks bloc
 it. Confirm owner-authored changes have a satisfiable review path. Record actual
 readback evidence in #398; no destructive force-push/deletion trial is required.
 
+## One-shot owner application
+
+`.github/automation/configure-main-ruleset.mjs` is the maintained one-shot
+configuration and readback tool for the selected policy: zero formal approvals,
+the nine required checks, up-to-date branches, pull requests only, no bypass
+actors, no force pushes and no branch deletion. It does not restrict the merge
+button to a GitHub identity; the separate operating rule remains that only Benny
+executes a merge.
+
+Run its no-network dry run first from the repository root:
+
+```bash
+node .github/automation/configure-main-ruleset.mjs
+```
+
+Applying requires a fine-grained token scoped only to `Benny3840RG/Jarvis` with
+repository **Administration: write** and **Metadata: read**. Enter it without
+placing it in shell history:
+
+```bash
+read -rsp "GitHub token: " GITHUB_TOKEN
+export GITHUB_TOKEN
+node .github/automation/configure-main-ruleset.mjs \
+  --apply \
+  --repository Benny3840RG/Jarvis \
+  --confirm-repository Benny3840RG/Jarvis
+unset GITHUB_TOKEN
+```
+
+The tool refuses a repository identity/default-branch mismatch or another active
+repository branch ruleset. It creates its named ruleset disabled, verifies the
+exact preflight policy, activates it, then re-reads both the ruleset and effective
+`main` rules. If active readback fails, it disables the new ruleset again. It
+never deletes or silently edits the two stale disabled rulesets. A second
+successful run is read-only and reports the existing verified ruleset.
+
 ## Rationale
 
 The audit identified that `main` has no branch protection rules. Without them:
