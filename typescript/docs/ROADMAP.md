@@ -207,3 +207,16 @@ rather than an occasional operator action.
   restoration; replay tests prove no new records, revisions or audit writes. Active
   proposals, arbitrary payloads and effect/worker histories remain unsupported;
   whole-group coverage remains partial with no verified group.
+
+### Documented implementation context — issue #533
+
+PR #482's bounded review exposed an omitted documentation-to-code relationship.
+The existing fetched-inventory resolver now follows explicit unambiguous local
+paths from Markdown and retains both revision references. It does not fetch
+external URLs, guess basenames, or create cross-code graph bridges through shared
+documents. Regression coverage proves a separated documentation segment receives
+its implementation while exact coverage and prompt limits remain intact. Missing
+essential context still blocks.
+
+Next: full verification, independent Claude review, current Jarvis evaluation,
+then Benny merge before any live review claims can use the repaired planner.
