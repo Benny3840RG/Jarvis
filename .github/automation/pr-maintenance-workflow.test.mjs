@@ -141,6 +141,17 @@ test("publication retains exact named artifact directories for one or many segme
   }
 });
 
+test("publication refuses an ambiguous mixed layout with root and named artifacts", (t) => {
+  const { root, results } = artifactFixture(t);
+  fs.writeFileSync(`${results}/result.json`, JSON.stringify(validReceipt));
+  fs.mkdirSync(`${results}/jarvis-review-123-1-0`);
+  fs.writeFileSync(
+    `${results}/jarvis-review-123-1-0/result.json`,
+    JSON.stringify(validReceipt),
+  );
+  assert.deepEqual(readDownloadedReceipts(root), []);
+});
+
 for (const invalid of [
   "multiple-expected",
   "wrong-index",

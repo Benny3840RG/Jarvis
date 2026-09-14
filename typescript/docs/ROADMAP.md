@@ -4,6 +4,17 @@ This file is a living record for the autonomous engineering sessions working on
 Jarvis: current state, what changed recently, and what to pick up next. Update
 it at the end of every session.
 
+## Single-artifact layout ambiguity coverage (2026-09-14)
+
+PR #541 now proves the bounded review publisher rejects an ambiguous mixed
+download layout where a root `result.json` appears beside a named segment
+directory. The flat root receipt remains accepted only for the trusted
+single-segment manifest case; mixed layouts still fail closed and do not
+override digest or provider checks.
+
+Next: rerun the automation-policy lane on the exact head, obtain a fresh
+independent Claude/Jarvis review, then Benny merge if the maintained gates pass.
+
 ## Sentry commissioning tooling — #303 (2026-09-14)
 
 The bounded development CLI reuses the existing commissioning app, API-client
@@ -287,6 +298,6 @@ then Benny merge before any live review claims can use the repaired planner.
 
 ## Single-artifact review publication compatibility
 
-The pinned `actions/download-artifact` revision flattens one matched artifact into the destination even when `merge-multiple` is false. This blocked #540 after its sole reviewer returned valid evidence. The existing publisher now accepts that exact flat `result.json` layout only when its trusted manifest expects segment zero alone, while retaining named-directory loading for multiple artifacts. File/manifest byte bounds, regular-file checks, exact indices, run/attempt directory names and downstream manifest/prompt digest verification remain enforced. A failure-first test executes the actual workflow loader; negative fixtures cover mixed layouts, wrong indices/identities, oversized files, invalid JSON and symlinks. Local proof does not override the blocked provider result; fresh Claude review, maintained PASS and Benny merge remain required.
+The pinned `actions/download-artifact` revision flattens one matched artifact into the destination even when `merge-multiple` is false. This blocked #540 after its sole reviewer returned valid evidence. The existing publisher now accepts that exact flat `result.json` layout only when its trusted manifest expects segment zero alone, while retaining named-directory loading for multiple artifacts. File/manifest byte bounds, regular-file checks, exact indices, run/attempt directory names and downstream manifest/prompt digest verification remain enforced. A failure-first test executes the actual workflow loader; negative fixtures cover ambiguous mixed layouts (a root `result.json` beside a named segment directory), wrong indices/identities, oversized files, invalid JSON and symlinks. Local proof does not override the blocked provider result; fresh Claude review, maintained PASS and Benny merge remain required.
 
 Implementation and proving coverage: `.github/workflows/jarvis-pr-maintenance.yml` and `.github/automation/pr-maintenance-workflow.test.mjs`. These exact changed files supply the flat/named artifact loader and its negative fixtures; review them together with these documentation claims.
