@@ -109,3 +109,57 @@ describe("Convex live-work projection validation", () => {
     }
   });
 });
+
+it("accepts bounded multiline Omega objectives supported by the authoritative store", async () => {
+  const row = {
+    ...snapshot(),
+    omegaMission: {
+      missionId: "mission",
+      objective: "Build safely\nVerify independently",
+      state: "active",
+      acceptanceCriteria: [],
+    },
+  };
+  assert.deepEqual(await source(row).readLiveWorkSnapshot(), row);
+});
+
+it("rejects unsafe control characters in multiline Omega objectives", async () => {
+  for (const objective of [
+    "Build safely\n\u001b[31mspoofed",
+    "Build safely\u0000hidden",
+    "Build safely\rspoofed",
+    "Build safely\r\r\nspoofed",
+  ]) {
+    const row = {
+      ...snapshot(),
+      omegaMission: {
+        missionId: "mission",
+        objective,
+        state: "active",
+        acceptanceCriteria: [],
+      },
+    };
+    await assert.rejects(source(row).readLiveWorkSnapshot(), /Invalid live-work snapshot/);
+  }
+});
+
+it("keeps CRLF objectives available and projects canonical LF without changing source data", async () => {
+  const row = {
+    ...snapshot(),
+    omegaMission: {
+      missionId: "mission",
+      objective: "Build safely\r\nVerify independently\nRecord evidence",
+      state: "active",
+      acceptanceCriteria: [],
+    },
+  };
+  const result = await readLiveWorkPipeline({ source: source(row) });
+  assert.equal(result.status, "available");
+  if (result.status !== "available") assert.fail("Expected available pipeline");
+  assert.equal(result.pipeline?.objective, "Build safely\nVerify independently\nRecord evidence");
+  assert.equal(
+    result.pipeline?.nodes.find((node) => node.key === "mission")?.detail,
+    "Build safely\nVerify independently\nRecord evidence",
+  );
+  assert.equal(row.omegaMission.objective, "Build safely\r\nVerify independently\nRecord evidence");
+});

@@ -366,12 +366,6 @@ export const approve = mutation({
     projectKey: v.string(),
     actionId: v.string(),
     expectedRevision: v.number(),
-    // Optional clock injection for deterministic expiry tests; never read
-    // from an untrusted caller in production HTTP callers. A caller-supplied
-    // value can only ever shorten (via approvalTtlMs, clamped) the resulting
-    // window — it can never extend approval authority, since the ceiling is
-    // derived server-side from the proposal's own `destructive` flag.
-    now: v.optional(v.number()),
     approvalTtlMs: v.optional(v.number()),
   },
   returns: toolActionDocumentValidator,
@@ -382,7 +376,7 @@ export const approve = mutation({
     const actionId = cleanRequiredText(args.actionId, "Tool action ID");
     const expectedRevision = requirePositiveRevision(args.expectedRevision, "Expected revision");
     const action = await requireAction(ctx, ownerId, projectKey, actionId);
-    const now = args.now ?? Date.now();
+    const now = Date.now();
 
     if (action.baseRevision !== expectedRevision) {
       throw new Error(
@@ -701,7 +695,6 @@ export const claimSingleUseExecution = mutation({
     projectKey: v.string(),
     actionId: v.string(),
     claimId: v.string(),
-    now: v.optional(v.number()),
   },
   returns: v.object({
     claimed: v.boolean(),
@@ -731,7 +724,7 @@ export const claimSingleUseExecution = mutation({
       }
     }
 
-    const now = args.now ?? Date.now();
+    const now = Date.now();
     const revision = await reviseStateAndExpiryAtExecutionTime(
       ctx,
       ownerId,
@@ -788,7 +781,6 @@ export const verifyExecutionEligibility = mutation({
     serviceToken: v.string(),
     projectKey: v.string(),
     actionId: v.string(),
-    now: v.optional(v.number()),
   },
   returns: v.object({
     eligible: v.boolean(),
@@ -806,7 +798,7 @@ export const verifyExecutionEligibility = mutation({
       );
     }
 
-    const now = args.now ?? Date.now();
+    const now = Date.now();
     const revision = await reviseStateAndExpiryAtExecutionTime(
       ctx,
       ownerId,

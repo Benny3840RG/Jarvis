@@ -93,15 +93,25 @@ async function stageAndApproveDestructiveAction(
     idempotencyKey: `idempotency-${actionId}`,
     proposedBy: "agent",
   });
-  return t.mutation(anyApi.toolActions.approve, {
-    serviceToken: SERVICE_TOKEN,
-    approvalToken: APPROVAL_TOKEN,
-    projectKey: PROJECT_KEY,
-    actionId,
-    expectedRevision: 1,
-    now,
-    approvalTtlMs: 60_000,
-  });
+  // approve() no longer accepts a caller-supplied clock (security fix: it
+  // let a service-token-only caller forge past an expired approval).
+  // Freeze real time to the same small synthetic `now` this helper always
+  // used, so its resulting approvalExpiresAt stays consistent with
+  // bindAndAuthorize's still-explicit `now`/`authorityExpiresAt` values.
+  // Real timers are restored before returning.
+  vi.useFakeTimers({ now });
+  try {
+    return await t.mutation(anyApi.toolActions.approve, {
+      serviceToken: SERVICE_TOKEN,
+      approvalToken: APPROVAL_TOKEN,
+      projectKey: PROJECT_KEY,
+      actionId,
+      expectedRevision: 1,
+      approvalTtlMs: 60_000,
+    });
+  } finally {
+    vi.useRealTimers();
+  }
 }
 
 async function bindAndAuthorize(
@@ -226,7 +236,6 @@ describe("Omega action contracts", () => {
       projectKey: PROJECT_KEY,
       actionId: "reusable-action",
       expectedRevision: 1,
-      now: 10_000,
     });
 
     await expect(
@@ -270,13 +279,18 @@ describe("Omega atomic execution gate", () => {
       nextState: "blocked",
     });
 
-    const claim = await t.mutation(anyApi.toolActions.claimSingleUseExecution, {
-      serviceToken: SERVICE_TOKEN,
-      projectKey: PROJECT_KEY,
-      actionId: "action-1",
-      claimId: "claim-blocked",
-      now: 10_200,
-    });
+    vi.useFakeTimers({ now: 10_200 });
+    let claim;
+    try {
+      claim = await t.mutation(anyApi.toolActions.claimSingleUseExecution, {
+        serviceToken: SERVICE_TOKEN,
+        projectKey: PROJECT_KEY,
+        actionId: "action-1",
+        claimId: "claim-blocked",
+      });
+    } finally {
+      vi.useRealTimers();
+    }
 
     expect(claim).toEqual({
       claimed: false,
@@ -301,13 +315,18 @@ describe("Omega atomic execution gate", () => {
     await stageAndApproveDestructiveAction(t);
     await bindAndAuthorize(t);
 
-    const claim = await t.mutation(anyApi.toolActions.claimSingleUseExecution, {
-      serviceToken: SERVICE_TOKEN,
-      projectKey: PROJECT_KEY,
-      actionId: "action-1",
-      claimId: "claim-1",
-      now: 10_200,
-    });
+    vi.useFakeTimers({ now: 10_200 });
+    let claim;
+    try {
+      claim = await t.mutation(anyApi.toolActions.claimSingleUseExecution, {
+        serviceToken: SERVICE_TOKEN,
+        projectKey: PROJECT_KEY,
+        actionId: "action-1",
+        claimId: "claim-1",
+      });
+    } finally {
+      vi.useRealTimers();
+    }
     expect(claim).toEqual({ claimed: true, claimId: "claim-1" });
 
     const contract = await t.query(anyApi.omegaActionContracts.getByToolAction, {
@@ -326,13 +345,17 @@ describe("Omega receipt reconciliation", () => {
     await createActiveMission(t);
     await stageAndApproveDestructiveAction(t);
     await bindAndAuthorize(t);
-    await t.mutation(anyApi.toolActions.claimSingleUseExecution, {
-      serviceToken: SERVICE_TOKEN,
-      projectKey: PROJECT_KEY,
-      actionId: "action-1",
-      claimId: "claim-1",
-      now: 10_200,
-    });
+    vi.useFakeTimers({ now: 10_200 });
+    try {
+      await t.mutation(anyApi.toolActions.claimSingleUseExecution, {
+        serviceToken: SERVICE_TOKEN,
+        projectKey: PROJECT_KEY,
+        actionId: "action-1",
+        claimId: "claim-1",
+      });
+    } finally {
+      vi.useRealTimers();
+    }
 
     const first = await saveReceiptAndDrainScheduled(t, receiptArgs());
     const second = await saveReceiptAndDrainScheduled(t, receiptArgs());
@@ -364,13 +387,17 @@ describe("Omega receipt reconciliation", () => {
     await createActiveMission(t, "mission-indeterminate");
     await stageAndApproveDestructiveAction(t, "action-indeterminate");
     await bindAndAuthorize(t, "mission-indeterminate", "action-indeterminate");
-    await t.mutation(anyApi.toolActions.claimSingleUseExecution, {
-      serviceToken: SERVICE_TOKEN,
-      projectKey: PROJECT_KEY,
-      actionId: "action-indeterminate",
-      claimId: "claim-indeterminate",
-      now: 10_200,
-    });
+    vi.useFakeTimers({ now: 10_200 });
+    try {
+      await t.mutation(anyApi.toolActions.claimSingleUseExecution, {
+        serviceToken: SERVICE_TOKEN,
+        projectKey: PROJECT_KEY,
+        actionId: "action-indeterminate",
+        claimId: "claim-indeterminate",
+      });
+    } finally {
+      vi.useRealTimers();
+    }
     await saveReceiptAndDrainScheduled(t, receiptArgs("action-indeterminate", "indeterminate"));
 
     const contract = await t.query(anyApi.omegaActionContracts.getByToolAction, {

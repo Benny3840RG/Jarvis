@@ -119,3 +119,16 @@ The tests prove the six-category in-process contract, fail-closed negative paths
   provisioning, callback, token-store, connection and regression paths. The
   bounded planner repair is separately tested against this candidate's source
   inventory; links do not replace runtime/provider evidence or a current review.
+
+- PR maintenance base-drift visibility (#529):
+  `.github/automation/pr-maintenance-integration.test.mjs` exercises repeated
+  observations, changed-main updates, copied user markers, uncertain writes,
+  provider readback mismatch, pagination limits, candidate races and progress
+  of other eligible PRs. No review status or completion authority is produced.
+
+- Bounded documentation review context (#533):
+  `paired-review-context.test.mjs` covers before/after local paths, relative links,
+  ambiguous/external/absent references and isolation of unrelated code segments.
+  `review-segments.test.mjs` proves referenced implementation reaches a separated
+  documentation segment within existing bounds; essential context requests still
+  block and exact primary coverage remains digest-validated.

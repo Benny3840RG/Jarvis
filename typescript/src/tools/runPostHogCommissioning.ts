@@ -76,7 +76,9 @@ function createCommissioningPersistence(): PersistenceProvider {
   };
 }
 
-function createCommissioningApp(telemetry: PostHogTelemetry): Promise<NestFastifyApplication> {
+export function createCommissioningApp(
+  telemetry: PostHogTelemetry,
+): Promise<NestFastifyApplication> {
   return createJarvisHttpApp({
     persistence: createCommissioningPersistence(),
     providerName: "json",

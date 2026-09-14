@@ -92,7 +92,6 @@ async function seedProposedContract(t: ReturnType<typeof harness>) {
     projectKey: PROJECT_KEY,
     actionId: "action-authorization",
     expectedRevision: 1,
-    now: 10_000,
     approvalTtlMs: 60_000,
   });
   await t.mutation(anyApi.omegaActionContracts.create, {

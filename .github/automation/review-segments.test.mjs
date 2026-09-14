@@ -920,3 +920,76 @@ test("partial primary ranges do not suppress complete imported declarations", ()
   assert.equal(aggregateSegments(plan, receipts).verdict, "blocked");
   validateReviewPlan(plan);
 });
+
+test("a separated documentation segment receives its referenced implementation within existing bounds", () => {
+  const plan = make([
+    {
+      filename: "docs/setup.md",
+      status: "added",
+      before: null,
+      after:
+        "Use `src/provider.ts` to enforce the boundary.\n" +
+        "Documentation detail.\n".repeat(4000),
+    },
+    {
+      filename: "other.md",
+      status: "added",
+      before: null,
+      after: "Unrelated primary content.\n".repeat(4000),
+    },
+    {
+      filename: "src/provider.ts",
+      status: "modified",
+      before: "export function allowed(value) { return true; }\n",
+      after:
+        'export function allowed(value) { return value === "approved"; }\n',
+    },
+  ]);
+  const doc = plan.prompts
+    .map((prompt) => JSON.parse(prompt.slice(prompt.indexOf("\n\n") + 2)))
+    .find((context) =>
+      context.units.some((unit) =>
+        unit.parts.some((part) =>
+          part.references.some((ref) => ref.fileIndex === 0),
+        ),
+      ),
+    );
+  assert.ok(doc);
+  assert.equal(
+    doc.units.some((unit) =>
+      unit.parts.some((part) =>
+        part.references.some((ref) => ref.fileIndex === 2),
+      ),
+    ),
+    false,
+    "fixture must place implementation outside the primary documentation segment",
+  );
+  const source = doc.supplemental
+    .filter((context) => context.fileIndex === 2)
+    .flatMap((context) => context.parts);
+  assert.ok(source.some((part) => part.text.includes('value === "approved"')));
+  assert.ok(
+    source.some(
+      (part) =>
+        part.side === "before" ||
+        part.otherSides?.some((ref) => ref.side === "before"),
+    ),
+  );
+  for (const prompt of plan.prompts)
+    assert.ok(Buffer.byteLength(prompt) <= 160 * 1024);
+  validateReviewPlan(plan);
+  const receipts = plan.prompts.map((_, index) =>
+    segmentReceipt(plan, index, raw),
+  );
+  receipts[0] = segmentReceipt(
+    plan,
+    0,
+    JSON.stringify({
+      verdict: "blocked",
+      summary: "Additional context still required",
+      findings: [],
+      contextRequests: ["a non-inventory dependency"],
+    }),
+  );
+  assert.equal(aggregateSegments(plan, receipts).verdict, "blocked");
+});
