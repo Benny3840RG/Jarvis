@@ -133,7 +133,17 @@ export async function listWorkflowHistory(github, owner, repo, since) {
   throw new Error("Incomplete review run history.");
 }
 
-async function current(github, owner, repo, pullNumber) {
+class BaseDriftError extends Error {
+  constructor(pull, mainSha) {
+    super("Main moved while resolving the candidate; defer this observation.");
+    this.pullNumber = pull.number;
+    this.headSha = pull.head.sha;
+    this.baseSha = pull.base.sha;
+    this.mainSha = mainSha;
+  }
+}
+
+async function candidateBase(github, owner, repo, pullNumber) {
   const { data: pull } = await github.rest.pulls.get({
     owner,
     repo,
@@ -148,10 +158,19 @@ async function current(github, owner, repo, pullNumber) {
     repo,
     branch: "main",
   });
-  if (pull.base.sha !== branch.commit.sha)
-    throw new Error(
-      "Main moved while resolving the candidate; defer this observation.",
-    );
+  if (!sha(branch.commit?.sha))
+    throw new Error("Current main identity is unavailable.");
+  return { pull, mainSha: branch.commit.sha };
+}
+
+async function current(github, owner, repo, pullNumber) {
+  const { pull, mainSha } = await candidateBase(
+    github,
+    owner,
+    repo,
+    pullNumber,
+  );
+  if (pull.base.sha !== mainSha) throw new BaseDriftError(pull, mainSha);
   const evidence = await collectCandidateChecks({
     github,
     owner,
@@ -176,6 +195,98 @@ function assertIdentity(actual, expected) {
     throw new Error(
       "Candidate or verification evidence changed; stale review discarded.",
     );
+}
+
+// Diagnostic only: this comment never supplies review, scheduling or completion authority.
+const BASE_DRIFT_MARKER = "<!-- jarvis-pr-maintenance:base-drift:v1 -->";
+const ownNotice = (comment) =>
+  comment.user?.login === "github-actions[bot]" &&
+  comment.user?.type === "Bot" &&
+  comment.body?.startsWith(BASE_DRIFT_MARKER);
+
+async function publishBaseDrift({ github, owner, repo, drift, core }) {
+  const comments = [];
+  const ids = new Set();
+  for (let page = 1; ; page++) {
+    const { data } = await github.rest.issues.listComments({
+      owner,
+      repo,
+      issue_number: drift.pullNumber,
+      per_page: 100,
+      page,
+    });
+    if (!Array.isArray(data) || data.length > 100)
+      throw new Error("Base-drift comment history is unavailable.");
+    for (const comment of data) {
+      if (!Number.isSafeInteger(comment.id) || ids.has(comment.id))
+        throw new Error(
+          "Base-drift comment history has invalid or duplicate identities.",
+        );
+      ids.add(comment.id);
+      comments.push(comment);
+    }
+    if (data.length < 100) break;
+    if (page === 10)
+      throw new Error("Base-drift comment history exceeds its bound.");
+  }
+  const { pull, mainSha } = await candidateBase(
+    github,
+    owner,
+    repo,
+    drift.pullNumber,
+  );
+  if (
+    pull.head.sha !== drift.headSha ||
+    pull.base.sha !== drift.baseSha ||
+    mainSha !== drift.mainSha
+  )
+    throw new Error(
+      "Candidate or main changed before the base-drift notice; defer publication.",
+    );
+  const body = [
+    BASE_DRIFT_MARKER,
+    "### Jarvis review deferred: update the branch with main",
+    `Observed candidate: \`${drift.headSha}\` · PR base: \`${drift.baseSha}\` · Observed main: \`${drift.mainSha}\``,
+    "The PR base does not match observed main. Update this branch with main, resolve conflicts, and run fresh verification before requesting review again.",
+    "This is an observation, not a review result or Jarvis PASS. Earlier review/check results retain their original SHA scope. Merge and deployment remain owner-controlled.",
+  ].join("\n\n");
+  const existing = comments.findLast(ownNotice);
+  if (existing?.body === body) return;
+  const { data: written } = existing
+    ? await github.rest.issues.updateComment({
+        owner,
+        repo,
+        comment_id: existing.id,
+        body,
+      })
+    : await github.rest.issues.createComment({
+        owner,
+        repo,
+        issue_number: drift.pullNumber,
+        body,
+      });
+  // A timeout is not retried here. The next sweep observes provider comments first.
+  if (
+    !Number.isSafeInteger(written?.id) ||
+    (existing && written.id !== existing.id)
+  )
+    throw new Error("Base-drift notice publication was not confirmed.");
+  const { data: observed } = await github.rest.issues.getComment({
+    owner,
+    repo,
+    comment_id: written.id,
+  });
+  if (
+    observed?.id !== written.id ||
+    !ownNotice(observed) ||
+    observed.body !== body
+  )
+    throw new Error(
+      "Base-drift notice publication was not confirmed by provider readback.",
+    );
+  core.info(
+    `Observed base-drift notice for PR #${drift.pullNumber} at ${drift.headSha}.`,
+  );
 }
 
 // Dispatching records the exact candidate in GitHub's run metadata. A comment
@@ -240,6 +351,15 @@ export async function sweep({
     try {
       observation = await current(github, owner, repo, candidate.number);
     } catch (error) {
+      if (error instanceof BaseDriftError) {
+        try {
+          await publishBaseDrift({ github, owner, repo, drift: error, core });
+        } catch (noticeError) {
+          core.warning(
+            `PR #${candidate.number} base-drift notice is unconfirmed: ${printable(noticeError.message)}. Continuing with other candidates.`,
+          );
+        }
+      }
       core.warning(
         `PR #${candidate.number} has unavailable evidence: ${printable(error.message)}. Continuing with other candidates.`,
       );
