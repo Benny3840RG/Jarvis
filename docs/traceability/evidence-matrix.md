@@ -225,6 +225,14 @@ or adjustment ledger, Convex transaction, or issued-artifact immutability proof.
 
 ## Production continuation — Development Live Work (2026-09-11)
 
+Review repair 2026-09-14, PR #502: regression coverage now proves that CRLF
+objectives remain available as canonical LF and that multiline objectives cannot
+escape either terminal mission row at widths 64, 96 and 120, with and without
+colour. Bare carriage returns, escape sequences and NUL still fail closed at the
+read adapter. Source objectives are preserved. Exact candidate verification,
+review and provider limitations remain in the existing production completion
+ledger and PR; no commissioning or completion claim follows from these tests.
+
 Base revision: `fae9949fc1f9d1ce15729608384a6d32ec40b8cb`.
 Candidate results and eventual merge identity are maintained in the
 [production completion ledger](../operations/production-completion-ledger.md).

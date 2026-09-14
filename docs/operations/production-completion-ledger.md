@@ -1,5 +1,48 @@
 # Jarvis production completion ledger
 
+## Live Work objective review repair — 2026-09-14
+
+- MISSION / ISSUE / ROLE / OWNER: existing PR #502 repair; BUILDER / CODEX.
+- BASE SHA: `40393d04a31db81b2802199e3f234e99b4085464`.
+- PRE-REPAIR HEAD: `ac1cd2532d6fd62fea531f9a4b6bea2d3cf7681b`.
+- BRANCH / PR: `codex/production-live-work-20260911`, #502. Final tested head
+  and immutable external results are recorded in the PR slice handoff.
+- CURRENT TRUTH: review `34736290718` is blocked. Segments 13/14 identify
+  reproduced objective validation/rendering defects. Segments 10/11 describe
+  existing distinct objective/intake nodes, not duplicate mission selection;
+  the stable `issue` key and MISSION label intentionally make no GitHub issue
+  claim. Segment 12 requests producer context; this remains a review-context
+  blocker and is not waived by application tests.
+- FILES / BEHAVIOUR: Convex read adapter normalizes CRLF to LF after the input
+  length bound, still rejects bare CR/unsafe controls, and preserves source
+  data. Terminal objective and node detail rendering flatten line separators
+  before clipping. Tests, OpenAPI description, operator guide, roadmap and
+  evidence matrix accompany these two runtime changes.
+- TESTS ADDED: mixed CRLF/LF read-model availability and non-mutation;
+  multiline terminal rows at three widths, colour on/off, LF/CRLF/Unicode
+  separators; bare and doubled CR rejection added to unsafe-control coverage.
+- FOCUSED VERIFICATION: `node --import tsx --test --test-isolation=none
+  tests/developmentLiveWorkPersistence.test.ts tests/liveWorkTerminal.test.ts`.
+  Before repair: 16 passed / 2 failed for unavailable CRLF and unflattened
+  objective rows. After repair: 18 passed / 0 failed. Logs:
+  `/tmp/jarvis-502-red-detail.log`, `/tmp/jarvis-502-green.log`.
+- FULL VERIFICATION: pending on the final committed candidate; no new full
+  success is asserted by this entry.
+- RUNTIME / PROVIDER EVIDENCE: real adapter/projection/terminal code exercised
+  against synthetic query responses; no cloud lifecycle or deployment proof.
+- SECURITY / GOVERNANCE: no new persistence, approval, completion or execution
+  authority. Rejected controls remain rejected. No provider mutation.
+- CLAUDE REVIEW / JARVIS PASS: required on the new head; pending.
+- BACKLOG / MATRIX: updated with bounded repair evidence and open gates.
+- RESIDUAL RISK: full candidate review, provider commissioning, residual
+  uncertainty persistence, recovery and production acceptance remain open.
+- BLOCKER: #398 requires owner branch-protection activation and provider proof;
+  #526 is awaiting Benny. Existing #502 review lacks complete valid evidence.
+- NEXT HANDOFF: Claude reviews the verified exact candidate; Jarvis must
+  independently PASS that head before Benny's merge decision.
+- NEXT CLAIM: highest-priority unblocked Codex slice after checking current
+  ownership; Later Projects remain excluded.
+
 ## Development Live Work and restore marker hardening — 2026-09-11
 
 - BASE SHA: `fae9949fc1f9d1ce15729608384a6d32ec40b8cb` (fetched origin/main).

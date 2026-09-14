@@ -7,7 +7,10 @@ import { stripAnsi, visibleWidth } from "../src/terminal/ansi.js";
 
 const NOW = new Date("2026-09-11T14:02:07.000Z");
 
-function pipeline(state: LiveWorkPipeline["state"] = "VERIFYING"): LiveWorkPipeline {
+function pipeline(
+  state: LiveWorkPipeline["state"] = "VERIFYING",
+  objective = "Ship the terminal live-work monitor",
+): LiveWorkPipeline {
   return foldLiveWorkPipeline({
     omegaReadiness: { allowed: false, failures: ["residual-uncertainty-not-recorded"] },
     subject: {
@@ -43,7 +46,7 @@ function pipeline(state: LiveWorkPipeline["state"] = "VERIFYING"): LiveWorkPipel
     ],
     omegaMission: {
       missionId: "mission-42",
-      objective: "Ship the terminal live-work monitor",
+      objective,
       state: "active",
       acceptanceCriteria: [{ status: "satisfied" }, { status: "unverified" }],
     },
@@ -57,6 +60,30 @@ function lines(output: string): string[] {
 }
 
 describe("renderLiveWorkTerminal", () => {
+  it("keeps multiline objectives inside both mission rows without changing the projection", () => {
+    for (const newline of ["\n", "\r\n", "\u2028", "\u2029"]) {
+      const objective = `Build safely${newline}Verify evidence`;
+      const current = pipeline("VERIFYING", objective);
+      for (const width of [64, 96, 120]) {
+        for (const color of [false, true]) {
+          const output = renderLiveWorkTerminal(
+            { status: "available", pipeline: current },
+            { width, color, now: NOW },
+          );
+          const text = stripAnsi(output);
+          assert.equal(text.match(/Build safely Verify evidence/g)?.length, 2);
+          assert.doesNotMatch(text, /[\r\u2028\u2029]/);
+          for (const line of lines(output)) {
+            assert.equal(visibleWidth(line), width);
+            assert.match(stripAnsi(line), /^[┌│├└].*[┐│┤┘]$/);
+          }
+        }
+      }
+      assert.equal(current.objective, objective);
+      assert.equal(current.nodes.find((node) => node.key === "mission")?.detail, objective);
+    }
+  });
+
   it("frames every line to the exact panel width", () => {
     for (const width of [64, 80, 96, 120]) {
       const output = renderLiveWorkTerminal(

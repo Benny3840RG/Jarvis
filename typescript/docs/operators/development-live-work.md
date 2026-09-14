@@ -4,6 +4,16 @@
 read the same authenticated `GET /api/v1/development/live-work` projection.
 They do not mutate missions, grant approval, or commit completion.
 
+Mission objectives may contain line breaks. The Convex read adapter normalizes
+CRLF to LF while preserving stored source text; other ASCII control characters
+remain invalid. The terminal flattens line breaks before clipping each objective
+row. HTTP/MCP retain multiline objectives.
+
+The `mission` node describes the current objective. The legacy `issue` key is
+the mission intake phase, labelled MISSION because it has no independently
+observed GitHub issue binding. These are two views of the same mission, not two
+selected missions or proof of provider issue state.
+
 - Unconfigured JSON persistence: HTTP 200 with `status: unavailable` and
   `Development Live Work requires configured Convex persistence.`
 - Available Convex with no non-terminal subject: `status: available`, `pipeline: null`;

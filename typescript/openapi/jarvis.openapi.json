@@ -11456,7 +11456,8 @@
             "type": ["string", "null"]
           },
           "objective": {
-            "type": ["string", "null"]
+            "type": ["string", "null"],
+            "description": "Mission objective. The Convex projection normalizes CRLF line endings to LF; terminal displays flatten line breaks within each framed row."
           },
           "missionInFlight": {
             "type": "boolean"

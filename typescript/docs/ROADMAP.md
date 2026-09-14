@@ -4,6 +4,22 @@ This file is a living record for the autonomous engineering sessions working on
 Jarvis: current state, what changed recently, and what to pick up next. Update
 it at the end of every session.
 
+## Live Work review repair (2026-09-14)
+
+PR #502 remains Codex-owned, with Claude independent review and Benny merge
+required. Review run `34736290718` exposed two reproduced defects: CRLF
+objectives made the read projection unavailable, and accepted multiline
+objectives escaped terminal row framing. The adapter now canonicalizes CRLF;
+terminal rendering flattens line breaks before clipping both objective rows.
+Stored objectives and completion authority are unchanged. Regression evidence
+and remaining gates are recorded in the production completion ledger.
+
+Next: full candidate verification, Claude review, then current Jarvis PASS.
+Priority 1 issue #398 still requires owner activation/readback and an ordinary
+PR drill; PR #526's green review alone does not establish live enforcement.
+Priority 2 commissioning and Priority 3–4 recovery/orchestration gates remain
+open; this rendering repair does not complete them.
+
 ## Recovery engineering update (2026-09-11)
 
 The bounded recovery candidate now captures existing S4 evidence and mutable-quote

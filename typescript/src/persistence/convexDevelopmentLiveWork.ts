@@ -41,6 +41,7 @@ const multilineText = (max = 4096) =>
     .string()
     .min(1)
     .max(max)
+    .transform((value) => value.replace(/\r\n/g, "\n"))
     .refine(
       (value) =>
         ![...value].some((character) => {
