@@ -5,6 +5,7 @@ import {
   createSentryRuntime,
   type SentryEvent,
   type SentryTransport,
+  type SentryDeliveryObservation,
 } from "../src/observability/sentry.js";
 
 function transport(events: SentryEvent[]): SentryTransport {
@@ -16,6 +17,63 @@ function transport(events: SentryEvent[]): SentryTransport {
 }
 
 describe("Sentry runtime adapter", () => {
+  it("observes a stalled delivery once as indeterminate, even after late acceptance", async () => {
+    const observations: SentryDeliveryObservation[] = [];
+    let accept: () => void = () => {};
+    const runtime = createSentryRuntime(
+      {
+        enabled: true,
+        release: "test",
+        environment: "development",
+        timeoutMs: 25,
+        observeDelivery: (observation) => observations.push(observation),
+      },
+      {
+        send: () =>
+          new Promise<void>((resolve) => {
+            accept = resolve;
+          }),
+      },
+    );
+    await runtime.captureError(new Error("synthetic"), { operation: "test" });
+    assert.equal(observations.length, 1);
+    assert.equal(observations[0]!.status, "INDETERMINATE");
+    accept();
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.equal(observations.length, 1);
+    assert.equal(observations[0]!.status, "INDETERMINATE");
+  });
+
+  it("keeps observer errors out of application outcomes", async () => {
+    const runtime = createSentryRuntime(
+      {
+        enabled: true,
+        release: "test",
+        environment: "test",
+        observeDelivery: () => {
+          throw new Error("observer unavailable");
+        },
+      },
+      transport([]),
+    );
+    await assert.doesNotReject(runtime.captureError(new Error("synthetic"), { operation: "test" }));
+    const asyncObserver = createSentryRuntime(
+      {
+        enabled: true,
+        release: "test",
+        environment: "test",
+        observeDelivery: async () => {
+          throw new Error("async observer unavailable");
+        },
+      },
+      transport([]),
+    );
+    await assert.doesNotReject(
+      asyncObserver.captureError(new Error("synthetic"), { operation: "test" }),
+    );
+    await new Promise<void>((resolve) => setImmediate(resolve));
+  });
+
   it("serializes complete transactions through the native envelope transport", async (t) => {
     const envelopes: string[] = [];
     t.mock.method(globalThis, "fetch", async (_input: unknown, init: RequestInit) => {

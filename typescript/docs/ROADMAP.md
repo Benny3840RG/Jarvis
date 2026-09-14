@@ -4,6 +4,23 @@ This file is a living record for the autonomous engineering sessions working on
 Jarvis: current state, what changed recently, and what to pick up next. Update
 it at the end of every session.
 
+## Sentry commissioning tooling — #303 (2026-09-14)
+
+The bounded development CLI reuses the existing commissioning app, API-client
+error/measurement path and native Sentry envelope transport. An optional delivery
+observer exposes accepted, rejected and indeterminate transport outcomes while
+ordinary telemetry remains best-effort. The CLI requires explicit development
+configuration and a clean source checkout, emits two synthetic observations,
+and reports event IDs without DSNs, tokens or payloads. Late acceptance cannot
+rewrite a timed-out observation; responses may arrive in either order.
+
+This is repository-side preparation only. Sentry event visibility, redaction
+inspection and alert activation still require independent provider evidence.
+The authenticated Sentry connector remains an owner gate; #303 stays open.
+See [the commissioning runbook](operators/sentry-commissioning.md). Next: exact-head
+full verification, independent Claude/Jarvis review, then an approved development
+probe with authenticated provider readback. No production operation is included.
+
 ## Recovery engineering update (2026-09-11)
 
 The bounded recovery candidate now captures existing S4 evidence and mutable-quote
