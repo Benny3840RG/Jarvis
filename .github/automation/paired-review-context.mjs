@@ -174,14 +174,53 @@ export function pairedUnits(files) {
   }
   return units;
 }
-// Bounded lexical hints for static imports and literal typed Convex references. Dynamic import,
-// require, aliases and comment-separated syntax are not resolved. No source is fetched.
+// Documentation supplies context hints only; resolve within the fetched inventory.
+function documentedFileContext(files, index) {
+  if (!files[index].filename.endsWith(".md")) return [];
+  const wanted = new Set();
+  for (const text of [files[index].before, files[index].after]) {
+    for (const token of (text ?? "").match(/[^\s<>`"'(),;]+/g) ?? []) {
+      const reference = token.split("#", 1)[0].replace(/:\d+(?::\d+)?$/, "");
+      if (
+        !reference.includes("/") ||
+        reference.startsWith("/") ||
+        /^[a-z][a-z0-9+.-]*:/i.test(reference) ||
+        /[\\?%]/.test(reference)
+      )
+        continue;
+      const candidates = new Set(
+        [
+          path.posix.normalize(reference),
+          path.posix.normalize(
+            path.posix.join(
+              path.posix.dirname(files[index].filename),
+              reference,
+            ),
+          ),
+        ].filter(
+          (candidate) => candidate !== ".." && !candidate.startsWith("../"),
+        ),
+      );
+      const matches = files.flatMap((file, fileIndex) =>
+        candidates.has(file.filename) ? [fileIndex] : [],
+      );
+      if (matches.length === 1) wanted.add(matches[0]);
+    }
+  }
+  return [...wanted];
+}
+
+// Bounded lexical hints for imports, literal Convex references and local documentation paths.
+// Dynamic imports, aliases and non-inventory sources remain unresolved. Nothing is fetched.
 export function changedImportContext(
   files,
   fileIndices,
   includePrimary = false,
 ) {
   const wanted = new Set();
+  for (const index of fileIndices)
+    for (const target of documentedFileContext(files, index))
+      if (includePrimary || !fileIndices.has(target)) wanted.add(target);
   const includeBackend = (moduleName) => {
     const suffix = `convex/${moduleName}.ts`;
     const targets = files
@@ -329,14 +368,22 @@ function lineUnits(file, fileIndex) {
 
 /** Direct import graph in the already-fetched inventory; depth two supplies adjacent wiring. */
 export function relatedChangedContext(files, seeds) {
-  const edges = files.map(
-    (_, index) => new Set(changedImportContext(files, new Set([index]))),
+  const edges = files.map((file, index) =>
+    file.filename.endsWith(".md")
+      ? new Set()
+      : new Set(changedImportContext(files, new Set([index]))),
   );
   edges.forEach((targets, index) => {
     for (const target of targets) edges[target].add(index);
   });
-  const seen = new Set(seeds),
-    frontier = [...seeds];
+  // Docs may seed their linked implementation, but must not become reverse
+  // graph bridges that pull unrelated code into every implementation segment.
+  const seen = new Set(seeds);
+  for (const index of seeds)
+    if (files[index].filename.endsWith(".md"))
+      for (const target of changedImportContext(files, new Set([index])))
+        seen.add(target);
+  const frontier = [...seen];
   for (let depth = 0; depth < 2; depth++) {
     const length = frontier.length;
     for (let i = 0; i < length; i++)

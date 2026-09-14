@@ -202,3 +202,21 @@ bound to the observed commit, main branch and a declared trigger, is excluded
 from additional failed checks. Required build/security checks and every unrelated
 failure still block completion. Earlier inconclusive proofs and failed workflow
 runs remain intact.
+
+### Documentation context within review segments
+
+The existing context resolver recognizes explicit repository-local paths in
+Markdown, including relative links and paths in command/code examples. It
+resolves only a unique match in the already fetched changed-file inventory,
+considering the repository root and the document directory. Before and after
+references both contribute context. External URLs, absolute paths, backslashes,
+encoded/query paths, absent files and ambiguous matches are not resolved; bare
+filenames are not guessed. No URL fetch or additional filesystem read is added.
+
+A documentation segment can seed its linked implementation and adjacent imports.
+Documentation does not become a reverse graph bridge that brings unrelated
+code into implementation segments. Supplemental bytes retain their exact source
+references; primary coverage and authorized finding locations are unchanged.
+Existing prompt/segment limits and explicit unavailable-context records still
+apply. A model's essential context request still blocks the aggregate review.
+This improvement does not itself supply a Jarvis PASS to a blocked candidate.
