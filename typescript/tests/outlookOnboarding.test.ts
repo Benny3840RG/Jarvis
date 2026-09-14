@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { chmod, mkdtemp, open, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import dns from "node:dns/promises";
 import { request, Server } from "node:http";
 import { describe, it } from "node:test";
 import {
@@ -11,6 +12,79 @@ import {
 import { resolveOutlookConnections } from "../src/auth/microsoftOutlookConnections.js";
 
 describe("Outlook browser onboarding", () => {
+  for (const host of ["127.0.0.1", "::1"] as const)
+    it(`onboards with only ${host} available when localhost resolves to that family`, async (t) => {
+      t.mock.method(dns, "lookup", async () => [{ address: host, family: host === "::1" ? 6 : 4 }]);
+      const directory = await mkdtemp(join(tmpdir(), "outlook-single-stack-"));
+      const connection = resolveOutlookConnections({
+        JARVIS_OUTLOOK_CONNECTIONS_JSON: JSON.stringify([
+          {
+            id: "personal",
+            clientId: "aaaaaaaa-2222-3333-4444-555555555555",
+            mailbox: "test@outlook.com",
+            refreshTokenFile: join(directory, "refresh.token"),
+          },
+        ]),
+      })[0];
+      const originalListen = Server.prototype.listen;
+      const attempted: string[] = [];
+      t.mock.method(Server.prototype, "listen", function (this: Server, ...args: unknown[]) {
+        const options = args[0] as { host: string };
+        attempted.push(options.host);
+        if (options.host !== host) {
+          queueMicrotask(() =>
+            this.emit(
+              "error",
+              Object.assign(new Error("synthetic unavailable family"), { code: "EADDRNOTAVAIL" }),
+            ),
+          );
+          return this;
+        }
+        return Reflect.apply(originalListen, this, args) as Server;
+      });
+      let requests = 0;
+      let callbackUrl = "";
+      try {
+        await authorizeOutlookConnection(connection, {
+          async showAuthorizationUrl(url) {
+            const auth = new URL(url);
+            const callback = new URL(auth.searchParams.get("redirect_uri")!);
+            assert.equal(callback.hostname, "localhost");
+            callback.hostname = host === "::1" ? "[::1]" : host;
+            callback.searchParams.set("state", auth.searchParams.get("state")!);
+            callback.searchParams.set("code", "synthetic-code");
+            callbackUrl = callback.toString();
+            assert.equal((await fetch(callback)).status, 200);
+          },
+          fetch: async (url) => {
+            requests += 1;
+            return new Response(
+              JSON.stringify(
+                String(url).endsWith("/token")
+                  ? {
+                      token_type: "Bearer",
+                      access_token: "synthetic-access",
+                      refresh_token: "synthetic-rotated",
+                      expires_in: 3600,
+                      scope: "Mail.ReadWrite Mail.Send",
+                    }
+                  : { id: "inbox-id" },
+              ),
+            );
+          },
+        });
+        assert.deepEqual(attempted, ["127.0.0.1", "::1"]);
+        assert.equal(requests, 3);
+        assert.equal(
+          await readFile(connection.config.refreshTokenFile, "utf8"),
+          "synthetic-rotated\n",
+        );
+        await assert.rejects(fetch(callbackUrl));
+      } finally {
+        await rm(directory, { recursive: true, force: true });
+      }
+    });
+
   for (const boundary of ["group-writable", "other-writable", "wrong-owner", "private"] as const)
     it(`verifies only an owned private token directory: ${boundary}`, async (t) => {
       const directory = await mkdtemp(join(tmpdir(), "outlook-verify-"));
@@ -69,59 +143,64 @@ describe("Outlook browser onboarding", () => {
       }
     });
 
-  it("closes the first loopback listener and avoids consent if the second bind fails", async (t) => {
-    const directory = await mkdtemp(join(tmpdir(), "outlook-bind-"));
-    const connection = resolveOutlookConnections({
-      JARVIS_OUTLOOK_CONNECTIONS_JSON: JSON.stringify([
-        {
-          id: "personal",
-          clientId: "aaaaaaaa-2222-3333-4444-555555555555",
-          mailbox: "test@outlook.com",
-          refreshTokenFile: join(directory, "refresh.token"),
-        },
-      ]),
-    })[0];
-    let port = 0;
-    let effects = 0;
-    const originalListen = Server.prototype.listen;
-    t.mock.method(Server.prototype, "listen", function (this: Server, ...args: unknown[]) {
-      const options = args[0] as { host?: string };
-      if (options.host === "::1") {
-        queueMicrotask(() =>
-          this.emit(
-            "error",
-            Object.assign(new Error("synthetic bind failure"), { code: "EADDRINUSE" }),
-          ),
-        );
-        return this;
-      }
-      this.once("listening", () => {
-        const address = this.address();
-        if (address && typeof address !== "string") port = address.port;
+  for (const bindError of ["EADDRINUSE", "EADDRNOTAVAIL"] as const)
+    it(`closes the first listener before consent when required IPv6 bind fails: ${bindError}`, async (t) => {
+      t.mock.method(dns, "lookup", async () => [
+        { address: "127.0.0.1", family: 4 },
+        { address: "::1", family: 6 },
+      ]);
+      const directory = await mkdtemp(join(tmpdir(), "outlook-bind-"));
+      const connection = resolveOutlookConnections({
+        JARVIS_OUTLOOK_CONNECTIONS_JSON: JSON.stringify([
+          {
+            id: "personal",
+            clientId: "aaaaaaaa-2222-3333-4444-555555555555",
+            mailbox: "test@outlook.com",
+            refreshTokenFile: join(directory, "refresh.token"),
+          },
+        ]),
+      })[0];
+      let port = 0;
+      let effects = 0;
+      const originalListen = Server.prototype.listen;
+      t.mock.method(Server.prototype, "listen", function (this: Server, ...args: unknown[]) {
+        const options = args[0] as { host?: string };
+        if (options.host === "::1") {
+          queueMicrotask(() =>
+            this.emit(
+              "error",
+              Object.assign(new Error("synthetic bind failure"), { code: bindError }),
+            ),
+          );
+          return this;
+        }
+        this.once("listening", () => {
+          const address = this.address();
+          if (address && typeof address !== "string") port = address.port;
+        });
+        return Reflect.apply(originalListen, this, args) as Server;
       });
-      return Reflect.apply(originalListen, this, args) as Server;
+      try {
+        await assert.rejects(
+          authorizeOutlookConnection(connection, {
+            async showAuthorizationUrl() {
+              effects += 1;
+            },
+            fetch: async () => {
+              effects += 1;
+              return new Response(null);
+            },
+          }),
+          /synthetic bind failure/u,
+        );
+        assert.ok(port > 0);
+        assert.equal(effects, 0);
+        await assert.rejects(fetch(`http://127.0.0.1:${port}/`));
+        assert.deepEqual(await readdir(directory), []);
+      } finally {
+        await rm(directory, { recursive: true, force: true });
+      }
     });
-    try {
-      await assert.rejects(
-        authorizeOutlookConnection(connection, {
-          async showAuthorizationUrl() {
-            effects += 1;
-          },
-          fetch: async () => {
-            effects += 1;
-            return new Response(null);
-          },
-        }),
-        /synthetic bind failure/u,
-      );
-      assert.ok(port > 0);
-      assert.equal(effects, 0);
-      await assert.rejects(fetch(`http://127.0.0.1:${port}/`));
-      assert.deepEqual(await readdir(directory), []);
-    } finally {
-      await rm(directory, { recursive: true, force: true });
-    }
-  });
 
   it("rejects unsupported ownership checks before opening consent or making requests", async (t) => {
     const descriptor = Object.getOwnPropertyDescriptor(process, "getuid")!;

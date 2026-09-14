@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
-import { lookup } from "node:dns/promises";
+import dns from "node:dns/promises";
 import { createServer, type RequestListener, type Server } from "node:http";
 import { lstat } from "node:fs/promises";
 import { dirname } from "node:path";
@@ -130,7 +130,7 @@ export async function authorizeOutlookConnection(
     180_000,
   );
   try {
-    const localhost = await lookup("localhost", { all: true });
+    const localhost = await dns.lookup("localhost", { all: true });
     if (
       localhost.length === 0 ||
       localhost.some(({ address }) => address !== "127.0.0.1" && address !== "::1")
@@ -151,11 +151,10 @@ export async function authorizeOutlookConnection(
           });
         });
       } catch (error: unknown) {
-        // IPv4-only hosts need no IPv6 socket when localhost cannot resolve to it.
+        // An unavailable family is optional only when localhost cannot resolve to it.
         const code = (error as NodeJS.ErrnoException).code;
         if (
-          host === "::1" &&
-          !localhost.some(({ address }) => address === "::1") &&
+          !localhost.some(({ address }) => address === host) &&
           (code === "EAFNOSUPPORT" || code === "EADDRNOTAVAIL")
         )
           continue;

@@ -231,3 +231,11 @@ POSIX directory check as onboarding, before reading or refreshing a credential.
 A valid mode-0600 token does not make a shared or differently owned parent
 directory safe. Rejected verification makes no Microsoft request and preserves
 the existing token. Supported private directories still permit token rotation.
+
+### Single-stack localhost callbacks
+
+Onboarding attempts both IPv4 and IPv6 loopback listeners on the same port.
+An unavailable family (`EAFNOSUPPORT` or `EADDRNOTAVAIL`) is skipped only when
+`localhost` does not resolve to that family. This applies symmetrically to
+IPv4-only and IPv6-only hosts. Failure to bind a family that localhost does
+resolve to stops before consent and closes any listener already opened.

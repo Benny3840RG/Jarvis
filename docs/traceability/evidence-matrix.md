@@ -283,3 +283,14 @@ Both ASCII and multibyte payloads are proven through initial create, rotation
 and readback; oversized create/replace/read paths still reject. The legacy
 configuration table now includes tenant-pinned business accounts and keeps
 named connection mode separate. No provider or activation evidence is claimed.
+
+#### Outlook single-stack callback evidence (PR #482)
+
+An actual-socket test with controlled localhost resolution reproduced successful
+IPv4-only onboarding and failed IPv6-only onboarding before repair. The shared
+listener loop now treats unavailable, non-resolved families symmetrically.
+Both single-stack cases complete callback/probe/persistence and close their
+listener; unavailable or occupied required-family failures remain pre-consent
+rejections with cleanup. PowerShell's child-script `exit 1` was independently
+executed and observed by the caller via `$LASTEXITCODE`; it does not bypass
+the existing setup-test assertions. No provider request or activation is claimed.

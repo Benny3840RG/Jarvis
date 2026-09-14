@@ -290,3 +290,13 @@ rejected without replacing an existing credential. The runbook distinguishes
 legacy personal/business tenant settings from named connection configuration.
 This remains offline repository proof; live commissioning and merge gates
 are unchanged.
+
+### Outlook single-stack callback follow-up — 2026-09-14
+
+PR #482 now handles unavailable IPv4 and IPv6 families symmetrically, skipping
+only a family not present in localhost resolution. Failure-first coverage
+reproduces IPv6-only startup failure and verifies both single-stack cases;
+required-family failures still close the existing listener before consent.
+The PowerShell exit finding from run 34802974904 is false: executing a child
+script with `&` returns control and its exit code to the calling script, as
+proven in the actual PowerShell host. Existing harness assertions remain active.
