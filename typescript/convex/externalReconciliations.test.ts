@@ -922,8 +922,42 @@ describe("releaseClaim retry-scheduling latency boundary", () => {
     });
 
     expect(released.state).toBe("pending");
-    expect(released.nextAttemptAt).toBeGreaterThan(Date.now());
+    // Compare against claimTime (captured before the call), not a freshly resampled
+    // Date.now() -- the clamp target is only a 1ms epsilon past the mutation's own
+    // now, so a post-call Date.now() sample can tie with it at millisecond
+    // resolution. Time only moves forward, so the mutation's internal now is always
+    // >= claimTime, making this comparison both correct and deterministic.
+    expect(released.nextAttemptAt).toBeGreaterThan(claimTime);
     expect(released.nextAttemptAt).not.toBe(staleHint);
+  });
+
+  it("does not stretch a short, genuinely-future retry hint out to an arbitrary floor", async () => {
+    // A worker configured with a small maxRetryMs (fast retries) computes a hint only
+    // a few milliseconds past now -- this is not stale, so the clamp must not silently
+    // override that worker's own retry cadence with a larger minimum gap.
+    const t = harness();
+    const claimTime = Date.now();
+    await t.run((ctx) =>
+      seedClaimedReconciliation(ctx, {
+        leaseExpiresAt: claimTime + 60_000,
+        leaseOwner: "worker-A",
+        leaseToken: "lease-token-A",
+      }),
+    );
+
+    const shortHint = claimTime + 500;
+    const released = await t.mutation(api.externalReconciliations.releaseClaim, {
+      serviceToken: SERVICE_TOKEN,
+      reconciliationId: "reconciliation-1",
+      workerId: "worker-A",
+      leaseToken: "lease-token-A",
+      errorCode: "provider-still-processing",
+      nextAttemptAt: shortHint,
+      maxAttempts: 5,
+    });
+
+    expect(released.state).toBe("pending");
+    expect(released.nextAttemptAt).toBe(shortHint);
   });
 
   it("still fails closed when the lease has genuinely expired", async () => {

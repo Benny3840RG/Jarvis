@@ -36,8 +36,11 @@ const OBSERVING_RECOVERY_MS = 60_000;
 // before calling releaseClaim. Ordinary RPC latency between that computation and the
 // server receiving the call can put the hint at or before the server's own now. That
 // hint is scheduling information, not an authority decision, so releaseClaim clamps it
-// forward by this minimum gap instead of rejecting an otherwise-valid release.
-const MIN_RETRY_GAP_MS = 1_000;
+// strictly past now instead of rejecting an otherwise-valid release. This is a minimal
+// epsilon, not a policy floor: a fixed minimum gap of any real size (e.g. 1 second)
+// would silently override a worker configured with a smaller maxRetryMs on every
+// release, not just when latency actually caused staleness.
+const MIN_RETRY_EPSILON_MS = 1;
 
 function cleanScope(args: {
   projectId: string;
@@ -970,8 +973,11 @@ export const releaseClaim = mutation({
       // decision -- assertLease above already proved the lease is genuinely still
       // valid against the server's own clock. Ordinary RPC latency between the worker
       // computing this hint and the server receiving the call can put it at or before
-      // `now`; clamp it forward instead of rejecting an otherwise-valid release.
-      const nextAttemptAt = Math.max(args.nextAttemptAt, now + MIN_RETRY_GAP_MS);
+      // `now`; clamp it forward instead of rejecting an otherwise-valid release. The
+      // clamp target is a minimal epsilon past now, not a policy-sized floor, so it
+      // never overrides a worker's own configured retry cadence (e.g. a small
+      // maxRetryMs) -- it only guarantees the stored value is genuinely in the future.
+      const nextAttemptAt = Math.max(args.nextAttemptAt, now + MIN_RETRY_EPSILON_MS);
       await ctx.db.patch("externalReconciliations", reconciliation._id, {
         state: "pending",
         lastErrorCode: errorCode,
