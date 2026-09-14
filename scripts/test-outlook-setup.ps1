@@ -1,5 +1,5 @@
 # Offline provisioning regression test. All Microsoft calls are replaced by mocks.
-param([ValidateSet('success', 'wrong-tenant', 'broad-grant', 'app-timeout-visible', 'app-timeout-missing', 'principal-timeout', 'grant-timeout', 'ambiguous-app-page', 'foreign-next-link', 'pagination-loop', 'principal-page', 'grant-page', 'principal-timeout-missing', 'grant-timeout-missing', 'pagination-bound', 'collection-bound', 'setup-lock', 'legacy-partial', 'legacy-principal', 'legacy-grant', 'unknown-intent-version', 'duplicate-app-scope', 'wrong-token-version', 'fallback-public-client', 'remote-web-redirect', 'remote-spa-redirect', 'implicit-grant', 'relative-directory', 'unsupported-platform')][string]$Scenario = 'success')
+param([ValidateSet('success', 'wrong-tenant', 'broad-grant', 'app-timeout-visible', 'app-timeout-missing', 'principal-timeout', 'grant-timeout', 'ambiguous-app-page', 'foreign-next-link', 'pagination-loop', 'principal-page', 'grant-page', 'principal-timeout-missing', 'grant-timeout-missing', 'pagination-bound', 'collection-bound', 'setup-lock', 'legacy-partial', 'legacy-principal', 'legacy-grant', 'unknown-intent-version', 'duplicate-app-scope', 'wrong-token-version', 'fallback-public-client', 'remote-web-redirect', 'remote-spa-redirect', 'implicit-grant', 'relative-directory', 'unsupported-platform', 'missing-graph-module', 'unreviewed-graph-module')][string]$Scenario = 'success')
 $ErrorActionPreference = 'Stop'
 $testDir = Join-Path ([IO.Path]::GetTempPath()) ([guid]::NewGuid().ToString())
 $global:outlookSetupTestFixture = @{}
@@ -7,6 +7,9 @@ $global:outlookSetupTestFixture.apps = @{}
 $global:outlookSetupTestFixture.grant = $null
 $global:outlookSetupTestFixture.principal = $null
 $global:outlookSetupTestFixture.posts = 0
+$global:outlookSetupTestFixture.moduleInstalls = 0
+$global:outlookSetupTestFixture.moduleImports = 0
+$global:outlookSetupTestFixture.adminLogins = 0
 $global:outlookSetupTestFixture.collectionReads = 0
 $global:outlookSetupTestFixture.requestedUris = [Collections.Generic.List[string]]::new()
 $global:outlookSetupTestFixture.failed = $false
@@ -25,9 +28,21 @@ function Read-Host($Prompt) {
     if ($Prompt -match 'Business mailbox') { return 'business@example.com' }
     return 'personal@outlook.com'
 }
-function Get-Module { param($ListAvailable) return @{ Name = 'Mock Graph' } }
-function Import-Module { param($Name) }
+function Get-Module {
+    param([switch]$ListAvailable, $Name)
+    if ($Scenario -eq 'missing-graph-module') { return @() }
+    $version = if ($Scenario -eq 'unreviewed-graph-module') { '99.0.0' } else { '2.36.1' }
+    return @{ Name = 'Microsoft.Graph.Authentication'; Version = [version]$version }
+}
+function Install-Module { $global:outlookSetupTestFixture.moduleInstalls++ }
+function Import-Module {
+    param($Name, $RequiredVersion)
+    $global:outlookSetupTestFixture.moduleImports++
+    if ($Name -ne 'Microsoft.Graph.Authentication' -or [string]$RequiredVersion -ne '2.36.1') { throw 'Graph import did not select the validated dependency version.' }
+}
+
 function Connect-MgGraph { param($TenantId, $ContextScope, [switch]$NoWelcome, $Scopes)
+    $global:outlookSetupTestFixture.adminLogins++
     if ($Scopes.Count -ne 3 -or $ContextScope -ne 'Process') { throw 'Unexpected admin login.' }
 }
 function Disconnect-MgGraph { }
@@ -171,6 +186,15 @@ try {
         }
         if ($global:outlookSetupTestFixture.posts -ne 4 -or -not (Test-Path (Join-Path $testDir 'connections.json'))) { throw 'Interrupted effect did not reconcile without duplicate creation.' }
         Write-Host "PASS: $Scenario reconciled without repeating the effect."
+        exit 0
+    }
+    if ($Scenario -in @('missing-graph-module', 'unreviewed-graph-module')) {
+        if ($LASTEXITCODE -ne 1 -or $global:outlookSetupTestFixture.moduleInstalls -ne 0 -or
+            $global:outlookSetupTestFixture.moduleImports -ne 0 -or $global:outlookSetupTestFixture.adminLogins -ne 0 -or
+            $global:outlookSetupTestFixture.requestedUris.Count -ne 0 -or (Test-Path (Join-Path $testDir 'connections.json'))) {
+            throw 'Unvalidated Graph dependency reached installation, import, authentication or provider effects.'
+        }
+        Write-Host "PASS: $Scenario rejected before dependency execution or administrator sign-in."
         exit 0
     }
     if ($Scenario -ne 'success') {

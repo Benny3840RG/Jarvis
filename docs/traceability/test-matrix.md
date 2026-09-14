@@ -108,3 +108,9 @@ The tests prove the six-category in-process contract, fail-closed negative paths
 | R-073–R-076       | `invoiceStore.test.ts`, `invoiceHttp.test.ts`                                                                    | Draft-only invoice edits, issue transition, void transition and pre-issue payment rejection are covered                                        | Partial |
 | R-105–R-111       | `invoiceHttp.test.ts`, `httpRouteContract.test.ts`, `httpOpenApiRouteAlignment.test.ts`, `openapi` contract lint | `/api/v1/invoices` is authenticated, served by the HTTP adapter, documented in OpenAPI and deliberately not exposed as an MCP tool             | Partial |
 | R-125–R-127       | `invoiceStore.test.ts`, `invoiceHttp.test.ts`, `httpRouteContract.test.ts`, `httpOpenApiRouteAlignment.test.ts`  | Invoice/payment truth is durable and server-derived, but PDF generation, provider reconciliation and automatic numbering remain open           | Partial |
+
+- Outlook administrator setup dependency boundary (#482):
+  `scripts/test-outlook-setup.ps1` covers missing and different Graph module
+  versions stopping before installation, import, sign-in or provider requests,
+  and exact version selection on successful setup. All 31 offline provisioning
+  scenarios pass; package provenance remains a documented operator prerequisite.

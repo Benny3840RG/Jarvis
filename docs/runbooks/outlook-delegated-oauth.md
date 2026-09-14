@@ -92,7 +92,20 @@ Legacy single-mailbox configuration remains supported; an optional
 
 ### Operator setup
 
-On the operator's Ubuntu computer, with Node 24 and PowerShell installed:
+On the operator's Ubuntu computer, with Node 24 and PowerShell installed,
+preinstall a validated **Microsoft.Graph.Authentication 2.36.1** distribution.
+Use your administrator's trusted software provisioning process to validate the
+publisher signature or compare the package against an independently approved
+integrity digest before installing it. The
+[Microsoft package version](https://www.powershellgallery.com/packages/Microsoft.Graph.Authentication/2.36.1)
+is the version reference; merely finding a module with that name/version does not
+prove its integrity. Keep its installed files protected from untrusted writers.
+
+Setup requires that exact preinstalled version and imports it explicitly. It
+never downloads, installs, or updates a PowerShell module, and stops before
+state creation or administrator sign-in if the required version is absent.
+Dependency validation is an operator prerequisite, not a claim made by this
+script's version check. After that prerequisite is satisfied:
 
 ```bash
 bash scripts/setup-outlook.sh

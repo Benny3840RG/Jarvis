@@ -7,6 +7,12 @@ $setupLock = $null
 try {
     if (-not $IsLinux) { throw 'Outlook setup requires Linux or WSL with POSIX filesystem permissions.' }
     if (-not [IO.Path]::IsPathFullyQualified($SetupDirectory)) { throw 'SetupDirectory must be an absolute filesystem path.' }
+    # Dependency provisioning is a separate operator trust decision, before this admin flow.
+    $graphModuleVersion = [version]'2.36.1'
+    $graphModules = @(Get-Module -ListAvailable -Name Microsoft.Graph.Authentication | Where-Object { $_.Version -eq $graphModuleVersion })
+    if ($graphModules.Count -eq 0) {
+        throw "Preinstall and validate Microsoft.Graph.Authentication $graphModuleVersion using the Outlook runbook. Setup does not install or update PowerShell modules."
+    }
     $setupDir = $SetupDirectory
     if (Test-Path -LiteralPath $setupDir) {
         $item = Get-Item -Force -LiteralPath $setupDir
@@ -79,10 +85,7 @@ try {
     if ($state.intentVersion -ne 1) { throw 'Unsupported setup effect-intent version.' }
     if (-not $state.ContainsKey('intents')) { $state.intents = @{} }
     Save-State
-    if (-not (Get-Module -ListAvailable Microsoft.Graph.Authentication)) {
-        Install-Module Microsoft.Graph.Authentication -Repository PSGallery -Scope CurrentUser -Force
-    }
-    Import-Module Microsoft.Graph.Authentication
+    Import-Module Microsoft.Graph.Authentication -RequiredVersion $graphModuleVersion
     Write-Host "Sign in with the BUSINESS TENANT administrator for $($state.tenantId)."
     Write-Host 'This creates two dedicated app registrations and a delegated grant for the business user only.'
     # System-browser authentication: deliberately not the blocked device-code flow.

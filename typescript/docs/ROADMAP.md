@@ -300,3 +300,14 @@ required-family failures still close the existing listener before consent.
 The PowerShell exit finding from run 34802974904 is false: executing a child
 script with `&` returns control and its exit code to the calling script, as
 proven in the actual PowerShell host. Existing harness assertions remain active.
+
+### Outlook setup dependency boundary — 2026-09-14
+
+PR #482 removes automatic PowerShell module installation from administrator
+setup. It requires a preinstalled, operator-validated Microsoft.Graph.Authentication
+2.36.1 distribution and explicitly imports that version. Missing or different
+versions stop before setup state, module execution or administrator sign-in.
+The version check does not claim package integrity; the runbook records the
+separate trusted software provisioning prerequisite. All 31 offline provisioning
+scenarios pass, including two regressions that fail on the old installer path.
+Live OAuth and provider commissioning remain unproven.
