@@ -61,7 +61,22 @@ export type SentryRuntimeConfig = {
   environment: string;
   secrets?: readonly string[];
   timeoutMs?: number;
+  observeDelivery?: (observation: SentryDeliveryObservation) => void;
 };
+
+/** Envelope transport evidence only; acceptance does not prove event retention or alerts. */
+export type SentryDeliveryObservation = Readonly<{
+  eventId: string;
+  eventType: SentryEvent["type"];
+  status: "ACCEPTED" | "REJECTED" | "INDETERMINATE";
+  httpStatus?: number;
+}>;
+
+class SentryHttpRejection extends Error {
+  constructor(readonly status: number) {
+    super(`Sentry transport returned HTTP ${status}.`);
+  }
+}
 
 const SAFE_TAG = /^[A-Za-z0-9._:/-]{1,128}$/;
 const SAFE_IDENTIFIER = /^[A-Za-z0-9._:/-]+$/;
@@ -241,7 +256,7 @@ class SentryEnvelopeTransport implements SentryTransport {
         signal: controller.signal,
       });
       if (!response.ok) {
-        throw new Error(`Sentry transport returned HTTP ${response.status}.`);
+        throw new SentryHttpRejection(response.status);
       }
     } finally {
       clearTimeout(timeout);
@@ -268,14 +283,28 @@ export function createSentryRuntime(
   const secrets = config.secrets ?? [];
   const send = async (event: SentryEvent): Promise<void> => {
     try {
-      const sending = sender.send(event).catch(() => {});
-      await new Promise<void>((resolve) => {
-        const timeout = setTimeout(resolve, timeoutMs);
-        void sending.finally(() => {
+      type Outcome = Pick<SentryDeliveryObservation, "status" | "httpStatus">;
+      const sending = Promise.resolve()
+        .then(() => sender.send(event))
+        .then(
+          (): Outcome => ({ status: "ACCEPTED" }),
+          (error: unknown): Outcome =>
+            error instanceof SentryHttpRejection
+              ? { status: "REJECTED", httpStatus: error.status }
+              : { status: "INDETERMINATE" },
+        );
+      const outcome = await new Promise<Outcome>((resolve) => {
+        const timeout = setTimeout(() => resolve({ status: "INDETERMINATE" }), timeoutMs);
+        void sending.then((result) => {
           clearTimeout(timeout);
-          resolve();
+          resolve(result);
         });
       });
+      void Promise.resolve(
+        config.observeDelivery?.(
+          Object.freeze({ eventId: event.event_id, eventType: event.type, ...outcome }),
+        ),
+      ).catch(() => {});
     } catch {
       // Telemetry is best-effort. An unavailable Sentry endpoint must not
       // change Jarvis request, tool, or reconciliation outcomes.
@@ -342,6 +371,7 @@ export function createSentryRuntime(
 
 export function createSentryRuntimeFromEnv(
   environment: NodeJS.ProcessEnv = process.env,
+  observeDelivery?: SentryRuntimeConfig["observeDelivery"],
 ): SentryRuntime {
   const dsn = environment.SENTRY_DSN?.trim();
   const release =
@@ -363,6 +393,7 @@ export function createSentryRuntimeFromEnv(
     release,
     environment: sentryEnvironment,
     secrets,
+    ...(observeDelivery === undefined ? {} : { observeDelivery }),
   });
 }
 
