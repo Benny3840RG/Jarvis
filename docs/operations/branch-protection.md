@@ -120,8 +120,9 @@ unset GITHUB_TOKEN
 The tool refuses a repository identity/default-branch mismatch or another active
 repository branch ruleset. It creates its named ruleset disabled, verifies the
 exact preflight policy, activates it, then re-reads both the ruleset and effective
-`main` rules. If active readback fails, it disables the new ruleset again. It
-never deletes or silently edits the two stale disabled rulesets. A second
+`main` rules. The readback rejects any additional effective rule, including one
+inherited from another ruleset. If active readback fails, it disables the new
+ruleset again. It never deletes or silently edits the two stale disabled rulesets. A second
 successful run is read-only and reports the existing verified ruleset.
 
 ## Rationale

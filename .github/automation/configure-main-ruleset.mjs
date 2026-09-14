@@ -123,11 +123,12 @@ function client(fetchImpl, token, repository) {
 
 function assertEffectiveRules(rules, rulesetId) {
   if (!Array.isArray(rules)) throw new Error("Effective branch rules are unavailable.");
-  const actual = rules
-    .filter((rule) => rule?.ruleset_id === rulesetId)
-    .map(({ type, parameters }) =>
-      parameters === undefined ? { type } : { type, parameters },
-    );
+  if (rules.some((rule) => rule?.ruleset_id !== rulesetId)) {
+    throw new Error("Effective main rules do not match the Jarvis policy.");
+  }
+  const actual = rules.map(({ type, parameters }) =>
+    parameters === undefined ? { type } : { type, parameters },
+  );
   const expected = desiredMainRuleset("active").rules;
   if (canonical(actual) !== canonical(expected)) {
     throw new Error("Effective main rules do not match the Jarvis policy.");

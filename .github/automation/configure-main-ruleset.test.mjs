@@ -24,7 +24,7 @@ function expectedBranchRules(id) {
   }));
 }
 
-function successfulApi({ existingEnforcement } = {}) {
+function successfulApi({ existingEnforcement, additionalEffectiveRules = [] } = {}) {
   const calls = [];
   let enforcement = existingEnforcement ?? "disabled";
   const id = 9001;
@@ -73,7 +73,7 @@ function successfulApi({ existingEnforcement } = {}) {
       return json({ id, ...body });
     }
     if (path === "/repos/Benny3840RG/Jarvis/rules/branches/main" && method === "GET") {
-      return json(expectedBranchRules(id));
+      return json([...expectedBranchRules(id), ...additionalEffectiveRules]);
     }
     if (path === "/repos/Benny3840RG/Jarvis/branches/main" && method === "GET") {
       return json({ name: "main", protected: true });
@@ -214,6 +214,24 @@ test("failed effective readback disables the newly activated ruleset", async () 
         token: "secret-value",
       }),
     /readback failed.*disabled again/i,
+  );
+  const updates = fixture.calls.filter((call) => call.method === "PUT");
+  assert.equal(updates.at(-1).body.enforcement, "disabled");
+});
+
+test("apply rejects additional effective rules from another ruleset", async () => {
+  const fixture = successfulApi({
+    additionalEffectiveRules: [{ type: "deletion", ruleset_id: 8128 }],
+  });
+  await assert.rejects(
+    () =>
+      configureMainRuleset({
+        fetchImpl: fixture.fetchImpl,
+        repository,
+        confirmedRepository: repository,
+        token: "secret-value",
+      }),
+    /effective main rules do not match/i,
   );
   const updates = fixture.calls.filter((call) => call.method === "PUT");
   assert.equal(updates.at(-1).body.enforcement, "disabled");
