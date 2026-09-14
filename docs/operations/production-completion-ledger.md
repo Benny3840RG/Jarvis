@@ -52,6 +52,22 @@
 - NEXT CLAIM: highest-priority unblocked Codex slice after checking current
   ownership; Later Projects remain excluded.
 
+### Narrowed candidate after the next review
+
+Candidate `421de6d128dadebae69df13090f5b626879de20d` passed the complete gate:
+1,530 Node tests / 370 Convex tests, both type checks, static, hygiene and
+OpenAPI. Hosted checks passed; Claude independently confirmed all four repairs
+with no new defects in comment `5657687012` (source review, no reviewer test
+execution). Jarvis run `34795454961` returned 15 passing segments and one
+missing-context request for the unrelated notes-route description. It remains
+blocked, not PASS.
+
+The unrelated note-route hunk is removed from this Live Work candidate; its
+correct route description remains a separately scoped follow-up, requiring the
+existing handler and test context. No Live Work runtime fix was removed and no
+review rule was changed. New exact-head verification/review is required and
+recorded on PR #502; the previous blocked receipt is not erased or waived.
+
 ## Development Live Work and restore marker hardening — 2026-09-11
 
 - BASE SHA: `fae9949fc1f9d1ce15729608384a6d32ec40b8cb` (fetched origin/main).

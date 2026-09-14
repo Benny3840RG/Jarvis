@@ -18,6 +18,11 @@ Stored objectives and completion authority are unchanged. Regression evidence
 and remaining gates are recorded in the production completion ledger.
 
 Next: full candidate verification, Claude review, then current Jarvis PASS.
+Jarvis run `34795454961` returned 15 passes and one context request for an
+unrelated notes-route description. That correction is removed from #502's scope;
+the notes documentation follow-up must include its existing handler/test context
+and independently establish the execute route. The blocked result is preserved,
+and the narrowed candidate requires new verification and review.
 Priority 1 issue #398 still requires owner activation/readback and an ordinary
 PR drill; PR #526's green review alone does not establish live enforcement.
 Priority 2 commissioning and Priority 3–4 recovery/orchestration gates remain
