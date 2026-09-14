@@ -4,10 +4,33 @@ This file is a living record for the autonomous engineering sessions working on
 Jarvis: current state, what changed recently, and what to pick up next. Update
 it at the end of every session.
 
+## Sentry commissioning tooling — #303 (2026-09-14)
+
+The bounded development CLI reuses the existing commissioning app, API-client
+error/measurement path and native Sentry envelope transport. An optional delivery
+observer exposes accepted, rejected and indeterminate transport outcomes while
+ordinary telemetry remains best-effort. The CLI requires explicit development
+configuration and a clean source checkout, emits two synthetic observations,
+and reports event IDs without DSNs, tokens or payloads. Late acceptance cannot
+rewrite a timed-out observation; responses may arrive in either order.
+
+Issue #303 is now closed with [Claude's provider-readback evidence](https://github.com/Benny3840RG/Jarvis/issues/303#issuecomment-5658528064)
+for source `40393d04a31db81b2802199e3f234e99b4085464`: the synthetic error,
+latency/failure spans, release/environment identity, redaction inspection and
+issue-alert trigger were observed in Sentry. That proof exercised the existing
+runtime directly; it does not claim this new CLI was used or that the aggregate
+metric-alert thresholds fired. No provider probe was repeated during integration.
+See [the commissioning runbook](operators/sentry-commissioning.md). Next: fresh
+verification and independent Claude/Jarvis review of #527 against current main,
+then Benny merge. Production authority remains separate.
+
 ## Live Work review repair (2026-09-14)
 
-PR #502 remains Codex-owned, with Claude independent review and Benny merge
-required. Review run `34736290718` exposed two reproduced defects: CRLF
+Benny merged PR #502 as `e9b76439dd0afdf0846a872c74ff16af89524626`.
+Issue #398 is now closed with owner-recorded live merge evidence. The following
+paragraphs preserve the earlier review history and do not reopen those gates.
+
+Earlier review record: Review run `34736290718` exposed two reproduced defects: CRLF
 objectives made the read projection unavailable, and accepted multiline
 objectives escaped terminal row framing. The adapter now canonicalizes CRLF;
 terminal rendering flattens line breaks before clipping both objective rows.
@@ -248,3 +271,16 @@ completion authority. Live notification proof awaits owner merge to main.
 
 Next: independent Claude review, current Jarvis evaluation, then Benny's merge
 decision and an observed stale-base notice from the maintained workflow.
+
+### Documented implementation context — issue #533
+
+PR #482's bounded review exposed an omitted documentation-to-code relationship.
+The existing fetched-inventory resolver now follows explicit unambiguous local
+paths from Markdown and retains both revision references. It does not fetch
+external URLs, guess basenames, or create cross-code graph bridges through shared
+documents. Regression coverage proves a separated documentation segment receives
+its implementation while exact coverage and prompt limits remain intact. Missing
+essential context still blocks.
+
+Next: full verification, independent Claude review, current Jarvis evaluation,
+then Benny merge before any live review claims can use the repaired planner.

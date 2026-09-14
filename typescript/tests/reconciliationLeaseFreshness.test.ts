@@ -8,9 +8,14 @@ import type {
 } from "../src/reconciliation/externalReconciliation.js";
 import { ReconciliationWorker } from "../src/reconciliation/reconciliationWorker.js";
 
-it("uses the post-provider timestamp when resolving a claimed reconciliation", async () => {
+it("propagates a server-side lease rejection instead of reporting a stale success", async () => {
+  // Lease/authority timing is enforced entirely server-side against the server's own
+  // clock (see convex/externalReconciliations.ts); the worker no longer supplies `now`
+  // and must not assume a resolution is safe just because it thinks the lease is fresh.
+  // This simulates the authoritative store rejecting a resolution whose lease has
+  // genuinely expired by the time the provider call completed, and proves the worker
+  // propagates that rejection rather than reporting a stale success.
   const claimTime = 1_000;
-  const completionTime = 7_000;
   const leaseMs = 5_000;
   const receipt: ToolExecutionReceipt = {
     receiptId: "receipt-freshness",
@@ -35,15 +40,13 @@ it("uses the post-provider timestamp when resolving a claimed reconciliation", a
     startedAt: new Date(0).toISOString(),
     completedAt: new Date(claimTime).toISOString(),
   };
-  const resolutionTimes: number[] = [];
+  let resolveCalls = 0;
   const store = {
     async claimNext(input: {
       workerId: string;
       leaseToken: string;
-      now: number;
       leaseMs: number;
     }): Promise<ExternalReconciliationClaim> {
-      assert.equal(input.now, claimTime);
       return {
         reconciliation: {
           reconciliationId: "reconciliation-freshness",
@@ -73,13 +76,11 @@ it("uses the post-provider timestamp when resolving a claimed reconciliation", a
         receipt,
       };
     },
-    async resolveClaim(input: { now: number }): Promise<ToolExecutionReceipt> {
-      resolutionTimes.push(input.now);
-      if (input.now >= claimTime + leaseMs) throw new Error("lease expired before resolution");
-      return { ...receipt, status: "succeeded", errorCode: undefined };
+    async resolveClaim(): Promise<ToolExecutionReceipt> {
+      resolveCalls += 1;
+      throw new Error("Reconciliation claim lease is stale or belongs to another worker.");
     },
   } as unknown as ExternalReconciliationStore;
-  const timestamps = [claimTime, completionTime];
   const worker = new ReconciliationWorker({
     store,
     adapters: [
@@ -90,7 +91,6 @@ it("uses the post-provider timestamp when resolving a claimed reconciliation", a
         },
       },
     ],
-    now: () => timestamps.shift() ?? completionTime,
     leaseToken: () => "lease-freshness",
   });
 
@@ -100,7 +100,7 @@ it("uses the post-provider timestamp when resolving a claimed reconciliation", a
       leaseMs,
       signal: new AbortController().signal,
     }),
-    /lease expired before resolution/,
+    /lease is stale or belongs to another worker/,
   );
-  assert.deepEqual(resolutionTimes, [completionTime]);
+  assert.equal(resolveCalls, 1);
 });

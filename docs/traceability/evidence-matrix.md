@@ -1,5 +1,20 @@
 # Jarvis Evidence Matrix
 
+## Sentry commissioning preparation — #303 (2026-09-14)
+
+The development commissioning command exercises the existing API client against
+the in-process commissioning app and observes native Sentry envelope delivery.
+Focused regressions cover configuration refusal, synthetic error and latency
+metadata, explicit rejection, unknown transport results, late acceptance and
+out-of-order delivery. The normal runtime still isolates telemetry failures from
+application outcomes. Exact tested SHA and full-gate/review evidence belong to
+the associated PR. [Claude's provider-readback record](https://github.com/Benny3840RG/Jarvis/issues/303#issuecomment-5658528064)
+closed #303 for runtime source `40393d04a31db81b2802199e3f234e99b4085464`,
+including the synthetic error/spans, redaction inspection and issue-alert trigger.
+That record does not prove this new CLI ran live or that aggregate metric-alert
+thresholds fired. Transport acceptance alone never supplies those observations
+or production authority.
+
 **Specification:** Jarvis Requirements v2.2  
 **Rule:** Evidence must be immutable or durably addressable and must identify the verified revision.
 
