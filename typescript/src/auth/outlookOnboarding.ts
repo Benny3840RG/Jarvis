@@ -84,7 +84,7 @@ export async function authorizeOutlookConnection(
     resolveCode = resolve;
     rejectCode = reject;
   });
-  // Attach immediately so a timeout while the browser launches cannot be unhandled.
+  // Attach immediately so listener errors during setup cannot be unhandled.
   void codePromise.catch(() => undefined);
   let consumed = false;
   const handleCallback: RequestListener = (req, res) => {
@@ -125,10 +125,11 @@ export async function authorizeOutlookConnection(
     resolveCode(code);
   };
   const servers: Server[] = [];
-  const timeout = setTimeout(
-    () => rejectCode(new Error("outlook-onboarding-sign-in-timeout")),
-    180_000,
-  );
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const signInDeadline = new Promise<never>((_resolve, reject) => {
+    timeout = setTimeout(() => reject(new Error("outlook-onboarding-sign-in-timeout")), 180_000);
+  });
+  void signInDeadline.catch(() => undefined);
   try {
     const localhost = await dns.lookup("localhost", { all: true });
     if (
@@ -180,8 +181,10 @@ export async function authorizeOutlookConnection(
       prompt: "select_account",
       login_hint: connection.config.mailbox,
     }).toString();
-    await options.showAuthorizationUrl(authorize.toString());
-    const code = await codePromise;
+    const [, code] = await Promise.race([
+      Promise.all([options.showAuthorizationUrl(authorize.toString()), codePromise]),
+      signInDeadline,
+    ]);
     const signal = AbortSignal.timeout(30_000);
     const response = await request(connection.config.tokenEndpoint, {
       method: "POST",

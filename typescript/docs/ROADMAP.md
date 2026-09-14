@@ -404,3 +404,7 @@ essential context still blocks.
 
 Next: full verification, independent Claude review, current Jarvis evaluation,
 then Benny merge before any live review claims can use the repaired planner.
+
+## Outlook browser-launch deadline
+
+The #482 maintained review found that a stalled URL-display callback could prevent the sign-in timeout from reaching cleanup. The minimal repair bounds launcher completion and code receipt together, including when a valid callback arrived first. Two offline regressions failed before the fix and now prove listener closure and no token/provider effects on expiry. Fresh review remains required; live #293/#294/#297 commissioning stays open.

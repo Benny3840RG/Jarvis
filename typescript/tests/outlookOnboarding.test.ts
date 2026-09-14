@@ -12,6 +12,81 @@ import {
 import { resolveOutlookConnections } from "../src/auth/microsoftOutlookConnections.js";
 
 describe("Outlook browser onboarding", () => {
+  for (const callbackReceived of [false, true])
+    it(`expires a stalled browser launcher with callback received: ${callbackReceived}`, async (t) => {
+      const directory = await mkdtemp(join(tmpdir(), "outlook-launch-timeout-"));
+      const connection = resolveOutlookConnections({
+        JARVIS_OUTLOOK_CONNECTIONS_JSON: JSON.stringify([
+          {
+            id: "personal",
+            clientId: "aaaaaaaa-2222-3333-4444-555555555555",
+            mailbox: "test@outlook.com",
+            refreshTokenFile: join(directory, "refresh.token"),
+          },
+        ]),
+      })[0];
+      let expire!: () => void;
+      const originalTimeout = globalThis.setTimeout;
+      t.mock.method(globalThis, "setTimeout", (callback: () => void, delay?: number) => {
+        if (delay === 180_000) expire = callback;
+        return originalTimeout(callback, delay);
+      });
+      let launcherReady!: () => void;
+      const ready = new Promise<void>((resolve) => {
+        launcherReady = resolve;
+      });
+      let rejectLauncher!: (error: Error) => void;
+      const launcher = new Promise<void>((_resolve, reject) => {
+        rejectLauncher = reject;
+      });
+      let callbackUrl = "";
+      let providerCalls = 0;
+      const operation = authorizeOutlookConnection(connection, {
+        async showAuthorizationUrl(url) {
+          const auth = new URL(url);
+          const callback = new URL(auth.searchParams.get("redirect_uri")!);
+          callback.hostname = "127.0.0.1";
+          callback.searchParams.set("state", auth.searchParams.get("state")!);
+          callback.searchParams.set("code", "synthetic-code");
+          callbackUrl = callback.toString();
+          if (callbackReceived) assert.equal((await fetch(callback)).status, 200);
+          launcherReady();
+          return launcher;
+        },
+        fetch: async () => {
+          providerCalls++;
+          throw new Error("provider must not run after sign-in expiry");
+        },
+      });
+      let settled = false;
+      const observed = operation.then(
+        () => {
+          settled = true;
+          return undefined;
+        },
+        (error: unknown) => {
+          settled = true;
+          return error;
+        },
+      );
+      try {
+        await ready;
+        expire();
+        // Listener close callbacks run before the following check phase.
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        assert.equal(settled, true, "sign-in expiry must release a stalled browser launcher");
+        assert.match(String(await observed), /outlook-onboarding-sign-in-timeout/u);
+        await assert.rejects(fetch(callbackUrl));
+        assert.equal(providerCalls, 0);
+        assert.deepEqual(await readdir(directory), []);
+      } finally {
+        // Also release the old broken implementation after its expected assertion failure.
+        rejectLauncher(new Error("test launcher cleanup"));
+        await observed;
+        await rm(directory, { recursive: true, force: true });
+      }
+    });
+
   for (const host of ["127.0.0.1", "::1"] as const)
     it(`onboards with only ${host} available when localhost resolves to that family`, async (t) => {
       t.mock.method(dns, "lookup", async () => [{ address: host, family: host === "::1" ? 6 : 4 }]);

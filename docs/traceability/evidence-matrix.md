@@ -341,3 +341,7 @@ Candidate results and eventual merge identity are maintained in the
   revision or commission an active lifecycle. Synthetic scenarios remain labeled.
   Production and external commissioning remain unproven, and the read model does
   not invent missing uncertainty. Exact integration results are recorded in the ledger.
+
+## Outlook sign-in deadline review repair
+
+Jarvis review of #482 at `c5521a3` identified a stalled browser-launch callback that could outlive the sign-in deadline. The repair races both launcher completion and authorization-code receipt against an independent deadline, so a received code cannot neutralize the timeout while the launcher remains stalled. Existing listener cleanup runs on expiry. Two failure-first regressions establish bounded rejection and no provider or credential effects. Fresh candidate verification, independent review and actual Jarvis PASS remain required.

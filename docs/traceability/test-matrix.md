@@ -132,3 +132,7 @@ The tests prove the six-category in-process contract, fail-closed negative paths
   `review-segments.test.mjs` proves referenced implementation reaches a separated
   documentation segment within existing bounds; essential context requests still
   block and exact primary coverage remains digest-validated.
+
+## Outlook browser-launch deadline repair
+
+`typescript/tests/outlookOnboarding.test.ts` now proves that the existing 180-second sign-in deadline releases a stalled URL-display callback both before and after a valid OAuth callback. Both cases failed before the repair. They prove listener closure, zero token/provider calls and no credential publication after expiry. Local loopback and controlled time only; no live Microsoft proof.
