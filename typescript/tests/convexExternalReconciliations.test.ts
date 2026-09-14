@@ -258,21 +258,18 @@ describe("ConvexExternalReconciliationStore", () => {
     const claim = await store.claimNext({
       workerId: "worker-1",
       leaseToken: "lease-1",
-      now: NOW,
       leaseMs: 30_000,
     });
     const resolved = await store.resolveClaim({
       reconciliationId: "reconciliation-1",
       workerId: "worker-1",
       leaseToken: "lease-1",
-      now: NOW + 1_000,
       result: { status: "succeeded", outputDigest: "digest-1" },
     });
     const released = await store.releaseClaim({
       reconciliationId: "reconciliation-1",
       workerId: "worker-1",
       leaseToken: "lease-1",
-      now: NOW + 2_000,
       errorCode: "still-processing",
       nextAttemptAt: NOW + 5_000,
       maxAttempts: 5,
@@ -291,7 +288,6 @@ describe("ConvexExternalReconciliationStore", () => {
           serviceToken: "owner-service-token",
           workerId: "worker-1",
           leaseToken: "lease-1",
-          now: NOW,
           leaseMs: 30_000,
         },
         {
@@ -299,7 +295,6 @@ describe("ConvexExternalReconciliationStore", () => {
           reconciliationId: "reconciliation-1",
           workerId: "worker-1",
           leaseToken: "lease-1",
-          now: NOW + 1_000,
           result: { status: "succeeded", outputDigest: "digest-1" },
         },
         {
@@ -307,7 +302,6 @@ describe("ConvexExternalReconciliationStore", () => {
           reconciliationId: "reconciliation-1",
           workerId: "worker-1",
           leaseToken: "lease-1",
-          now: NOW + 2_000,
           errorCode: "still-processing",
           nextAttemptAt: NOW + 5_000,
           maxAttempts: 5,

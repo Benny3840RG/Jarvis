@@ -108,3 +108,10 @@ The tests prove the six-category in-process contract, fail-closed negative paths
 | R-073–R-076       | `invoiceStore.test.ts`, `invoiceHttp.test.ts`                                                                    | Draft-only invoice edits, issue transition, void transition and pre-issue payment rejection are covered                                        | Partial |
 | R-105–R-111       | `invoiceHttp.test.ts`, `httpRouteContract.test.ts`, `httpOpenApiRouteAlignment.test.ts`, `openapi` contract lint | `/api/v1/invoices` is authenticated, served by the HTTP adapter, documented in OpenAPI and deliberately not exposed as an MCP tool             | Partial |
 | R-125–R-127       | `invoiceStore.test.ts`, `invoiceHttp.test.ts`, `httpRouteContract.test.ts`, `httpOpenApiRouteAlignment.test.ts`  | Invoice/payment truth is durable and server-derived, but PDF generation, provider reconciliation and automatic numbering remain open           | Partial |
+
+- Bounded documentation review context (#533):
+  `paired-review-context.test.mjs` covers before/after local paths, relative links,
+  ambiguous/external/absent references and isolation of unrelated code segments.
+  `review-segments.test.mjs` proves referenced implementation reaches a separated
+  documentation segment within existing bounds; essential context requests still
+  block and exact primary coverage remains digest-validated.

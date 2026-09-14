@@ -146,21 +146,18 @@ export interface ExternalReconciliationStore {
   claimNext(input: {
     workerId: string;
     leaseToken: string;
-    now: number;
     leaseMs: number;
   }): Promise<ExternalReconciliationClaim | null>;
   resolveClaim(input: {
     reconciliationId: string;
     workerId: string;
     leaseToken: string;
-    now: number;
     result: Exclude<ProviderReconciliationResult, { status: "unresolved" }>;
   }): Promise<ToolExecutionReceipt>;
   releaseClaim(input: {
     reconciliationId: string;
     workerId: string;
     leaseToken: string;
-    now: number;
     errorCode: string;
     nextAttemptAt: number;
     maxAttempts: number;
