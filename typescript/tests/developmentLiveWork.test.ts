@@ -52,7 +52,7 @@ describe("foldLiveWorkPipeline", () => {
     const pipeline = foldLiveWorkPipeline(
       snapshot({ subject: { ...snapshot().subject, state: "REVIEW" } }),
     );
-    assert.equal(node(pipeline.nodes, "issue").status, "done");
+    assert.equal(node(pipeline.nodes, "issue").status, "unavailable");
     assert.equal(node(pipeline.nodes, "ci").status, "done");
     assert.equal(node(pipeline.nodes, "review").status, "active");
     assert.equal(node(pipeline.nodes, "merge").status, "pending");
@@ -79,7 +79,7 @@ describe("foldLiveWorkPipeline", () => {
     );
     assert.equal(node(pipeline.nodes, "review").status, "blocked");
     assert.equal(node(pipeline.nodes, "stage").status, "blocked");
-    assert.equal(node(pipeline.nodes, "ci").status, "done");
+    assert.equal(node(pipeline.nodes, "ci").status, "pending");
   });
 
   it("blocks the merge node on an indeterminate merge outcome", () => {
@@ -102,13 +102,13 @@ describe("foldLiveWorkPipeline", () => {
     assert.equal(node(complete.nodes, "merge").status, "done");
   });
 
-  it("reports issue and PR detail honestly when the repository and branch are not recorded", () => {
+  it("reports the mission identity and absent PR honestly without repository or branch", () => {
     const pipeline = foldLiveWorkPipeline(
       snapshot({
         subject: { subjectId: "mission-1", state: "SPECIFIED", updatedAt: 0 },
       }),
     );
-    assert.match(node(pipeline.nodes, "issue").detail, /not recorded/i);
+    assert.equal(node(pipeline.nodes, "issue").detail, "Not recorded by the mission yet.");
     assert.match(node(pipeline.nodes, "pr").detail, /not recorded/i);
   });
 
@@ -264,6 +264,12 @@ it("does not let rejected transitions mark later stages done", () => {
 it("shows rebuilt candidate verification pending after repair", () => {
   const result = foldLiveWorkPipeline(
     snapshot({
+      workerStep: {
+        nodeId: "development",
+        state: "running",
+        leaseOwner: "worker-1",
+        leaseExpiresAt: Date.parse("2026-09-01T02:00:00.000Z"),
+      },
       events: [
         {
           eventId: "old",
@@ -288,4 +294,110 @@ it("shows rebuilt candidate verification pending after repair", () => {
   );
   assert.equal(node(result.nodes, "worker").status, "active");
   assert.equal(node(result.nodes, "ci").status, "pending");
+});
+
+it("does not claim an active worker without a recorded live lease", () => {
+  for (const workerStep of [
+    null,
+    { nodeId: "development", state: "pending", leaseOwner: null, leaseExpiresAt: null },
+  ]) {
+    assert.equal(
+      node(foldLiveWorkPipeline(snapshot({ workerStep })).nodes, "worker").status,
+      "unavailable",
+    );
+  }
+});
+
+it("keeps authoritative contradiction blocked despite stale Omega readiness", () => {
+  const pipeline = foldLiveWorkPipeline(
+    snapshot({
+      subject: { ...snapshot().subject, state: "CONTRADICTED" },
+      omegaReadiness: { allowed: true, failures: [] },
+    }),
+  );
+  assert.equal(node(pipeline.nodes, "omega").status, "blocked");
+  assert.match(node(pipeline.nodes, "omega").detail, /CONTRADICTED/);
+  assert.equal(node(pipeline.nodes, "merge").status, "blocked");
+  assert.match(node(pipeline.nodes, "merge").detail, /CONTRADICTED/);
+  assert.equal(pipeline.completionLabel, "CONTRADICTED");
+});
+
+it("retains demonstrated earlier rail phases on an indeterminate branch without inferring progress from blocked labels", () => {
+  const base = snapshot();
+  const blocked = { ...base.subject, state: "INDETERMINATE" as const };
+  const evidence = {
+    eventId: "uncertain",
+    eventType: "DEV_TRANSITION_COMMITTED",
+    occurredAt: base.generatedAt,
+    from: "READY_TO_MERGE",
+    to: "INDETERMINATE",
+    reasonCodes: [],
+    hasMergeReceipt: false,
+  };
+  const result = foldLiveWorkPipeline(snapshot({ subject: blocked, events: [evidence] }));
+  assert.equal(result.rail.find((x) => x.state === "SPECIFIED")?.status, "done");
+  assert.equal(result.rail.find((x) => x.state === "REVIEW")?.status, "done");
+  assert.equal(result.rail.find((x) => x.state === "MERGED")?.status, "pending");
+  assert.equal(result.rail.find((x) => x.state === "INDETERMINATE")?.status, "blocked");
+  for (const events of [[], [{ ...evidence, eventType: "DEV_TRANSITION_REJECTED" }]]) {
+    const unknown = foldLiveWorkPipeline(snapshot({ subject: blocked, events }));
+    assert.equal(unknown.rail.find((x) => x.state === "REVIEW")?.status, "pending");
+  }
+});
+it("does not carry previous candidate rail verification through a recorded repair", () => {
+  const base = snapshot();
+  const result = foldLiveWorkPipeline(
+    snapshot({
+      subject: { ...base.subject, state: "REPAIR_REQUIRED" },
+      events: [
+        {
+          eventId: "repair",
+          eventType: "DEV_TRANSITION_COMMITTED",
+          occurredAt: base.generatedAt,
+          from: "REVIEW",
+          to: "REPAIR_REQUIRED",
+          reasonCodes: [],
+          hasMergeReceipt: false,
+        },
+      ],
+    }),
+  );
+  assert.equal(result.rail.find((x) => x.state === "CLAIMED")?.status, "done");
+  assert.equal(result.rail.find((x) => x.state === "VERIFYING")?.status, "pending");
+  assert.equal(result.rail.find((x) => x.state === "REVIEW")?.status, "pending");
+});
+
+it("blocks terminal workers despite a recorded unexpired lease", () => {
+  for (const state of ["FAILED", "ABORTED", "CONTRADICTED"] as const) {
+    const base = snapshot();
+    const pipeline = foldLiveWorkPipeline(
+      snapshot({
+        subject: { ...base.subject, state },
+        workerStep: {
+          nodeId: "development",
+          state: "running",
+          leaseOwner: "worker-1",
+          leaseExpiresAt: Date.parse(base.generatedAt) + 60_000,
+        },
+      }),
+    );
+    assert.equal(node(pipeline.nodes, "worker").status, "blocked");
+    assert.match(node(pipeline.nodes, "worker").detail, new RegExp(state));
+    assert.equal(node(pipeline.nodes, "stage").detail, state);
+  }
+});
+
+it("does not infer issue identity or success from mission progress and repository metadata", () => {
+  for (const repository of ["owner/repository", undefined]) {
+    const pipeline = foldLiveWorkPipeline(
+      snapshot({
+        subject: { ...snapshot().subject, state: "MERGED", subjectId: "subject-123", repository },
+      }),
+    );
+    const issue = node(pipeline.nodes, "issue");
+    assert.equal(issue.label, "ISSUE");
+    assert.equal(issue.status, "unavailable");
+    assert.equal(issue.detail, "Not recorded by the mission yet.");
+    assert.equal(node(pipeline.nodes, "mission").detail, "Ship the live-work HUD");
+  }
 });

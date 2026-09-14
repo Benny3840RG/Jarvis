@@ -17,6 +17,8 @@ import {
   type TransitionEvaluation,
   type TransitionRequest,
 } from "../src/development/stateMachine.js";
+import { githubMergeArguments } from "../src/development/githubMergeArguments.js";
+import { isLiveWorkMissionInFlight } from "../src/development/liveWork.js";
 import { DEVELOPMENT_TRANSITIONS } from "../src/development/transitionRegistry.js";
 import { fingerprintToolAction, fingerprintToolEffect } from "../src/actions/toolExecution.js";
 import type { ToolAction } from "../src/actions/toolActions.js";
@@ -478,11 +480,96 @@ export const listRecent = query({
   },
 });
 
-const LIVE_WORK_TERMINAL_STATES = new Set(["COMPLETE", "ABORTED", "FAILED", "CONTRADICTED"]);
 const LIVE_WORK_EVENT_TAIL = 40;
 
 function stringField(value: unknown): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+async function liveWorkCandidate(ctx: QueryCtx, subject: Doc<"developmentSubjects">) {
+  if (subject.state !== "MERGED" || !subject.lastEventId) return null;
+  const event = await ctx.db
+    .query("developmentEvents")
+    .withIndex("by_owner_and_subject_id_and_event_id", (q) =>
+      q
+        .eq("ownerId", subject.ownerId)
+        .eq("subjectId", subject.subjectId)
+        .eq("eventId", subject.lastEventId!),
+    )
+    .unique();
+  if (
+    !event ||
+    event.eventType !== "DEV_TRANSITION_COMMITTED" ||
+    event.payload.to !== "MERGED" ||
+    !["DEV_TRANSITION_READY_TO_MERGE_TO_MERGED", "DEV_TRANSITION_INDETERMINATE_TO_MERGED"].includes(
+      event.transitionId ?? "",
+    ) ||
+    typeof event.payload.mergeReceiptKey !== "string"
+  )
+    return null;
+  const receipt = await ctx.db
+    .query("toolExecutionReceipts")
+    .withIndex("by_owner_and_receipt_key", (q) =>
+      q.eq("ownerId", subject.ownerId).eq("receiptKey", event.payload.mergeReceiptKey as string),
+    )
+    .unique();
+  if (
+    !receipt ||
+    receipt.projectId !== subject.subjectId ||
+    receipt.status !== "succeeded" ||
+    receipt.provider !== "github-rest-v1" ||
+    receipt.tool !== "github" ||
+    receipt.operation !== "merge-pull-request"
+  )
+    return null;
+  const action = await ctx.db
+    .query("toolActions")
+    .withIndex("by_owner_and_action_id", (q) =>
+      q.eq("ownerId", subject.ownerId).eq("actionId", receipt.actionId),
+    )
+    .unique();
+  if (
+    !action ||
+    action.projectKey !== subject.subjectId ||
+    action.tool !== "github" ||
+    action.operation !== "merge-pull-request" ||
+    action.approvedBy !== "user" ||
+    action.requiredAuthority !== "T3" ||
+    !action.destructive ||
+    action.consumptionPolicy !== "single-use" ||
+    receipt.actionFingerprint !== fingerprintToolAction(toolActionForFingerprint(action))
+  )
+    return null;
+  const parsed = githubMergeArguments.safeParse(action.arguments);
+  if (
+    !parsed.success ||
+    parsed.data.subjectId !== subject.subjectId ||
+    parsed.data.repository !== subject.repository ||
+    parsed.data.baseBranch !== subject.branch ||
+    !Number.isSafeInteger(parsed.data.pullRequestNumber)
+  )
+    return null;
+  return {
+    pullRequestNumber: parsed.data.pullRequestNumber,
+    headSha: parsed.data.reviewedHeadSha.toLowerCase(),
+    receiptId: receipt.receiptId,
+  };
+}
+
+function liveWorkEvidenceIds(ids: readonly string[]): string[] {
+  if (
+    ids.length > 128 ||
+    ids.some(
+      (id) =>
+        !id ||
+        id.length > 512 ||
+        [...id].some(
+          (character) => character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127,
+        ),
+    )
+  )
+    throw new Error("Invalid live-work evidence references.");
+  return [...ids];
 }
 
 /**
@@ -506,7 +593,7 @@ export const liveWork = query({
         .withIndex("by_owner_and_updated_at", (q) => q.eq("ownerId", ownerId)),
       "Development live-work mission selection",
     );
-    const active = subjects.filter((row) => !LIVE_WORK_TERMINAL_STATES.has(row.state));
+    const active = subjects.filter((row) => isLiveWorkMissionInFlight(row.state));
     if (active.length > 1) throw new ConvexError({ code: "DEVELOPMENT_LIVE_WORK_AMBIGUOUS" });
     const subject = active[0];
     if (!subject) return null;
@@ -528,7 +615,12 @@ export const liveWork = query({
       reasonCodes: Array.isArray(event.payload.reasonCodes)
         ? event.payload.reasonCodes.filter((code): code is string => typeof code === "string")
         : [],
-      hasMergeReceipt: typeof event.payload.mergeReceiptKey === "string",
+      hasMergeReceipt:
+        event.eventType === "DEV_TRANSITION_COMMITTED" &&
+        event.payload.to === "MERGED" &&
+        typeof event.payload.mergeReceiptKey === "string" &&
+        event.payload.mergeReceiptKey.trim().length > 0,
+      evidenceIds: liveWorkEvidenceIds(event.evidenceIds),
     }));
 
     const missionId = subject.omegaMissionId;
@@ -560,6 +652,7 @@ export const liveWork = query({
       : { allowed: false, failures: ["omega-mission-not-linked"] };
 
     return {
+      candidate: await liveWorkCandidate(ctx, subject),
       omegaReadiness: {
         allowed: omegaReadiness.allowed,
         failures: [...omegaReadiness.failures].map((failure) =>
@@ -989,7 +1082,8 @@ export const commit = mutation({
           }
         : undefined;
     const activeTrustedLease = leaseRequired ? trustedLease : undefined;
-    const mergeReceiptKey = args.mergeReceiptKey?.trim();
+    // A receipt pointer is authoritative only on the validated merge path.
+    const mergeReceiptKey = args.to === "MERGED" ? args.mergeReceiptKey?.trim() : undefined;
     const mergeReceipt =
       args.to === "MERGED" && mergeReceiptKey
         ? await ctx.db
