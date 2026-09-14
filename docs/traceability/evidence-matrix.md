@@ -12,6 +12,13 @@ mail delivery or live provider reconciliation. The existing PR records the exact
 final head, full gate, independent Claude review and Jarvis result; #293/#294/#297
 remain open until their provider evidence exists.
 
+The foreign-pagination regression now observes requested URIs, so an attempted
+foreign GET cannot masquerade as safe rejection merely because setup exits with
+no POSTs. The old test passed a temporary guard-bypass mutation; the strengthened
+test fails it and passes the intact guard. Collection requests explicitly select
+the SDK's `HashTable` output contract. This adds offline boundary evidence only;
+the existing PR carries the new tested SHA and independent review result.
+
 **Specification:** Jarvis Requirements v2.2  
 **Rule:** Evidence must be immutable or durably addressable and must identify the verified revision.
 

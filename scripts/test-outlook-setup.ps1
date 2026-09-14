@@ -8,6 +8,7 @@ $global:outlookSetupTestFixture.grant = $null
 $global:outlookSetupTestFixture.principal = $null
 $global:outlookSetupTestFixture.posts = 0
 $global:outlookSetupTestFixture.collectionReads = 0
+$global:outlookSetupTestFixture.requestedUris = [Collections.Generic.List[string]]::new()
 $global:outlookSetupTestFixture.failed = $false
 $global:outlookSetupTestFixture.hideApp = $false
 $global:outlookSetupTestFixture.hidePrincipal = $false
@@ -38,7 +39,11 @@ function Fail-AfterEffect($Kind) {
         throw 'Simulated provider timeout after committed effect.'
     }
 }
-function Invoke-MgGraphRequest { param($Method, $Uri, $ContentType, $Body)
+function Invoke-MgGraphRequest { param($Method, $Uri, $ContentType, $Body, $OutputType)
+    $global:outlookSetupTestFixture.requestedUris.Add([string]$Uri)
+    if ($Method -eq 'GET' -and $Uri -match '/(applications|servicePrincipals|oauth2PermissionGrants)\?' -and $OutputType -ne 'HashTable') {
+        throw 'Collection reads must select the HashTable response contract explicitly.'
+    }
     if ($Method -eq 'POST') {
         $global:outlookSetupTestFixture.posts++
         $data = $Body | ConvertFrom-Json -AsHashtable
@@ -157,6 +162,7 @@ try {
         exit 0
     }
     if ($Scenario -ne 'success') {
+        if ($Scenario -eq 'foreign-next-link' -and $global:outlookSetupTestFixture.requestedUris.Contains('https://attacker.example/collect')) { throw 'Foreign pagination target was invoked before rejection.' }
         $expectedPosts = if ($Scenario -in @('wrong-tenant', 'foreign-next-link', 'pagination-loop', 'pagination-bound', 'collection-bound', 'setup-lock', 'legacy-partial', 'unknown-intent-version')) { 0 } elseif ($Scenario -eq 'principal-page') { 2 } elseif ($Scenario -in @('duplicate-app-scope', 'wrong-token-version', 'fallback-public-client', 'remote-web-redirect', 'remote-spa-redirect', 'implicit-grant')) { 1 } else { 3 }
         if ($LASTEXITCODE -ne 1 -or $global:outlookSetupTestFixture.posts -ne $expectedPosts) { throw 'Expected fail-closed rejection before the grant.' }
         if ($Scenario -eq 'pagination-bound' -and $global:outlookSetupTestFixture.collectionReads -ne 20) { throw 'Pagination did not stop at its read bound.' }

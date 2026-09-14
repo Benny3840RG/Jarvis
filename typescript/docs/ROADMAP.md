@@ -15,6 +15,14 @@ reconciliation. Fresh full verification and independent review are recorded on
 the existing PR before Benny's merge decision. #293/#294/#297 remain open for
 approved live consent and provider evidence; no Microsoft effect is performed.
 
+Jarvis review of integration head `cbcb09b` found a valid foreign-pagination
+test gap. The mock now records every requested URI and fails if the foreign
+target is invoked, even when setup later rejects and creates nothing. A temporary
+guard-bypass mutation passes the old test and fails the repaired test; the intact
+guard passes. Collection reads also select `HashTable` explicitly. The Microsoft
+SDK already defaults to that type; the review's claimed `PSCustomObject` default
+was incorrect. Fresh exact-head full verification and re-review remain required.
+
 ## Recovery engineering update (2026-09-11)
 
 The bounded recovery candidate now captures existing S4 evidence and mutable-quote

@@ -62,7 +62,8 @@ try {
             }
             if ($seen.ContainsKey($Uri) -or $seen.Count -ge 20) { throw 'Microsoft Graph pagination could not be reconciled within its bound.' }
             $seen[$Uri] = $true
-            $page = Invoke-MgGraphRequest -Method GET -Uri $Uri
+            # Select the SDK's HashTable contract explicitly, independent of caller defaults.
+            $page = Invoke-MgGraphRequest -Method GET -Uri $Uri -OutputType HashTable
             if ($page -isnot [Collections.IDictionary] -or -not $page.Contains('value') -or $null -eq $page.value) { throw 'Invalid Microsoft Graph collection response.' }
             foreach ($record in $page.value) {
                 if ($records.Count -ge 1000) { throw 'Microsoft Graph collection exceeds its reconciliation bound.' }
