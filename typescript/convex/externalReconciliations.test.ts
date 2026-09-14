@@ -934,9 +934,12 @@ describe("releaseClaim retry-scheduling latency boundary", () => {
   it("does not stretch a short, genuinely-future retry hint out to an arbitrary floor", async () => {
     // A worker configured with a small maxRetryMs (fast retries) computes a hint only
     // a few milliseconds past now -- this is not stale, so the clamp must not silently
-    // override that worker's own retry cadence with a larger minimum gap.
+    // override that worker's own retry cadence with a larger minimum gap. The mutation's
+    // internal Date.now() is pinned via fake timers so this assertion is deterministic
+    // regardless of how long the mutation actually takes to execute.
     const t = harness();
     const claimTime = Date.now();
+    vi.useFakeTimers({ now: claimTime });
     await t.run((ctx) =>
       seedClaimedReconciliation(ctx, {
         leaseExpiresAt: claimTime + 60_000,
