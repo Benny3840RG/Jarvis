@@ -101,7 +101,6 @@ export class ReconciliationWorker {
     const claim = await this.store.claimNext({
       workerId: input.workerId,
       leaseToken,
-      now: claimNow,
       leaseMs: positiveInteger(input.leaseMs, "Reconciliation lease duration"),
     });
     if (!claim) return { status: "idle" };
@@ -113,7 +112,6 @@ export class ReconciliationWorker {
         reconciliationId,
         input.workerId,
         leaseToken,
-        claimNow,
         "provider-reference-missing",
         claimNow,
         1,
@@ -123,15 +121,7 @@ export class ReconciliationWorker {
     const adapter = this.registry.get(reference.provider);
     if (!adapter) {
       const reason = `unknown-provider:${reference.provider}`;
-      return this.release(
-        reconciliationId,
-        input.workerId,
-        leaseToken,
-        claimNow,
-        reason,
-        claimNow,
-        1,
-      );
+      return this.release(reconciliationId, input.workerId, leaseToken, reason, claimNow, 1);
     }
 
     let providerResult: ProviderReconciliationResult;
@@ -147,14 +137,12 @@ export class ReconciliationWorker {
         reconciliationId,
         input.workerId,
         leaseToken,
-        completionNow,
         errorCode,
         nextAttemptAt,
         this.maxAttempts,
       );
     }
 
-    const completionNow = this.now();
     if (
       providerResult.status === "succeeded" ||
       providerResult.status === "failed" ||
@@ -164,7 +152,6 @@ export class ReconciliationWorker {
         reconciliationId,
         workerId: input.workerId,
         leaseToken,
-        now: completionNow,
         result: providerResult,
       });
       return {
@@ -174,6 +161,7 @@ export class ReconciliationWorker {
       };
     }
 
+    const completionNow = this.now();
     const requestedDelay = providerResult.retryAfterMs;
     const retryDelay =
       requestedDelay === undefined
@@ -186,7 +174,6 @@ export class ReconciliationWorker {
       reconciliationId,
       input.workerId,
       leaseToken,
-      completionNow,
       providerResult.errorCode,
       completionNow + retryDelay,
       this.maxAttempts,
@@ -202,7 +189,6 @@ export class ReconciliationWorker {
     reconciliationId: string,
     workerId: string,
     leaseToken: string,
-    now: number,
     errorCode: string,
     nextAttemptAt: number,
     maxAttempts: number,
@@ -211,7 +197,6 @@ export class ReconciliationWorker {
       reconciliationId,
       workerId,
       leaseToken,
-      now,
       errorCode,
       nextAttemptAt,
       maxAttempts,

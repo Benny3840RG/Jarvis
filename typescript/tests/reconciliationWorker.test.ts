@@ -90,21 +90,18 @@ class FakeStore implements ExternalReconciliationStore {
   readonly claimCalls: Array<{
     workerId: string;
     leaseToken: string;
-    now: number;
     leaseMs: number;
   }> = [];
   readonly resolveCalls: Array<{
     reconciliationId: string;
     workerId: string;
     leaseToken: string;
-    now: number;
     result: Exclude<ProviderReconciliationResult, { status: "unresolved" }>;
   }> = [];
   readonly releaseCalls: Array<{
     reconciliationId: string;
     workerId: string;
     leaseToken: string;
-    now: number;
     errorCode: string;
     nextAttemptAt: number;
     maxAttempts: number;
@@ -139,7 +136,6 @@ class FakeStore implements ExternalReconciliationStore {
   async claimNext(input: {
     workerId: string;
     leaseToken: string;
-    now: number;
     leaseMs: number;
   }): Promise<ExternalReconciliationClaim | null> {
     this.claimCalls.push(input);
@@ -152,7 +148,7 @@ class FakeStore implements ExternalReconciliationStore {
         ...next.reconciliation,
         leaseOwner: input.workerId,
         leaseToken: input.leaseToken,
-        leaseExpiresAt: input.now + input.leaseMs,
+        leaseExpiresAt: Date.now() + input.leaseMs,
       },
     };
   }
@@ -161,7 +157,6 @@ class FakeStore implements ExternalReconciliationStore {
     reconciliationId: string;
     workerId: string;
     leaseToken: string;
-    now: number;
     result: Exclude<ProviderReconciliationResult, { status: "unresolved" }>;
   }): Promise<ToolExecutionReceipt> {
     this.resolveCalls.push(input);
@@ -172,7 +167,6 @@ class FakeStore implements ExternalReconciliationStore {
     reconciliationId: string;
     workerId: string;
     leaseToken: string;
-    now: number;
     errorCode: string;
     nextAttemptAt: number;
     maxAttempts: number;
@@ -184,13 +178,14 @@ class FakeStore implements ExternalReconciliationStore {
       leaseToken: input.leaseToken,
     });
     const escalated = current.attemptCount >= input.maxAttempts;
+    const now = Date.now();
     return {
       ...current,
       state: escalated ? "escalated" : "pending",
       nextAttemptAt: input.nextAttemptAt,
       lastErrorCode: input.errorCode,
-      ...(escalated ? { escalationReason: input.errorCode, escalatedAt: input.now } : {}),
-      updatedAt: input.now,
+      ...(escalated ? { escalationReason: input.errorCode, escalatedAt: now } : {}),
+      updatedAt: now,
     };
   }
 
@@ -299,7 +294,6 @@ describe("ReconciliationWorker", () => {
         reconciliationId: "reconciliation-1",
         workerId: "worker-1",
         leaseToken: "lease-generated",
-        now: NOW,
         errorCode: "provider-still-processing",
         nextAttemptAt: NOW + 2_500,
         maxAttempts: 3,
