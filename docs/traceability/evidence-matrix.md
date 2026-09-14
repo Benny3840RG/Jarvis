@@ -8,8 +8,12 @@ Focused regressions cover configuration refusal, synthetic error and latency
 metadata, explicit rejection, unknown transport results, late acceptance and
 out-of-order delivery. The normal runtime still isolates telemetry failures from
 application outcomes. Exact tested SHA and full-gate/review evidence belong to
-the associated PR. Provider event and alert evidence remain **NOT_PROVEN**;
-transport acceptance alone does not close #303 or authorize production.
+the associated PR. [Claude's provider-readback record](https://github.com/Benny3840RG/Jarvis/issues/303#issuecomment-5658528064)
+closed #303 for runtime source `40393d04a31db81b2802199e3f234e99b4085464`,
+including the synthetic error/spans, redaction inspection and issue-alert trigger.
+That record does not prove this new CLI ran live or that aggregate metric-alert
+thresholds fired. Transport acceptance alone never supplies those observations
+or production authority.
 
 **Specification:** Jarvis Requirements v2.2  
 **Rule:** Evidence must be immutable or durably addressable and must identify the verified revision.
@@ -233,3 +237,35 @@ The route remains HTTP-only (`x-mcp-tool.exposed=false`) until a governed action
 binding exists. This is not yet a client-ready invoice document generator,
 automatic invoice-number consumer, bank/payment-provider reconciliation, credit
 or adjustment ledger, Convex transaction, or issued-artifact immutability proof.
+
+## Production continuation — Development Live Work (2026-09-11)
+
+Review repair 2026-09-14, PR #502: regression coverage now proves that CRLF
+objectives remain available as canonical LF and that multiline objectives cannot
+escape either terminal mission row at widths 64, 96 and 120, with and without
+colour. Bare carriage returns, escape sequences and NUL still fail closed at the
+read adapter. Source objectives are preserved.
+The distinct ISSUE node remains unavailable without provider binding, even for
+a MERGED mission; dashboard and terminal use that same identity/status contract.
+Exact candidate verification, review and provider limitations remain in the existing production completion
+ledger and PR; no commissioning or completion claim follows from these tests.
+
+Base revision: `fae9949fc1f9d1ce15729608384a6d32ec40b8cb`.
+Candidate results and eventual merge identity are maintained in the
+[production completion ledger](../operations/production-completion-ledger.md).
+
+- JARVIS-001 / JARVIS-006 / JARVIS-018: the existing ΩΣ policy and persistence
+  transition remain completion authority; HTTP/MCP/HUD project one read model.
+- Selection regressions cover idle, terminal exclusion, ambiguous active subjects,
+  old active subjects behind terminal history, explicit ΩΣ binding, and bounded
+  latest-event reads. No mission is selected by recency alone.
+- Renderer and real MCP-process scenarios distinguish unavailable, idle, repair,
+  indeterminate, merged/not-ready, synthetic ready, and persisted-state COMPLETE
+  rendering. Synthetic snapshots are not live provider completion evidence.
+- Restore-marker regressions prove forged planned filenames and late non-file
+  entries are rejected before any destination content is removed.
+- Current runtime evidence: both MCP tools read available/idle from the configured
+  development Convex query. This read-only check does not attest its deployed
+  revision or commission an active lifecycle. Synthetic scenarios remain labeled.
+  Production and external commissioning remain unproven, and the read model does
+  not invent missing uncertainty. Exact integration results are recorded in the ledger.

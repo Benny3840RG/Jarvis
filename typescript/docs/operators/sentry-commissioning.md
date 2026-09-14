@@ -1,8 +1,9 @@
 # Sentry development commissioning
 
-Issue #303 remains open until Sentry independently shows the expected events and
-proven alert behaviour. This command prepares a bounded transport observation;
-it cannot establish provider retention, alert activation or mission completion.
+Issue #303 is closed with [independent provider-readback evidence](https://github.com/Benny3840RG/Jarvis/issues/303#issuecomment-5658528064)
+for the existing runtime at source `40393d04a31db81b2802199e3f234e99b4085464`.
+This command prepares a bounded transport observation; its return value cannot
+establish provider retention, alert activation or mission completion.
 
 Use an approved development project and install its DSN through the environment
 or ignored `.env.local`, without copying credentials into terminal arguments,
@@ -47,7 +48,9 @@ and the separate alert-rule configuration and triggered alert evidence on #303.
 Do not infer those results from the command's exit code. A latency transaction
 does not itself prove a latency threshold alert fired.
 
-Current live blocker: authenticated Sentry project/DSN/query access is absent
-from this implementation session. The command was tested with synthetic
-transport responses only. Benny's production approval, existing Jarvis policy
-and ΩΣ completion remain separate boundaries.
+The recorded provider proof used the existing runtime directly, not this CLI.
+This command was tested with synthetic transport responses only. Any future
+live probe still requires an approved development project and authenticated
+provider readback; do not repeat a probe merely because this tool was merged.
+Benny's production approval, existing Jarvis policy and ΩΣ completion remain
+separate boundaries.

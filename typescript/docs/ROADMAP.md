@@ -14,12 +14,42 @@ configuration and a clean source checkout, emits two synthetic observations,
 and reports event IDs without DSNs, tokens or payloads. Late acceptance cannot
 rewrite a timed-out observation; responses may arrive in either order.
 
-This is repository-side preparation only. Sentry event visibility, redaction
-inspection and alert activation still require independent provider evidence.
-The authenticated Sentry connector remains an owner gate; #303 stays open.
-See [the commissioning runbook](operators/sentry-commissioning.md). Next: exact-head
-full verification, independent Claude/Jarvis review, then an approved development
-probe with authenticated provider readback. No production operation is included.
+Issue #303 is now closed with [Claude's provider-readback evidence](https://github.com/Benny3840RG/Jarvis/issues/303#issuecomment-5658528064)
+for source `40393d04a31db81b2802199e3f234e99b4085464`: the synthetic error,
+latency/failure spans, release/environment identity, redaction inspection and
+issue-alert trigger were observed in Sentry. That proof exercised the existing
+runtime directly; it does not claim this new CLI was used or that the aggregate
+metric-alert thresholds fired. No provider probe was repeated during integration.
+See [the commissioning runbook](operators/sentry-commissioning.md). Next: fresh
+verification and independent Claude/Jarvis review of #527 against current main,
+then Benny merge. Production authority remains separate.
+
+## Live Work review repair (2026-09-14)
+
+Benny merged PR #502 as `e9b76439dd0afdf0846a872c74ff16af89524626`.
+Issue #398 is now closed with owner-recorded live merge evidence. The following
+paragraphs preserve the earlier review history and do not reopen those gates.
+
+Earlier review record: Review run `34736290718` exposed two reproduced defects: CRLF
+objectives made the read projection unavailable, and accepted multiline
+objectives escaped terminal row framing. The adapter now canonicalizes CRLF;
+terminal rendering flattens line breaks before clipping both objective rows.
+Claude's independent review also identified duplicate mission labels. The stable
+`issue` node now displays ISSUE/unavailable rather than presenting mission
+progress or subject IDs as provider issue evidence.
+Stored objectives and completion authority are unchanged. Regression evidence
+and remaining gates are recorded in the production completion ledger.
+
+Next: full candidate verification, Claude review, then current Jarvis PASS.
+Jarvis run `34795454961` returned 15 passes and one context request for an
+unrelated notes-route description. That correction is removed from #502's scope;
+the notes documentation follow-up must include its existing handler/test context
+and independently establish the execute route. The blocked result is preserved,
+and the narrowed candidate requires new verification and review.
+Priority 1 issue #398 still requires owner activation/readback and an ordinary
+PR drill; PR #526's green review alone does not establish live enforcement.
+Priority 2 commissioning and Priority 3–4 recovery/orchestration gates remain
+open; this rendering repair does not complete them.
 
 ## Recovery engineering update (2026-09-11)
 
@@ -76,14 +106,22 @@ gates do not make these local gaps complete. See
   OIDC provider, production deployment approval). These need operator-supplied
   credentials/decisions and are not actionable by an autonomous coding session.
 
-## Archive v4 manifest review (2026-09-10)
+## Production reconciliation (2026-09-11)
 
-- S1 adds strict manifest parsing, coverage metadata and SHA-256 digest format
-  validation. Full recovery reparses the manifest and refuses forged completeness.
-- Every manifest remains partial until a real restore verifier is implemented;
-  group presence and reference descriptions do not prove recovery integrity.
-- Next: S2 core/memory capture and isolated restore, then S3 business records
-  and settings; complete recovery remains gated on the later domain/verifier work.
+Base: `fae9949fc1f9d1ce15729608384a6d32ec40b8cb` (PR #501).
+
+- Archive v4 captures core, memory, business records and settings. The isolated
+  restore verifier reads ordinary stores and verifies references and digests.
+  The old S1-only/S2-next status is superseded by merged #492 and #501.
+- Complete recovery remains unavailable: notes/evidence, durable orchestration,
+  quote aggregates/delivery history and artifact recovery still need capture,
+  domain-aware restoration and read-back proof. Group presence alone is not proof.
+- Development Live Work is being completed on the existing Convex/HTTP/MCP path.
+  Idle, unavailable and ambiguous selection are distinct; ΩΣ readiness cannot
+  commit COMPLETE. Current ΩΣ storage does not persist residual uncertainty,
+  so the read-only query honestly reports that missing readiness input.
+- Current evidence and remaining commissioning gates are recorded in
+  [the production ledger](../../docs/operations/production-completion-ledger.md).
 
 ## This session's work
 
@@ -140,17 +178,11 @@ rather than an occasional operator action.
 
 ## Next steps
 
-1. **Phase 2 of backup coverage: the cross-referenced business domains.**
-   Clients, quotes, invoices, projects, properties, enquiries, and errands
-   are NOT in the backup archive. These are harder than phase 1: they're
-   densely cross-referenced by id (a quote holds `clientId`; an invoice holds
-   `quoteId` and `clientId`; a project can hold both). Restoring them safely
-   needs the explicit reference inventory in
-   [the v4 contract](architecture/backup-v4-contract.md): preserve logical IDs
-   in an empty destination and translate platform-generated IDs, including
-   string-typed references, with table-scoped maps. Existing `add()` APIs do
-   not necessarily preserve IDs. Verify the complete reference graph rather
-   than applying an untyped global string replacement.
+1. **Complete remaining archive v4 domains.** Core/memory and cross-referenced
+   business records are implemented in v4. Next are notes/evidence and durable
+   orchestration, including replay identities and reference validation. Preserve
+   logical IDs in an empty destination; translate platform IDs with typed,
+   table-scoped maps. Follow [the v4 contract](architecture/backup-v4-contract.md).
 2. **Quote delivery / PDF artifact backup.** The delivery-attempt/outcome ledger
    is authoritative history, including failed and indeterminate outcomes;
    re-sending cannot restore it. PDF bytes are only conditionally regenerable
