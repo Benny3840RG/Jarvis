@@ -142,7 +142,6 @@ class ReconciliationStore implements ExternalReconciliationStore {
     reconciliationId: string;
     workerId: string;
     leaseToken: string;
-    now: number;
     result: Exclude<ProviderReconciliationResult, { status: "unresolved" }>;
   }): Promise<ToolExecutionReceipt> {
     throw new Error("not used");

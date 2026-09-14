@@ -492,7 +492,6 @@ class FakeReconciliationStore implements ExternalReconciliationStore {
     reconciliationId: string;
     workerId: string;
     leaseToken: string;
-    now: number;
     result: Exclude<ProviderReconciliationResult, { status: "unresolved" }>;
   }): Promise<ToolExecutionReceipt> {
     throw new Error("not used in this test");
@@ -502,7 +501,6 @@ class FakeReconciliationStore implements ExternalReconciliationStore {
     reconciliationId: string;
     workerId: string;
     leaseToken: string;
-    now: number;
     errorCode: string;
     nextAttemptAt: number;
     maxAttempts: number;

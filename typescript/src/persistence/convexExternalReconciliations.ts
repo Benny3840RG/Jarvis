@@ -368,7 +368,6 @@ export class ConvexExternalReconciliationStore
   async claimNext(input: {
     workerId: string;
     leaseToken: string;
-    now: number;
     leaseMs: number;
   }): Promise<ExternalReconciliationClaim | null> {
     const row = await this.client.mutation(externalReconciliationFunctions.claimNext, {
@@ -407,7 +406,6 @@ export class ConvexExternalReconciliationStore
     reconciliationId: string;
     workerId: string;
     leaseToken: string;
-    now: number;
     result: Exclude<ProviderReconciliationResult, { status: "unresolved" }>;
   }): Promise<ToolExecutionReceipt> {
     const row = await this.client.mutation(externalReconciliationFunctions.resolveClaim, {
@@ -421,7 +419,6 @@ export class ConvexExternalReconciliationStore
     reconciliationId: string;
     workerId: string;
     leaseToken: string;
-    now: number;
     errorCode: string;
     nextAttemptAt: number;
     maxAttempts: number;

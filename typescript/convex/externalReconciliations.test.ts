@@ -33,6 +33,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllEnvs();
+  vi.useRealTimers();
 });
 
 describe("external reconciliation safety evidence", () => {
@@ -126,6 +127,7 @@ describe("claimNext lease-expiry reclaim (worker-crash recovery)", () => {
   it("reclaims a claimed record whose lease has expired for a different worker", async () => {
     const t = harness();
     const now = Date.now();
+    vi.useFakeTimers({ now });
     const recordId = await t.run((ctx) =>
       seedClaimedReconciliation(ctx, {
         leaseExpiresAt: now - 1_000,
@@ -138,7 +140,6 @@ describe("claimNext lease-expiry reclaim (worker-crash recovery)", () => {
       serviceToken: SERVICE_TOKEN,
       workerId: "worker-B",
       leaseToken: "lease-token-B",
-      now,
       leaseMs: 30_000,
     });
 
@@ -176,11 +177,50 @@ describe("claimNext lease-expiry reclaim (worker-crash recovery)", () => {
       serviceToken: SERVICE_TOKEN,
       workerId: "worker-B",
       leaseToken: "lease-token-B",
-      now,
       leaseMs: 30_000,
     });
 
     expect(claim).toBeNull();
+  });
+
+  it("regression: a caller-supplied clock can no longer skew lease/authority timing", async () => {
+    const t = harness();
+    const beforeCall = Date.now();
+    const recordId = await t.run((ctx) =>
+      seedClaimedReconciliation(ctx, {
+        leaseExpiresAt: beforeCall - 1_000,
+        leaseOwner: "worker-A",
+        leaseToken: "lease-token-A",
+      }),
+    );
+
+    // The lease/authority mutations must not accept a client-controlled clock at all
+    // (previously `now`) -- an attacker with a valid service token could otherwise steal
+    // a still-active lease by claiming with an inflated timestamp.
+    await expect(
+      t.mutation(api.externalReconciliations.claimNext, {
+        serviceToken: SERVICE_TOKEN,
+        workerId: "worker-B",
+        leaseToken: "lease-token-B",
+        leaseMs: 30_000,
+        ...({ now: beforeCall + 10_000_000 } as Record<string, unknown>),
+      }),
+    ).rejects.toThrow();
+
+    const claim = await t.mutation(api.externalReconciliations.claimNext, {
+      serviceToken: SERVICE_TOKEN,
+      workerId: "worker-B",
+      leaseToken: "lease-token-B",
+      leaseMs: 30_000,
+    });
+    const afterCall = Date.now();
+
+    expect(claim).not.toBeNull();
+    expect(claim?.reconciliation._id).toBe(recordId);
+    // The lease expiry must derive from the server's own clock, bounded tightly around
+    // real wall-clock time -- not from anything a caller could have supplied.
+    expect(claim?.reconciliation.leaseExpiresAt).toBeGreaterThanOrEqual(beforeCall + 30_000);
+    expect(claim?.reconciliation.leaseExpiresAt).toBeLessThanOrEqual(afterCall + 30_000);
   });
 });
 
@@ -201,7 +241,6 @@ describe("same-operation resume after proven non-effect", () => {
       reconciliationId: "reconciliation-1",
       workerId: "worker-A",
       leaseToken: "lease-token-A",
-      now,
       result: { status: "no-effect", evidenceDigest: "github-no-effect-evidence" },
     });
     expect(receipt.status).toBe("failed");
@@ -315,6 +354,7 @@ describe("terminal quote delivery projection", () => {
   it("atomically reconciles the quote delivery ledger when the provider succeeds", async () => {
     const t = harness();
     const now = Date.now();
+    vi.useFakeTimers({ now });
     await t.run(async (ctx) => {
       await seedClaimedReconciliation(ctx, {
         leaseExpiresAt: now + 30_000,
@@ -329,7 +369,6 @@ describe("terminal quote delivery projection", () => {
       reconciliationId: "reconciliation-1",
       workerId: "worker-A",
       leaseToken: "lease-token-A",
-      now,
       result: { status: "succeeded", outputDigest: "provider-output-digest" },
     });
 
@@ -382,7 +421,6 @@ describe("terminal quote delivery projection", () => {
       reconciliationId: "reconciliation-1",
       workerId: "worker-A",
       leaseToken: "lease-token-A",
-      now,
       result: { status: "failed", errorCode: "message-rejected" },
     });
 
@@ -424,7 +462,6 @@ describe("terminal quote delivery projection", () => {
         reconciliationId: "reconciliation-1",
         workerId: "worker-A",
         leaseToken: "lease-token-A",
-        now,
         result: { status: "failed", errorCode: "mailbox-disabled" },
       }),
     ).rejects.toThrow("conflicts with the provider result");
@@ -453,6 +490,7 @@ describe("observing-process crash recovery", () => {
   it("escalates an observing record abandoned for more than sixty seconds", async () => {
     const t = harness();
     const now = Date.now();
+    vi.useFakeTimers({ now });
     await t.run((ctx) =>
       seedObservingReconciliation(ctx, {
         reconciliationId: "stale-observing",
@@ -464,7 +502,6 @@ describe("observing-process crash recovery", () => {
       serviceToken: SERVICE_TOKEN,
       workerId: "worker-B",
       leaseToken: "lease-token-B",
-      now,
       leaseMs: 30_000,
     });
     expect(claim).toBeNull();
@@ -485,6 +522,7 @@ describe("observing-process crash recovery", () => {
   it("keeps an observation at the exact sixty-second boundary safe", async () => {
     const t = harness();
     const now = Date.now();
+    vi.useFakeTimers({ now });
     await t.run((ctx) =>
       seedObservingReconciliation(ctx, {
         reconciliationId: "boundary-observing",
@@ -496,7 +534,6 @@ describe("observing-process crash recovery", () => {
       serviceToken: SERVICE_TOKEN,
       workerId: "worker-B",
       leaseToken: "lease-token-B",
-      now,
       leaseMs: 30_000,
     });
     expect(claim).toBeNull();
@@ -516,6 +553,7 @@ describe("observing-process crash recovery", () => {
   it("leaves a fresh observing record alone while its sender may still be running", async () => {
     const t = harness();
     const now = Date.now();
+    vi.useFakeTimers({ now });
     await t.run((ctx) =>
       seedObservingReconciliation(ctx, {
         reconciliationId: "fresh-observing",
@@ -527,7 +565,6 @@ describe("observing-process crash recovery", () => {
       serviceToken: SERVICE_TOKEN,
       workerId: "worker-B",
       leaseToken: "lease-token-B",
-      now,
       leaseMs: 30_000,
     });
     expect(claim).toBeNull();

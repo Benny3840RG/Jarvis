@@ -180,7 +180,6 @@ class FakeReconciliationStore implements ExternalReconciliationStore {
   async claimNext(_input: {
     workerId: string;
     leaseToken: string;
-    now: number;
     leaseMs: number;
   }): Promise<ExternalReconciliationClaim | null> {
     return null;
@@ -190,7 +189,6 @@ class FakeReconciliationStore implements ExternalReconciliationStore {
     reconciliationId: string;
     workerId: string;
     leaseToken: string;
-    now: number;
     result: Exclude<ProviderReconciliationResult, { status: "unresolved" }>;
   }): Promise<ToolExecutionReceipt> {
     throw new Error("not used");
@@ -200,7 +198,6 @@ class FakeReconciliationStore implements ExternalReconciliationStore {
     reconciliationId: string;
     workerId: string;
     leaseToken: string;
-    now: number;
     errorCode: string;
     nextAttemptAt: number;
     maxAttempts: number;
