@@ -109,6 +109,12 @@ The tests prove the six-category in-process contract, fail-closed negative paths
 | R-105–R-111       | `invoiceHttp.test.ts`, `httpRouteContract.test.ts`, `httpOpenApiRouteAlignment.test.ts`, `openapi` contract lint | `/api/v1/invoices` is authenticated, served by the HTTP adapter, documented in OpenAPI and deliberately not exposed as an MCP tool             | Partial |
 | R-125–R-127       | `invoiceStore.test.ts`, `invoiceHttp.test.ts`, `httpRouteContract.test.ts`, `httpOpenApiRouteAlignment.test.ts`  | Invoice/payment truth is durable and server-derived, but PDF generation, provider reconciliation and automatic numbering remain open           | Partial |
 
+- PR maintenance base-drift visibility (#529):
+  `.github/automation/pr-maintenance-integration.test.mjs` exercises repeated
+  observations, changed-main updates, copied user markers, uncertain writes,
+  provider readback mismatch, pagination limits, candidate races and progress
+  of other eligible PRs. No review status or completion authority is produced.
+
 - Bounded documentation review context (#533):
   `paired-review-context.test.mjs` covers before/after local paths, relative links,
   ambiguous/external/absent references and isolation of unrelated code segments.

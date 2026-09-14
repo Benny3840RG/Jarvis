@@ -480,3 +480,168 @@ test("segmented preparation reports bounded failures and preserves retry budget"
     /retry budget/,
   );
 });
+
+function baseDriftFixture() {
+  const f = fixture();
+  f.pull.base.sha = "c".repeat(40);
+  const comments = [],
+    warnings = [],
+    infos = [];
+  f.core.warning = (message) => warnings.push(message);
+  f.core.info = (message) => infos.push(message);
+  f.github.rest.issues.listComments = async ({ page, per_page }) => ({
+    data: comments.slice((page - 1) * per_page, page * per_page),
+  });
+  f.github.rest.issues.createComment = async (args) => {
+    const comment = {
+      id: comments.length + 1,
+      body: args.body,
+      user: { login: "github-actions[bot]", type: "Bot" },
+    };
+    comments.push(comment);
+    f.writes.push({ kind: "comment", ...args });
+    return { data: comment };
+  };
+  f.github.rest.issues.updateComment = async (args) => {
+    const comment = comments.find((item) => item.id === args.comment_id);
+    comment.body = args.body;
+    f.writes.push({ kind: "comment-update", ...args });
+    return { data: comment };
+  };
+  f.github.rest.issues.getComment = async ({ comment_id }) => ({
+    data: comments.find((item) => item.id === comment_id),
+  });
+  return {
+    ...f,
+    comments,
+    warnings,
+    infos,
+    run: () => sweep({ github: f.github, owner: "o", repo: "r", core: f.core }),
+  };
+}
+
+test("base drift posts one exact observation and identical sweeps do not spam", async () => {
+  const f = baseDriftFixture();
+  assert.equal(await f.run(), null);
+  assert.equal(await f.run(), null);
+  assert.equal(f.comments.length, 1);
+  const body = f.comments[0].body;
+  for (const identity of [f.head, f.pull.base.sha, f.base])
+    assert.ok(body.includes(identity));
+  assert.match(body, /update.*main/i);
+  assert.match(body, /not.*review result/i);
+  assert.equal(f.writes.length, 1);
+});
+
+test("base drift updates the existing bot notice when main moves again", async () => {
+  const f = baseDriftFixture();
+  await f.run();
+  const nextMain = "d".repeat(40);
+  f.github.rest.repos.getBranch = async () => ({
+    data: { commit: { sha: nextMain } },
+  });
+  await f.run();
+  assert.equal(f.comments.length, 1);
+  assert.ok(f.comments[0].body.includes(nextMain));
+  assert.equal(
+    f.writes.filter((write) => write.kind === "comment-update").length,
+    1,
+  );
+});
+
+test("a copied marker in a user comment cannot suppress or receive the bot notice", async () => {
+  const f = baseDriftFixture();
+  await f.run();
+  f.comments[0].user = { login: "untrusted-user", type: "User" };
+  await f.run();
+  assert.equal(f.comments.length, 2);
+  assert.equal(
+    f.writes.filter((write) => write.kind === "comment-update").length,
+    0,
+  );
+});
+
+test("an uncertain committed comment is observed on the next sweep without duplicate publication", async () => {
+  const f = baseDriftFixture();
+  const create = f.github.rest.issues.createComment;
+  f.github.rest.issues.createComment = async (args) => {
+    await create(args);
+    throw new Error("provider timeout after commit");
+  };
+  await f.run();
+  assert.equal(f.comments.length, 1);
+  assert.ok(f.warnings.some((message) => message.includes("provider timeout")));
+  assert.equal(
+    f.infos.some((message) => message.includes("Observed base-drift notice")),
+    false,
+  );
+  await f.run();
+  assert.equal(f.comments.length, 1);
+  assert.equal(f.writes.length, 1);
+});
+
+test("unconfirmed comment readback is not reported as publication success", async () => {
+  const f = baseDriftFixture();
+  f.github.rest.issues.getComment = async () => ({
+    data: { id: 1, body: "different provider state" },
+  });
+  await f.run();
+  assert.equal(f.comments.length, 1);
+  assert.equal(
+    f.infos.some((message) => message.includes("Observed base-drift notice")),
+    false,
+  );
+  assert.ok(f.warnings.some((message) => /not confirmed/i.test(message)));
+});
+
+test("a failed base-drift notice does not prevent another eligible candidate being reviewed", async () => {
+  const f = baseDriftFixture();
+  const behind = structuredClone(f.pull);
+  behind.number = 11;
+  f.pull.base.sha = f.base;
+  f.github.rest.pulls.list = async () => [behind, f.pull];
+  f.github.rest.pulls.get = async ({ pull_number }) => ({
+    data: pull_number === 11 ? behind : f.pull,
+  });
+  f.github.rest.issues.listComments = async () => {
+    throw new Error("comments unavailable");
+  };
+  const selected = await f.run();
+  assert.equal(selected.pullNumber, 12);
+  assert.equal(f.writes.filter((write) => write.kind === "dispatch").length, 1);
+  assert.ok(
+    f.warnings.some((message) => message.includes("comments unavailable")),
+  );
+});
+
+test("base-drift comment history is bounded and incomplete evidence cannot trigger another comment", async () => {
+  const f = baseDriftFixture();
+  let pages = 0;
+  f.github.rest.issues.listComments = async () => {
+    pages++;
+    return {
+      data: Array.from({ length: 100 }, (_, i) => ({
+        id: pages * 100 + i,
+        body: "unrelated",
+        user: { login: "user", type: "User" },
+      })),
+    };
+  };
+  await f.run();
+  assert.equal(pages, 10);
+  assert.equal(f.writes.length, 0);
+  assert.ok(f.warnings.some((message) => /history.*bound/i.test(message)));
+});
+
+test("a candidate changing during comment inspection does not receive a stale notice", async () => {
+  const f = baseDriftFixture();
+  const list = f.github.rest.issues.listComments;
+  f.github.rest.issues.listComments = async (args) => {
+    const result = await list(args);
+    f.pull.head.sha = "e".repeat(40);
+    return result;
+  };
+  await f.run();
+  assert.equal(f.writes.length, 0);
+  assert.ok(f.warnings.some((message) => /changed/i.test(message)));
+});

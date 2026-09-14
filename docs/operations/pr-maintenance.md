@@ -40,8 +40,25 @@ and is reconstructed into a file on the isolated review runner. This preserves
 the full admitted context without exceeding per-environment-entry limits.
 The pinned Codex action already supplies `--skip-git-repo-check`; repeating
 that single-use flag in `codex-args` prevents the reviewer from starting.
-Only the separate trusted publisher has issue and pull-request write permissions
-for the advisory comment; the model runner retains read-only permissions.
+The separate trusted publisher has issue and pull-request write permissions for
+the advisory review comment. The trusted coordinator has issue-write permission
+for diagnostic base-drift notices; it checks out only the pinned workflow revision.
+The model runner retains read-only permissions.
+
+When a PR base differs from observed main, the sweep preserves its exact-base
+review gate and posts a diagnostic notice on that PR. It identifies the observed
+head, PR base and main SHA and asks the implementation owner to update the branch
+and rerun verification. It creates no review result, status, approval or completion
+record. Existing results retain their original SHA scope.
+
+The coordinator reads at most ten pages of 100 comments, recognizes only its
+GitHub Actions bot notice, and rechecks candidate/main identity before writing.
+It updates the same notice when the observation changes and leaves identical
+observations untouched. Failed or incomplete comment evidence remains unconfirmed;
+other eligible PRs still progress. After an uncertain write, the next sweep reads
+provider comments before deciding whether another write is needed. Successful
+writes require provider readback. Sweep concurrency remains serialized by the
+existing workflow group. Live notification proof requires this change on main.
 
 ## Limits and failure handling
 
