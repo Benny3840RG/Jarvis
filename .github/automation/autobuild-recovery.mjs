@@ -42,8 +42,8 @@ export function classifyAutobuildRecovery({ receipt, priorRetries = 0 } = {}) {
 
   const retryable =
     ["failure", "cancelled"].includes(buildResult) &&
-    (['failure', 'cancelled', 'unavailable'].includes(stages.dependencies) ||
-      ['failure', 'cancelled', 'unavailable'].includes(stages.worker));
+    (["failure", "cancelled", "unavailable"].includes(stages.dependencies) ||
+      ["failure", "cancelled", "unavailable"].includes(stages.worker));
 
   if (!retryable) {
     return { action: "block", reason: "non-retryable-build-failure" };
