@@ -6,6 +6,8 @@ it at the end of every session.
 
 ## Dependabot compatibility repair (2026-09-14)
 
+- Runtime and compiler constraints are declared in `typescript/package.json`;
+  update grouping and the Node type hold live in `.github/dependabot.yml`.
 - Separate major upgrades from the root production/development dependency groups;
   keep `@types/node` on the Node 24 runtime line.
 - PR #522 retains the Redocly CLI, convex-test, ESLint and typescript-eslint
