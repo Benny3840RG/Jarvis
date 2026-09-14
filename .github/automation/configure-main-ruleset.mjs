@@ -203,13 +203,11 @@ export async function configureMainRuleset({
     "Disabled preflight ruleset",
   );
 
-  let activated = false;
   try {
     await request(`/rulesets/${rulesetId}`, {
       method: "PUT",
       body: desiredMainRuleset("active"),
     });
-    activated = true;
     assertPolicy(
       await request(`/rulesets/${rulesetId}`),
       desiredMainRuleset("active"),
@@ -219,7 +217,6 @@ export async function configureMainRuleset({
     const branch = await request("/branches/main");
     if (branch?.protected !== true) throw new Error("GitHub does not report main protected.");
   } catch (error) {
-    if (!activated) throw error;
     try {
       await request(`/rulesets/${rulesetId}`, { method: "PUT", body: disabled });
     } catch {

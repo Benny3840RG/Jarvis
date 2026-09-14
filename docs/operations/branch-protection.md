@@ -122,8 +122,10 @@ repository branch ruleset. It creates its named ruleset disabled, verifies the
 exact preflight policy, activates it, then re-reads both the ruleset and effective
 `main` rules. The readback rejects any additional effective rule, including one
 inherited from another ruleset. If active readback fails, it disables the new
-ruleset again. It never deletes or silently edits the two stale disabled rulesets. A second
-successful run is read-only and reports the existing verified ruleset.
+ruleset again. An uncertain activation response also triggers that rollback, so
+an accepted request cannot silently leave unverified protection active. It never
+deletes or silently edits the two stale disabled rulesets. A second successful
+run is read-only and reports the existing verified ruleset.
 
 ## Rationale
 

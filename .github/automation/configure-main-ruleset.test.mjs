@@ -24,7 +24,11 @@ function expectedBranchRules(id) {
   }));
 }
 
-function successfulApi({ existingEnforcement, additionalEffectiveRules = [] } = {}) {
+function successfulApi({
+  existingEnforcement,
+  additionalEffectiveRules = [],
+  failActivationResponse = false,
+} = {}) {
   const calls = [];
   let enforcement = existingEnforcement ?? "disabled";
   const id = 9001;
@@ -70,6 +74,9 @@ function successfulApi({ existingEnforcement, additionalEffectiveRules = [] } = 
     }
     if (path === `/repos/Benny3840RG/Jarvis/rulesets/${id}` && method === "PUT") {
       enforcement = body.enforcement;
+      if (body.enforcement === "active" && failActivationResponse) {
+        throw new Error("connection lost after activation request");
+      }
       return json({ id, ...body });
     }
     if (path === "/repos/Benny3840RG/Jarvis/rules/branches/main" && method === "GET") {
@@ -235,6 +242,25 @@ test("apply rejects additional effective rules from another ruleset", async () =
   );
   const updates = fixture.calls.filter((call) => call.method === "PUT");
   assert.equal(updates.at(-1).body.enforcement, "disabled");
+});
+
+test("an uncertain activation response still rolls the ruleset back to disabled", async () => {
+  const fixture = successfulApi({ failActivationResponse: true });
+  await assert.rejects(
+    () =>
+      configureMainRuleset({
+        fetchImpl: fixture.fetchImpl,
+        repository,
+        confirmedRepository: repository,
+        token: "secret-value",
+      }),
+    /readback failed.*disabled again/i,
+  );
+  const updates = fixture.calls.filter((call) => call.method === "PUT");
+  assert.deepEqual(
+    updates.map((call) => call.body.enforcement),
+    ["active", "disabled"],
+  );
 });
 
 test("apply requires the exact repository confirmation and a token", async () => {
