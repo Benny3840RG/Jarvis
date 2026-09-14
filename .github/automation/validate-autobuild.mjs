@@ -99,6 +99,7 @@ function hardForbiddenPathReason(path) {
 }
 
 function testGatedPathReason(path, testAreas) {
+  if (TEST_PATH.test(path)) return null;
   if (!TEST_GATED_APPLICATION_PATHS.some((pattern) => pattern.test(path)))
     return null;
   const area = pathArea(path);
