@@ -52,7 +52,7 @@ describe("foldLiveWorkPipeline", () => {
     const pipeline = foldLiveWorkPipeline(
       snapshot({ subject: { ...snapshot().subject, state: "REVIEW" } }),
     );
-    assert.equal(node(pipeline.nodes, "issue").status, "done");
+    assert.equal(node(pipeline.nodes, "issue").status, "unavailable");
     assert.equal(node(pipeline.nodes, "ci").status, "done");
     assert.equal(node(pipeline.nodes, "review").status, "active");
     assert.equal(node(pipeline.nodes, "merge").status, "pending");
@@ -108,7 +108,7 @@ describe("foldLiveWorkPipeline", () => {
         subject: { subjectId: "mission-1", state: "SPECIFIED", updatedAt: 0 },
       }),
     );
-    assert.equal(node(pipeline.nodes, "issue").detail, "mission-1");
+    assert.equal(node(pipeline.nodes, "issue").detail, "Not recorded by the mission yet.");
     assert.match(node(pipeline.nodes, "pr").detail, /not recorded/i);
   });
 
@@ -387,15 +387,17 @@ it("blocks terminal workers despite a recorded unexpired lease", () => {
   }
 });
 
-it("labels the stable issue-key node as the recorded mission lifecycle", () => {
+it("does not infer issue identity or success from mission progress and repository metadata", () => {
   for (const repository of ["owner/repository", undefined]) {
     const pipeline = foldLiveWorkPipeline(
       snapshot({
-        subject: { ...snapshot().subject, subjectId: "subject-123", repository },
+        subject: { ...snapshot().subject, state: "MERGED", subjectId: "subject-123", repository },
       }),
     );
-    const mission = node(pipeline.nodes, "issue");
-    assert.equal(mission.label, "MISSION");
-    assert.equal(mission.detail, repository ? `subject-123 · ${repository}` : "subject-123");
+    const issue = node(pipeline.nodes, "issue");
+    assert.equal(issue.label, "ISSUE");
+    assert.equal(issue.status, "unavailable");
+    assert.equal(issue.detail, "Not recorded by the mission yet.");
+    assert.equal(node(pipeline.nodes, "mission").detail, "Ship the live-work HUD");
   }
 });

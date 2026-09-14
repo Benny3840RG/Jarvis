@@ -229,8 +229,10 @@ Review repair 2026-09-14, PR #502: regression coverage now proves that CRLF
 objectives remain available as canonical LF and that multiline objectives cannot
 escape either terminal mission row at widths 64, 96 and 120, with and without
 colour. Bare carriage returns, escape sequences and NUL still fail closed at the
-read adapter. Source objectives are preserved. Exact candidate verification,
-review and provider limitations remain in the existing production completion
+read adapter. Source objectives are preserved.
+The distinct ISSUE node remains unavailable without provider binding, even for
+a MERGED mission; dashboard and terminal use that same identity/status contract.
+Exact candidate verification, review and provider limitations remain in the existing production completion
 ledger and PR; no commissioning or completion claim follows from these tests.
 
 Base revision: `fae9949fc1f9d1ce15729608384a6d32ec40b8cb`.

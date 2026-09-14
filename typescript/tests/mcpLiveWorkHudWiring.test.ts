@@ -189,10 +189,10 @@ it("renders one mission mascot without duplicated overlay effects", () => {
   assert.equal((widget.match(/class="mission-mascot"/g) ?? []).length, 1);
 });
 
-it("labels the stable issue-key lifecycle node as Mission in the HUD", () => {
+it("distinguishes the issue card from the current mission in the HUD", () => {
   const node = widget.match(/id="lw-node-issue"[^\n]*/)?.[0];
   assert.ok(node);
-  assert.match(node, />Mission<\/span>/);
-  assert.match(node, /Awaiting mission\./);
-  assert.doesNotMatch(node, />Issue<|Awaiting issue/);
+  assert.match(node, />Issue<\/span>/);
+  assert.match(node, /Not recorded by the mission yet\./);
+  assert.doesNotMatch(node, />Mission<|Awaiting mission/);
 });

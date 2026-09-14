@@ -128,7 +128,7 @@ describe("renderLiveWorkTerminal", () => {
     for (const label of [
       "MISSION",
       "STAGE",
-      "MISSION",
+      "ISSUE",
       "PR",
       "WORKER",
       "REVIEW",
@@ -177,7 +177,7 @@ describe("renderLiveWorkTerminal", () => {
       renderLiveWorkTerminal({ status: "available", pipeline: bare }, { now: NOW }),
     );
     assert.match(text, /MISSION +mission-x/);
-    assert.doesNotMatch(text, /ISSUE/);
+    assert.match(text, /\? +ISSUE +Not recorded by the mission yet\./);
     assert.match(text, /PR +Not recorded by the mission yet\./);
     assert.match(text, /No mission events recorded yet\./);
   });

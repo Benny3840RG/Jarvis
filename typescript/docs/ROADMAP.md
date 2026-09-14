@@ -11,6 +11,9 @@ required. Review run `34736290718` exposed two reproduced defects: CRLF
 objectives made the read projection unavailable, and accepted multiline
 objectives escaped terminal row framing. The adapter now canonicalizes CRLF;
 terminal rendering flattens line breaks before clipping both objective rows.
+Claude's independent review also identified duplicate mission labels. The stable
+`issue` node now displays ISSUE/unavailable rather than presenting mission
+progress or subject IDs as provider issue evidence.
 Stored objectives and completion authority are unchanged. Regression evidence
 and remaining gates are recorded in the production completion ledger.
 

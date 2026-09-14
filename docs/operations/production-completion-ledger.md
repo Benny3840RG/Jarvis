@@ -8,16 +8,18 @@
 - BRANCH / PR: `codex/production-live-work-20260911`, #502. Final tested head
   and immutable external results are recorded in the PR slice handoff.
 - CURRENT TRUTH: review `34736290718` is blocked. Segments 13/14 identify
-  reproduced objective validation/rendering defects. Segments 10/11 describe
-  existing distinct objective/intake nodes, not duplicate mission selection;
-  the stable `issue` key and MISSION label intentionally make no GitHub issue
-  claim. Segment 12 requests producer context; this remains a review-context
+  reproduced objective validation/rendering defects. Claude independently
+  confirmed those defects and the duplicate mission labels in segments 10/11
+  in PR comment `5657626688`. The stable `issue` node now displays ISSUE and
+  unavailable because subject identity/progress is not provider issue evidence.
+  Segment 12 requests producer context; this remains a review-context
   blocker and is not waived by application tests.
 - FILES / BEHAVIOUR: Convex read adapter normalizes CRLF to LF after the input
   length bound, still rejects bare CR/unsafe controls, and preserves source
   data. Terminal objective and node detail rendering flatten line separators
-  before clipping. Tests, OpenAPI description, operator guide, roadmap and
-  evidence matrix accompany these two runtime changes.
+  before clipping. The read model, dashboard and terminal distinguish ISSUE
+  from MISSION. Tests, OpenAPI description, operator guide, roadmap and
+  evidence matrix accompany these runtime changes.
 - TESTS ADDED: mixed CRLF/LF read-model availability and non-mutation;
   multiline terminal rows at three widths, colour on/off, LF/CRLF/Unicode
   separators; bare and doubled CR rejection added to unsafe-control coverage.
@@ -26,13 +28,20 @@
   Before repair: 16 passed / 2 failed for unavailable CRLF and unflattened
   objective rows. After repair: 18 passed / 0 failed. Logs:
   `/tmp/jarvis-502-red-detail.log`, `/tmp/jarvis-502-green.log`.
+- ISSUE DISPLAY VERIFICATION: the same command plus
+  `tests/developmentLiveWork.test.ts tests/mcpLiveWorkHudWiring.test.ts`
+  passes 50 tests. Issue display regressions failed six assertions before the
+  second repair; logs `/tmp/jarvis-502-issue-red.log` and
+  `/tmp/jarvis-502-all-focused.log` preserve the observations.
 - FULL VERIFICATION: pending on the final committed candidate; no new full
-  success is asserted by this entry.
+  success is asserted by this entry. The first candidate's full run was
+  interrupted when Claude's additional findings arrived; it is not green proof.
 - RUNTIME / PROVIDER EVIDENCE: real adapter/projection/terminal code exercised
   against synthetic query responses; no cloud lifecycle or deployment proof.
 - SECURITY / GOVERNANCE: no new persistence, approval, completion or execution
   authority. Rejected controls remain rejected. No provider mutation.
-- CLAUDE REVIEW / JARVIS PASS: required on the new head; pending.
+- CLAUDE REVIEW / JARVIS PASS: Claude review findings were repaired; independent
+  review and Jarvis PASS are still required on the final new head.
 - BACKLOG / MATRIX: updated with bounded repair evidence and open gates.
 - RESIDUAL RISK: full candidate review, provider commissioning, residual
   uncertainty persistence, recovery and production acceptance remain open.

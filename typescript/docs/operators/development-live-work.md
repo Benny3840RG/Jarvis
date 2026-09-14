@@ -9,10 +9,10 @@ CRLF to LF while preserving stored source text; other ASCII control characters
 remain invalid. The terminal flattens line breaks before clipping each objective
 row. HTTP/MCP retain multiline objectives.
 
-The `mission` node describes the current objective. The legacy `issue` key is
-the mission intake phase, labelled MISSION because it has no independently
-observed GitHub issue binding. These are two views of the same mission, not two
-selected missions or proof of provider issue state.
+The `mission` node describes the current objective. The `issue` node is labelled
+ISSUE and remains unavailable because the projection has no independently
+observed GitHub issue binding. Mission progress, repository metadata and subject
+IDs do not establish provider issue identity or status.
 
 - Unconfigured JSON persistence: HTTP 200 with `status: unavailable` and
   `Development Live Work requires configured Convex persistence.`

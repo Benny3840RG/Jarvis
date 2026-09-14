@@ -326,9 +326,9 @@ export function foldLiveWorkPipeline(snapshot: LiveWorkSnapshot): LiveWorkPipeli
     },
     {
       key: "issue",
-      label: "MISSION",
-      status: phaseStatus(order, reached, STATE_ORDER.IDEA, STATE_ORDER.READY, false),
-      detail: repository ? `${subject.subjectId} · ${repository}` : subject.subjectId,
+      label: "ISSUE",
+      status: "unavailable",
+      detail: NOT_RECORDED,
     },
     {
       key: "pr",

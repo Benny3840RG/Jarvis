@@ -11368,6 +11368,7 @@
       },
       "LiveWorkNode": {
         "type": "object",
+        "description": "The mission node describes the objective. The issue node remains unavailable until an authoritative GitHub issue binding is recorded; mission progress alone does not prove issue state.",
         "additionalProperties": false,
         "required": ["key", "label", "status", "detail"],
         "properties": {
