@@ -28,6 +28,8 @@ function successfulApi({
   existingEnforcement,
   additionalEffectiveRules = [],
   failActivationResponse = false,
+  useNestedRulesetSource = false,
+  conflictingRulesetSource = false,
 } = {}) {
   const calls = [];
   let enforcement = existingEnforcement ?? "disabled";
@@ -80,7 +82,14 @@ function successfulApi({
       return json({ id, ...body });
     }
     if (path === "/repos/Benny3840RG/Jarvis/rules/branches/main" && method === "GET") {
-      return json([...expectedBranchRules(id), ...additionalEffectiveRules]);
+      const ownRules = expectedBranchRules(id).map((rule) =>
+        useNestedRulesetSource
+          ? { ...rule, ruleset_id: undefined, ruleset_source: { id } }
+          : conflictingRulesetSource
+            ? { ...rule, ruleset_source: { id: id + 1 } }
+          : rule,
+      );
+      return json([...ownRules, ...additionalEffectiveRules]);
     }
     if (path === "/repos/Benny3840RG/Jarvis/branches/main" && method === "GET") {
       return json({ name: "main", protected: true });
@@ -230,6 +239,33 @@ test("apply rejects additional effective rules from another ruleset", async () =
   const fixture = successfulApi({
     additionalEffectiveRules: [{ type: "deletion", ruleset_id: 8128 }],
   });
+  await assert.rejects(
+    () =>
+      configureMainRuleset({
+        fetchImpl: fixture.fetchImpl,
+        repository,
+        confirmedRepository: repository,
+        token: "secret-value",
+      }),
+    /effective main rules do not match/i,
+  );
+  const updates = fixture.calls.filter((call) => call.method === "PUT");
+  assert.equal(updates.at(-1).body.enforcement, "disabled");
+});
+
+test("apply accepts the alternate nested effective-rule source identifier", async () => {
+  const fixture = successfulApi({ useNestedRulesetSource: true });
+  const result = await configureMainRuleset({
+    fetchImpl: fixture.fetchImpl,
+    repository,
+    confirmedRepository: repository,
+    token: "secret-value",
+  });
+  assert.deepEqual(result, { action: "created", rulesetId: fixture.id, verified: true });
+});
+
+test("apply rejects conflicting direct and nested effective-rule identifiers", async () => {
+  const fixture = successfulApi({ conflictingRulesetSource: true });
   await assert.rejects(
     () =>
       configureMainRuleset({

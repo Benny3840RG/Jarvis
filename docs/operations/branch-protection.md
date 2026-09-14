@@ -121,9 +121,12 @@ The tool refuses a repository identity/default-branch mismatch or another active
 repository branch ruleset. It creates its named ruleset disabled, verifies the
 exact preflight policy, activates it, then re-reads both the ruleset and effective
 `main` rules. The readback rejects any additional effective rule, including one
-inherited from another ruleset. If active readback fails, it disables the new
-ruleset again. An uncertain activation response also triggers that rollback, so
-an accepted request cannot silently leave unverified protection active. It never
+inherited from another ruleset. It prefers GitHub's documented numeric
+`ruleset_id`, accepts a nested source ID for response compatibility, and rejects
+missing or conflicting source identities. If active readback fails, it disables
+the new ruleset again. An uncertain activation response also triggers that
+rollback, so an accepted request cannot silently leave unverified protection
+active. It never
 deletes or silently edits the two stale disabled rulesets. A second successful
 run is read-only and reports the existing verified ruleset.
 

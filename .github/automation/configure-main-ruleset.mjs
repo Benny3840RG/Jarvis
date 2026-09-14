@@ -123,7 +123,19 @@ function client(fetchImpl, token, repository) {
 
 function assertEffectiveRules(rules, rulesetId) {
   if (!Array.isArray(rules)) throw new Error("Effective branch rules are unavailable.");
-  if (rules.some((rule) => rule?.ruleset_id !== rulesetId)) {
+  const sourceId = (rule) => {
+    const direct = rule?.ruleset_id;
+    const nested =
+      rule?.ruleset_source && typeof rule.ruleset_source === "object"
+        ? rule.ruleset_source.id
+        : undefined;
+    const directValid = Number.isSafeInteger(direct) && direct > 0;
+    const nestedValid = Number.isSafeInteger(nested) && nested > 0;
+    if (directValid && nestedValid && direct !== nested) return undefined;
+    if (directValid) return direct;
+    return nestedValid ? nested : undefined;
+  };
+  if (rules.some((rule) => sourceId(rule) !== rulesetId)) {
     throw new Error("Effective main rules do not match the Jarvis policy.");
   }
   const actual = rules.map(({ type, parameters }) =>
