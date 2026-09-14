@@ -269,6 +269,21 @@ rather than an occasional operator action.
   proposals, arbitrary payloads and effect/worker histories remain unsupported;
   whole-group coverage remains partial with no verified group.
 
+### Review base-drift visibility — issue #529
+
+The PR maintenance coordinator retains the exact-main review guard and records
+base mismatches in an owner-visible GitHub comment. It reuses the existing
+workflow and comment transport, recognizes its own diagnostic notice, updates
+changed observations and leaves identical observations untouched. Bounded comment
+reads, candidate re-observation and provider readback prevent false publication
+claims. An unavailable notice does not stop another eligible candidate. The
+trusted coordinator gains issue-write permission; the model remains read-only.
+This comment is diagnostic and never grants review, scheduling, approval or
+completion authority. Live notification proof awaits owner merge to main.
+
+Next: independent Claude review, current Jarvis evaluation, then Benny's merge
+decision and an observed stale-base notice from the maintained workflow.
+
 ### Documented implementation context — issue #533
 
 PR #482's bounded review exposed an omitted documentation-to-code relationship.
