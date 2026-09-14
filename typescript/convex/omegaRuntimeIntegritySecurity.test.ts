@@ -299,7 +299,6 @@ describe("Omega runtime integrity", () => {
       serviceToken: SERVICE_TOKEN,
       workerId: "omega-integrity-worker",
       leaseToken: "omega-integrity-lease",
-      now: 10_400,
       leaseMs: 60_000,
     });
     expect(reconciliationClaim?.reconciliation.reconciliationId).toBe(
@@ -311,7 +310,6 @@ describe("Omega runtime integrity", () => {
       reconciliationId: "omega-integrity-reconciliation",
       workerId: "omega-integrity-worker",
       leaseToken: "omega-integrity-lease",
-      now: 10_500,
       result: { status: "succeeded", outputDigest: "omega-integrity-output-digest" },
     });
     await drainScheduled(t);

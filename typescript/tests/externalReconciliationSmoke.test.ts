@@ -117,21 +117,21 @@ class SharedFakeReconciliationStore implements ExternalReconciliationStore {
   async claimNext(input: {
     workerId: string;
     leaseToken: string;
-    now: number;
     leaseMs: number;
   }): Promise<ExternalReconciliationClaim | null> {
     if (this.backend.failClaim) throw new Error("injected claim failure");
     const current = this.backend.reconciliation;
     const receipt = this.backend.receipt;
     if (!current || !receipt || current.state !== "pending") return null;
+    const now = Date.now();
     const claimed: ExternalReconciliationClaim["reconciliation"] = {
       ...current,
       state: "claimed",
       attemptCount: current.attemptCount + 1,
       leaseOwner: input.workerId,
       leaseToken: input.leaseToken,
-      leaseExpiresAt: input.now + input.leaseMs,
-      updatedAt: input.now,
+      leaseExpiresAt: now + input.leaseMs,
+      updatedAt: now,
     };
     this.backend.reconciliation = claimed;
     return { reconciliation: claimed, receipt };
@@ -141,7 +141,6 @@ class SharedFakeReconciliationStore implements ExternalReconciliationStore {
     reconciliationId: string;
     workerId: string;
     leaseToken: string;
-    now: number;
     result: Exclude<ProviderReconciliationResult, { status: "unresolved" }>;
   }): Promise<ToolExecutionReceipt> {
     const current = this.backend.reconciliation;
@@ -156,6 +155,7 @@ class SharedFakeReconciliationStore implements ExternalReconciliationStore {
       throw new Error("invalid reconciliation claim");
     }
     this.backend.resolveCalls += 1;
+    const now = Date.now();
     const terminalReceipt: ToolExecutionReceipt = {
       ...receipt,
       status: input.result.status === "succeeded" ? "succeeded" : "failed",
@@ -165,7 +165,7 @@ class SharedFakeReconciliationStore implements ExternalReconciliationStore {
       ...(input.result.status === "failed"
         ? { errorCode: "provider-failed" as const, providerErrorCode: input.result.errorCode }
         : { errorCode: undefined }),
-      completedAt: new Date(input.now).toISOString(),
+      completedAt: new Date(now).toISOString(),
     };
     const resolved: ExternalReconciliationRecord = {
       ...current,
@@ -175,8 +175,8 @@ class SharedFakeReconciliationStore implements ExternalReconciliationStore {
         ? { resolutionDigest: input.result.outputDigest }
         : {}),
       ...(input.result.status === "failed" ? { resolutionErrorCode: input.result.errorCode } : {}),
-      updatedAt: input.now,
-      resolvedAt: input.now,
+      updatedAt: now,
+      resolvedAt: now,
     };
     this.backend.receipt = terminalReceipt;
     this.backend.reconciliation = resolved;
@@ -187,21 +187,21 @@ class SharedFakeReconciliationStore implements ExternalReconciliationStore {
     reconciliationId: string;
     workerId: string;
     leaseToken: string;
-    now: number;
     errorCode: string;
     nextAttemptAt: number;
     maxAttempts: number;
   }): Promise<ExternalReconciliationRecord> {
     const current = this.backend.reconciliation;
     if (!current) throw new Error("missing reconciliation");
+    const now = Date.now();
     const escalated = current.attemptCount >= input.maxAttempts;
     const updated: ExternalReconciliationRecord = {
       ...current,
       state: escalated ? "escalated" : "pending",
       nextAttemptAt: input.nextAttemptAt,
       lastErrorCode: input.errorCode,
-      ...(escalated ? { escalationReason: input.errorCode, escalatedAt: input.now } : {}),
-      updatedAt: input.now,
+      ...(escalated ? { escalationReason: input.errorCode, escalatedAt: now } : {}),
+      updatedAt: now,
     };
     this.backend.reconciliation = updated;
     return updated;

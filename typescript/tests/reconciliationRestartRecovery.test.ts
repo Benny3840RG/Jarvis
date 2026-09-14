@@ -39,7 +39,6 @@ it("allows a fresh worker process to reclaim and resolve an expired lease", asyn
     async claimNext(input: {
       workerId: string;
       leaseToken: string;
-      now: number;
       leaseMs: number;
     }): Promise<ExternalReconciliationClaim | null> {
       claimCalls += 1;
@@ -66,9 +65,9 @@ it("allows a fresh worker process to reclaim and resolve an expired lease", asyn
           nextAttemptAt: now - 5_000,
           leaseOwner: input.workerId,
           leaseToken: input.leaseToken,
-          leaseExpiresAt: input.now + input.leaseMs,
+          leaseExpiresAt: now + input.leaseMs,
           createdAt: now - 20_000,
-          updatedAt: input.now,
+          updatedAt: now,
         },
         receipt,
       };
@@ -110,7 +109,6 @@ it("allows a fresh worker process to reclaim and resolve an expired lease", asyn
       reconciliationId: "reconciliation-restart",
       workerId: "worker-after-restart",
       leaseToken: "fresh-process-lease",
-      now,
       result: { status: "succeeded", outputDigest: "restart-digest" },
     },
   ]);
