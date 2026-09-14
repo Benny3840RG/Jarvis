@@ -152,13 +152,7 @@ export function evaluateDiff({ files = [] } = {}) {
   );
   for (const area of sourceAreas) {
     if (!testAreas.has(area)) {
-      const affected = files
-        .map((file) => String(file.path ?? ""))
-        .filter((path) => pathArea(path) === area)
-        .join(", ");
-      reasons.push(
-        `source changes require a matching ${area} test change: ${affected}`,
-      );
+      reasons.push(`source changes require a matching ${area} test change`);
     }
   }
 
