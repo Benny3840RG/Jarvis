@@ -114,3 +114,8 @@ The tests prove the six-category in-process contract, fail-closed negative paths
   versions stopping before installation, import, sign-in or provider requests,
   and exact version selection on successful setup. All 31 offline provisioning
   scenarios pass; package provenance remains a documented operator prerequisite.
+
+- Outlook documentation context (#482 / #533): the runbook links the actual
+  provisioning, callback, token-store, connection and regression paths. The
+  bounded planner repair is separately tested against this candidate's source
+  inventory; links do not replace runtime/provider evidence or a current review.

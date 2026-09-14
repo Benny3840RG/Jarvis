@@ -252,3 +252,22 @@ An unavailable family (`EAFNOSUPPORT` or `EADDRNOTAVAIL`) is skipped only when
 `localhost` does not resolve to that family. This applies symmetrically to
 IPv4-only and IPv6-only hosts. Failure to bind a family that localhost does
 resolve to stops before consent and closes any listener already opened.
+
+### Maintained implementation and regression coverage
+
+- [Administrator provisioning](../../scripts/setup-outlook.ps1) owns registration,
+  single-user consent and durable recovery of uncertain setup effects. Its
+  [offline harness](../../scripts/test-outlook-setup.ps1) replaces Microsoft calls.
+- [Browser onboarding](../../typescript/src/auth/outlookOnboarding.ts) owns PKCE
+  and localhost callbacks; the [token store](../../typescript/src/auth/fileRefreshTokenStore.ts)
+  owns private-file validation and durable credential publication.
+- [Connection composition](../../typescript/src/auth/microsoftOutlookConnections.ts)
+  selects the mailbox and routes persisted provider references;
+  [runtime composition](../../typescript/src/auth/microsoftOutlookRuntime.ts)
+  retains the legacy single-account path.
+- [Onboarding regressions](../../typescript/tests/outlookOnboarding.test.ts) and
+  [connection regressions](../../typescript/tests/microsoftOutlookConnections.test.ts)
+  exercise the callback, token and sender-selection boundaries described above.
+
+These source references identify the maintained paths. They are not live OAuth,
+provider delivery or completion evidence.

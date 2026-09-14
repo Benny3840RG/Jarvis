@@ -311,3 +311,12 @@ The version check does not claim package integrity; the runbook records the
 separate trusted software provisioning prerequisite. All 31 offline provisioning
 scenarios pass, including two regressions that fail on the old installer path.
 Live OAuth and provider commissioning remain unproven.
+
+### Outlook documentation review context — 2026-09-14
+
+PR #482's runbook now names the authoritative provisioning, callback, token-store
+and connection-composition files and their offline regressions. The source map
+addresses the reviewer's explicit context request without changing runtime code
+or treating documentation as provider evidence. Issue #533 repairs the existing
+bounded planner's lookup of these paths; its trusted-main activation still needs
+Benny merge. Current Jarvis PASS remains unproven while that dependency is pending.
