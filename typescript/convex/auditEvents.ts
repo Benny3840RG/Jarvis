@@ -1,3 +1,4 @@
+import { publicAuditEvent } from "./publicEvidence.js";
 import { paginationOptsValidator, paginationResultValidator } from "convex/server";
 import { v } from "convex/values";
 
@@ -50,7 +51,7 @@ export const append = mutation({
     });
     const created = await ctx.db.get("auditEvents", id);
     if (!created) throw new Error("Audit event creation failed.");
-    return created;
+    return publicAuditEvent(created);
   },
 });
 
@@ -63,13 +64,15 @@ export const listRecent = query({
   returns: v.array(auditEventValidator),
   handler: async (ctx, args) => {
     const ownerId = requireOwner(args.serviceToken);
-    return ctx.db
-      .query("auditEvents")
-      .withIndex("by_owner_and_scope_key", (q) =>
-        q.eq("ownerId", ownerId).eq("scopeKey", scopeKey(args.projectKey)),
-      )
-      .order("desc")
-      .take(boundedLimit(args.limit));
+    return (
+      await ctx.db
+        .query("auditEvents")
+        .withIndex("by_owner_and_scope_key", (q) =>
+          q.eq("ownerId", ownerId).eq("scopeKey", scopeKey(args.projectKey)),
+        )
+        .order("desc")
+        .take(boundedLimit(args.limit))
+    ).map(publicAuditEvent);
   },
 });
 
@@ -87,11 +90,12 @@ export const listActivityPage = query({
   handler: async (ctx, args) => {
     const ownerId = requireOwner(args.serviceToken);
     requirePageSize(args.paginationOpts.numItems, "Activity");
-    return ctx.db
+    const result = await ctx.db
       .query("auditEvents")
       .withIndex("by_owner_and_created_at", (q) => q.eq("ownerId", ownerId))
       .order("desc")
       .paginate(args.paginationOpts);
+    return { ...result, page: result.page.map(publicAuditEvent) };
   },
 });
 
@@ -100,12 +104,14 @@ export const listByRequest = query({
   returns: v.array(auditEventValidator),
   handler: async (ctx, args) => {
     const ownerId = requireOwner(args.serviceToken);
-    return ctx.db
-      .query("auditEvents")
-      .withIndex("by_owner_and_request_id", (q) =>
-        q.eq("ownerId", ownerId).eq("requestId", args.requestId.trim()),
-      )
-      .order("desc")
-      .take(boundedLimit(args.limit));
+    return (
+      await ctx.db
+        .query("auditEvents")
+        .withIndex("by_owner_and_request_id", (q) =>
+          q.eq("ownerId", ownerId).eq("requestId", args.requestId.trim()),
+        )
+        .order("desc")
+        .take(boundedLimit(args.limit))
+    ).map(publicAuditEvent);
   },
 });

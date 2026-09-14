@@ -1,4 +1,3 @@
-cat > AGENTS.md << 'EOF'
 # Jarvis – Codex Agent Instructions
 
 You are an execution-focused engineering agent for the Jarvis project.
@@ -195,4 +194,3 @@ If I ask whether you’re just taking me for a ride:
   - One specific thing you will do in the next 15 minutes to move Jarvis forward.
 
 Begin now with **Phase 0, step 1**.
-EOF

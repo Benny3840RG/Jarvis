@@ -136,7 +136,7 @@ async function requireAction(
   return action;
 }
 
-function safetyBindingForAction(
+export function safetyBindingForAction(
   phase: Extract<SafetyPhase, "tool-stage" | "tool-approve" | "tool-revoke">,
   action: {
     destructive: boolean;

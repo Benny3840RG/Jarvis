@@ -366,6 +366,23 @@
       .quote-pipeline-button { width:100%; border:0; background:transparent; color:inherit; text-align:left; cursor:pointer; display:flex; justify-content:space-between; gap:12px; padding:0; }
       .quote-pipeline-button:hover strong,.quote-pipeline-button:focus-visible strong { color:var(--console-cyan); }
       .quote-detail-actions { display:flex; justify-content:flex-end; margin-top:10px; }
+      .livework-view { display:grid; gap:14px; align-content:start; }
+      .lw-pipeline { display:flex; flex-wrap:wrap; align-items:stretch; gap:6px; }
+      .lw-node { flex:1 1 128px; min-width:118px; display:grid; gap:5px; padding:10px; border:1px solid var(--line); border-radius:9px; background:rgba(5,6,10,.42); }
+      .lw-node .lw-label { display:flex; align-items:center; gap:6px; font-size:9px; font-weight:900; letter-spacing:.12em; text-transform:uppercase; color:var(--muted); }
+      .lw-node .lw-status { font-size:10px; font-weight:900; text-transform:uppercase; letter-spacing:.08em; }
+      .lw-node .lw-detail { font-size:10px; color:var(--muted); overflow-wrap:anywhere; }
+      .lw-dot { width:8px; height:8px; border-radius:999px; background:var(--muted); flex:none; }
+      .lw-node.done .lw-dot, .lw-node.done .lw-status { background:var(--green); color:var(--green); }
+      .lw-node.done .lw-status { background:transparent; }
+      .lw-node.active { border-color:var(--violet); }
+      .lw-node.active .lw-dot, .lw-node.active .lw-status { background:var(--violet); color:var(--violet); }
+      .lw-node.active .lw-status { background:transparent; }
+      .lw-node.blocked { border-color:var(--red); }
+      .lw-node.blocked .lw-dot, .lw-node.blocked .lw-status { background:var(--red); color:var(--red); }
+      .lw-node.blocked .lw-status { background:transparent; }
+      .lw-node.pending .lw-status, .lw-node.unavailable .lw-status { color:var(--muted); }
+      .lw-sep { align-self:center; color:var(--muted); font-size:14px; }
 </style>
   </head>
   <body><!-- JARVIS // OPERATOR CONSOLE · LANDSCAPE COMMAND CENTRE --><!-- JARVIS // OPERATOR CONSOLE · LANDSCAPE COMMAND CENTRE --><!-- JARVIS // OPERATOR CONSOLE · LANDSCAPE COMMAND CENTRE -->
@@ -425,6 +442,7 @@
                 <button class="rail-button" type="button" data-view="board"><span class="rail-icon">▦</span><span><strong>Task Board</strong><small>Durable queue</small></span><span class="rail-count" id="nav-board-count">0</span></button>
                 <button class="rail-button" type="button" data-view="reminders"><span class="rail-icon">◷</span><span><strong>Reminders</strong><small>Time contacts</small></span><span class="rail-count" id="nav-reminder-count">0</span></button>
                 <button class="rail-button" type="button" data-view="operations"><span class="rail-icon">⌁</span><span><strong>Operations</strong><small>Daily brief</small></span><span class="rail-count" id="nav-operations-count">0</span></button>
+                <button class="rail-button" type="button" data-view="livework"><span class="rail-icon">⛭</span><span><strong>Live Work</strong><small>Mission pipeline</small></span><span class="rail-count" id="nav-livework-count">0</span></button>
                 <button class="rail-button" type="button" data-view="systems"><span class="rail-icon">◇</span><span><strong>Systems</strong><small>Runtime layers</small></span><span class="rail-count" id="nav-system-count">0</span></button>
               </div>
             </nav>
@@ -567,6 +585,40 @@
                   </article>
                 </div>
               </section>
+              <section class="view" id="view-livework">
+                <div class="livework-view">
+                  <article class="panel green">
+                    <div class="panel-header"><h2>Live work</h2><span id="livework-state">STANDBY</span></div>
+                    <p class="eyebrow">CURRENT MISSION</p>
+                    <h3 id="livework-objective">Waiting for Jarvis…</h3>
+                    <p id="livework-subject">Live development mission state will appear here.</p>
+                  </article>
+                  <article class="panel violet">
+                    <div class="panel-header"><h2>Pipeline</h2><span>MISSION → ΩΣ</span></div>
+                    <div class="lw-pipeline" id="livework-pipeline" aria-label="Persisted mission stages"></div>
+                    <p id="livework-bindings"></p>
+                    <ul class="compact-list" id="livework-omega-failures"></ul>
+                  </article>
+                  <article class="panel violet">
+                    <div class="panel-header"><h2>Mission details</h2><span>DURABLE EVIDENCE</span></div>
+                    <div class="lw-pipeline" id="livework-details">
+                      <div class="lw-node" id="lw-node-mission"><span class="lw-label"><span class="lw-dot"></span>Current mission</span><b class="lw-status" id="lw-status-mission">—</b><span class="lw-detail" id="lw-detail-mission">Awaiting mission.</span></div>
+                      <div class="lw-node" id="lw-node-stage"><span class="lw-label"><span class="lw-dot"></span>Stage</span><b class="lw-status" id="lw-status-stage">—</b><span class="lw-detail" id="lw-detail-stage">Awaiting stage.</span></div>
+                      <div class="lw-node" id="lw-node-issue"><span class="lw-label"><span class="lw-dot"></span>Issue</span><b class="lw-status" id="lw-status-issue">—</b><span class="lw-detail" id="lw-detail-issue">Awaiting issue.</span></div>
+                      <div class="lw-node" id="lw-node-pr"><span class="lw-label"><span class="lw-dot"></span>PR</span><b class="lw-status" id="lw-status-pr">—</b><span class="lw-detail" id="lw-detail-pr">Awaiting PR.</span></div>
+                      <div class="lw-node" id="lw-node-worker"><span class="lw-label"><span class="lw-dot"></span>Worker</span><b class="lw-status" id="lw-status-worker">—</b><span class="lw-detail" id="lw-detail-worker">Awaiting worker.</span></div>
+                      <div class="lw-node" id="lw-node-review"><span class="lw-label"><span class="lw-dot"></span>Review</span><b class="lw-status" id="lw-status-review">—</b><span class="lw-detail" id="lw-detail-review">Awaiting review.</span></div>
+                      <div class="lw-node" id="lw-node-ci"><span class="lw-label"><span class="lw-dot"></span>CI</span><b class="lw-status" id="lw-status-ci">—</b><span class="lw-detail" id="lw-detail-ci">Awaiting verification.</span></div>
+                      <div class="lw-node" id="lw-node-merge"><span class="lw-label"><span class="lw-dot"></span>Merge</span><b class="lw-status" id="lw-status-merge">—</b><span class="lw-detail" id="lw-detail-merge">Awaiting merge.</span></div>
+                      <div class="lw-node" id="lw-node-omega"><span class="lw-label"><span class="lw-dot"></span>ΩΣ</span><b class="lw-status" id="lw-status-omega">—</b><span class="lw-detail" id="lw-detail-omega">Awaiting ΩΣ completion.</span></div>
+                    </div>
+                  </article>
+                  <article class="panel list-panel green">
+                    <div class="panel-header"><h2>Mission events</h2><span id="livework-events-status">AWAITING DATA</span></div>
+                    <ul class="compact-list scroll-list" id="livework-events"></ul>
+                  </article>
+                </div>
+              </section>
               <section class="view" id="view-systems">
                 <div class="systems-view">
                   <article class="panel violet">
@@ -628,7 +680,7 @@
     <script>
       (() => {
         "use strict";
-        const state = { status: null, lastStatusAt: 0, tasks: [], reminders: [], brief: null, quotes: [], quoteRegisterStatus: "unavailable", counts: { activeTasks: 0, completedTasks: 0, reminders: 0 }, captureMode: "task", activities: [], selectedQuoteSummary: null, selectedQuote: null, quoteDetailState: "empty", quoteRequestGeneration: 0, inbox: null, activity: null };
+        const state = { status: null, lastStatusAt: 0, tasks: [], reminders: [], brief: null, quotes: [], quoteRegisterStatus: "unavailable", counts: { activeTasks: 0, completedTasks: 0, reminders: 0 }, captureMode: "task", activities: [], selectedQuoteSummary: null, selectedQuote: null, quoteDetailState: "empty", quoteRequestGeneration: 0, inbox: null, activity: null, liveWork: null };
         const STATUS_STALE_MS = 45000;
         let rpcId = 0;
         let healthCheckInFlight = false;
@@ -676,7 +728,7 @@
             healthCheckInFlight = false;
           }
         }
-        function update(result) { const data = structured(result); if (!data || typeof data !== "object") return; if (data.status && typeof data.status === "object") { state.status = data.status; state.lastStatusAt = Date.now(); } if (Array.isArray(data.tasks)) state.tasks = data.tasks; if (Array.isArray(data.reminders)) state.reminders = data.reminders; if (data.brief && typeof data.brief === "object") state.brief = data.brief; if (data.quoteRegister && typeof data.quoteRegister === "object") { state.quoteRegisterStatus = data.quoteRegister.status === "ready" ? "ready" : "unavailable"; state.quotes = Array.isArray(data.quoteRegister.quotes) ? data.quoteRegister.quotes : []; } if ("inbox" in data) state.inbox = data.inbox; if ("activity" in data) state.activity = data.activity; if (data.counts && typeof data.counts === "object") state.counts = data.counts; else recalc(); render(); }
+        function update(result) { const data = structured(result); if (!data || typeof data !== "object") return; if (data.status && typeof data.status === "object") { state.status = data.status; state.lastStatusAt = Date.now(); } if (Array.isArray(data.tasks)) state.tasks = data.tasks; if (Array.isArray(data.reminders)) state.reminders = data.reminders; if (data.brief && typeof data.brief === "object") state.brief = data.brief; if (data.quoteRegister && typeof data.quoteRegister === "object") { state.quoteRegisterStatus = data.quoteRegister.status === "ready" ? "ready" : "unavailable"; state.quotes = Array.isArray(data.quoteRegister.quotes) ? data.quoteRegister.quotes : []; } if ("inbox" in data) state.inbox = data.inbox; if ("activity" in data) state.activity = data.activity; if ("liveWork" in data) state.liveWork = data.liveWork; if (data.counts && typeof data.counts === "object") state.counts = data.counts; else recalc(); render(); }
         window.addEventListener("message", (event) => { if (event.source !== window.parent) return; const message = event.data; if (!message || message.jsonrpc !== "2.0") return; if (typeof message.id === "number") { const waiting = pending.get(message.id); if (!waiting) return; pending.delete(message.id); if (message.error) waiting.reject(message.error); else waiting.resolve(message.result); return; } if (message.method === "ui/notifications/tool-result") update(message.params); }, { passive: true });
         const bridgeReady = (async () => { await request("ui/initialize", { appInfo: { name: "jarvis-dashboard", version: "0.2.0" }, appCapabilities: {}, protocolVersion: "2026-01-26" }); notify("ui/notifications/initialized", {}); bridgeInitialised = true; void checkConnectionHealth(true); activity("HUD bridge online", "MCP Apps connection initialised"); })();
         async function callTool(name, args = {}) { await bridgeReady; const result = await request("tools/call", { name, arguments: args }); update(result); return result; }
@@ -909,7 +961,54 @@
         function activityEventRow(event) { const row = document.createElement("li"); row.className = "activity-row"; const title = document.createElement("strong"); text(title,event.summary); const meta = document.createElement("small"); text(meta,`${event.actor} · ${new Date(event.occurredAt).toLocaleString("en-AU")}`); row.append(title,meta); return row; }
         function renderActivityTimeline() { const activity = state.activity; const statusEl = byId("activity-timeline-status"); if (!activity || activity.status === "unavailable") { text(statusEl,"DURABLE · UNAVAILABLE"); fillList(byId("activity-timeline-list"),[],() => empty(""),!activity ? "Activity timeline could not be reached." : activity.reason || "Activity timeline unavailable."); return; } text(statusEl,`DURABLE · ${activity.events.length} EVENT${activity.events.length === 1 ? "" : "S"}`); fillList(byId("activity-timeline-list"),activity.events,activityEventRow,"No recent activity."); }
         function renderCounts() { recalc(); text(byId("active-count"),state.counts.activeTasks); text(byId("done-count"),state.counts.completedTasks); text(byId("reminder-count"),state.counts.reminders); text(byId("telemetry-queue"),`${state.counts.activeTasks} TASKS`); text(byId("nav-focus-count"),state.counts.activeTasks ? 1 : 0); text(byId("nav-board-count"),state.tasks.length); text(byId("nav-reminder-count"),state.counts.reminders); }
-        function render() { renderCounts(); renderFocus(); renderBoard(); renderReminders(); renderSystems(); renderCategories(); renderPriorities(); renderRightReminders(); renderOperations(); renderActivity(); renderInbox(); renderActivityTimeline(); }
+        const LIVE_WORK_KEYS = ["mission", "stage", "issue", "pr", "worker", "review", "ci", "merge", "omega"];
+        function liveWorkNodeApply(key, status, detail) { const node = byId(`lw-node-${key}`); ["done", "active", "pending", "blocked", "unavailable"].forEach((name) => node.classList.toggle(name, name === status)); text(byId(`lw-status-${key}`), status ? String(status).toUpperCase() : "—"); text(byId(`lw-detail-${key}`), detail); }
+        function liveWorkRailRow(stage) { const node = document.createElement("div"); node.className = "lw-node"; ["done", "active", "pending", "blocked", "unavailable"].forEach((name) => node.classList.toggle(name, name === stage.status)); const label = document.createElement("span"); label.className = "lw-label"; const dot = document.createElement("span"); dot.className = "lw-dot"; const title = document.createElement("span"); text(title, stage.label); label.append(dot, title); const status = document.createElement("b"); status.className = "lw-status"; text(status, stage.status); node.append(label, status); return node; }
+        function clearLiveWorkRail(message) { fillList(byId("livework-pipeline"), [], () => empty(""), message); text(byId("livework-bindings"), ""); fillList(byId("livework-omega-failures"), [], () => empty(""), "Readiness not reported."); }
+        function renderLiveWork() {
+          const lw = state.liveWork;
+          const objective = byId("livework-objective");
+          const subject = byId("livework-subject");
+          const stateEl = byId("livework-state");
+          const eventsStatus = byId("livework-events-status");
+          if (!lw) {
+            clearLiveWorkRail("Live-work pipeline could not be reached.");
+            text(objective, "LIVE-WORK LINK UNAVAILABLE");
+            text(subject, "The development live-work pipeline could not be reached.");
+            text(stateEl, "OFFLINE");
+            LIVE_WORK_KEYS.forEach((key) => liveWorkNodeApply(key, "unavailable", "Could not be reached."));
+            text(eventsStatus, "UNAVAILABLE");
+            fillList(byId("livework-events"), [], () => empty(""), "Mission events could not be reached.");
+            text(byId("nav-livework-count"), 0);
+            return;
+          }
+          if (lw.status === "unavailable" || !lw.pipeline) {
+            const unavailable = lw.status === "unavailable";
+            const detail = unavailable ? lw.reason : "NO MISSION IN FLIGHT";
+            clearLiveWorkRail(detail);
+            text(objective, unavailable ? "LIVE WORK UNAVAILABLE" : "NO MISSION IN FLIGHT");
+            text(subject, detail);
+            text(stateEl, unavailable ? "UNAVAILABLE" : "IDLE");
+            LIVE_WORK_KEYS.forEach((key) => liveWorkNodeApply(key, unavailable ? "unavailable" : "pending", detail));
+            text(eventsStatus, unavailable ? "UNAVAILABLE" : "IDLE");
+            fillList(byId("livework-events"), [], () => empty(""), detail);
+            text(byId("nav-livework-count"), 0);
+            return;
+          }
+          const pipeline = lw.pipeline;
+          text(objective, pipeline.objective || pipeline.subjectId);
+          text(subject, [pipeline.repository, pipeline.branch].filter(Boolean).join(" · ") || pipeline.subjectId);
+          text(stateEl, pipeline.completionLabel || pipeline.state);
+          fillList(byId("livework-pipeline"), pipeline.rail || [], liveWorkRailRow, "Mission stages not reported.");
+          text(byId("livework-bindings"), `Subject version ${pipeline.subjectVersion ?? "unavailable"} · Run ${pipeline.orchestrationRunId ?? "unavailable"} · Node ${pipeline.orchestrationNodeId ?? "unavailable"} · Fence ${pipeline.fencingToken ?? "unavailable"}`);
+          fillList(byId("livework-omega-failures"), pipeline.omegaReadiness?.failures || [], (failure) => { const row = document.createElement("li"); text(row, failure); return row; }, pipeline.omegaReadiness ? "No readiness failures reported." : "Readiness not reported.");
+          const byKey = new Map((pipeline.nodes || []).map((node) => [node.key, node]));
+          LIVE_WORK_KEYS.forEach((key) => { const node = byKey.get(key); if (node) liveWorkNodeApply(key, node.status, node.detail); else liveWorkNodeApply(key, "unavailable", "Not reported."); });
+          text(eventsStatus, `${pipeline.events.length} EVENT${pipeline.events.length === 1 ? "" : "S"}`);
+          fillList(byId("livework-events"), pipeline.events.map((event) => ({ summary: event.summary, occurredAt: event.at, actor: "Development" })), activityEventRow, "No mission events recorded yet.");
+          text(byId("nav-livework-count"), pipeline.missionInFlight ? 1 : 0);
+        }
+        function render() { renderCounts(); renderFocus(); renderBoard(); renderReminders(); renderSystems(); renderCategories(); renderPriorities(); renderRightReminders(); renderOperations(); renderActivity(); renderInbox(); renderActivityTimeline(); renderLiveWork(); }
         function setCaptureMode(mode) { state.captureMode = mode; document.querySelectorAll("[data-capture]").forEach((button) => button.classList.toggle("active",button.dataset.capture === mode)); const category = byId("capture-category"); const due = byId("capture-due"); if (mode === "task") { text(byId("capture-title-label"),"Task command"); text(byId("capture-detail-copy"),"Category"); category.hidden = false; due.hidden = true; text(byId("capture-submit"),"ADD TASK"); } else { text(byId("capture-title-label"),"Reminder command"); text(byId("capture-detail-copy"),"When"); category.hidden = true; due.hidden = false; text(byId("capture-submit"),"SET REMINDER"); } }
         document.querySelectorAll("[data-view]").forEach((button) => button.addEventListener("click",() => { document.querySelectorAll("[data-view]").forEach((candidate) => candidate.classList.toggle("active",candidate === button)); document.querySelectorAll(".view").forEach((view) => view.classList.toggle("active",view.id === `view-${button.dataset.view}`)); }));
         document.querySelectorAll("[data-capture]").forEach((button) => button.addEventListener("click",() => setCaptureMode(button.dataset.capture)));

@@ -27,9 +27,11 @@ import type { TotalityPipeline } from "../totality/totalityPipeline.js";
 import type { ExternalReconciliationReadStore } from "../reconciliation/externalReconciliation.js";
 import type { RuntimeReconciliationHealth } from "../reconciliation/runtimeReconciliationHost.js";
 import type { ActivityEventReader } from "../operations/activityTimeline.js";
+import type { DevelopmentLiveWorkSource } from "../development/liveWork.js";
 import type { HttpAppConfig } from "./config.js";
 import type { OidcVerifier } from "./oidcVerifier.js";
 import { ActivityTimelineController } from "./activityTimelineController.js";
+import { DevelopmentLiveWorkController } from "./developmentLiveWorkController.js";
 import { BusinessSettingsController } from "./businessSettingsController.js";
 import { EnquiryController } from "./enquiryController.js";
 import { InvoiceController } from "./invoiceController.js";
@@ -77,6 +79,7 @@ import {
   HTTP_PREFERENCE_STORE,
   HTTP_NOTE_STORE,
   HTTP_ACTIVITY_EVENTS,
+  HTTP_DEVELOPMENT_LIVE_WORK,
   HTTP_MEMORY_CHANGE_SETS,
   HTTP_PERSISTENCE,
   HTTP_PROVIDER_NAME,
@@ -115,6 +118,7 @@ export type JarvisHttpModuleOptions = {
   preferenceStore: PreferenceStore;
   noteStore: NoteStore;
   activityEventReader: ActivityEventReader | null;
+  developmentLiveWorkSource: DevelopmentLiveWorkSource | null;
 };
 
 @Module({})
@@ -148,6 +152,7 @@ export class JarvisHttpModule {
         BriefController,
         OperationsInboxController,
         ActivityTimelineController,
+        DevelopmentLiveWorkController,
       ],
       providers: [
         { provide: HTTP_APP_CONFIG, useValue: options.config },
@@ -170,6 +175,10 @@ export class JarvisHttpModule {
         { provide: HTTP_PREFERENCE_STORE, useValue: options.preferenceStore },
         { provide: HTTP_NOTE_STORE, useValue: options.noteStore },
         { provide: HTTP_ACTIVITY_EVENTS, useValue: options.activityEventReader },
+        {
+          provide: HTTP_DEVELOPMENT_LIVE_WORK,
+          useValue: options.developmentLiveWorkSource,
+        },
         { provide: HTTP_PROVIDER_NAME, useValue: options.providerName },
         {
           provide: HTTP_RECONCILIATION_HEALTH,

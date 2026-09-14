@@ -724,3 +724,97 @@ describe("operator reconciliation reads", () => {
     ).rejects.toThrow("between 1 and 100");
   });
 });
+
+it("does not expose a claimed worker capability through owner read APIs", async () => {
+  const t = harness();
+  await t.run((ctx) =>
+    seedClaimedReconciliation(ctx, {
+      leaseOwner: "private-worker",
+      leaseToken: "private-worker-capability",
+      leaseExpiresAt: Date.now() + 60000,
+    }),
+  );
+  const scope = {
+    serviceToken: SERVICE_TOKEN,
+    projectId: "project-1",
+    tool: "quotes",
+    operation: "send",
+    idempotencyKey: "idempotency-1",
+    effectFingerprint: "effect-fingerprint-1",
+  };
+  const responses = [
+    await t.query(api.externalReconciliations.getByScope, scope),
+    await t.query(api.externalReconciliations.getForOperator, {
+      serviceToken: SERVICE_TOKEN,
+      reconciliationId: "reconciliation-1",
+    }),
+    await t.query(api.externalReconciliations.listForOperator, { serviceToken: SERVICE_TOKEN }),
+    await t.query(api.externalReconciliations.listForOperator, {
+      serviceToken: SERVICE_TOKEN,
+      state: "claimed",
+    }),
+  ];
+  for (const response of responses) {
+    expect(JSON.stringify(response)).not.toContain("private-worker-capability");
+    expect(JSON.stringify(response)).not.toContain("private-worker");
+  }
+  const stored = await t.run((ctx) => ctx.db.query("externalReconciliations").first());
+  expect(stored?.leaseToken).toBe("private-worker-capability");
+});
+
+it("keeps existing capabilities private in ordinary attempt mutation responses", async () => {
+  for (const terminal of [false, true]) {
+    const t = harness();
+    await t.run((ctx) =>
+      seedClaimedReconciliation(ctx, {
+        leaseOwner: "private-worker",
+        leaseToken: "private-capability",
+        leaseExpiresAt: Date.now() + 60000,
+      }),
+    );
+    const args = {
+      serviceToken: SERVICE_TOKEN,
+      projectId: "project-1",
+      tool: "quotes",
+      operation: "send",
+      idempotencyKey: "idempotency-1",
+      effectFingerprint: "effect-fingerprint-1",
+      reconciliationId: "reconciliation-1",
+      executionKey: "execution-1",
+      actionId: "action-1",
+      requestId: "request-1",
+      actionFingerprint: "receipt-key-1-fingerprint",
+      expectedProvider: "test-provider",
+      receiptKey: "receipt-key-1",
+      receipt: {
+        receiptId: "receipt-key-1-receipt",
+        actionId: "action-1",
+        requestId: "request-1",
+        projectId: "project-1",
+        idempotencyKey: "idempotency-1",
+        actionFingerprint: "receipt-key-1-fingerprint",
+        tool: "quotes",
+        operation: "send",
+        actor: "tool" as const,
+        policyVersion: "test",
+        correlationId: "correlation-1",
+        source: "test",
+        status: terminal ? ("succeeded" as const) : ("indeterminate" as const),
+        startedAt: Date.now(),
+        completedAt: Date.now(),
+        safetyBinding,
+      },
+    };
+    const response = await t.mutation(
+      terminal
+        ? api.externalReconciliations.completeAttempt
+        : api.externalReconciliations.markIndeterminate,
+      args,
+    );
+    expect(JSON.stringify(response)).not.toContain("private-capability");
+    expect(JSON.stringify(response)).not.toContain("private-worker");
+    expect(
+      (await t.run((ctx) => ctx.db.query("externalReconciliations").first()))?.leaseToken,
+    ).toBe("private-capability");
+  }
+});

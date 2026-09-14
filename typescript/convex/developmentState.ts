@@ -1,4 +1,5 @@
-import { v } from "convex/values";
+import { publicDevelopmentEvent } from "./publicEvidence.js";
+import { v, ConvexError } from "convex/values";
 import { paginationOptsValidator } from "convex/server";
 
 import {
@@ -19,6 +20,8 @@ import {
 import { DEVELOPMENT_TRANSITIONS } from "../src/development/transitionRegistry.js";
 import { fingerprintToolAction, fingerprintToolEffect } from "../src/actions/toolExecution.js";
 import type { ToolAction } from "../src/actions/toolActions.js";
+import { deriveOmegaCompletionInput } from "./omegaMissions.js";
+import { evaluateOmegaCompletion } from "../src/omega/policy.js";
 import type { OmegaCompletionInput } from "../src/omega/policy.js";
 import { resolveTrustedModelProfile } from "../src/development/modelResourceGovernance.js";
 import { collectBounded, requireOwner } from "./authHelpers.js";
@@ -27,7 +30,7 @@ import {
   developmentApprovalValidator,
   developmentCapabilityEnvelopeValidator,
   developmentCommitOutcomeValidator,
-  developmentEventDocumentValidator,
+  developmentEventPublicValidator,
   developmentLeaseValidator,
   developmentMergeEvidenceValidator,
   developmentReconciliationEvidenceValidator,
@@ -36,6 +39,7 @@ import {
   developmentStateValidator,
   developmentSubjectDocumentValidator,
   developmentTransitionIdValidator,
+  liveWorkSnapshotValidator,
 } from "./developmentValidators.js";
 import type { Doc } from "./_generated/dataModel.js";
 import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server.js";
@@ -474,6 +478,132 @@ export const listRecent = query({
   },
 });
 
+const LIVE_WORK_TERMINAL_STATES = new Set(["COMPLETE", "ABORTED", "FAILED", "CONTRADICTED"]);
+const LIVE_WORK_EVENT_TAIL = 40;
+
+function stringField(value: unknown): string | undefined {
+  return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+/**
+ * Single-mission read model for the operator HUD live-work pipeline
+ * (`src/development/liveWork.ts`). Selects a single non-terminal Development
+ * subject and joins its newest forty events, explicitly bound Omega mission,
+ * and orchestration worker step into one
+ * render-safe projection. Returns `null` when no mission is in flight (every
+ * subject is terminal, or there are none). Throws if the "at most one" invariant
+ * is violated rather than silently picking one. Never returns the orchestration
+ * lease token.
+ */
+export const liveWork = query({
+  args: { serviceToken: v.string() },
+  returns: v.union(liveWorkSnapshotValidator, v.null()),
+  handler: async (ctx, args) => {
+    const ownerId = requireOwner(args.serviceToken);
+    const subjects = await collectBounded(
+      ctx.db
+        .query("developmentSubjects")
+        .withIndex("by_owner_and_updated_at", (q) => q.eq("ownerId", ownerId)),
+      "Development live-work mission selection",
+    );
+    const active = subjects.filter((row) => !LIVE_WORK_TERMINAL_STATES.has(row.state));
+    if (active.length > 1) throw new ConvexError({ code: "DEVELOPMENT_LIVE_WORK_AMBIGUOUS" });
+    const subject = active[0];
+    if (!subject) return null;
+
+    const recentEvents = await ctx.db
+      .query("developmentEvents")
+      .withIndex("by_owner_and_subject_id_and_created_at", (q) =>
+        q.eq("ownerId", ownerId).eq("subjectId", subject.subjectId),
+      )
+      .order("desc")
+      .take(LIVE_WORK_EVENT_TAIL);
+    const events = recentEvents.reverse().map((event) => ({
+      eventId: event.eventId,
+      eventType: event.eventType,
+      ...optionalField("transitionId", event.transitionId),
+      occurredAt: event.occurredAt,
+      ...optionalField("from", stringField(event.payload.from)),
+      ...optionalField("to", stringField(event.payload.to)),
+      reasonCodes: Array.isArray(event.payload.reasonCodes)
+        ? event.payload.reasonCodes.filter((code): code is string => typeof code === "string")
+        : [],
+      hasMergeReceipt: typeof event.payload.mergeReceiptKey === "string",
+    }));
+
+    const missionId = subject.omegaMissionId;
+    const omega =
+      missionId === undefined
+        ? null
+        : await ctx.db
+            .query("omegaMissions")
+            .withIndex("by_owner_and_mission_id", (q) =>
+              q.eq("ownerId", ownerId).eq("missionId", missionId),
+            )
+            .unique();
+
+    const workerStepDoc =
+      subject.orchestrationRunId !== undefined && subject.orchestrationNodeId !== undefined
+        ? await findOrchestrationStep(
+            ctx,
+            ownerId,
+            subject.orchestrationRunId,
+            subject.orchestrationNodeId,
+          )
+        : null;
+
+    const omegaReadiness = omega
+      ? evaluateOmegaCompletion({
+          ...(await deriveOmegaCompletionInput(ctx, omega, Date.now())),
+          residualUncertainty: Number.NaN,
+        })
+      : { allowed: false, failures: ["omega-mission-not-linked"] };
+
+    return {
+      omegaReadiness: {
+        allowed: omegaReadiness.allowed,
+        failures: [...omegaReadiness.failures].map((failure) =>
+          failure === "invalid-residual-uncertainty"
+            ? "residual-uncertainty-not-recorded"
+            : failure,
+        ),
+      },
+      subject: {
+        subjectVersion: subject.subjectVersion,
+        ...optionalField("orchestrationRunId", subject.orchestrationRunId),
+        ...optionalField("orchestrationNodeId", subject.orchestrationNodeId),
+        ...optionalField("fencingToken", subject.fencingToken),
+        subjectId: subject.subjectId,
+        state: subject.state,
+        ...optionalField("repository", subject.repository),
+        ...optionalField("branch", subject.branch),
+        updatedAt: subject.updatedAt,
+      },
+      events,
+      omegaMission: omega
+        ? {
+            missionId: omega.missionId,
+            objective: omega.objective,
+            state: omega.state,
+            acceptanceCriteria: omega.acceptanceCriteria.map((criterion) => ({
+              status: criterion.status,
+            })),
+          }
+        : null,
+      workerStep: workerStepDoc
+        ? {
+            nodeId: workerStepDoc.nodeId,
+            operationId: workerStepDoc.operationId ?? null,
+            state: workerStepDoc.state,
+            leaseOwner: workerStepDoc.leaseOwner ?? null,
+            leaseExpiresAt: workerStepDoc.leaseExpiresAt ?? null,
+          }
+        : null,
+      generatedAt: new Date().toISOString(),
+    };
+  },
+});
+
 /** Stable-key pagination for lifecycle sweeps; unlike the HUD recent snapshot,
  * updating a subject during observation cannot move it past the cursor. */
 export const listPage = query({
@@ -496,19 +626,21 @@ export const listPage = query({
 
 export const listEvents = query({
   args: { serviceToken: v.string(), subjectId: v.string() },
-  returns: v.array(developmentEventDocumentValidator),
+  returns: v.array(developmentEventPublicValidator),
   handler: async (ctx, args) => {
     const ownerId = requireOwner(args.serviceToken);
     const subjectId = args.subjectId.trim();
-    return collectBounded(
-      ctx.db
-        .query("developmentEvents")
-        .withIndex("by_owner_and_subject_id_and_created_at", (q) =>
-          q.eq("ownerId", ownerId).eq("subjectId", subjectId),
-        )
-        .order("asc"),
-      "Development event history",
-    );
+    return (
+      await collectBounded(
+        ctx.db
+          .query("developmentEvents")
+          .withIndex("by_owner_and_subject_id_and_created_at", (q) =>
+            q.eq("ownerId", ownerId).eq("subjectId", subjectId),
+          )
+          .order("asc"),
+        "Development event history",
+      )
+    ).map(publicDevelopmentEvent);
   },
 });
 
@@ -539,7 +671,7 @@ export const recordModelInvocation = mutation({
     escalationReason: v.optional(v.string()),
     workerId: v.optional(v.string()),
   },
-  returns: developmentEventDocumentValidator,
+  returns: developmentEventPublicValidator,
   handler: async (ctx, args) => {
     const ownerId = requireOwner(args.serviceToken);
     const subjectId = cleanRequired(args.subjectId, "Development subject ID");
@@ -608,7 +740,7 @@ export const recordModelInvocation = mutation({
       if (existing.canonicalRequestFingerprint !== canonicalRequestFingerprint) {
         throw new Error("Model invocation event ID already exists with different contents.");
       }
-      return existing;
+      return publicDevelopmentEvent(existing);
     }
 
     const now = Date.now();
@@ -644,7 +776,7 @@ export const recordModelInvocation = mutation({
     });
     const created = await ctx.db.get("developmentEvents", id);
     if (!created) throw new Error("Model invocation event persistence failed.");
-    return created;
+    return publicDevelopmentEvent(created);
   },
 });
 
@@ -735,7 +867,7 @@ export const commit = mutation({
             ? "COMMITTED"
             : "REJECTED") as "COMMITTED" | "REJECTED",
           subject,
-          event: existingEvent,
+          event: publicDevelopmentEvent(existingEvent),
           reasons: (existingEvent.payload.reasonCodes as string[] | undefined) ?? [],
           retryDisposition: existingEvent.payload.retryDisposition as
             "RESUME_SAME_OPERATION" | "NEW_EXECUTION_REQUIRED" | "NO_RETRY" | undefined,
@@ -754,7 +886,7 @@ export const commit = mutation({
       return {
         kind: "REJECTED" as const,
         subject,
-        event: existingEvent,
+        event: publicDevelopmentEvent(existingEvent),
         reasons: ["IDEMPOTENCY_EVENT_ID_CONFLICT"],
       };
     }
@@ -788,7 +920,7 @@ export const commit = mutation({
           ? "COMMITTED"
           : "REJECTED") as "COMMITTED" | "REJECTED",
         subject,
-        event: existingRequest,
+        event: publicDevelopmentEvent(existingRequest),
         reasons: (existingRequest.payload.reasonCodes as string[] | undefined) ?? [],
         retryDisposition: existingRequest.payload.retryDisposition as
           "RESUME_SAME_OPERATION" | "NEW_EXECUTION_REQUIRED" | "NO_RETRY" | undefined,
@@ -808,7 +940,7 @@ export const commit = mutation({
       return {
         kind: "REJECTED" as const,
         subject,
-        event: existingRequest,
+        event: publicDevelopmentEvent(existingRequest),
         reasons: ["IDEMPOTENCY_REQUEST_ID_CONFLICT"],
       };
     }
@@ -1159,7 +1291,7 @@ export const commit = mutation({
     return {
       kind: (evaluation.allowed ? "COMMITTED" : "REJECTED") as "COMMITTED" | "REJECTED",
       subject: updatedSubject,
-      event: insertedEvent,
+      event: publicDevelopmentEvent(insertedEvent),
       reasons: [...evaluation.reasons],
       retryDisposition: evaluation.retryDisposition,
     };

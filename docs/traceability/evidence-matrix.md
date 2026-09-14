@@ -1,5 +1,17 @@
 # Jarvis Evidence Matrix
 
+## Outlook integration evidence — 2026-09-14
+
+Existing PR #482 integrates main `40393d04` without changing its Outlook runtime
+implementation. The package conflict preserves both onboarding and main's
+bounded Convex test scheduling. Fifty-two focused Outlook tests and all 27
+mocked PowerShell provisioning scenarios pass, including uncertain-create
+reconciliation, missing visibility, intent versioning, sender isolation and
+registration drift. This is offline integration proof, not Microsoft consent,
+mail delivery or live provider reconciliation. The existing PR records the exact
+final head, full gate, independent Claude review and Jarvis result; #293/#294/#297
+remain open until their provider evidence exists.
+
 **Specification:** Jarvis Requirements v2.2  
 **Rule:** Evidence must be immutable or durably addressable and must identify the verified revision.
 
