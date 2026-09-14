@@ -94,44 +94,56 @@ async function setupClaimedContract(t: ReturnType<typeof harness>) {
     idempotencyKey: "omega-integrity-action-idempotency",
     proposedBy: "agent",
   });
-  await t.mutation(anyApi.toolActions.approve, {
-    serviceToken: SERVICE_TOKEN,
-    approvalToken: APPROVAL_TOKEN,
-    projectKey: PROJECT_KEY,
-    actionId: ACTION_ID,
-    expectedRevision: 1,
-    now: 10_000,
-    approvalTtlMs: 60_000,
-  });
-  await t.mutation(anyApi.omegaActionContracts.create, {
-    serviceToken: SERVICE_TOKEN,
-    missionId: MISSION_ID,
-    contractId: CONTRACT_ID,
-    toolActionId: ACTION_ID,
-    intent: "Send the approved Outlook draft exactly once.",
-    riskClass: "R3",
-    reversibilityClass: "REV-2",
-    requiredAuthority: "T3",
-    scope: { projectKey: PROJECT_KEY },
-    preconditions: ["underlying-action-approved"],
-    rollbackPlan: "Reconcile terminal provider truth without duplicate send.",
-  });
-  await t.mutation(anyApi.omegaActionContracts.authorize, {
-    serviceToken: SERVICE_TOKEN,
-    approvalToken: APPROVAL_TOKEN,
-    missionId: MISSION_ID,
-    contractId: CONTRACT_ID,
-    approvalRef: "approval-integrity",
-    now: 10_100,
-  });
-  const claim = await t.mutation(anyApi.toolActions.claimSingleUseExecution, {
-    serviceToken: SERVICE_TOKEN,
-    projectKey: PROJECT_KEY,
-    actionId: ACTION_ID,
-    claimId: "omega-integrity-claim",
-    now: 10_200,
-  });
-  expect(claim.claimed).toBe(true);
+  // approve()/claimSingleUseExecution() no longer accept a caller-supplied
+  // clock (security fix: it let a service-token-only caller forge past an
+  // expired approval). Freeze real time to the same small synthetic
+  // timeline this helper always used, so it stays consistent with
+  // omegaActionContracts.authorize's still-explicit `now: 10_100` and its
+  // resulting authorityExpiresAt. Real timers are restored before
+  // returning so callers see real time exactly as before this fix.
+  vi.useFakeTimers({ now: 10_000 });
+  try {
+    await t.mutation(anyApi.toolActions.approve, {
+      serviceToken: SERVICE_TOKEN,
+      approvalToken: APPROVAL_TOKEN,
+      projectKey: PROJECT_KEY,
+      actionId: ACTION_ID,
+      expectedRevision: 1,
+      approvalTtlMs: 60_000,
+    });
+    await t.mutation(anyApi.omegaActionContracts.create, {
+      serviceToken: SERVICE_TOKEN,
+      missionId: MISSION_ID,
+      contractId: CONTRACT_ID,
+      toolActionId: ACTION_ID,
+      intent: "Send the approved Outlook draft exactly once.",
+      riskClass: "R3",
+      reversibilityClass: "REV-2",
+      requiredAuthority: "T3",
+      scope: { projectKey: PROJECT_KEY },
+      preconditions: ["underlying-action-approved"],
+      rollbackPlan: "Reconcile terminal provider truth without duplicate send.",
+    });
+    vi.setSystemTime(10_100);
+    await t.mutation(anyApi.omegaActionContracts.authorize, {
+      serviceToken: SERVICE_TOKEN,
+      approvalToken: APPROVAL_TOKEN,
+      missionId: MISSION_ID,
+      contractId: CONTRACT_ID,
+      approvalRef: "approval-integrity",
+      now: 10_100,
+    });
+    vi.setSystemTime(10_200);
+    const claim = await t.mutation(anyApi.toolActions.claimSingleUseExecution, {
+      serviceToken: SERVICE_TOKEN,
+      projectKey: PROJECT_KEY,
+      actionId: ACTION_ID,
+      claimId: "omega-integrity-claim",
+    });
+    expect(claim.claimed).toBe(true);
+  } finally {
+    vi.useRealTimers();
+  }
 }
 
 function receiptInput(status: "succeeded" | "failed" | "indeterminate", completedAt: number) {
