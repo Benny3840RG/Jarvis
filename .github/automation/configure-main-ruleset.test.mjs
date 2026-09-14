@@ -24,9 +24,9 @@ function expectedBranchRules(id) {
   }));
 }
 
-function successfulApi() {
+function successfulApi({ existingEnforcement } = {}) {
   const calls = [];
-  let enforcement = "disabled";
+  let enforcement = existingEnforcement ?? "disabled";
   const id = 9001;
   const fetchImpl = async (url, options = {}) => {
     const path = new URL(url).pathname + new URL(url).search;
@@ -49,6 +49,16 @@ function successfulApi() {
       return json([
         { id: 18831602, name: "JaRvIs7", target: "branch", enforcement: "disabled" },
         { id: 19147000, name: "main", target: "branch", enforcement: "disabled" },
+        ...(existingEnforcement
+          ? [
+              {
+                id,
+                name: JARVIS_MAIN_RULESET_NAME,
+                target: "branch",
+                enforcement: existingEnforcement,
+              },
+            ]
+          : []),
       ]);
     }
     if (path === "/repos/Benny3840RG/Jarvis/rulesets" && method === "POST") {
@@ -128,6 +138,38 @@ test("apply stages disabled policy, activates it, and verifies effective main ru
   assert.equal(fixture.calls[4].body.enforcement, "active");
   assert.ok(fixture.calls.every((call) => call.authorization === "Bearer secret-value"));
   assert.ok(fixture.calls.every((call) => call.apiVersion === "2022-11-28"));
+});
+
+test("apply verifies an existing active policy without writing", async () => {
+  const fixture = successfulApi({ existingEnforcement: "active" });
+  const result = await configureMainRuleset({
+    fetchImpl: fixture.fetchImpl,
+    repository,
+    confirmedRepository: repository,
+    token: "secret-value",
+  });
+  assert.deepEqual(result, { action: "unchanged", rulesetId: fixture.id, verified: true });
+  assert.equal(
+    fixture.calls.some((call) => ["POST", "PUT"].includes(call.method)),
+    false,
+  );
+});
+
+test("apply repairs its existing disabled policy before activation", async () => {
+  const fixture = successfulApi({ existingEnforcement: "disabled" });
+  const result = await configureMainRuleset({
+    fetchImpl: fixture.fetchImpl,
+    repository,
+    confirmedRepository: repository,
+    token: "secret-value",
+  });
+  assert.deepEqual(result, { action: "updated", rulesetId: fixture.id, verified: true });
+  assert.equal(fixture.calls.some((call) => call.method === "POST"), false);
+  const updates = fixture.calls.filter((call) => call.method === "PUT");
+  assert.deepEqual(
+    updates.map((call) => call.body.enforcement),
+    ["disabled", "active"],
+  );
 });
 
 test("apply refuses a different active repository ruleset before creating anything", async () => {
