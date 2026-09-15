@@ -134,6 +134,11 @@ Split such work into a reviewed design and owner-approved implementation instead
 
 ## Failure recovery
 
+For two recorded gaps from early live missions—including a manual-coordination
+claim confusion and a diff-policy false positive—see
+[Autobuild known gaps](autobuild-known-gaps.md). That document is an evidence
+record only; it does not fix either issue.
+
 A failed run that acquired the mission lock but never published a candidate removes `automation-in-progress`, applies `automation-blocked`, and comments with the run URL. A run that failed its own eligibility recheck before acquiring the lock — for example one that lost the dispatch race to another active mission — leaves the issue untouched, so it keeps `automation-approved` and the coordinator retries it. A run that published a draft PR keeps `automation-in-progress` until the coordinator sees that PR merged or closed. Review the failed step and redacted logs.
 
 - If no branch exists, correct the issue and retry manually; each attempt receives a unique branch.
