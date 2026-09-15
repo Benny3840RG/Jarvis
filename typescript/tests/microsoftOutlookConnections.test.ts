@@ -125,9 +125,13 @@ describe("isolated Outlook connections", () => {
 
   it("binds connection selection to configuration, including a change of tenant or mailbox", () => {
     const original = resolveOutlookConnections(environment())[1].senderConnection;
+    const movedToken = resolveOutlookConnections(
+      environment([personal, { ...business, refreshTokenFile: "/private/./moved-business.token" }]),
+    )[1].senderConnection;
     const changed = resolveOutlookConnections(
       environment([personal, { ...business, mailbox: "other@example.com" }]),
     )[1].senderConnection;
+    assert.equal(original, movedToken);
     assert.notEqual(original, changed);
     const { runtime, requests } = fixture();
     assert.throws(() => runtime.quoteEmailProvider.validateSender?.(undefined), /sender/u);
