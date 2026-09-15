@@ -7,8 +7,9 @@ import { z } from "zod";
 import { ToolExecutionService } from "../src/actions/toolExecution.js";
 import { createJarvisHttpApp } from "../src/http/app.js";
 import type { HttpAppConfig } from "../src/http/config.js";
-import type { IntegrationStatus } from "../src/http/contracts.js";
+import type { IntegrationStatus, LayersStatus } from "../src/http/contracts.js";
 import type { PersistenceProvider } from "../src/persistence/persistence.js";
+import { IMMUTABLE_SAFETY_CATEGORIES } from "../src/safety/safetyBinder.js";
 
 const CONFIG: HttpAppConfig = {
   version: "0.1.0",
@@ -87,6 +88,24 @@ async function fetchIntegrations(app: NestFastifyApplication): Promise<Integrati
   return (response.json() as { integrations: IntegrationStatus[] }).integrations;
 }
 
+async function fetchLayers(app: NestFastifyApplication): Promise<LayersStatus> {
+  const response = await app.inject({
+    method: "GET",
+    url: "/api/v1/status",
+    headers: AUTH,
+  });
+  assert.equal(response.statusCode, 200);
+  return (response.json() as { layers: LayersStatus }).layers;
+}
+
+const CATEGORY_COUNT_WORDS: Record<number, string> = {
+  4: "four",
+  5: "five",
+  6: "six",
+  7: "seven",
+  8: "eight",
+};
+
 describe("system status integration commissioning evidence", () => {
   it("reports quote-delivery as implemented-only with a reason when tool execution is unconfigured", async () => {
     const app = await makeApp(null);
@@ -148,5 +167,23 @@ describe("system status integration commissioning evidence", () => {
         );
       }
     }
+  });
+
+  it("keeps the safety layer's reported category count in sync with IMMUTABLE_SAFETY_CATEGORIES", async () => {
+    // Regression guard: this text previously said "five" after a sixth
+    // category (tool-action) was added and the static status string was
+    // never updated. This doesn't verify the substantive "not yet bound to
+    // every transition" claim -- only that the count can't silently drift
+    // from the real category list again.
+    const layers = await fetchLayers(await makeApp(null));
+    const word = CATEGORY_COUNT_WORDS[IMMUTABLE_SAFETY_CATEGORIES.length];
+    assert.ok(
+      word,
+      `add a CATEGORY_COUNT_WORDS entry for ${IMMUTABLE_SAFETY_CATEGORIES.length} categories`,
+    );
+    assert.ok(
+      layers.safety.reason?.includes(`all ${word} immutable safety categories`),
+      `expected the safety reason to say "all ${word} immutable safety categories", got: ${layers.safety.reason}`,
+    );
   });
 });
