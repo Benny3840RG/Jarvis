@@ -98,13 +98,17 @@ function hardForbiddenPathReason(path) {
     : null;
 }
 
-function testGatedPathReason(path, testAreas) {
+function testGatedPathReason(path, changedTests) {
   if (TEST_PATH.test(path)) return null;
   if (!TEST_GATED_APPLICATION_PATHS.some((pattern) => pattern.test(path)))
     return null;
-  const area = pathArea(path);
-  if (area && testAreas.has(area)) return null;
-  return `guarded application path requires a matching ${area ?? "source"} test change: ${path}`;
+  const matchingTest = path.startsWith("typescript/convex/")
+    ? path.replace(/\.ts$/, ".test.ts")
+    : SOURCE_PATH.test(path)
+      ? `typescript/tests/${path.split("/").at(-1).replace(/\.ts$/, ".test.ts")}`
+      : null;
+  if (matchingTest && changedTests.has(matchingTest)) return null;
+  return `guarded application path requires its own test change (${matchingTest ?? "no supported test path"}): ${path}`;
 }
 
 export function evaluateDiff({ files = [] } = {}) {
@@ -128,16 +132,26 @@ export function evaluateDiff({ files = [] } = {}) {
     reasons.push("total changed byte limit exceeded");
 
   const testAreas = new Set(
+    files.map((file) => testArea(String(file.path ?? ""))).filter(Boolean),
+  );
+  const changedTests = new Set(
     files
-      .map((file) => testArea(String(file.path ?? "")))
-      .filter(Boolean),
+      .filter(
+        (file) =>
+          TEST_PATH.test(String(file.path ?? "")) &&
+          !["D", "removed", "deleted"].includes(file.status) &&
+          Number(file.additions ?? 0) > 0 &&
+          !file.binary &&
+          !file.symlink,
+      )
+      .map((file) => String(file.path)),
   );
 
   for (const file of files) {
     const path = String(file.path ?? "");
     const hardPathReason = hardForbiddenPathReason(path);
     if (hardPathReason) reasons.push(hardPathReason);
-    const guardedPathReason = testGatedPathReason(path, testAreas);
+    const guardedPathReason = testGatedPathReason(path, changedTests);
     if (guardedPathReason) reasons.push(guardedPathReason);
     if (file.binary) reasons.push(`binary change is forbidden: ${path}`);
     if (file.symlink) reasons.push(`symlink change is forbidden: ${path}`);
@@ -147,9 +161,7 @@ export function evaluateDiff({ files = [] } = {}) {
   }
 
   const sourceAreas = new Set(
-    files
-      .map((file) => pathArea(String(file.path ?? "")))
-      .filter(Boolean),
+    files.map((file) => pathArea(String(file.path ?? ""))).filter(Boolean),
   );
   for (const area of sourceAreas) {
     if (!testAreas.has(area)) {

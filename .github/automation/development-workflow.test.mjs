@@ -108,9 +108,21 @@ test("bounded worker may repair ordinary reconciliation persistence integration 
       deletions: 2,
     },
     {
-      path: "typescript/tests/standingAuthorityRepair.test.ts",
+      path: "typescript/tests/convexExternalReconciliations.test.ts",
       status: "M",
       additions: 24,
+      deletions: 0,
+    },
+    {
+      path: "typescript/tests/reconciliationWorker.test.ts",
+      status: "M",
+      additions: 12,
+      deletions: 0,
+    },
+    {
+      path: "typescript/tests/outlookAdapter.test.ts",
+      status: "M",
+      additions: 12,
       deletions: 0,
     },
   ];
@@ -148,8 +160,16 @@ test("completed failed autonomous builds have bounded trusted recovery without o
     import.meta.url,
   );
   const helperUrl = new URL("./autobuild-recovery.mjs", import.meta.url);
-  assert.equal(fs.existsSync(workflowUrl), true, "recovery workflow must exist");
-  assert.equal(fs.existsSync(helperUrl), true, "recovery policy helper must exist");
+  assert.equal(
+    fs.existsSync(workflowUrl),
+    true,
+    "recovery workflow must exist",
+  );
+  assert.equal(
+    fs.existsSync(helperUrl),
+    true,
+    "recovery policy helper must exist",
+  );
 
   const workflow = fs.readFileSync(workflowUrl, "utf8");
   assert.match(workflow, /workflow_run:/);
@@ -202,6 +222,7 @@ test("completed failed autonomous builds have bounded trusted recovery without o
 
   const publishedCandidate = {
     ...retryableReceipt,
+    build_result: "success",
     verification_result: "failure",
     stages: {
       ...retryableReceipt.stages,

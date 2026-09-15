@@ -40,25 +40,42 @@ and is reconstructed into a file on the isolated review runner. This preserves
 the full admitted context without exceeding per-environment-entry limits.
 The pinned Codex action already supplies `--skip-git-repo-check`; repeating
 that single-use flag in `codex-args` prevents the reviewer from starting.
-Only the separate trusted publisher has issue and pull-request write permissions
-for the advisory comment; the model runner retains read-only permissions.
+The separate trusted publisher has issue and pull-request write permissions for
+the advisory review comment. The trusted coordinator has issue-write permission
+for diagnostic base-drift notices; it checks out only the pinned workflow revision.
+The model runner retains read-only permissions.
+
+When a PR base differs from observed main, the sweep preserves its exact-base
+review gate and posts a diagnostic notice on that PR. It identifies the observed
+head, PR base and main SHA and asks the implementation owner to update the branch
+and rerun verification. It creates no review result, status, approval or completion
+record. Existing results retain their original SHA scope.
+
+The coordinator reads at most ten pages of 100 comments, recognizes only its
+GitHub Actions bot notice, and rechecks candidate/main identity before writing.
+It updates the same notice when the observation changes and leaves identical
+observations untouched. Failed or incomplete comment evidence remains unconfirmed;
+other eligible PRs still progress. After an uncertain write, the next sweep reads
+provider comments before deciding whether another write is needed. Successful
+writes require provider readback. Sweep concurrency remains serialized by the
+existing workflow group. Live notification proof requires this change on main.
 
 ## Limits and failure handling
 
-| Boundary                           | Behaviour                                                                                                                                        |
-| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Automatic review spend             | At most two invocations per candidate head across CI/base changes and manual reruns; sweeps never retry an identical attempted snapshot.         |
-| Automatic repair spend             | At most two owning builder runs per PR; failures/cancellations consume attempts and repair reruns are refused.                                   |
-| Initial-build operational retry    | At most two trusted automatic retries after the initial failed attempt, and only for classified pre-publication dependency/worker failures.      |
-| Review context                     | At most 40 changed files and 160 KiB decoded before/after content; no silent truncation. Oversized/binary/symlinked context blocks model review. |
-| CI evidence                        | Bounded complete pagination, unique IDs, exact SHA, authenticated repository/run URL and producer; missing/untrusted data cannot pass.           |
-| History                            | Queried from the PR's creation time; incomplete or over-limit history fails closed.                                                              |
-| Existing manually authored PR      | Advisory review only. Opening a PR does not confer the approved-issue repair authority.                                                          |
-| Control-plane changes              | Owner repair required. Workflow/automation controls, dependency manifests, env/secrets, schema/config authority and deployment/governance stay hard-blocked. |
-| Sensitive application source       | Allowed only with matching area tests and still subject to authority-sensitive patch scanning and cumulative diff limits.                        |
-| New commits or changed base/checks | Old review discarded; no stale push or stale pass.                                                                                               |
-| Main moved or unhealthy            | No repair dispatch. Repair claims are not inferred from the request comment.                                                                     |
-| Provider timeout during dispatch   | Unconfirmed result; inspect owning run history before retrying.                                                                                  |
+| Boundary                           | Behaviour                                                                                                                                                                          |
+| ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Automatic review spend             | At most two invocations per candidate head across CI/base changes and manual reruns; sweeps never retry an identical attempted snapshot.                                           |
+| Automatic repair spend             | At most two owning builder runs per PR; failures/cancellations consume attempts and repair reruns are refused.                                                                     |
+| Initial-build operational retry    | At most two trusted automatic retries after the initial failed attempt, and only for classified pre-publication dependency/worker failures.                                        |
+| Review context                     | At most 40 changed files and 160 KiB decoded before/after content; no silent truncation. Oversized/binary/symlinked context blocks model review.                                   |
+| CI evidence                        | Bounded complete pagination, unique IDs, exact SHA, authenticated repository/run URL and producer; missing/untrusted data cannot pass.                                             |
+| History                            | Queried from the PR's creation time; incomplete or over-limit history fails closed.                                                                                                |
+| Existing manually authored PR      | Advisory review only. Opening a PR does not confer the approved-issue repair authority.                                                                                            |
+| Control-plane changes              | Owner repair required. Workflow/automation controls, dependency manifests, env/secrets, schema/config authority and deployment/governance stay hard-blocked.                       |
+| Sensitive application source       | Each guarded module requires additions to its own corresponding test; unrelated, deleted or unchanged tests do not qualify. Patch scanning and cumulative diff limits still apply. |
+| New commits or changed base/checks | Old review discarded; no stale push or stale pass.                                                                                                                                 |
+| Main moved or unhealthy            | No repair dispatch. Repair claims are not inferred from the request comment.                                                                                                       |
+| Provider timeout during dispatch   | Unconfirmed result; inspect owning run history before retrying.                                                                                                                    |
 
 A completed initial builder failure is observed by
 `jarvis-autobuild-recovery.yml` from trusted default-branch workflow code. The
@@ -68,6 +85,26 @@ classified retry removes `automation-blocked` and re-enters only through
 failures, invalid/ambiguous evidence, stale locks and exhausted retry budgets stay
 blocked and automatically request read-only `@claude` advice. That advisory path
 has no content-write, approval, merge or deployment authority.
+
+The module test rule in `.github/automation/validate-autobuild.mjs` requires
+`typescript/tests/<module>.test.ts` for guarded `src/` modules, or a sibling
+`<module>.test.ts` for Convex modules (including the same nested directory).
+See `.github/automation/validate-autobuild.test.mjs` for unrelated-test,
+per-module, deletion and rename-only regressions. This is a file-level check;
+neither test naming nor keyword scanning proves the changed logic is safe.
+Executable tests and independent review must assess the actual behavior.
+
+Recovery classification in `.github/automation/autobuild-recovery.mjs` rejects
+missing, unknown and contradictory stage outcomes. Explicit `unavailable`
+values from interrupted builds remain distinct from malformed fields.
+`.github/automation/autobuild-recovery.test.mjs` exercises these refusal paths
+and the existing finite retry budget.
+
+The recovery workflow persists each retry attempt before unblocking the issue.
+It rejects duplicate source-run recovery and uses a complete provider history
+window, capped at 100 runs, to refuse stale failures when a newer build exists.
+Unavailable or incomplete history leaves the issue unchanged. These workflow
+paths are executed by the same regression suite; they are not live retry proof.
 
 The namespaced `jarvis-pr-maintenance/review` status is a handover aid. It never
 impersonates TypeScript, PR Evidence or CodeQL checks and cannot satisfy the
@@ -213,3 +250,21 @@ bound to the observed commit, main branch and a declared trigger, is excluded
 from additional failed checks. Required build/security checks and every unrelated
 failure still block completion. Earlier inconclusive proofs and failed workflow
 runs remain intact.
+
+### Documentation context within review segments
+
+The existing context resolver recognizes explicit repository-local paths in
+Markdown, including relative links and paths in command/code examples. It
+resolves only a unique match in the already fetched changed-file inventory,
+considering the repository root and the document directory. Before and after
+references both contribute context. External URLs, absolute paths, backslashes,
+encoded/query paths, absent files and ambiguous matches are not resolved; bare
+filenames are not guessed. No URL fetch or additional filesystem read is added.
+
+A documentation segment can seed its linked implementation and adjacent imports.
+Documentation does not become a reverse graph bridge that brings unrelated
+code into implementation segments. Supplemental bytes retain their exact source
+references; primary coverage and authorized finding locations are unchanged.
+Existing prompt/segment limits and explicit unavailable-context records still
+apply. A model's essential context request still blocks the aggregate review.
+This improvement does not itself supply a Jarvis PASS to a blocked candidate.

@@ -51,7 +51,7 @@ The autonomous worker may modify ordinary application code, including:
 - ordinary `typescript/convex/` implementation files;
 - other normal TypeScript source and matching tests.
 
-Sensitive application areas remain test-gated. The worker must also satisfy bounded diff size, binary/symlink restrictions, test-area matching and semantic patch scanning.
+Sensitive application areas remain test-gated. Each guarded module requires added test lines in its own corresponding test file: `typescript/tests/<module>.test.ts` for `src/` modules, or a sibling `<module>.test.ts` for Convex modules. Unrelated area tests, deleted tests and rename-only changes do not qualify. The worker must also satisfy bounded diff size, binary/symlink restrictions, test-area matching and patch scanning. Implementation and regression evidence are in `.github/automation/validate-autobuild.mjs` and `.github/automation/validate-autobuild.test.mjs`.
 
 ### Locked control plane
 
@@ -66,7 +66,7 @@ Unattended workers must remain unable to modify the machinery that defines or ex
 - Convex schema/config authority;
 - deployment/commissioning implementation and canonical deployment/governance policy documents.
 
-Authority-sensitive patch-content scanning remains a second independent barrier for credentials, permissions, approvals, deployment/commissioning and equivalent authority changes.
+Authority-sensitive patch-content scanning remains an additional keyword filter for credentials, permissions, approvals and deployment/commissioning changes. It cannot detect arbitrary logic errors, including a caller-controlled clock hidden behind ordinary comparisons. Matching test filenames likewise do not prove behavioral coverage. Executable regression tests and independent review remain required.
 
 The purpose is not to make every security-related application file immutable. The purpose is to prevent an unattended worker from changing the controls that define its own permissions, merge authority, deployment authority or secret access.
 
@@ -83,6 +83,8 @@ Automatic retry is finite: at most two automatic retries after the initial faile
 ### Hard policy failures
 
 A post-agent policy-guard failure, invalid/ambiguous diagnostic evidence, stale mission lock, non-retryable failure, or exhausted retry budget remains fail-closed.
+
+The recovery classifier rejects missing, unknown and contradictory stage outcomes before considering a retry. An explicitly recorded `unavailable` outcome remains distinct from an invalid field. See `.github/automation/autobuild-recovery.mjs` and `.github/automation/autobuild-recovery.test.mjs` for the validation and regression cases.
 
 For a hard block, the system keeps `automation-blocked` and automatically asks the existing read-only Claude path to inspect the exact run evidence and advise the smallest repair. Claude receives no content-write, approval, merge or deployment authority from this handoff.
 

@@ -4,7 +4,7 @@
   "info": {
     "title": "Jarvis Operator API",
     "summary": "A safety-gated API for the Jarvis Z-State runtime and durable operator data.",
-    "description": "Jarvis accepts structured operator requests, routes work through its runtime and safety envelope, persists tasks and reminders through the configured JSON or Convex provider, runs proposal-only Totality reasoning, stages revision-checked project-memory changes, and stores revision-bound tool-action proposals for explicit approval or rejection. Approved tool actions may be executed through the small reviewed server-side allowlist, with durable receipts and external reconciliation where required. The private development ChatGPT App preview provides a stateless Streamable HTTP MCP adapter and versioned dashboard widget for the operations marked with x-mcp-tool.exposed=true. Jarvis and OpenAI credentials remain server-side. This contract is intentionally single-user and private.",
+    "description": "Jarvis accepts structured operator requests, routes work through its runtime and safety envelope, persists tasks and reminders through the configured JSON or Convex provider, runs proposal-only Totality reasoning, stages revision-checked project-memory changes, and stores revision-bound tool-action proposals for explicit approval or rejection. Approved tool actions may be executed through the small reviewed server-side allowlist, with durable receipts and external reconciliation where required. The private development ChatGPT App preview provides a stateless Streamable HTTP MCP adapter and versioned dashboard widget for the operations marked with x-mcp-tool.exposed=true. Jarvis and OpenAI credentials remain server-side. This contract is intentionally single-user and private. The development-only Sentry commissioning CLI exercises an isolated API-client failure boundary and reports envelope transport observations; provider event visibility and alert proof remain separate, unproven until independently observed.",
     "version": "0.7.0",
     "license": {
       "name": "Proprietary",
@@ -8349,7 +8349,7 @@
             "type": "object",
             "maxProperties": 64,
             "additionalProperties": true,
-            "description": "Bounded JSON arguments. Credential-bearing keys, secrets, non-finite numbers, excessive nesting, and oversized strings are rejected before persistence."
+            "description": "Bounded JSON arguments. Credential-bearing keys, secrets, non-finite numbers, excessive nesting, and oversized strings are rejected before persistence. Staging accepts bounded generic arguments; tool-specific validation occurs at execution. For quotes:send, optional senderConnection is a string matching ^[a-z][a-z0-9-]{0,31}:[a-f0-9]{64}$ (manifest label plus configuration fingerprint). At execution, the configured named Outlook provider requires that value to match its current manifest; omission, unknown connection or changed configuration fails closed before a provider request. Legacy single-mailbox mode omits senderConnection. Runtime configuration determines which mode applies; this generic staging schema does not assert a mode-dependent required field. Changing the sender requires a new approval."
           },
           "rationale": {
             "type": "string",
@@ -8467,7 +8467,7 @@
             "type": "object",
             "maxProperties": 64,
             "additionalProperties": true,
-            "description": "Bounded JSON arguments. Credential-bearing keys, secrets, non-finite numbers, excessive nesting, and oversized strings are rejected before persistence."
+            "description": "Bounded JSON arguments. Credential-bearing keys, secrets, non-finite numbers, excessive nesting, and oversized strings are rejected before persistence. Staging accepts bounded generic arguments; tool-specific validation occurs at execution. For quotes:send, optional senderConnection is a string matching ^[a-z][a-z0-9-]{0,31}:[a-f0-9]{64}$ (manifest label plus configuration fingerprint). At execution, the configured named Outlook provider requires that value to match its current manifest; omission, unknown connection or changed configuration fails closed before a provider request. Legacy single-mailbox mode omits senderConnection. Runtime configuration determines which mode applies; this generic staging schema does not assert a mode-dependent required field. Changing the sender requires a new approval."
           },
           "rationale": {
             "type": "string",

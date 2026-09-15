@@ -13,12 +13,13 @@
 - No autonomous merge authority.
 - No autonomous production deployment or commissioning authority.
 - `.github/workflows/`, `.github/actions/`, `.github/automation/`, dependency manifests, secret/env material, schema/config authority and deployment/governance controls remain forbidden to unattended workers.
-- Sensitive application paths are allowed only with matching area tests and remain subject to authority-sensitive patch scanning.
+- Sensitive application paths require changes to their own corresponding module tests; unrelated area tests, deletions and rename-only changes do not qualify. Keyword scanning is an additional filter, not proof of correct logic.
 - Exact-head CI and independent Jarvis review remain required before owner merge.
 
 ## Task 1: Standing uncertainty budget
 
 **Files**
+
 - `.github/automation/development-workflow.test.mjs`
 - `.github/automation/run-development-actions.mjs`
 - operator documentation
@@ -32,6 +33,7 @@
 ## Task 2: Permit tested application repairs without unlocking the control plane
 
 **Files**
+
 - `.github/automation/development-workflow.test.mjs`
 - `.github/automation/validate-autobuild.mjs`
 
@@ -44,6 +46,7 @@
 ## Task 3: Finite automatic recovery instead of instant owner reruns
 
 **Files**
+
 - `.github/automation/autobuild-recovery.mjs`
 - `.github/workflows/jarvis-autobuild-recovery.yml`
 - `.github/automation/development-workflow.test.mjs`
@@ -57,6 +60,13 @@
 - [x] Grant the recovery workflow no content-write, PR-approval, merge or deployment authority.
 
 ## Task 4: Verification gate
+
+Review repair sources: `.github/automation/autobuild-recovery.mjs`,
+`.github/automation/autobuild-recovery.test.mjs`,
+`.github/automation/validate-autobuild.mjs` and
+`.github/automation/validate-autobuild.test.mjs` cover malformed recovery
+evidence and per-module test matching. Both defects were reproduced with failing
+regressions before repair. Fresh checks and independent review remain required.
 
 - [ ] Required exact-head `automation-policy` passes.
 - [ ] Required exact-head `typecheck-lint-format-test` passes.

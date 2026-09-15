@@ -367,6 +367,80 @@ test("requires tests in each affected source area", () => {
   );
 });
 
+test("guarded source requires its own test, not unrelated tests in the same area", () => {
+  for (const [source, unrelated, matching] of [
+    [
+      "typescript/convex/externalReconciliations.ts",
+      "typescript/convex/tasks.test.ts",
+      "typescript/convex/externalReconciliations.test.ts",
+    ],
+    [
+      "typescript/src/persistence/convexExternalReconciliations.ts",
+      "typescript/tests/tasks.test.ts",
+      "typescript/tests/convexExternalReconciliations.test.ts",
+    ],
+    [
+      "typescript/src/reconciliation/reconciliationWorker.ts",
+      "typescript/tests/reconciliationScheduler.test.ts",
+      "typescript/tests/reconciliationWorker.test.ts",
+    ],
+    [
+      "typescript/convex/nested/security.ts",
+      "typescript/convex/security.test.ts",
+      "typescript/convex/nested/security.test.ts",
+    ],
+  ]) {
+    const change = (path) => ({
+      path,
+      status: "M",
+      additions: 2,
+      deletions: 1,
+    });
+    const denied = evaluateDiff({ files: [change(source), change(unrelated)] });
+    assert.equal(denied.ok, false, source);
+    assert.ok(denied.reasons.some((reason) => reason.includes(matching)));
+    assert.deepEqual(
+      evaluateDiff({ files: [change(source), change(matching)] }),
+      { ok: true, reasons: [] },
+    );
+    assert.equal(
+      evaluateDiff({
+        files: [
+          change(source),
+          { ...change(matching), status: "D", additions: 0 },
+        ],
+      }).ok,
+      false,
+      "deleting the matching test is not coverage",
+    );
+    assert.equal(
+      evaluateDiff({
+        files: [
+          change(source),
+          { ...change(matching), additions: 0, deletions: 0 },
+        ],
+      }).ok,
+      false,
+      "unchanged/rename-only evidence is not a test update",
+    );
+  }
+});
+
+test("one guarded module's test cannot cover another guarded module", () => {
+  const files = [
+    "typescript/src/reconciliation/reconciliationWorker.ts",
+    "typescript/src/reconciliation/reconciliationScheduler.ts",
+    "typescript/tests/reconciliationWorker.test.ts",
+  ].map((path) => ({ path, status: "M", additions: 2, deletions: 1 }));
+  const result = evaluateDiff({ files });
+  assert.equal(result.ok, false);
+  assert.ok(
+    result.reasons.some((reason) =>
+      reason.includes("typescript/tests/reconciliationScheduler.test.ts"),
+    ),
+  );
+});
+
 test("rejects assume-unchanged and skip-worktree index flags", () => {
   const result = evaluateIndexFlags([
     { tag: "h", path: ".github/automation/validate-autobuild.mjs" },

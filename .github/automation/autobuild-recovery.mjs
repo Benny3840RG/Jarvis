@@ -8,16 +8,17 @@ const KNOWN_OUTCOMES = new Set([
   "unavailable",
 ]);
 
-function safeOutcome(value) {
-  return KNOWN_OUTCOMES.has(value) ? value : "unavailable";
-}
+const STAGE_NAMES = ["dependencies", "worker", "guard", "publication"];
+const EXECUTED_OUTCOMES = new Set(["success", "failure", "cancelled"]);
 
 export function classifyAutobuildRecovery({ receipt, priorRetries = 0 } = {}) {
   if (
     !receipt ||
     typeof receipt !== "object" ||
+    Array.isArray(receipt) ||
     !receipt.stages ||
-    typeof receipt.stages !== "object"
+    typeof receipt.stages !== "object" ||
+    Array.isArray(receipt.stages)
   ) {
     return { action: "block", reason: "invalid-diagnostic-receipt" };
   }
@@ -25,13 +26,36 @@ export function classifyAutobuildRecovery({ receipt, priorRetries = 0 } = {}) {
     return { action: "block", reason: "invalid-retry-count" };
   }
 
-  const buildResult = safeOutcome(receipt.build_result);
-  const stages = {
-    dependencies: safeOutcome(receipt.stages.dependencies),
-    worker: safeOutcome(receipt.stages.worker),
-    guard: safeOutcome(receipt.stages.guard),
-    publication: safeOutcome(receipt.stages.publication),
-  };
+  const buildResult = receipt.build_result;
+  const verificationResult = receipt.verification_result;
+  const stages = receipt.stages;
+  const outcomes = STAGE_NAMES.map((stage) => stages[stage]);
+  // The workflow explicitly emits "unavailable" when runner outputs are lost.
+  // Missing or unknown receipt fields must never acquire that retry authority.
+  if (
+    !KNOWN_OUTCOMES.has(buildResult) ||
+    !KNOWN_OUTCOMES.has(verificationResult) ||
+    outcomes.some((outcome) => !KNOWN_OUTCOMES.has(outcome))
+  ) {
+    return { action: "block", reason: "invalid-diagnostic-receipt" };
+  }
+  // These stages run in order with the default success() condition. A later
+  // executed stage cannot corroborate a failed, skipped, or unknown predecessor.
+  if (
+    outcomes.some(
+      (outcome, index) =>
+        EXECUTED_OUTCOMES.has(outcome) &&
+        outcomes.slice(0, index).some((previous) => previous !== "success"),
+    ) ||
+    (buildResult === "success" &&
+      outcomes.some((outcome) =>
+        ["failure", "cancelled", "skipped"].includes(outcome),
+      )) ||
+    (EXECUTED_OUTCOMES.has(verificationResult) &&
+      (buildResult !== "success" || stages.publication !== "success"))
+  ) {
+    return { action: "block", reason: "invalid-diagnostic-receipt" };
+  }
 
   if (stages.publication === "success") {
     return { action: "ignore", reason: "candidate-published" };
