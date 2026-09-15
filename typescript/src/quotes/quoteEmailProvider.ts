@@ -2,6 +2,7 @@ import { createMicrosoftOutlookRuntimeFromEnv } from "../auth/microsoftOutlookRu
 import type { QuoteRevision } from "./quoteLifecycle.js";
 
 export type QuoteEmailSendInput = {
+  senderConnection?: string;
   quoteId: string;
   revision: QuoteRevision;
   recipient: string;
@@ -33,6 +34,7 @@ export type QuoteEmailSendResult = QuoteEmailPreparedReference;
 
 export interface QuoteEmailProvider {
   readonly name: string;
+  validateSender?(senderConnection: string | undefined): void;
   prepare(input: QuoteEmailPrepareInput, signal: AbortSignal): Promise<QuoteEmailPreparedReference>;
   sendPrepared(
     reference: QuoteEmailPreparedReference,
