@@ -18,6 +18,60 @@ it at the end of every session.
   TypeScript 7 once the lint toolchain supports its compiler API and peer range.
 - Fresh CI is required for each repaired head before the owner merge decision.
 
+## Outlook current-main integration (2026-09-14)
+
+Current base is `6b6ced5e5c3c32ca0eb9d06fbd56d73dac7acddc`. Benny has
+merged the documented-context planner (#534), base-drift diagnostics (#532),
+Sentry tooling (#527) and server-clock repairs (#535/#536). The held Outlook
+source map can now use the trusted planner. This integration preserves both
+sets of documentation and requires fresh exact-head proof and review. The
+following paragraphs retain the earlier implementation/review history.
+
+PR #482's integration with main `40393d04` preserves its separate personal and
+business Outlook runtime and the current verification controls. The package
+script conflict retains both `outlook` onboarding and main's single-worker
+Convex test scheduling; the main lockfile is unchanged. Existing focused
+runtime tests prove sender binding, OAuth isolation and uncertain-effect
+reconciliation. Fresh full verification and independent review are recorded on
+the existing PR before Benny's merge decision. #293/#294/#297 remain open for
+approved live consent and provider evidence; no Microsoft effect is performed.
+
+Jarvis review of integration head `cbcb09b` found a valid foreign-pagination
+test gap. The mock now records every requested URI and fails if the foreign
+target is invoked, even when setup later rejects and creates nothing. A temporary
+guard-bypass mutation passes the old test and fails the repaired test; the intact
+guard passes. Collection reads also select `HashTable` explicitly. The Microsoft
+SDK already defaults to that type; the review's claimed `PSCustomObject` default
+was incorrect. Fresh exact-head full verification and re-review remain required.
+
+The next review found relative setup paths and an unclear unsupported-platform
+failure. Setup now rejects non-absolute paths before filesystem/provider effects.
+Browser onboarding explicitly requires POSIX ownership support before inspecting
+the credential directory or starting consent; native Windows ACL storage remains
+unsupported. The owner/private-directory guard is preserved. Regressions prove
+both rejections occur before external actions; full verification and reviews
+are recorded against the resulting PR head.
+
+Further review exposed two pagination-test false positives: incomplete first-page
+principal/grant records rejected even when later pages were ignored. The fixtures
+now put complete exact records on the first page and ambiguity on the second,
+assert the second-page request and reject configuration/grant advancement.
+Ignoring every nextLink passes both old tests and fails both strengthened tests;
+normal pagination passes. The evidence matrix distinguishes the integration merge
+from the cumulative Outlook implementation and later repairs. Runtime ambiguous
+collection rejection is unchanged.
+
+The next runtime hardening increment explicitly rejects unsupported setup
+platforms before filesystem/Graph effects, serves the registered localhost OAuth
+callback through both IPv4/IPv6 loopback sockets, and closes partially bound
+listeners before consent. Initial credentials now use the existing token store's
+private temporary-file/fsync mechanism with atomic no-clobber publication (the
+same hard-link pattern already used by JSON locking). Regression tests reproduce
+partial-write/fsync leftovers before the repair and prove their absence after it,
+plus concurrent creation, both callback families and partial listener cleanup.
+All live provider and production gates remain open; exact-SHA full/review evidence
+is recorded on the PR.
+
 ## Sentry commissioning tooling — #303 (2026-09-14)
 
 The bounded development CLI reuses the existing commissioning app, API-client
@@ -119,6 +173,19 @@ gates do not make these local gaps complete. See
   are external commissioning gates (Outlook OAuth, Sentry, PostHog, a real
   OIDC provider, production deployment approval). These need operator-supplied
   credentials/decisions and are not actionable by an autonomous coding session.
+
+## Outlook separate connections (2026-09-09)
+
+- Added opt-in named personal/business Outlook connections with separate app IDs,
+  tenant-pinned business authority, token files and per-connection caches.
+- Quote approvals explicitly bind the sender configuration; durable references
+  route sends/reconciliation to the same account after restart. No fallback.
+- Added browser PKCE onboarding, read-only verification and an operator setup
+  script for separate registrations and single-user business consent. It does not
+  relax tenant policy, enable the runtime, send customer email or deploy.
+- Live Microsoft provisioning, both mailbox sign-ins, and per-account governed
+  draft/send/reconciliation evidence remain outstanding (#293/#294/#297).
+- See `docs/runbooks/outlook-delegated-oauth.md` for setup and migration boundaries.
 
 ## Production reconciliation (2026-09-11)
 
@@ -271,6 +338,59 @@ rather than an occasional operator action.
   proposals, arbitrary payloads and effect/worker histories remain unsupported;
   whole-group coverage remains partial with no verified group.
 
+### Outlook verification boundary follow-up — 2026-09-14
+
+PR #482 now checks private current-user directory ownership before `verify`
+reads or refreshes an existing credential, with failure-first coverage for
+shared/writable and wrong-owner directories and a valid rotation control.
+The runbook uses complete legacy environment-variable names. OpenAPI clarifies
+that generic staging and tool-specific execution validation are separate;
+named sender identity is checked against the active provider manifest at
+execution, while legacy mode omits it. Microsoft SDK source confirms the
+explicit Graph `HashTable` output is supported; that review finding is false.
+Live Outlook commissioning and Benny's merge remain separate gates.
+
+### Outlook serialized-token boundary repair — 2026-09-14
+
+PR #482 repairs the shared token store's size mismatch: its existing 64 KiB
+payload limit is preserved while the file-read bound now accounts for the
+single newline appended by initial publication and rotation. ASCII and
+multibyte maximum-size tokens round-trip; one-byte-over payloads remain
+rejected without replacing an existing credential. The runbook distinguishes
+legacy personal/business tenant settings from named connection configuration.
+This remains offline repository proof; live commissioning and merge gates
+are unchanged.
+
+### Outlook single-stack callback follow-up — 2026-09-14
+
+PR #482 now handles unavailable IPv4 and IPv6 families symmetrically, skipping
+only a family not present in localhost resolution. Failure-first coverage
+reproduces IPv6-only startup failure and verifies both single-stack cases;
+required-family failures still close the existing listener before consent.
+The PowerShell exit finding from run 34802974904 is false: executing a child
+script with `&` returns control and its exit code to the calling script, as
+proven in the actual PowerShell host. Existing harness assertions remain active.
+
+### Outlook setup dependency boundary — 2026-09-14
+
+PR #482 removes automatic PowerShell module installation from administrator
+setup. It requires a preinstalled, operator-validated Microsoft.Graph.Authentication
+2.36.1 distribution and explicitly imports that version. Missing or different
+versions stop before setup state, module execution or administrator sign-in.
+The version check does not claim package integrity; the runbook records the
+separate trusted software provisioning prerequisite. All 31 offline provisioning
+scenarios pass, including two regressions that fail on the old installer path.
+Live OAuth and provider commissioning remain unproven.
+
+### Outlook documentation review context — 2026-09-14
+
+PR #482's runbook now names the authoritative provisioning, callback, token-store
+and connection-composition files and their offline regressions. The source map
+addresses the reviewer's explicit context request without changing runtime code
+or treating documentation as provider evidence. Issue #533 repairs the existing
+bounded planner's lookup of these paths and is now merged through #534.
+Current Jarvis PASS remains unproven until this integrated candidate is evaluated.
+
 ### Review base-drift visibility — issue #529
 
 The PR maintenance coordinator retains the exact-main review guard and records
@@ -298,3 +418,7 @@ essential context still blocks.
 
 Next: full verification, independent Claude review, current Jarvis evaluation,
 then Benny merge before any live review claims can use the repaired planner.
+
+## Outlook browser-launch deadline
+
+The #482 maintained review found that a stalled URL-display callback could prevent the sign-in timeout from reaching cleanup. The minimal repair bounds launcher completion and code receipt together, including when a valid callback arrived first. Two offline regressions failed before the fix and now prove listener closure and no token/provider effects on expiry. Fresh review remains required; live #293/#294/#297 commissioning stays open.
