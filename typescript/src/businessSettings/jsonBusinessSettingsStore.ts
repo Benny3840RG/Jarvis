@@ -48,7 +48,7 @@ export class JsonBusinessSettingsStore implements BusinessSettingsStore {
     this.writeLock = new JsonFileLock(filePath, warn, lockTimeoutMs);
   }
 
-  private async readDocument(): Promise<BusinessSettingsDocument> {
+  private async readDocument(lockHeld = false): Promise<BusinessSettingsDocument> {
     const fallback = defaultBusinessSettings();
     let raw: string;
     try {
@@ -63,6 +63,9 @@ export class JsonBusinessSettingsStore implements BusinessSettingsStore {
     try {
       parsed = JSON.parse(raw);
     } catch {
+      if (!lockHeld) {
+        return this.writeLock.run(() => this.readDocument(true), "corruption recovery");
+      }
       await this.setAside();
       return { version: DOCUMENT_VERSION, settings: fallback };
     }
@@ -93,7 +96,7 @@ export class JsonBusinessSettingsStore implements BusinessSettingsStore {
 
   async update(update: BusinessSettingsUpdate): Promise<BusinessSettings> {
     return this.writeLock.run(async () => {
-      const document = await this.readDocument();
+      const document = await this.readDocument(true);
       const settings = applySettingsUpdate(document.settings, update);
       await this.writeDocument({ version: DOCUMENT_VERSION, settings });
       return clone(settings);

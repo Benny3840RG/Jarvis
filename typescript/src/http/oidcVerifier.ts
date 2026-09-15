@@ -68,9 +68,19 @@ export function createOidcVerifier(
 ): OidcVerifier {
   let cachedKeys: Map<string, CryptoKey> | undefined;
   let cachedUntil = 0;
+  let pendingKeys: Promise<Map<string, CryptoKey>> | undefined;
 
-  async function loadKeys(force = false): Promise<Map<string, CryptoKey>> {
-    if (!force && cachedKeys !== undefined && cachedUntil > now()) return cachedKeys;
+  function loadKeys(force = false): Promise<Map<string, CryptoKey>> {
+    if (!force && cachedKeys !== undefined && cachedUntil > now()) {
+      return Promise.resolve(cachedKeys);
+    }
+    pendingKeys ??= fetchKeys().finally(() => {
+      pendingKeys = undefined;
+    });
+    return pendingKeys;
+  }
+
+  async function fetchKeys(): Promise<Map<string, CryptoKey>> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 2_000);
     try {

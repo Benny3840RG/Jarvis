@@ -82,7 +82,7 @@ export class JsonProjectStore implements ProjectStore {
     this.writeLock = new JsonFileLock(filePath, warn, lockTimeoutMs);
   }
 
-  private async readDocument(): Promise<ProjectDocument> {
+  private async readDocument(lockHeld = false): Promise<ProjectDocument> {
     let raw: string;
     try {
       raw = await fs.readFile(this.filePath, "utf8");
@@ -95,6 +95,9 @@ export class JsonProjectStore implements ProjectStore {
     try {
       parsed = JSON.parse(raw);
     } catch {
+      if (!lockHeld) {
+        return this.writeLock.run(() => this.readDocument(true), "corruption recovery");
+      }
       await this.setAside();
       return { version: DOCUMENT_VERSION, projects: [] };
     }
@@ -133,7 +136,7 @@ export class JsonProjectStore implements ProjectStore {
 
   async add(input: ProjectInput): Promise<Project> {
     return this.writeLock.run(async () => {
-      const document = await this.readDocument();
+      const document = await this.readDocument(true);
       const now = Date.now();
       const project: Project = {
         id: randomUUID(),
@@ -166,7 +169,7 @@ export class JsonProjectStore implements ProjectStore {
       );
     }
     return this.writeLock.run(async () => {
-      const document = await this.readDocument();
+      const document = await this.readDocument(true);
       const project = document.projects.find((candidate) => candidate.id === id);
       if (!project) return null;
       if (update.clientId !== undefined)
@@ -191,7 +194,7 @@ export class JsonProjectStore implements ProjectStore {
 
   async remove(id: string): Promise<Project | null> {
     return this.writeLock.run(async () => {
-      const document = await this.readDocument();
+      const document = await this.readDocument(true);
       const index = document.projects.findIndex((candidate) => candidate.id === id);
       if (index === -1) return null;
       const [removed] = document.projects.splice(index, 1);
