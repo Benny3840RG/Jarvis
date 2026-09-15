@@ -1,7 +1,9 @@
 # Jarvis PR maintenance
 
-The Actions handover now performs independent advisory review and bounded repair.
-It does not grant merge approval or declare a durable Development mission complete.
+The Actions handover performs independent review and bounded repair. Its
+exact-candidate `jarvis-pr-maintenance/review` status is the required Jarvis PASS
+for agent-authored PRs. It does not grant owner approval, merge authority or a
+durable Development completion claim.
 
 ## Runtime path
 
@@ -106,9 +108,12 @@ window, capped at 100 runs, to refuse stale failures when a newer build exists.
 Unavailable or incomplete history leaves the issue unchanged. These workflow
 paths are executed by the same regression suite; they are not live retry proof.
 
-The namespaced `jarvis-pr-maintenance/review` status is a handover aid. It never
-impersonates TypeScript, PR Evidence or CodeQL checks and cannot satisfy the
-existing ToolAction approval boundary. Blocked results retain their linked run.
+The namespaced `jarvis-pr-maintenance/review` status must be required by the
+effective `main` protection policy for Claude/Codex work. It never impersonates
+TypeScript, PR Evidence or CodeQL checks and cannot satisfy the owner or existing
+ToolAction approval boundary. Blocked results retain their linked run. A passing
+status means only that the exact candidate reached `awaiting-owner` with trusted
+green CI and a clean bounded review.
 
 Manual entry: Actions → **Jarvis PR maintenance** → Run workflow on `main`, mode
 `sweep`; optionally specify a PR number. Exact review dispatch fields are normally
