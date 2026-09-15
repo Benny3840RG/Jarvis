@@ -1165,3 +1165,49 @@ describe("developmentState.commit -- verification/review evidence gates", () => 
     expect(outcome.subject.state).toBe("READY_TO_MERGE");
   });
 });
+
+it("projects replay fingerprints out of event and rejection-audit owner reads", async () => {
+  const t = harness();
+  await seedSubject(t);
+  await t.mutation(api.developmentState.commit, claimedToBuildingArgs());
+  await t.run(async (ctx) => {
+    const event = await ctx.db.query("developmentEvents").first();
+    if (!event) throw new Error("Expected transition event");
+    await ctx.db.patch("developmentEvents", event._id, {
+      canonicalRequestFingerprint: '{"lease":{"leaseToken":"private-capability"}}',
+    });
+    await ctx.db.insert("auditEvents", {
+      ownerId: "jarvis-cli",
+      requestId: "private-request",
+      scopeKey: "__global__",
+      eventType: "development.transition.rejected",
+      actor: "agent",
+      payload: {
+        canonicalRequestFingerprint: '{"lease":{"leaseToken":"private-capability"}}',
+        reasonCodes: ["conflict"],
+      },
+      createdAt: Date.now(),
+    });
+  });
+  const responses = [
+    await t.mutation(api.developmentState.commit, claimedToBuildingArgs()),
+    await t.query(api.developmentState.listEvents, {
+      serviceToken: SERVICE_TOKEN,
+      subjectId: "mission-1",
+    }),
+    await t.query(api.auditEvents.listRecent, { serviceToken: SERVICE_TOKEN }),
+    await t.query(api.auditEvents.listByRequest, {
+      serviceToken: SERVICE_TOKEN,
+      requestId: "private-request",
+    }),
+    await t.query(api.auditEvents.listActivityPage, {
+      serviceToken: SERVICE_TOKEN,
+      paginationOpts: { numItems: 10, cursor: null },
+    }),
+  ];
+  for (const response of responses)
+    expect(JSON.stringify(response)).not.toContain("private-capability");
+  expect(
+    (await t.run((ctx) => ctx.db.query("developmentEvents").first()))?.canonicalRequestFingerprint,
+  ).toContain("private-capability");
+});

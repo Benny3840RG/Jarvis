@@ -113,12 +113,14 @@ is a follow-up once #247 merges and an owner-wide receipts read exists.
 percentage without a documented formula, never inferred from an environment variable simply being set.
 Today's only line item:
 
-| `name`           | `status`                            | Evidence                                                                                                                                                                                                                                     |
-| ---------------- | ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `quote-delivery` | `commissioned` / `not-commissioned` | `ToolExecutionService.isRegistered("quotes", "send")` — the same conditional registration `toolExecutionFactory.ts` already performs from the real quote-repository / email-provider / delivery-repository / PDF-artifact-repository bundle. |
+| `name`           | `stage`                      | `status`           | Evidence                                                                                                                                                                                                                     |
+| ---------------- | ---------------------------- | ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `quote-delivery` | `implemented` / `configured` | `not-commissioned` | `ToolExecutionService.isRegistered("quotes", "send")` checks the actual quote-repository / email-provider / delivery-repository / PDF-artifact-repository bundle. Registration establishes configuration, not commissioning. |
 
-`not-commissioned` always carries a concrete `reason` (either "tool execution is not configured in this
-deployment" or "the quotes:send tool is not registered"); `commissioned` carries no `reason` at all. This
+Every current result carries a concrete reason. A registered bundle reports `configured`;
+no commissioning or production-approval evidence reader is wired into this status check,
+so stronger stages remain unknown here. The legacy status is derived from stage and only
+reports `commissioned` for a future evidenced `commissioned` or `production-approved` stage. This
 check makes no new live call to Outlook or any other external provider — it only asks the already-running
 `ToolExecutionService` what it registered at startup.
 

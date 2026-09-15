@@ -1,6 +1,10 @@
 import { v } from "convex/values";
 
-import { evaluateOmegaCompletion, canTransitionOmegaMission } from "../src/omega/policy.js";
+import {
+  evaluateOmegaCompletion,
+  canTransitionOmegaMission,
+  type OmegaCompletionInput,
+} from "../src/omega/policy.js";
 import { projectOmegaDevelopmentCompletion } from "./developmentState.js";
 import { requireApprovalToken, requireOwner } from "./authHelpers.js";
 import {
@@ -17,7 +21,8 @@ import {
   omegaValidationProofDocumentValidator,
   omegaValidationResultValidator,
 } from "./omegaValidators.js";
-import { mutation, query, type MutationCtx } from "./_generated/server.js";
+import type { Doc } from "./_generated/dataModel.js";
+import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server.js";
 
 const POLICY_VERSION = "omega-sigma:v1";
 const MAX_ACCEPTANCE_CRITERIA = 64;
@@ -453,6 +458,113 @@ export const recordValidationProof = mutation({
   },
 });
 
+/** Derives completion truth from the same bounded durable rows for reads and transitions.
+ * Residual uncertainty is deliberately absent: it is caller judgment and is not persisted.
+ */
+export async function deriveOmegaCompletionInput(
+  ctx: Pick<QueryCtx, "db">,
+  mission: Doc<"omegaMissions">,
+  now: number,
+): Promise<Omit<OmegaCompletionInput, "residualUncertainty">> {
+  const { ownerId, missionId } = mission;
+  const proofs = await ctx.db
+    .query("omegaValidationProofs")
+    .withIndex("by_owner_and_mission_id", (q) =>
+      q.eq("ownerId", ownerId).eq("missionId", missionId),
+    )
+    .take(MAX_PROOFS_PER_MISSION + 1);
+  if (proofs.length > MAX_PROOFS_PER_MISSION) {
+    throw new Error("Omega mission validation proof set exceeds its bounded policy limit.");
+  }
+
+  const evidence = await ctx.db
+    .query("omegaEvidence")
+    .withIndex("by_owner_and_mission_id", (q) =>
+      q.eq("ownerId", ownerId).eq("missionId", missionId),
+    )
+    .take(MAX_EVIDENCE_PER_MISSION + 1);
+  if (evidence.length > MAX_EVIDENCE_PER_MISSION) {
+    throw new Error("Omega mission evidence set exceeds its bounded policy limit.");
+  }
+
+  const contracts = await ctx.db
+    .query("omegaActionContracts")
+    .withIndex("by_owner_and_mission_id", (q) =>
+      q.eq("ownerId", ownerId).eq("missionId", missionId),
+    )
+    .take(MAX_CONTRACTS_PER_MISSION + 1);
+  if (contracts.length > MAX_CONTRACTS_PER_MISSION) {
+    throw new Error("Omega mission contract set exceeds its bounded policy limit.");
+  }
+
+  const contradictionResolutions = await ctx.db
+    .query("omegaContradictionResolutions")
+    .withIndex("by_owner_and_mission_id", (q) =>
+      q.eq("ownerId", ownerId).eq("missionId", missionId),
+    )
+    .take(MAX_RESOLUTIONS_PER_MISSION + 1);
+  if (contradictionResolutions.length > MAX_RESOLUTIONS_PER_MISSION) {
+    throw new Error("Omega mission contradiction resolution set exceeds its bounded policy limit.");
+  }
+
+  const currentEvidenceIds = new Set(
+    evidence
+      .filter((item) => item.validUntil === undefined || item.validUntil > now)
+      .map((item) => item.evidenceId),
+  );
+  const criteriaForCompletion = mission.acceptanceCriteria.map((criterion) => ({
+    criterionId: criterion.criterionId,
+  }));
+  const currentProofs = proofs
+    .filter(
+      (proof) =>
+        proof.evidenceRefs.length > 0 &&
+        proof.evidenceRefs.every((evidenceId) => currentEvidenceIds.has(evidenceId)),
+    )
+    .map((proof) => ({
+      criterionId: proof.criterionId,
+      result: proof.result,
+      independent: proof.independent,
+      evidenceRefs: proof.evidenceRefs,
+    }));
+
+  const resolvedContradictionTargets = new Map<string, Set<string>>();
+  for (const resolution of contradictionResolutions) {
+    const resolvedTargets =
+      resolvedContradictionTargets.get(resolution.contradictionEvidenceId) ?? new Set<string>();
+    resolvedTargets.add(resolution.contradictedEvidenceId);
+    resolvedContradictionTargets.set(resolution.contradictionEvidenceId, resolvedTargets);
+  }
+
+  let unresolvedCriticalContradictions = 0;
+  for (const item of evidence) {
+    if (
+      (item.validUntil === undefined || item.validUntil > now) &&
+      item.classification === "certain"
+    ) {
+      const resolvedTargets = resolvedContradictionTargets.get(item.evidenceId);
+      for (const contradictedEvidenceId of item.contradicts) {
+        if (!resolvedTargets?.has(contradictedEvidenceId)) {
+          unresolvedCriticalContradictions += 1;
+        }
+      }
+    }
+  }
+
+  const unreconciledExternalEffects = contracts.filter(
+    (contract) => !["reconciled", "denied", "expired", "rolled-back"].includes(contract.status),
+  ).length;
+
+  return {
+    criteria: criteriaForCompletion,
+    proofs: currentProofs,
+    riskClass: mission.riskClass,
+    unresolvedCriticalContradictions,
+    unreconciledExternalEffects,
+    uncertaintyBudget: mission.uncertaintyBudget,
+  };
+}
+
 export const transition = mutation({
   args: {
     serviceToken: v.string(),
@@ -492,105 +604,11 @@ export const transition = mutation({
         throw new Error("Completing an Omega mission requires residual uncertainty.");
       }
 
-      const proofs = await ctx.db
-        .query("omegaValidationProofs")
-        .withIndex("by_owner_and_mission_id", (q) =>
-          q.eq("ownerId", ownerId).eq("missionId", missionId),
-        )
-        .take(MAX_PROOFS_PER_MISSION + 1);
-      if (proofs.length > MAX_PROOFS_PER_MISSION) {
-        throw new Error("Omega mission validation proof set exceeds its bounded policy limit.");
-      }
-
-      const evidence = await ctx.db
-        .query("omegaEvidence")
-        .withIndex("by_owner_and_mission_id", (q) =>
-          q.eq("ownerId", ownerId).eq("missionId", missionId),
-        )
-        .take(MAX_EVIDENCE_PER_MISSION + 1);
-      if (evidence.length > MAX_EVIDENCE_PER_MISSION) {
-        throw new Error("Omega mission evidence set exceeds its bounded policy limit.");
-      }
-
-      const contracts = await ctx.db
-        .query("omegaActionContracts")
-        .withIndex("by_owner_and_mission_id", (q) =>
-          q.eq("ownerId", ownerId).eq("missionId", missionId),
-        )
-        .take(MAX_CONTRACTS_PER_MISSION + 1);
-      if (contracts.length > MAX_CONTRACTS_PER_MISSION) {
-        throw new Error("Omega mission contract set exceeds its bounded policy limit.");
-      }
-
-      const contradictionResolutions = await ctx.db
-        .query("omegaContradictionResolutions")
-        .withIndex("by_owner_and_mission_id", (q) =>
-          q.eq("ownerId", ownerId).eq("missionId", missionId),
-        )
-        .take(MAX_RESOLUTIONS_PER_MISSION + 1);
-      if (contradictionResolutions.length > MAX_RESOLUTIONS_PER_MISSION) {
-        throw new Error(
-          "Omega mission contradiction resolution set exceeds its bounded policy limit.",
-        );
-      }
-
-      const currentEvidenceIds = new Set(
-        evidence
-          .filter((item) => item.validUntil === undefined || item.validUntil > now)
-          .map((item) => item.evidenceId),
-      );
-      const criteriaForCompletion = mission.acceptanceCriteria.map((criterion) => ({
-        criterionId: criterion.criterionId,
-      }));
-      const currentProofs = proofs
-        .filter(
-          (proof) =>
-            proof.evidenceRefs.length > 0 &&
-            proof.evidenceRefs.every((evidenceId) => currentEvidenceIds.has(evidenceId)),
-        )
-        .map((proof) => ({
-          criterionId: proof.criterionId,
-          result: proof.result,
-          independent: proof.independent,
-          evidenceRefs: proof.evidenceRefs,
-        }));
-
-      const resolvedContradictionTargets = new Map<string, Set<string>>();
-      for (const resolution of contradictionResolutions) {
-        const resolvedTargets =
-          resolvedContradictionTargets.get(resolution.contradictionEvidenceId) ?? new Set<string>();
-        resolvedTargets.add(resolution.contradictedEvidenceId);
-        resolvedContradictionTargets.set(resolution.contradictionEvidenceId, resolvedTargets);
-      }
-
-      let unresolvedCriticalContradictions = 0;
-      for (const item of evidence) {
-        if (
-          (item.validUntil === undefined || item.validUntil > now) &&
-          item.classification === "certain"
-        ) {
-          const resolvedTargets = resolvedContradictionTargets.get(item.evidenceId);
-          for (const contradictedEvidenceId of item.contradicts) {
-            if (!resolvedTargets?.has(contradictedEvidenceId)) {
-              unresolvedCriticalContradictions += 1;
-            }
-          }
-        }
-      }
-
-      const unreconciledExternalEffects = contracts.filter(
-        (contract) => !["reconciled", "denied", "expired", "rolled-back"].includes(contract.status),
-      ).length;
-
-      const completion = evaluateOmegaCompletion({
-        criteria: criteriaForCompletion,
-        proofs: currentProofs,
-        riskClass: mission.riskClass,
-        unresolvedCriticalContradictions,
-        unreconciledExternalEffects,
+      const completionInput = {
+        ...(await deriveOmegaCompletionInput(ctx, mission, now)),
         residualUncertainty: args.residualUncertainty,
-        uncertaintyBudget: mission.uncertaintyBudget,
-      });
+      };
+      const completion = evaluateOmegaCompletion(completionInput);
 
       if (!completion.allowed) {
         throw new Error(`Omega completion denied: ${completion.failures.join(", ")}.`);
@@ -601,20 +619,12 @@ export const transition = mutation({
         missionId,
         evidenceIds: [
           ...new Set(
-            currentProofs
+            completionInput.proofs
               .filter((proof) => proof.result === "pass")
               .flatMap((proof) => proof.evidenceRefs),
           ),
         ],
-        completionInput: {
-          criteria: criteriaForCompletion,
-          proofs: currentProofs,
-          riskClass: mission.riskClass,
-          unresolvedCriticalContradictions,
-          unreconciledExternalEffects,
-          residualUncertainty: args.residualUncertainty,
-          uncertaintyBudget: mission.uncertaintyBudget,
-        },
+        completionInput,
         now,
       });
     }

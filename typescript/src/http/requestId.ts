@@ -15,7 +15,9 @@ export function resolveRequestId(
   const candidate = Array.isArray(value) ? undefined : value;
   return candidate !== undefined &&
     SAFE_REQUEST_ID.test(candidate) &&
-    !rejectedValues.includes(candidate)
+    !rejectedValues.some(
+      (secret) => secret !== undefined && secret.length > 0 && candidate.includes(secret),
+    )
     ? candidate
     : randomUUID();
 }

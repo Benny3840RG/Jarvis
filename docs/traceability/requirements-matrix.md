@@ -89,3 +89,12 @@ Exact main HEAD assessed: `b11dc07bf1dbcce5446f08489122e4df76c205be` (merge of P
 - Branch protection on `main` remains unenforced (issue #398); cannot be applied from the current tool surface — owner GitHub UI required.
 - Open Dependabot PRs reviewed, not merged: #379 (prod deps) needs fresh exact-head proof + human land; #391 (Action pins) eligible after human land confirmation.
 - No requirement range is promoted to Verified by this reconciliation. No commissioning, remote exposure, customer effect, or production deployment was performed.
+
+## Foundation reconciliation — 2026-09-11
+
+Main baseline: `db1b7153348de349fcfde019f4b5eb5deaa21dbc` (PR #487).
+
+- Post-merge TypeScript `34544527352` and CodeQL `34544526697` / `34544526539` passed. Current GitHub APIs report no open CodeQL, Dependabot or secret-scanning alerts. A fresh npm audit of the current lockfile reports zero findings. Earlier dated alert counts above are historical, not the current security queue.
+- The effective branch-rules API returns no rules for `main`; protection returns 404. Both stored rulesets are disabled with empty branch selectors, and the configured main review policy does not require approvals or code-owner review. Issue #398 is reopened because the required live enforcement evidence is absent. The previous connector capability limitation no longer describes this environment; consequential settings and review/bypass policy remain owner-controlled.
+- Runtime source now receives the existing CODEOWNERS assignment, including Development, ΩΣ, ToolAction execution, orchestration, safety and persistence. The existing governance workflow now runs when its requirements-registry dependency changes. Regressions reproduced both coverage gaps and pass after repair. These repository changes do not claim active GitHub enforcement.
+- Broad requirement ranges remain Partial/Unverified as recorded. Recovery completeness, current-release provider commissioning, remote identity, hosted operations and exact-release production approval remain outstanding; these checks do not commission production.

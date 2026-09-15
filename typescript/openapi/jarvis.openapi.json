@@ -4,7 +4,7 @@
   "info": {
     "title": "Jarvis Operator API",
     "summary": "A safety-gated API for the Jarvis Z-State runtime and durable operator data.",
-    "description": "Jarvis accepts structured operator requests, routes work through its runtime and safety envelope, persists tasks and reminders through the configured JSON or Convex provider, runs proposal-only Totality reasoning, stages revision-checked project-memory changes, and stores revision-bound tool-action proposals for explicit approval or rejection. Approved tool actions may be executed through the small reviewed server-side allowlist, with durable receipts and external reconciliation where required. The private development ChatGPT App preview provides a stateless Streamable HTTP MCP adapter and versioned dashboard widget for the operations marked with x-mcp-tool.exposed=true. Jarvis and OpenAI credentials remain server-side. This contract is intentionally single-user and private.",
+    "description": "Jarvis accepts structured operator requests, routes work through its runtime and safety envelope, persists tasks and reminders through the configured JSON or Convex provider, runs proposal-only Totality reasoning, stages revision-checked project-memory changes, and stores revision-bound tool-action proposals for explicit approval or rejection. Approved tool actions may be executed through the small reviewed server-side allowlist, with durable receipts and external reconciliation where required. The private development ChatGPT App preview provides a stateless Streamable HTTP MCP adapter and versioned dashboard widget for the operations marked with x-mcp-tool.exposed=true. Jarvis and OpenAI credentials remain server-side. This contract is intentionally single-user and private. The development-only Sentry commissioning CLI exercises an isolated API-client failure boundary and reports envelope transport observations; provider event visibility and alert proof remain separate, unproven until independently observed.",
     "version": "0.7.0",
     "license": {
       "name": "Proprietary",
@@ -3897,7 +3897,7 @@
       "post": {
         "operationId": "createBuild",
         "summary": "Create a build",
-        "description": "Records one machine or project — the RC crawler, the trailer, a tool.",
+        "description": "Records one machine or project \u2014 the RC crawler, the trailer, a tool.",
         "tags": ["Builds"],
         "x-mcp-tool": {
           "exposed": true,
@@ -4270,7 +4270,7 @@
       "get": {
         "operationId": "listBuildLogs",
         "summary": "List build log entries",
-        "description": "Returns the dated lore attached to Benny's builds — origins, milestones, failures, anecdotes, notes.",
+        "description": "Returns the dated lore attached to Benny's builds \u2014 origins, milestones, failures, anecdotes, notes.",
         "tags": ["Build Log"],
         "x-mcp-tool": {
           "exposed": true,
@@ -4311,7 +4311,7 @@
       "post": {
         "operationId": "createBuildLog",
         "summary": "Record a build log entry",
-        "description": "Adds one dated entry to a build's story — why it started, a milestone, a failure, an anecdote, or a loose note.",
+        "description": "Adds one dated entry to a build's story \u2014 why it started, a milestone, a failure, an anecdote, or a loose note.",
         "tags": ["Build Log"],
         "x-mcp-tool": {
           "exposed": true,
@@ -4519,7 +4519,7 @@
       "get": {
         "operationId": "listUpgrades",
         "summary": "List upgrades",
-        "description": "Returns the upgrade chronicle — the changes made to Benny's builds over time.",
+        "description": "Returns the upgrade chronicle \u2014 the changes made to Benny's builds over time.",
         "tags": ["Upgrades"],
         "x-mcp-tool": {
           "exposed": true,
@@ -4560,7 +4560,7 @@
       "post": {
         "operationId": "createUpgrade",
         "summary": "Record an upgrade",
-        "description": "Records one change to a build — what was swapped or modified, why, the before/after, the outcome, and the parts involved.",
+        "description": "Records one change to a build \u2014 what was swapped or modified, why, the before/after, the outcome, and the parts involved.",
         "tags": ["Upgrades"],
         "x-mcp-tool": {
           "exposed": true,
@@ -5017,7 +5017,7 @@
       "get": {
         "operationId": "listPreferences",
         "summary": "List preferences",
-        "description": "Returns Benny's settings and standing choices — brands, tools, naming, defaults.",
+        "description": "Returns Benny's settings and standing choices \u2014 brands, tools, naming, defaults.",
         "tags": ["Preferences"],
         "x-mcp-tool": {
           "exposed": true,
@@ -5468,7 +5468,7 @@
       "get": {
         "operationId": "getOperationsInbox",
         "summary": "Get the read-only Operations Inbox",
-        "description": "Composes what genuinely needs the operator's attention now from existing authoritative sources (overdue reminders, overdue/due-soon maintenance; governed tool actions, reconciliation escalations, and quote-delivery problems are reported as a separately-commissioned source rather than fabricated). Each source reports its own availability — one source failing never fails this response or hides another source's items. Read-only: no source is mutated or retried from this endpoint.",
+        "description": "Composes what genuinely needs the operator's attention now from existing authoritative sources (overdue reminders, overdue/due-soon maintenance; governed tool actions, reconciliation escalations, and quote-delivery problems are reported as a separately-commissioned source rather than fabricated). Each source reports its own availability \u2014 one source failing never fails this response or hides another source's items. Read-only: no source is mutated or retried from this endpoint.",
         "tags": ["Operations"],
         "x-mcp-tool": {
           "exposed": true,
@@ -5511,7 +5511,7 @@
       "get": {
         "operationId": "getOperationsActivity",
         "summary": "Get one bounded page of the read-only Operations Activity Timeline",
-        "description": "A bounded, cursor-paginated, owner-wide feed of durable audit events across every project scope, newest first. Unlike the Operations Inbox, this endpoint has exactly one source (the audit event log), so a read failure or an unconfigured deployment is reported as {status: \"unavailable\", reason} rather than as an empty page or a thrown error — an empty page always means \"no activity\", never \"the read failed\". Each event's summary is built only from a fixed, known-safe subset of its fields; an unrecognized event type falls back to a type-only summary rather than exposing its raw payload. Read-only: nothing is mutated from this endpoint.",
+        "description": "A bounded, cursor-paginated, owner-wide feed of durable audit events across every project scope, newest first. Unlike the Operations Inbox, this endpoint has exactly one source (the audit event log), so a read failure or an unconfigured deployment is reported as {status: \"unavailable\", reason} rather than as an empty page or a thrown error \u2014 an empty page always means \"no activity\", never \"the read failed\". Each event's summary is built only from a fixed, known-safe subset of its fields; an unrecognized event type falls back to a type-only summary rather than exposing its raw payload. Read-only: nothing is mutated from this endpoint.",
         "tags": ["Operations"],
         "x-mcp-tool": {
           "exposed": true,
@@ -5563,6 +5563,46 @@
           },
           "422": {
             "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
+    },
+    "/api/v1/development/live-work": {
+      "get": {
+        "operationId": "getDevelopmentLiveWork",
+        "summary": "Get the read-only development live-work pipeline",
+        "description": "Projects the sole non-terminal Development subject through the existing owner-scoped read model. No active subject returns {status: \"available\", pipeline: null}; unsupported persistence, failed reads or ambiguous multiple active subjects return {status: \"unavailable\", reason} in the 200 body. COMPLETE, FAILED, ABORTED and CONTRADICTED subjects are excluded from current work; MERGED remains visible until authoritative completion. Persisted Development state controls the HUD, and Omega readiness never implies COMPLETE. Only durable or derivable fields are exposed, including validated candidate receipts and orchestration metadata when present. The numeric fencingToken is a non-secret lease-generation counter; the secret string leaseToken is never returned. Unknown values remain null or unavailable. Read-only: nothing is mutated.",
+        "tags": ["Operations"],
+        "x-mcp-tool": {
+          "exposed": true,
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The current development live-work pipeline, or a truthful unavailable status.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DevelopmentLiveWorkResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
@@ -8309,7 +8349,7 @@
             "type": "object",
             "maxProperties": 64,
             "additionalProperties": true,
-            "description": "Bounded JSON arguments. Credential-bearing keys, secrets, non-finite numbers, excessive nesting, and oversized strings are rejected before persistence."
+            "description": "Bounded JSON arguments. Credential-bearing keys, secrets, non-finite numbers, excessive nesting, and oversized strings are rejected before persistence. Staging accepts bounded generic arguments; tool-specific validation occurs at execution. For quotes:send, optional senderConnection is a string matching ^[a-z][a-z0-9-]{0,31}:[a-f0-9]{64}$ (manifest label plus configuration fingerprint). At execution, the configured named Outlook provider requires that value to match its current manifest; omission, unknown connection or changed configuration fails closed before a provider request. Legacy single-mailbox mode omits senderConnection. Runtime configuration determines which mode applies; this generic staging schema does not assert a mode-dependent required field. Changing the sender requires a new approval."
           },
           "rationale": {
             "type": "string",
@@ -8427,7 +8467,7 @@
             "type": "object",
             "maxProperties": 64,
             "additionalProperties": true,
-            "description": "Bounded JSON arguments. Credential-bearing keys, secrets, non-finite numbers, excessive nesting, and oversized strings are rejected before persistence."
+            "description": "Bounded JSON arguments. Credential-bearing keys, secrets, non-finite numbers, excessive nesting, and oversized strings are rejected before persistence. Staging accepts bounded generic arguments; tool-specific validation occurs at execution. For quotes:send, optional senderConnection is a string matching ^[a-z][a-z0-9-]{0,31}:[a-f0-9]{64}$ (manifest label plus configuration fingerprint). At execution, the configured named Outlook provider requires that value to match its current manifest; omission, unknown connection or changed configuration fails closed before a provider request. Legacy single-mailbox mode omits senderConnection. Runtime configuration determines which mode applies; this generic staging schema does not assert a mode-dependent required field. Changing the sender requires a new approval."
           },
           "rationale": {
             "type": "string",
@@ -11108,7 +11148,7 @@
           "approvalToken": {
             "type": "string",
             "minLength": 1,
-            "description": "The same separately configured operator secret required by /approve — proves a human, not just the shared service token, decided to revoke this specific proposal."
+            "description": "The same separately configured operator secret required by /approve \u2014 proves a human, not just the shared service token, decided to revoke this specific proposal."
           }
         }
       },
@@ -11127,7 +11167,7 @@
           },
           "reason": {
             "type": "string",
-            "description": "Present when status is not \"available\" — a concrete, non-generic reason."
+            "description": "Present when status is not \"available\" \u2014 a concrete, non-generic reason."
           },
           "checkedAt": {
             "type": "string",
@@ -11258,7 +11298,7 @@
           "summary": {
             "type": "string",
             "minLength": 1,
-            "description": "A safe, factual summary built only from a fixed, known-safe subset of the source event's fields — never the raw event payload."
+            "description": "A safe, factual summary built only from a fixed, known-safe subset of the source event's fields \u2014 never the raw event payload."
           },
           "projectKey": {
             "type": "string",
@@ -11326,24 +11366,334 @@
           }
         }
       },
-      "IntegrationStatus": {
+      "LiveWorkNode": {
         "type": "object",
+        "description": "The mission node describes the objective. The issue node remains unavailable until an authoritative GitHub issue binding is recorded; mission progress alone does not prove issue state.",
         "additionalProperties": false,
-        "required": ["name", "status"],
+        "required": ["key", "label", "status", "detail"],
         "properties": {
-          "name": {
+          "key": {
+            "type": "string",
+            "enum": ["mission", "stage", "issue", "pr", "worker", "review", "ci", "merge", "omega"]
+          },
+          "label": {
             "type": "string",
             "minLength": 1
           },
           "status": {
             "type": "string",
-            "enum": ["commissioned", "not-commissioned"]
+            "enum": ["done", "active", "pending", "blocked", "unavailable"]
+          },
+          "detail": {
+            "type": "string",
+            "description": "Composed server-side from render-safe fields only — never a raw event payload. \"Not recorded by the mission yet.\" when the domain does not durably record this node's data."
+          }
+        }
+      },
+      "LiveWorkEvent": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["eventId", "at", "summary", "evidenceIds"],
+        "properties": {
+          "eventId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "summary": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Built only from a fixed, known-safe subset of the development event's fields — never the raw payload."
+          },
+          "evidenceIds": {
+            "type": "array",
+            "maxItems": 128,
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "LiveWorkPipeline": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "subjectId",
+          "state",
+          "repository",
+          "branch",
+          "objective",
+          "missionInFlight",
+          "nodes",
+          "events",
+          "updatedAt",
+          "generatedAt",
+          "rail",
+          "completionLabel",
+          "omegaReadiness",
+          "subjectVersion",
+          "orchestrationRunId",
+          "orchestrationNodeId",
+          "fencingToken",
+          "workerStep",
+          "candidate"
+        ],
+        "properties": {
+          "subjectId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "state": {
+            "type": "string",
+            "minLength": 1
+          },
+          "repository": {
+            "type": ["string", "null"]
+          },
+          "branch": {
+            "type": ["string", "null"]
+          },
+          "objective": {
+            "type": ["string", "null"],
+            "description": "Mission objective. The Convex projection normalizes CRLF line endings to LF; terminal displays flatten line breaks within each framed row."
+          },
+          "missionInFlight": {
+            "type": "boolean"
+          },
+          "nodes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LiveWorkNode"
+            }
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LiveWorkEvent"
+            }
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "generatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "rail": {
+            "type": "array",
+            "maxItems": 11,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["state", "label", "status"],
+              "properties": {
+                "state": {
+                  "type": "string"
+                },
+                "label": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string",
+                  "enum": ["done", "active", "pending", "blocked", "unavailable"]
+                }
+              }
+            }
+          },
+          "completionLabel": {
+            "type": "string"
+          },
+          "omegaReadiness": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["allowed", "failures"],
+            "properties": {
+              "allowed": {
+                "type": "boolean"
+              },
+              "failures": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "subjectVersion": {
+            "type": ["integer", "null"]
+          },
+          "orchestrationRunId": {
+            "type": ["string", "null"]
+          },
+          "orchestrationNodeId": {
+            "type": ["string", "null"]
+          },
+          "fencingToken": {
+            "description": "Non-secret lease-generation counter; not the secret leaseToken and not execution authority.",
+            "type": ["integer", "null"]
+          },
+          "workerStep": {
+            "type": ["object", "null"],
+            "additionalProperties": false,
+            "required": ["nodeId", "state"],
+            "properties": {
+              "nodeId": {
+                "type": "string"
+              },
+              "operationId": {
+                "type": ["string", "null"]
+              },
+              "state": {
+                "type": "string"
+              },
+              "leaseOwner": {
+                "type": ["string", "null"]
+              },
+              "leaseExpiresAt": {
+                "type": ["number", "null"]
+              }
+            }
+          },
+          "candidate": {
+            "type": ["object", "null"],
+            "required": ["pullRequestNumber", "headSha", "receiptId"],
+            "additionalProperties": false,
+            "properties": {
+              "pullRequestNumber": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "headSha": {
+                "type": "string",
+                "pattern": "^[a-fA-F0-9]{40}$"
+              },
+              "receiptId": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "LiveWorkAvailable": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["status", "pipeline"],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": ["available"]
+          },
+          "pipeline": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/LiveWorkPipeline"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "LiveWorkUnavailable": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["status", "reason"],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": ["unavailable"]
           },
           "reason": {
             "type": "string",
-            "description": "Present when status is \"not-commissioned\" — a concrete, non-generic reason."
+            "minLength": 1
           }
         }
+      },
+      "LiveWorkResult": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/LiveWorkAvailable"
+          },
+          {
+            "$ref": "#/components/schemas/LiveWorkUnavailable"
+          }
+        ]
+      },
+      "DevelopmentLiveWorkResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["data"],
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/LiveWorkResult"
+          }
+        }
+      },
+      "IntegrationStatus": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "stage", "status"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "stage": {
+            "type": "string",
+            "enum": ["implemented", "configured", "commissioned", "production-approved"],
+            "description": "Highest lifecycle stage with recorded evidence of that kind. Never inferred upward: registering a tool proves \"configured\" only, never \"commissioned\"."
+          },
+          "status": {
+            "type": "string",
+            "enum": ["commissioned", "not-commissioned"],
+            "description": "Derived from \"stage\" for existing consumers: \"commissioned\" only when stage is \"commissioned\" or \"production-approved\"."
+          },
+          "reason": {
+            "type": "string",
+            "description": "Why the integration is not further along. Present unless stage is \"production-approved\".",
+            "minLength": 1
+          }
+        },
+        "oneOf": [
+          {
+            "properties": {
+              "stage": {
+                "enum": ["implemented", "configured"]
+              },
+              "status": {
+                "const": "not-commissioned"
+              }
+            },
+            "required": ["stage", "status", "reason"]
+          },
+          {
+            "properties": {
+              "stage": {
+                "const": "commissioned"
+              },
+              "status": {
+                "const": "commissioned"
+              }
+            },
+            "required": ["stage", "status", "reason"]
+          },
+          {
+            "properties": {
+              "stage": {
+                "const": "production-approved"
+              },
+              "status": {
+                "const": "commissioned"
+              }
+            },
+            "required": ["stage", "status"]
+          }
+        ]
       },
       "ReasoningStatus": {
         "type": "object",
@@ -11356,10 +11706,27 @@
             "description": "\"configured\" means the provider's API key env var is present -- never that the provider has been reached with a live call."
           },
           "provider": {
-            "oneOf": [{ "type": "string", "enum": ["openai", "gemini"] }, { "type": "null" }]
+            "oneOf": [
+              {
+                "type": "string",
+                "enum": ["openai", "gemini"]
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "model": {
-            "oneOf": [{ "type": "string", "minLength": 1, "maxLength": 128 }, { "type": "null" }]
+            "oneOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "reason": {
             "type": "string",

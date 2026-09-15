@@ -3,6 +3,8 @@ import { convexTest } from "convex-test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import schema from "./schema.js";
+import { deriveOmegaCompletionInput } from "./omegaMissions.js";
+import { evaluateOmegaCompletion } from "../src/omega/policy.js";
 import { modules } from "./test.setup.js";
 
 const SERVICE_TOKEN = "omega-completion-service-token-0000000000";
@@ -278,5 +280,68 @@ describe("Omega completion truth security", () => {
 
     await beginValidation(t, missionId);
     await expect(completeMission(t, missionId)).rejects.toThrow(/critical-evidence-contradiction/i);
+  });
+});
+
+describe("shared read-only Omega completion derivation", () => {
+  it("uses current durable truth without manufacturing residual uncertainty or mutating state", async () => {
+    const t = harness();
+    const missionId = "mission-readiness";
+    await createMission(t, missionId);
+    await recordEvidence(t, missionId, "EV-CURRENT");
+    await recordPassingProof(t, missionId, ["EV-CURRENT"]);
+    await beginValidation(t, missionId);
+
+    const derived = await t.run(async (ctx) => {
+      const mission = await ctx.db
+        .query("omegaMissions")
+        .withIndex("by_owner_and_mission_id", (q) =>
+          q.eq("ownerId", OWNER_ID).eq("missionId", missionId),
+        )
+        .unique();
+      if (!mission) throw new Error("Missing mission");
+      const result = await deriveOmegaCompletionInput(ctx, mission, Date.now());
+      expect(await ctx.db.get("omegaMissions", mission._id)).toEqual(mission);
+      return result;
+    });
+    expect(derived).not.toHaveProperty("residualUncertainty");
+    expect(evaluateOmegaCompletion({ ...derived, residualUncertainty: Number.NaN })).toEqual({
+      allowed: false,
+      failures: ["invalid-residual-uncertainty"],
+    });
+    expect(evaluateOmegaCompletion({ ...derived, residualUncertainty: 0 }).allowed).toBe(true);
+    expect((await completeMission(t, missionId)).state).toBe("complete");
+  });
+
+  it("expires whole proofs and isolates evidence by mission owner", async () => {
+    const t = harness();
+    const missionId = "mission-readiness-expired";
+    await createMission(t, missionId);
+    await recordEvidence(t, missionId, "EV-EXPIRES", { validUntil: Date.now() + 1000 });
+    await recordPassingProof(t, missionId, ["EV-EXPIRES"]);
+    const derived = await t.run(async (ctx) => {
+      const mission = await ctx.db
+        .query("omegaMissions")
+        .withIndex("by_owner_and_mission_id", (q) =>
+          q.eq("ownerId", OWNER_ID).eq("missionId", missionId),
+        )
+        .unique();
+      if (!mission) throw new Error("Missing mission");
+      await ctx.db.insert("omegaEvidence", {
+        ownerId: "other-owner",
+        missionId,
+        evidenceId: "EV-EXPIRES",
+        claim: "Not this owner's evidence",
+        classification: "certain",
+        sourceType: "primary-source",
+        contradicts: [],
+        createdAt: Date.now(),
+      });
+      return deriveOmegaCompletionInput(ctx, mission, Date.now() + 2000);
+    });
+    expect(derived.proofs).toEqual([]);
+    expect(evaluateOmegaCompletion({ ...derived, residualUncertainty: 0 }).failures).toContain(
+      "criterion-missing-passing-proof:AC-1",
+    );
   });
 });

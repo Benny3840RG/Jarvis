@@ -47,7 +47,7 @@ export function archiveV4Usage(): string[] {
     "archive partial.",
     "",
     "An interrupted restore leaves the destination unmistakably incomplete. Re-run",
-    "with --resume to discard that restore's own output and start again; a plain",
+    "with --resume to retain verified output and write missing files; a plain",
     "retry refuses it.",
   ];
 }

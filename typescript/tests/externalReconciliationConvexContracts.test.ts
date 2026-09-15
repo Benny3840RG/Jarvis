@@ -35,8 +35,8 @@ describe("external reconciliation Convex contracts", () => {
     assert.ok(reconciliationSource.includes("record.leaseExpiresAt === undefined"));
     assert.ok(reconciliationSource.includes("record.leaseExpiresAt <= now"));
     assert.equal(
-      reconciliationSource.split("assertLease(reconciliation, workerId, leaseToken, args.now)")
-        .length - 1,
+      reconciliationSource.split("assertLease(reconciliation, workerId, leaseToken, now)").length -
+        1,
       2,
     );
   });

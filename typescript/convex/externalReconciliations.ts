@@ -1,8 +1,9 @@
+import { publicReconciliation } from "./publicEvidence.js";
 import { v } from "convex/values";
 
 import {
   externalReconciliationClaimValidator,
-  externalReconciliationDocumentValidator,
+  externalReconciliationPublicValidator,
   externalReconciliationEnvelopeValidator,
   externalReconciliationStateValidator,
 } from "./externalReconciliationValidators.js";
@@ -30,6 +31,16 @@ const scopeArgs = {
 };
 
 const OBSERVING_RECOVERY_MS = 60_000;
+
+// A worker computes a retry-scheduling hint (nextAttemptAt) from its own clock just
+// before calling releaseClaim. Ordinary RPC latency between that computation and the
+// server receiving the call can put the hint at or before the server's own now. That
+// hint is scheduling information, not an authority decision, so releaseClaim clamps it
+// strictly past now instead of rejecting an otherwise-valid release. This is a minimal
+// epsilon, not a policy floor: a fixed minimum gap of any real size (e.g. 1 second)
+// would silently override a worker configured with a smaller maxRetryMs on every
+// release, not just when latency actually caused staleness.
+const MIN_RETRY_EPSILON_MS = 1;
 
 function cleanScope(args: {
   projectId: string;
@@ -270,7 +281,7 @@ export const getByScope = query({
     if (!reconciliation) return null;
     assertEffect(reconciliation, scope.effectFingerprint);
     return {
-      reconciliation,
+      reconciliation: publicReconciliation(reconciliation),
       receipt: await findReceipt(ctx, ownerId, reconciliation.receiptKey),
     };
   },
@@ -282,7 +293,7 @@ export const listForOperator = query({
     state: v.optional(externalReconciliationStateValidator),
     limit: v.optional(v.number()),
   },
-  returns: v.array(externalReconciliationDocumentValidator),
+  returns: v.array(externalReconciliationPublicValidator),
   handler: async (ctx, args) => {
     const ownerId = requireOwner(args.serviceToken);
     const limit = args.limit ?? 50;
@@ -291,20 +302,24 @@ export const listForOperator = query({
     }
 
     if (args.state !== undefined) {
-      return ctx.db
-        .query("externalReconciliations")
-        .withIndex("by_owner_and_state_and_updated_at", (q) =>
-          q.eq("ownerId", ownerId).eq("state", args.state!),
-        )
-        .order("desc")
-        .take(limit);
+      return (
+        await ctx.db
+          .query("externalReconciliations")
+          .withIndex("by_owner_and_state_and_updated_at", (q) =>
+            q.eq("ownerId", ownerId).eq("state", args.state!),
+          )
+          .order("desc")
+          .take(limit)
+      ).map(publicReconciliation);
     }
 
-    return ctx.db
-      .query("externalReconciliations")
-      .withIndex("by_owner_and_updated_at", (q) => q.eq("ownerId", ownerId))
-      .order("desc")
-      .take(limit);
+    return (
+      await ctx.db
+        .query("externalReconciliations")
+        .withIndex("by_owner_and_updated_at", (q) => q.eq("ownerId", ownerId))
+        .order("desc")
+        .take(limit)
+    ).map(publicReconciliation);
   },
 });
 
@@ -317,7 +332,7 @@ export const getForOperator = query({
     const reconciliation = await findByReconciliationId(ctx, ownerId, reconciliationId);
     if (!reconciliation) return null;
     return {
-      reconciliation,
+      reconciliation: publicReconciliation(reconciliation),
       receipt: await findReceipt(ctx, ownerId, reconciliation.receiptKey),
     };
   },
@@ -337,7 +352,7 @@ export const registerAttempt = mutation({
     providerCorrelationId: v.string(),
     safetyBinding: v.optional(safetyBindingValidator),
   },
-  returns: externalReconciliationDocumentValidator,
+  returns: externalReconciliationPublicValidator,
   handler: async (ctx, args) => {
     const ownerId = requireOwner(args.serviceToken);
     const scope = cleanScope(args);
@@ -395,7 +410,7 @@ export const registerAttempt = mutation({
         });
         const resumed = await ctx.db.get("externalReconciliations", existing._id);
         if (!resumed) throw new Error("External reconciliation resume failed.");
-        return resumed;
+        return publicReconciliation(resumed);
       }
       throw new Error(
         "External execution operation already has an attempt in progress or resolved.",
@@ -431,7 +446,7 @@ export const registerAttempt = mutation({
     });
     const created = await ctx.db.get("externalReconciliations", id);
     if (!created) throw new Error("External reconciliation creation failed.");
-    return created;
+    return publicReconciliation(created);
   },
 });
 
@@ -508,7 +523,7 @@ export const markIndeterminate = mutation({
       assertProvider(reconciliation, expectedProvider);
       if (reconciliation.state === "resolved") {
         return {
-          reconciliation,
+          reconciliation: publicReconciliation(reconciliation),
           receipt: await findReceipt(ctx, ownerId, reconciliation.receiptKey),
         };
       }
@@ -546,7 +561,7 @@ export const markIndeterminate = mutation({
     });
     const updated = await ctx.db.get("externalReconciliations", reconciliation._id);
     if (!updated) throw new Error("Indeterminate reconciliation update failed.");
-    return { reconciliation: updated, receipt: boundReceipt };
+    return { reconciliation: publicReconciliation(updated), receipt: boundReceipt };
   },
 });
 
@@ -627,7 +642,7 @@ export const completeAttempt = mutation({
       }
       if (!reconciliation) throw new Error("Missing-reference escalation failed.");
       const receipt = await upsertReceipt(ctx, ownerId, receiptKey, indeterminateReceipt);
-      return { reconciliation, receipt };
+      return { reconciliation: publicReconciliation(reconciliation), receipt };
     }
 
     assertEffect(reconciliation, scope.effectFingerprint);
@@ -665,7 +680,7 @@ export const completeAttempt = mutation({
     });
     const updated = await ctx.db.get("externalReconciliations", reconciliation._id);
     if (!updated) throw new Error("Terminal reconciliation update failed.");
-    return { reconciliation: updated, receipt: boundReceipt };
+    return { reconciliation: publicReconciliation(updated), receipt: boundReceipt };
   },
 });
 
@@ -674,7 +689,6 @@ export const claimNext = mutation({
     serviceToken: v.string(),
     workerId: v.string(),
     leaseToken: v.string(),
-    now: v.number(),
     leaseMs: v.number(),
   },
   returns: v.union(externalReconciliationClaimValidator, v.null()),
@@ -685,6 +699,7 @@ export const claimNext = mutation({
     if (!Number.isSafeInteger(args.leaseMs) || args.leaseMs < 1 || args.leaseMs > 300_000) {
       throw new Error("Lease duration must be an integer between 1 and 300000 milliseconds.");
     }
+    const now = Date.now();
 
     const abandonedObservation = await ctx.db
       .query("externalReconciliations")
@@ -692,15 +707,15 @@ export const claimNext = mutation({
         q
           .eq("ownerId", ownerId)
           .eq("state", "observing")
-          .lt("nextAttemptAt", args.now - OBSERVING_RECOVERY_MS),
+          .lt("nextAttemptAt", now - OBSERVING_RECOVERY_MS),
       )
       .first();
     if (abandonedObservation) {
       await ctx.db.patch("externalReconciliations", abandonedObservation._id, {
         state: "escalated",
         escalationReason: "abandoned-observing-process-interruption",
-        updatedAt: args.now,
-        escalatedAt: args.now,
+        updatedAt: now,
+        escalatedAt: now,
       });
       return null;
     }
@@ -708,14 +723,14 @@ export const claimNext = mutation({
     let candidate = await ctx.db
       .query("externalReconciliations")
       .withIndex("by_owner_and_state_and_next_attempt_at", (q) =>
-        q.eq("ownerId", ownerId).eq("state", "pending").lte("nextAttemptAt", args.now),
+        q.eq("ownerId", ownerId).eq("state", "pending").lte("nextAttemptAt", now),
       )
       .first();
     if (!candidate) {
       candidate = await ctx.db
         .query("externalReconciliations")
         .withIndex("by_owner_and_state_and_lease_expires_at", (q) =>
-          q.eq("ownerId", ownerId).eq("state", "claimed").lte("leaseExpiresAt", args.now),
+          q.eq("ownerId", ownerId).eq("state", "claimed").lte("leaseExpiresAt", now),
         )
         .first();
     }
@@ -725,8 +740,8 @@ export const claimNext = mutation({
       await ctx.db.patch("externalReconciliations", candidate._id, {
         state: "escalated",
         escalationReason: "provider-reference-or-receipt-missing",
-        updatedAt: args.now,
-        escalatedAt: args.now,
+        updatedAt: now,
+        escalatedAt: now,
       });
       return null;
     }
@@ -735,8 +750,8 @@ export const claimNext = mutation({
       await ctx.db.patch("externalReconciliations", candidate._id, {
         state: "escalated",
         escalationReason: "authoritative-receipt-missing",
-        updatedAt: args.now,
-        escalatedAt: args.now,
+        updatedAt: now,
+        escalatedAt: now,
       });
       return null;
     }
@@ -746,8 +761,8 @@ export const claimNext = mutation({
       attemptCount: candidate.attemptCount + 1,
       leaseOwner: workerId,
       leaseToken,
-      leaseExpiresAt: args.now + args.leaseMs,
-      updatedAt: args.now,
+      leaseExpiresAt: now + args.leaseMs,
+      updatedAt: now,
     });
     const claimed = await ctx.db.get("externalReconciliations", candidate._id);
     if (!claimed) throw new Error("Reconciliation claim failed.");
@@ -761,7 +776,6 @@ export const resolveClaim = mutation({
     reconciliationId: v.string(),
     workerId: v.string(),
     leaseToken: v.string(),
-    now: v.number(),
     result: v.union(
       v.object({
         status: v.literal("succeeded"),
@@ -777,9 +791,10 @@ export const resolveClaim = mutation({
     const reconciliationId = cleanRequiredText(args.reconciliationId, "Reconciliation ID");
     const workerId = cleanRequiredText(args.workerId, "Worker ID");
     const leaseToken = cleanRequiredText(args.leaseToken, "Lease token");
+    const now = Date.now();
     const reconciliation = await findByReconciliationId(ctx, ownerId, reconciliationId);
     if (!reconciliation) throw new Error("Reconciliation record was not found.");
-    assertLease(reconciliation, workerId, leaseToken, args.now);
+    assertLease(reconciliation, workerId, leaseToken, now);
     const receipt = await findReceipt(ctx, ownerId, reconciliation.receiptKey);
     if (!receipt) throw new Error("Authoritative reconciliation receipt was not found.");
 
@@ -850,7 +865,7 @@ export const resolveClaim = mutation({
             }
           : {}),
         startedAt: receipt.startedAt,
-        completedAt: args.now,
+        completedAt: now,
         safetyBinding: receipt.safetyBinding ?? reconciliation.safetyBinding,
       },
       receipt.createdAt,
@@ -873,8 +888,8 @@ export const resolveClaim = mutation({
               resolutionErrorCode: "provider-proved-no-effect",
             }
           : {}),
-      updatedAt: args.now,
-      resolvedAt: args.now,
+      updatedAt: now,
+      resolvedAt: now,
     });
     await ctx.db.insert("auditEvents", {
       ownerId,
@@ -897,7 +912,7 @@ export const resolveClaim = mutation({
           ? { evidenceDigest: args.result.evidenceDigest }
           : {}),
       },
-      createdAt: args.now,
+      createdAt: now,
     });
     if (quoteDelivery?.status === "indeterminate") {
       await ctx.db.patch("quoteDeliveryAttempts", quoteDelivery._id, {
@@ -908,8 +923,8 @@ export const resolveClaim = mutation({
               providerErrorCode: providerErrorCode!,
             }
           : {}),
-        reconciledAt: args.now,
-        updatedAt: args.now,
+        reconciledAt: now,
+        updatedAt: now,
       });
     }
     const updatedReceipt = await ctx.db.get("toolExecutionReceipts", receipt._id);
@@ -925,12 +940,11 @@ export const releaseClaim = mutation({
     reconciliationId: v.string(),
     workerId: v.string(),
     leaseToken: v.string(),
-    now: v.number(),
     errorCode: v.string(),
     nextAttemptAt: v.number(),
     maxAttempts: v.number(),
   },
-  returns: externalReconciliationDocumentValidator,
+  returns: externalReconciliationPublicValidator,
   handler: async (ctx, args) => {
     const ownerId = requireOwner(args.serviceToken);
     const reconciliationId = cleanRequiredText(args.reconciliationId, "Reconciliation ID");
@@ -940,32 +954,40 @@ export const releaseClaim = mutation({
     if (!Number.isSafeInteger(args.maxAttempts) || args.maxAttempts < 1 || args.maxAttempts > 100) {
       throw new Error("Maximum attempts must be an integer between 1 and 100.");
     }
+    const now = Date.now();
     const reconciliation = await findByReconciliationId(ctx, ownerId, reconciliationId);
     if (!reconciliation) throw new Error("Reconciliation record was not found.");
-    assertLease(reconciliation, workerId, leaseToken, args.now);
+    // Fails closed on a genuinely stale/expired lease; this is authority, not scheduling.
+    assertLease(reconciliation, workerId, leaseToken, now);
 
     if (reconciliation.attemptCount >= args.maxAttempts) {
       await ctx.db.patch("externalReconciliations", reconciliation._id, {
         state: "escalated",
         lastErrorCode: errorCode,
         escalationReason: `unresolved-after-${reconciliation.attemptCount}-attempts`,
-        updatedAt: args.now,
-        escalatedAt: args.now,
+        updatedAt: now,
+        escalatedAt: now,
       });
     } else {
-      if (args.nextAttemptAt <= args.now) {
-        throw new Error("Next reconciliation attempt must be scheduled in the future.");
-      }
+      // args.nextAttemptAt is a worker-computed scheduling hint, not an authority
+      // decision -- assertLease above already proved the lease is genuinely still
+      // valid against the server's own clock. Ordinary RPC latency between the worker
+      // computing this hint and the server receiving the call can put it at or before
+      // `now`; clamp it forward instead of rejecting an otherwise-valid release. The
+      // clamp target is a minimal epsilon past now, not a policy-sized floor, so it
+      // never overrides a worker's own configured retry cadence (e.g. a small
+      // maxRetryMs) -- it only guarantees the stored value is genuinely in the future.
+      const nextAttemptAt = Math.max(args.nextAttemptAt, now + MIN_RETRY_EPSILON_MS);
       await ctx.db.patch("externalReconciliations", reconciliation._id, {
         state: "pending",
         lastErrorCode: errorCode,
-        nextAttemptAt: args.nextAttemptAt,
-        updatedAt: args.now,
+        nextAttemptAt,
+        updatedAt: now,
       });
     }
     const updated = await ctx.db.get("externalReconciliations", reconciliation._id);
     if (!updated) throw new Error("Reconciliation release failed.");
-    return updated;
+    return publicReconciliation(updated);
   },
 });
 

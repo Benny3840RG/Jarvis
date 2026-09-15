@@ -33,6 +33,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllEnvs();
+  vi.useRealTimers();
 });
 
 describe("external reconciliation safety evidence", () => {
@@ -126,6 +127,7 @@ describe("claimNext lease-expiry reclaim (worker-crash recovery)", () => {
   it("reclaims a claimed record whose lease has expired for a different worker", async () => {
     const t = harness();
     const now = Date.now();
+    vi.useFakeTimers({ now });
     const recordId = await t.run((ctx) =>
       seedClaimedReconciliation(ctx, {
         leaseExpiresAt: now - 1_000,
@@ -138,7 +140,6 @@ describe("claimNext lease-expiry reclaim (worker-crash recovery)", () => {
       serviceToken: SERVICE_TOKEN,
       workerId: "worker-B",
       leaseToken: "lease-token-B",
-      now,
       leaseMs: 30_000,
     });
 
@@ -176,7 +177,6 @@ describe("claimNext lease-expiry reclaim (worker-crash recovery)", () => {
       serviceToken: SERVICE_TOKEN,
       workerId: "worker-B",
       leaseToken: "lease-token-B",
-      now,
       leaseMs: 30_000,
     });
 
@@ -201,7 +201,6 @@ describe("same-operation resume after proven non-effect", () => {
       reconciliationId: "reconciliation-1",
       workerId: "worker-A",
       leaseToken: "lease-token-A",
-      now,
       result: { status: "no-effect", evidenceDigest: "github-no-effect-evidence" },
     });
     expect(receipt.status).toBe("failed");
@@ -315,6 +314,7 @@ describe("terminal quote delivery projection", () => {
   it("atomically reconciles the quote delivery ledger when the provider succeeds", async () => {
     const t = harness();
     const now = Date.now();
+    vi.useFakeTimers({ now });
     await t.run(async (ctx) => {
       await seedClaimedReconciliation(ctx, {
         leaseExpiresAt: now + 30_000,
@@ -329,7 +329,6 @@ describe("terminal quote delivery projection", () => {
       reconciliationId: "reconciliation-1",
       workerId: "worker-A",
       leaseToken: "lease-token-A",
-      now,
       result: { status: "succeeded", outputDigest: "provider-output-digest" },
     });
 
@@ -382,7 +381,6 @@ describe("terminal quote delivery projection", () => {
       reconciliationId: "reconciliation-1",
       workerId: "worker-A",
       leaseToken: "lease-token-A",
-      now,
       result: { status: "failed", errorCode: "message-rejected" },
     });
 
@@ -424,7 +422,6 @@ describe("terminal quote delivery projection", () => {
         reconciliationId: "reconciliation-1",
         workerId: "worker-A",
         leaseToken: "lease-token-A",
-        now,
         result: { status: "failed", errorCode: "mailbox-disabled" },
       }),
     ).rejects.toThrow("conflicts with the provider result");
@@ -453,6 +450,7 @@ describe("observing-process crash recovery", () => {
   it("escalates an observing record abandoned for more than sixty seconds", async () => {
     const t = harness();
     const now = Date.now();
+    vi.useFakeTimers({ now });
     await t.run((ctx) =>
       seedObservingReconciliation(ctx, {
         reconciliationId: "stale-observing",
@@ -464,7 +462,6 @@ describe("observing-process crash recovery", () => {
       serviceToken: SERVICE_TOKEN,
       workerId: "worker-B",
       leaseToken: "lease-token-B",
-      now,
       leaseMs: 30_000,
     });
     expect(claim).toBeNull();
@@ -485,6 +482,7 @@ describe("observing-process crash recovery", () => {
   it("keeps an observation at the exact sixty-second boundary safe", async () => {
     const t = harness();
     const now = Date.now();
+    vi.useFakeTimers({ now });
     await t.run((ctx) =>
       seedObservingReconciliation(ctx, {
         reconciliationId: "boundary-observing",
@@ -496,7 +494,6 @@ describe("observing-process crash recovery", () => {
       serviceToken: SERVICE_TOKEN,
       workerId: "worker-B",
       leaseToken: "lease-token-B",
-      now,
       leaseMs: 30_000,
     });
     expect(claim).toBeNull();
@@ -516,6 +513,7 @@ describe("observing-process crash recovery", () => {
   it("leaves a fresh observing record alone while its sender may still be running", async () => {
     const t = harness();
     const now = Date.now();
+    vi.useFakeTimers({ now });
     await t.run((ctx) =>
       seedObservingReconciliation(ctx, {
         reconciliationId: "fresh-observing",
@@ -527,7 +525,6 @@ describe("observing-process crash recovery", () => {
       serviceToken: SERVICE_TOKEN,
       workerId: "worker-B",
       leaseToken: "lease-token-B",
-      now,
       leaseMs: 30_000,
     });
     expect(claim).toBeNull();
@@ -722,5 +719,295 @@ describe("operator reconciliation reads", () => {
         limit: 101,
       }),
     ).rejects.toThrow("between 1 and 100");
+  });
+});
+
+it("does not expose a claimed worker capability through owner read APIs", async () => {
+  const t = harness();
+  await t.run((ctx) =>
+    seedClaimedReconciliation(ctx, {
+      leaseOwner: "private-worker",
+      leaseToken: "private-worker-capability",
+      leaseExpiresAt: Date.now() + 60000,
+    }),
+  );
+  const scope = {
+    serviceToken: SERVICE_TOKEN,
+    projectId: "project-1",
+    tool: "quotes",
+    operation: "send",
+    idempotencyKey: "idempotency-1",
+    effectFingerprint: "effect-fingerprint-1",
+  };
+  const responses = [
+    await t.query(api.externalReconciliations.getByScope, scope),
+    await t.query(api.externalReconciliations.getForOperator, {
+      serviceToken: SERVICE_TOKEN,
+      reconciliationId: "reconciliation-1",
+    }),
+    await t.query(api.externalReconciliations.listForOperator, { serviceToken: SERVICE_TOKEN }),
+    await t.query(api.externalReconciliations.listForOperator, {
+      serviceToken: SERVICE_TOKEN,
+      state: "claimed",
+    }),
+  ];
+  for (const response of responses) {
+    expect(JSON.stringify(response)).not.toContain("private-worker-capability");
+    expect(JSON.stringify(response)).not.toContain("private-worker");
+  }
+  const stored = await t.run((ctx) => ctx.db.query("externalReconciliations").first());
+  expect(stored?.leaseToken).toBe("private-worker-capability");
+});
+
+it("keeps existing capabilities private in ordinary attempt mutation responses", async () => {
+  for (const terminal of [false, true]) {
+    const t = harness();
+    await t.run((ctx) =>
+      seedClaimedReconciliation(ctx, {
+        leaseOwner: "private-worker",
+        leaseToken: "private-capability",
+        leaseExpiresAt: Date.now() + 60000,
+      }),
+    );
+    const args = {
+      serviceToken: SERVICE_TOKEN,
+      projectId: "project-1",
+      tool: "quotes",
+      operation: "send",
+      idempotencyKey: "idempotency-1",
+      effectFingerprint: "effect-fingerprint-1",
+      reconciliationId: "reconciliation-1",
+      executionKey: "execution-1",
+      actionId: "action-1",
+      requestId: "request-1",
+      actionFingerprint: "receipt-key-1-fingerprint",
+      expectedProvider: "test-provider",
+      receiptKey: "receipt-key-1",
+      receipt: {
+        receiptId: "receipt-key-1-receipt",
+        actionId: "action-1",
+        requestId: "request-1",
+        projectId: "project-1",
+        idempotencyKey: "idempotency-1",
+        actionFingerprint: "receipt-key-1-fingerprint",
+        tool: "quotes",
+        operation: "send",
+        actor: "tool" as const,
+        policyVersion: "test",
+        correlationId: "correlation-1",
+        source: "test",
+        status: terminal ? ("succeeded" as const) : ("indeterminate" as const),
+        startedAt: Date.now(),
+        completedAt: Date.now(),
+        safetyBinding,
+      },
+    };
+    const response = await t.mutation(
+      terminal
+        ? api.externalReconciliations.completeAttempt
+        : api.externalReconciliations.markIndeterminate,
+      args,
+    );
+    expect(JSON.stringify(response)).not.toContain("private-capability");
+    expect(JSON.stringify(response)).not.toContain("private-worker");
+    expect(
+      (await t.run((ctx) => ctx.db.query("externalReconciliations").first()))?.leaseToken,
+    ).toBe("private-capability");
+  }
+});
+
+describe("lease/authority timing is server-side only", () => {
+  it("rejects a caller-supplied now on claimNext, resolveClaim, and releaseClaim", async () => {
+    const t = harness();
+    const now = Date.now();
+    await t.run((ctx) =>
+      seedClaimedReconciliation(ctx, {
+        leaseExpiresAt: now + 30_000,
+        leaseOwner: "worker-A",
+        leaseToken: "lease-token-A",
+      }),
+    );
+
+    // An attacker with a valid service token must not be able to skew any of these
+    // lease/fencing decisions by injecting a `now` argument -- Convex's argument
+    // validation rejects it outright since the mutations no longer declare it.
+    await expect(
+      t.mutation(api.externalReconciliations.claimNext, {
+        serviceToken: SERVICE_TOKEN,
+        workerId: "worker-B",
+        leaseToken: "lease-token-B",
+        leaseMs: 30_000,
+        ...({ now: now + 10_000_000 } as Record<string, unknown>),
+      }),
+    ).rejects.toThrow();
+
+    await expect(
+      t.mutation(api.externalReconciliations.resolveClaim, {
+        serviceToken: SERVICE_TOKEN,
+        reconciliationId: "reconciliation-1",
+        workerId: "worker-A",
+        leaseToken: "lease-token-A",
+        result: { status: "succeeded", outputDigest: "digest" },
+        ...({ now: now + 10_000_000 } as Record<string, unknown>),
+      }),
+    ).rejects.toThrow();
+
+    await expect(
+      t.mutation(api.externalReconciliations.releaseClaim, {
+        serviceToken: SERVICE_TOKEN,
+        reconciliationId: "reconciliation-1",
+        workerId: "worker-A",
+        leaseToken: "lease-token-A",
+        errorCode: "still-processing",
+        nextAttemptAt: now + 5_000,
+        maxAttempts: 5,
+        ...({ now: now + 10_000_000 } as Record<string, unknown>),
+      }),
+    ).rejects.toThrow();
+  });
+
+  it("claims with a lease expiry bounded tightly around the server's real clock", async () => {
+    const t = harness();
+    const beforeCall = Date.now();
+    const recordId = await t.run((ctx) =>
+      seedClaimedReconciliation(ctx, {
+        leaseExpiresAt: beforeCall - 1_000,
+        leaseOwner: "worker-A",
+        leaseToken: "lease-token-A",
+      }),
+    );
+
+    const claim = await t.mutation(api.externalReconciliations.claimNext, {
+      serviceToken: SERVICE_TOKEN,
+      workerId: "worker-B",
+      leaseToken: "lease-token-B",
+      leaseMs: 30_000,
+    });
+    const afterCall = Date.now();
+
+    expect(claim).not.toBeNull();
+    expect(claim?.reconciliation._id).toBe(recordId);
+    expect(claim?.reconciliation.leaseExpiresAt).toBeGreaterThanOrEqual(beforeCall + 30_000);
+    expect(claim?.reconciliation.leaseExpiresAt).toBeLessThanOrEqual(afterCall + 30_000);
+  });
+});
+
+describe("releaseClaim retry-scheduling latency boundary", () => {
+  it("clamps a stale worker-computed nextAttemptAt forward instead of rejecting the release", async () => {
+    const t = harness();
+    const claimTime = Date.now();
+    await t.run((ctx) =>
+      seedClaimedReconciliation(ctx, {
+        leaseExpiresAt: claimTime + 60_000,
+        leaseOwner: "worker-A",
+        leaseToken: "lease-token-A",
+      }),
+    );
+
+    // Simulate the worker computing its retry-scheduling hint, then ordinary RPC
+    // latency elapsing before the server receives the release call: by the time this
+    // mutation runs, the server's own now has already passed the worker's hint. The
+    // lease itself (checked above via assertLease inside the mutation) is still
+    // genuinely valid, so the release must succeed with the stored retry time clamped
+    // forward -- not reject and strand the reconciliation until lease expiry.
+    const staleHint = claimTime - 1;
+    const released = await t.mutation(api.externalReconciliations.releaseClaim, {
+      serviceToken: SERVICE_TOKEN,
+      reconciliationId: "reconciliation-1",
+      workerId: "worker-A",
+      leaseToken: "lease-token-A",
+      errorCode: "provider-still-processing",
+      nextAttemptAt: staleHint,
+      maxAttempts: 5,
+    });
+
+    expect(released.state).toBe("pending");
+    // Compare against claimTime (captured before the call), not a freshly resampled
+    // Date.now() -- the clamp target is only a 1ms epsilon past the mutation's own
+    // now, so a post-call Date.now() sample can tie with it at millisecond
+    // resolution. Time only moves forward, so the mutation's internal now is always
+    // >= claimTime, making this comparison both correct and deterministic.
+    expect(released.nextAttemptAt).toBeGreaterThan(claimTime);
+    expect(released.nextAttemptAt).not.toBe(staleHint);
+  });
+
+  it("does not stretch a short, genuinely-future retry hint out to an arbitrary floor", async () => {
+    // A worker configured with a small maxRetryMs (fast retries) computes a hint only
+    // a few milliseconds past now -- this is not stale, so the clamp must not silently
+    // override that worker's own retry cadence with a larger minimum gap. The mutation's
+    // internal Date.now() is pinned via fake timers so this assertion is deterministic
+    // regardless of how long the mutation actually takes to execute.
+    const t = harness();
+    const claimTime = Date.now();
+    vi.useFakeTimers({ now: claimTime });
+    await t.run((ctx) =>
+      seedClaimedReconciliation(ctx, {
+        leaseExpiresAt: claimTime + 60_000,
+        leaseOwner: "worker-A",
+        leaseToken: "lease-token-A",
+      }),
+    );
+
+    const shortHint = claimTime + 500;
+    const released = await t.mutation(api.externalReconciliations.releaseClaim, {
+      serviceToken: SERVICE_TOKEN,
+      reconciliationId: "reconciliation-1",
+      workerId: "worker-A",
+      leaseToken: "lease-token-A",
+      errorCode: "provider-still-processing",
+      nextAttemptAt: shortHint,
+      maxAttempts: 5,
+    });
+
+    expect(released.state).toBe("pending");
+    expect(released.nextAttemptAt).toBe(shortHint);
+  });
+
+  it("still fails closed when the lease has genuinely expired", async () => {
+    const t = harness();
+    const now = Date.now();
+    await t.run((ctx) =>
+      seedClaimedReconciliation(ctx, {
+        leaseExpiresAt: now - 1_000,
+        leaseOwner: "worker-A",
+        leaseToken: "lease-token-A",
+      }),
+    );
+
+    await expect(
+      t.mutation(api.externalReconciliations.releaseClaim, {
+        serviceToken: SERVICE_TOKEN,
+        reconciliationId: "reconciliation-1",
+        workerId: "worker-A",
+        leaseToken: "lease-token-A",
+        errorCode: "provider-still-processing",
+        nextAttemptAt: now + 5_000,
+        maxAttempts: 5,
+      }),
+    ).rejects.toThrow("Reconciliation claim lease is stale or belongs to another worker.");
+  });
+
+  it("still escalates once max attempts is reached, regardless of the scheduling hint", async () => {
+    const t = harness();
+    const now = Date.now();
+    await t.run((ctx) =>
+      seedClaimedReconciliation(ctx, {
+        leaseExpiresAt: now + 60_000,
+        leaseOwner: "worker-A",
+        leaseToken: "lease-token-A",
+      }),
+    );
+
+    const released = await t.mutation(api.externalReconciliations.releaseClaim, {
+      serviceToken: SERVICE_TOKEN,
+      reconciliationId: "reconciliation-1",
+      workerId: "worker-A",
+      leaseToken: "lease-token-A",
+      errorCode: "provider-still-processing",
+      nextAttemptAt: now - 1,
+      maxAttempts: 1,
+    });
+
+    expect(released.state).toBe("escalated");
   });
 });

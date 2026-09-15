@@ -13,6 +13,8 @@ docs/validators/ @Benny3840
 docs/traceability/ @Benny3840
 scripts/ @Benny3840
 typescript/scripts/ @Benny3840
+# Runtime source can affect governed execution, persisted evidence and completion.
+typescript/src/ @Benny3840
 typescript/src/auth/ @Benny3840
 typescript/src/http/ @Benny3840
 typescript/src/mcp/ @Benny3840
