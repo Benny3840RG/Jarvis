@@ -4,6 +4,16 @@ This file is a living record for the autonomous engineering sessions working on
 Jarvis: current state, what changed recently, and what to pick up next. Update
 it at the end of every session.
 
+## Review artifact regression follow-up (2026-09-15)
+
+After PR #541 merged, its test-only follow-up adds a regression combining a
+root `result.json` with one and then two valid named segment directories, asserting
+that neither layout retains any receipts. This closes the explicit mixed-layout
+coverage gap; the publisher implementation is unchanged. The test-only candidate
+requires fresh full verification, Claude review and maintained PASS before Benny's
+merge decision. See `.github/automation/pr-maintenance-workflow.test.mjs` and
+`.github/workflows/jarvis-pr-maintenance.yml` for the exercised authority path.
+
 ## Outlook current-main integration (2026-09-14)
 
 Current base is `6b6ced5e5c3c32ca0eb9d06fbd56d73dac7acddc`. Benny has

@@ -141,6 +141,23 @@ test("publication retains exact named artifact directories for one or many segme
   }
 });
 
+test("publication rejects mixed flat and named artifacts without retaining partial receipts", (t) => {
+  const { root, results } = artifactFixture(t);
+  fs.writeFileSync(`${results}/result.json`, JSON.stringify(validReceipt));
+  for (const index of [0, 1]) {
+    const directory = `${results}/jarvis-review-123-1-${index}`;
+    fs.mkdirSync(directory);
+    fs.writeFileSync(
+      `${directory}/result.json`,
+      JSON.stringify({ ...validReceipt, index }),
+    );
+    assert.deepEqual(
+      readDownloadedReceipts(root, index === 0 ? [0] : [0, 1]),
+      [],
+    );
+  }
+});
+
 for (const invalid of [
   "multiple-expected",
   "wrong-index",
