@@ -228,6 +228,10 @@ describe("HTTP secret output boundary", () => {
       JARVIS_REMOTE_GATEWAY_ENABLED: "true",
       JARVIS_TLS_TERMINATED: "true",
       JARVIS_ALLOWED_ORIGINS: "https://allowed.example.com",
+      // Matches light-my-request's default injected remoteAddress, so the
+      // injected x-forwarded-proto header below is trusted the same way a
+      // real request through the configured terminator would be.
+      JARVIS_TRUSTED_PROXY: "127.0.0.1",
     });
     const app = await makeApp({ ...CONFIG, remoteGateway });
     for (const secret of ALL_SECRETS) {
