@@ -136,3 +136,9 @@ The tests prove the six-category in-process contract, fail-closed negative paths
 ## Outlook browser-launch deadline repair
 
 `typescript/tests/outlookOnboarding.test.ts` now proves that the existing 180-second sign-in deadline releases a stalled URL-display callback both before and after a valid OAuth callback. Both cases failed before the repair. They prove listener closure, zero token/provider calls and no credential publication after expiry. Local loopback and controlled time only; no live Microsoft proof.
+
+## Single-artifact review publication compatibility
+
+The pinned `actions/download-artifact` revision flattens one matched artifact into the destination even when `merge-multiple` is false. This blocked #540 after its sole reviewer returned valid evidence. The existing publisher now accepts that exact flat `result.json` layout only when its trusted manifest expects segment zero alone, while retaining named-directory loading for multiple artifacts. File/manifest byte bounds, regular-file checks, exact indices, run/attempt directory names and downstream manifest/prompt digest verification remain enforced. A failure-first test executes the actual workflow loader; negative fixtures cover mixed layouts, wrong indices/identities, oversized files, invalid JSON and symlinks. Local proof does not override the blocked provider result; fresh Claude review, maintained PASS and Benny merge remain required.
+
+Implementation and proving coverage: `.github/workflows/jarvis-pr-maintenance.yml` and `.github/automation/pr-maintenance-workflow.test.mjs`. These exact changed files supply the flat/named artifact loader and its negative fixtures; review them together with these documentation claims.

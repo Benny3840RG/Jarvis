@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { z } from "zod";
 import {
   resolveMicrosoftDelegatedOAuthConfig,
+  resolveMicrosoftDelegatedTokenEndpoint,
   type EnabledMicrosoftDelegatedOAuthConfig,
 } from "./microsoftDelegatedOAuth.js";
 import {
@@ -75,9 +76,9 @@ export function resolveOutlookConnections(environment: Environment): OutlookConn
     // Paths are not identity: moving a secret must not strand a pending delivery.
     const identity = JSON.stringify([
       entry.id,
-      config.clientId,
-      config.mailbox,
-      config.tokenEndpoint,
+      entry.clientId,
+      entry.mailbox,
+      resolveMicrosoftDelegatedTokenEndpoint(entry.tenantId),
     ]);
     return {
       id: entry.id,
