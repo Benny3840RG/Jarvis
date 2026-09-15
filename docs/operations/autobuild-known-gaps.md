@@ -1,10 +1,11 @@
 # Autonomous-build known gaps
 
-This is an evidence record for two gaps observed during the first live
-`jarvis-autobuild.yml` missions for issues #550 and #551. It is recording-only:
-neither gap is fixed by this document or by the link added to the recovery
-runbook. Any repair requires a separately scoped change to the relevant
-coordination or automation control, with fresh tests and review.
+This is an evidence record for three gaps observed during the first live
+`jarvis-autobuild.yml` missions for issues #550, #551 and #552. It is
+recording-only: none of the three gaps is fixed by this document or by the
+link added to the recovery runbook. Any repair requires a separately scoped
+change to the relevant coordination or automation control, with fresh tests
+and review.
 
 ## Autonomous workers and manual coordination claims
 
@@ -48,6 +49,36 @@ such as `authoritativeCommitter`, `missionAuthority`, and `workerAuthority`, so
 an otherwise in-scope state-machine change can be structurally unable to pass
 the guard. The line numbers above and the existing test/source files provide a
 minimal reproduction target for a future guard repair.
+
+## A crashed review evidence write leaves a stuck review-attempt lock
+
+This candidate (issue #552, this pull request) hit a third gap while this
+document was itself in review. The first `jarvis-pr-maintenance.yml` review
+run for the exact candidate (`34944213898`) computed a passing review verdict
+and clean CI, then crashed while durably recording that outcome:
+
+```
+Error: Durable operation failed: developmentEvidence:recordDevelopmentEvidence.
+    at DevelopmentMissions.call (.github/automation/development-missions.mjs:42:13)
+    at async DevelopmentMissions.review (.github/automation/development-missions.mjs:481:7)
+```
+
+The crash happened after a review-attempt record was already taken for that
+exact head SHA. A second, otherwise-clean manual re-dispatch against the same
+head (`34944398486`) was then rejected before it could retry:
+
+```
+Error: This exact candidate already has a review attempt.
+```
+
+With no automatic recovery path observed, the only way found to unblock the
+candidate was pushing a new commit so review would run against a fresh head
+SHA -- exactly the change that added this section. The underlying crash cause
+inside `developmentEvidence:recordDevelopmentEvidence` was not established (the
+durable-operation error message is deliberately generic and does not surface
+the original Convex validation failure); reproducing it would need direct
+access to the Convex deployment's logs for run `34944213898`, which this
+session did not have.
 
 Neither issue is fixed here. This report deliberately records the observed
 evidence without changing the workflow, automation script, prompt, or source
