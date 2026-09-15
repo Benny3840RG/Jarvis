@@ -1,0 +1,238 @@
+name: Jarvis autonomous build recovery
+
+on:
+  workflow_run:
+    workflows: ["Jarvis autonomous build"]
+    types: [completed]
+
+permissions: {}
+
+concurrency:
+  group: jarvis-autobuild-recovery-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  recover:
+    if: github.event.workflow_run.event == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      actions: write
+      contents: read
+      issues: write
+    steps:
+      - name: Check out trusted recovery controls
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+
+      - name: Classify failure and recover without an owner rerun
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const { pathToFileURL } = require("node:url");
+            const { classifyAutobuildRecovery, MAX_AUTOMATIC_RETRIES } = await import(
+              pathToFileURL(
+                `${process.env.GITHUB_WORKSPACE}/.github/automation/autobuild-recovery.mjs`,
+              ).href
+            );
+            const run = context.payload.workflow_run;
+            if (
+              !run ||
+              run.path !== ".github/workflows/jarvis-autobuild.yml" ||
+              run.head_branch !== "main" ||
+              run.event !== "workflow_dispatch" ||
+              run.status !== "completed"
+            ) {
+              core.info("Ignoring a run that is not the trusted completed autonomous builder.");
+              return;
+            }
+            if (run.conclusion === "success") {
+              core.info("Autonomous build succeeded; no recovery required.");
+              return;
+            }
+
+            const titleMatch = /^Jarvis build issue #([1-9][0-9]*)$/.exec(
+              run.display_title || "",
+            );
+            if (!titleMatch) {
+              core.info("Ignoring repair or unrecognised autonomous-build run title.");
+              return;
+            }
+            const issueNumber = Number(titleMatch[1]);
+            const { data: issue } = await github.rest.issues.get({
+              ...context.repo,
+              issue_number: issueNumber,
+            });
+            const labels = new Set(
+              (issue.labels || []).map((label) =>
+                typeof label === "string" ? label : label.name,
+              ),
+            );
+            if (
+              issue.state !== "open" ||
+              issue.pull_request ||
+              !labels.has("automation-approved")
+            ) {
+              core.info("Issue is no longer an approved open Development mission.");
+              return;
+            }
+
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              ...context.repo,
+              issue_number: issueNumber,
+              per_page: 100,
+            });
+            if (comments.length > 1000) {
+              core.setFailed("Issue comment history exceeds the bounded recovery limit.");
+              return;
+            }
+            const botComments = comments.filter(
+              (comment) => comment.user?.login === "github-actions[bot]",
+            );
+            const receipts = [];
+            for (const comment of botComments) {
+              if (!comment.body?.includes("### Build diagnostic receipt")) continue;
+              const match = /```json\n([\s\S]*?)\n```/.exec(comment.body);
+              if (!match) continue;
+              try {
+                const receipt = JSON.parse(match[1]);
+                if (receipt.run_id === run.id) receipts.push(receipt);
+              } catch {
+                // An invalid receipt cannot be upgraded into automatic authority.
+              }
+            }
+            if (receipts.length !== 1) {
+              core.setFailed("Exact autonomous-build diagnostic receipt is unavailable or ambiguous.");
+              return;
+            }
+
+            const retryMarker = "<!-- jarvis-autobuild-auto-retry:v1 -->";
+            const priorRetries = botComments.filter((comment) =>
+              comment.body?.includes(retryMarker),
+            ).length;
+            let decision = classifyAutobuildRecovery({
+              receipt: receipts[0],
+              priorRetries,
+            });
+            if (decision.action === "retry" && labels.has("automation-in-progress")) {
+              decision = { action: "block", reason: "stale-mission-lock" };
+            }
+
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${run.id}`;
+            const sourceRetryMarker = `<!-- jarvis-autobuild-auto-retry-source:${run.id} -->`;
+            if (botComments.some((comment) =>
+              comment.body?.includes(retryMarker) &&
+              (comment.body.includes(sourceRetryMarker) ||
+                comment.body.includes(`Source run: ${runUrl}.`)),
+            )) {
+              core.info("This source run already consumed its automatic retry.");
+              return;
+            }
+            if (decision.action === "ignore") {
+              core.info(`Recovery not required: ${decision.reason}.`);
+              return;
+            }
+
+            // A delayed completion must not clear or replace a newer build's
+            // block. Read the complete bounded provider window, not comment order.
+            const sourceCreated = Date.parse(run.created_at);
+            if (!Number.isSafeInteger(run.id) || run.id <= 0 || !Number.isFinite(sourceCreated)) {
+              core.setFailed("Source run identity or creation time is invalid.");
+              return;
+            }
+            const { data: history } = await github.rest.actions.listWorkflowRuns({
+              ...context.repo,
+              workflow_id: "jarvis-autobuild.yml",
+              branch: "main",
+              event: "workflow_dispatch",
+              created: `>=${run.created_at}`,
+              per_page: 100,
+              page: 1,
+            });
+            const runs = history.workflow_runs;
+            if (
+              !Array.isArray(runs) ||
+              !Number.isSafeInteger(history.total_count) ||
+              history.total_count > 100 ||
+              history.total_count !== runs.length ||
+              !runs.every((candidate) =>
+                Number.isSafeInteger(candidate?.id) && candidate.id > 0 &&
+                typeof candidate.display_title === "string" &&
+                Number.isFinite(Date.parse(candidate.created_at)) &&
+                Date.parse(candidate.created_at) >= sourceCreated &&
+                candidate.path === run.path &&
+                candidate.head_branch === "main" &&
+                candidate.event === "workflow_dispatch" &&
+                candidate.head_repository?.full_name === `${context.repo.owner}/${context.repo.repo}`,
+              )
+            ) {
+              core.setFailed("Latest builder cannot be established from complete bounded workflow history.");
+              return;
+            }
+            const relevantRuns = runs.filter((candidate) => candidate.display_title === run.display_title);
+            const source = relevantRuns.find((candidate) => candidate.id === run.id);
+            if (!source || source.created_at !== run.created_at || source.status !== "completed" || source.conclusion !== run.conclusion) {
+              core.setFailed("Source completion no longer matches current provider history.");
+              return;
+            }
+            if (relevantRuns.some((candidate) => candidate.id !== run.id)) {
+              core.info("A newer or concurrent initial build owns this issue; ignoring stale recovery.");
+              return;
+            }
+
+            if (decision.action === "retry") {
+              // Persist the budget before the periodic queue can see eligibility.
+              // A failed write must leave automation-blocked in place.
+              await github.rest.issues.createComment({
+                ...context.repo,
+                issue_number: issueNumber,
+                body:
+                  `${retryMarker}\n${sourceRetryMarker}\nAutomatic bounded retry ${priorRetries + 1}/${MAX_AUTOMATIC_RETRIES} ` +
+                  `after ${decision.reason}. Source run: ${runUrl}. The queue coordinator owns the retry.`,
+              });
+              if (labels.has("automation-blocked")) {
+                try {
+                  await github.rest.issues.removeLabel({
+                    ...context.repo,
+                    issue_number: issueNumber,
+                    name: "automation-blocked",
+                  });
+                } catch (error) {
+                  if (error.status !== 404) throw error;
+                }
+              }
+              await github.rest.actions.createWorkflowDispatch({
+                ...context.repo,
+                workflow_id: "jarvis-queue-advance.yml",
+                ref: "main",
+              });
+              core.info(`Dispatched queue recovery for issue #${issueNumber}.`);
+              return;
+            }
+
+            if (!labels.has("automation-blocked")) {
+              await github.rest.issues.addLabels({
+                ...context.repo,
+                issue_number: issueNumber,
+                labels: ["automation-blocked"],
+              });
+            }
+            const hardBlockMarker = `<!-- jarvis-autobuild-hard-block:${run.id} -->`;
+            if (botComments.some((comment) => comment.body?.includes(hardBlockMarker))) {
+              core.info("Hard-block advisory was already published for this run.");
+              return;
+            }
+            const stages = receipts[0].stages || {};
+            await github.rest.issues.createComment({
+              ...context.repo,
+              issue_number: issueNumber,
+              body:
+                `${hardBlockMarker}\n@claude Inspect this bounded autonomous-build stop and advise the smallest safe repair. ` +
+                `Reason: ${decision.reason}. Run: ${runUrl}. ` +
+                `Stages: dependencies=${stages.dependencies || "unavailable"}, ` +
+                `worker=${stages.worker || "unavailable"}, guard=${stages.guard || "unavailable"}, ` +
+                `publication=${stages.publication || "unavailable"}. ` +
+                `Do not infer approval or merge authority; report the practical blocker and next repair action only.`,
+            });
