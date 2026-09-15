@@ -345,3 +345,9 @@ Candidate results and eventual merge identity are maintained in the
 ## Outlook sign-in deadline review repair
 
 Jarvis review of #482 at `c5521a3` identified a stalled browser-launch callback that could outlive the sign-in deadline. The repair races both launcher completion and authorization-code receipt against an independent deadline, so a received code cannot neutralize the timeout while the launcher remains stalled. Existing listener cleanup runs on expiry. Two failure-first regressions establish bounded rejection and no provider or credential effects. Fresh candidate verification, independent review and actual Jarvis PASS remain required.
+
+## Single-artifact review publication compatibility
+
+The pinned `actions/download-artifact` revision flattens one matched artifact into the destination even when `merge-multiple` is false. This blocked #540 after its sole reviewer returned valid evidence. The existing publisher now accepts that exact flat `result.json` layout only when its trusted manifest expects segment zero alone, while retaining named-directory loading for multiple artifacts. File/manifest byte bounds, regular-file checks, exact indices, run/attempt directory names and downstream manifest/prompt digest verification remain enforced. A failure-first test executes the actual workflow loader; negative fixtures cover mixed layouts, wrong indices/identities, oversized files, invalid JSON and symlinks. Local proof does not override the blocked provider result; fresh Claude review, maintained PASS and Benny merge remain required.
+
+Implementation and proving coverage: `.github/workflows/jarvis-pr-maintenance.yml` and `.github/automation/pr-maintenance-workflow.test.mjs`. These exact changed files supply the flat/named artifact loader and its negative fixtures; review them together with these documentation claims.
