@@ -270,3 +270,56 @@ it("halts when the run deadline is exhausted and preserves completed-step recove
   assert.deepEqual(executed, ["createTask"]);
   assert.equal(result.completedSteps.length, 1);
 });
+
+describe("orchestration runner additional-capabilities seam", () => {
+  const probeCommand: OrchestrationCommand = {
+    operationId: "commissioningProbe",
+    input: { nonce: "n1" },
+  };
+  const probeGraph = new OrchestrationGraph([{ id: "probe", command: probeCommand }]);
+  const probeResult: DomainResult = {
+    ok: true,
+    value: { probe: "ok", nonce: "n1", observedAt: 1 },
+  };
+
+  it("blocks an operation absent from IMPLEMENTED_CAPABILITIES by default", async () => {
+    const runner = new OrchestrationRunner(
+      { execute: async () => probeResult },
+      gate(),
+      recorder([]),
+    );
+    const result = await runner.run(probeGraph, context);
+    assert.equal(result.ok, false);
+    if (result.ok) return;
+    assert.equal(result.failure.code, "blocked");
+    assert.match(result.failure.message, /not present in the implemented capability contract/);
+  });
+
+  it("admits that operation when the composition passes it in additionalCapabilities", async () => {
+    let executed = 0;
+    const runner = new OrchestrationRunner(
+      {
+        execute: async () => {
+          executed += 1;
+          return probeResult;
+        },
+      },
+      gate(),
+      recorder([]),
+      {
+        additionalCapabilities: [
+          {
+            operationId: "commissioningProbe",
+            summary: "probe",
+            mutating: false,
+            destructive: false,
+            mcpExposed: false,
+          },
+        ],
+      },
+    );
+    const result = await runner.run(probeGraph, context);
+    assert.equal(result.ok, true);
+    assert.equal(executed, 1);
+  });
+});

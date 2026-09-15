@@ -292,6 +292,10 @@ export async function createJarvisHttpApp(
     // approval tokens included, not just the service tokens.
     genReqId: (request: IncomingMessage) =>
       resolveRequestId(request.headers[REQUEST_ID_HEADER], configuredSecrets(config)),
+    // Scoped to the exact configured terminator address(es)/CIDR(s) -- never a
+    // bare `true`, which would trust X-Forwarded-* from any direct peer. This
+    // also makes `request.ip` below trust-aware by the same Fastify mechanism.
+    ...(remoteGateway ? { trustProxy: [...remoteGateway.trustedProxy] } : {}),
   });
   if (remoteGateway !== undefined) {
     adapter.getInstance().addHook("onRequest", async (request, reply) => {
@@ -300,10 +304,12 @@ export async function createJarvisHttpApp(
         typeof contentLengthHeader === "string" ? Number(contentLengthHeader) : undefined;
       const decision = evaluateRemoteGatewayRequest(remoteGateway, {
         origin: typeof request.headers.origin === "string" ? request.headers.origin : undefined,
-        forwardedProto:
-          typeof request.headers["x-forwarded-proto"] === "string"
-            ? request.headers["x-forwarded-proto"]
-            : undefined,
+        // Fastify's own `request.protocol` getter is trust-aware: it only
+        // honours X-Forwarded-Proto when the *direct* socket peer matches the
+        // configured `trustProxy` set above, otherwise it reports the real
+        // socket's TLS state. A raw header read here would let any directly-
+        // connecting client spoof this check regardless of trustProxy.
+        forwardedProto: request.protocol,
         contentLength,
         clientKey: request.ip,
       });

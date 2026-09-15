@@ -112,16 +112,108 @@ describe("invoice HTTP boundary", () => {
     });
     assert.equal(issued.statusCode, 201);
     const partial = await inject(app, "POST", `/api/v1/invoices/${invoice.id}/payments`, {
-      headers: AUTH,
+      headers: { ...AUTH, "idempotency-key": "payment-1" },
       payload: { amount: 50, reference: "bank-1" },
     });
     assert.equal(partial.statusCode, 201);
     assert.equal(partial.json<{ data: Invoice }>().data.paymentStatus, "partial");
     const overpaid = await inject(app, "POST", `/api/v1/invoices/${invoice.id}/payments`, {
-      headers: AUTH,
+      headers: { ...AUTH, "idempotency-key": "payment-2" },
       payload: { amount: 200, reference: "bank-2" },
     });
     assert.equal(overpaid.json<{ data: Invoice }>().data.paymentStatus, "overpaid");
+  });
+
+  it("does not double-record a payment retried with the same idempotency key", async () => {
+    const app = await makeApp();
+    const created = await inject(app, "POST", "/api/v1/invoices", {
+      headers: AUTH,
+      payload: {
+        clientId: "c1",
+        number: "BTI-0010",
+        lineItems: [{ description: "Labour", quantity: 1, unitPrice: 500 }],
+      },
+    });
+    const invoice = created.json<{ data: Invoice }>().data;
+    await inject(app, "POST", `/api/v1/invoices/${invoice.id}/issue`, { headers: AUTH });
+
+    const payload = { amount: 500, reference: "bank-txn-882" };
+    const first = await inject(app, "POST", `/api/v1/invoices/${invoice.id}/payments`, {
+      headers: { ...AUTH, "idempotency-key": "retry-key-1" },
+      payload,
+    });
+    assert.equal(first.statusCode, 201);
+    const firstInvoice = first.json<{ data: Invoice }>().data;
+    assert.equal(firstInvoice.payments.length, 1);
+    assert.equal(firstInvoice.paymentStatus, "paid");
+
+    // Simulates the client never seeing the first response and retrying with
+    // the identical request and idempotency key -- the exact financial-
+    // integrity property this fix protects.
+    const retry = await inject(app, "POST", `/api/v1/invoices/${invoice.id}/payments`, {
+      headers: { ...AUTH, "idempotency-key": "retry-key-1" },
+      payload,
+    });
+    assert.equal(retry.statusCode, 201);
+    const retryInvoice = retry.json<{ data: Invoice }>().data;
+    assert.equal(retryInvoice.payments.length, 1, "a retried payment must not be recorded twice");
+    assert.equal(retryInvoice.amountPaid, 500);
+    assert.equal(retryInvoice.paymentStatus, "paid");
+    assert.deepEqual(retryInvoice, firstInvoice);
+  });
+
+  it("rejects a payment idempotency key reused for a different payment", async () => {
+    const app = await makeApp();
+    const created = await inject(app, "POST", "/api/v1/invoices", {
+      headers: AUTH,
+      payload: {
+        clientId: "c1",
+        number: "BTI-0011",
+        lineItems: [{ description: "Labour", quantity: 1, unitPrice: 500 }],
+      },
+    });
+    const invoice = created.json<{ data: Invoice }>().data;
+    await inject(app, "POST", `/api/v1/invoices/${invoice.id}/issue`, { headers: AUTH });
+
+    const first = await inject(app, "POST", `/api/v1/invoices/${invoice.id}/payments`, {
+      headers: { ...AUTH, "idempotency-key": "conflict-key" },
+      payload: { amount: 100, reference: "bank-a" },
+    });
+    assert.equal(first.statusCode, 201);
+
+    const conflicting = await inject(app, "POST", `/api/v1/invoices/${invoice.id}/payments`, {
+      headers: { ...AUTH, "idempotency-key": "conflict-key" },
+      payload: { amount: 200, reference: "bank-b" },
+    });
+    assert.equal(conflicting.statusCode, 409);
+    assert.equal(
+      conflicting.json<{ type: string }>().type,
+      "urn:jarvis:problem:invoice-payment-idempotency-conflict",
+    );
+
+    const unchanged = await inject(app, "GET", `/api/v1/invoices/${invoice.id}`, {
+      headers: AUTH,
+    });
+    assert.equal(unchanged.json<{ data: Invoice }>().data.payments.length, 1);
+  });
+
+  it("requires an Idempotency-Key on payment requests", async () => {
+    const app = await makeApp();
+    const created = await inject(app, "POST", "/api/v1/invoices", {
+      headers: AUTH,
+      payload: {
+        clientId: "c1",
+        number: "BTI-0012",
+        lineItems: [{ description: "Labour", quantity: 1, unitPrice: 50 }],
+      },
+    });
+    const invoice = created.json<{ data: Invoice }>().data;
+    await inject(app, "POST", `/api/v1/invoices/${invoice.id}/issue`, { headers: AUTH });
+    const response = await inject(app, "POST", `/api/v1/invoices/${invoice.id}/payments`, {
+      headers: AUTH,
+      payload: { amount: 10 },
+    });
+    assert.equal(response.statusCode, 422);
   });
 
   it("rejects malformed bodies, stale state changes, pre-issue payment and invalid filters", async () => {
@@ -151,7 +243,7 @@ describe("invoice HTTP boundary", () => {
     assert.equal(
       (
         await inject(app, "POST", `/api/v1/invoices/${invoice.id}/payments`, {
-          headers: AUTH,
+          headers: { ...AUTH, "idempotency-key": "pre-issue-payment-attempt" },
           payload: { amount: 10 },
         })
       ).statusCode,

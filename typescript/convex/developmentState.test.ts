@@ -1071,10 +1071,97 @@ describe("developmentState.commit", () => {
   });
 });
 
+/**
+ * Directly inserts a BUILDING->VERIFYING checkpoint event -- the durable
+ * record developmentState.commit's verification/review evidence gates
+ * derive their trusted head from. Bypasses full lease/orchestration
+ * mechanics (covered elsewhere) since these tests are about the evidence
+ * gates, not checkpoint transition validity itself.
+ */
+async function seedVerifyingCheckpoint(
+  t: ReturnType<typeof harness>,
+  input: { subjectId?: string; headSha: string },
+) {
+  const subjectId = input.subjectId ?? "mission-1";
+  const now = Date.now();
+  await t.run((ctx) =>
+    ctx.db.insert("developmentEvents", {
+      ownerId: "jarvis-cli",
+      subjectId,
+      eventId: `checkpoint-${subjectId}`,
+      requestId: `checkpoint-request-${subjectId}`,
+      canonicalRequestFingerprint: `checkpoint-request-fingerprint-${subjectId}`,
+      canonicalEventFingerprint: `checkpoint-event-fingerprint-${subjectId}`,
+      eventType: "DEV_TRANSITION_COMMITTED",
+      eventSchemaVersion: 1,
+      transitionId: "DEV_TRANSITION_BUILDING_TO_VERIFYING",
+      requestedBy: { actorType: "worker", actorId: "worker-1" },
+      committedBy: { actorType: "controller", actorId: "development-controller" },
+      occurredAt: new Date(now).toISOString(),
+      recordedAt: new Date(now).toISOString(),
+      evidenceIds: [],
+      correlationId: `checkpoint-correlation-${subjectId}`,
+      reducerVersion: "DevelopmentReducer/v1",
+      payload: {
+        effectPayload: {
+          runId: "run-1",
+          pullNumber: 1,
+          headSha: input.headSha,
+          workerSucceeded: true,
+        },
+      },
+      createdAt: now,
+    }),
+  );
+}
+
+async function recordEvidence(
+  t: ReturnType<typeof harness>,
+  input: {
+    subjectId?: string;
+    kind: "verification" | "review";
+    headSha: string;
+    outcome: "clean" | "blocking";
+  },
+) {
+  await t.mutation(api.developmentEvidence.recordDevelopmentEvidence, {
+    serviceToken: SERVICE_TOKEN,
+    subjectId: input.subjectId ?? "mission-1",
+    kind: input.kind,
+    headSha: input.headSha,
+    outcome: input.outcome,
+    sourceUrl: "https://github.com/Benny3840RG/Jarvis/actions/runs/1",
+  });
+}
+
+const HEAD_SHA = "a".repeat(40);
+
 describe("developmentState.commit -- verification/review evidence gates", () => {
-  it("rejects VERIFYING -> REVIEW through the real commit boundary when no verification evidence is supplied", async () => {
+  it("rejects VERIFYING -> REVIEW through the real commit boundary when no BUILDING->VERIFYING checkpoint exists", async () => {
     const t = harness();
     await seedSubject(t, { state: "VERIFYING" });
+
+    const outcome = await t.mutation(api.developmentState.commit, {
+      serviceToken: SERVICE_TOKEN,
+      subjectId: "mission-1",
+      eventId: "event-1",
+      requestId: "request-1",
+      correlationId: "correlation-1",
+      transitionId: "DEV_TRANSITION_VERIFYING_TO_REVIEW",
+      to: "REVIEW",
+      requestedBy: { actorType: "worker", actorId: "verifier-1" },
+      committedBy: { actorType: "controller", actorId: "development-controller" },
+    });
+
+    expect(outcome.kind).toBe("REJECTED");
+    expect(outcome.reasons).toContain("VERIFICATION_HEAD_NOT_ESTABLISHED");
+    expect(outcome.subject.state).toBe("VERIFYING");
+  });
+
+  it("rejects VERIFYING -> REVIEW when a checkpoint exists but no verification evidence was recorded for its head", async () => {
+    const t = harness();
+    await seedSubject(t, { state: "VERIFYING" });
+    await seedVerifyingCheckpoint(t, { headSha: HEAD_SHA });
 
     const outcome = await t.mutation(api.developmentState.commit, {
       serviceToken: SERVICE_TOKEN,
@@ -1093,9 +1180,12 @@ describe("developmentState.commit -- verification/review evidence gates", () => 
     expect(outcome.subject.state).toBe("VERIFYING");
   });
 
-  it("commits VERIFYING -> REVIEW through the real commit boundary once clean verification evidence is supplied", async () => {
+  it("rejects VERIFYING -> REVIEW when the recorded verification evidence is bound to a different (stale) head", async () => {
     const t = harness();
     await seedSubject(t, { state: "VERIFYING" });
+    await seedVerifyingCheckpoint(t, { headSha: HEAD_SHA });
+    // Evidence for an earlier head must not authorize the current one.
+    await recordEvidence(t, { kind: "verification", headSha: "b".repeat(40), outcome: "clean" });
 
     const outcome = await t.mutation(api.developmentState.commit, {
       serviceToken: SERVICE_TOKEN,
@@ -1107,21 +1197,86 @@ describe("developmentState.commit -- verification/review evidence gates", () => 
       to: "REVIEW",
       requestedBy: { actorType: "worker", actorId: "verifier-1" },
       committedBy: { actorType: "controller", actorId: "development-controller" },
-      verificationEvidence: {
-        checksPassed: true,
-        hasBlockingFindings: false,
-        receiptId: "verification-receipt-1",
-      },
+    });
+
+    expect(outcome.kind).toBe("REJECTED");
+    expect(outcome.reasons).toContain("VERIFICATION_EVIDENCE_REQUIRED");
+  });
+
+  it("rejects VERIFYING -> REVIEW when recorded verification evidence for the current head is blocking", async () => {
+    const t = harness();
+    await seedSubject(t, { state: "VERIFYING" });
+    await seedVerifyingCheckpoint(t, { headSha: HEAD_SHA });
+    await recordEvidence(t, { kind: "verification", headSha: HEAD_SHA, outcome: "blocking" });
+
+    const outcome = await t.mutation(api.developmentState.commit, {
+      serviceToken: SERVICE_TOKEN,
+      subjectId: "mission-1",
+      eventId: "event-1",
+      requestId: "request-1",
+      correlationId: "correlation-1",
+      transitionId: "DEV_TRANSITION_VERIFYING_TO_REVIEW",
+      to: "REVIEW",
+      requestedBy: { actorType: "worker", actorId: "verifier-1" },
+      committedBy: { actorType: "controller", actorId: "development-controller" },
+    });
+
+    expect(outcome.kind).toBe("REJECTED");
+    expect(outcome.reasons).toContain("VERIFICATION_EVIDENCE_NOT_CLEAN");
+  });
+
+  it("rejects VERIFYING -> REVIEW when a caller attempts to smuggle an inline evidence claim (field no longer exists)", async () => {
+    const t = harness();
+    await seedSubject(t, { state: "VERIFYING" });
+    await seedVerifyingCheckpoint(t, { headSha: HEAD_SHA });
+
+    await expect(
+      t.mutation(api.developmentState.commit, {
+        serviceToken: SERVICE_TOKEN,
+        subjectId: "mission-1",
+        eventId: "event-1",
+        requestId: "request-1",
+        correlationId: "correlation-1",
+        transitionId: "DEV_TRANSITION_VERIFYING_TO_REVIEW",
+        to: "REVIEW",
+        requestedBy: { actorType: "worker", actorId: "verifier-1" },
+        committedBy: { actorType: "controller", actorId: "development-controller" },
+        ...({
+          verificationEvidence: { checksPassed: true, hasBlockingFindings: false, receiptId: "x" },
+        } as Record<string, unknown>),
+      }),
+    ).rejects.toThrow();
+  });
+
+  it("commits VERIFYING -> REVIEW through the real commit boundary once genuine, head-bound verification evidence exists", async () => {
+    const t = harness();
+    await seedSubject(t, { state: "VERIFYING" });
+    await seedVerifyingCheckpoint(t, { headSha: HEAD_SHA });
+    await recordEvidence(t, { kind: "verification", headSha: HEAD_SHA, outcome: "clean" });
+
+    const outcome = await t.mutation(api.developmentState.commit, {
+      serviceToken: SERVICE_TOKEN,
+      subjectId: "mission-1",
+      eventId: "event-1",
+      requestId: "request-1",
+      correlationId: "correlation-1",
+      transitionId: "DEV_TRANSITION_VERIFYING_TO_REVIEW",
+      to: "REVIEW",
+      requestedBy: { actorType: "worker", actorId: "verifier-1" },
+      committedBy: { actorType: "controller", actorId: "development-controller" },
     });
 
     expect(outcome.kind).toBe("COMMITTED");
     expect(outcome.subject.state).toBe("REVIEW");
-    expect(outcome.event.evidenceIds).toContain("verification-receipt-1");
+    expect(outcome.event.evidenceIds).toContain(
+      "https://github.com/Benny3840RG/Jarvis/actions/runs/1",
+    );
   });
 
-  it("rejects REVIEW -> READY_TO_MERGE through the real commit boundary when no review evidence is supplied", async () => {
+  it("rejects REVIEW -> READY_TO_MERGE through the real commit boundary when no review evidence was recorded for the current head", async () => {
     const t = harness();
     await seedSubject(t, { state: "REVIEW" });
+    await seedVerifyingCheckpoint(t, { headSha: HEAD_SHA });
 
     const outcome = await t.mutation(api.developmentState.commit, {
       serviceToken: SERVICE_TOKEN,
@@ -1140,9 +1295,11 @@ describe("developmentState.commit -- verification/review evidence gates", () => 
     expect(outcome.subject.state).toBe("REVIEW");
   });
 
-  it("commits REVIEW -> READY_TO_MERGE through the real commit boundary once a clean completed review is supplied", async () => {
+  it("commits REVIEW -> READY_TO_MERGE through the real commit boundary once a genuine, head-bound clean review exists", async () => {
     const t = harness();
     await seedSubject(t, { state: "REVIEW" });
+    await seedVerifyingCheckpoint(t, { headSha: HEAD_SHA });
+    await recordEvidence(t, { kind: "review", headSha: HEAD_SHA, outcome: "clean" });
 
     const outcome = await t.mutation(api.developmentState.commit, {
       serviceToken: SERVICE_TOKEN,
@@ -1154,15 +1311,136 @@ describe("developmentState.commit -- verification/review evidence gates", () => 
       to: "READY_TO_MERGE",
       requestedBy: { actorType: "worker", actorId: "reviewer-1" },
       committedBy: { actorType: "controller", actorId: "development-controller" },
-      reviewEvidence: {
-        reviewComplete: true,
-        hasBlockingFindings: false,
-        receiptId: "review-receipt-1",
-      },
     });
 
     expect(outcome.kind).toBe("COMMITTED");
     expect(outcome.subject.state).toBe("READY_TO_MERGE");
+  });
+
+  it("rejects REVIEW -> READY_TO_MERGE when the recorded review evidence has blocking findings", async () => {
+    const t = harness();
+    await seedSubject(t, { state: "REVIEW" });
+    await seedVerifyingCheckpoint(t, { headSha: HEAD_SHA });
+    await recordEvidence(t, { kind: "review", headSha: HEAD_SHA, outcome: "blocking" });
+
+    const outcome = await t.mutation(api.developmentState.commit, {
+      serviceToken: SERVICE_TOKEN,
+      subjectId: "mission-1",
+      eventId: "event-1",
+      requestId: "request-1",
+      correlationId: "correlation-1",
+      transitionId: "DEV_TRANSITION_REVIEW_TO_READY_TO_MERGE",
+      to: "READY_TO_MERGE",
+      requestedBy: { actorType: "worker", actorId: "reviewer-1" },
+      committedBy: { actorType: "controller", actorId: "development-controller" },
+    });
+
+    expect(outcome.kind).toBe("REJECTED");
+    expect(outcome.reasons).toContain("REVIEW_EVIDENCE_NOT_CLEAN");
+  });
+
+  it("commits REVIEW -> REPAIR_REQUIRED only once a genuine review recorded blocking findings for the current head", async () => {
+    const t = harness();
+    await seedSubject(t, { state: "REVIEW" });
+    await seedVerifyingCheckpoint(t, { headSha: HEAD_SHA });
+
+    const beforeEvidence = await t.mutation(api.developmentState.commit, {
+      serviceToken: SERVICE_TOKEN,
+      subjectId: "mission-1",
+      eventId: "event-1",
+      requestId: "request-1",
+      correlationId: "correlation-1",
+      transitionId: "DEV_TRANSITION_REVIEW_TO_REPAIR_REQUIRED",
+      to: "REPAIR_REQUIRED",
+      requestedBy: { actorType: "worker", actorId: "reviewer-1" },
+      committedBy: { actorType: "controller", actorId: "development-controller" },
+    });
+    expect(beforeEvidence.kind).toBe("REJECTED");
+    expect(beforeEvidence.reasons).toContain("REVIEW_EVIDENCE_REQUIRED");
+
+    await recordEvidence(t, { kind: "review", headSha: HEAD_SHA, outcome: "blocking" });
+    const afterEvidence = await t.mutation(api.developmentState.commit, {
+      serviceToken: SERVICE_TOKEN,
+      subjectId: "mission-1",
+      eventId: "event-2",
+      requestId: "request-2",
+      correlationId: "correlation-2",
+      transitionId: "DEV_TRANSITION_REVIEW_TO_REPAIR_REQUIRED",
+      to: "REPAIR_REQUIRED",
+      requestedBy: { actorType: "worker", actorId: "reviewer-1" },
+      committedBy: { actorType: "controller", actorId: "development-controller" },
+    });
+    expect(afterEvidence.kind).toBe("COMMITTED");
+    expect(afterEvidence.subject.state).toBe("REPAIR_REQUIRED");
+  });
+});
+
+describe("developmentEvidence.recordDevelopmentEvidence", () => {
+  it("rejects a caller-supplied recordedAt outright -- the field does not exist on the wire contract", async () => {
+    const t = harness();
+    await seedSubject(t, { state: "VERIFYING" });
+
+    await expect(
+      t.mutation(api.developmentEvidence.recordDevelopmentEvidence, {
+        serviceToken: SERVICE_TOKEN,
+        subjectId: "mission-1",
+        kind: "verification",
+        headSha: HEAD_SHA,
+        outcome: "clean",
+        sourceUrl: "https://github.com/Benny3840RG/Jarvis/actions/runs/1",
+        ...({ recordedAt: 1 } as Record<string, unknown>),
+      }),
+    ).rejects.toThrow();
+  });
+
+  it("stamps recordedAt from the server clock on an ordinary call", async () => {
+    const t = harness();
+    await seedSubject(t, { state: "VERIFYING" });
+    const before = Date.now();
+
+    const result = await t.mutation(api.developmentEvidence.recordDevelopmentEvidence, {
+      serviceToken: SERVICE_TOKEN,
+      subjectId: "mission-1",
+      kind: "verification",
+      headSha: HEAD_SHA,
+      outcome: "clean",
+      sourceUrl: "https://github.com/Benny3840RG/Jarvis/actions/runs/1",
+    });
+    const after = Date.now();
+
+    expect(result.recordedAt).toBeGreaterThanOrEqual(before);
+    expect(result.recordedAt).toBeLessThanOrEqual(after);
+  });
+
+  it("rejects a headSha that is not an exact 40-character hex commit SHA", async () => {
+    const t = harness();
+    await seedSubject(t, { state: "VERIFYING" });
+
+    await expect(
+      t.mutation(api.developmentEvidence.recordDevelopmentEvidence, {
+        serviceToken: SERVICE_TOKEN,
+        subjectId: "mission-1",
+        kind: "verification",
+        headSha: "not-a-sha",
+        outcome: "clean",
+        sourceUrl: "https://github.com/Benny3840RG/Jarvis/actions/runs/1",
+      }),
+    ).rejects.toThrow(/40-character hex/);
+  });
+
+  it("rejects evidence for a subject that does not exist", async () => {
+    const t = harness();
+
+    await expect(
+      t.mutation(api.developmentEvidence.recordDevelopmentEvidence, {
+        serviceToken: SERVICE_TOKEN,
+        subjectId: "no-such-mission",
+        kind: "verification",
+        headSha: HEAD_SHA,
+        outcome: "clean",
+        sourceUrl: "https://github.com/Benny3840RG/Jarvis/actions/runs/1",
+      }),
+    ).rejects.toThrow(/does not exist/);
   });
 });
 

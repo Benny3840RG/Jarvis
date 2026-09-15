@@ -23,6 +23,7 @@ import { DEVELOPMENT_TRANSITIONS } from "../src/development/transitionRegistry.j
 import { fingerprintToolAction, fingerprintToolEffect } from "../src/actions/toolExecution.js";
 import type { ToolAction } from "../src/actions/toolActions.js";
 import { deriveOmegaCompletionInput } from "./omegaMissions.js";
+import { findLatestDevelopmentEvidence } from "./developmentEvidence.js";
 import { evaluateOmegaCompletion } from "../src/omega/policy.js";
 import type { OmegaCompletionInput } from "../src/omega/policy.js";
 import { resolveTrustedModelProfile } from "../src/development/modelResourceGovernance.js";
@@ -36,8 +37,6 @@ import {
   developmentLeaseValidator,
   developmentMergeEvidenceValidator,
   developmentReconciliationEvidenceValidator,
-  developmentReviewEvidenceValidator,
-  developmentVerificationEvidenceValidator,
   developmentStateValidator,
   developmentSubjectDocumentValidator,
   developmentTransitionIdValidator,
@@ -72,6 +71,45 @@ async function findSubject(ctx: QueryCtx | MutationCtx, ownerId: string, subject
       q.eq("ownerId", ownerId).eq("subjectId", subjectId),
     )
     .unique();
+}
+
+const HEAD_SHA_PATTERN = /^[0-9a-f]{40}$/i;
+const CHECKPOINT_SCAN_BOUND = 200;
+
+/**
+ * The head SHA bound to the subject's most recent BUILDING->VERIFYING
+ * checkpoint, or undefined if none exists. This is the trusted "what head
+ * is this mission currently on" signal for the verification/review
+ * evidence gates below -- the checkpoint event itself was only reachable
+ * through a validated worker lease (BUILDING_TO_VERIFYING is in
+ * LEASE_REQUIRED_TRANSITIONS), so its recorded headSha is as trustworthy
+ * as any other committed transition event in this system.
+ */
+async function findLatestVerifyingCheckpointHeadSha(
+  ctx: MutationCtx,
+  ownerId: string,
+  subjectId: string,
+): Promise<string | undefined> {
+  const events = await ctx.db
+    .query("developmentEvents")
+    .withIndex("by_owner_and_subject_id_and_created_at", (q) =>
+      q.eq("ownerId", ownerId).eq("subjectId", subjectId),
+    )
+    .order("desc")
+    .take(CHECKPOINT_SCAN_BOUND);
+  const checkpoint = events.find(
+    (event) =>
+      event.eventType === "DEV_TRANSITION_COMMITTED" &&
+      event.transitionId === "DEV_TRANSITION_BUILDING_TO_VERIFYING",
+  );
+  const effectPayload = checkpoint?.payload.effectPayload;
+  const headSha =
+    effectPayload && typeof effectPayload === "object" && "headSha" in effectPayload
+      ? (effectPayload as Record<string, unknown>).headSha
+      : undefined;
+  return typeof headSha === "string" && HEAD_SHA_PATTERN.test(headSha)
+    ? headSha.toLowerCase()
+    : undefined;
 }
 
 async function findOrchestrationRun(ctx: QueryCtx | MutationCtx, ownerId: string, runId: string) {
@@ -164,8 +202,6 @@ function requestFingerprint(input: {
   effectPayload?: unknown;
   mergeEvidence?: unknown;
   reconciliationEvidence?: unknown;
-  verificationEvidence?: unknown;
-  reviewEvidence?: unknown;
   mergeReceiptKey?: string;
   expectedSubjectVersion?: number;
 }): string {
@@ -193,8 +229,6 @@ function requestFingerprint(input: {
     ...optionalField("effectPayload", input.effectPayload),
     ...optionalField("mergeEvidence", input.mergeEvidence),
     ...optionalField("reconciliationEvidence", input.reconciliationEvidence),
-    ...optionalField("verificationEvidence", input.verificationEvidence),
-    ...optionalField("reviewEvidence", input.reviewEvidence),
     ...optionalField("mergeReceiptKey", input.mergeReceiptKey),
     ...optionalField("expectedSubjectVersion", input.expectedSubjectVersion),
   });
@@ -917,8 +951,6 @@ export const commit = mutation({
     effectPayload: v.optional(v.record(v.string(), v.any())),
     mergeEvidence: v.optional(developmentMergeEvidenceValidator),
     reconciliationEvidence: v.optional(developmentReconciliationEvidenceValidator),
-    verificationEvidence: v.optional(developmentVerificationEvidenceValidator),
-    reviewEvidence: v.optional(developmentReviewEvidenceValidator),
     mergeReceiptKey: v.optional(v.string()),
     expectedSubjectVersion: v.optional(v.number()),
   },
@@ -1204,6 +1236,64 @@ export const commit = mutation({
             ),
           }
         : undefined;
+    // VERIFYING->REVIEW and the two REVIEW exits must prove a genuine
+    // verification/review outcome occurred for the mission's current head,
+    // not merely accept a caller-supplied claim (see
+    // convex/developmentEvidence.ts). The trusted head comes from the
+    // subject's own most recent BUILDING->VERIFYING checkpoint event, the
+    // same durable record a worker's lease was already validated against to
+    // reach VERIFYING in the first place.
+    const evidenceGatedTransition =
+      args.transitionId === "DEV_TRANSITION_VERIFYING_TO_REVIEW" ||
+      args.transitionId === "DEV_TRANSITION_REVIEW_TO_READY_TO_MERGE" ||
+      args.transitionId === "DEV_TRANSITION_REVIEW_TO_REPAIR_REQUIRED";
+    const verifiedHeadSha = evidenceGatedTransition
+      ? await findLatestVerifyingCheckpointHeadSha(ctx, ownerId, subjectId)
+      : undefined;
+    const trustedVerificationEvidence =
+      args.transitionId === "DEV_TRANSITION_VERIFYING_TO_REVIEW" && verifiedHeadSha
+        ? await findLatestDevelopmentEvidence(
+            ctx,
+            ownerId,
+            subjectId,
+            "verification",
+            verifiedHeadSha,
+          )
+        : undefined;
+    const trustedVerificationReason =
+      args.transitionId !== "DEV_TRANSITION_VERIFYING_TO_REVIEW"
+        ? undefined
+        : !verifiedHeadSha
+          ? "VERIFICATION_HEAD_NOT_ESTABLISHED"
+          : !trustedVerificationEvidence
+            ? "VERIFICATION_EVIDENCE_REQUIRED"
+            : trustedVerificationEvidence.outcome === "clean"
+              ? undefined
+              : "VERIFICATION_EVIDENCE_NOT_CLEAN";
+    const trustedReviewEvidence =
+      (args.transitionId === "DEV_TRANSITION_REVIEW_TO_READY_TO_MERGE" ||
+        args.transitionId === "DEV_TRANSITION_REVIEW_TO_REPAIR_REQUIRED") &&
+      verifiedHeadSha
+        ? await findLatestDevelopmentEvidence(ctx, ownerId, subjectId, "review", verifiedHeadSha)
+        : undefined;
+    const trustedReviewReason =
+      args.transitionId !== "DEV_TRANSITION_REVIEW_TO_READY_TO_MERGE" &&
+      args.transitionId !== "DEV_TRANSITION_REVIEW_TO_REPAIR_REQUIRED"
+        ? undefined
+        : !verifiedHeadSha
+          ? "REVIEW_HEAD_NOT_ESTABLISHED"
+          : !trustedReviewEvidence
+            ? "REVIEW_EVIDENCE_REQUIRED"
+            : args.transitionId === "DEV_TRANSITION_REVIEW_TO_READY_TO_MERGE"
+              ? trustedReviewEvidence.outcome === "clean"
+                ? undefined
+                : "REVIEW_EVIDENCE_NOT_CLEAN"
+              : // REVIEW_TO_REPAIR_REQUIRED specifically records that a
+                // completed review *found* blocking issues -- it must not be
+                // reachable from a clean review either.
+                trustedReviewEvidence.outcome === "blocking"
+                ? undefined
+                : "REVIEW_EVIDENCE_NOT_BLOCKING";
     const orchestrationPreconditionReason = !leaseRequired
       ? undefined
       : !bindingComplete
@@ -1231,7 +1321,11 @@ export const commit = mutation({
           ? orchestrationPreconditionReason
           : trustedMergeReason
             ? trustedMergeReason
-            : undefined;
+            : trustedVerificationReason
+              ? trustedVerificationReason
+              : trustedReviewReason
+                ? trustedReviewReason
+                : undefined;
 
     const request: TransitionRequest = {
       transitionId: args.transitionId,
@@ -1271,8 +1365,6 @@ export const commit = mutation({
             }
           : args.mergeEvidence,
       reconciliationEvidence: args.reconciliationEvidence,
-      verificationEvidence: args.verificationEvidence,
-      reviewEvidence: args.reviewEvidence,
       expectedSubjectVersion: args.expectedSubjectVersion,
       currentSubjectVersion: subject.subjectVersion,
       currentFencingToken: orchestrationFencingToken ?? currentFencingToken,
@@ -1291,8 +1383,8 @@ export const commit = mutation({
     // authoritative event history, so only a verified prior parent is kept.
     const evidenceIds = [
       ...(mergeReceiptKey ? [mergeReceiptKey] : []),
-      ...(request.verificationEvidence ? [request.verificationEvidence.receiptId] : []),
-      ...(request.reviewEvidence ? [request.reviewEvidence.receiptId] : []),
+      ...(trustedVerificationEvidence ? [trustedVerificationEvidence.sourceUrl] : []),
+      ...(trustedReviewEvidence ? [trustedReviewEvidence.sourceUrl] : []),
       ...(request.reconciliationEvidence ? [request.reconciliationEvidence.observationSource] : []),
     ];
     const commitContext = {

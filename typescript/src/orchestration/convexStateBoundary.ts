@@ -163,7 +163,7 @@ export class ConvexOrchestrationStateBoundary implements OrchestrationStepStateB
   }
 }
 
-function authenticatedWorkerId(principal: {
+export function authenticatedWorkerId(principal: {
   issuer: string;
   audience: string;
   subject: string;

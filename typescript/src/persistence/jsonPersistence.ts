@@ -1,4 +1,4 @@
-import fs, { type FileHandle } from "node:fs/promises";
+import fs from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
@@ -14,8 +14,9 @@ import {
   StateDocumentError,
   type PersistedDocument,
 } from "./document.js";
-import { JsonFileLock } from "./jsonFileLock.js";
 import { assertAssistantState } from "./assistantState.js";
+import { writePrivateJsonFile } from "./atomicJsonFile.js";
+import { JsonFileLock } from "./jsonFileLock.js";
 import type {
   AssistantState,
   PersistenceProvider,
@@ -174,26 +175,7 @@ export class JSONPersistence implements PersistenceProvider {
   }
 
   private async writeDocument(document: PersistedDocument): Promise<void> {
-    // Capture bytes before filesystem awaits can expose caller-owned references to mutation.
-    const serialized = `${JSON.stringify(document, null, 2)}\n`;
-    await fs.mkdir(path.dirname(this.filePath), { recursive: true });
-    const tempPath = path.join(
-      path.dirname(this.filePath),
-      `.${path.basename(this.filePath)}.tmp-${process.pid}-${randomUUID()}`,
-    );
-    let handle: FileHandle | undefined;
-    try {
-      handle = await fs.open(tempPath, "wx", 0o600);
-      await handle.writeFile(serialized, "utf8");
-      await handle.sync();
-      await handle.close();
-      handle = undefined;
-      await fs.rename(tempPath, this.filePath);
-    } catch (error: unknown) {
-      await handle?.close().catch(() => undefined);
-      await fs.rm(tempPath, { force: true }).catch(() => undefined);
-      throw error;
-    }
+    await writePrivateJsonFile(this.filePath, document);
   }
 
   private withWriteLock<T>(operation: () => Promise<T>): Promise<T> {
