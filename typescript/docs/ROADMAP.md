@@ -6,6 +6,14 @@ it at the end of every session.
 
 ## Outlook current-main integration (2026-09-14)
 
+PR #541 review follow-up (2026-09-15): the publication regression now combines a
+root `result.json` with one and then two valid named segment directories, asserting
+that neither layout retains any receipts. This closes the explicit mixed-layout
+coverage gap; the publisher implementation is unchanged. The integrated candidate
+requires fresh full verification, Claude review and maintained PASS before Benny's
+merge decision. See `.github/automation/pr-maintenance-workflow.test.mjs` and
+`.github/workflows/jarvis-pr-maintenance.yml` for the exercised authority path.
+
 Current base is `6b6ced5e5c3c32ca0eb9d06fbd56d73dac7acddc`. Benny has
 merged the documented-context planner (#534), base-drift diagnostics (#532),
 Sentry tooling (#527) and server-clock repairs (#535/#536). The held Outlook
