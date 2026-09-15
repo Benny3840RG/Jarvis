@@ -166,32 +166,14 @@ export type ReconciliationEvidence = {
   readonly observationSource: string;
 };
 
-/**
- * Evidence for `deterministic_verification_success_gate`
- * (`DEV_TRANSITION_VERIFYING_TO_REVIEW`). Unlike `mergeEvidence`, presence
- * of this evidence is itself required, not merely checked when supplied —
- * there is no separate trusted-derivation boundary for it yet (that is
- * later Task 11 pipeline work), so the kernel is this gate's only line of
- * defense against a caller reaching REVIEW with no proof any check ran.
- */
-export type VerificationEvidence = {
-  readonly checksPassed: boolean;
-  readonly hasBlockingFindings: boolean;
-  readonly receiptId: string;
-};
-
-/**
- * Evidence for `deterministic_review_findings_gate`
- * (`DEV_TRANSITION_REVIEW_TO_REPAIR_REQUIRED`) and
- * `deterministic_review_readiness_gate`
- * (`DEV_TRANSITION_REVIEW_TO_READY_TO_MERGE`). Same "presence itself is
- * required" rule as `VerificationEvidence`, for the same reason.
- */
-export type ReviewEvidence = {
-  readonly reviewComplete: boolean;
-  readonly hasBlockingFindings: boolean;
-  readonly receiptId: string;
-};
+// Verification/review evidence for `deterministic_verification_success_gate`,
+// `deterministic_review_findings_gate` and `deterministic_review_readiness_gate`
+// now has a real trusted-derivation boundary: convex/developmentState.ts's
+// commit() looks up a durable, head-bound record (convex/developmentEvidence.ts)
+// before calling evaluateDevelopmentTransition, the same way it already does
+// for mergeEvidence via trustedMergeReason. The kernel no longer accepts an
+// inline evidence claim for these gates -- commit() rejects via its
+// precondition layer before evaluateDevelopmentTransition is even called.
 
 export type TransitionRequest = {
   readonly transitionId: DevelopmentTransitionId;
@@ -219,8 +201,6 @@ export type TransitionRequest = {
   readonly effectPayload?: Readonly<Record<string, unknown>>;
   readonly mergeEvidence?: MergeEvidence;
   readonly reconciliationEvidence?: ReconciliationEvidence;
-  readonly verificationEvidence?: VerificationEvidence;
-  readonly reviewEvidence?: ReviewEvidence;
   /**
    * Real input to the reused `evaluateOmegaCompletion` policy — criteria,
    * proofs, risk class, unresolved contradictions/external effects, and
@@ -447,43 +427,11 @@ function deriveFailedMergeRetryDisposition(
   return "RESUME_SAME_OPERATION";
 }
 
-function verificationGateReason(
-  definition: TransitionDefinition,
-  request: TransitionRequest,
-): string | undefined {
-  if (definition.evaluator !== "deterministic_verification_success_gate") return undefined;
-
-  const evidence = request.verificationEvidence;
-  if (!evidence) return "VERIFICATION_EVIDENCE_REQUIRED";
-  if (!evidence.checksPassed) return "VERIFICATION_CHECKS_NOT_PASSED";
-  if (evidence.hasBlockingFindings) return "BLOCKING_VERIFICATION_FINDINGS_PRESENT";
-  return undefined;
-}
-
-/**
- * Covers both review evaluators, which share `ReviewEvidence` but expect
- * opposite `hasBlockingFindings` polarity: readiness requires a clean
- * review, while REVIEW_TO_REPAIR_REQUIRED exists specifically to record
- * that a completed review *found* blocking issues, so it must not be
- * reachable without evidence proving that either.
- */
-function reviewGateReason(
-  definition: TransitionDefinition,
-  request: TransitionRequest,
-): string | undefined {
-  const isFindingsGate = definition.evaluator === "deterministic_review_findings_gate";
-  const isReadinessGate = definition.evaluator === "deterministic_review_readiness_gate";
-  if (!isFindingsGate && !isReadinessGate) return undefined;
-
-  const evidence = request.reviewEvidence;
-  if (!evidence) return "REVIEW_EVIDENCE_REQUIRED";
-  if (!evidence.reviewComplete) return "INDEPENDENT_REVIEW_NOT_COMPLETE";
-
-  if (isFindingsGate) {
-    return evidence.hasBlockingFindings ? undefined : "NO_BLOCKING_REVIEW_FINDINGS";
-  }
-  return evidence.hasBlockingFindings ? "BLOCKING_REVIEW_FINDINGS_PRESENT" : undefined;
-}
+// verificationGateReason/reviewGateReason were removed: commit()'s
+// precondition layer in convex/developmentState.ts now gates
+// deterministic_verification_success_gate, deterministic_review_findings_gate
+// and deterministic_review_readiness_gate against a trusted, head-bound
+// evidence record before this kernel is ever called for those transitions.
 
 function reconciliationGateReason(
   definition: TransitionDefinition,
@@ -583,12 +531,6 @@ export function evaluateDevelopmentTransition(request: TransitionRequest): Trans
       return rejected(request, "HEAD_NOT_CURRENT");
     }
   }
-
-  const verificationReason = verificationGateReason(definition, request);
-  if (verificationReason) return rejected(request, verificationReason);
-
-  const reviewReason = reviewGateReason(definition, request);
-  if (reviewReason) return rejected(request, reviewReason);
 
   const reconciliationReason = reconciliationGateReason(definition, request);
   if (reconciliationReason) return rejected(request, reconciliationReason);

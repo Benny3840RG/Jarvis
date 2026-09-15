@@ -474,24 +474,32 @@ export class DevelopmentMissions {
         });
       return;
     }
-    if (subject.state === "VERIFYING")
+    if (subject.state === "VERIFYING") {
+      // Write the durable, head-bound evidence record before attempting the
+      // transition -- developmentState.commit's VERIFYING_TO_REVIEW gate
+      // looks this up rather than trusting an inline claim.
+      await this.mutate("developmentEvidence:recordDevelopmentEvidence", {
+        subjectId,
+        kind: "verification",
+        headSha: identity.headSha,
+        outcome: "clean",
+        sourceUrl: runUrl,
+      });
       await this.transition(subjectId, "VERIFYING", "REVIEW", key, {
         effectPayload,
-        verificationEvidence: {
-          checksPassed: true,
-          hasBlockingFindings: false,
-          receiptId: runUrl,
-        },
       });
+    }
     if (review.verdict === "blocked") return;
     const to = review.verdict === "pass" ? "READY_TO_MERGE" : "REPAIR_REQUIRED";
+    await this.mutate("developmentEvidence:recordDevelopmentEvidence", {
+      subjectId,
+      kind: "review",
+      headSha: identity.headSha,
+      outcome: to === "REPAIR_REQUIRED" ? "blocking" : "clean",
+      sourceUrl: runUrl,
+    });
     await this.transition(subjectId, "REVIEW", to, key, {
       effectPayload,
-      reviewEvidence: {
-        reviewComplete: true,
-        hasBlockingFindings: to === "REPAIR_REQUIRED",
-        receiptId: runUrl,
-      },
     });
   }
   async ownerGate(subjectId, observePull) {

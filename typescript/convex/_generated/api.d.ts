@@ -15,6 +15,7 @@ import type * as authHelpers from "../authHelpers.js";
 import type * as buildLogs from "../buildLogs.js";
 import type * as buildOwnership from "../buildOwnership.js";
 import type * as builds from "../builds.js";
+import type * as developmentEvidence from "../developmentEvidence.js";
 import type * as developmentSchema from "../developmentSchema.js";
 import type * as developmentState from "../developmentState.js";
 import type * as developmentValidators from "../developmentValidators.js";
@@ -79,6 +80,7 @@ declare const fullApi: ApiFromModules<{
   buildLogs: typeof buildLogs;
   buildOwnership: typeof buildOwnership;
   builds: typeof builds;
+  developmentEvidence: typeof developmentEvidence;
   developmentSchema: typeof developmentSchema;
   developmentState: typeof developmentState;
   developmentValidators: typeof developmentValidators;

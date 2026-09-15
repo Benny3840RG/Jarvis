@@ -56,4 +56,18 @@ export const developmentTables = {
     .index("by_owner_and_subject_id_and_event_id", ["ownerId", "subjectId", "eventId"])
     .index("by_owner_and_subject_id_and_request_id", ["ownerId", "subjectId", "requestId"])
     .index("by_owner_and_subject_id_and_created_at", ["ownerId", "subjectId", "createdAt"]),
+  // Durable, independently-queryable record of a genuine verification/review
+  // outcome, bound to the exact head it was observed against. commit()'s
+  // VERIFYING/REVIEW gates look this up rather than trusting an inline
+  // caller-supplied claim -- see convex/developmentEvidence.ts.
+  developmentEvidence: defineTable({
+    ownerId: v.string(),
+    subjectId: v.string(),
+    kind: v.union(v.literal("verification"), v.literal("review")),
+    headSha: v.string(),
+    outcome: v.union(v.literal("clean"), v.literal("blocking")),
+    sourceUrl: v.string(),
+    recordedAt: v.number(),
+    createdAt: v.number(),
+  }).index("by_owner_subject_kind_and_head", ["ownerId", "subjectId", "kind", "headSha"]),
 };
