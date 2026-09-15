@@ -3,7 +3,7 @@ const MAX_DIFF_LINES = 2_000;
 const MAX_TOTAL_BYTES = 2 * 1024 * 1024;
 const MAX_FILE_BYTES = 512 * 1024;
 
-const FORBIDDEN_PATHS = [
+const HARD_FORBIDDEN_PATHS = [
   /^\.github\/workflows\//,
   /^\.github\/actions\//,
   /^\.github\/automation\//,
@@ -13,9 +13,17 @@ const FORBIDDEN_PATHS = [
   /(^|\/)package(?:-lock)?\.json$/,
   /^typescript\/convex\/schema\.ts$/,
   /(^|\/)convex\.json$/,
+  /^typescript\/(?:src|convex)\/.*(?:deploy|commission|billing|payment)/i,
+  /^docs\/governance\//,
+  /^docs\/registries\//,
+  /^docs\/validators\//,
+  /^docs\/traceability\/action-family-registry\.yaml$/,
+  /^docs\/deployment\.md$/,
+];
+
+const TEST_GATED_APPLICATION_PATHS = [
   /^typescript\/(?:src|convex)\/.*(?:auth|security|permission|approval|authority|policy|credential|secret|token)/i,
   /^typescript\/(?:src|convex)\/.*(?:integration|adapter|provider|reconciliation|external)/i,
-  /^typescript\/(?:src|convex)\/.*(?:deploy|commission|billing|payment)/i,
   /^typescript\/src\/actions\//,
   /^typescript\/src\/integrations\//,
   /^typescript\/src\/tools\//,
@@ -29,11 +37,6 @@ const FORBIDDEN_PATHS = [
   /^typescript\/src\/persistence\/convexTool(?:Actions|ExecutionReceipts)\.ts$/,
   /^typescript\/src\/persistence\/convex(?:ExternalReconciliations|QuoteDeliveries)\.ts$/,
   /^typescript\/convex\/(?:authHelpers|toolActionLogic)\.ts$/,
-  /^docs\/governance\//,
-  /^docs\/registries\//,
-  /^docs\/validators\//,
-  /^docs\/traceability\/action-family-registry\.yaml$/,
-  /^docs\/deployment\.md$/,
 ];
 
 const SOURCE_PATH =
@@ -75,10 +78,37 @@ export function evaluateIssue(issue) {
   return result(reasons);
 }
 
-function forbiddenPathReason(path) {
-  return FORBIDDEN_PATHS.some((pattern) => pattern.test(path))
+function pathArea(path) {
+  if (!SOURCE_PATH.test(path) || TEST_PATH.test(path)) return null;
+  if (path.startsWith("typescript/convex/")) return "convex";
+  if (path.startsWith("typescript/jarvis-console-01/")) return "console";
+  return "node";
+}
+
+function testArea(path) {
+  if (!TEST_PATH.test(path)) return null;
+  if (path.startsWith("typescript/convex/")) return "convex";
+  if (path.startsWith("typescript/jarvis-console-01/")) return "console";
+  return "node";
+}
+
+function hardForbiddenPathReason(path) {
+  return HARD_FORBIDDEN_PATHS.some((pattern) => pattern.test(path))
     ? `forbidden path changed: ${path}`
     : null;
+}
+
+function testGatedPathReason(path, changedTests) {
+  if (TEST_PATH.test(path)) return null;
+  if (!TEST_GATED_APPLICATION_PATHS.some((pattern) => pattern.test(path)))
+    return null;
+  const matchingTest = path.startsWith("typescript/convex/")
+    ? path.replace(/\.ts$/, ".test.ts")
+    : SOURCE_PATH.test(path)
+      ? `typescript/tests/${path.split("/").at(-1).replace(/\.ts$/, ".test.ts")}`
+      : null;
+  if (matchingTest && changedTests.has(matchingTest)) return null;
+  return `guarded application path requires its own test change (${matchingTest ?? "no supported test path"}): ${path}`;
 }
 
 export function evaluateDiff({ files = [] } = {}) {
@@ -101,10 +131,28 @@ export function evaluateDiff({ files = [] } = {}) {
   if (totalBytes > MAX_TOTAL_BYTES)
     reasons.push("total changed byte limit exceeded");
 
+  const testAreas = new Set(
+    files.map((file) => testArea(String(file.path ?? ""))).filter(Boolean),
+  );
+  const changedTests = new Set(
+    files
+      .filter(
+        (file) =>
+          TEST_PATH.test(String(file.path ?? "")) &&
+          !["D", "removed", "deleted"].includes(file.status) &&
+          Number(file.additions ?? 0) > 0 &&
+          !file.binary &&
+          !file.symlink,
+      )
+      .map((file) => String(file.path)),
+  );
+
   for (const file of files) {
     const path = String(file.path ?? "");
-    const pathReason = forbiddenPathReason(path);
-    if (pathReason) reasons.push(pathReason);
+    const hardPathReason = hardForbiddenPathReason(path);
+    if (hardPathReason) reasons.push(hardPathReason);
+    const guardedPathReason = testGatedPathReason(path, changedTests);
+    if (guardedPathReason) reasons.push(guardedPathReason);
     if (file.binary) reasons.push(`binary change is forbidden: ${path}`);
     if (file.symlink) reasons.push(`symlink change is forbidden: ${path}`);
     if (Number(file.bytes ?? 0) > MAX_FILE_BYTES) {
@@ -113,28 +161,7 @@ export function evaluateDiff({ files = [] } = {}) {
   }
 
   const sourceAreas = new Set(
-    files
-      .map((file) => String(file.path ?? ""))
-      .filter((path) => SOURCE_PATH.test(path) && !TEST_PATH.test(path))
-      .map((path) =>
-        path.startsWith("typescript/convex/")
-          ? "convex"
-          : path.startsWith("typescript/jarvis-console-01/")
-            ? "console"
-            : "node",
-      ),
-  );
-  const testAreas = new Set(
-    files
-      .map((file) => String(file.path ?? ""))
-      .filter((path) => TEST_PATH.test(path))
-      .map((path) =>
-        path.startsWith("typescript/convex/")
-          ? "convex"
-          : path.startsWith("typescript/jarvis-console-01/")
-            ? "console"
-            : "node",
-      ),
+    files.map((file) => pathArea(String(file.path ?? ""))).filter(Boolean),
   );
   for (const area of sourceAreas) {
     if (!testAreas.has(area)) {
