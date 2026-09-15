@@ -61,6 +61,53 @@ describe("Microsoft delegated OAuth configuration", () => {
 });
 
 describe("FileRefreshTokenStore", () => {
+  for (const [encoding, token] of [
+    ["ASCII", "x".repeat(65_536)],
+    ["multibyte", "é".repeat(32_768)],
+  ] as const)
+    it(`round-trips maximum-size ${encoding} tokens through create and rotation`, async () => {
+      const directory = await mkdtemp(join(tmpdir(), "jarvis-outlook-limit-"));
+      const tokenPath = join(directory, "refresh-token");
+      const store = new FileRefreshTokenStore(tokenPath);
+      try {
+        await store.create(token);
+        assert.equal((await stat(tokenPath)).size, 65_537);
+        assert.equal(await store.read(), token);
+        await store.replace("small");
+        await store.replace(token);
+        assert.equal(await store.read(), token);
+        await assert.rejects(store.replace(`${token}x`), /refresh-token-invalid/u);
+        assert.equal(await store.read(), token);
+        const absent = new FileRefreshTokenStore(join(directory, "absent"));
+        await assert.rejects(absent.create(`${token}x`), /refresh-token-invalid/u);
+        assert.deepEqual(await readdir(directory), ["refresh-token"]);
+        // The extra file byte is serialization overhead, never extra token payload.
+        await writeFile(tokenPath, `${token}x`);
+        await assert.rejects(store.read(), /refresh-token-invalid/u);
+      } finally {
+        await rm(directory, { recursive: true, force: true });
+      }
+    });
+
+  it("atomically creates one complete credential without clobbering a competing create", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "jarvis-outlook-create-"));
+    const tokenPath = join(directory, "refresh-token");
+    try {
+      const store = new FileRefreshTokenStore(tokenPath);
+      const results = await Promise.allSettled([store.create("first"), store.create("second")]);
+      assert.equal(results.filter(({ status }) => status === "fulfilled").length, 1);
+      assert.equal(results.filter(({ status }) => status === "rejected").length, 1);
+      const value = await store.read();
+      assert.ok(value === "first" || value === "second");
+      await assert.rejects(store.create("replacement"));
+      assert.equal(await store.read(), value);
+      assert.equal((await stat(tokenPath)).mode & 0o777, 0o600);
+      assert.deepEqual(await readdir(directory), ["refresh-token"]);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   it("reads an owner-only regular file and atomically replaces rotations", async () => {
     const directory = await mkdtemp(join(tmpdir(), "jarvis-outlook-token-"));
     const tokenPath = join(directory, "refresh-token");

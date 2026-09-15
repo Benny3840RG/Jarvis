@@ -108,3 +108,37 @@ The tests prove the six-category in-process contract, fail-closed negative paths
 | R-073–R-076       | `invoiceStore.test.ts`, `invoiceHttp.test.ts`                                                                    | Draft-only invoice edits, issue transition, void transition and pre-issue payment rejection are covered                                        | Partial |
 | R-105–R-111       | `invoiceHttp.test.ts`, `httpRouteContract.test.ts`, `httpOpenApiRouteAlignment.test.ts`, `openapi` contract lint | `/api/v1/invoices` is authenticated, served by the HTTP adapter, documented in OpenAPI and deliberately not exposed as an MCP tool             | Partial |
 | R-125–R-127       | `invoiceStore.test.ts`, `invoiceHttp.test.ts`, `httpRouteContract.test.ts`, `httpOpenApiRouteAlignment.test.ts`  | Invoice/payment truth is durable and server-derived, but PDF generation, provider reconciliation and automatic numbering remain open           | Partial |
+
+- Outlook administrator setup dependency boundary (#482):
+  `scripts/test-outlook-setup.ps1` covers missing and different Graph module
+  versions stopping before installation, import, sign-in or provider requests,
+  and exact version selection on successful setup. All 31 offline provisioning
+  scenarios pass; package provenance remains a documented operator prerequisite.
+
+- Outlook documentation context (#482 / #533): the runbook links the actual
+  provisioning, callback, token-store, connection and regression paths. The
+  bounded planner repair is separately tested against this candidate's source
+  inventory; links do not replace runtime/provider evidence or a current review.
+
+- PR maintenance base-drift visibility (#529):
+  `.github/automation/pr-maintenance-integration.test.mjs` exercises repeated
+  observations, changed-main updates, copied user markers, uncertain writes,
+  provider readback mismatch, pagination limits, candidate races and progress
+  of other eligible PRs. No review status or completion authority is produced.
+
+- Bounded documentation review context (#533):
+  `paired-review-context.test.mjs` covers before/after local paths, relative links,
+  ambiguous/external/absent references and isolation of unrelated code segments.
+  `review-segments.test.mjs` proves referenced implementation reaches a separated
+  documentation segment within existing bounds; essential context requests still
+  block and exact primary coverage remains digest-validated.
+
+## Outlook browser-launch deadline repair
+
+`typescript/tests/outlookOnboarding.test.ts` now proves that the existing 180-second sign-in deadline releases a stalled URL-display callback both before and after a valid OAuth callback. Both cases failed before the repair. They prove listener closure, zero token/provider calls and no credential publication after expiry. Local loopback and controlled time only; no live Microsoft proof.
+
+## Single-artifact review publication compatibility
+
+The pinned `actions/download-artifact` revision flattens one matched artifact into the destination even when `merge-multiple` is false. This blocked #540 after its sole reviewer returned valid evidence. The existing publisher now accepts that exact flat `result.json` layout only when its trusted manifest expects segment zero alone, while retaining named-directory loading for multiple artifacts. File/manifest byte bounds, regular-file checks, exact indices, run/attempt directory names and downstream manifest/prompt digest verification remain enforced. A failure-first test executes the actual workflow loader; negative fixtures cover mixed layouts, wrong indices/identities, oversized files, invalid JSON and symlinks. Local proof does not override the blocked provider result; fresh Claude review, maintained PASS and Benny merge remain required.
+
+Implementation and proving coverage: `.github/workflows/jarvis-pr-maintenance.yml` and `.github/automation/pr-maintenance-workflow.test.mjs`. These exact changed files supply the flat/named artifact loader and its negative fixtures; review them together with these documentation claims.

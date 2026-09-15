@@ -599,3 +599,64 @@ test("large npm lockfiles preserve complete package-entry semantics within revie
     plan.prompts.every((prompt) => Buffer.byteLength(prompt) <= 160 * 1024),
   );
 });
+
+test("documentation paths resolve only unambiguous local files already in the inventory", async () => {
+  const { changedImportContext, relatedChangedContext } =
+    await import("./paired-review-context.mjs");
+  const files = [
+    {
+      filename: "docs/runbooks/setup.md",
+      before: "Use `scripts/old.ps1`.",
+      after:
+        "Run bash scripts/setup.sh\nSee [provider](../../typescript/src/provider.ts#L3) and `../../typescript/tests/provider.test.ts`.",
+    },
+    { filename: "scripts/old.ps1", before: "old", after: null },
+    { filename: "scripts/setup.sh", before: null, after: "setup" },
+    {
+      filename: "typescript/src/provider.ts",
+      before: null,
+      after: 'import { shared } from "./shared.js";',
+    },
+    {
+      filename: "typescript/tests/provider.test.ts",
+      before: null,
+      after: "test",
+    },
+    { filename: "typescript/src/shared.ts", before: null, after: "shared" },
+  ];
+  assert.deepEqual(changedImportContext(files, new Set([0])), [1, 2, 3, 4]);
+  assert.deepEqual(
+    relatedChangedContext(files, new Set([0])),
+    [0, 1, 2, 3, 4, 5],
+  );
+});
+
+test("documentation references do not fetch URLs, resolve absent files or guess ambiguous paths", async () => {
+  const { changedImportContext } = await import("./paired-review-context.mjs");
+  const files = [
+    {
+      filename: "docs/setup.md",
+      before: null,
+      after:
+        "[external](https://example.test/?file=src/a.ts) `//example.test/src/a.ts` `../../../src/a.ts` `src\\a.ts` `src/a.ts%2Fother` `src/missing.ts` `a.ts` `src/a.ts`",
+    },
+    { filename: "src/a.ts", before: null, after: "root" },
+    { filename: "docs/src/a.ts", before: null, after: "relative" },
+  ];
+  assert.deepEqual(changedImportContext(files, new Set([0])), []);
+});
+
+test("a shared document does not connect unrelated code into other code segments", async () => {
+  const { relatedChangedContext } = await import("./paired-review-context.mjs");
+  const files = [
+    {
+      filename: "docs/setup.md",
+      before: null,
+      after: "`src/a.ts` and `src/b.ts`",
+    },
+    { filename: "src/a.ts", before: null, after: "a" },
+    { filename: "src/b.ts", before: null, after: "b" },
+  ];
+  assert.deepEqual(relatedChangedContext(files, new Set([1])), [1]);
+  assert.deepEqual(relatedChangedContext(files, new Set([0])), [0, 1, 2]);
+});

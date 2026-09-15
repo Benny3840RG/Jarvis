@@ -178,11 +178,18 @@ function renderRailBar(panel: Panel, pipeline: LiveWorkPipeline, style: Terminal
 
 const NODE_LABEL_WIDTH = 7;
 
+// Objectives remain multiline in the read model; terminal content must stay in its row.
+function singleLine(value: string): string {
+  return value.replace(/\r\n|[\r\n\u2028\u2029]/g, " ");
+}
+
 function renderNode(panel: Panel, node: LiveWorkNode, style: TerminalStyle): void {
   const glyph = paint(style, node.status, GLYPH[node.status]);
   const label = paint(style, node.status, padVisible(NODE_LABEL[node.key], NODE_LABEL_WIDTH));
   const room = panel.inner - 3 - NODE_LABEL_WIDTH - 1;
-  panel.row(`${glyph}  ${label} ${style.dim(truncateVisible(node.detail, Math.max(0, room)))}`);
+  panel.row(
+    `${glyph}  ${label} ${style.dim(truncateVisible(singleLine(node.detail), Math.max(0, room)))}`,
+  );
 }
 
 function renderPipelinePanel(
@@ -195,7 +202,7 @@ function renderPipelinePanel(
   panel.top("JARVIS · LIVE WORK");
   panel.row(style.grey(`updated ${isoMinute(pipeline.updatedAt)}Z`), style.grey(stamp(now)));
   panel.blank();
-  panel.field("MISSION", style.bold(pipeline.objective ?? pipeline.subjectId));
+  panel.field("MISSION", style.bold(singleLine(pipeline.objective ?? pipeline.subjectId)));
   const subject =
     [pipeline.repository, pipeline.branch].filter(Boolean).join(" · ") || pipeline.subjectId;
   panel.field("SUBJECT", subject);

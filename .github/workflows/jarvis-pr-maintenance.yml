@@ -39,6 +39,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
+      issues: write # Trusted coordinator publishes diagnostic base-drift notices only.
       checks: read
       actions: write
     outputs:
@@ -173,7 +174,7 @@ jobs:
           fs.writeFileSync(`${root}/result.json`,JSON.stringify({...receipt,raw}),{flag:'wx',mode:0o600});
           JS
       - name: Retain exact segment result for the isolated publisher
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: jarvis-review-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.segment }}
           path: ${{ runner.temp }}/jarvis-independent-review/result.json
@@ -199,7 +200,7 @@ jobs:
           ref: ${{ github.workflow_sha }}
           persist-credentials: false
       - name: Read results from this workflow attempt only
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         continue-on-error: true
         with:
           pattern: jarvis-review-${{ github.run_id }}-${{ github.run_attempt }}-*
@@ -230,13 +231,23 @@ jobs:
             try {
               const entries = fs.readdirSync(resultRoot,{withFileTypes:true});
               if(entries.length>16) throw new Error('Too many segment artifacts.');
-              receipts = entries.map(entry => {
-                if(!entry.isDirectory() || !new RegExp(`^jarvis-review-${context.runId}-${process.env.RUN_ATTEMPT}-[0-9]+$`).test(entry.name)) throw new Error('Unexpected artifact.');
-                const file = `${resultRoot}/${entry.name}/result.json`;
-                if(fs.readdirSync(`${resultRoot}/${entry.name}`).join() !== 'result.json' || !fs.lstatSync(file).isFile() || fs.statSync(file).size>70000) throw new Error('Invalid result artifact.');
+              const readReceipt = (file, index) => {
+                if(!fs.lstatSync(file).isFile() || fs.statSync(file).size>70000) throw new Error('Invalid result artifact.');
                 const receipt = JSON.parse(fs.readFileSync(file,'utf8'));
-                if(String(receipt.index)!==entry.name.split('-').at(-1)) throw new Error('Artifact index mismatch.');
+                if(receipt.index!==index) throw new Error('Artifact index mismatch.');
                 return receipt;
+              };
+              // The pinned downloader flattens a single match even with merge-multiple false.
+              if(entries.length===1 && entries[0].name==='result.json' && entries[0].isFile()) {
+                if(Buffer.byteLength(process.env.REVIEW_MANIFEST || '')>32768) throw new Error('Manifest exceeds bound.');
+                const expected = JSON.parse(process.env.REVIEW_MANIFEST || 'null');
+                if(expected?.segments?.length!==1 || expected.segments[0].index!==0) throw new Error('Unexpected flat artifact.');
+                receipts = [readReceipt(`${resultRoot}/result.json`, 0)];
+              } else receipts = entries.map(entry => {
+                if(!entry.isDirectory() || !new RegExp(`^jarvis-review-${context.runId}-${process.env.RUN_ATTEMPT}-(?:0|[1-9][0-9]*)$`).test(entry.name)) throw new Error('Unexpected artifact.');
+                const file = `${resultRoot}/${entry.name}/result.json`;
+                if(fs.readdirSync(`${resultRoot}/${entry.name}`).join() !== 'result.json') throw new Error('Invalid result artifact.');
+                return readReceipt(file, Number(entry.name.split('-').at(-1)));
               });
             } catch { receipts = []; }
             let manifest = null;

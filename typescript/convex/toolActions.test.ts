@@ -136,7 +136,6 @@ describe("approve() consent-lifecycle stamping", () => {
       projectKey: PROJECT_KEY,
       actionId: "action-1",
       expectedRevision: 1,
-      now: Date.now(),
     });
     expect(approved.safetyBinding?.phase).toBe("tool-approve");
 
@@ -169,29 +168,33 @@ describe("approve() consent-lifecycle stamping", () => {
   });
 
   it("stamps the durable binding when an expired approval is observed", async () => {
-    const t = harness();
-    await stageAndReturn(t);
-    await t.mutation(api.toolActions.approve, {
-      serviceToken: SERVICE_TOKEN,
-      approvalToken: APPROVAL_TOKEN,
-      projectKey: PROJECT_KEY,
-      actionId: "action-1",
-      expectedRevision: 1,
-      now: 1_000,
-      approvalTtlMs: 60_000,
-    });
+    vi.useFakeTimers({ now: 1_000 });
+    try {
+      const t = harness();
+      await stageAndReturn(t);
+      await t.mutation(api.toolActions.approve, {
+        serviceToken: SERVICE_TOKEN,
+        approvalToken: APPROVAL_TOKEN,
+        projectKey: PROJECT_KEY,
+        actionId: "action-1",
+        expectedRevision: 1,
+        approvalTtlMs: 60_000,
+      });
 
-    const expired = await t.mutation(api.toolActions.approve, {
-      serviceToken: SERVICE_TOKEN,
-      approvalToken: APPROVAL_TOKEN,
-      projectKey: PROJECT_KEY,
-      actionId: "action-1",
-      expectedRevision: 1,
-      now: 61_001,
-    });
-    expect(expired.state).toBe("expired");
-    expect(expired.safetyBinding?.phase).toBe("tool-approve");
-    expect(expired.safetyBinding?.version).toBe("jarvis-safety-binding:v1");
+      vi.setSystemTime(61_001);
+      const expired = await t.mutation(api.toolActions.approve, {
+        serviceToken: SERVICE_TOKEN,
+        approvalToken: APPROVAL_TOKEN,
+        projectKey: PROJECT_KEY,
+        actionId: "action-1",
+        expectedRevision: 1,
+      });
+      expect(expired.state).toBe("expired");
+      expect(expired.safetyBinding?.phase).toBe("tool-approve");
+      expect(expired.safetyBinding?.version).toBe("jarvis-safety-binding:v1");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("stamps a ttl expiry policy and a reusable consumption policy for a non-destructive proposal", async () => {
@@ -205,7 +208,6 @@ describe("approve() consent-lifecycle stamping", () => {
       projectKey: PROJECT_KEY,
       actionId: "action-1",
       expectedRevision: 1,
-      now,
     });
 
     expect(approved.approvalExpiryPolicy).toBe("ttl");
@@ -214,75 +216,84 @@ describe("approve() consent-lifecycle stamping", () => {
   });
 
   it("stamps a tighter expiry ceiling and single-use consumption for a destructive proposal", async () => {
-    const t = harness();
-    await t.run((ctx) => seedProject(ctx));
-    await t.mutation(
-      api.toolActions.stage,
-      stageArgs({ destructive: true, requiredAuthority: "T3" }),
-    );
-    const now = Date.now();
+    vi.useFakeTimers({ now: 5_000 });
+    try {
+      const t = harness();
+      await t.run((ctx) => seedProject(ctx));
+      await t.mutation(
+        api.toolActions.stage,
+        stageArgs({ destructive: true, requiredAuthority: "T3" }),
+      );
+      const now = Date.now();
 
-    const nonDestructiveNow = Date.now();
-    const approved = await t.mutation(api.toolActions.approve, {
-      serviceToken: SERVICE_TOKEN,
-      approvalToken: APPROVAL_TOKEN,
-      projectKey: PROJECT_KEY,
-      actionId: "action-1",
-      expectedRevision: 1,
-      now,
-    });
+      const approved = await t.mutation(api.toolActions.approve, {
+        serviceToken: SERVICE_TOKEN,
+        approvalToken: APPROVAL_TOKEN,
+        projectKey: PROJECT_KEY,
+        actionId: "action-1",
+        expectedRevision: 1,
+      });
 
-    expect(approved.consumptionPolicy).toBe("single-use");
-    expect(approved.approvalExpiresAt).toBeLessThanOrEqual(now + 60 * 60 * 1000);
-    void nonDestructiveNow;
+      expect(approved.consumptionPolicy).toBe("single-use");
+      expect(approved.approvalExpiresAt).toBeLessThanOrEqual(now + 60 * 60 * 1000);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("clamps a caller-supplied approvalTtlMs override rather than trusting it verbatim", async () => {
-    const t = harness();
-    await stageAndReturn(t);
-    const now = Date.now();
+    vi.useFakeTimers({ now: 5_000 });
+    try {
+      const t = harness();
+      await stageAndReturn(t);
+      const now = Date.now();
 
-    const approved = await t.mutation(api.toolActions.approve, {
-      serviceToken: SERVICE_TOKEN,
-      approvalToken: APPROVAL_TOKEN,
-      projectKey: PROJECT_KEY,
-      actionId: "action-1",
-      expectedRevision: 1,
-      now,
-      approvalTtlMs: Number.MAX_SAFE_INTEGER,
-    });
+      const approved = await t.mutation(api.toolActions.approve, {
+        serviceToken: SERVICE_TOKEN,
+        approvalToken: APPROVAL_TOKEN,
+        projectKey: PROJECT_KEY,
+        actionId: "action-1",
+        expectedRevision: 1,
+        approvalTtlMs: Number.MAX_SAFE_INTEGER,
+      });
 
-    expect(approved.approvalExpiresAt).toBeLessThan(Number.MAX_SAFE_INTEGER);
-    expect(approved.approvalExpiresAt).toBeLessThanOrEqual(now + 24 * 60 * 60 * 1000);
+      expect(approved.approvalExpiresAt).toBeLessThan(Number.MAX_SAFE_INTEGER);
+      expect(approved.approvalExpiresAt).toBeLessThanOrEqual(now + 24 * 60 * 60 * 1000);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 
 describe("approve() expiry observation on idempotent re-approve", () => {
   it("silently returns the unchanged doc when re-approved before expiry", async () => {
-    const t = harness();
-    await stageAndReturn(t);
-    const now = Date.now();
-    const first = await t.mutation(api.toolActions.approve, {
-      serviceToken: SERVICE_TOKEN,
-      approvalToken: APPROVAL_TOKEN,
-      projectKey: PROJECT_KEY,
-      actionId: "action-1",
-      expectedRevision: 1,
-      now,
-    });
+    vi.useFakeTimers({ now: 5_000 });
+    try {
+      const t = harness();
+      await stageAndReturn(t);
+      const first = await t.mutation(api.toolActions.approve, {
+        serviceToken: SERVICE_TOKEN,
+        approvalToken: APPROVAL_TOKEN,
+        projectKey: PROJECT_KEY,
+        actionId: "action-1",
+        expectedRevision: 1,
+      });
 
-    const second = await t.mutation(api.toolActions.approve, {
-      serviceToken: SERVICE_TOKEN,
-      approvalToken: APPROVAL_TOKEN,
-      projectKey: PROJECT_KEY,
-      actionId: "action-1",
-      expectedRevision: 1,
-      now: now + 1000,
-    });
+      vi.advanceTimersByTime(1000);
+      const second = await t.mutation(api.toolActions.approve, {
+        serviceToken: SERVICE_TOKEN,
+        approvalToken: APPROVAL_TOKEN,
+        projectKey: PROJECT_KEY,
+        actionId: "action-1",
+        expectedRevision: 1,
+      });
 
-    expect(second._id).toBe(first._id);
-    expect(second.approvalExpiresAt).toBe(first.approvalExpiresAt);
-    expect(second.state).toBe("approved");
+      expect(second._id).toBe(first._id);
+      expect(second.approvalExpiresAt).toBe(first.approvalExpiresAt);
+      expect(second.state).toBe("approved");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("persists the expired transition and returns the expired doc, not a stale approved one", async () => {
@@ -292,62 +303,69 @@ describe("approve() expiry observation on idempotent re-approve", () => {
     // subsequent read), not via a thrown rejection from this call — exactly
     // like reject()'s own idempotent-match path already returns rather than
     // throws.
-    const t = harness();
-    await stageAndReturn(t);
-    const now = Date.now();
-    await t.mutation(api.toolActions.approve, {
-      serviceToken: SERVICE_TOKEN,
-      approvalToken: APPROVAL_TOKEN,
-      projectKey: PROJECT_KEY,
-      actionId: "action-1",
-      expectedRevision: 1,
-      now,
-    });
+    vi.useFakeTimers({ now: 5_000 });
+    try {
+      const t = harness();
+      await stageAndReturn(t);
+      const now = Date.now();
+      await t.mutation(api.toolActions.approve, {
+        serviceToken: SERVICE_TOKEN,
+        approvalToken: APPROVAL_TOKEN,
+        projectKey: PROJECT_KEY,
+        actionId: "action-1",
+        expectedRevision: 1,
+      });
 
-    const wayLater = now + 365 * 24 * 60 * 60 * 1000;
-    const result = await t.mutation(api.toolActions.approve, {
-      serviceToken: SERVICE_TOKEN,
-      approvalToken: APPROVAL_TOKEN,
-      projectKey: PROJECT_KEY,
-      actionId: "action-1",
-      expectedRevision: 1,
-      now: wayLater,
-    });
-    expect(result.state).toBe("expired");
-    expect(result.expiredObservedAt).toBe(wayLater);
+      const wayLater = now + 365 * 24 * 60 * 60 * 1000;
+      vi.setSystemTime(wayLater);
+      const result = await t.mutation(api.toolActions.approve, {
+        serviceToken: SERVICE_TOKEN,
+        approvalToken: APPROVAL_TOKEN,
+        projectKey: PROJECT_KEY,
+        actionId: "action-1",
+        expectedRevision: 1,
+      });
+      expect(result.state).toBe("expired");
+      expect(result.expiredObservedAt).toBe(wayLater);
 
-    const stored = await t.query(api.toolActions.get, {
-      serviceToken: SERVICE_TOKEN,
-      projectKey: PROJECT_KEY,
-      actionId: "action-1",
-    });
-    expect(stored?.state).toBe("expired");
-    expect(stored?.expiredObservedAt).toBe(wayLater);
+      const stored = await t.query(api.toolActions.get, {
+        serviceToken: SERVICE_TOKEN,
+        projectKey: PROJECT_KEY,
+        actionId: "action-1",
+      });
+      expect(stored?.state).toBe("expired");
+      expect(stored?.expiredObservedAt).toBe(wayLater);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("boundary: now === approvalExpiresAt is already expired, not one more valid instant", async () => {
-    const t = harness();
-    await stageAndReturn(t);
-    const now = Date.now();
-    const approved = await t.mutation(api.toolActions.approve, {
-      serviceToken: SERVICE_TOKEN,
-      approvalToken: APPROVAL_TOKEN,
-      projectKey: PROJECT_KEY,
-      actionId: "action-1",
-      expectedRevision: 1,
-      now,
-    });
-    const expiresAt = approved.approvalExpiresAt as number;
+    vi.useFakeTimers({ now: 5_000 });
+    try {
+      const t = harness();
+      await stageAndReturn(t);
+      const approved = await t.mutation(api.toolActions.approve, {
+        serviceToken: SERVICE_TOKEN,
+        approvalToken: APPROVAL_TOKEN,
+        projectKey: PROJECT_KEY,
+        actionId: "action-1",
+        expectedRevision: 1,
+      });
+      const expiresAt = approved.approvalExpiresAt as number;
 
-    const result = await t.mutation(api.toolActions.approve, {
-      serviceToken: SERVICE_TOKEN,
-      approvalToken: APPROVAL_TOKEN,
-      projectKey: PROJECT_KEY,
-      actionId: "action-1",
-      expectedRevision: 1,
-      now: expiresAt,
-    });
-    expect(result.state).toBe("expired");
+      vi.setSystemTime(expiresAt);
+      const result = await t.mutation(api.toolActions.approve, {
+        serviceToken: SERVICE_TOKEN,
+        approvalToken: APPROVAL_TOKEN,
+        projectKey: PROJECT_KEY,
+        actionId: "action-1",
+        expectedRevision: 1,
+      });
+      expect(result.state).toBe("expired");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 
@@ -362,7 +380,6 @@ describe("get()/listRecent() expose a computed isApprovalExpired without mutatin
       projectKey: PROJECT_KEY,
       actionId: "action-1",
       expectedRevision: 1,
-      now,
     });
 
     const wayLater = now + 365 * 24 * 60 * 60 * 1000;
@@ -404,7 +421,6 @@ describe("get()/listRecent() expose a computed isApprovalExpired without mutatin
       projectKey: PROJECT_KEY,
       actionId: "action-1",
       expectedRevision: 1,
-      now,
     });
 
     const viaGet = await t.query(api.toolActions.get, {
@@ -428,7 +444,6 @@ describe("revoke()", () => {
       projectKey: PROJECT_KEY,
       actionId: "action-1",
       expectedRevision: 1,
-      now,
     });
 
     const revoked = await t.mutation(api.toolActions.revoke, {
@@ -456,7 +471,6 @@ describe("revoke()", () => {
       projectKey: PROJECT_KEY,
       actionId: "action-1",
       expectedRevision: 1,
-      now,
     });
     const first = await t.mutation(api.toolActions.revoke, {
       serviceToken: SERVICE_TOKEN,
@@ -490,7 +504,6 @@ describe("revoke()", () => {
       projectKey: PROJECT_KEY,
       actionId: "action-1",
       expectedRevision: 1,
-      now,
     });
     await t.mutation(api.toolActions.revoke, {
       serviceToken: SERVICE_TOKEN,
@@ -566,7 +579,6 @@ describe("revoke()", () => {
       projectKey: PROJECT_KEY,
       actionId: "action-1",
       expectedRevision: 1,
-      now,
     });
     await t.run((ctx) =>
       ctx.db.insert("toolExecutionReceipts", {
@@ -626,7 +638,6 @@ describe("revoke()", () => {
       projectKey: PROJECT_KEY,
       actionId: "action-1",
       expectedRevision: 1,
-      now,
     });
     await t.run((ctx) =>
       ctx.db.insert("toolExecutionReceipts", {
@@ -669,7 +680,6 @@ describe("revoke()", () => {
       projectKey: PROJECT_KEY,
       actionId: "action-1",
       expectedRevision: 1,
-      now,
     });
     await t.mutation(api.toolActions.revoke, {
       serviceToken: SERVICE_TOKEN,
@@ -712,7 +722,6 @@ describe("revoke()", () => {
       projectKey: PROJECT_KEY,
       actionId: "action-1",
       expectedRevision: 1,
-      now,
     });
 
     // Project revision has since moved on; revoke must still succeed.
@@ -805,7 +814,6 @@ describe("concurrency: racing mutations against the same approved action", () =>
       projectKey: PROJECT_KEY,
       actionId: "action-1",
       expectedRevision: 1,
-      now,
     });
 
     const results = await Promise.allSettled([
@@ -847,14 +855,12 @@ describe("concurrency: racing mutations against the same approved action", () =>
   it("two concurrent single-use execution claims with different claim IDs produce exactly one winner", async () => {
     const t = harness();
     await stageAndReturn(t, { destructive: true, requiredAuthority: "T3" });
-    const now = Date.now();
     await t.mutation(api.toolActions.approve, {
       serviceToken: SERVICE_TOKEN,
       approvalToken: APPROVAL_TOKEN,
       projectKey: PROJECT_KEY,
       actionId: "action-1",
       expectedRevision: 1,
-      now,
     });
 
     const results = await Promise.all([
@@ -863,14 +869,12 @@ describe("concurrency: racing mutations against the same approved action", () =>
         projectKey: PROJECT_KEY,
         actionId: "action-1",
         claimId: "claim-a",
-        now,
       }),
       t.mutation(api.toolActions.claimSingleUseExecution, {
         serviceToken: SERVICE_TOKEN,
         projectKey: PROJECT_KEY,
         actionId: "action-1",
         claimId: "claim-b",
-        now,
       }),
     ]);
 
@@ -902,7 +906,6 @@ describe("concurrency: racing mutations against the same approved action", () =>
       projectKey: PROJECT_KEY,
       actionId: "action-1",
       expectedRevision: 1,
-      now,
     });
 
     const first = await t.mutation(api.toolActions.claimSingleUseExecution, {
@@ -910,14 +913,12 @@ describe("concurrency: racing mutations against the same approved action", () =>
       projectKey: PROJECT_KEY,
       actionId: "action-1",
       claimId: "claim-a",
-      now,
     });
     const second = await t.mutation(api.toolActions.claimSingleUseExecution, {
       serviceToken: SERVICE_TOKEN,
       projectKey: PROJECT_KEY,
       actionId: "action-1",
       claimId: "claim-a",
-      now,
     });
 
     expect(first).toEqual({ claimed: true, claimId: "claim-a" });
@@ -958,7 +959,6 @@ describe("concurrency: racing mutations against the same approved action", () =>
       projectKey: PROJECT_KEY,
       actionId: "action-1",
       claimId: "claim-a",
-      now,
     });
     expect(resumed).toEqual({ claimed: true, claimId: "claim-a" });
   });
@@ -978,7 +978,6 @@ describe("concurrency: racing mutations against the same approved action", () =>
       projectKey: PROJECT_KEY,
       actionId: "action-1",
       expectedRevision: 1,
-      now,
     });
     await t.mutation(api.toolActions.revoke, {
       serviceToken: SERVICE_TOKEN,
@@ -994,7 +993,6 @@ describe("concurrency: racing mutations against the same approved action", () =>
       projectKey: PROJECT_KEY,
       actionId: "action-1",
       claimId: "claim-a",
-      now,
     });
 
     expect(claim).toEqual({ claimed: false, claimId: "", blockReason: "not-approved" });
@@ -1009,54 +1007,55 @@ describe("concurrency: racing mutations against the same approved action", () =>
   });
 
   it("refuses to claim single-use execution once the approval expired between the caller's read and the claim, and durably observes the expiry", async () => {
-    const t = harness();
-    await stageAndReturn(t, { destructive: true, requiredAuthority: "T3" });
-    const approvedAt = Date.now();
-    await t.mutation(api.toolActions.approve, {
-      serviceToken: SERVICE_TOKEN,
-      approvalToken: APPROVAL_TOKEN,
-      projectKey: PROJECT_KEY,
-      actionId: "action-1",
-      expectedRevision: 1,
-      now: approvedAt,
-      approvalTtlMs: 60_000, // clamped to the 1-minute floor
-    });
+    vi.useFakeTimers({ now: 5_000 });
+    try {
+      const t = harness();
+      await stageAndReturn(t, { destructive: true, requiredAuthority: "T3" });
+      const approvedAt = Date.now();
+      await t.mutation(api.toolActions.approve, {
+        serviceToken: SERVICE_TOKEN,
+        approvalToken: APPROVAL_TOKEN,
+        projectKey: PROJECT_KEY,
+        actionId: "action-1",
+        expectedRevision: 1,
+        approvalTtlMs: 60_000, // clamped to the 1-minute floor
+      });
 
-    // The caller's own earlier read (not modelled here) would have seen
-    // "approved, not yet expired" at approvedAt. By the time the claim is
-    // attempted, the TTL has elapsed.
-    const claimAttemptAt = approvedAt + 60_001;
-    const claim = await t.mutation(api.toolActions.claimSingleUseExecution, {
-      serviceToken: SERVICE_TOKEN,
-      projectKey: PROJECT_KEY,
-      actionId: "action-1",
-      claimId: "claim-a",
-      now: claimAttemptAt,
-    });
+      // The caller's own earlier read (not modelled here) would have seen
+      // "approved, not yet expired" at approvedAt. By the time the claim is
+      // attempted, the TTL has elapsed.
+      vi.setSystemTime(approvedAt + 60_001);
+      const claim = await t.mutation(api.toolActions.claimSingleUseExecution, {
+        serviceToken: SERVICE_TOKEN,
+        projectKey: PROJECT_KEY,
+        actionId: "action-1",
+        claimId: "claim-a",
+      });
 
-    expect(claim).toEqual({ claimed: false, claimId: "", blockReason: "expired" });
-    const stored = await t.query(api.toolActions.get, {
-      serviceToken: SERVICE_TOKEN,
-      projectKey: PROJECT_KEY,
-      actionId: "action-1",
-    });
-    // Expiry is durably observed, matching approve()'s own lazy-expiry
-    // convention, not just reported transiently for this one call.
-    expect(stored?.state).toBe("expired");
-    expect(stored?.singleUseClaimId).toBeUndefined();
+      expect(claim).toEqual({ claimed: false, claimId: "", blockReason: "expired" });
+      const stored = await t.query(api.toolActions.get, {
+        serviceToken: SERVICE_TOKEN,
+        projectKey: PROJECT_KEY,
+        actionId: "action-1",
+      });
+      // Expiry is durably observed, matching approve()'s own lazy-expiry
+      // convention, not just reported transiently for this one call.
+      expect(stored?.state).toBe("expired");
+      expect(stored?.singleUseClaimId).toBeUndefined();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("refuses to claim single-use execution for a reusable action", async () => {
     const t = harness();
     await stageAndReturn(t, { destructive: false });
-    const now = Date.now();
     await t.mutation(api.toolActions.approve, {
       serviceToken: SERVICE_TOKEN,
       approvalToken: APPROVAL_TOKEN,
       projectKey: PROJECT_KEY,
       actionId: "action-1",
       expectedRevision: 1,
-      now,
     });
 
     await expect(
@@ -1065,7 +1064,6 @@ describe("concurrency: racing mutations against the same approved action", () =>
         projectKey: PROJECT_KEY,
         actionId: "action-1",
         claimId: "claim-a",
-        now,
       }),
     ).rejects.toThrow(/single-use/i);
   });
@@ -1085,7 +1083,6 @@ describe("concurrency: racing mutations against the same approved action", () =>
       projectKey: PROJECT_KEY,
       actionId: "action-1",
       expectedRevision: 1,
-      now,
     });
     await t.mutation(api.toolActions.revoke, {
       serviceToken: SERVICE_TOKEN,
@@ -1100,7 +1097,6 @@ describe("concurrency: racing mutations against the same approved action", () =>
       serviceToken: SERVICE_TOKEN,
       projectKey: PROJECT_KEY,
       actionId: "action-1",
-      now,
     });
 
     expect(verification).toEqual({ eligible: false, blockReason: "not-approved" });
@@ -1113,56 +1109,56 @@ describe("concurrency: racing mutations against the same approved action", () =>
   });
 
   it("refuses execution eligibility for a reusable action once its approval expired between the caller's read and the check, and durably observes the expiry", async () => {
-    const t = harness();
-    await stageAndReturn(t, { destructive: false });
-    const approvedAt = Date.now();
-    await t.mutation(api.toolActions.approve, {
-      serviceToken: SERVICE_TOKEN,
-      approvalToken: APPROVAL_TOKEN,
-      projectKey: PROJECT_KEY,
-      actionId: "action-1",
-      expectedRevision: 1,
-      now: approvedAt,
-      approvalTtlMs: 60_000, // clamped to the 1-minute floor
-    });
+    vi.useFakeTimers({ now: 5_000 });
+    try {
+      const t = harness();
+      await stageAndReturn(t, { destructive: false });
+      const approvedAt = Date.now();
+      await t.mutation(api.toolActions.approve, {
+        serviceToken: SERVICE_TOKEN,
+        approvalToken: APPROVAL_TOKEN,
+        projectKey: PROJECT_KEY,
+        actionId: "action-1",
+        expectedRevision: 1,
+        approvalTtlMs: 60_000, // clamped to the 1-minute floor
+      });
 
-    const checkAt = approvedAt + 60_001;
-    const verification = await t.mutation(api.toolActions.verifyExecutionEligibility, {
-      serviceToken: SERVICE_TOKEN,
-      projectKey: PROJECT_KEY,
-      actionId: "action-1",
-      now: checkAt,
-    });
+      vi.setSystemTime(approvedAt + 60_001);
+      const verification = await t.mutation(api.toolActions.verifyExecutionEligibility, {
+        serviceToken: SERVICE_TOKEN,
+        projectKey: PROJECT_KEY,
+        actionId: "action-1",
+      });
 
-    expect(verification).toEqual({ eligible: false, blockReason: "expired" });
-    const stored = await t.query(api.toolActions.get, {
-      serviceToken: SERVICE_TOKEN,
-      projectKey: PROJECT_KEY,
-      actionId: "action-1",
-    });
-    // Expiry is durably observed, matching approve()'s and
-    // claimSingleUseExecution's own lazy-expiry convention.
-    expect(stored?.state).toBe("expired");
+      expect(verification).toEqual({ eligible: false, blockReason: "expired" });
+      const stored = await t.query(api.toolActions.get, {
+        serviceToken: SERVICE_TOKEN,
+        projectKey: PROJECT_KEY,
+        actionId: "action-1",
+      });
+      // Expiry is durably observed, matching approve()'s and
+      // claimSingleUseExecution's own lazy-expiry convention.
+      expect(stored?.state).toBe("expired");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("reports execution eligibility for a still-approved reusable action without disturbing its state", async () => {
     const t = harness();
     await stageAndReturn(t, { destructive: false });
-    const now = Date.now();
     await t.mutation(api.toolActions.approve, {
       serviceToken: SERVICE_TOKEN,
       approvalToken: APPROVAL_TOKEN,
       projectKey: PROJECT_KEY,
       actionId: "action-1",
       expectedRevision: 1,
-      now,
     });
 
     const verification = await t.mutation(api.toolActions.verifyExecutionEligibility, {
       serviceToken: SERVICE_TOKEN,
       projectKey: PROJECT_KEY,
       actionId: "action-1",
-      now,
     });
 
     expect(verification).toEqual({ eligible: true });
@@ -1177,14 +1173,12 @@ describe("concurrency: racing mutations against the same approved action", () =>
   it("refuses execution eligibility checks for a single-use action", async () => {
     const t = harness();
     await stageAndReturn(t, { destructive: true, requiredAuthority: "T3" });
-    const now = Date.now();
     await t.mutation(api.toolActions.approve, {
       serviceToken: SERVICE_TOKEN,
       approvalToken: APPROVAL_TOKEN,
       projectKey: PROJECT_KEY,
       actionId: "action-1",
       expectedRevision: 1,
-      now,
     });
 
     await expect(
@@ -1192,8 +1186,128 @@ describe("concurrency: racing mutations against the same approved action", () =>
         serviceToken: SERVICE_TOKEN,
         projectKey: PROJECT_KEY,
         actionId: "action-1",
-        now,
       }),
     ).rejects.toThrow(/single-use/i);
+  });
+});
+
+describe("regression: a caller-supplied clock can no longer skew execution-gate timing", () => {
+  // Security fix: approve()/claimSingleUseExecution()/verifyExecutionEligibility()
+  // used to accept an optional `now` argument and trust it over the server's own
+  // clock. A caller holding only the shared serviceToken (no human-gated
+  // approvalToken needed for claim/verify) could forge a `now` from before the
+  // real expiry to execute a genuinely-expired approval. These prove the field
+  // is gone from the wire contract, not just unused.
+
+  it("rejects a smuggled `now` on claimSingleUseExecution and judges expiry by real wall-clock time", async () => {
+    vi.useFakeTimers({ now: 5_000 });
+    try {
+      const t = harness();
+      await stageAndReturn(t, { destructive: true, requiredAuthority: "T3" });
+      await t.mutation(api.toolActions.approve, {
+        serviceToken: SERVICE_TOKEN,
+        approvalToken: APPROVAL_TOKEN,
+        projectKey: PROJECT_KEY,
+        actionId: "action-1",
+        expectedRevision: 1,
+        approvalTtlMs: 60_000,
+      });
+
+      // Real time has genuinely passed the approval's expiry.
+      vi.setSystemTime(5_000 + 60_001);
+
+      // The schema no longer declares `now` at all, so Convex's own argument
+      // validation must reject it outright -- not silently ignore it.
+      await expect(
+        t.mutation(api.toolActions.claimSingleUseExecution, {
+          serviceToken: SERVICE_TOKEN,
+          projectKey: PROJECT_KEY,
+          actionId: "action-1",
+          claimId: "claim-forged",
+          ...({ now: 5_000 } as Record<string, unknown>),
+        }),
+      ).rejects.toThrow();
+
+      // The legitimate call (no `now`) must judge the approval as expired
+      // using real wall-clock time, not a forged earlier instant.
+      const claim = await t.mutation(api.toolActions.claimSingleUseExecution, {
+        serviceToken: SERVICE_TOKEN,
+        projectKey: PROJECT_KEY,
+        actionId: "action-1",
+        claimId: "claim-forged",
+      });
+      expect(claim).toEqual({ claimed: false, claimId: "", blockReason: "expired" });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("rejects a smuggled `now` on verifyExecutionEligibility and judges expiry by real wall-clock time", async () => {
+    vi.useFakeTimers({ now: 5_000 });
+    try {
+      const t = harness();
+      await stageAndReturn(t, { destructive: false });
+      await t.mutation(api.toolActions.approve, {
+        serviceToken: SERVICE_TOKEN,
+        approvalToken: APPROVAL_TOKEN,
+        projectKey: PROJECT_KEY,
+        actionId: "action-1",
+        expectedRevision: 1,
+        approvalTtlMs: 60_000,
+      });
+
+      vi.setSystemTime(5_000 + 60_001);
+
+      await expect(
+        t.mutation(api.toolActions.verifyExecutionEligibility, {
+          serviceToken: SERVICE_TOKEN,
+          projectKey: PROJECT_KEY,
+          actionId: "action-1",
+          ...({ now: 5_000 } as Record<string, unknown>),
+        }),
+      ).rejects.toThrow();
+
+      const verification = await t.mutation(api.toolActions.verifyExecutionEligibility, {
+        serviceToken: SERVICE_TOKEN,
+        projectKey: PROJECT_KEY,
+        actionId: "action-1",
+      });
+      expect(verification).toEqual({ eligible: false, blockReason: "expired" });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("rejects a smuggled `now` on approve and still derives approvalExpiresAt from real wall-clock time", async () => {
+    vi.useFakeTimers({ now: 5_000 });
+    try {
+      const t = harness();
+      await stageAndReturn(t);
+
+      await expect(
+        t.mutation(api.toolActions.approve, {
+          serviceToken: SERVICE_TOKEN,
+          approvalToken: APPROVAL_TOKEN,
+          projectKey: PROJECT_KEY,
+          actionId: "action-1",
+          expectedRevision: 1,
+          ...({ now: 999_999_999 } as Record<string, unknown>),
+        }),
+      ).rejects.toThrow();
+
+      const approved = await t.mutation(api.toolActions.approve, {
+        serviceToken: SERVICE_TOKEN,
+        approvalToken: APPROVAL_TOKEN,
+        projectKey: PROJECT_KEY,
+        actionId: "action-1",
+        expectedRevision: 1,
+      });
+      // A forged, wildly-future `now` must not have been able to push
+      // approvalExpiresAt out to it; it must stay anchored to real time.
+      expect(approved.approvalExpiresAt).toBeLessThan(999_999_999);
+      expect(approved.approvalExpiresAt).toBeGreaterThanOrEqual(5_000);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
