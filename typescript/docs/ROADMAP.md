@@ -38,30 +38,6 @@ requires fresh full verification, Claude review and maintained PASS before Benny
 merge decision. See `.github/automation/pr-maintenance-workflow.test.mjs` and
 `.github/workflows/jarvis-pr-maintenance.yml` for the exercised authority path.
 
-## Standing Development review repair (2026-09-15)
-
-PR #537's recovery classifier now refuses missing, unknown and contradictory
-diagnostic stages instead of coercing them into retry authority. Guarded source
-changes require added lines in their corresponding module test; unrelated area
-tests, deleted tests and rename-only changes cannot satisfy the guard. Both
-defects were reproduced before repair. The two-retry budget, independent review,
-owner merge and deployment boundaries remain unchanged.
-
-Implementation and regression sources: `.github/automation/autobuild-recovery.mjs`,
-`.github/automation/autobuild-recovery.test.mjs`,
-`.github/automation/validate-autobuild.mjs` and
-`.github/automation/validate-autobuild.test.mjs`. Test filenames and keyword scans
-do not prove behavioral correctness. Current-head checks and independent Jarvis
-review remain required before Benny's merge decision. No live issue execution or
-deployment is established by these local repairs.
-
-Independent review also exposed retry-budget persistence ordering, stale-run
-recovery and contradictory verification-result gaps. The workflow now records
-the retry before unblocking, refuses source-run replays, and confirms a complete
-bounded provider history before changing eligibility. The classifier validates
-verification outcomes against build/publication state. Executable workflow
-regressions cover the reproduced failures.
-
 ## Outlook current-main integration (2026-09-14)
 
 Current base is `6b6ced5e5c3c32ca0eb9d06fbd56d73dac7acddc`. Benny has
