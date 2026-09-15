@@ -4,6 +4,40 @@ This file is a living record for the autonomous engineering sessions working on
 Jarvis: current state, what changed recently, and what to pick up next. Update
 it at the end of every session.
 
+## Standing Development review repair (2026-09-15)
+
+PR #537's recovery classifier now refuses missing, unknown and contradictory
+diagnostic stages instead of coercing them into retry authority. Guarded source
+changes require added lines in their corresponding module test; unrelated area
+tests, deleted tests and rename-only changes cannot satisfy the guard. Both
+defects were reproduced before repair. The two-retry budget, independent review,
+owner merge and deployment boundaries remain unchanged.
+
+Implementation and regression sources: `.github/automation/autobuild-recovery.mjs`,
+`.github/automation/autobuild-recovery.test.mjs`,
+`.github/automation/validate-autobuild.mjs` and
+`.github/automation/validate-autobuild.test.mjs`. Test filenames and keyword scans
+do not prove behavioral correctness. Current-head checks and independent Jarvis
+review remain required before Benny's merge decision. No live issue execution or
+deployment is established by these local repairs.
+
+Independent review also exposed retry-budget persistence ordering, stale-run
+recovery and contradictory verification-result gaps. The workflow now records
+the retry before unblocking, refuses source-run replays, and confirms a complete
+bounded provider history before changing eligibility. The classifier validates
+verification outcomes against build/publication state. Executable workflow
+regressions cover the reproduced failures.
+
+## Review artifact regression follow-up (2026-09-15)
+
+After PR #541 merged, its test-only follow-up adds a regression combining a
+root `result.json` with one and then two valid named segment directories, asserting
+that neither layout retains any receipts. This closes the explicit mixed-layout
+coverage gap; the publisher implementation is unchanged. The test-only candidate
+requires fresh full verification, Claude review and maintained PASS before Benny's
+merge decision. See `.github/automation/pr-maintenance-workflow.test.mjs` and
+`.github/workflows/jarvis-pr-maintenance.yml` for the exercised authority path.
+
 ## Outlook current-main integration (2026-09-14)
 
 Current base is `6b6ced5e5c3c32ca0eb9d06fbd56d73dac7acddc`. Benny has
@@ -408,3 +442,9 @@ then Benny merge before any live review claims can use the repaired planner.
 ## Outlook browser-launch deadline
 
 The #482 maintained review found that a stalled URL-display callback could prevent the sign-in timeout from reaching cleanup. The minimal repair bounds launcher completion and code receipt together, including when a valid callback arrived first. Two offline regressions failed before the fix and now prove listener closure and no token/provider effects on expiry. Fresh review remains required; live #293/#294/#297 commissioning stays open.
+
+## Single-artifact review publication compatibility
+
+The pinned `actions/download-artifact` revision flattens one matched artifact into the destination even when `merge-multiple` is false. This blocked #540 after its sole reviewer returned valid evidence. The existing publisher now accepts that exact flat `result.json` layout only when its trusted manifest expects segment zero alone, while retaining named-directory loading for multiple artifacts. File/manifest byte bounds, regular-file checks, exact indices, run/attempt directory names and downstream manifest/prompt digest verification remain enforced. A failure-first test executes the actual workflow loader; negative fixtures cover mixed layouts, wrong indices/identities, oversized files, invalid JSON and symlinks. Local proof does not override the blocked provider result; fresh Claude review, maintained PASS and Benny merge remain required.
+
+Implementation and proving coverage: `.github/workflows/jarvis-pr-maintenance.yml` and `.github/automation/pr-maintenance-workflow.test.mjs`. These exact changed files supply the flat/named artifact loader and its negative fixtures; review them together with these documentation claims.

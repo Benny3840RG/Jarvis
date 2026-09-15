@@ -37,6 +37,7 @@ jobs:
         run: >-
           node --test .github/automation/validate-autobuild.test.mjs
           .github/automation/development-commissioning.test.mjs
+          .github/automation/configure-main-ruleset.test.mjs
           .github/automation/validate-pr-evidence.test.mjs
           .github/automation/jarvis-queue-advance.test.mjs
           .github/automation/revision-health.test.mjs
@@ -49,6 +50,7 @@ jobs:
           .github/automation/pr-maintenance-workflow.test.mjs
           .github/automation/repair-context.test.mjs
           .github/automation/development-workflow.test.mjs
+          .github/automation/autobuild-recovery.test.mjs
           .github/automation/governance-coverage.test.mjs
           .github/automation/development-worker-recovery.test.mjs
           .github/automation/review-prompt-transport.test.mjs

@@ -231,13 +231,23 @@ jobs:
             try {
               const entries = fs.readdirSync(resultRoot,{withFileTypes:true});
               if(entries.length>16) throw new Error('Too many segment artifacts.');
-              receipts = entries.map(entry => {
-                if(!entry.isDirectory() || !new RegExp(`^jarvis-review-${context.runId}-${process.env.RUN_ATTEMPT}-[0-9]+$`).test(entry.name)) throw new Error('Unexpected artifact.');
-                const file = `${resultRoot}/${entry.name}/result.json`;
-                if(fs.readdirSync(`${resultRoot}/${entry.name}`).join() !== 'result.json' || !fs.lstatSync(file).isFile() || fs.statSync(file).size>70000) throw new Error('Invalid result artifact.');
+              const readReceipt = (file, index) => {
+                if(!fs.lstatSync(file).isFile() || fs.statSync(file).size>70000) throw new Error('Invalid result artifact.');
                 const receipt = JSON.parse(fs.readFileSync(file,'utf8'));
-                if(String(receipt.index)!==entry.name.split('-').at(-1)) throw new Error('Artifact index mismatch.');
+                if(receipt.index!==index) throw new Error('Artifact index mismatch.');
                 return receipt;
+              };
+              // The pinned downloader flattens a single match even with merge-multiple false.
+              if(entries.length===1 && entries[0].name==='result.json' && entries[0].isFile()) {
+                if(Buffer.byteLength(process.env.REVIEW_MANIFEST || '')>32768) throw new Error('Manifest exceeds bound.');
+                const expected = JSON.parse(process.env.REVIEW_MANIFEST || 'null');
+                if(expected?.segments?.length!==1 || expected.segments[0].index!==0) throw new Error('Unexpected flat artifact.');
+                receipts = [readReceipt(`${resultRoot}/result.json`, 0)];
+              } else receipts = entries.map(entry => {
+                if(!entry.isDirectory() || !new RegExp(`^jarvis-review-${context.runId}-${process.env.RUN_ATTEMPT}-(?:0|[1-9][0-9]*)$`).test(entry.name)) throw new Error('Unexpected artifact.');
+                const file = `${resultRoot}/${entry.name}/result.json`;
+                if(fs.readdirSync(`${resultRoot}/${entry.name}`).join() !== 'result.json') throw new Error('Invalid result artifact.');
+                return readReceipt(file, Number(entry.name.split('-').at(-1)));
               });
             } catch { receipts = []; }
             let manifest = null;

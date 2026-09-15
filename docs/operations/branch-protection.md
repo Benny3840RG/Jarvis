@@ -17,7 +17,8 @@ These are the existing intended controls, not evidence of live enforcement. The 
 
 ## Required status checks
 
-The maintained controller requires the following eight contexts for a PR. Keep this
+The maintained controller and agent handover require the following nine contexts
+for a PR. Keep this
 list aligned with `.github/automation/revision-health.mjs` and
 `.github/automation/pr-maintenance.mjs`; bind each required context to GitHub Actions
 App ID **15368**, the observed producer on current main and PR checks.
@@ -32,11 +33,13 @@ App ID **15368**, the observed producer on current main and PR checks.
 | `Analyze (python)` | 15368 | `dynamic/github-code-scanning/` |
 | `Analyze (ruby)` | 15368 | `dynamic/github-code-scanning/` |
 | `Analyze (javascript-typescript)` | 15368 | `dynamic/github-code-scanning/` |
+| `jarvis-pr-maintenance/review` | 15368 | `.github/workflows/jarvis-pr-maintenance.yml` |
 
 `pr-evidence` is not expected on a main push. Do not universally require the
 path-filtered `python-tests` or governance-validation job: unrelated PRs may never
-emit them. Conditional advisory-review jobs (`prepare`, `review`, `publish`) are
-also not substitutes for these contexts or the owner's approval.
+emit them. The maintenance workflow's internal `prepare`, `review` and `publish`
+jobs are not separate required contexts; its exact-head status above is the Jarvis
+gate. That status is not the owner's approval.
 
 An App ID authenticates the publisher, not the workflow path or reviewed source.
 The existing controller's exact-head/base, producer-path and evidence checks remain
@@ -47,8 +50,8 @@ Branch rules do not grant ToolAction approval, ΩΣ completion or deployment aut
 
 ## Current enforcement and owner decisions
 
-Read-only GitHub verification on 2026-09-11 at main
-`6d478809715b7d7e09885d9b71f6252ec86a3761` found protection **unenforced**:
+Read-only GitHub verification on 2026-09-14 at main
+`40393d04a31db81b2802199e3f234e99b4085464` found protection **unenforced**:
 `protected: false`, no effective branch rules, and disabled rulesets `18831602`
 (`JaRvIs7`) and `19147000` (`main`). Both have empty branch selectors and bypass
 lists. The stale main ruleset also has zero required approvals, code-owner review
@@ -69,7 +72,14 @@ GitHub approvals optional would leave human review enforced only by the existing
 owner approval process, not by GitHub; that limitation requires an explicit decision.
 Preserve the intended no-bypass rule. Any exception needs a separate scoped owner
 decision; a PR-only bypass can still bypass checks in its ruleset and is not an
-approval-only exemption. Model/advisory reviews cannot supply human authority.
+approval-only exemption. Model review cannot supply human authority. Its bounded
+PASS is required candidate evidence; Benny's merge decision remains distinct.
+
+PR #526 provides live producer proof for the new status name: exact head
+`5207ba024b77b8f15a98698c5c4747ea24485757` received
+`jarvis-pr-maintenance/review = success` from GitHub Actions App ID 15368 after
+trusted CI and bounded review. This proves status publication, not branch
+enforcement. GitHub still reported `main` unprotected after that PASS.
 
 Before activation, re-read the current rulesets, branch, CODEOWNERS and check
 producers; review the exact resulting configuration rather than reusing stale
@@ -77,6 +87,48 @@ settings. After an authorized update, inspect effective main rules and prove an
 ordinary reviewed PR can land without bypass while failed or missing checks block
 it. Confirm owner-authored changes have a satisfiable review path. Record actual
 readback evidence in #398; no destructive force-push/deletion trial is required.
+
+## One-shot owner application
+
+`.github/automation/configure-main-ruleset.mjs` is the maintained one-shot
+configuration and readback tool for the selected policy: zero formal approvals,
+the nine required checks, up-to-date branches, pull requests only, no bypass
+actors, no force pushes and no branch deletion. It does not restrict the merge
+button to a GitHub identity; the separate operating rule remains that only Benny
+executes a merge.
+
+Run its no-network dry run first from the repository root:
+
+```bash
+node .github/automation/configure-main-ruleset.mjs
+```
+
+Applying requires a fine-grained token scoped only to `Benny3840RG/Jarvis` with
+repository **Administration: write** and **Metadata: read**. Enter it without
+placing it in shell history:
+
+```bash
+read -rsp "GitHub token: " GITHUB_TOKEN
+export GITHUB_TOKEN
+node .github/automation/configure-main-ruleset.mjs \
+  --apply \
+  --repository Benny3840RG/Jarvis \
+  --confirm-repository Benny3840RG/Jarvis
+unset GITHUB_TOKEN
+```
+
+The tool refuses a repository identity/default-branch mismatch or another active
+repository branch ruleset. It creates its named ruleset disabled, verifies the
+exact preflight policy, activates it, then re-reads both the ruleset and effective
+`main` rules. The readback rejects any additional effective rule, including one
+inherited from another ruleset. It prefers GitHub's documented numeric
+`ruleset_id`, accepts a nested source ID for response compatibility, and rejects
+missing or conflicting source identities. If active readback fails, it disables
+the new ruleset again. An uncertain activation response also triggers that
+rollback, so an accepted request cannot silently leave unverified protection
+active. It never
+deletes or silently edits the two stale disabled rulesets. A second successful
+run is read-only and reports the existing verified ruleset.
 
 ## Rationale
 

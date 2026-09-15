@@ -77,3 +77,160 @@ test("review segments have bounded concurrency and exact manifest artifact bindi
   assert.match(publishJob, /github.run_attempt/);
   assert.doesNotMatch(reviewJob, /prompt:|needs.prepare.outputs.prompt[ }]/);
 });
+
+// Exercise the publication script itself against the pinned action's two layouts.
+function readDownloadedReceipts(root, segments = [0]) {
+  const script = publishJob
+    .slice(publishJob.indexOf("            const fs = require('node:fs');"))
+    .split("            let manifest = null;")[0];
+  return new Function(
+    "require",
+    "context",
+    "process",
+    `${script}\nreturn receipts;`,
+  )(
+    () => fs,
+    { runId: 123 },
+    {
+      env: {
+        RUNNER_TEMP: root,
+        RUN_ATTEMPT: "1",
+        REVIEW_MANIFEST: JSON.stringify({
+          segments: segments.map((index) => ({ index })),
+        }),
+      },
+    },
+  );
+}
+
+function artifactFixture(t) {
+  const root = fs.mkdtempSync("/tmp/jarvis-artifact-test-");
+  fs.mkdirSync(`${root}/jarvis-review-results`);
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  return { root, results: `${root}/jarvis-review-results` };
+}
+
+const validReceipt = {
+  index: 0,
+  manifestDigest: "a".repeat(64),
+  promptDigest: "b".repeat(64),
+  raw: '{"verdict":"pass","summary":"fixture","findings":[],"contextRequests":[]}',
+};
+
+test("publication reads a flat single artifact produced by the pinned downloader", (t) => {
+  const { root, results } = artifactFixture(t);
+  fs.writeFileSync(`${results}/result.json`, JSON.stringify(validReceipt));
+  assert.deepEqual(readDownloadedReceipts(root), [validReceipt]);
+});
+
+test("publication retains exact named artifact directories for one or many segments", (t) => {
+  const { root, results } = artifactFixture(t);
+  for (const index of [0, 1]) {
+    fs.mkdirSync(`${results}/jarvis-review-123-1-${index}`);
+    fs.writeFileSync(
+      `${results}/jarvis-review-123-1-${index}/result.json`,
+      JSON.stringify({ ...validReceipt, index }),
+    );
+    assert.deepEqual(
+      readDownloadedReceipts(root, index === 0 ? [0] : [0, 1]),
+      Array.from({ length: index + 1 }, (_, index) => ({
+        ...validReceipt,
+        index,
+      })),
+    );
+  }
+});
+
+test("publication rejects mixed flat and named artifacts without retaining partial receipts", (t) => {
+  const { root, results } = artifactFixture(t);
+  fs.writeFileSync(`${results}/result.json`, JSON.stringify(validReceipt));
+  for (const index of [0, 1]) {
+    const directory = `${results}/jarvis-review-123-1-${index}`;
+    fs.mkdirSync(directory);
+    fs.writeFileSync(
+      `${directory}/result.json`,
+      JSON.stringify({ ...validReceipt, index }),
+    );
+    assert.deepEqual(
+      readDownloadedReceipts(root, index === 0 ? [0] : [0, 1]),
+      [],
+    );
+  }
+});
+
+for (const invalid of [
+  "multiple-expected",
+  "wrong-index",
+  "oversized",
+  "symlink",
+  "extra-file",
+  "wrong-name",
+  "invalid-json",
+]) {
+  test(`publication refuses invalid flat artifact: ${invalid}`, (t) => {
+    const { root, results } = artifactFixture(t);
+    const file = `${results}/result.json`;
+    fs.writeFileSync(
+      file,
+      invalid === "oversized"
+        ? " ".repeat(70001)
+        : invalid === "invalid-json"
+          ? "{"
+          : JSON.stringify({
+              ...validReceipt,
+              index: invalid === "wrong-index" ? 1 : 0,
+            }),
+    );
+    if (invalid === "symlink") {
+      fs.renameSync(file, `${root}/target`);
+      fs.symlinkSync(`${root}/target`, file);
+    }
+    if (invalid === "extra-file")
+      fs.writeFileSync(`${results}/extra.json`, "{}");
+    if (invalid === "wrong-name") fs.renameSync(file, `${results}/other.json`);
+    assert.deepEqual(
+      readDownloadedReceipts(
+        root,
+        invalid === "multiple-expected" ? [0, 1] : [0],
+      ),
+      [],
+    );
+  });
+}
+
+for (const invalid of [
+  "wrong-run",
+  "wrong-attempt",
+  "padded-index",
+  "wrong-receipt-index",
+  "directory-symlink",
+  "extra-child",
+]) {
+  test(`publication refuses invalid named artifact: ${invalid}`, (t) => {
+    const { root, results } = artifactFixture(t);
+    const name =
+      invalid === "wrong-run"
+        ? "jarvis-review-124-1-0"
+        : invalid === "wrong-attempt"
+          ? "jarvis-review-123-2-0"
+          : invalid === "padded-index"
+            ? "jarvis-review-123-1-00"
+            : "jarvis-review-123-1-0";
+    const directory = `${results}/${name}`;
+    fs.mkdirSync(directory);
+    fs.writeFileSync(
+      `${directory}/result.json`,
+      JSON.stringify({
+        ...validReceipt,
+        index: invalid === "wrong-receipt-index" ? 1 : 0,
+      }),
+    );
+    if (invalid === "directory-symlink") {
+      fs.renameSync(directory, `${root}/target`);
+      fs.symlinkSync(`${root}/target`, directory);
+    }
+    if (invalid === "extra-child")
+      fs.writeFileSync(`${directory}/extra.json`, "{}");
+    assert.deepEqual(readDownloadedReceipts(root), []);
+  });
+}
