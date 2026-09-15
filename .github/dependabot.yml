@@ -9,11 +9,18 @@ updates:
       time: "06:00"
       timezone: "Australia/Melbourne"
     open-pull-requests-limit: 5
+    # Match the Node 24 runtime; change this hold with the runtime upgrade.
+    ignore:
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
+    # Major upgrades need their own migration PR, not a routine dependency batch.
     groups:
       production-dependencies:
         dependency-type: "production"
+        update-types: ["minor", "patch"]
       development-dependencies:
         dependency-type: "development"
+        update-types: ["minor", "patch"]
 
   - package-ecosystem: "npm"
     directory: "/typescript/jarvis-console-01"
