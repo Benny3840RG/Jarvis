@@ -1,5 +1,18 @@
 # Jarvis TypeScript Roadmap
 
+## Audit findings and JSON write repair (2026-09-15)
+
+Fault audit of the TypeScript runtime found one high-confidence production defect in this candidate: domain JSON stores (`jsonInvoiceStore` and the other `json*Store.ts` writers) published files with `open(..., "w")`, no `0o600`, and no `fsync`. Core state, backups, and token files already used exclusive `wx` + `0o600` + `sync`. On a typical umask of `022` that made invoices, clients, quotes and related business files world-readable, and a crash could leave a truncated file after rename.
+
+Fix: shared `writePrivateJsonFile` in `src/persistence/atomicJsonFile.ts`, used by the thirteen domain JSON stores and `JSONPersistence`. Tests force umask `0` and assert `0o600`, plus leftover temp cleanup when rename fails.
+
+Not fixed here (already open PRs or documented limitations):
+
+- High / already in flight: spoofable `X-Forwarded-Proto` (#542); invoice payment without `Idempotency-Key` (#543); stale "five" safety-category status copy (#540).
+- High / documented: v3 restore and `importMemoryStores` are not atomic across memory domains; v3 export reads through forgiving store `list()` which can coerce or drop malformed rows.
+- Medium: JSON stores skip malformed rows instead of quarantining; JSON `buildId` is not existence-checked (Convex is); MCP preview HTTP has no caller auth on loopback.
+- Auth/token HTTP guards, secret redaction, OIDC verification, MCP operation↔OpenAPI parity, and v4 restore guards were reviewed and not found broken.
+
 This file is a living record for the autonomous engineering sessions working on
 Jarvis: current state, what changed recently, and what to pick up next. Update
 it at the end of every session.

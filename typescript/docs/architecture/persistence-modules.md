@@ -3,21 +3,26 @@
 Jarvis exposes persistence through `src/persistence/persistence.ts`. That file is a public facade;
 runtime behaviour belongs in the focused modules below.
 
-| Module                 | Responsibility                                                        |
-| ---------------------- | --------------------------------------------------------------------- |
-| `types.ts`             | Shared records, provider contracts, snapshots, and restore results    |
-| `assistantState.ts`    | Shared assistant-state validation before provider state writes        |
-| `document.ts`          | JSON document versions, validation, migration, and defensive cloning  |
-| `jsonPersistence.ts`   | JSON CRUD plus atomic snapshot and empty-target restore               |
-| `jsonFileLock.ts`      | Cross-process JSON writer ownership, timeout, and stale-lock recovery |
-| `convexPersistence.ts` | Generated Convex API mapping, CRUD, snapshot, and restore             |
-| `providerSelection.ts` | Explicit `json` or `convex` environment selection                     |
-| `updates.ts`           | Provider-neutral task and reminder update validation                  |
+| Module                 | Responsibility                                                         |
+| ---------------------- | ---------------------------------------------------------------------- |
+| `types.ts`             | Shared records, provider contracts, snapshots, and restore results     |
+| `assistantState.ts`    | Shared assistant-state validation before provider state writes         |
+| `document.ts`          | JSON document versions, validation, migration, and defensive cloning   |
+| `jsonPersistence.ts`   | JSON CRUD plus atomic snapshot and empty-target restore                |
+| `atomicJsonFile.ts`    | Private atomic JSON publish (`wx`, `0o600`, `fsync`, leftover cleanup) |
+| `jsonFileLock.ts`      | Cross-process JSON writer ownership, timeout, and stale-lock recovery  |
+| `convexPersistence.ts` | Generated Convex API mapping, CRUD, snapshot, and restore              |
+| `providerSelection.ts` | Explicit `json` or `convex` environment selection                      |
+| `updates.ts`           | Provider-neutral task and reminder update validation                   |
 
 ## Dependency rules
 
 - `document.ts` performs no file or network I/O.
 - JSON file locking has one implementation and is used by CRUD, snapshots, and restores.
+- Durable JSON documents (core state and domain `json*Store.ts` files) publish
+  through `writePrivateJsonFile`: exclusive temp create, mode `0o600`, `fsync`
+  before rename, and temp cleanup on failure. Callers must not use umask-dependent
+  `open(..., "w")` for these files.
 - Provider selection contains no persistence behaviour and never silently falls back.
 - Callers import the facade instead of provider internals.
 - JSON and Convex must continue to satisfy the same `PersistenceProvider` contract.
@@ -35,7 +40,9 @@ runtime behaviour belongs in the focused modules below.
   validator and does not replace validation on direct Convex server calls.
 - JSON saves revalidate after their queued lock/read waits and capture serialized
   bytes before filesystem writes yield, so pending caller mutations cannot slip
-  an unchecked non-finite value or cycle into the saved state.
+  an unchecked non-finite value or cycle into the saved state. Domain JSON stores
+  share the same publish helper; a published file must remain owner-read/write
+  only (`0o600`) even when the process umask is `0`.
 - Current writes use version 2 and preserve normalized reminder timezone data.
 - Numeric task/reminder creation timestamps must be finite in every document
   version. Missing legacy timestamps still default to zero. Overflowing JSON

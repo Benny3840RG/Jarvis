@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readdir, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, it } from "node:test";
@@ -119,5 +119,24 @@ describe("JsonInvoiceStore durability", () => {
     const read = await reopened.get(invoice.id);
     assert.equal(read?.paymentStatus, "partial");
     assert.equal(read?.payments[0]?.reference, "receipt-1");
+  });
+
+  it("publishes invoice files as private 0o600 even when umask is 0", async () => {
+    const file = path.join(dir, "invoices.json");
+    const previous = process.umask(0o000);
+    try {
+      const store = new JsonInvoiceStore(file);
+      await store.add({
+        clientId: "c1",
+        number: "BTI-0006",
+        lineItems: [{ description: "Gate repair", quantity: 1, unitPrice: 80 }],
+      });
+    } finally {
+      process.umask(previous);
+    }
+    if (process.platform === "win32") return;
+    assert.equal((await stat(file)).mode & 0o777, 0o600);
+    const leftovers = (await readdir(dir)).filter((name) => name.includes(".tmp-"));
+    assert.deepEqual(leftovers, []);
   });
 });
