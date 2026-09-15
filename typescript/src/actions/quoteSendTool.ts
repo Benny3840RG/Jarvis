@@ -22,6 +22,10 @@ const SEND_FINGERPRINT_VERSION = "quote-send-fingerprint:v1";
 
 export const quoteSendArgumentsSchema = z
   .object({
+    senderConnection: z
+      .string()
+      .regex(/^[a-z][a-z0-9-]{0,31}:[a-f0-9]{64}$/u)
+      .optional(),
     quoteId: z.string().trim().min(1).max(256),
     quoteRevision: z.number().int().min(1),
     recipient: z.string().trim().min(3).max(320).email(),
@@ -42,6 +46,7 @@ function sendFingerprint(input: {
   recipient: string;
   channel: "email";
   revisionFingerprint: string;
+  senderConnection?: string;
 }): string {
   const hash = createHash("sha256").update(canonicalJson(input), "utf8").digest("hex");
   return `${SEND_FINGERPRINT_VERSION}:sha256:${hash}`;
@@ -81,6 +86,10 @@ export function createQuoteSendToolDefinition(
     schema: quoteSendArgumentsSchema,
     async execute(argumentsValue, signal, context): Promise<QuoteSendResult> {
       const parsed = quoteSendArgumentsSchema.parse(argumentsValue);
+      if (parsed.senderConnection !== undefined && !provider.validateSender) {
+        throw new Error("outlook-sender-connection-unsupported");
+      }
+      provider.validateSender?.(parsed.senderConnection);
       const snapshot = await quotes.getQuote(parsed.quoteId);
       if (!snapshot) {
         throw new Error(`Quote ${parsed.quoteId} does not exist.`);
@@ -126,6 +135,9 @@ export function createQuoteSendToolDefinition(
       const fingerprint = sendFingerprint({
         ...scope,
         revisionFingerprint: snapshot.revision.fingerprint,
+        ...(parsed.senderConnection === undefined
+          ? {}
+          : { senderConnection: parsed.senderConnection }),
       });
 
       const existing = await deliveries.getBySendScope(scope);
@@ -177,6 +189,9 @@ export function createQuoteSendToolDefinition(
         await prepareRegisterAndSendQuoteEmail({
           provider,
           input: {
+            ...(parsed.senderConnection === undefined
+              ? {}
+              : { senderConnection: parsed.senderConnection }),
             quoteId: parsed.quoteId,
             revision: snapshot.revision,
             recipient: parsed.recipient,
