@@ -147,7 +147,7 @@ export class JSONPersistence implements PersistenceProvider {
     }
   }
 
-  private async readFromDisk(): Promise<PersistedDocument> {
+  private async readFromDisk(lockHeld = false): Promise<PersistedDocument> {
     let raw: string;
     try {
       raw = await fs.readFile(this.filePath, "utf8");
@@ -159,6 +159,9 @@ export class JSONPersistence implements PersistenceProvider {
     try {
       return normalizeDocument(JSON.parse(raw) as unknown);
     } catch (error: unknown) {
+      if (!lockHeld) {
+        return this.writeLock.run(() => this.readFromDisk(true), "corruption recovery");
+      }
       const documentError =
         error instanceof StateDocumentError
           ? error
@@ -170,8 +173,8 @@ export class JSONPersistence implements PersistenceProvider {
     }
   }
 
-  private async readDocument(): Promise<PersistedDocument> {
-    return cloneDocument(await this.readFromDisk());
+  private async readDocument(lockHeld = false): Promise<PersistedDocument> {
+    return cloneDocument(await this.readFromDisk(lockHeld));
   }
 
   private async writeDocument(document: PersistedDocument): Promise<void> {
@@ -190,7 +193,7 @@ export class JSONPersistence implements PersistenceProvider {
     assertAssistantState(state);
     await this.enqueue(() =>
       this.withWriteLock(async () => {
-        const current = await this.readDocument();
+        const current = await this.readDocument(true);
         const nextState = { ...state };
         // The caller may have mutated nested values while the save waited for its lock.
         assertAssistantState(nextState);
@@ -206,7 +209,7 @@ export class JSONPersistence implements PersistenceProvider {
   async addTask(title: string, category: string): Promise<Task> {
     return this.enqueue(() =>
       this.withWriteLock(async () => {
-        const current = await this.readDocument();
+        const current = await this.readDocument(true);
         const task: Task = {
           id: randomUUID(),
           title,
@@ -227,7 +230,7 @@ export class JSONPersistence implements PersistenceProvider {
     const validated = validateTaskUpdate(update);
     return this.enqueue(() =>
       this.withWriteLock(async () => {
-        const current = await this.readDocument();
+        const current = await this.readDocument(true);
         const index = current.tasks.findIndex((task) => task.id === id);
         if (index < 0) return null;
         const task: Task = { ...current.tasks[index], ...validated };
@@ -241,7 +244,7 @@ export class JSONPersistence implements PersistenceProvider {
   async completeTask(id: string): Promise<Task | null> {
     return this.enqueue(() =>
       this.withWriteLock(async () => {
-        const current = await this.readDocument();
+        const current = await this.readDocument(true);
         const index = current.tasks.findIndex((task) => task.id === id);
         if (index < 0) return null;
         if (current.tasks[index].completed) return cloneTask(current.tasks[index]);
@@ -256,7 +259,7 @@ export class JSONPersistence implements PersistenceProvider {
   async removeTask(id: string): Promise<Task | null> {
     return this.enqueue(() =>
       this.withWriteLock(async () => {
-        const current = await this.readDocument();
+        const current = await this.readDocument(true);
         const task = current.tasks.find((entry) => entry.id === id);
         if (!task) return null;
         await this.writeDocument({
@@ -275,7 +278,7 @@ export class JSONPersistence implements PersistenceProvider {
   async addReminder(title: string, due?: ReminderDue): Promise<Reminder> {
     return this.enqueue(() =>
       this.withWriteLock(async () => {
-        const current = await this.readDocument();
+        const current = await this.readDocument(true);
         const reminder = reminderFromDue(randomUUID(), title, Date.now(), due);
         await this.writeDocument({
           ...current,
@@ -290,7 +293,7 @@ export class JSONPersistence implements PersistenceProvider {
     const validated = validateReminderUpdate(update);
     return this.enqueue(() =>
       this.withWriteLock(async () => {
-        const current = await this.readDocument();
+        const current = await this.readDocument(true);
         const index = current.reminders.findIndex((reminder) => reminder.id === id);
         if (index < 0) return null;
         const existing = current.reminders[index];
@@ -315,7 +318,7 @@ export class JSONPersistence implements PersistenceProvider {
   async removeReminder(id: string): Promise<Reminder | null> {
     return this.enqueue(() =>
       this.withWriteLock(async () => {
-        const current = await this.readDocument();
+        const current = await this.readDocument(true);
         const reminder = current.reminders.find((entry) => entry.id === id);
         if (!reminder) return null;
         await this.writeDocument({
@@ -329,7 +332,7 @@ export class JSONPersistence implements PersistenceProvider {
 
   async snapshot(): Promise<PersistenceSnapshot> {
     return this.enqueue(() =>
-      this.writeLock.run(async () => snapshotFromDocument(await this.readDocument())),
+      this.writeLock.run(async () => snapshotFromDocument(await this.readDocument(true))),
     );
   }
 
@@ -343,7 +346,7 @@ export class JSONPersistence implements PersistenceProvider {
 
     return this.enqueue(() =>
       this.writeLock.run(async () => {
-        const current = await this.readDocument();
+        const current = await this.readDocument(true);
         if (
           Object.keys(current.state).length > 0 ||
           current.tasks.length > 0 ||

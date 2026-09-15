@@ -1,5 +1,28 @@
 # Jarvis TypeScript Roadmap
 
+## Concurrent recovery and authentication hardening (2026-09-15, #548)
+
+Reproduced and repaired two runtime failure classes:
+
+- A core or domain JSON reader could capture corrupt bytes, then quarantine a
+  valid replacement published by another writer. Corruption recovery now takes
+  the existing writer lock and re-reads before moving anything. Healthy reads
+  remain lock-free; locked writers and snapshots reuse their held lock. Tests
+  cover all three core read methods and all 25 business/memory read entry points.
+- Concurrent OIDC verification downloaded the same JWKS eight times for eight
+  callers. Downloads now share one pending promise, cleared on success or failure.
+  Regressions cover cold and expired caches, rotated keys and recovery after a
+  failed download, using signed tokens.
+
+No persisted schema, archive format or endpoint contract changes. Full checks,
+independent review and the Jarvis gate are recorded against the draft PR head.
+These repairs do not establish production or external-provider evidence.
+
+Next: assess directory-entry durability after the shared JSON publisher's rename
+and concurrent stale-lock reclamation; both need fault/recovery evidence before
+claiming a fix. Complete the separately tracked production recovery engineering
+and commissioning work in #307; retain the partial-v4 restore limitations.
+
 ## Audit findings and JSON write repair (2026-09-15)
 
 Fault audit of the TypeScript runtime found one high-confidence production defect in this candidate: domain JSON stores (`jsonInvoiceStore` and the other `json*Store.ts` writers) published files with `open(..., "w")`, no `0o600`, and no `fsync`. Core state, backups, and token files already used exclusive `wx` + `0o600` + `sync`. On a typical umask of `022` that made invoices, clients, quotes and related business files world-readable, and a crash could leave a truncated file after rename.

@@ -82,7 +82,7 @@ export class JsonUpgradeStore implements UpgradeStore {
     this.writeLock = new JsonFileLock(filePath, warn, lockTimeoutMs);
   }
 
-  private async readDocument(): Promise<UpgradeDocument> {
+  private async readDocument(lockHeld = false): Promise<UpgradeDocument> {
     let raw: string;
     try {
       raw = await fs.readFile(this.filePath, "utf8");
@@ -95,6 +95,9 @@ export class JsonUpgradeStore implements UpgradeStore {
     try {
       parsed = JSON.parse(raw);
     } catch {
+      if (!lockHeld) {
+        return this.writeLock.run(() => this.readDocument(true), "corruption recovery");
+      }
       await this.setAside();
       return { version: DOCUMENT_VERSION, entries: [] };
     }
@@ -133,7 +136,7 @@ export class JsonUpgradeStore implements UpgradeStore {
 
   async add(input: UpgradeInput): Promise<Upgrade> {
     return this.writeLock.run(async () => {
-      const document = await this.readDocument();
+      const document = await this.readDocument(true);
       const entry = createUpgrade(input);
       document.entries.push(entry);
       await this.writeDocument(document);
@@ -143,7 +146,7 @@ export class JsonUpgradeStore implements UpgradeStore {
 
   async update(id: string, update: UpgradeUpdate): Promise<Upgrade | null> {
     return this.writeLock.run(async () => {
-      const document = await this.readDocument();
+      const document = await this.readDocument(true);
       const entry = document.entries.find((candidate) => candidate.id === id);
       if (!entry) return null;
       applyUpgradeUpdate(entry, update);
@@ -154,7 +157,7 @@ export class JsonUpgradeStore implements UpgradeStore {
 
   async remove(id: string): Promise<Upgrade | null> {
     return this.writeLock.run(async () => {
-      const document = await this.readDocument();
+      const document = await this.readDocument(true);
       const index = document.entries.findIndex((candidate) => candidate.id === id);
       if (index === -1) return null;
       const [removed] = document.entries.splice(index, 1);

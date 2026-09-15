@@ -93,7 +93,7 @@ export class JsonQuoteStore implements QuoteStore {
     this.writeLock = new JsonFileLock(filePath, warn, lockTimeoutMs);
   }
 
-  private async readDocument(): Promise<QuoteDocument> {
+  private async readDocument(lockHeld = false): Promise<QuoteDocument> {
     let raw: string;
     try {
       raw = await fs.readFile(this.filePath, "utf8");
@@ -106,6 +106,9 @@ export class JsonQuoteStore implements QuoteStore {
     try {
       parsed = JSON.parse(raw);
     } catch {
+      if (!lockHeld) {
+        return this.writeLock.run(() => this.readDocument(true), "corruption recovery");
+      }
       await this.setAside();
       return { version: DOCUMENT_VERSION, quotes: [] };
     }
@@ -144,7 +147,7 @@ export class JsonQuoteStore implements QuoteStore {
 
   async add(input: QuoteInput): Promise<Quote> {
     return this.writeLock.run(async () => {
-      const document = await this.readDocument();
+      const document = await this.readDocument(true);
       const quote = createQuote(input);
       document.quotes.push(quote);
       await this.writeDocument(document);
@@ -154,7 +157,7 @@ export class JsonQuoteStore implements QuoteStore {
 
   async update(id: string, update: QuoteUpdate): Promise<Quote | null> {
     return this.writeLock.run(async () => {
-      const document = await this.readDocument();
+      const document = await this.readDocument(true);
       const quote = document.quotes.find((candidate) => candidate.id === id);
       if (!quote) return null;
       applyQuoteUpdate(quote, update);
@@ -165,7 +168,7 @@ export class JsonQuoteStore implements QuoteStore {
 
   async remove(id: string): Promise<Quote | null> {
     return this.writeLock.run(async () => {
-      const document = await this.readDocument();
+      const document = await this.readDocument(true);
       const index = document.quotes.findIndex((candidate) => candidate.id === id);
       if (index === -1) return null;
       const [removed] = document.quotes.splice(index, 1);

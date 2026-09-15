@@ -49,6 +49,10 @@ runtime behaviour belongs in the focused modules below.
   numbers (such as `1e400`) trigger the existing corrupt-file quarantine, which
   preserves the original bytes for recovery.
 - JSON mutations reread the latest document after acquiring the cross-process lock.
+- Corrupt reads acquire that same lock and re-read before moving a file aside.
+  Core and domain stores pass `true` for the internal `lockHeld` parameter when the caller already
+  owns the lock, avoiding nested acquisition. Healthy reads stay lock-free,
+  including runtime readback within v4 archive capture's existing locks.
 - Task completion remains idempotent: repeats return the completed task. The
   JSON provider checks completion after its locked reread and returns a copy
   without replacing the state file or migrating a legacy document on a repeat.
