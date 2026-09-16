@@ -3,6 +3,7 @@ import { test } from "node:test";
 import {
   reviewRunTitle,
   hasReviewAttempt,
+  reviewBudgetAvailable,
   eligiblePull,
   listWorkflowHistory,
 } from "./pr-maintenance-controller.mjs";
@@ -41,6 +42,39 @@ test("a review attempt is identified by provider run history, never by comment t
   assert.equal(
     hasReviewAttempt([{ ...run, conclusion: "cancelled" }], identity),
     true,
+  );
+});
+
+test("failed publication retains the exact-attempt lock and the two-attempt budget", () => {
+  const failed = {
+    id: 500,
+    display_title: reviewRunTitle(identity),
+    path: ".github/workflows/jarvis-pr-maintenance.yml",
+    event: "workflow_dispatch",
+    head_branch: "main",
+    conclusion: "failure",
+    run_attempt: 1,
+  };
+  assert.equal(hasReviewAttempt([failed], identity, 501), true);
+  assert.equal(hasReviewAttempt([failed], identity, 500), false);
+  assert.equal(reviewBudgetAvailable([failed], identity, 500, 2), true);
+  assert.equal(reviewBudgetAvailable([failed], identity, 500, 3), false);
+  const duplicate = { ...failed, id: 501 };
+  assert.equal(
+    reviewBudgetAvailable([failed, duplicate], identity, 500, 2),
+    false,
+  );
+  assert.equal(
+    reviewBudgetAvailable([failed, duplicate], identity, 502),
+    false,
+  );
+  assert.throws(
+    () => reviewRunTitle({ ...identity, fingerprint: "" }),
+    /identity/,
+  );
+  assert.throws(
+    () => reviewRunTitle({ ...identity, headSha: "a".repeat(8) }),
+    /identity/,
   );
 });
 
