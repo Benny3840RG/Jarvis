@@ -1,5 +1,41 @@
 # Jarvis TypeScript Roadmap
 
+## Concurrent recovery and authentication hardening (2026-09-15, #548)
+
+Reproduced and repaired two runtime failure classes:
+
+- A core or domain JSON reader could capture corrupt bytes, then quarantine a
+  valid replacement published by another writer. Corruption recovery now takes
+  the existing writer lock and re-reads before moving anything. Healthy reads
+  remain lock-free; locked writers and snapshots reuse their held lock. Tests
+  cover all three core read methods and all 25 business/memory read entry points.
+- Concurrent OIDC verification downloaded the same JWKS eight times for eight
+  callers. Downloads now share one pending promise, cleared on success or failure.
+  Regressions cover cold and expired caches, rotated keys and recovery after a
+  failed download, using signed tokens.
+
+No persisted schema, archive format or endpoint contract changes. Full checks,
+independent review and the Jarvis gate are recorded against the draft PR head.
+These repairs do not establish production or external-provider evidence.
+
+Next: assess directory-entry durability after the shared JSON publisher's rename
+and concurrent stale-lock reclamation; both need fault/recovery evidence before
+claiming a fix. Complete the separately tracked production recovery engineering
+and commissioning work in #307; retain the partial-v4 restore limitations.
+
+## Audit findings and JSON write repair (2026-09-15)
+
+Fault audit of the TypeScript runtime found one high-confidence production defect in this candidate: domain JSON stores (`jsonInvoiceStore` and the other `json*Store.ts` writers) published files with `open(..., "w")`, no `0o600`, and no `fsync`. Core state, backups, and token files already used exclusive `wx` + `0o600` + `sync`. On a typical umask of `022` that made invoices, clients, quotes and related business files world-readable, and a crash could leave a truncated file after rename.
+
+Fix: shared `writePrivateJsonFile` in `src/persistence/atomicJsonFile.ts`, used by the thirteen domain JSON stores and `JSONPersistence`. Tests force umask `0` and assert `0o600`, plus leftover temp cleanup when rename fails.
+
+Not fixed here (already open PRs or documented limitations):
+
+- High / already in flight: spoofable `X-Forwarded-Proto` (#542); invoice payment without `Idempotency-Key` (#543); stale "five" safety-category status copy (#540).
+- High / documented: v3 restore and `importMemoryStores` are not atomic across memory domains; v3 export reads through forgiving store `list()` which can coerce or drop malformed rows.
+- Medium: JSON stores skip malformed rows instead of quarantining; JSON `buildId` is not existence-checked (Convex is); MCP preview HTTP has no caller auth on loopback.
+- Auth/token HTTP guards, secret redaction, OIDC verification, MCP operation↔OpenAPI parity, and v4 restore guards were reviewed and not found broken.
+
 This file is a living record for the autonomous engineering sessions working on
 Jarvis: current state, what changed recently, and what to pick up next. Update
 it at the end of every session.
@@ -17,6 +53,40 @@ it at the end of every session.
 - Next: migrate MCP Apps with the split SDK 2 packages and protocol tests; revisit
   TypeScript 7 once the lint toolchain supports its compiler API and peer range.
 - Fresh CI is required for each repaired head before the owner merge decision.
+
+## Standing Development review repair (2026-09-15)
+
+PR #537's recovery classifier now refuses missing, unknown and contradictory
+diagnostic stages instead of coercing them into retry authority. Guarded source
+changes require added lines in their corresponding module test; unrelated area
+tests, deleted tests and rename-only changes cannot satisfy the guard. Both
+defects were reproduced before repair. The two-retry budget, independent review,
+owner merge and deployment boundaries remain unchanged.
+
+Implementation and regression sources: `.github/automation/autobuild-recovery.mjs`,
+`.github/automation/autobuild-recovery.test.mjs`,
+`.github/automation/validate-autobuild.mjs` and
+`.github/automation/validate-autobuild.test.mjs`. Test filenames and keyword scans
+do not prove behavioral correctness. Current-head checks and independent Jarvis
+review remain required before Benny's merge decision. No live issue execution or
+deployment is established by these local repairs.
+
+Independent review also exposed retry-budget persistence ordering, stale-run
+recovery and contradictory verification-result gaps. The workflow now records
+the retry before unblocking, refuses source-run replays, and confirms a complete
+bounded provider history before changing eligibility. The classifier validates
+verification outcomes against build/publication state. Executable workflow
+regressions cover the reproduced failures.
+
+## Review artifact regression follow-up (2026-09-15)
+
+After PR #541 merged, its test-only follow-up adds a regression combining a
+root `result.json` with one and then two valid named segment directories, asserting
+that neither layout retains any receipts. This closes the explicit mixed-layout
+coverage gap; the publisher implementation is unchanged. The test-only candidate
+requires fresh full verification, Claude review and maintained PASS before Benny's
+merge decision. See `.github/automation/pr-maintenance-workflow.test.mjs` and
+`.github/workflows/jarvis-pr-maintenance.yml` for the exercised authority path.
 
 ## Outlook current-main integration (2026-09-14)
 
@@ -422,3 +492,9 @@ then Benny merge before any live review claims can use the repaired planner.
 ## Outlook browser-launch deadline
 
 The #482 maintained review found that a stalled URL-display callback could prevent the sign-in timeout from reaching cleanup. The minimal repair bounds launcher completion and code receipt together, including when a valid callback arrived first. Two offline regressions failed before the fix and now prove listener closure and no token/provider effects on expiry. Fresh review remains required; live #293/#294/#297 commissioning stays open.
+
+## Single-artifact review publication compatibility
+
+The pinned `actions/download-artifact` revision flattens one matched artifact into the destination even when `merge-multiple` is false. This blocked #540 after its sole reviewer returned valid evidence. The existing publisher now accepts that exact flat `result.json` layout only when its trusted manifest expects segment zero alone, while retaining named-directory loading for multiple artifacts. File/manifest byte bounds, regular-file checks, exact indices, run/attempt directory names and downstream manifest/prompt digest verification remain enforced. A failure-first test executes the actual workflow loader; negative fixtures cover mixed layouts, wrong indices/identities, oversized files, invalid JSON and symlinks. Local proof does not override the blocked provider result; fresh Claude review, maintained PASS and Benny merge remain required.
+
+Implementation and proving coverage: `.github/workflows/jarvis-pr-maintenance.yml` and `.github/automation/pr-maintenance-workflow.test.mjs`. These exact changed files supply the flat/named artifact loader and its negative fixtures; review them together with these documentation claims.

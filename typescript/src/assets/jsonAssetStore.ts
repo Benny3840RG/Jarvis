@@ -3,6 +3,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { writePrivateJsonFile } from "../persistence/atomicJsonFile.js";
 import { JsonFileLock } from "../persistence/jsonFileLock.js";
 import type { PersistenceWarning } from "../persistence/types.js";
 import { applyAssetUpdate, cloneAsset, createAsset } from "./assetData.js";
@@ -66,7 +67,7 @@ export class JsonAssetStore implements AssetStore {
     this.writeLock = new JsonFileLock(filePath, warn, lockTimeoutMs);
   }
 
-  private async readDocument(): Promise<AssetDocument> {
+  private async readDocument(lockHeld = false): Promise<AssetDocument> {
     let raw: string;
     try {
       raw = await fs.readFile(this.filePath, "utf8");
@@ -79,6 +80,9 @@ export class JsonAssetStore implements AssetStore {
     try {
       parsed = JSON.parse(raw);
     } catch {
+      if (!lockHeld) {
+        return this.writeLock.run(() => this.readDocument(true), "corruption recovery");
+      }
       await this.setAside();
       return { version: DOCUMENT_VERSION, entries: [] };
     }
@@ -103,18 +107,7 @@ export class JsonAssetStore implements AssetStore {
   }
 
   private async writeDocument(document: AssetDocument): Promise<void> {
-    await fs.mkdir(path.dirname(this.filePath), { recursive: true });
-    const tempPath = path.join(
-      path.dirname(this.filePath),
-      `.${path.basename(this.filePath)}.tmp-${process.pid}-${randomUUID()}`,
-    );
-    const handle = await fs.open(tempPath, "w");
-    try {
-      await handle.writeFile(`${JSON.stringify(document, null, 2)}\n`, "utf8");
-    } finally {
-      await handle.close();
-    }
-    await fs.rename(tempPath, this.filePath);
+    await writePrivateJsonFile(this.filePath, document);
   }
 
   async list(): Promise<Asset[]> {
@@ -128,7 +121,7 @@ export class JsonAssetStore implements AssetStore {
 
   async add(input: AssetInput): Promise<Asset> {
     return this.writeLock.run(async () => {
-      const document = await this.readDocument();
+      const document = await this.readDocument(true);
       const entry = createAsset(input);
       document.entries.push(entry);
       await this.writeDocument(document);
@@ -138,7 +131,7 @@ export class JsonAssetStore implements AssetStore {
 
   async update(id: string, update: AssetUpdate): Promise<Asset | null> {
     return this.writeLock.run(async () => {
-      const document = await this.readDocument();
+      const document = await this.readDocument(true);
       const entry = document.entries.find((candidate) => candidate.id === id);
       if (!entry) return null;
       applyAssetUpdate(entry, update);
@@ -149,7 +142,7 @@ export class JsonAssetStore implements AssetStore {
 
   async remove(id: string): Promise<Asset | null> {
     return this.writeLock.run(async () => {
-      const document = await this.readDocument();
+      const document = await this.readDocument(true);
       const index = document.entries.findIndex((candidate) => candidate.id === id);
       if (index === -1) return null;
       const [removed] = document.entries.splice(index, 1);

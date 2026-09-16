@@ -52,6 +52,12 @@ function safeSecret(value: unknown, code: string): string {
   return cleaned;
 }
 
+export function resolveMicrosoftDelegatedTokenEndpoint(tenantId: string | undefined): string {
+  return tenantId === undefined
+    ? PERSONAL_ACCOUNT_TOKEN_ENDPOINT
+    : `https://login.microsoftonline.com/${tenantId.toLowerCase()}/oauth2/v2.0/token`;
+}
+
 export function resolveMicrosoftDelegatedOAuthConfig(
   environment: Environment = process.env,
 ): MicrosoftDelegatedOAuthConfig {
@@ -75,10 +81,7 @@ export function resolveMicrosoftDelegatedOAuthConfig(
     clientId,
     mailbox,
     refreshTokenFile,
-    tokenEndpoint:
-      tenantId === undefined
-        ? PERSONAL_ACCOUNT_TOKEN_ENDPOINT
-        : `https://login.microsoftonline.com/${tenantId.toLowerCase()}/oauth2/v2.0/token`,
+    tokenEndpoint: resolveMicrosoftDelegatedTokenEndpoint(tenantId),
     scopes: [...APPROVED_SCOPES],
   };
 }

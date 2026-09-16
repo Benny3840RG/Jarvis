@@ -3,6 +3,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { writePrivateJsonFile } from "../persistence/atomicJsonFile.js";
 import { JsonFileLock } from "../persistence/jsonFileLock.js";
 import type { PersistenceWarning } from "../persistence/types.js";
 import type { Client, ClientContact, ClientInput, ClientStore, ClientUpdate } from "./client.js";
@@ -76,7 +77,7 @@ export class JsonClientStore implements ClientStore {
     this.writeLock = new JsonFileLock(filePath, warn, lockTimeoutMs);
   }
 
-  private async readDocument(): Promise<ClientDocument> {
+  private async readDocument(lockHeld = false): Promise<ClientDocument> {
     let raw: string;
     try {
       raw = await fs.readFile(this.filePath, "utf8");
@@ -89,6 +90,9 @@ export class JsonClientStore implements ClientStore {
     try {
       parsed = JSON.parse(raw);
     } catch {
+      if (!lockHeld) {
+        return this.writeLock.run(() => this.readDocument(true), "corruption recovery");
+      }
       await this.setAside();
       return { version: DOCUMENT_VERSION, clients: [] };
     }
@@ -113,18 +117,7 @@ export class JsonClientStore implements ClientStore {
   }
 
   private async writeDocument(document: ClientDocument): Promise<void> {
-    await fs.mkdir(path.dirname(this.filePath), { recursive: true });
-    const tempPath = path.join(
-      path.dirname(this.filePath),
-      `.${path.basename(this.filePath)}.tmp-${process.pid}-${randomUUID()}`,
-    );
-    const handle = await fs.open(tempPath, "w");
-    try {
-      await handle.writeFile(`${JSON.stringify(document, null, 2)}\n`, "utf8");
-    } finally {
-      await handle.close();
-    }
-    await fs.rename(tempPath, this.filePath);
+    await writePrivateJsonFile(this.filePath, document);
   }
 
   async list(): Promise<Client[]> {
@@ -138,7 +131,7 @@ export class JsonClientStore implements ClientStore {
 
   async add(input: ClientInput): Promise<Client> {
     return this.writeLock.run(async () => {
-      const document = await this.readDocument();
+      const document = await this.readDocument(true);
       const now = Date.now();
       const client: Client = {
         id: randomUUID(),
@@ -159,7 +152,7 @@ export class JsonClientStore implements ClientStore {
       throw new Error("Client update requires a name, contacts, or notes change.");
     }
     return this.writeLock.run(async () => {
-      const document = await this.readDocument();
+      const document = await this.readDocument(true);
       const client = document.clients.find((candidate) => candidate.id === id);
       if (!client) return null;
       if (update.name !== undefined) client.name = requiredName(update.name);
@@ -177,7 +170,7 @@ export class JsonClientStore implements ClientStore {
 
   async remove(id: string): Promise<Client | null> {
     return this.writeLock.run(async () => {
-      const document = await this.readDocument();
+      const document = await this.readDocument(true);
       const index = document.clients.findIndex((candidate) => candidate.id === id);
       if (index === -1) return null;
       const [removed] = document.clients.splice(index, 1);

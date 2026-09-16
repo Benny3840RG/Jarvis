@@ -20,6 +20,7 @@ export type RemoteGatewayConfig = {
   rateLimitWindowMs: number;
   requireForwardedHttps: true;
   rateBuckets: Map<string, { windowStartedAt: number; count: number }>;
+  trustedProxy: readonly string[];
 };
 
 type GatewayEnvironment = NodeJS.ProcessEnv;
@@ -85,6 +86,36 @@ function parseAllowedOrigins(value: string | undefined): string[] {
   return origins;
 }
 
+const IPV4_OR_CIDR = /^(\d{1,3}\.){3}\d{1,3}(\/\d{1,2})?$/;
+const IPV6_OR_CIDR = /^[0-9a-fA-F:]+(\/\d{1,3})?$/;
+
+function parseTrustedProxy(value: string | undefined): string[] {
+  const raw = optionalText(value);
+  if (raw === undefined)
+    throw new Error(
+      "JARVIS_TRUSTED_PROXY is required for the remote gateway -- it names the exact upstream TLS terminator address(es)/CIDR(s) allowed to set forwarded-request headers. Without it, X-Forwarded-Proto and X-Forwarded-For could not be trusted from any peer.",
+    );
+  const entries = [
+    ...new Set(
+      raw
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean),
+    ),
+  ];
+  if (entries.length === 0) {
+    throw new Error("JARVIS_TRUSTED_PROXY must contain at least one IP address or CIDR range.");
+  }
+  for (const entry of entries) {
+    if (!IPV4_OR_CIDR.test(entry) && !IPV6_OR_CIDR.test(entry)) {
+      throw new Error(
+        `JARVIS_TRUSTED_PROXY entry "${entry}" is not a recognisable IP address or CIDR range.`,
+      );
+    }
+  }
+  return entries;
+}
+
 export function resolveRemoteGatewayConfig(
   env: GatewayEnvironment = process.env,
 ): RemoteGatewayConfig {
@@ -121,6 +152,7 @@ export function resolveRemoteGatewayConfig(
     ),
     requireForwardedHttps: true,
     rateBuckets: new Map(),
+    trustedProxy: parseTrustedProxy(env.JARVIS_TRUSTED_PROXY),
   };
 }
 

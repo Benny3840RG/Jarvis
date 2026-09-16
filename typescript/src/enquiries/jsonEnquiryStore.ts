@@ -3,6 +3,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { writePrivateJsonFile } from "../persistence/atomicJsonFile.js";
 import { JsonFileLock } from "../persistence/jsonFileLock.js";
 import type { PersistenceWarning } from "../persistence/types.js";
 import type { ProjectStore } from "../projects/project.js";
@@ -47,7 +48,7 @@ export class JsonEnquiryStore implements EnquiryStore {
     this.writeLock = new JsonFileLock(filePath, warn, lockTimeoutMs);
   }
 
-  private async readDocument(): Promise<EnquiryDocument> {
+  private async readDocument(lockHeld = false): Promise<EnquiryDocument> {
     let raw: string;
     try {
       raw = await fs.readFile(this.filePath, "utf8");
@@ -60,6 +61,9 @@ export class JsonEnquiryStore implements EnquiryStore {
     try {
       parsed = JSON.parse(raw);
     } catch {
+      if (!lockHeld) {
+        return this.writeLock.run(() => this.readDocument(true), "corruption recovery");
+      }
       await this.setAside();
       return { version: DOCUMENT_VERSION, enquiries: [] };
     }
@@ -89,18 +93,7 @@ export class JsonEnquiryStore implements EnquiryStore {
   }
 
   private async writeDocument(document: EnquiryDocument): Promise<void> {
-    await fs.mkdir(path.dirname(this.filePath), { recursive: true });
-    const tempPath = path.join(
-      path.dirname(this.filePath),
-      `.${path.basename(this.filePath)}.tmp-${process.pid}-${randomUUID()}`,
-    );
-    const handle = await fs.open(tempPath, "w");
-    try {
-      await handle.writeFile(`${JSON.stringify(document, null, 2)}\n`, "utf8");
-    } finally {
-      await handle.close();
-    }
-    await fs.rename(tempPath, this.filePath);
+    await writePrivateJsonFile(this.filePath, document);
   }
 
   async list(filter: { status?: EnquiryStatus; clientId?: string } = {}): Promise<Enquiry[]> {
@@ -117,7 +110,7 @@ export class JsonEnquiryStore implements EnquiryStore {
 
   async add(input: EnquiryInput): Promise<Enquiry> {
     return this.writeLock.run(async () => {
-      const document = await this.readDocument();
+      const document = await this.readDocument(true);
       const duplicateKey = input.duplicateKey?.trim();
       if (duplicateKey) {
         const existing = document.enquiries.find(
@@ -134,7 +127,7 @@ export class JsonEnquiryStore implements EnquiryStore {
 
   async update(id: string, update: EnquiryUpdate): Promise<Enquiry | null> {
     return this.writeLock.run(async () => {
-      const document = await this.readDocument();
+      const document = await this.readDocument(true);
       const enquiry = document.enquiries.find((candidate) => candidate.id === id);
       if (!enquiry) return null;
       applyEnquiryUpdate(enquiry, update);
@@ -145,7 +138,7 @@ export class JsonEnquiryStore implements EnquiryStore {
 
   async close(id: string, reason: string): Promise<Enquiry | null> {
     return this.writeLock.run(async () => {
-      const document = await this.readDocument();
+      const document = await this.readDocument(true);
       const enquiry = document.enquiries.find((candidate) => candidate.id === id);
       if (!enquiry) return null;
       if (enquiry.status !== "open") throw new Error("Only open enquiries can be closed.");
@@ -163,7 +156,7 @@ export class JsonEnquiryStore implements EnquiryStore {
     input: EnquiryConversionInput = {},
   ): Promise<EnquiryConversionResult | null> {
     return this.writeLock.run(async () => {
-      const document = await this.readDocument();
+      const document = await this.readDocument(true);
       const enquiry = document.enquiries.find((candidate) => candidate.id === id);
       if (!enquiry) return null;
       if (enquiry.status === "converted" && enquiry.convertedProjectId) {

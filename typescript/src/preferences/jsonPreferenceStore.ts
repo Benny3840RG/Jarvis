@@ -3,6 +3,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { writePrivateJsonFile } from "../persistence/atomicJsonFile.js";
 import { JsonFileLock } from "../persistence/jsonFileLock.js";
 import type { PersistenceWarning } from "../persistence/types.js";
 import { applyPreferenceUpdate, clonePreference, createPreference } from "./preferenceData.js";
@@ -63,7 +64,7 @@ export class JsonPreferenceStore implements PreferenceStore {
     this.writeLock = new JsonFileLock(filePath, warn, lockTimeoutMs);
   }
 
-  private async readDocument(): Promise<PreferenceDocument> {
+  private async readDocument(lockHeld = false): Promise<PreferenceDocument> {
     let raw: string;
     try {
       raw = await fs.readFile(this.filePath, "utf8");
@@ -76,6 +77,9 @@ export class JsonPreferenceStore implements PreferenceStore {
     try {
       parsed = JSON.parse(raw);
     } catch {
+      if (!lockHeld) {
+        return this.writeLock.run(() => this.readDocument(true), "corruption recovery");
+      }
       await this.setAside();
       return { version: DOCUMENT_VERSION, entries: [] };
     }
@@ -100,18 +104,7 @@ export class JsonPreferenceStore implements PreferenceStore {
   }
 
   private async writeDocument(document: PreferenceDocument): Promise<void> {
-    await fs.mkdir(path.dirname(this.filePath), { recursive: true });
-    const tempPath = path.join(
-      path.dirname(this.filePath),
-      `.${path.basename(this.filePath)}.tmp-${process.pid}-${randomUUID()}`,
-    );
-    const handle = await fs.open(tempPath, "w");
-    try {
-      await handle.writeFile(`${JSON.stringify(document, null, 2)}\n`, "utf8");
-    } finally {
-      await handle.close();
-    }
-    await fs.rename(tempPath, this.filePath);
+    await writePrivateJsonFile(this.filePath, document);
   }
 
   async list(): Promise<Preference[]> {
@@ -125,7 +118,7 @@ export class JsonPreferenceStore implements PreferenceStore {
 
   async add(input: PreferenceInput): Promise<Preference> {
     return this.writeLock.run(async () => {
-      const document = await this.readDocument();
+      const document = await this.readDocument(true);
       const entry = createPreference(input);
       document.entries.push(entry);
       await this.writeDocument(document);
@@ -135,7 +128,7 @@ export class JsonPreferenceStore implements PreferenceStore {
 
   async update(id: string, update: PreferenceUpdate): Promise<Preference | null> {
     return this.writeLock.run(async () => {
-      const document = await this.readDocument();
+      const document = await this.readDocument(true);
       const entry = document.entries.find((candidate) => candidate.id === id);
       if (!entry) return null;
       applyPreferenceUpdate(entry, update);
@@ -146,7 +139,7 @@ export class JsonPreferenceStore implements PreferenceStore {
 
   async remove(id: string): Promise<Preference | null> {
     return this.writeLock.run(async () => {
-      const document = await this.readDocument();
+      const document = await this.readDocument(true);
       const index = document.entries.findIndex((candidate) => candidate.id === id);
       if (index === -1) return null;
       const [removed] = document.entries.splice(index, 1);

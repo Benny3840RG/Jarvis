@@ -80,7 +80,7 @@ async function admit() {
     runId,
     sourceSha,
     uncertaintyBudget: Number(
-      env.JARVIS_DEVELOPMENT_UNCERTAINTY_BUDGET || "NaN",
+      env.JARVIS_DEVELOPMENT_UNCERTAINTY_BUDGET || "0.05",
     ),
   });
   appendFileSync(

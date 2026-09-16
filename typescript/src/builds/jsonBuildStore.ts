@@ -3,6 +3,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { writePrivateJsonFile } from "../persistence/atomicJsonFile.js";
 import { JsonFileLock } from "../persistence/jsonFileLock.js";
 import type { PersistenceWarning } from "../persistence/types.js";
 import { applyBuildUpdate, cloneBuild, createBuild } from "./buildData.js";
@@ -70,7 +71,7 @@ export class JsonBuildStore implements BuildStore {
     this.writeLock = new JsonFileLock(filePath, warn, lockTimeoutMs);
   }
 
-  private async readDocument(): Promise<BuildDocument> {
+  private async readDocument(lockHeld = false): Promise<BuildDocument> {
     let raw: string;
     try {
       raw = await fs.readFile(this.filePath, "utf8");
@@ -83,6 +84,9 @@ export class JsonBuildStore implements BuildStore {
     try {
       parsed = JSON.parse(raw);
     } catch {
+      if (!lockHeld) {
+        return this.writeLock.run(() => this.readDocument(true), "corruption recovery");
+      }
       await this.setAside();
       return { version: DOCUMENT_VERSION, builds: [] };
     }
@@ -107,18 +111,7 @@ export class JsonBuildStore implements BuildStore {
   }
 
   private async writeDocument(document: BuildDocument): Promise<void> {
-    await fs.mkdir(path.dirname(this.filePath), { recursive: true });
-    const tempPath = path.join(
-      path.dirname(this.filePath),
-      `.${path.basename(this.filePath)}.tmp-${process.pid}-${randomUUID()}`,
-    );
-    const handle = await fs.open(tempPath, "w");
-    try {
-      await handle.writeFile(`${JSON.stringify(document, null, 2)}\n`, "utf8");
-    } finally {
-      await handle.close();
-    }
-    await fs.rename(tempPath, this.filePath);
+    await writePrivateJsonFile(this.filePath, document);
   }
 
   async list(): Promise<Build[]> {
@@ -132,7 +125,7 @@ export class JsonBuildStore implements BuildStore {
 
   async add(input: BuildInput): Promise<Build> {
     return this.writeLock.run(async () => {
-      const document = await this.readDocument();
+      const document = await this.readDocument(true);
       const build = createBuild(input);
       document.builds.push(build);
       await this.writeDocument(document);
@@ -142,7 +135,7 @@ export class JsonBuildStore implements BuildStore {
 
   async update(id: string, update: BuildUpdate): Promise<Build | null> {
     return this.writeLock.run(async () => {
-      const document = await this.readDocument();
+      const document = await this.readDocument(true);
       const build = document.builds.find((candidate) => candidate.id === id);
       if (!build) return null;
       applyBuildUpdate(build, update);
@@ -153,7 +146,7 @@ export class JsonBuildStore implements BuildStore {
 
   async remove(id: string): Promise<Build | null> {
     return this.writeLock.run(async () => {
-      const document = await this.readDocument();
+      const document = await this.readDocument(true);
       const index = document.builds.findIndex((candidate) => candidate.id === id);
       if (index === -1) return null;
       const [removed] = document.builds.splice(index, 1);

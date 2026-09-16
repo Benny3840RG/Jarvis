@@ -53,7 +53,7 @@ const LAYERS: LayersStatus = {
   safety: {
     status: "partial",
     reason:
-      "The prototype envelope exists; all five immutable safety categories are not yet bound to every transition.",
+      "The prototype envelope exists; all six immutable safety categories are not yet bound to every transition.",
   },
   adaptive: {
     status: "partial",

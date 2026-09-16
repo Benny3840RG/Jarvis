@@ -3,6 +3,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { writePrivateJsonFile } from "../persistence/atomicJsonFile.js";
 import { JsonFileLock } from "../persistence/jsonFileLock.js";
 import type { PersistenceWarning } from "../persistence/types.js";
 import { applyQuoteUpdate, cloneQuote, createQuote, normalizeLineItems } from "./quoteData.js";
@@ -92,7 +93,7 @@ export class JsonQuoteStore implements QuoteStore {
     this.writeLock = new JsonFileLock(filePath, warn, lockTimeoutMs);
   }
 
-  private async readDocument(): Promise<QuoteDocument> {
+  private async readDocument(lockHeld = false): Promise<QuoteDocument> {
     let raw: string;
     try {
       raw = await fs.readFile(this.filePath, "utf8");
@@ -105,6 +106,9 @@ export class JsonQuoteStore implements QuoteStore {
     try {
       parsed = JSON.parse(raw);
     } catch {
+      if (!lockHeld) {
+        return this.writeLock.run(() => this.readDocument(true), "corruption recovery");
+      }
       await this.setAside();
       return { version: DOCUMENT_VERSION, quotes: [] };
     }
@@ -129,18 +133,7 @@ export class JsonQuoteStore implements QuoteStore {
   }
 
   private async writeDocument(document: QuoteDocument): Promise<void> {
-    await fs.mkdir(path.dirname(this.filePath), { recursive: true });
-    const tempPath = path.join(
-      path.dirname(this.filePath),
-      `.${path.basename(this.filePath)}.tmp-${process.pid}-${randomUUID()}`,
-    );
-    const handle = await fs.open(tempPath, "w");
-    try {
-      await handle.writeFile(`${JSON.stringify(document, null, 2)}\n`, "utf8");
-    } finally {
-      await handle.close();
-    }
-    await fs.rename(tempPath, this.filePath);
+    await writePrivateJsonFile(this.filePath, document);
   }
 
   async list(): Promise<Quote[]> {
@@ -154,7 +147,7 @@ export class JsonQuoteStore implements QuoteStore {
 
   async add(input: QuoteInput): Promise<Quote> {
     return this.writeLock.run(async () => {
-      const document = await this.readDocument();
+      const document = await this.readDocument(true);
       const quote = createQuote(input);
       document.quotes.push(quote);
       await this.writeDocument(document);
@@ -164,7 +157,7 @@ export class JsonQuoteStore implements QuoteStore {
 
   async update(id: string, update: QuoteUpdate): Promise<Quote | null> {
     return this.writeLock.run(async () => {
-      const document = await this.readDocument();
+      const document = await this.readDocument(true);
       const quote = document.quotes.find((candidate) => candidate.id === id);
       if (!quote) return null;
       applyQuoteUpdate(quote, update);
@@ -175,7 +168,7 @@ export class JsonQuoteStore implements QuoteStore {
 
   async remove(id: string): Promise<Quote | null> {
     return this.writeLock.run(async () => {
-      const document = await this.readDocument();
+      const document = await this.readDocument(true);
       const index = document.quotes.findIndex((candidate) => candidate.id === id);
       if (index === -1) return null;
       const [removed] = document.quotes.splice(index, 1);

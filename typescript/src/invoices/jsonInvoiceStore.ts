@@ -3,6 +3,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { writePrivateJsonFile } from "../persistence/atomicJsonFile.js";
 import { JsonFileLock } from "../persistence/jsonFileLock.js";
 import type { PersistenceWarning } from "../persistence/types.js";
 import type {
@@ -47,7 +48,7 @@ export class JsonInvoiceStore implements InvoiceStore {
     this.writeLock = new JsonFileLock(filePath, warn, lockTimeoutMs);
   }
 
-  private async readDocument(): Promise<InvoiceDocument> {
+  private async readDocument(lockHeld = false): Promise<InvoiceDocument> {
     let raw: string;
     try {
       raw = await fs.readFile(this.filePath, "utf8");
@@ -60,6 +61,9 @@ export class JsonInvoiceStore implements InvoiceStore {
     try {
       parsed = JSON.parse(raw);
     } catch {
+      if (!lockHeld) {
+        return this.writeLock.run(() => this.readDocument(true), "corruption recovery");
+      }
       await this.setAside();
       return { version: DOCUMENT_VERSION, invoices: [] };
     }
@@ -89,18 +93,7 @@ export class JsonInvoiceStore implements InvoiceStore {
   }
 
   private async writeDocument(document: InvoiceDocument): Promise<void> {
-    await fs.mkdir(path.dirname(this.filePath), { recursive: true });
-    const tempPath = path.join(
-      path.dirname(this.filePath),
-      `.${path.basename(this.filePath)}.tmp-${process.pid}-${randomUUID()}`,
-    );
-    const handle = await fs.open(tempPath, "w");
-    try {
-      await handle.writeFile(`${JSON.stringify(document, null, 2)}\n`, "utf8");
-    } finally {
-      await handle.close();
-    }
-    await fs.rename(tempPath, this.filePath);
+    await writePrivateJsonFile(this.filePath, document);
   }
 
   async list(filter: { clientId?: string; status?: InvoiceStatus } = {}): Promise<Invoice[]> {
@@ -117,7 +110,7 @@ export class JsonInvoiceStore implements InvoiceStore {
 
   async add(input: InvoiceInput): Promise<Invoice> {
     return this.writeLock.run(async () => {
-      const document = await this.readDocument();
+      const document = await this.readDocument(true);
       const duplicateKey = input.duplicateKey?.trim();
       if (duplicateKey) {
         const existing = document.invoices.find((invoice) => invoice.duplicateKey === duplicateKey);
@@ -132,7 +125,7 @@ export class JsonInvoiceStore implements InvoiceStore {
 
   async update(id: string, update: InvoiceUpdate): Promise<Invoice | null> {
     return this.writeLock.run(async () => {
-      const document = await this.readDocument();
+      const document = await this.readDocument(true);
       const invoice = document.invoices.find((candidate) => candidate.id === id);
       if (!invoice) return null;
       applyInvoiceUpdate(invoice, update);
@@ -143,7 +136,7 @@ export class JsonInvoiceStore implements InvoiceStore {
 
   async issue(id: string): Promise<Invoice | null> {
     return this.writeLock.run(async () => {
-      const document = await this.readDocument();
+      const document = await this.readDocument(true);
       const invoice = document.invoices.find((candidate) => candidate.id === id);
       if (!invoice) return null;
       if (invoice.status !== "draft") throw new Error("Only draft invoices can be issued.");
@@ -160,7 +153,7 @@ export class JsonInvoiceStore implements InvoiceStore {
 
   async void(id: string, reason: string): Promise<Invoice | null> {
     return this.writeLock.run(async () => {
-      const document = await this.readDocument();
+      const document = await this.readDocument(true);
       const invoice = document.invoices.find((candidate) => candidate.id === id);
       if (!invoice) return null;
       if (invoice.status === "void") throw new Error("Invoice is already void.");
@@ -178,7 +171,7 @@ export class JsonInvoiceStore implements InvoiceStore {
 
   async recordPayment(id: string, input: InvoicePaymentInput): Promise<Invoice | null> {
     return this.writeLock.run(async () => {
-      const document = await this.readDocument();
+      const document = await this.readDocument(true);
       const invoice = document.invoices.find((candidate) => candidate.id === id);
       if (!invoice) return null;
       if (invoice.status !== "issued" && invoice.status !== "paid") {

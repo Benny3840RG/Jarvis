@@ -154,6 +154,37 @@ describe("assistant-state write validation", () => {
 });
 
 describe("JSONPersistence", () => {
+  for (const read of ["loadState", "listTasks", "listReminders"] as const) {
+    it(`${read} cannot quarantine a concurrent acknowledged write`, async (t) => {
+      const file = path.join(tempDir, "concurrent-recovery.json");
+      await fs.writeFile(file, "{");
+      const reader = new JSONPersistence(file, () => undefined);
+      const writer = new JSONPersistence(file, () => undefined, 40);
+      const readFile = fs.readFile.bind(fs);
+      let intercept = true;
+
+      // Suspend a reader after it has captured corrupt bytes. A different
+      // provider tries to recover and write before that reader can quarantine.
+      t.mock.method(fs, "readFile", async (...args: Parameters<typeof fs.readFile>) => {
+        const raw = await readFile(...args);
+        if (args[0] === file && intercept) {
+          intercept = false;
+          await writer.addTask("Acknowledged task", "personal");
+        }
+        return raw;
+      });
+
+      await reader[read]();
+      assert.deepEqual(
+        (await writer.listTasks()).map((task) => task.title),
+        ["Acknowledged task"],
+      );
+      const quarantined = (await fs.readdir(tempDir)).filter((name) => name.includes(".corrupt-"));
+      assert.equal(quarantined.length, 1);
+      assert.equal(await readFile(path.join(tempDir, quarantined[0]), "utf8"), "{");
+    });
+  }
+
   it("returns empty durable collections when the file is missing", async () => {
     const provider = new JSONPersistence(path.join(tempDir, "missing.json"));
     assert.deepEqual(await provider.loadState(), {});

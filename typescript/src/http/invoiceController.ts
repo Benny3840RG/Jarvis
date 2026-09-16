@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import {
   Body,
   Controller,
@@ -9,7 +11,9 @@ import {
   Patch,
   Post,
   Query,
+  Req,
 } from "@nestjs/common";
+import type { FastifyRequest } from "fastify";
 
 import type { Invoice, InvoiceStore } from "../invoices/invoice.js";
 import {
@@ -20,7 +24,12 @@ import {
   parseVoidInvoice,
 } from "./invoiceRequest.js";
 import { JarvisProblem } from "./problemDetails.js";
+import { parseIdempotencyKey } from "./taskRequest.js";
 import { HTTP_INVOICE_STORE } from "./tokens.js";
+
+type CachedPayment = { fingerprint: string; invoice: Invoice };
+type PendingPayment = { fingerprint: string; invoice: Promise<Invoice | null> };
+const IDEMPOTENCY_CACHE_LIMIT = 1_000;
 
 function invalid(detail: string): JarvisProblem {
   return new JarvisProblem(
@@ -60,8 +69,15 @@ function isInvalidInvoiceError(error: unknown): error is Error {
   );
 }
 
+function requestFingerprint(input: unknown): string {
+  return createHash("sha256").update(JSON.stringify(input), "utf8").digest("hex");
+}
+
 @Controller("api/v1/invoices")
 export class InvoiceController {
+  private readonly cachedPayments = new Map<string, CachedPayment>();
+  private readonly pendingPayments = new Map<string, PendingPayment>();
+
   constructor(@Inject(HTTP_INVOICE_STORE) private readonly invoices: InvoiceStore) {}
 
   @Get()
@@ -168,7 +184,11 @@ export class InvoiceController {
   }
 
   @Post(":invoiceId/payments")
-  async recordPayment(@Param("invoiceId") invoiceId: string, @Body() body: unknown) {
+  async recordPayment(
+    @Param("invoiceId") invoiceId: string,
+    @Body() body: unknown,
+    @Req() request: FastifyRequest,
+  ) {
     const input = (() => {
       try {
         return parseInvoicePayment(body);
@@ -176,14 +196,62 @@ export class InvoiceController {
         throw invalid(error instanceof Error ? error.message : "The payment request is invalid.");
       }
     })();
+    let key: string;
+    try {
+      key = parseIdempotencyKey(request.headers["idempotency-key"]);
+    } catch (error: unknown) {
+      throw invalid(error instanceof Error ? error.message : "Idempotency-Key is invalid.");
+    }
+    // A real-world payment must never be recorded twice because an HTTP
+    // response was lost -- this mirrors TaskController/ReminderController's
+    // idempotency-key cache exactly. Only a genuine successful record is
+    // cached; a not-found or invalid-state result carries no durable effect
+    // to protect, so it is never cached and a retry just repeats it.
+    const fingerprint = requestFingerprint({ invoiceId, ...input });
+    const cached = this.cachedPayments.get(key);
+    if (cached) {
+      if (cached.fingerprint !== fingerprint) {
+        throw new JarvisProblem(
+          HttpStatus.CONFLICT,
+          "invoice-payment-idempotency-conflict",
+          "Idempotency Key Conflict",
+          "Idempotency-Key was already used for a different payment request.",
+        );
+      }
+      return invoiceResponse(cached.invoice);
+    }
+    const pending = this.pendingPayments.get(key);
+    if (pending) {
+      if (pending.fingerprint !== fingerprint) {
+        throw new JarvisProblem(
+          HttpStatus.CONFLICT,
+          "invoice-payment-idempotency-conflict",
+          "Idempotency Key Conflict",
+          "Idempotency-Key was already used for a different payment request.",
+        );
+      }
+      const invoice = await pending.invoice;
+      if (!invoice) throw notFound();
+      return invoiceResponse(invoice);
+    }
+    const record = this.invoices.recordPayment(invoiceId, input);
+    this.pendingPayments.set(key, { fingerprint, invoice: record });
     let invoice: Invoice | null;
     try {
-      invoice = await this.invoices.recordPayment(invoiceId, input);
+      invoice = await record;
     } catch (error: unknown) {
       if (isInvalidInvoiceError(error)) throw invalid(error.message);
       throw operationFailed();
+    } finally {
+      this.pendingPayments.delete(key);
     }
     if (!invoice) throw notFound();
+    this.cachedPayments.set(key, { fingerprint, invoice });
+    while (this.cachedPayments.size > IDEMPOTENCY_CACHE_LIMIT) {
+      const oldestKey = this.cachedPayments.keys().next().value;
+      if (oldestKey === undefined) break;
+      this.cachedPayments.delete(oldestKey);
+    }
     return invoiceResponse(invoice);
   }
 }

@@ -3,6 +3,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { writePrivateJsonFile } from "../persistence/atomicJsonFile.js";
 import { JsonFileLock } from "../persistence/jsonFileLock.js";
 import type { PersistenceWarning } from "../persistence/types.js";
 import { applyErrandUpdate, cloneErrand, createErrand, normalizeLocation } from "./errandData.js";
@@ -76,7 +77,7 @@ export class JsonErrandStore implements ErrandStore {
     this.writeLock = new JsonFileLock(filePath, warn, lockTimeoutMs);
   }
 
-  private async readDocument(): Promise<ErrandDocument> {
+  private async readDocument(lockHeld = false): Promise<ErrandDocument> {
     let raw: string;
     try {
       raw = await fs.readFile(this.filePath, "utf8");
@@ -89,6 +90,9 @@ export class JsonErrandStore implements ErrandStore {
     try {
       parsed = JSON.parse(raw);
     } catch {
+      if (!lockHeld) {
+        return this.writeLock.run(() => this.readDocument(true), "corruption recovery");
+      }
       await this.setAside();
       return { version: DOCUMENT_VERSION, errands: [] };
     }
@@ -113,18 +117,7 @@ export class JsonErrandStore implements ErrandStore {
   }
 
   private async writeDocument(document: ErrandDocument): Promise<void> {
-    await fs.mkdir(path.dirname(this.filePath), { recursive: true });
-    const tempPath = path.join(
-      path.dirname(this.filePath),
-      `.${path.basename(this.filePath)}.tmp-${process.pid}-${randomUUID()}`,
-    );
-    const handle = await fs.open(tempPath, "w");
-    try {
-      await handle.writeFile(`${JSON.stringify(document, null, 2)}\n`, "utf8");
-    } finally {
-      await handle.close();
-    }
-    await fs.rename(tempPath, this.filePath);
+    await writePrivateJsonFile(this.filePath, document);
   }
 
   async list(): Promise<Errand[]> {
@@ -138,7 +131,7 @@ export class JsonErrandStore implements ErrandStore {
 
   async add(input: ErrandInput): Promise<Errand> {
     return this.writeLock.run(async () => {
-      const document = await this.readDocument();
+      const document = await this.readDocument(true);
       const errand = createErrand(input);
       document.errands.push(errand);
       await this.writeDocument(document);
@@ -148,7 +141,7 @@ export class JsonErrandStore implements ErrandStore {
 
   async update(id: string, update: ErrandUpdate): Promise<Errand | null> {
     return this.writeLock.run(async () => {
-      const document = await this.readDocument();
+      const document = await this.readDocument(true);
       const errand = document.errands.find((candidate) => candidate.id === id);
       if (!errand) return null;
       applyErrandUpdate(errand, update);
@@ -159,7 +152,7 @@ export class JsonErrandStore implements ErrandStore {
 
   async remove(id: string): Promise<Errand | null> {
     return this.writeLock.run(async () => {
-      const document = await this.readDocument();
+      const document = await this.readDocument(true);
       const index = document.errands.findIndex((candidate) => candidate.id === id);
       if (index === -1) return null;
       const [removed] = document.errands.splice(index, 1);
