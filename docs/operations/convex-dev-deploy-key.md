@@ -1,98 +1,88 @@
-# Convex dev deployment: scoped deploy-key mechanism
+# Convex development deployment with a scoped key
 
-Status: current. Covers pushing code to the `dev:outgoing-ram-798` Convex deployment
-only. This is separate from `JARVIS_SERVICE_TOKEN` (runtime app auth, see README's
-"Convex persistence and service authentication") — this doc is about deploying
-functions/schema, not about the running app authenticating its own users.
+This wrapper targets only `dev:outgoing-ram-798` at
+`https://outgoing-ram-798.convex.cloud`. Deployment credentials are separate from
+`JARVIS_SERVICE_TOKEN`, which authenticates the running application.
 
-## Why this exists
-
-The original ad hoc flow resolved a deployment admin key from Benny's personal Convex
-access token (`~/.convex/config.json`, account-wide scope, via
-`POST /api/deployment/authorize_within_current_project`) and passed it to the CLI as
-`--admin-key <secret>` on argv. That works, but every deploy depended on an
-account-wide credential and put the secret in process argv (visible to other local
-processes via `ps`/`/proc/<pid>/cmdline`). #553 recovery replaced it with a
-deployment-scoped deploy key injected only via environment.
-
-## Mechanism
-
-Script: `typescript/scripts/convex-deploy-dev-outgoing-ram-798.mjs`. Run from
-`typescript/`:
+Run from `typescript/` in the exact reviewed checkout:
 
 ```bash
 node scripts/convex-deploy-dev-outgoing-ram-798.mjs --dry-run
+# After Benny approves the exact commit and displayed change plan:
 node scripts/convex-deploy-dev-outgoing-ram-798.mjs --deploy
 node scripts/convex-deploy-dev-outgoing-ram-798.mjs --verify
 ```
 
-It locates the repo relative to its own file location (`import.meta.url`), so it works
-from any checkout or worktree, not just the one it was written in.
+The script resolves the checkout from its own location. There are no target
+flags. It never merges, approves a candidate, reconciles mission state or resets
+worker/review attempts.
 
-Modes:
+## Preflight and verification
 
-- `--dry-run` — non-mutating. On success, writes a single-use, git-SHA-bound approval
-  receipt with a 20-minute TTL to `~/.local/state/jarvis-convex/last-dry-run-receipt.json`.
-- `--deploy` — real deploy. Requires a receipt from `--dry-run` matching the current
-  commit and still within its TTL; consumes (deletes) it whether or not the deploy
-  itself succeeds. There is no path to a real deploy without a fresh matching receipt.
-- `--verify` — non-mutating, identical dry-run diff check, no receipt written. Use
-  after a real deploy to confirm the change landed (an already-applied change reports
-  an empty/no-op diff).
+`--dry-run` invalidates any previous receipt **before** checking the working tree,
+credentials or provider. A successful preflight writes a versioned receipt bound
+to the exact Git SHA, target URL and SHA-256 digest of the validated structured
+Convex finish diff. The receipt expires after twenty minutes. It proves that a
+preflight ran; it is **not owner approval**.
 
-Hardcoded, non-parameterized target: `dev`, `outgoing-ram-798`,
-`https://outgoing-ram-798.convex.cloud`. Do not add a flag to redirect this script at
-another deployment — copy it and change the constants instead, so a flag-parsing
-mistake can never reach `prod`.
+`--deploy` consumes the receipt, validates its schema, target, SHA and timestamp,
+and refuses missing, malformed, future-dated or expired evidence. It runs another
+non-deploying preflight and requires the same structured plan before invoking the
+mutating command. The checkout is checked again and the receipt must still be
+within its lifetime after that preflight. No automatic retry occurs after any
+failure. Repeat the dry run and obtain a fresh exact-candidate decision when the
+candidate or plan changes.
+
+`--verify` requires structured evidence of **no pending changes**, including
+functions and indexes. A successful CLI exit or a matching URL alone is
+insufficient. Missing, ambiguous or unsupported diff output fails closed.
+Verification writes no receipt and does not establish application functionality,
+mission reconciliation, CI, peer review or Jarvis PASS.
+
+The parser uses the installed Convex CLI's verbose `finishPushDiff` shape. It
+accepts root-component function changes and index additions/enabling; it refuses
+module/index removal, index disabling, schema/runtime/auth/cron changes and
+component lifecycle changes. Those broader changes need separately scoped
+preparation. Unknown diff fields fail closed rather than being discarded.
+Only the validated finish diff and concise results are printed; raw verbose
+provider output and errors are withheld.
+
+**Concurrency limit:** the CLI recomputes its push after preflight. The wrapper
+cannot atomically lock Convex against another deployment. Keep other deployment
+writers stopped from approved preflight through deployment and verification.
+The preflight is not a transactional guarantee against concurrent remote changes.
+A failed mutating invocation has an uncertain outcome until independent readback;
+never interpret a post-execution refusal as proof that nothing changed.
 
 ## Credential handling
 
-- Secret file: `~/.local/state/jarvis-convex/dev-outgoing-ram-798.env` — outside any
-  git repository, directory mode `0700`, file mode `0600`, single line
-  `CONVEX_DEPLOY_KEY=dev:outgoing-ram-798|...`.
-- Provisioned once via `deployment token create`, which needs Benny's personal token —
-  this is the **only** step permitted to touch `~/.convex/config.json`:
-  ```
+- Store one line, `CONVEX_DEPLOY_KEY=dev:outgoing-ram-798|...`, in
+  `~/.local/state/jarvis-convex/dev-outgoing-ram-798.env`.
+- The state directory must be owned by the current user with mode `0700`; the
+  key and receipt must be owned regular files with mode `0600`. Symlink files
+  and a symlink state directory are refused before provider access.
+- Provisioning is a separate owner operation. The CLI supports saving a scoped
+  token directly to the file without printing it:
+
+  ```bash
   node node_modules/convex/bin/main.js deployment token create <name> \
     --deployment-name outgoing-ram-798 \
     --save-env ~/.local/state/jarvis-convex/dev-outgoing-ram-798.env
   ```
-  `--save-env` writes the key straight to disk; the CLI never prints it, so an agent
-  running this command does not see the secret value either.
-- The script loads the key from that file, checks its prefix
-  (`dev:outgoing-ram-798|`) and refuses anything containing `prod` before any network
-  call, then injects it **only** into the Convex child process's environment as
-  `CONVEX_DEPLOY_KEY` — never as a CLI argument.
-- All captured child stdout/stderr is redacted (literal key value stripped) before
-  being written to the console or a log file.
-- Rotate by re-running `deployment token create` with a new name and the same
-  `--save-env` path, then delete the old token from the Convex dashboard.
 
-## Known limitation
+- Never resolve deployment credentials from `~/.convex/config.json` or pass
+  secrets through `--admin-key` or other command arguments. The wrapper injects
+  only the scoped key and a small environment allowlist into the CLI; unrelated
+  application secrets and `NODE_OPTIONS` are excluded.
+- Rotate with a new scoped token and revoke the former token through the
+  existing owner-controlled mechanism. Do not paste keys into chat or logs.
 
-This Convex CLI/API version (`1.45.0`) has no `deployment:deploy`-only permission
-scope. A key from `deployment token create` can deploy, run functions, and read/write
-data on that one deployment. The actual privilege reduction versus the old personal
-token is the single-deployment binding, not a deploy-only role. Do not describe this
-mechanism as least-privilege beyond that.
+Convex CLI/API 1.45.0 does not offer a deploy-only permission. This key can also
+run functions and read/write data on its one deployment. The restriction is to
+one development deployment, not to deployment operations alone.
 
-## Safety gates
+## Retired flow
 
-- Refuses if the deployment key file is missing, empty, prefixed `prod`, or doesn't
-  match `dev:outgoing-ram-798|` — before any network activity.
-- Refuses if the working tree (in the checkout the script targets) is not clean.
-- Refuses `--deploy` without a fresh, SHA-matched, non-expired `--dry-run` receipt —
-  this is the technical form of "explicit approval between dry-run and real deploy";
-  in practice an agent should still only run `--deploy` after the owner says so in
-  chat, same as for any other mutating action.
-- Scans all deploy output for deletion/destructive-schema signals
-  (`Deleted table indexes`, `Would delete`, `removed_indexes`, schema-breaking
-  language, data loss) and for the expected target URL, aborting rather than
-  declaring success if anything doesn't match.
-
-## Retired
-
-`inspect-deployment.mjs` and `execute-deployment.mjs` (the personal-access-token /
-`--admin-key` argv flow) are retired to
-`~/jarvis-session-handoffs/553-recovery-evidence/deprecated-admin-key-flow/` for the
-audit trail. Do not run them for new deploys.
+The former personal-token/admin-key scripts remain in the local
+`553-recovery-evidence/deprecated-admin-key-flow/` audit folder. Do not run them
+for new deployments.

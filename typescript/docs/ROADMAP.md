@@ -1,5 +1,13 @@
 # Jarvis TypeScript Roadmap
 
+## Development deployment wrapper recovery (#564, 2026-09-16)
+
+- Reproduced stale receipt reuse, invalid timestamp acceptance and false verification success before repairing the wrapper.
+- Preflight now invalidates old receipts, validates structured function/index diffs, and binds the target, commit and plan. Deployment consumes the receipt and repeats preflight before mutation.
+- Verification requires no pending changes. Private key/receipt paths and a minimal child environment preserve credential boundaries.
+- No HTTP/MCP contract, Convex function/schema, durable mission history, worker limits or phone dashboard changes.
+- Next: fresh exact-head independent review, trusted CI and Jarvis gate; re-read #552/#553 recovery state before any separately approved development action.
+
 ## Maintenance notification repair (2026-09-16, #548)
 
 Run `35058594031` correctly deferred #522 and #553 for base drift, but its
