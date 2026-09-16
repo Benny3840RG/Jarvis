@@ -38,8 +38,7 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: read
-      pull-requests: read
-      issues: write # Trusted coordinator publishes diagnostic base-drift notices only.
+      pull-requests: write # Required for diagnostic comments on PRs; no issue writes.
       checks: read
       actions: write
     outputs:

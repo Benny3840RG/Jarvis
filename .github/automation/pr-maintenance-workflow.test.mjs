@@ -8,6 +8,25 @@ const workflow = fs.readFileSync(
 );
 const reviewJob = workflow.split("\n  review:")[1].split("\n  publish:")[0];
 const publishJob = workflow.split("\n  publish:")[1];
+const prepareJob = workflow.split("\n  prepare:")[1].split("\n  review:")[0];
+
+test("diagnostic PR comments receive only the required coordinator permissions", () => {
+  const permissions = prepareJob
+    .split("    permissions:\n")[1]
+    .split("    outputs:")[0]
+    .trim()
+    .split("\n")
+    .map((line) => line.trim().split(/\s+#/)[0]);
+  assert.deepEqual(permissions, [
+    "contents: read",
+    "pull-requests: write",
+    "checks: read",
+    "actions: write",
+  ]);
+  assert.match(prepareJob, /ref: \$\{\{ github.workflow_sha \}\}/);
+  assert.match(prepareJob, /persist-credentials: false/);
+  assert.doesNotMatch(prepareJob, /codex-action|npm (?:ci|test|run)/);
+});
 
 test("run names containing issue hashes are folded YAML scalars, not comments", () => {
   for (const path of ["jarvis-pr-maintenance.yml", "jarvis-autobuild.yml"]) {
