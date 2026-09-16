@@ -56,14 +56,20 @@ cp.execFileSync = (_exe, args) => Buffer.from(args[0] === 'status' ? '' : '${sha
 cp.spawnSync = (_exe, args, options) => {
   const input = JSON.parse(fs.readFileSync(${JSON.stringify(fixture)}, 'utf8'));
   fs.appendFileSync(${JSON.stringify(calls)}, JSON.stringify({args, envKeys:Object.keys(options.env)})+'\\n');
-  const text = '${target}\\n' + (input.message || '') + '\\n' + (args.includes('--verbose') ? JSON.stringify(input.plan, null, 2) : 'Would have deployed') + '\\n';
+  const text = '${target}\\n' + (input.message || '') + '\\n' + (args.includes('--verbose') ? 'startPush: '+JSON.stringify({schemaChange:{indexDiffs:input.startIndexes},environmentVariables:{PRIVATE_TEST_VALUE:'never-print-this-provider-secret'}}, null, 2)+'\\n'+JSON.stringify(input.plan, null, 2) : 'Would have deployed') + '\\n';
   return {status:input.status??0, stdout:Buffer.from(text), stderr:Buffer.alloc(0)};
 };
 syncBuiltinESMExports();
 `,
   );
-  function run(mode: string, plan: unknown = noChange, status = 0, message = "") {
-    writeFileSync(fixture, JSON.stringify({ plan, status, message }));
+  function run(
+    mode: string,
+    plan: unknown = noChange,
+    status = 0,
+    message = "",
+    startIndexes: unknown = {},
+  ) {
+    writeFileSync(fixture, JSON.stringify({ plan, status, message, startIndexes }));
     return spawnSync(
       process.execPath,
       ["--import", preload, resolve("scripts/convex-deploy-dev-outgoing-ram-798.mjs"), mode],
@@ -263,3 +269,36 @@ test("empty CLI runtime-diff heading is not a change, but version entries are re
     h.close();
   }
 });
+
+test("CLI uses only the private explicit env file and suppresses verbose provider secrets", () => {
+  const h = harness();
+  try {
+    const result = h.run("--verify");
+    assert.equal(result.status, 0);
+    const args = h.calls()[0].args;
+    assert.equal(args[args.indexOf("--env-file") + 1], h.key);
+    assert.equal(args.join(" ").includes("fake-test-only-key"), false);
+    assert.equal(
+      (result.stdout + result.stderr).includes("never-print-this-provider-secret"),
+      false,
+    );
+  } finally {
+    h.close();
+  }
+});
+for (const effect of ["added_indexes", "removed_indexes"]) {
+  test(`start-only ${effect} prevents false no-change verification`, () => {
+    const h = harness();
+    try {
+      const indexes = { added_indexes: [], removed_indexes: [] } as Record<string, unknown[]>;
+      indexes[effect].push({ name: "tasks.by_name", type: "database", fields: ["name"] });
+      assert.notEqual(h.run("--verify", noChange, 0, "", { "": indexes }).status, 0);
+      if (effect === "removed_indexes") {
+        assert.notEqual(h.run("--dry-run", noChange, 0, "", { "": indexes }).status, 0);
+        assert.equal(existsSync(h.receipt), false);
+      }
+    } finally {
+      h.close();
+    }
+  });
+}

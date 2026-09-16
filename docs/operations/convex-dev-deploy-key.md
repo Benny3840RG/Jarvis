@@ -22,7 +22,7 @@ worker/review attempts.
 `--dry-run` invalidates any previous receipt **before** checking the working tree,
 credentials or provider. A successful preflight writes a versioned receipt bound
 to the exact Git SHA, target URL and SHA-256 digest of the validated structured
-Convex finish diff. The receipt expires after twenty minutes. It proves that a
+Convex finish diff and start-phase index changes. The receipt expires after twenty minutes. It proves that a
 preflight ran; it is **not owner approval**.
 
 `--deploy` consumes the receipt, validates its schema, target, SHA and timestamp,
@@ -39,7 +39,8 @@ insufficient. Missing, ambiguous or unsupported diff output fails closed.
 Verification writes no receipt and does not establish application functionality,
 mission reconciliation, CI, peer review or Jarvis PASS.
 
-The parser uses the installed Convex CLI's verbose `finishPushDiff` shape. It
+The parser validates the installed Convex CLI's verbose `finishPushDiff` and
+`startPush.schemaChange.indexDiffs` shapes. It
 accepts root-component function changes and index additions/enabling; it refuses
 module/index removal, index disabling, schema/runtime/auth/cron changes and
 component lifecycle changes. Those broader changes need separately scoped
@@ -73,7 +74,10 @@ never interpret a post-execution refusal as proof that nothing changed.
 - Never resolve deployment credentials from `~/.convex/config.json` or pass
   secrets through `--admin-key` or other command arguments. The wrapper injects
   only the scoped key and a small environment allowlist into the CLI; unrelated
-  application secrets and `NODE_OPTIONS` are excluded.
+  application secrets and `NODE_OPTIONS` are excluded. The CLI also receives
+  `--env-file` pointing only to the checked scoped-key file, preventing its
+  default loading of checkout `.env` and `.env.local` files. The argument is a
+  file path, never the secret value.
 - Rotate with a new scoped token and revoke the former token through the
   existing owner-controlled mechanism. Do not paste keys into chat or logs.
 

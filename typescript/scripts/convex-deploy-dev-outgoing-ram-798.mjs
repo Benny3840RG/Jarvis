@@ -70,6 +70,8 @@ function runConvex(dryRun, key) {
     "node_modules/convex/bin/main.js",
     "deploy",
     "--verbose",
+    "--env-file",
+    KEY_FILE,
     "--codegen",
     "disable",
     "--typecheck",
@@ -106,7 +108,25 @@ function runConvex(dryRun, key) {
     })
     .filter((value) => value && Object.hasOwn(value, "componentDiffs"));
   if (matches.length !== 1) fail("Exactly one structured Convex finish diff is required.");
-  return validatePlan(matches[0]);
+  const starts = [...output.matchAll(/^startPush: (\{\r?\n[\s\S]*?^\})/gm)].map((match) => {
+    try {
+      return JSON.parse(match[1]);
+    } catch {
+      return null;
+    }
+  });
+  if (starts.length !== 1 || !starts[0]?.schemaChange)
+    fail("Exactly one structured Convex start response is required.");
+  const preflightIndexDiffs = starts[0].schemaChange.indexDiffs ?? {};
+  if (
+    !preflightIndexDiffs ||
+    typeof preflightIndexDiffs !== "object" ||
+    Array.isArray(preflightIndexDiffs) ||
+    Object.keys(preflightIndexDiffs).some((key) => key !== "")
+  )
+    fail("Unsupported start-phase component index evidence.");
+  for (const indexes of Object.values(preflightIndexDiffs)) validateIndexes(indexes);
+  return { ...validatePlan(matches[0]), preflightIndexDiffs };
 }
 function object(value, keys, label) {
   if (
@@ -152,39 +172,66 @@ function validatePlan(plan) {
     object(root.cronDiff, ["added", "updated", "deleted"], "cron diff");
     if (Object.values(root.cronDiff).some((items) => array(items, "cron").length))
       fail("Cron changes require separate preparation.");
-    const indexes = root.indexDiff;
-    object(
-      indexes,
-      [
-        "added_indexes",
-        "removed_indexes",
-        ...["enabled_indexes", "disabled_indexes"].filter((key) =>
-          Object.hasOwn(indexes || {}, key),
-        ),
-      ],
-      "index diff",
-    );
-    if (
-      array(indexes.removed_indexes, "removed indexes").length ||
-      array(indexes.disabled_indexes || [], "disabled indexes").length
-    )
-      fail("Index removal or disabling is refused.");
-    for (const index of [
-      ...array(indexes.added_indexes, "added indexes"),
-      ...array(indexes.enabled_indexes || [], "enabled indexes"),
-    ]) {
-      if (
-        !index ||
-        typeof index !== "object" ||
-        typeof index.name !== "string" ||
-        !["database", "search", "vector"].includes(index.type)
-      )
-        fail("Invalid index evidence.");
-    }
+    validateIndexes(root.indexDiff);
     if (root.schemaDiff !== null || root.udfConfigDiff !== null)
       fail("Schema/runtime changes require separate preparation.");
   }
   return plan;
+}
+function validateIndexes(indexes) {
+  object(
+    indexes,
+    [
+      "added_indexes",
+      "removed_indexes",
+      ...["enabled_indexes", "disabled_indexes"].filter((key) => Object.hasOwn(indexes || {}, key)),
+    ],
+    "index diff",
+  );
+  if (
+    array(indexes.removed_indexes, "removed indexes").length ||
+    array(indexes.disabled_indexes || [], "disabled indexes").length
+  )
+    fail("Index removal or disabling is refused.");
+  for (const index of [
+    ...array(indexes.added_indexes, "added indexes"),
+    ...array(indexes.enabled_indexes || [], "enabled indexes"),
+  ]) {
+    if (!index || !["database", "search", "vector"].includes(index.type))
+      fail("Invalid index evidence.");
+    const fields =
+      index.type === "database"
+        ? ["fields"]
+        : index.type === "search"
+          ? ["searchField", "filterFields"]
+          : ["dimensions", "vectorField", "filterFields"];
+    object(
+      index,
+      ["name", "type", ...fields, ...(Object.hasOwn(index, "staged") ? ["staged"] : [])],
+      "index definition",
+    );
+    if (
+      typeof index.name !== "string" ||
+      !index.name ||
+      (Object.hasOwn(index, "staged") && typeof index.staged !== "boolean")
+    )
+      fail("Invalid index definition.");
+    for (const key of ["fields", "filterFields"].filter((key) => Object.hasOwn(index, key))) {
+      if (array(index[key], "index fields").some((field) => typeof field !== "string" || !field))
+        fail("Invalid index fields.");
+    }
+    for (const key of ["searchField", "vectorField"].filter((key) => Object.hasOwn(index, key))) {
+      if (typeof index[key] !== "string" || !index[key]) fail("Invalid index field.");
+    }
+    if (
+      index.type === "vector" &&
+      (!Number.isSafeInteger(index.dimensions) || index.dimensions <= 0)
+    )
+      fail("Invalid vector dimensions.");
+  }
+}
+function pendingIndexes(indexes) {
+  return indexes.added_indexes.length > 0 || (indexes.enabled_indexes || []).length > 0;
 }
 function canonical(value) {
   if (Array.isArray(value)) return value.map(canonical);
@@ -259,6 +306,8 @@ function verify() {
   const sha = requireCleanWorkingTree();
   const plan = runConvex(true, loadDeployKey());
   requireCleanWorkingTree(sha);
+  if (Object.values(plan.preflightIndexDiffs).some(pendingIndexes))
+    fail("Verification found unapplied start-phase index changes.");
   const root = plan.componentDiffs[""];
   if (
     root &&
