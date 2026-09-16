@@ -202,6 +202,15 @@ npm run smoke:convex
 
 Do not run the smoke command while deliberately testing against production. The deployment guard is there to fail closed.
 
+### Deploying to the dev deployment
+
+Pushing code (as opposed to running the app, which only needs `CONVEX_URL`) uses a
+dedicated, deployment-scoped Convex deploy key rather than a personal access token.
+See [`docs/operations/convex-dev-deploy-key.md`](docs/operations/convex-dev-deploy-key.md)
+for the full mechanism, credential storage, and safety gates. Do not resolve a deploy
+key from `~/.convex/config.json` or pass one via `--admin-key` on the command line;
+both are retired.
+
 ### Backup, verification, and restore
 
 Backups are provider-neutral JSON archives containing assistant state, tasks, reminders, builds, build logs, upgrades, assets, preferences, source IDs, source timestamps, and normalized reminder due data. Files are created with private permissions and an existing backup file is never overwritten. Version 1 and version 2 archives remain accepted and are migrated to the current version during validation (a migrated legacy archive simply carries no build/build-log/upgrade/asset/preference records).
