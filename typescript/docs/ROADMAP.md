@@ -69,6 +69,20 @@ This file is a living record for the autonomous engineering sessions working on
 Jarvis: current state, what changed recently, and what to pick up next. Update
 it at the end of every session.
 
+## Dependabot compatibility repair (2026-09-14)
+
+- Runtime and compiler constraints are declared in `typescript/package.json`;
+  update grouping and the Node type hold live in `.github/dependabot.yml`.
+- Separate major upgrades from the root production/development dependency groups;
+  keep `@types/node` on the Node 24 runtime line.
+- PR #522 retains the Redocly CLI, convex-test, ESLint and typescript-eslint
+  updates while retaining TypeScript 6.0.3 and Node 24 types.
+- PR #520 separately retains Fastify and Zod updates while keeping the MCP Apps
+  1.x API until an intentional SDK 2 migration.
+- Next: migrate MCP Apps with the split SDK 2 packages and protocol tests; revisit
+  TypeScript 7 once the lint toolchain supports its compiler API and peer range.
+- Fresh CI is required for each repaired head before the owner merge decision.
+
 ## Standing Development review repair (2026-09-15)
 
 PR #537's recovery classifier now refuses missing, unknown and contradictory
