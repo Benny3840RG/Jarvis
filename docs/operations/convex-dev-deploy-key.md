@@ -17,10 +17,17 @@ deployment-scoped deploy key injected only via environment.
 
 ## Mechanism
 
-Script: `~/jarvis-session-handoffs/553-recovery-evidence/convex-deploy-dev-outgoing-ram-798.mjs`
-(mission-evidence location; promote it into the repo, e.g. `typescript/scripts/`, if
-it needs to be reachable from a fresh checkout without that evidence folder — not yet
-done as of this doc).
+Script: `typescript/scripts/convex-deploy-dev-outgoing-ram-798.mjs`. Run from
+`typescript/`:
+
+```bash
+node scripts/convex-deploy-dev-outgoing-ram-798.mjs --dry-run
+node scripts/convex-deploy-dev-outgoing-ram-798.mjs --deploy
+node scripts/convex-deploy-dev-outgoing-ram-798.mjs --verify
+```
+
+It locates the repo relative to its own file location (`import.meta.url`), so it works
+from any checkout or worktree, not just the one it was written in.
 
 Modes:
 
