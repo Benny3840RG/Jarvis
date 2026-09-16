@@ -153,6 +153,12 @@ issuer/audience/JWKS configuration, an allowlisted HTTPS origin set, bounded req
 per-client rate budget. The proxy must terminate TLS and send `X-Forwarded-Proto: https`; the
 application does not expose a plaintext remote listener.
 
+OIDC verification caches signing keys for five minutes. Concurrent cache misses,
+expiry reloads and key-rotation refreshes share one pending JWKS download per
+verifier. A failed download rejects the waiting verifications and clears the
+pending request so a later verification can retry. The download retains its
+two-second timeout; this request sharing does not commission the OIDC provider.
+
 This repository-side boundary does not commission a hosting provider, create OIDC credentials, or
 approve public exposure. MCP remains loopback-only. The service token must remain server-side and
 must never enter model input, widget state, URLs, logs, or tool arguments.

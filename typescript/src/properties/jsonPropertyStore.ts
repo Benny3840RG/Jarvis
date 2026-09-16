@@ -85,7 +85,7 @@ export class JsonPropertyStore implements PropertyStore {
     this.writeLock = new JsonFileLock(filePath, warn, lockTimeoutMs);
   }
 
-  private async readDocument(): Promise<PropertyDocument> {
+  private async readDocument(lockHeld = false): Promise<PropertyDocument> {
     let raw: string;
     try {
       raw = await fs.readFile(this.filePath, "utf8");
@@ -98,6 +98,9 @@ export class JsonPropertyStore implements PropertyStore {
     try {
       parsed = JSON.parse(raw);
     } catch {
+      if (!lockHeld) {
+        return this.writeLock.run(() => this.readDocument(true), "corruption recovery");
+      }
       await this.setAside();
       return { version: DOCUMENT_VERSION, properties: [] };
     }
@@ -139,7 +142,7 @@ export class JsonPropertyStore implements PropertyStore {
 
   async add(input: PropertyInput): Promise<Property> {
     return this.writeLock.run(async () => {
-      const document = await this.readDocument();
+      const document = await this.readDocument(true);
       const now = Date.now();
       const property: Property = {
         id: randomUUID(),
@@ -172,7 +175,7 @@ export class JsonPropertyStore implements PropertyStore {
       throw new Error("Property update requires at least one changed field.");
     }
     return this.writeLock.run(async () => {
-      const document = await this.readDocument();
+      const document = await this.readDocument(true);
       const property = document.properties.find((candidate) => candidate.id === id);
       if (!property) return null;
       if (update.clientId !== undefined)
@@ -198,7 +201,7 @@ export class JsonPropertyStore implements PropertyStore {
 
   async remove(id: string): Promise<Property | null> {
     return this.writeLock.run(async () => {
-      const document = await this.readDocument();
+      const document = await this.readDocument(true);
       const index = document.properties.findIndex((candidate) => candidate.id === id);
       if (index === -1) return null;
       const [removed] = document.properties.splice(index, 1);

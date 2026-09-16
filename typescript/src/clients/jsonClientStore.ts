@@ -77,7 +77,7 @@ export class JsonClientStore implements ClientStore {
     this.writeLock = new JsonFileLock(filePath, warn, lockTimeoutMs);
   }
 
-  private async readDocument(): Promise<ClientDocument> {
+  private async readDocument(lockHeld = false): Promise<ClientDocument> {
     let raw: string;
     try {
       raw = await fs.readFile(this.filePath, "utf8");
@@ -90,6 +90,9 @@ export class JsonClientStore implements ClientStore {
     try {
       parsed = JSON.parse(raw);
     } catch {
+      if (!lockHeld) {
+        return this.writeLock.run(() => this.readDocument(true), "corruption recovery");
+      }
       await this.setAside();
       return { version: DOCUMENT_VERSION, clients: [] };
     }
@@ -128,7 +131,7 @@ export class JsonClientStore implements ClientStore {
 
   async add(input: ClientInput): Promise<Client> {
     return this.writeLock.run(async () => {
-      const document = await this.readDocument();
+      const document = await this.readDocument(true);
       const now = Date.now();
       const client: Client = {
         id: randomUUID(),
@@ -149,7 +152,7 @@ export class JsonClientStore implements ClientStore {
       throw new Error("Client update requires a name, contacts, or notes change.");
     }
     return this.writeLock.run(async () => {
-      const document = await this.readDocument();
+      const document = await this.readDocument(true);
       const client = document.clients.find((candidate) => candidate.id === id);
       if (!client) return null;
       if (update.name !== undefined) client.name = requiredName(update.name);
@@ -167,7 +170,7 @@ export class JsonClientStore implements ClientStore {
 
   async remove(id: string): Promise<Client | null> {
     return this.writeLock.run(async () => {
-      const document = await this.readDocument();
+      const document = await this.readDocument(true);
       const index = document.clients.findIndex((candidate) => candidate.id === id);
       if (index === -1) return null;
       const [removed] = document.clients.splice(index, 1);
