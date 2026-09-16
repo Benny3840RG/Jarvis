@@ -13,6 +13,7 @@ const KEY_FILE = join(STATE_DIR, "dev-outgoing-ram-798.env");
 const RECEIPT_FILE = join(STATE_DIR, "last-dry-run-receipt.json");
 const EXPECTED_KEY_PREFIX = "dev:outgoing-ram-798|";
 const EXPECTED_URL = "https://outgoing-ram-798.convex.cloud";
+const EXPECTED_ORIGIN = new URL(EXPECTED_URL).origin;
 const RECEIPT_TTL_MS = 20 * 60 * 1000;
 const SHA = /^[a-f0-9]{40}$/;
 const HASH = /^[a-f0-9]{64}$/;
@@ -21,6 +22,12 @@ function fail(message) {
   throw new Error(message);
 }
 function invalidateReceipt() {
+  // Validate the directory (rejects a symlinked STATE_DIR) before any path
+  // beneath it is touched, so this can never be tricked into unlinking a
+  // file outside the intended state directory.
+  privatePath(STATE_DIR, true);
+  if (!existsSync(RECEIPT_FILE)) return;
+  privatePath(RECEIPT_FILE); // must be a private regular file, not a symlink
   try {
     unlinkSync(RECEIPT_FILE);
   } catch (error) {
@@ -92,7 +99,18 @@ function runConvex(dryRun, key) {
   const output = (String(result.stdout || "") + "\n" + String(result.stderr || ""))
     .split(key)
     .join("[REDACTED]");
-  if (!output.includes(EXPECTED_URL)) fail("Expected development target was not confirmed.");
+  // Parse candidate URLs and compare exact origins, rather than a substring
+  // match: a substring check would also accept the expected host embedded
+  // inside an unrelated URL (e.g. as a path segment or a subdomain suffix).
+  const candidateUrls = output.match(/https?:\/\/[^\s"'<>]+/g) || [];
+  const confirmedTarget = candidateUrls.some((candidate) => {
+    try {
+      return new URL(candidate).origin === EXPECTED_ORIGIN;
+    } catch {
+      return false;
+    }
+  });
+  if (!confirmedTarget) fail("Expected development target was not confirmed.");
   // CLI 1.45 can print an empty runtime heading for null versus undefined.
   // Only real +/- version entries constitute a change; the finish diff below
   // independently checks the UDF runtime and all function/index changes.
@@ -115,11 +133,24 @@ function runConvex(dryRun, key) {
       return null;
     }
   });
-  if (starts.length !== 1 || !starts[0]?.schemaChange)
-    fail("Exactly one structured Convex start response is required.");
-  const preflightIndexDiffs = starts[0].schemaChange.indexDiffs ?? {};
+  if (starts.length !== 1) fail("Exactly one structured Convex start response is required.");
+  const schemaChange = starts[0]?.schemaChange;
   if (
-    !preflightIndexDiffs ||
+    !schemaChange ||
+    typeof schemaChange !== "object" ||
+    Array.isArray(schemaChange) ||
+    Object.keys(schemaChange).some(
+      (key) => !["allocatedComponentIds", "schemaIds", "indexDiffs"].includes(key),
+    )
+  )
+    fail("Unsupported start-phase schema-change evidence.");
+  // The provider's schema contract makes indexDiffs optional (absent means
+  // "nothing to report"), but never null; an explicit null is incomplete or
+  // corrupted evidence and must fail closed rather than default to "no diffs".
+  if (Object.hasOwn(schemaChange, "indexDiffs") && schemaChange.indexDiffs === null)
+    fail("Unsupported start-phase schema-change evidence.");
+  const preflightIndexDiffs = schemaChange.indexDiffs ?? {};
+  if (
     typeof preflightIndexDiffs !== "object" ||
     Array.isArray(preflightIndexDiffs) ||
     Object.keys(preflightIndexDiffs).some((key) => key !== "")
@@ -155,8 +186,11 @@ function validatePlan(plan) {
     Object.keys(plan.componentDiffs).some((key) => key !== "")
   )
     fail("Component changes require separate preparation.");
-  const root = plan.componentDiffs[""];
-  if (root) {
+  // Use key presence, not truthiness, to decide whether a root diff exists:
+  // a malformed-but-falsy value (false, 0, "") must still fail validation
+  // instead of being silently treated as "no root component change".
+  if (Object.hasOwn(plan.componentDiffs, "")) {
+    const root = plan.componentDiffs[""];
     object(
       root,
       ["diffType", "moduleDiff", "udfConfigDiff", "cronDiff", "indexDiff", "schemaDiff"],

@@ -313,6 +313,29 @@ for (const effect of ["added_indexes", "removed_indexes"]) {
   });
 }
 
+test("explicit null start-phase indexDiffs is refused, not treated as no pending changes", () => {
+  const h = harness();
+  try {
+    assert.notEqual(h.run("--verify", noChange, 0, "", null).status, 0);
+    assert.notEqual(h.run("--dry-run", noChange, 0, "", null).status, 0);
+    assert.equal(existsSync(h.receipt), false);
+  } finally {
+    h.close();
+  }
+});
+
+test("a falsy but present root component diff is refused, not treated as no root change", () => {
+  const h = harness();
+  try {
+    const plan = { ...structuredClone(noChange), componentDiffs: { "": false } };
+    assert.notEqual(h.run("--verify", plan).status, 0);
+    assert.notEqual(h.run("--dry-run", plan).status, 0);
+    assert.equal(existsSync(h.receipt), false);
+  } finally {
+    h.close();
+  }
+});
+
 test("a receipt consumed by a competing process cannot authorize a second deployment", () => {
   const h = harness();
   try {
