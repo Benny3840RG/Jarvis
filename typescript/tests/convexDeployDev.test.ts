@@ -240,3 +240,26 @@ test("a matching additive function plan can deploy but cannot pass verification 
     h.close();
   }
 });
+
+test("empty CLI runtime-diff heading is not a change, but version entries are refused", () => {
+  const h = harness();
+  try {
+    assert.equal(
+      h.run("--verify", noChange, 0, "Change the server's version for Node.js actions:\n  \n")
+        .status,
+      0,
+    );
+    assert.notEqual(
+      h.run(
+        "--dry-run",
+        noChange,
+        0,
+        "Change the server's version for Node.js actions:\n  [-] 22\n  [+] 24\n",
+      ).status,
+      0,
+    );
+    assert.equal(existsSync(h.receipt), false);
+  } finally {
+    h.close();
+  }
+});

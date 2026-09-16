@@ -91,7 +91,10 @@ function runConvex(dryRun, key) {
     .split(key)
     .join("[REDACTED]");
   if (!output.includes(EXPECTED_URL)) fail("Expected development target was not confirmed.");
-  if (/Change the server's (?:function version|version for Node\.js actions)/.test(output))
+  // CLI 1.45 can print an empty runtime heading for null versus undefined.
+  // Only real +/- version entries constitute a change; the finish diff below
+  // independently checks the UDF runtime and all function/index changes.
+  if (/^\s*\[[+-]\]\s*\S/m.test(output))
     fail("Runtime configuration changes require separate preparation.");
   const matches = [...output.matchAll(/^\{\r?\n[\s\S]*?^\}/gm)]
     .map((match) => {
