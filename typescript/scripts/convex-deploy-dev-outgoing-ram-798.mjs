@@ -288,7 +288,8 @@ function realDeploy() {
   privatePath(STATE_DIR, true);
   privatePath(RECEIPT_FILE);
   const raw = readFileSync(RECEIPT_FILE, "utf8");
-  invalidateReceipt(); // Consume on all subsequent failures, including malformed JSON.
+  // Unlike invalidation, consumption must fail if another process removed it.
+  unlinkSync(RECEIPT_FILE); // Consume even on subsequent malformed-JSON failure.
   const receipt = JSON.parse(raw);
   const sha = requireCleanWorkingTree();
   validateReceipt(receipt, sha);

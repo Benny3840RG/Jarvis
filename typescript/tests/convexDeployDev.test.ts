@@ -59,6 +59,10 @@ cp.spawnSync = (_exe, args, options) => {
   const text = '${target}\\n' + (input.message || '') + '\\n' + (args.includes('--verbose') ? 'startPush: '+JSON.stringify({schemaChange:{indexDiffs:input.startIndexes},environmentVariables:{PRIVATE_TEST_VALUE:'never-print-this-provider-secret'}}, null, 2)+'\\n'+JSON.stringify(input.plan, null, 2) : 'Would have deployed') + '\\n';
   return {status:input.status??0, stdout:Buffer.from(text), stderr:Buffer.alloc(0)};
 };
+if (process.env.JARVIS_TEST_RECEIPT_RACE === '1') {
+ const unlink = fs.unlinkSync;
+ fs.unlinkSync = (path) => { if (String(path).endsWith('last-dry-run-receipt.json')) { const error=new Error('another process consumed receipt'); error.code='ENOENT'; throw error; } return unlink(path); };
+}
 syncBuiltinESMExports();
 `,
   );
@@ -68,6 +72,7 @@ syncBuiltinESMExports();
     status = 0,
     message = "",
     startIndexes: unknown = {},
+    receiptRace = false,
   ) {
     writeFileSync(fixture, JSON.stringify({ plan, status, message, startIndexes }));
     return spawnSync(
@@ -75,7 +80,12 @@ syncBuiltinESMExports();
       ["--import", preload, resolve("scripts/convex-deploy-dev-outgoing-ram-798.mjs"), mode],
       {
         encoding: "utf8",
-        env: { ...process.env, JARVIS_SERVICE_TOKEN: "unrelated-secret", NODE_OPTIONS: "" },
+        env: {
+          ...process.env,
+          JARVIS_SERVICE_TOKEN: "unrelated-secret",
+          NODE_OPTIONS: "",
+          JARVIS_TEST_RECEIPT_RACE: receiptRace ? "1" : "0",
+        },
       },
     );
   }
@@ -302,3 +312,17 @@ for (const effect of ["added_indexes", "removed_indexes"]) {
     }
   });
 }
+
+test("a receipt consumed by a competing process cannot authorize a second deployment", () => {
+  const h = harness();
+  try {
+    assert.equal(h.run("--dry-run").status, 0);
+    assert.notEqual(h.run("--deploy", noChange, 0, "", {}, true).status, 0);
+    assert.equal(
+      h.calls().some((c) => !c.args.includes("--dry-run")),
+      false,
+    );
+  } finally {
+    h.close();
+  }
+});
