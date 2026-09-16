@@ -196,6 +196,39 @@ function fixture() {
   };
 }
 
+test("durable evidence write failure cannot publish a review, status or repair", async () => {
+  const f = fixture();
+  f.pull.head.ref = "automation/issue-7/run-100";
+  const identity = await f.identity();
+  let attempts = 0;
+  await assert.rejects(
+    () =>
+      publishReview({
+        github: f.github,
+        owner: "o",
+        repo: "r",
+        identity,
+        rawReview: JSON.stringify({
+          verdict: "pass",
+          summary: "Clean",
+          findings: [],
+        }),
+        reviewResult: "success",
+        runId: 500,
+        serverUrl: "https://github.com",
+        recordDevelopment: async () => {
+          attempts++;
+          throw new Error(
+            "Durable operation failed: developmentEvidence:recordDevelopmentEvidence",
+          );
+        },
+      }),
+    /Durable operation failed/,
+  );
+  assert.equal(attempts, 1);
+  assert.deepEqual(f.writes, []);
+});
+
 test("publication refuses stale candidate, base and check evidence before any write", async () => {
   for (const mutate of [
     (f) => {

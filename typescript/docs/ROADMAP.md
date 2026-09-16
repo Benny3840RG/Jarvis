@@ -1,5 +1,34 @@
 # Jarvis TypeScript Roadmap
 
+## Maintenance notification repair (2026-09-16, #548)
+
+Run `35058594031` correctly deferred #522 and #553 for base drift, but its
+diagnostic PR comments failed with HTTP 403. The trusted prepare job now requests
+`pull-requests: write` instead of `issues: write`; contents and checks remain
+read-only, and the isolated reviewer receives no write permission. A regression
+asserts the complete coordinator permission set and trusted checkout boundary.
+
+The earlier #553 publisher failure is a separate development-backend mismatch:
+run `34944213898` reached the durable verification-evidence write, but the
+configured development deployment does not expose
+`developmentEvidence:recordDevelopmentEvidence`. The subsequent new review run
+`34944398486` was correctly refused as an existing exact-candidate attempt;
+`34959648275` supplied an empty fingerprint and was also correctly refused.
+No retry budget, candidate binding, mission lock or durable checkpoint was reset.
+The #552 mission remains `VERIFYING` at version 5, bound to #553 head
+`21ea7e6b50c7915bd69e0d6c9075ff40fc884a2d`; the published head is now
+`734c7f11a86760de3fbcd16bd093181011623447`. A branch update alone cannot satisfy
+that checkpoint. The existing admission path refuses a new worker from
+`VERIFYING`; neither a fabricated review nor a direct checkpoint rewrite is a
+valid recovery.
+
+Next: obtain owner-controlled deployment/reconciliation of the missing development
+function, refresh #553 through its existing autonomous owner with a matching
+durable checkpoint, then collect fresh CI, independent review and Jarvis evidence.
+The notification fix itself requires owner merge before the trusted main workflow
+can demonstrate successful bot comment publication. No live dashboard or runtime
+configuration was changed by this maintenance repair.
+
 ## Concurrent recovery and authentication hardening (2026-09-15, #548)
 
 Reproduced and repaired two runtime failure classes:
