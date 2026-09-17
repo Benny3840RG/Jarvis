@@ -3,7 +3,9 @@
 The Actions handover performs independent review and bounded repair. Its
 exact-candidate `jarvis-pr-maintenance/review` status is advisory for
 agent-authored PRs. It does not grant owner approval, merge authority or a
-durable Development completion claim.
+durable Development completion claim. It is not a GitHub-required merge status,
+but the autonomous coordinator will not hand a candidate to Benny without a
+clean review bound to that exact candidate and trusted CI/CodeQL evidence.
 
 ## Runtime path
 

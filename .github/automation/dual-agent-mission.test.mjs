@@ -255,7 +255,12 @@ test("allows the owner to terminate a mission from every active phase", () => {
     );
     const terminal = advanceMission(mission, {
       type: "terminal",
-      ownerEvidence: { actor: "Benny", decision: "abandoned", source: "github-owner-decision" },
+      ownerEvidence: {
+        actor: "Benny",
+        decision: "abandoned",
+        source: "github-owner-decision",
+        ...(mission.identity ? { identity: mission.identity } : {}),
+      },
     });
     assert.equal(terminal.phase, "terminal");
     assert.match(renderMissionReceipt(terminal), /Phase: terminal/);

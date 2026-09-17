@@ -32,12 +32,16 @@ function terminalEvidence(value, mission) {
   ) {
     throw new Error("Terminal transition requires owner evidence.");
   }
-  if (mission.identity && ["merged", "closed"].includes(value.decision)) {
+  if (value.decision === "merged" && !mission.identity)
+    throw new Error("Merged terminal evidence requires an exact candidate.");
+  if (mission.identity) {
     const identity = exactIdentity(value.identity);
     if (!mission.identity || !sameIdentity(mission, identity))
       throw new Error("Terminal evidence must bind the exact candidate.");
     return { actor: value.actor, decision: value.decision, source: value.source, identity };
   }
+  if (value.decision !== "abandoned")
+    throw new Error("Candidate-less terminal evidence may only abandon a mission.");
   return { actor: value.actor, decision: value.decision, source: value.source };
 }
 
@@ -171,8 +175,10 @@ export function advanceMission(mission, event = {}) {
   validateMission(mission);
   if (!transitions[mission.phase].has(event.type))
     throw new Error(`Mission phase ${mission.phase} cannot consume ${event.type}.`);
-  if (event.type === "blocked")
-    return { ...mission, phase: "blocked", reason: String(event.reason || "Blocked.") };
+  if (event.type === "blocked") {
+    const reason = String(event.reason || "Blocked.").replace(/[\r\n<>]/g, " ").trim();
+    return { ...mission, phase: "blocked", reason: reason.slice(0, 500) || "Blocked." };
+  }
   if (event.type === "terminal")
     return { ...mission, phase: "terminal", terminalEvidence: terminalEvidence(event.ownerEvidence, mission) };
   if (event.type === "candidate") {
