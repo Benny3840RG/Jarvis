@@ -28,7 +28,7 @@
 
 **Interfaces:**
 - Produces `claimMission(input)`, `advanceMission(current, event)`, and `renderMissionReceipt(mission)`.
-- `claimMission` accepts `{issueNumber, baseSha, previousTerminalBuilder}` and returns a `claimed` mission with complementary builder/reviewer roles.
+- `claimMission` accepts `{issueNumber, baseSha, previousTerminalMission}` and returns a `claimed` mission with complementary builder/reviewer roles only after validating the prior owner-evidenced terminal mission.
 - `advanceMission` accepts an exact identity event and returns a new validated phase or throws on stale/authority-expanding input.
 
 - [ ] **Step 1: Write the failing role and exact-identity tests**
@@ -48,10 +48,10 @@ Expected: FAIL because `dual-agent-mission.mjs` does not exist.
 - [ ] **Step 3: Implement minimal claim validation and complementary role selection**
 
 ```js
-export function claimMission({ issueNumber, baseSha, previousTerminalBuilder } = {}) {
+export function claimMission({ issueNumber, baseSha, previousTerminalMission } = {}) {
   if (!Number.isSafeInteger(issueNumber) || issueNumber < 1) throw new Error("Invalid issue number.");
   if (!SHA.test(baseSha)) throw new Error("Invalid base SHA.");
-  const builder = previousTerminalBuilder === "codex" ? "claude" : "codex";
+  const builder = previousTerminalMission?.builder === "codex" ? "claude" : "codex";
   return { version: 1, issueNumber, baseSha, builder, reviewer: "codex-independent", phase: "claimed" };
 }
 ```

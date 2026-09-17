@@ -183,6 +183,10 @@ test("returns a changed reviewed candidate to CI and caps repairs at two", () =>
     advanceMission(reviewing, { type: "candidate", ...changed }).phase,
     "waiting-ci",
   );
+  assert.throws(
+    () => advanceMission(reviewing, { type: "candidate", ...identity }),
+    /already current/i,
+  );
   const firstRepair = advanceMission(reviewing, {
     type: "repair-required",
     ...identity,

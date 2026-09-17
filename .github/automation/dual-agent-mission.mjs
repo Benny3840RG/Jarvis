@@ -178,10 +178,12 @@ export function advanceMission(mission, event = {}) {
         phase: "blocked",
         reason: "Candidate base moved; independently validate a reset before continuing.",
       };
-    if (mission.identity && identity.pullNumber !== mission.identity.pullNumber)
-      throw new Error("Candidate must remain on the original pull request.");
     if (mission.phase === "repair-required" && sameIdentity(mission, identity))
       throw new Error("Repair must publish a fresh candidate identity.");
+    if (mission.identity && sameIdentity(mission, identity))
+      throw new Error("Candidate identity is already current for this mission.");
+    if (mission.identity && identity.pullNumber !== mission.identity.pullNumber)
+      throw new Error("Candidate must remain on the original pull request.");
     return { ...mission, phase: "waiting-ci", identity };
   }
   const identity = requireCurrentIdentity(mission, event);
