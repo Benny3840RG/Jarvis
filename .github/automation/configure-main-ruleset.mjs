@@ -1,28 +1,46 @@
 import { pathToFileURL } from "node:url";
 
-export const JARVIS_MAIN_RULESET_NAME = "Jarvis required PASS before owner merge";
-export const REQUIRED_MAIN_CHECKS = Object.freeze([
-  "automation-policy",
-  "typecheck-lint-format-test",
-  "jarvis-console-01-build",
-  "pr-evidence",
-  "Analyze (actions)",
-  "Analyze (python)",
-  "Analyze (ruby)",
-  "Analyze (javascript-typescript)",
-  "jarvis-pr-maintenance/review",
-]);
+// Scope, deliberately narrow (see docs/operations/branch-protection.md):
+//
+// Classic branch protection on `main` — applied and verified separately under
+// issue #398, not by this tool — already requires a pull request, an
+// up-to-date branch, the five checks `pr-evidence`, `automation-policy`,
+// `typecheck-lint-format-test`, `jarvis-console-01-build`, `CodeQL`, and
+// blocks force pushes and branch deletion. This tool does not duplicate or
+// replace any of that.
+//
+// This tool manages exactly one thing: a ruleset that closes the gap #563
+// found — GitHub's CodeQL Default Setup can post a "configurations not
+// found" result (not a failure) when `main`'s own baseline scan is stale,
+// which let a PR merge with no CodeQL evidence at all for its head commit.
+// The `code_scanning` rule type is the fix: a missing or in-progress result
+// blocks merge by design, it isn't an extra flag to set.
+//
+// `jarvis-pr-maintenance/review` is intentionally NOT a required check here
+// or anywhere else. It was explicitly excluded from classic protection under
+// #398 because it fails closed on ambiguous/incomplete review context and
+// can block a clean PR for reasons unrelated to any real defect (observed on
+// PR #502, 2026-09-14, and again on PR #564, 2026-09-16, where one review
+// segment simply lacked the file under test in its own context). Making it
+// a hard, no-bypass gate before that failure mode is fixed would risk
+// deadlocking legitimate merges. Revisit only after it's fixed and proven
+// not to do that.
+//
+// `security_alerts_threshold`/`alerts_threshold` below are GitHub's current
+// UI defaults for this rule, recorded as the baseline in effect, not a
+// deliberate severity policy decision — revisit that separately if wanted.
+
+export const MAIN_RULESET_NAME = "main required code scanning";
 
 const EXPECTED_REPOSITORY = "Benny3840RG/Jarvis";
-const ACTIONS_APP_ID = 15368;
 const API = "https://api.github.com";
 
 export function desiredMainRuleset(enforcement = "active") {
-  if (!['active', 'disabled'].includes(enforcement)) {
+  if (!["active", "disabled"].includes(enforcement)) {
     throw new Error("Ruleset enforcement must be active or disabled.");
   }
   return {
-    name: JARVIS_MAIN_RULESET_NAME,
+    name: MAIN_RULESET_NAME,
     target: "branch",
     enforcement,
     bypass_actors: [],
@@ -30,28 +48,16 @@ export function desiredMainRuleset(enforcement = "active") {
       ref_name: { include: ["refs/heads/main"], exclude: [] },
     },
     rules: [
-      { type: "deletion" },
-      { type: "non_fast_forward" },
       {
-        type: "pull_request",
+        type: "code_scanning",
         parameters: {
-          allowed_merge_methods: ["merge", "squash", "rebase"],
-          dismiss_stale_reviews_on_push: false,
-          require_code_owner_review: false,
-          require_last_push_approval: false,
-          required_approving_review_count: 0,
-          required_review_thread_resolution: false,
-        },
-      },
-      {
-        type: "required_status_checks",
-        parameters: {
-          do_not_enforce_on_create: true,
-          required_status_checks: REQUIRED_MAIN_CHECKS.map((context) => ({
-            context,
-            integration_id: ACTIONS_APP_ID,
-          })),
-          strict_required_status_checks_policy: true,
+          code_scanning_tools: [
+            {
+              tool: "CodeQL",
+              security_alerts_threshold: "high_or_higher",
+              alerts_threshold: "errors",
+            },
+          ],
         },
       },
     ],
@@ -170,12 +176,12 @@ export async function configureMainRuleset({
 
   const summaries = await request("/rulesets?includes_parents=false");
   if (!Array.isArray(summaries)) throw new Error("Ruleset inventory is unavailable.");
-  const existing = summaries.find((item) => item?.name === JARVIS_MAIN_RULESET_NAME);
+  const existing = summaries.find((item) => item?.name === MAIN_RULESET_NAME);
   const foreignActive = summaries.find(
     (item) =>
       item?.target === "branch" &&
       item?.enforcement === "active" &&
-      item?.name !== JARVIS_MAIN_RULESET_NAME,
+      item?.name !== MAIN_RULESET_NAME,
   );
   if (foreignActive) {
     throw new Error(
