@@ -70,11 +70,20 @@ never interpret a post-execution refusal as proof that nothing changed.
   write under a restrictive umask:
 
   ```bash
-  mkdir -p -m 0700 ~/.local/state/jarvis-convex
+  STATE_DIR=~/.local/state/jarvis-convex
+  [ -L "$STATE_DIR" ] && { echo "refusing: $STATE_DIR is a symlink" >&2; exit 1; }
+  mkdir -p "$STATE_DIR"
+  chmod 0700 "$STATE_DIR"
   ( umask 077 && node node_modules/convex/bin/main.js deployment token create <name> \
       --deployment-name outgoing-ram-798 \
-      --save-env ~/.local/state/jarvis-convex/dev-outgoing-ram-798.env )
+      --save-env "$STATE_DIR/dev-outgoing-ram-798.env" )
   ```
+
+  `mkdir -p -m 0700` only sets the mode when it actually creates the
+  directory — it's a no-op on permissions if the directory already exists
+  (e.g. from an earlier setup at a looser mode), which would leave a newly
+  provisioned key unusable once the wrapper correctly refuses that
+  directory. `chmod` afterward is idempotent regardless of prior state.
 
   `--deployment-name` is a real, functioning option (added by the same
   `addDeploymentSelectionOptions` helper used across the Convex CLI's
