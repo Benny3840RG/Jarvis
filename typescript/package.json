@@ -15,6 +15,7 @@
     "monitor": "node --import tsx src/tools/runLiveWorkMonitor.ts",
     "dev:live-work": "node --import tsx src/tools/runLiveWorkDev.ts",
     "quote:demo": "node --import tsx src/tools/runQuoteDemo.ts",
+    "quote:create": "node --import tsx src/tools/runQuoteCreate.ts",
     "agent:check": "node --import tsx src/agent/main.ts",
     "agent:repl": "node --import tsx src/agent/replMain.ts",
     "test": "npm run test:node && npm run test:convex",
