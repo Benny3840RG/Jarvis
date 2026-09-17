@@ -24,14 +24,21 @@ function exactIdentity(value) {
   };
 }
 
-function terminalEvidence(value) {
+function terminalEvidence(value, mission) {
   if (
     value?.actor !== "Benny" ||
+    value?.source !== "github-owner-decision" ||
     !["merged", "closed", "abandoned"].includes(value.decision)
   ) {
     throw new Error("Terminal transition requires owner evidence.");
   }
-  return { actor: value.actor, decision: value.decision };
+  if (value.decision === "merged") {
+    const identity = exactIdentity(value.identity);
+    if (!mission.identity || !sameIdentity(mission, identity))
+      throw new Error("Merged terminal evidence must bind the exact candidate.");
+    return { actor: value.actor, decision: value.decision, source: value.source, identity };
+  }
+  return { actor: value.actor, decision: value.decision, source: value.source };
 }
 
 function rolePlan(previousTerminalMission, availableExecutors) {
@@ -102,7 +109,7 @@ const transitions = {
   "waiting-ci": new Set(["review-started", "blocked", "terminal"]),
   reviewing: new Set(["candidate", "repair-required", "awaiting-owner", "blocked", "terminal"]),
   "repair-required": new Set(["candidate", "blocked", "terminal"]),
-  "awaiting-owner": new Set(["terminal"]),
+  "awaiting-owner": new Set(["candidate", "terminal"]),
   blocked: new Set(["terminal"]),
   terminal: new Set(),
 };
@@ -150,7 +157,7 @@ function validateMission(mission) {
   }
   if (mission.phase === "terminal") {
     try {
-      terminalEvidence(mission.terminalEvidence);
+      terminalEvidence(mission.terminalEvidence, mission);
     } catch {
       invalidMissionState();
     }
@@ -167,7 +174,7 @@ export function advanceMission(mission, event = {}) {
   if (event.type === "blocked")
     return { ...mission, phase: "blocked", reason: String(event.reason || "Blocked.") };
   if (event.type === "terminal")
-    return { ...mission, phase: "terminal", terminalEvidence: terminalEvidence(event.ownerEvidence) };
+    return { ...mission, phase: "terminal", terminalEvidence: terminalEvidence(event.ownerEvidence, mission) };
   if (event.type === "candidate") {
     const identity = exactIdentity(event);
     if (identity.issueNumber !== mission.issueNumber)

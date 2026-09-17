@@ -32,7 +32,7 @@ test("alternates only after an owner-evidenced terminal mission", () => {
     issueNumber: 43,
     baseSha,
     availableExecutors: ["codex"],
-  }), { type: "terminal", ownerEvidence: { actor: "Benny", decision: "abandoned" } });
+  }), { type: "terminal", ownerEvidence: { actor: "Benny", decision: "abandoned", source: "github-owner-decision" } });
   const mission = claimMission({
     issueNumber: 44,
     baseSha,
@@ -49,7 +49,7 @@ test("blocks rather than silently substituting an unavailable selected builder",
     issueNumber: 42,
     baseSha,
     availableExecutors: ["codex"],
-  }), { type: "terminal", ownerEvidence: { actor: "Benny", decision: "abandoned" } });
+  }), { type: "terminal", ownerEvidence: { actor: "Benny", decision: "abandoned", source: "github-owner-decision" } });
   const mission = claimMission({
     issueNumber: 43,
     baseSha,
@@ -255,7 +255,7 @@ test("allows the owner to terminate a mission from every active phase", () => {
     );
     const terminal = advanceMission(mission, {
       type: "terminal",
-      ownerEvidence: { actor: "Benny", decision: "abandoned" },
+      ownerEvidence: { actor: "Benny", decision: "abandoned", source: "github-owner-decision" },
     });
     assert.equal(terminal.phase, "terminal");
     assert.match(renderMissionReceipt(terminal), /Phase: terminal/);
@@ -320,6 +320,11 @@ test("only reaches owner decision after exact clean review and never grants auth
   assert.match(receipt, /Merge authorised: NO/);
   assert.match(receipt, /Deployment authorised: NO/);
   assert.doesNotMatch(receipt, /Merge authorised: YES|Deployment authorised: YES/);
+  const changed = { ...identity, headSha: "d".repeat(40), fingerprint: "e".repeat(64) };
+  assert.equal(
+    advanceMission(owner, { type: "candidate", ...changed }).phase,
+    "waiting-ci",
+  );
 });
 
 test("renders the precise blocked reason for the owner", () => {

@@ -246,8 +246,9 @@ state.
 The receipt phases are `claimed`, `waiting-ci`, `reviewing`,
 `repair-required`, `awaiting-owner`, `blocked`, and `terminal`. Every phase
 after claim carries the exact PR/head/base/CI-fingerprint identity. A changed
-head, base, or fingerprint invalidates review evidence and returns the mission
-to CI waiting; a repair remains with its original builder.
+head or fingerprint invalidates review evidence and returns the mission to CI
+waiting; a moved base yields `blocked` and requires an independently validated
+reset. A repair remains with its original builder.
 
 When a dedicated Claude builder executor is available, builder selection may
 alternate only after a terminal mission; the independent reviewer remains a
