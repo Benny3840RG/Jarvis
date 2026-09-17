@@ -220,7 +220,9 @@ test("allows the owner to terminate a mission from every active phase", () => {
   });
 
   for (const mission of [claimed, waiting, reviewing, repairing]) {
-    assert.equal(advanceMission(mission, { type: "terminal" }).phase, "terminal");
+    const terminal = advanceMission(mission, { type: "terminal" });
+    assert.equal(terminal.phase, "terminal");
+    assert.match(renderMissionReceipt(terminal), /Phase: terminal/);
   }
 });
 

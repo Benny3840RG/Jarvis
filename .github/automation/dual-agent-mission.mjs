@@ -85,6 +85,7 @@ const transitions = {
   "repair-required": new Set(["candidate", "blocked", "terminal"]),
   "awaiting-owner": new Set(["terminal"]),
   blocked: new Set(["terminal"]),
+  terminal: new Set(),
 };
 
 function invalidMissionState() {
