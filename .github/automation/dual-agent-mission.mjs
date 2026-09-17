@@ -32,10 +32,10 @@ function terminalEvidence(value, mission) {
   ) {
     throw new Error("Terminal transition requires owner evidence.");
   }
-  if (value.decision === "merged") {
+  if (mission.identity && ["merged", "closed"].includes(value.decision)) {
     const identity = exactIdentity(value.identity);
     if (!mission.identity || !sameIdentity(mission, identity))
-      throw new Error("Merged terminal evidence must bind the exact candidate.");
+      throw new Error("Terminal evidence must bind the exact candidate.");
     return { actor: value.actor, decision: value.decision, source: value.source, identity };
   }
   return { actor: value.actor, decision: value.decision, source: value.source };

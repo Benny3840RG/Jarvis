@@ -51,6 +51,10 @@ Expected: FAIL because `dual-agent-mission.mjs` does not exist.
 export function claimMission({ issueNumber, baseSha, previousTerminalMission } = {}) {
   if (!Number.isSafeInteger(issueNumber) || issueNumber < 1) throw new Error("Invalid issue number.");
   if (!SHA.test(baseSha)) throw new Error("Invalid base SHA.");
+  if (previousTerminalMission) {
+    validateMission(previousTerminalMission);
+    if (previousTerminalMission.phase !== "terminal") throw new Error("Role rotation requires a terminal mission.");
+  }
   const builder = previousTerminalMission?.builder === "codex" ? "claude" : "codex";
   return { version: 1, issueNumber, baseSha, builder, reviewer: "codex-independent", phase: "claimed" };
 }
@@ -89,7 +93,7 @@ Expected: FAIL because transition APIs do not exist.
 - [ ] **Step 3: Implement only the allowed transition graph**
 
 ```js
-const allowed = { claimed: ["candidate", "blocked", "terminal"], "waiting-ci": ["review-started", "blocked", "terminal"], reviewing: ["candidate", "repair-required", "awaiting-owner", "blocked", "terminal"], "repair-required": ["candidate", "blocked", "terminal"], "awaiting-owner": ["terminal"], blocked: ["terminal"] };
+const allowed = { claimed: ["candidate", "blocked", "terminal"], "waiting-ci": ["review-started", "blocked", "terminal"], reviewing: ["candidate", "repair-required", "awaiting-owner", "blocked", "terminal"], "repair-required": ["candidate", "blocked", "terminal"], "awaiting-owner": ["candidate", "terminal"], blocked: ["terminal"] };
 ```
 
 Validate identity on every candidate-derived transition; increment repair count only through `repair-required`; render explicit `Merge authorised: NO` and `Deployment authorised: NO` lines.
