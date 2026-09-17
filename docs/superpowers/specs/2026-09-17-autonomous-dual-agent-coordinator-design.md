@@ -31,8 +31,8 @@ When a dedicated Claude write-capable executor is available, the selected builde
 2. Builder publication records the exact draft PR/head and moves the receipt to `waiting-ci`.
 3. Existing maintenance waits for trusted exact-head CI and CodeQL, dispatches its independent advisory review using PR/head/base/fingerprint, and records `reviewing`.
 4. A clean advisory review and unchanged evidence produce `awaiting-owner`; the only result is an owner-facing summary. It does not mark ready, approve, merge, or deploy.
-5. Actionable findings route only to the original builder through the existing bounded repair path. A changed head/base/fingerprint invalidates the previous review and returns to `waiting-ci`; repair remains bound to the original builder and PR.
-6. Missing provenance, review context, moved base, unsupported builder capability, or exhausted budgets yields `blocked` with a precise owner action. Merge/close events produce `terminal` and make rotation eligible for the next mission.
+5. Actionable findings route only to the original builder through the existing bounded repair path. A changed head or fingerprint on the same PR and same independently verified base invalidates the previous review and returns to `waiting-ci`; repair remains bound to the original builder and PR. A moved base is rejected and yields a blocked mission requiring an independently validated reset.
+6. A receipt can reach `awaiting-owner` only when its exact candidate is accompanied by a clean advisory-review verdict and trusted-success CI evidence. Missing provenance, review context, moved base, unsupported builder capability, or exhausted budgets yields `blocked` with a precise owner action. Merge/close events produce `terminal` and make rotation eligible for the next mission.
 
 ## Workflow integration
 

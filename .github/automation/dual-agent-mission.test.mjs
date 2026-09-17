@@ -126,6 +126,15 @@ test("accepts a repaired candidate only on the original pull request", () => {
       }),
     /original pull request/i,
   );
+  assert.throws(
+    () =>
+      advanceMission(repairing, {
+        type: "candidate",
+        ...repaired,
+        baseSha: "f".repeat(40),
+      }),
+    /base SHA/i,
+  );
 });
 
 test("returns a changed reviewed candidate to CI and caps repairs at two", () => {
@@ -251,9 +260,15 @@ test("only reaches owner decision after exact clean review and never grants auth
     type: "review-started",
     ...identity,
   });
+  assert.throws(
+    () => advanceMission(reviewing, { type: "awaiting-owner", ...identity }),
+    /clean review and trusted CI/i,
+  );
   const owner = advanceMission(reviewing, {
     type: "awaiting-owner",
     ...identity,
+    ci: "trusted-success",
+    review: "clean",
   });
   const receipt = renderMissionReceipt(owner);
 
@@ -266,4 +281,13 @@ test("only reaches owner decision after exact clean review and never grants auth
   assert.match(receipt, /Merge authorised: NO/);
   assert.match(receipt, /Deployment authorised: NO/);
   assert.doesNotMatch(receipt, /Merge authorised: YES|Deployment authorised: YES/);
+});
+
+test("renders the precise blocked reason for the owner", () => {
+  const blocked = advanceMission(
+    claimMission({ issueNumber: 42, baseSha, availableExecutors: ["codex"] }),
+    { type: "blocked", reason: "Base moved; independently validate a reset." },
+  );
+
+  assert.match(renderMissionReceipt(blocked), /Base moved; independently validate a reset\./);
 });

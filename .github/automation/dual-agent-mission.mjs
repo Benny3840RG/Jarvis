@@ -139,11 +139,11 @@ export function advanceMission(mission, event = {}) {
   if (event.type === "terminal") return { ...mission, phase: "terminal" };
   if (event.type === "candidate") {
     const identity = exactIdentity(event);
-    if (mission.phase === "claimed" && identity.baseSha !== mission.baseSha)
-      throw new Error("Candidate base SHA differs from the claimed mission base.");
+    if (identity.baseSha !== mission.baseSha)
+      throw new Error("Candidate base SHA differs from the mission base.");
     if (mission.identity && identity.pullNumber !== mission.identity.pullNumber)
       throw new Error("Candidate must remain on the original pull request.");
-    return { ...mission, baseSha: identity.baseSha, phase: "waiting-ci", identity };
+    return { ...mission, phase: "waiting-ci", identity };
   }
   const identity = requireCurrentIdentity(mission, event);
   if (event.type === "repair-required") {
@@ -154,8 +154,11 @@ export function advanceMission(mission, event = {}) {
     return { ...mission, phase: "repair-required", identity, repairCount: mission.repairCount + 1 };
   }
   if (event.type === "review-started") return { ...mission, phase: "reviewing", identity };
-  if (event.type === "awaiting-owner")
+  if (event.type === "awaiting-owner") {
+    if (event.ci !== "trusted-success" || event.review !== "clean")
+      throw new Error("Owner handoff requires a clean review and trusted CI.");
     return { ...mission, phase: "awaiting-owner", identity };
+  }
   throw new Error("Unsupported mission event.");
 }
 
@@ -174,6 +177,7 @@ export function renderMissionReceipt(mission) {
     `Builder: ${mission.builder}`,
     `Independent reviewer: ${mission.reviewer}`,
     "Review: advisory; not a GitHub approval.",
+    ...(mission.phase === "blocked" ? [`Blocked reason: ${mission.reason || "Blocked."}`] : []),
     `Repairs routed to original builder: ${mission.builder} (${mission.repairCount || 0})`,
     "Owner interrupts: merge approval, deployment approval, or blocked ambiguity/risk.",
     "Merge authorised: NO",
