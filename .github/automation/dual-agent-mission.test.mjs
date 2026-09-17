@@ -259,6 +259,7 @@ test("rejects malformed persisted mission state before advancing or rendering", 
     { ...claimed, repairCount: 3 },
     { ...claimed, phase: "unknown" },
     { ...waiting, identity: undefined },
+    { ...waiting, identity: { ...identity, issueNumber: 99 } },
     { ...waiting, identity: { ...identity, baseSha: "d".repeat(40) } },
   ]) {
     assert.throws(() => advanceMission(mission, { type: "terminal" }), /Invalid mission state/);

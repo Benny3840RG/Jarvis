@@ -130,7 +130,8 @@ function validateMission(mission) {
     } catch {
       invalidMissionState();
     }
-    if (identity.baseSha !== mission.baseSha) invalidMissionState();
+    if (identity.issueNumber !== mission.issueNumber || identity.baseSha !== mission.baseSha)
+      invalidMissionState();
   }
   return mission;
 }
