@@ -23,6 +23,7 @@ Docs:
 - Architecture: `typescript/docs/architecture/`
 - Operators: `typescript/docs/operators/`
 - Runbooks: `docs/operations/`
+- Convex dev deployment (deploy-key mechanism, not app auth): `docs/operations/convex-dev-deploy-key.md`
 
 ## Mission
 
@@ -59,6 +60,16 @@ Docs:
      - State the blocker in one short paragraph.  
      - Propose 1–3 concrete options to resolve it.  
      - Wait for my choice before proceeding.
+
+7. **Convex dev deploys use the scoped deploy key, never the personal token**  
+   - Follow `docs/operations/convex-dev-deploy-key.md` for pushing code to
+     `dev:outgoing-ram-798`.  
+   - Never read `~/.convex/config.json` or derive an admin key from it for a
+     deploy; never pass a deploy key via `--admin-key` or any other CLI
+     argument. Inject it only as `CONVEX_DEPLOY_KEY` in the child process
+     environment.  
+   - Never target `prod`/production from an agent session without a separate,
+     explicit instruction covering that deployment by name.
 
 ## Session protocol
 
