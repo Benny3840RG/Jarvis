@@ -215,6 +215,31 @@ test("allows the owner to terminate a mission from every active phase", () => {
   }
 });
 
+test("rejects malformed persisted mission state before advancing or rendering", () => {
+  const claimed = claimMission({
+    issueNumber: 42,
+    baseSha,
+    availableExecutors: ["codex"],
+  });
+  const waiting = advanceMission(claimed, { type: "candidate", ...identity });
+
+  for (const mission of [
+    { ...claimed, version: 2 },
+    { ...claimed, issueNumber: 0 },
+    { ...claimed, baseSha: "invalid" },
+    { ...claimed, builder: "unknown" },
+    { ...claimed, reviewer: "claude" },
+    { ...claimed, repairCount: -1 },
+    { ...claimed, repairCount: 3 },
+    { ...claimed, phase: "unknown" },
+    { ...waiting, identity: undefined },
+    { ...waiting, identity: { ...identity, baseSha: "d".repeat(40) } },
+  ]) {
+    assert.throws(() => advanceMission(mission, { type: "terminal" }), /Invalid mission state/);
+    assert.throws(() => renderMissionReceipt(mission), /Invalid mission state/);
+  }
+});
+
 test("only reaches owner decision after exact clean review and never grants authority", () => {
   const claimed = claimMission({
     issueNumber: 42,

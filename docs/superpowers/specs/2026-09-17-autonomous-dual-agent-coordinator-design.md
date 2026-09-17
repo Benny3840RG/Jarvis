@@ -14,7 +14,7 @@ Remove routine owner dispatching from an approved autonomous development mission
 
 ## Smallest coordinator
 
-Add a pure `.github/automation/dual-agent-mission.mjs` module. It validates and renders a versioned GitHub issue-comment receipt that is informational only; workflow/run state remains the authority for dispatches and evidence. The receipt records one mission identity:
+Add a pure `.github/automation/dual-agent-mission.mjs` module. It validates and renders a versioned GitHub issue-comment receipt that is informational only; workflow/run state remains the authority for dispatches and evidence. Before every transition or render, it rejects malformed persisted state: unsupported version or phase, invalid issue/base SHA/roles, an out-of-range repair count, or missing, malformed, or base-mismatched candidate identity in a candidate-bound phase. The receipt records one mission identity:
 
 - issue and PR number;
 - verified base SHA, candidate head SHA, and CI fingerprint;
@@ -40,4 +40,4 @@ The initial safe increment is a tested controller module plus workflow-contract 
 
 ## Tests
 
-Unit tests prove role alternation only after terminal state; exact SHA and fingerprint validation; same-builder repair routing; stale-head/base invalidation; duplicate/overlap refusal; unavailable-builder blocking; and that no owner authority can be represented by a receipt. Workflow contract tests ensure the advisory review model and no new merge/deploy permissions remain intact.
+Unit tests prove role alternation only after terminal state; exact SHA and fingerprint validation; malformed persisted-state rejection; same-builder repair routing; stale-head/base invalidation; unavailable-builder blocking; and that no owner authority can be represented by a receipt. Duplicate/overlap refusal is deliberately enforced and tested at the queue boundary, which has the authoritative global lock, open-PR and active-worker state; the stateless receipt controller cannot safely arbitrate a second claim. Workflow contract tests ensure the advisory review model and no new merge/deploy permissions remain intact.

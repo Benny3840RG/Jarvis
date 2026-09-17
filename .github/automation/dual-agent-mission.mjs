@@ -1,6 +1,7 @@
 const SHA = /^[a-f0-9]{40}$/;
 const FINGERPRINT = /^[a-f0-9]{64}$/;
 const EXECUTORS = new Set(["codex", "claude"]);
+const REVIEWER = "codex-independent";
 
 function exactIdentity(value) {
   if (
@@ -28,14 +29,14 @@ function rolePlan(previousTerminalBuilder, availableExecutors) {
   if (!available.has(preferred)) {
     return {
       builder: preferred,
-      reviewer: preferred === "codex" ? "claude" : "codex-independent",
+      reviewer: REVIEWER,
       phase: "blocked",
       reason: `${preferred === "claude" ? "Claude" : "Codex"} builder executor is unavailable.`,
     };
   }
   return {
     builder: preferred,
-    reviewer: preferred === "codex" ? "codex-independent" : "codex-independent",
+    reviewer: REVIEWER,
     phase: "claimed",
   };
 }
@@ -86,9 +87,51 @@ const transitions = {
   blocked: new Set(["terminal"]),
 };
 
+function invalidMissionState() {
+  throw new Error("Invalid mission state.");
+}
+
+function validateMission(mission) {
+  if (!mission || typeof mission !== "object" || Array.isArray(mission))
+    invalidMissionState();
+  if (
+    mission.version !== 1 ||
+    !Number.isSafeInteger(mission.issueNumber) ||
+    mission.issueNumber < 1 ||
+    !SHA.test(mission.baseSha) ||
+    !EXECUTORS.has(mission.builder) ||
+    mission.reviewer !== REVIEWER ||
+    !Number.isSafeInteger(mission.repairCount) ||
+    mission.repairCount < 0 ||
+    mission.repairCount > 2 ||
+    !transitions[mission.phase]
+  ) {
+    invalidMissionState();
+  }
+
+  const requiresIdentity = new Set([
+    "waiting-ci",
+    "reviewing",
+    "repair-required",
+    "awaiting-owner",
+  ]);
+  if (requiresIdentity.has(mission.phase) && !mission.identity)
+    invalidMissionState();
+  if (mission.phase === "claimed" && mission.identity) invalidMissionState();
+  if (mission.identity) {
+    let identity;
+    try {
+      identity = exactIdentity(mission.identity);
+    } catch {
+      invalidMissionState();
+    }
+    if (identity.baseSha !== mission.baseSha) invalidMissionState();
+  }
+  return mission;
+}
+
 export function advanceMission(mission, event = {}) {
-  if (!mission || typeof mission !== "object" || !transitions[mission.phase])
-    throw new Error("Invalid mission phase.");
+  validateMission(mission);
   if (!transitions[mission.phase].has(event.type))
     throw new Error(`Mission phase ${mission.phase} cannot consume ${event.type}.`);
   if (event.type === "blocked")
@@ -117,7 +160,7 @@ export function advanceMission(mission, event = {}) {
 }
 
 export function renderMissionReceipt(mission) {
-  if (!mission || typeof mission !== "object") throw new Error("Invalid mission.");
+  validateMission(mission);
   const candidate = mission.identity
     ? `PR: #${mission.identity.pullNumber}\nCandidate SHA: ${mission.identity.headSha}\nCI fingerprint: ${mission.identity.fingerprint}`
     : "PR: not yet published\nCandidate SHA: not yet published\nCI fingerprint: not yet published";

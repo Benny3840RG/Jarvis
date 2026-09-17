@@ -210,9 +210,11 @@ Merge authorised: NO
 Deployment authorised: NO
 ```
 
-`OWNER DECISION REQUIRED` is valid only when the exact reviewed candidate also
-has `jarvis-pr-maintenance/review = success`. Otherwise the verdict remains
-`BLOCKED` or `REPAIR REQUIRED`.
+For this protocol, `OWNER DECISION REQUIRED` requires a clean, exact-candidate
+advisory review as well as trusted CI and CodeQL evidence. Its
+`jarvis-pr-maintenance/review` status is not a GitHub-required merge check and
+never grants merge authority; missing, failed, stale or differently bound
+review evidence must be investigated and cannot produce an owner handoff.
 
 ## Terminal transition
 
