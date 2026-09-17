@@ -220,15 +220,13 @@ test("returns a changed reviewed candidate to CI and caps repairs at two", () =>
   });
 
   assert.equal(secondRepair.repairCount, 2);
-  assert.throws(
-    () =>
-      advanceMission(thirdReview, {
-        type: "repair-required",
-        ...third,
-        builder: "codex",
-      }),
-    /repair budget/i,
-  );
+  const exhausted = advanceMission(thirdReview, {
+    type: "repair-required",
+    ...third,
+    builder: "codex",
+  });
+  assert.equal(exhausted.phase, "blocked");
+  assert.match(renderMissionReceipt(exhausted), /repair budget is exhausted/i);
 });
 
 test("allows the owner to terminate a mission from every active phase", () => {
@@ -280,6 +278,7 @@ test("rejects malformed persisted mission state before advancing or rendering", 
     { ...claimed, issueNumber: 0 },
     { ...claimed, baseSha: "invalid" },
     { ...claimed, builder: "unknown" },
+    { ...claimed, originalBuilder: "claude" },
     { ...claimed, reviewer: "claude" },
     { ...claimed, repairCount: -1 },
     { ...claimed, repairCount: 3 },

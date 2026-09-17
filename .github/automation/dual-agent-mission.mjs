@@ -88,6 +88,7 @@ export function claimMission({
     baseSha,
     repairCount: 0,
     ...roles,
+    originalBuilder: roles.builder,
   };
 }
 
@@ -131,6 +132,8 @@ function validateMission(mission) {
     mission.issueNumber < 1 ||
     !SHA.test(mission.baseSha) ||
     !EXECUTORS.has(mission.builder) ||
+    !EXECUTORS.has(mission.originalBuilder) ||
+    mission.builder !== mission.originalBuilder ||
     mission.reviewer !== REVIEWER ||
     !Number.isSafeInteger(mission.repairCount) ||
     mission.repairCount < 0 ||
@@ -201,10 +204,14 @@ export function advanceMission(mission, event = {}) {
   }
   const identity = requireCurrentIdentity(mission, event);
   if (event.type === "repair-required") {
-    if (event.builder !== mission.builder)
+    if (event.builder !== mission.originalBuilder)
       throw new Error("Repairs must return to the original builder.");
     if (mission.repairCount >= 2)
-      throw new Error("Mission repair budget is exhausted.");
+      return {
+        ...mission,
+        phase: "blocked",
+        reason: "Mission repair budget is exhausted; owner action is required.",
+      };
     return { ...mission, phase: "repair-required", identity, repairCount: mission.repairCount + 1 };
   }
   if (event.type === "review-started") return { ...mission, phase: "reviewing", identity };
@@ -232,7 +239,7 @@ export function renderMissionReceipt(mission) {
     `Independent reviewer: ${mission.reviewer}`,
     "Review: advisory; not a GitHub approval.",
     ...(mission.phase === "blocked" ? [`Blocked reason: ${mission.reason || "Blocked."}`] : []),
-    `Repairs routed to original builder: ${mission.builder} (${mission.repairCount || 0})`,
+    `Repairs routed to original builder: ${mission.originalBuilder} (${mission.repairCount || 0})`,
     "Owner interrupts: merge approval, deployment approval, or blocked ambiguity/risk.",
     "Merge authorised: NO",
     "Deployment authorised: NO",
