@@ -2,6 +2,15 @@
 
 Jarvis implements **one bounded GitHub issue at a time**. It creates a draft PR, then [PR maintenance](pr-maintenance.md) performs independent advisory review and can request at most two guarded repairs on the same PR. Owner approval, merge, commissioning and deployment remain separate gates.
 
+The queue is the operational mission coordinator. It removes routine owner
+dispatching: it selects one approved issue, retains the mission lock through the
+draft PR lifecycle, carries the verified source SHA to the builder, and hands
+the exact candidate to CI and independent advisory review. The optional
+`jarvis-dual-agent-mission:v1` receipt is a readable handoff summary only;
+trusted Actions history, exact candidate checks, and durable Development state
+remain authoritative. It explicitly records that merge and deployment authority
+remain with the owner.
+
 `jarvis-autobuild.yml` no longer runs on the `automation-approved` label. It has a single trigger, `workflow_dispatch`, and one repository-global concurrency group, so only one autonomous-build worker can ever run. `jarvis-queue-advance.yml` is the sole coordinator: it verifies `main` is healthy, then dispatches the builder for the next eligible approved issue. A mission occupies the queue from dispatch until its pull request is merged or closed — not just while the coding worker runs (see [Queue advance](#queue-advance)).
 
 ## Smoke-test verification

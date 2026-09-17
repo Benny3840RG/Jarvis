@@ -49,11 +49,12 @@ Neither agent may:
 Every merge and deployment requires a fresh, explicit decision from Benny
 against the exact candidate or release.
 
-Jarvis supplies a required machine gate, not owner approval. A candidate is not
-eligible for Benny's merge decision until the exact head has all required trusted
-CI and a successful `jarvis-pr-maintenance/review` status. Missing, pending,
-failed, stale or differently bound evidence blocks. A new commit or base change
-invalidates the prior peer review and Jarvis PASS.
+Jarvis supplies deterministic CI and CodeQL evidence, not owner approval. A
+candidate is eligible for Benny's merge decision only after its exact head has
+the required trusted CI and CodeQL evidence. `jarvis-pr-maintenance/review` is
+advisory: missing, pending, failed, stale or differently bound review evidence
+must be investigated, but it is not itself a formal merge status. A new commit
+or base change invalidates prior review evidence.
 
 ## Source of truth and mission claim
 
@@ -167,9 +168,9 @@ observe that same candidate through `jarvis-pr-maintenance`:
 5. Publish failure or remain non-success for missing context, real findings,
    untrusted evidence, stale identity or incomplete execution.
 
-The Jarvis PASS must be a required `main` merge status. It does not approve,
-merge, deploy, commission, close an issue or satisfy Omega evidence. Only Benny
-may act after the gate passes.
+The advisory review does not approve, merge, deploy, commission, close an issue
+or satisfy Omega evidence. Only Benny may act after the required deterministic
+checks are satisfied and the exact candidate has been considered.
 
 This operating model is not enforced merely because this document is merged.
 Activation requires live GitHub protection for `main` that names the Jarvis
@@ -209,9 +210,11 @@ Merge authorised: NO
 Deployment authorised: NO
 ```
 
-`OWNER DECISION REQUIRED` is valid only when the exact reviewed candidate also
-has `jarvis-pr-maintenance/review = success`. Otherwise the verdict remains
-`BLOCKED` or `REPAIR REQUIRED`.
+For this protocol, `OWNER DECISION REQUIRED` requires a clean, exact-candidate
+advisory review as well as trusted CI and CodeQL evidence. Its
+`jarvis-pr-maintenance/review` status is not a GitHub-required merge check and
+never grants merge authority; missing, failed, stale or differently bound
+review evidence must be investigated and cannot produce an owner handoff.
 
 ## Terminal transition
 
@@ -228,3 +231,38 @@ abandoning it. After that decision:
 This protocol coordinates work. It does not replace Jarvis's existing
 autonomous queue, exact-head verification, independent review, durable evidence
 or owner approval controls.
+
+## Autonomous coordinator receipt
+
+For `automation-approved` work, the existing GitHub Actions queue is the
+coordinator of record. It already serializes one mission, binds the builder to a
+verified `main` SHA, waits for exact-head CI/CodeQL, invokes the isolated
+advisory review, and routes a bounded repair to the original builder. The
+`jarvis-dual-agent-mission:v1` receipt supplements those provider records with
+the selected builder/reviewer pair and a human-readable phase; it never grants
+authority and cannot replace workflow history, checks, or durable Development
+state.
+
+The receipt phases are `claimed`, `waiting-ci`, `reviewing`,
+`repair-required`, `awaiting-owner`, `blocked`, and `terminal`. Every phase
+after claim carries the exact PR/head/base/CI-fingerprint identity. A changed
+head or fingerprint invalidates review evidence and returns the mission to CI
+waiting; a moved base yields `blocked` and requires an independently validated
+reset. A repair remains with its original builder.
+
+When a dedicated Claude builder executor is available, builder selection may
+alternate only after a terminal mission; the independent reviewer remains a
+separate read-only Codex maintenance invocation. This is capability-aware, not
+aspirational: the currently configured Claude workflow is comment-only and
+cannot safely build or return a machine-readable review receipt. If the selected
+Claude builder executor is unavailable, the mission is `blocked`; Jarvis must
+not silently substitute a different builder or claim an alternating handoff
+occurred. The configured Codex builder plus separately invoked read-only Codex
+maintenance review remains the safe autonomous path until that executor exists.
+
+`jarvis-pr-maintenance/review` remains advisory. It is not a GitHub approval,
+does not mark a PR ready, and does not give a worker merge or deployment power.
+The only owner interruptions are an exact-candidate merge approval, deployment
+approval, or an explicit blocked ambiguity/risk. Closing or merging the PR is
+the terminal transition; only then may a later mission become eligible for role
+rotation.
