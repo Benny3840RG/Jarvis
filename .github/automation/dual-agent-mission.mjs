@@ -141,7 +141,11 @@ export function advanceMission(mission, event = {}) {
   if (event.type === "candidate") {
     const identity = exactIdentity(event);
     if (identity.baseSha !== mission.baseSha)
-      throw new Error("Candidate base SHA differs from the mission base.");
+      return {
+        ...mission,
+        phase: "blocked",
+        reason: "Candidate base moved; independently validate a reset before continuing.",
+      };
     if (mission.identity && identity.pullNumber !== mission.identity.pullNumber)
       throw new Error("Candidate must remain on the original pull request.");
     return { ...mission, phase: "waiting-ci", identity };

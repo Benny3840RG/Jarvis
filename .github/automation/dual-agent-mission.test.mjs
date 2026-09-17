@@ -126,14 +126,16 @@ test("accepts a repaired candidate only on the original pull request", () => {
       }),
     /original pull request/i,
   );
-  assert.throws(
-    () =>
-      advanceMission(repairing, {
-        type: "candidate",
-        ...repaired,
-        baseSha: "f".repeat(40),
-      }),
-    /base SHA/i,
+  const baseMoved = advanceMission(repairing, {
+    type: "candidate",
+    ...repaired,
+    baseSha: "f".repeat(40),
+  });
+  assert.equal(baseMoved.phase, "blocked");
+  assert.match(baseMoved.reason, /base moved/i);
+  assert.match(
+    renderMissionReceipt(baseMoved),
+    /independently validate a reset/i,
   );
 });
 
