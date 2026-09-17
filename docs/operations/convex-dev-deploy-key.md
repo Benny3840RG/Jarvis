@@ -63,13 +63,24 @@ never interpret a post-execution refusal as proof that nothing changed.
   key and receipt must be owned regular files with mode `0600`. Symlink files
   and a symlink state directory are refused before provider access.
 - Provisioning is a separate owner operation. The CLI supports saving a scoped
-  token directly to the file without printing it:
+  token directly to the file without printing it. Convex's `--save-env` write
+  passes no explicit file mode, so it lands at the OS default (typically
+  `0644` under a standard `umask 022`) — private the whole time it exists, not
+  just after a later `chmod`, by creating the directory first and running the
+  write under a restrictive umask:
 
   ```bash
-  node node_modules/convex/bin/main.js deployment token create <name> \
-    --deployment-name outgoing-ram-798 \
-    --save-env ~/.local/state/jarvis-convex/dev-outgoing-ram-798.env
+  mkdir -p -m 0700 ~/.local/state/jarvis-convex
+  ( umask 077 && node node_modules/convex/bin/main.js deployment token create <name> \
+      --deployment-name outgoing-ram-798 \
+      --save-env ~/.local/state/jarvis-convex/dev-outgoing-ram-798.env )
   ```
+
+  `--deployment-name` is a real, functioning option (added by the same
+  `addDeploymentSelectionOptions` helper used across the Convex CLI's
+  deployment-selection commands); it's intentionally hidden from `--help`
+  output, which is why it can look unsupported from `--help` alone. It's the
+  exact command already used to provision the live key for this deployment.
 
 - Never resolve deployment credentials from `~/.convex/config.json` or pass
   secrets through `--admin-key` or other command arguments. The wrapper injects
