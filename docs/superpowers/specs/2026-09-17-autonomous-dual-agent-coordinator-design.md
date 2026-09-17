@@ -16,7 +16,7 @@ Remove routine owner dispatching from an approved autonomous development mission
 
 Add a pure `.github/automation/dual-agent-mission.mjs` module. It validates and renders a versioned GitHub issue-comment receipt that is informational only; workflow/run state remains the authority for dispatches and evidence. Before every transition or render, it rejects malformed persisted state: unsupported version or phase, invalid issue/base SHA/roles, an out-of-range repair count, or missing, malformed, or base-mismatched candidate identity in a candidate-bound phase. The receipt records one mission identity:
 
-- issue and PR number;
+- claimed issue number and its trusted candidate PR number;
 - verified base SHA, candidate head SHA, and CI fingerprint;
 - fixed builder/reviewer pair selected from the persisted rotation;
 - phase: `claimed`, `waiting-ci`, `reviewing`, `repair-required`, `awaiting-owner`, `blocked`, or `terminal`;

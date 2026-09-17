@@ -9,7 +9,7 @@ import {
 const baseSha = "a".repeat(40);
 const headSha = "b".repeat(40);
 const fingerprint = "c".repeat(64);
-const identity = { pullNumber: 42, headSha, baseSha, fingerprint };
+const identity = { issueNumber: 42, pullNumber: 42, headSha, baseSha, fingerprint };
 
 test("claims a complementary builder and reviewer from available executors", () => {
   const mission = claimMission({
@@ -136,6 +136,19 @@ test("accepts a repaired candidate only on the original pull request", () => {
   assert.match(
     renderMissionReceipt(baseMoved),
     /independently validate a reset/i,
+  );
+  assert.throws(
+    () => advanceMission(repairing, { type: "candidate", ...identity }),
+    /fresh candidate/i,
+  );
+});
+
+test("binds a candidate to its claimed issue before entering CI", () => {
+  const claimed = claimMission({ issueNumber: 42, baseSha, availableExecutors: ["codex"] });
+
+  assert.throws(
+    () => advanceMission(claimed, { type: "candidate", ...identity, issueNumber: 99 }),
+    /claimed issue/i,
   );
 });
 

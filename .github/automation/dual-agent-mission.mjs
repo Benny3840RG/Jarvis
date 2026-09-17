@@ -5,6 +5,8 @@ const REVIEWER = "codex-independent";
 
 function exactIdentity(value) {
   if (
+    !Number.isSafeInteger(value?.issueNumber) ||
+    value.issueNumber < 1 ||
     !Number.isSafeInteger(value?.pullNumber) ||
     value.pullNumber < 1 ||
     !SHA.test(value.headSha) ||
@@ -14,6 +16,7 @@ function exactIdentity(value) {
     throw new Error("Invalid exact candidate identity.");
   }
   return {
+    issueNumber: value.issueNumber,
     pullNumber: value.pullNumber,
     headSha: value.headSha,
     baseSha: value.baseSha,
@@ -64,6 +67,7 @@ export function claimMission({
 
 function sameIdentity(mission, identity) {
   return (
+    mission.identity?.issueNumber === identity.issueNumber &&
     mission.identity?.pullNumber === identity.pullNumber &&
     mission.identity?.headSha === identity.headSha &&
     mission.identity?.baseSha === identity.baseSha &&
@@ -140,6 +144,8 @@ export function advanceMission(mission, event = {}) {
   if (event.type === "terminal") return { ...mission, phase: "terminal" };
   if (event.type === "candidate") {
     const identity = exactIdentity(event);
+    if (identity.issueNumber !== mission.issueNumber)
+      throw new Error("Candidate is not bound to the claimed issue.");
     if (identity.baseSha !== mission.baseSha)
       return {
         ...mission,
@@ -148,6 +154,8 @@ export function advanceMission(mission, event = {}) {
       };
     if (mission.identity && identity.pullNumber !== mission.identity.pullNumber)
       throw new Error("Candidate must remain on the original pull request.");
+    if (mission.phase === "repair-required" && sameIdentity(mission, identity))
+      throw new Error("Repair must publish a fresh candidate identity.");
     return { ...mission, phase: "waiting-ci", identity };
   }
   const identity = requireCurrentIdentity(mission, event);
