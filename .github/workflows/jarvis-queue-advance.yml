@@ -266,6 +266,11 @@ jobs:
                 `${process.env.GITHUB_WORKSPACE}/.github/automation/select-next-mission.mjs`,
               ).href
             );
+            const { claimMission, renderMissionReceipt } = await import(
+              pathToFileURL(
+                `${process.env.GITHUB_WORKSPACE}/.github/automation/dual-agent-mission.mjs`,
+              ).href
+            );
 
             const verifiedSha = process.env.VERIFIED_SHA;
             if (!/^[0-9a-f]{40}$/.test(verifiedSha || "")) {
@@ -448,6 +453,13 @@ jobs:
 
             // Carry the verified revision to the builder so its checkout and its
             // own health re-check are bound to this exact SHA, not a moving main.
+            // This receipt is informational only: the existing global lock and
+            // provider workflow history remain dispatch authority.
+            const missionReceipt = renderMissionReceipt(claimMission({
+              issueNumber,
+              baseSha: verifiedSha,
+              availableExecutors: ["codex"],
+            }));
             await github.rest.actions.createWorkflowDispatch({
               owner,
               repo,
@@ -460,6 +472,7 @@ jobs:
               repo,
               issue_number: issueNumber,
               body:
+                `${missionReceipt}\n\n` +
                 `Queue advance dispatched the bounded autonomous builder for this ` +
                 `mission against verified main \`${verifiedSha}\`. The mission holds ` +
                 `the queue until its pull request is merged or closed. Independent ` +

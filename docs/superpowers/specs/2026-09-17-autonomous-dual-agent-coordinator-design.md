@@ -1,0 +1,43 @@
+# Autonomous Dual-Agent Coordinator Design
+
+## Goal
+
+Remove routine owner dispatching from an approved autonomous development mission while preserving Benny's sole authority to merge, deploy, close, or abandon a mission.
+
+## Existing controls retained
+
+- `jarvis-queue-advance.yml` remains the sole serialized dispatcher and retains its global mission lock.
+- `jarvis-autobuild.yml` remains the bounded Codex builder executor and accepts only a verified source SHA.
+- `jarvis-pr-maintenance.yml` remains an independent, read-only, **advisory** review with exact PR/head/base/CI-fingerprint binding.
+- Existing CI and CodeQL provenance checks, repair limits, branch/draft boundaries, and Development/Omega authority are not weakened.
+- The coordinator has no merge, approval, ready-for-review, deployment, commission, issue-close, or protection-setting operation.
+
+## Smallest coordinator
+
+Add a pure `.github/automation/dual-agent-mission.mjs` module. It validates and renders a versioned GitHub issue-comment receipt that is informational only; workflow/run state remains the authority for dispatches and evidence. The receipt records one mission identity:
+
+- issue and PR number;
+- verified base SHA, candidate head SHA, and CI fingerprint;
+- fixed builder/reviewer pair selected from the persisted rotation;
+- phase: `claimed`, `building`, `waiting-ci`, `reviewing`, `repair-required`, `awaiting-owner`, `blocked`, or `terminal`;
+- original builder and repair count, so repairs cannot silently change ownership;
+- the only allowed owner interrupts: merge, deployment, or an explicit blocked ambiguity/risk.
+
+The role assignment alternates `Codex builder / Claude reviewer` and `Claude builder / Codex reviewer` only when a preceding mission is terminal. Until a dedicated Claude write-capable executor exists, an unavailable selected builder is a transparent `blocked` state—not a fallback that pretends Claude work occurred. The existing Codex executor is selected where capability exists; independent Codex PR maintenance remains a separate read-only reviewer and is never its own candidate's builder.
+
+## Flow
+
+1. Queue admission confirms healthy `main`, no live lock/PR/worker, and an approved issue. It emits the claim receipt bound to the verified source SHA and selected roles before dispatching the existing builder.
+2. Builder publication records the exact draft PR/head and moves the receipt to `waiting-ci`.
+3. Existing maintenance waits for trusted exact-head CI and CodeQL, dispatches its independent advisory review using PR/head/base/fingerprint, and records `reviewing`.
+4. A clean advisory review and unchanged evidence produce `awaiting-owner`; the only result is an owner-facing summary. It does not mark ready, approve, merge, or deploy.
+5. Actionable findings route only to the original builder through the existing bounded repair path. A changed head/base/fingerprint invalidates the previous review and returns to `waiting-ci`; repair remains bound to the original builder and PR.
+6. Missing provenance, review context, moved base, unsupported builder capability, or exhausted budgets yields `blocked` with a precise owner action. Merge/close events produce `terminal` and make rotation eligible for the next mission.
+
+## Workflow integration
+
+The initial safe increment is a tested controller module plus workflow-contract assertions and an owner-facing operations document. It consumes existing Actions evidence rather than adding mutable state, tokens, or privileges. Follow-up workflow hooks may only call it to render facts already verified by the existing queue/maintenance controllers.
+
+## Tests
+
+Unit tests prove role alternation only after terminal state; exact SHA and fingerprint validation; same-builder repair routing; stale-head/base invalidation; duplicate/overlap refusal; unavailable-builder blocking; and that no owner authority can be represented by a receipt. Workflow contract tests ensure the advisory review model and no new merge/deploy permissions remain intact.
