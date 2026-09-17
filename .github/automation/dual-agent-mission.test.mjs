@@ -193,6 +193,28 @@ test("returns a changed reviewed candidate to CI and caps repairs at two", () =>
   );
 });
 
+test("allows the owner to terminate a mission from every active phase", () => {
+  const claimed = claimMission({
+    issueNumber: 42,
+    baseSha,
+    availableExecutors: ["codex"],
+  });
+  const waiting = advanceMission(claimed, { type: "candidate", ...identity });
+  const reviewing = advanceMission(waiting, {
+    type: "review-started",
+    ...identity,
+  });
+  const repairing = advanceMission(reviewing, {
+    type: "repair-required",
+    ...identity,
+    builder: "codex",
+  });
+
+  for (const mission of [claimed, waiting, reviewing, repairing]) {
+    assert.equal(advanceMission(mission, { type: "terminal" }).phase, "terminal");
+  }
+});
+
 test("only reaches owner decision after exact clean review and never grants authority", () => {
   const claimed = claimMission({
     issueNumber: 42,

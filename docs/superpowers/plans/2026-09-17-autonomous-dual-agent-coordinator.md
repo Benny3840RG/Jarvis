@@ -35,7 +35,7 @@
 
 ```js
 const mission = claimMission({ issueNumber: 42, baseSha: "a".repeat(40) });
-assert.deepEqual([mission.builder, mission.reviewer], ["codex", "claude"]);
+assert.deepEqual([mission.builder, mission.reviewer], ["codex", "codex-independent"]);
 assert.throws(() => claimMission({ issueNumber: 42, baseSha: "short" }), /base SHA/);
 ```
 
@@ -52,7 +52,7 @@ export function claimMission({ issueNumber, baseSha, previousTerminalBuilder } =
   if (!Number.isSafeInteger(issueNumber) || issueNumber < 1) throw new Error("Invalid issue number.");
   if (!SHA.test(baseSha)) throw new Error("Invalid base SHA.");
   const builder = previousTerminalBuilder === "codex" ? "claude" : "codex";
-  return { version: 1, issueNumber, baseSha, builder, reviewer: builder === "codex" ? "claude" : "codex", phase: "claimed" };
+  return { version: 1, issueNumber, baseSha, builder, reviewer: "codex-independent", phase: "claimed" };
 }
 ```
 
@@ -89,7 +89,7 @@ Expected: FAIL because transition APIs do not exist.
 - [ ] **Step 3: Implement only the allowed transition graph**
 
 ```js
-const allowed = { claimed: ["building", "blocked"], building: ["waiting-ci", "blocked"], waiting-ci: ["reviewing", "blocked"], reviewing: ["repair-required", "awaiting-owner", "blocked"], "repair-required": ["waiting-ci", "blocked"], "awaiting-owner": ["terminal"], blocked: ["terminal"] };
+const allowed = { claimed: ["candidate", "blocked", "terminal"], "waiting-ci": ["review-started", "blocked", "terminal"], reviewing: ["candidate", "repair-required", "awaiting-owner", "blocked", "terminal"], "repair-required": ["candidate", "blocked", "terminal"], "awaiting-owner": ["terminal"], blocked: ["terminal"] };
 ```
 
 Validate identity on every candidate-derived transition; increment repair count only through `repair-required`; render explicit `Merge authorised: NO` and `Deployment authorised: NO` lines.

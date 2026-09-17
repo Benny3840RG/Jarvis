@@ -78,10 +78,10 @@ function requireCurrentIdentity(mission, event) {
 }
 
 const transitions = {
-  claimed: new Set(["candidate", "blocked"]),
-  "waiting-ci": new Set(["review-started", "blocked"]),
-  reviewing: new Set(["candidate", "repair-required", "awaiting-owner", "blocked"]),
-  "repair-required": new Set(["candidate", "blocked"]),
+  claimed: new Set(["candidate", "blocked", "terminal"]),
+  "waiting-ci": new Set(["review-started", "blocked", "terminal"]),
+  reviewing: new Set(["candidate", "repair-required", "awaiting-owner", "blocked", "terminal"]),
+  "repair-required": new Set(["candidate", "blocked", "terminal"]),
   "awaiting-owner": new Set(["terminal"]),
   blocked: new Set(["terminal"]),
 };
