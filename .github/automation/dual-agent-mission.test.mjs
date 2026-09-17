@@ -27,11 +27,16 @@ test("claims a complementary builder and reviewer from available executors", () 
   );
 });
 
-test("alternates to Claude only when its builder executor is available", () => {
-  const mission = claimMission({
+test("alternates only after an owner-evidenced terminal mission", () => {
+  const previous = advanceMission(claimMission({
     issueNumber: 43,
     baseSha,
-    previousTerminalBuilder: "codex",
+    availableExecutors: ["codex"],
+  }), { type: "terminal", ownerEvidence: { actor: "Benny", decision: "abandoned" } });
+  const mission = claimMission({
+    issueNumber: 44,
+    baseSha,
+    previousTerminalMission: previous,
     availableExecutors: ["codex", "claude"],
   });
 
@@ -40,10 +45,15 @@ test("alternates to Claude only when its builder executor is available", () => {
 });
 
 test("blocks rather than silently substituting an unavailable selected builder", () => {
+  const previous = advanceMission(claimMission({
+    issueNumber: 42,
+    baseSha,
+    availableExecutors: ["codex"],
+  }), { type: "terminal", ownerEvidence: { actor: "Benny", decision: "abandoned" } });
   const mission = claimMission({
     issueNumber: 43,
     baseSha,
-    previousTerminalBuilder: "codex",
+    previousTerminalMission: previous,
     availableExecutors: ["codex"],
   });
 
@@ -235,7 +245,14 @@ test("allows the owner to terminate a mission from every active phase", () => {
   });
 
   for (const mission of [claimed, waiting, reviewing, repairing]) {
-    const terminal = advanceMission(mission, { type: "terminal" });
+    assert.throws(
+      () => advanceMission(mission, { type: "terminal" }),
+      /owner evidence/i,
+    );
+    const terminal = advanceMission(mission, {
+      type: "terminal",
+      ownerEvidence: { actor: "Benny", decision: "abandoned" },
+    });
     assert.equal(terminal.phase, "terminal");
     assert.match(renderMissionReceipt(terminal), /Phase: terminal/);
   }

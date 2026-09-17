@@ -24,11 +24,28 @@ function exactIdentity(value) {
   };
 }
 
-function rolePlan(previousTerminalBuilder, availableExecutors) {
+function terminalEvidence(value) {
+  if (
+    value?.actor !== "Benny" ||
+    !["merged", "closed", "abandoned"].includes(value.decision)
+  ) {
+    throw new Error("Terminal transition requires owner evidence.");
+  }
+  return { actor: value.actor, decision: value.decision };
+}
+
+function rolePlan(previousTerminalMission, availableExecutors) {
   const available = new Set(availableExecutors || ["codex"]);
   if (![...available].every((executor) => EXECUTORS.has(executor)))
     throw new Error("Unknown agent executor.");
-  const preferred = previousTerminalBuilder === "codex" ? "claude" : "codex";
+  let previousBuilder;
+  if (previousTerminalMission !== undefined) {
+    validateMission(previousTerminalMission);
+    if (previousTerminalMission.phase !== "terminal")
+      throw new Error("Role rotation requires a terminal mission.");
+    previousBuilder = previousTerminalMission.builder;
+  }
+  const preferred = previousBuilder === "codex" ? "claude" : "codex";
   if (!available.has(preferred)) {
     return {
       builder: preferred,
@@ -47,15 +64,13 @@ function rolePlan(previousTerminalBuilder, availableExecutors) {
 export function claimMission({
   issueNumber,
   baseSha,
-  previousTerminalBuilder,
+  previousTerminalMission,
   availableExecutors,
 } = {}) {
   if (!Number.isSafeInteger(issueNumber) || issueNumber < 1)
     throw new Error("Invalid issue number.");
   if (!SHA.test(baseSha)) throw new Error("Invalid base SHA.");
-  if (previousTerminalBuilder !== undefined && !EXECUTORS.has(previousTerminalBuilder))
-    throw new Error("Invalid previous terminal builder.");
-  const roles = rolePlan(previousTerminalBuilder, availableExecutors);
+  const roles = rolePlan(previousTerminalMission, availableExecutors);
   return {
     version: 1,
     issueNumber,
@@ -133,6 +148,15 @@ function validateMission(mission) {
     if (identity.issueNumber !== mission.issueNumber || identity.baseSha !== mission.baseSha)
       invalidMissionState();
   }
+  if (mission.phase === "terminal") {
+    try {
+      terminalEvidence(mission.terminalEvidence);
+    } catch {
+      invalidMissionState();
+    }
+  } else if (mission.terminalEvidence !== undefined) {
+    invalidMissionState();
+  }
   return mission;
 }
 
@@ -142,7 +166,8 @@ export function advanceMission(mission, event = {}) {
     throw new Error(`Mission phase ${mission.phase} cannot consume ${event.type}.`);
   if (event.type === "blocked")
     return { ...mission, phase: "blocked", reason: String(event.reason || "Blocked.") };
-  if (event.type === "terminal") return { ...mission, phase: "terminal" };
+  if (event.type === "terminal")
+    return { ...mission, phase: "terminal", terminalEvidence: terminalEvidence(event.ownerEvidence) };
   if (event.type === "candidate") {
     const identity = exactIdentity(event);
     if (identity.issueNumber !== mission.issueNumber)

@@ -23,7 +23,7 @@ Add a pure `.github/automation/dual-agent-mission.mjs` module. It validates and 
 - original builder and repair count, so repairs cannot silently change ownership;
 - the only allowed owner interrupts: merge, deployment, or an explicit blocked ambiguity/risk.
 
-When a dedicated Claude write-capable executor is available, the selected builder alternates after a terminal mission and the independent reviewer remains a separate read-only Codex maintenance invocation. Until then, an unavailable selected Claude builder is a transparent `blocked` state—not a fallback that pretends Claude work occurred. The existing Codex executor is selected where capability exists; independent Codex PR maintenance is a separate invocation and never its own candidate's builder.
+When a dedicated Claude write-capable executor is available, the selected builder alternates only from a persisted terminal mission carrying Benny's trusted merge, close, or abandonment evidence; the independent reviewer remains a separate read-only Codex maintenance invocation. Until then, an unavailable selected Claude builder is a transparent `blocked` state—not a fallback that pretends Claude work occurred. The existing Codex executor is selected where capability exists; independent Codex PR maintenance is a separate invocation and never its own candidate's builder.
 
 ## Flow
 
@@ -32,7 +32,7 @@ When a dedicated Claude write-capable executor is available, the selected builde
 3. Existing maintenance waits for trusted exact-head CI and CodeQL, dispatches its independent advisory review using PR/head/base/fingerprint, and records `reviewing`.
 4. A clean advisory review and unchanged evidence produce `awaiting-owner`; the only result is an owner-facing summary. It does not mark ready, approve, merge, or deploy.
 5. Actionable findings route only to the original builder through the existing bounded repair path. A changed head or fingerprint on the same PR and same independently verified base invalidates the previous review and returns to `waiting-ci`; repair remains bound to the original builder and PR. A moved base is rejected and yields a blocked mission requiring an independently validated reset.
-6. A receipt can reach `awaiting-owner` only when its exact candidate is accompanied by a clean advisory-review verdict and trusted-success CI evidence. Missing provenance, review context, moved base, unsupported builder capability, or exhausted budgets yields `blocked` with a precise owner action. Merge/close events produce `terminal` and make rotation eligible for the next mission.
+6. A receipt can reach `awaiting-owner` only when its exact candidate is accompanied by a clean advisory-review verdict and trusted-success CI evidence. Missing provenance, review context, moved base, unsupported builder capability, or exhausted budgets yields `blocked` with a precise owner action. Only trusted owner evidence of a merge, close, or abandonment produces `terminal` and makes rotation eligible for the next mission.
 
 ## Workflow integration
 
