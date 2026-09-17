@@ -50,6 +50,13 @@ Expected handling:
 - Production deployment is not authorised from CI unless the human owner gives an explicit deployment approval gate.
 - GitHub Actions should be pinned to full commit SHAs, and checkout credentials should not persist unless a job explicitly needs to push.
 - Control-plane files require CODEOWNERS coverage.
+- `main` is protected by classic branch protection (PR required, up-to-date
+  branch, five checks, no force-push/deletion; approvals currently `0` as a
+  deliberate temporary policy — see below) plus a narrow ruleset requiring a
+  CodeQL result at or below `high_or_higher`/`errors`, with no bypass actors.
+  `jarvis-pr-maintenance/review` is intentionally advisory, not a required
+  check. See `docs/operations/branch-protection.md` for the full policy,
+  why, and the documented Dependabot exclusion.
 
 ## Out of scope for public disclosure
 

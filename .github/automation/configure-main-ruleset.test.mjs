@@ -2,8 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
-  JARVIS_MAIN_RULESET_NAME,
-  REQUIRED_MAIN_CHECKS,
+  MAIN_RULESET_NAME,
   configureMainRuleset,
   desiredMainRuleset,
 } from "./configure-main-ruleset.mjs";
@@ -59,7 +58,7 @@ function successfulApi({
           ? [
               {
                 id,
-                name: JARVIS_MAIN_RULESET_NAME,
+                name: MAIN_RULESET_NAME,
                 target: "branch",
                 enforcement: existingEnforcement,
               },
@@ -99,20 +98,9 @@ function successfulApi({
   return { calls, fetchImpl, id };
 }
 
-test("policy requires every trusted candidate check, Jarvis PASS and no review or bypass", () => {
-  assert.deepEqual(REQUIRED_MAIN_CHECKS, [
-    "automation-policy",
-    "typecheck-lint-format-test",
-    "jarvis-console-01-build",
-    "pr-evidence",
-    "Analyze (actions)",
-    "Analyze (python)",
-    "Analyze (ruby)",
-    "Analyze (javascript-typescript)",
-    "jarvis-pr-maintenance/review",
-  ]);
+test("policy is exactly the narrow CodeQL code-scanning gate, no review or bypass", () => {
   const policy = desiredMainRuleset("active");
-  assert.equal(policy.name, JARVIS_MAIN_RULESET_NAME);
+  assert.equal(policy.name, MAIN_RULESET_NAME);
   assert.equal(policy.enforcement, "active");
   assert.deepEqual(policy.bypass_actors, []);
   assert.deepEqual(policy.conditions, {
@@ -120,22 +108,25 @@ test("policy requires every trusted candidate check, Jarvis PASS and no review o
   });
   assert.deepEqual(
     policy.rules.map((rule) => rule.type),
-    ["deletion", "non_fast_forward", "pull_request", "required_status_checks"],
+    ["code_scanning"],
   );
-  const pullRequest = policy.rules.find((rule) => rule.type === "pull_request");
-  assert.deepEqual(pullRequest.parameters, {
-    allowed_merge_methods: ["merge", "squash", "rebase"],
-    dismiss_stale_reviews_on_push: false,
-    require_code_owner_review: false,
-    require_last_push_approval: false,
-    required_approving_review_count: 0,
-    required_review_thread_resolution: false,
+  const codeScanning = policy.rules.find((rule) => rule.type === "code_scanning");
+  assert.deepEqual(codeScanning.parameters, {
+    code_scanning_tools: [
+      {
+        tool: "CodeQL",
+        security_alerts_threshold: "high_or_higher",
+        alerts_threshold: "errors",
+      },
+    ],
   });
-  const checks = policy.rules.find((rule) => rule.type === "required_status_checks");
-  assert.equal(checks.parameters.strict_required_status_checks_policy, true);
-  assert.deepEqual(
-    checks.parameters.required_status_checks,
-    REQUIRED_MAIN_CHECKS.map((context) => ({ context, integration_id: 15368 })),
+  // This ruleset must never grow a pull_request/required_status_checks/
+  // deletion/non_fast_forward rule: those are classic branch protection's
+  // job (applied separately, see docs/operations/branch-protection.md), and
+  // jarvis-pr-maintenance/review must never appear here (see file header).
+  assert.equal(
+    policy.rules.some((rule) => rule.type !== "code_scanning"),
+    false,
   );
 });
 
