@@ -80,7 +80,7 @@ function requireCurrentIdentity(mission, event) {
 const transitions = {
   claimed: new Set(["candidate", "blocked"]),
   "waiting-ci": new Set(["review-started", "blocked"]),
-  reviewing: new Set(["repair-required", "awaiting-owner", "blocked"]),
+  reviewing: new Set(["candidate", "repair-required", "awaiting-owner", "blocked"]),
   "repair-required": new Set(["candidate", "blocked"]),
   "awaiting-owner": new Set(["terminal"]),
   blocked: new Set(["terminal"]),
@@ -96,14 +96,18 @@ export function advanceMission(mission, event = {}) {
   if (event.type === "terminal") return { ...mission, phase: "terminal" };
   if (event.type === "candidate") {
     const identity = exactIdentity(event);
-    if (identity.baseSha !== mission.baseSha)
+    if (mission.phase === "claimed" && identity.baseSha !== mission.baseSha)
       throw new Error("Candidate base SHA differs from the claimed mission base.");
-    return { ...mission, phase: "waiting-ci", identity };
+    if (mission.identity && identity.pullNumber !== mission.identity.pullNumber)
+      throw new Error("Candidate must remain on the original pull request.");
+    return { ...mission, baseSha: identity.baseSha, phase: "waiting-ci", identity };
   }
   const identity = requireCurrentIdentity(mission, event);
   if (event.type === "repair-required") {
     if (event.builder !== mission.builder)
       throw new Error("Repairs must return to the original builder.");
+    if (mission.repairCount >= 2)
+      throw new Error("Mission repair budget is exhausted.");
     return { ...mission, phase: "repair-required", identity, repairCount: mission.repairCount + 1 };
   }
   if (event.type === "review-started") return { ...mission, phase: "reviewing", identity };

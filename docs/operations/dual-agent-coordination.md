@@ -247,14 +247,15 @@ after claim carries the exact PR/head/base/CI-fingerprint identity. A changed
 head, base, or fingerprint invalidates review evidence and returns the mission
 to CI waiting; a repair remains with its original builder.
 
-The preferred rotation is Codex builder / Claude reviewer, then Claude builder
-/ Codex independent reviewer. This is capability-aware, not aspirational: the
-currently configured Claude workflow is comment-only and cannot safely build or
-return a machine-readable review receipt. If the selected Claude builder
-executor is unavailable, the mission is `blocked`; Jarvis must not silently
-substitute a different builder or claim an alternating handoff occurred. The
-configured Codex builder plus separately invoked read-only Codex maintenance
-review remains the safe autonomous path until that executor exists.
+When a dedicated Claude builder executor is available, builder selection may
+alternate only after a terminal mission; the independent reviewer remains a
+separate read-only Codex maintenance invocation. This is capability-aware, not
+aspirational: the currently configured Claude workflow is comment-only and
+cannot safely build or return a machine-readable review receipt. If the selected
+Claude builder executor is unavailable, the mission is `blocked`; Jarvis must
+not silently substitute a different builder or claim an alternating handoff
+occurred. The configured Codex builder plus separately invoked read-only Codex
+maintenance review remains the safe autonomous path until that executor exists.
 
 `jarvis-pr-maintenance/review` remains advisory. It is not a GitHub approval,
 does not mark a PR ready, and does not give a worker merge or deployment power.

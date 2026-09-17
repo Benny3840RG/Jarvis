@@ -19,11 +19,11 @@ Add a pure `.github/automation/dual-agent-mission.mjs` module. It validates and 
 - issue and PR number;
 - verified base SHA, candidate head SHA, and CI fingerprint;
 - fixed builder/reviewer pair selected from the persisted rotation;
-- phase: `claimed`, `building`, `waiting-ci`, `reviewing`, `repair-required`, `awaiting-owner`, `blocked`, or `terminal`;
+- phase: `claimed`, `waiting-ci`, `reviewing`, `repair-required`, `awaiting-owner`, `blocked`, or `terminal`;
 - original builder and repair count, so repairs cannot silently change ownership;
 - the only allowed owner interrupts: merge, deployment, or an explicit blocked ambiguity/risk.
 
-The role assignment alternates `Codex builder / Claude reviewer` and `Claude builder / Codex reviewer` only when a preceding mission is terminal. Until a dedicated Claude write-capable executor exists, an unavailable selected builder is a transparent `blocked` state—not a fallback that pretends Claude work occurred. The existing Codex executor is selected where capability exists; independent Codex PR maintenance remains a separate read-only reviewer and is never its own candidate's builder.
+When a dedicated Claude write-capable executor is available, the selected builder alternates after a terminal mission and the independent reviewer remains a separate read-only Codex maintenance invocation. Until then, an unavailable selected Claude builder is a transparent `blocked` state—not a fallback that pretends Claude work occurred. The existing Codex executor is selected where capability exists; independent Codex PR maintenance is a separate invocation and never its own candidate's builder.
 
 ## Flow
 

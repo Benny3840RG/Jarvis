@@ -91,6 +91,108 @@ test("binds review to the exact candidate and returns repairs to the same builde
   assert.equal(repairing.repairCount, 1);
 });
 
+test("accepts a repaired candidate only on the original pull request", () => {
+  const claimed = claimMission({
+    issueNumber: 42,
+    baseSha,
+    availableExecutors: ["codex"],
+  });
+  const waiting = advanceMission(claimed, { type: "candidate", ...identity });
+  const reviewing = advanceMission(waiting, {
+    type: "review-started",
+    ...identity,
+  });
+  const repairing = advanceMission(reviewing, {
+    type: "repair-required",
+    ...identity,
+    builder: "codex",
+  });
+  const repaired = {
+    ...identity,
+    headSha: "d".repeat(40),
+    fingerprint: "e".repeat(64),
+  };
+
+  assert.equal(
+    advanceMission(repairing, { type: "candidate", ...repaired }).phase,
+    "waiting-ci",
+  );
+  assert.throws(
+    () =>
+      advanceMission(repairing, {
+        type: "candidate",
+        ...repaired,
+        pullNumber: 99,
+      }),
+    /original pull request/i,
+  );
+});
+
+test("returns a changed reviewed candidate to CI and caps repairs at two", () => {
+  const claimed = claimMission({
+    issueNumber: 42,
+    baseSha,
+    availableExecutors: ["codex"],
+  });
+  const waiting = advanceMission(claimed, { type: "candidate", ...identity });
+  const reviewing = advanceMission(waiting, {
+    type: "review-started",
+    ...identity,
+  });
+  const changed = {
+    ...identity,
+    headSha: "d".repeat(40),
+    fingerprint: "e".repeat(64),
+  };
+
+  assert.equal(
+    advanceMission(reviewing, { type: "candidate", ...changed }).phase,
+    "waiting-ci",
+  );
+  const firstRepair = advanceMission(reviewing, {
+    type: "repair-required",
+    ...identity,
+    builder: "codex",
+  });
+  const secondWaiting = advanceMission(firstRepair, {
+    type: "candidate",
+    ...changed,
+  });
+  const secondReview = advanceMission(secondWaiting, {
+    type: "review-started",
+    ...changed,
+  });
+  const secondRepair = advanceMission(secondReview, {
+    type: "repair-required",
+    ...changed,
+    builder: "codex",
+  });
+  const third = {
+    ...changed,
+    headSha: "f".repeat(40),
+    fingerprint: "0".repeat(64),
+  };
+  const thirdWaiting = advanceMission(secondRepair, {
+    type: "candidate",
+    ...third,
+  });
+  const thirdReview = advanceMission(thirdWaiting, {
+    type: "review-started",
+    ...third,
+  });
+
+  assert.equal(secondRepair.repairCount, 2);
+  assert.throws(
+    () =>
+      advanceMission(thirdReview, {
+        type: "repair-required",
+        ...third,
+        builder: "codex",
+      }),
+    /repair budget/i,
+  );
+});
+
 test("only reaches owner decision after exact clean review and never grants authority", () => {
   const claimed = claimMission({
     issueNumber: 42,
