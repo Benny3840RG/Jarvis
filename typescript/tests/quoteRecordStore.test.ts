@@ -310,4 +310,72 @@ describe("allocateAndSaveQuote", () => {
     assert.equal(result.saved, true);
     assert.equal(result.quote.quoteNumber, 1);
   });
+
+  it("detects a collision against a native (non-tagged) record sharing the same number", async () => {
+    // A legacy or otherwise-shared-store writer that never used this module's
+    // adapter still has a native `number` field, which must count too.
+    class NativeCollisionOnceStore implements QuoteStore {
+      private injected = false;
+      constructor(private readonly inner: QuoteStore) {}
+      list(): Promise<Quote[]> {
+        return this.inner.list();
+      }
+      get(id: string): Promise<Quote | null> {
+        return this.inner.get(id);
+      }
+      async add(input: Parameters<QuoteStore["add"]>[0]): Promise<Quote> {
+        const saved = await this.inner.add(input);
+        if (!this.injected) {
+          this.injected = true;
+          await this.inner.add({ clientId: "legacy-writer", number: input.number, lineItems: [] });
+        }
+        return saved;
+      }
+      update(id: string, update: Parameters<QuoteStore["update"]>[1]): Promise<Quote | null> {
+        return this.inner.update(id, update);
+      }
+      remove(id: string): Promise<Quote | null> {
+        return this.inner.remove(id);
+      }
+    }
+    const store = new NativeCollisionOnceStore(new InMemoryQuoteStore());
+
+    const result = await allocateAndSaveQuote(store, quote176);
+
+    assert.equal(result.saved, true);
+    assert.equal(result.quote.quoteNumber, 2);
+  });
+
+  it("stops immediately, without retrying, when cleaning up a detected duplicate fails", async () => {
+    class AlwaysCollidesAndCannotRemove implements QuoteStore {
+      addCalls = 0;
+      constructor(private readonly inner: QuoteStore) {}
+      list(): Promise<Quote[]> {
+        return this.inner.list();
+      }
+      get(id: string): Promise<Quote | null> {
+        return this.inner.get(id);
+      }
+      async add(input: Parameters<QuoteStore["add"]>[0]): Promise<Quote> {
+        this.addCalls++;
+        const saved = await this.inner.add(input);
+        await this.inner.add({ ...input, clientId: "racing-writer" });
+        return saved;
+      }
+      update(id: string, update: Parameters<QuoteStore["update"]>[1]): Promise<Quote | null> {
+        return this.inner.update(id, update);
+      }
+      remove(): Promise<Quote | null> {
+        return Promise.reject(new Error("remove failed"));
+      }
+    }
+    const store = new AlwaysCollidesAndCannotRemove(new InMemoryQuoteStore());
+
+    const result = await allocateAndSaveQuote(store, quote176, 5);
+
+    assert.equal(result.saved, false);
+    assert.match(result.error ?? "", /remove failed/);
+    // Exactly one attempt: no retry after a failed cleanup.
+    assert.equal(store.addCalls, 1);
+  });
 });

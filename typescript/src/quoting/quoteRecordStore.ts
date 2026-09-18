@@ -89,12 +89,36 @@ export async function allocateAndSaveQuote(
       return { quote: finalQuote, saved: true };
     }
 
-    const collided = records.some(
-      (record) => record.id !== saved.id && fromQuoteRecord(record)?.quoteNumber === quoteNumber,
-    );
+    // Matches both this module's tagged records and any other writer's native
+    // `number` field — the same two sources nextQuoteRecordNumber considers,
+    // so a plain legacy/shared-store writer can't slip past this check either.
+    const collided = records.some((record) => {
+      if (record.id === saved.id) return false;
+      if (fromQuoteRecord(record)?.quoteNumber === quoteNumber) return true;
+      return nativeQuoteNumber(record) === quoteNumber;
+    });
     if (!collided) return { quote: finalQuote, saved: true };
 
-    await store.remove(saved.id).catch(() => {});
+    // Undo our duplicate before retrying. If that fails, stop rather than
+    // retry again — another failed cleanup would only leave more duplicates
+    // behind, and we can no longer promise the store ends up unambiguous.
+    try {
+      const removed = await store.remove(saved.id);
+      if (!removed) {
+        return {
+          quote: finalQuote,
+          saved: false,
+          error: `Quote number ${quoteNumber} collided with another record, and the duplicate this call created (id ${saved.id}) was not found to remove — it may be left behind in the store.`,
+        };
+      }
+    } catch (error: unknown) {
+      return {
+        quote: finalQuote,
+        saved: false,
+        error: `Quote number ${quoteNumber} collided with another record, and removing the duplicate this call created failed (${errorMessage(error)}) — it is likely still in the store.`,
+      };
+    }
+
     lastFailure = {
       quote: finalQuote,
       saved: false,
