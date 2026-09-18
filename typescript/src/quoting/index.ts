@@ -1,5 +1,5 @@
 export { calculateQuoteTotals, type QuoteTotals } from "./quoteCalculator.js";
-export { renderQuoteText } from "./quoteRenderer.js";
+export { formatCurrency, renderQuoteText } from "./quoteRenderer.js";
 export type { QuoteClient, QuoteData, QuoteItem } from "./quoteTypes.js";
 export {
   collectQuoteData,
@@ -8,3 +8,17 @@ export {
   type QuoteIntakeIo,
   type QuoteIntakeWriter,
 } from "./createQuote.js";
+export {
+  decodeQuoteDataNote,
+  encodeQuoteDataNote,
+  fromQuoteRecord,
+  isQuoteData,
+  toQuoteInput,
+} from "./quoteRecordAdapter.js";
+export {
+  findQuoteRecordByNumber,
+  listRecentQuoteRecords,
+  nextQuoteRecordNumber,
+  saveQuoteRecord,
+  type QuoteRecordSummary,
+} from "./quoteRecordStore.js";
