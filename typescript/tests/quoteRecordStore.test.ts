@@ -309,6 +309,7 @@ describe("allocateAndSaveQuote", () => {
 
     assert.equal(result.saved, true);
     assert.equal(result.quote.quoteNumber, 1);
+    assert.match(result.warning ?? "", /could not confirm it's unique/);
   });
 
   it("detects a collision against a native (non-tagged) record sharing the same number", async () => {

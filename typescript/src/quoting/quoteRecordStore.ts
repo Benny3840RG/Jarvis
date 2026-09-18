@@ -31,6 +31,8 @@ export type AllocateAndSaveResult = {
   quote: QuoteData;
   saved: boolean;
   error?: string;
+  /** Set when `saved` is true but uniqueness couldn't be confirmed — the write happened, but a concurrent duplicate may still exist undetected. */
+  warning?: string;
 };
 
 function errorMessage(error: unknown): string {
@@ -82,11 +84,17 @@ export async function allocateAndSaveQuote(
     let records: Quote[];
     try {
       records = await store.list();
-    } catch {
+    } catch (error: unknown) {
       // The save itself already succeeded; a failure to re-read for the
       // uniqueness check is not a save failure — report success rather than
-      // losing an already-persisted quote over it.
-      return { quote: finalQuote, saved: true };
+      // losing an already-persisted quote over it. But don't pretend
+      // uniqueness was confirmed when it wasn't: flag it so the caller can
+      // warn, rather than silently risking an undetected duplicate number.
+      return {
+        quote: finalQuote,
+        saved: true,
+        warning: `Saved as quote #${quoteNumber}, but could not confirm it's unique (${errorMessage(error)}) — run "npm run quotes:list" to check for a duplicate.`,
+      };
     }
 
     // Matches both this module's tagged records and any other writer's native

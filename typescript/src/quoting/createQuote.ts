@@ -135,6 +135,8 @@ export async function runCreateQuote(
           write(
             `Jarvis: Could not save quote #${quote.quoteNumber} (${result.error}). The quote below was not saved — copy it now if you need it.`,
           );
+        } else if (result.warning) {
+          write(`Jarvis: ${result.warning}`);
         }
       } else {
         try {

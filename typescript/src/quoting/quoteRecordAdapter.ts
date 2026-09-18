@@ -14,17 +14,25 @@ import type { QuoteClient, QuoteData, QuoteItem } from "./quoteTypes.js";
  */
 const QUOTE_DATA_NOTES_TAG = "jarvis-quote-data:v1:";
 
-function isFiniteNumber(value: unknown): value is number {
-  return typeof value === "number" && Number.isFinite(value);
+function isPositiveInteger(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value > 0;
+}
+
+function isPositiveAmount(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value > 0;
+}
+
+function isPercentage(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 100;
 }
 
 function isQuoteItem(value: unknown): value is QuoteItem {
   if (typeof value !== "object" || value === null) return false;
   const candidate = value as Partial<QuoteItem>;
   return (
-    isFiniteNumber(candidate.number) &&
+    isPositiveInteger(candidate.number) &&
     typeof candidate.description === "string" &&
-    isFiniteNumber(candidate.amountIncGst)
+    isPositiveAmount(candidate.amountIncGst)
   );
 }
 
@@ -34,24 +42,35 @@ function isQuoteClient(value: unknown): value is QuoteClient {
   return typeof candidate.name === "string" && typeof candidate.propertyAddress === "string";
 }
 
+/**
+ * Domain-valid QuoteData: a positive whole quote number (so
+ * nextQuoteRecordNumber can never derive a fractional "next" number from a
+ * corrupt record), a positive whole valid-days period, a 0-100 deposit
+ * percentage, and positive whole line-item numbers with positive amounts —
+ * matching what the interactive intake itself already enforces.
+ */
 export function isQuoteData(value: unknown): value is QuoteData {
   if (typeof value !== "object" || value === null) return false;
   const candidate = value as Partial<QuoteData>;
   return (
-    isFiniteNumber(candidate.quoteNumber) &&
+    isPositiveInteger(candidate.quoteNumber) &&
     typeof candidate.issueDate === "string" &&
-    isFiniteNumber(candidate.validDays) &&
+    isPositiveInteger(candidate.validDays) &&
     isQuoteClient(candidate.client) &&
     typeof candidate.project === "string" &&
     Array.isArray(candidate.items) &&
     candidate.items.every(isQuoteItem) &&
-    isFiniteNumber(candidate.depositPercentage) &&
+    isPercentage(candidate.depositPercentage) &&
     Array.isArray(candidate.notes) &&
     candidate.notes.every((note) => typeof note === "string")
   );
 }
 
+/** Throws if `quote` violates the domain constraints `isQuoteData` checks, so invalid data is refused before it ever reaches the shared store. */
 export function encodeQuoteDataNote(quote: QuoteData): string {
+  if (!isQuoteData(quote)) {
+    throw new Error("Refusing to save an invalid quote (violates quote data constraints).");
+  }
   return `${QUOTE_DATA_NOTES_TAG}${JSON.stringify(quote)}`;
 }
 
