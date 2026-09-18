@@ -24,3 +24,16 @@ export {
   type AllocateAndSaveResult,
   type QuoteRecordSummary,
 } from "./quoteRecordStore.js";
+export type {
+  PavingJobInput,
+  PavingJobProfile,
+  PavingOption,
+  PavingOptionInput,
+} from "./pavingTypes.js";
+export {
+  buildPavingConditions,
+  buildPavingProfile,
+  buildPavingScope,
+  calculatePavingOptionTotals,
+  type PavingOptionTotals,
+} from "./pavingProfile.js";
