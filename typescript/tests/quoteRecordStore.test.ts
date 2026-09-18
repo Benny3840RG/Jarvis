@@ -2,11 +2,12 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { InMemoryQuoteStore } from "../src/quotes/inMemoryQuoteStore.js";
-import type { QuoteStore } from "../src/quotes/quote.js";
+import type { Quote, QuoteStore } from "../src/quotes/quote.js";
 import { runCreateQuote, type QuoteIntakeIo } from "../src/quoting/createQuote.js";
 import { quote176 } from "../src/quoting/fixtures/quote176.js";
 import { calculateQuoteTotals } from "../src/quoting/quoteCalculator.js";
 import {
+  allocateAndSaveQuote,
   findQuoteRecordByNumber,
   listRecentQuoteRecords,
   nextQuoteRecordNumber,
@@ -98,6 +99,20 @@ describe("runCreateQuote persistence", () => {
 
     await runCreateQuote(io, write, { quoteNumber: quote176.quoteNumber });
   });
+
+  it("auto-allocates the quote number from the store when none is pinned in options", async () => {
+    const store = new InMemoryQuoteStore();
+    await saveQuoteRecord(store, { ...quote176, quoteNumber: 40 });
+    const io = new ScriptedIo(scriptForQuote176());
+    const { output, write } = capture();
+
+    const quote = await runCreateQuote(io, write, { issueDate: quote176.issueDate }, store);
+
+    assert.equal(quote.quoteNumber, 41);
+    assert.ok(output.some((line) => line.includes(renderQuoteText(quote))));
+    const found = await findQuoteRecordByNumber(store, 41);
+    assert.deepEqual(found, quote);
+  });
 });
 
 describe("listRecentQuoteRecords", () => {
@@ -180,5 +195,67 @@ describe("nextQuoteRecordNumber", () => {
     await saveQuoteRecord(store, { ...quote176, quoteNumber: 40 });
 
     assert.equal(await nextQuoteRecordNumber(store), 177);
+  });
+
+  it("also accounts for plain-integer quote numbers on records this module didn't create", async () => {
+    // This store is shared with the HTTP daily brief and backup/restore, not exclusive
+    // to this module, so a pre-existing record's native `number` must not be reusable.
+    const store = new InMemoryQuoteStore();
+    await store.add({ clientId: "someone", number: "50", lineItems: [] });
+
+    assert.equal(await nextQuoteRecordNumber(store), 51);
+  });
+
+  it("ignores non-integer native quote numbers from other systems", async () => {
+    const store = new InMemoryQuoteStore();
+    await store.add({ clientId: "someone", number: "BTQ-2026-07", lineItems: [] });
+
+    assert.equal(await nextQuoteRecordNumber(store), 1);
+  });
+});
+
+describe("allocateAndSaveQuote", () => {
+  it("allocates the next number and saves under it", async () => {
+    const store = new InMemoryQuoteStore();
+    await saveQuoteRecord(store, { ...quote176, quoteNumber: 10 });
+
+    const result = await allocateAndSaveQuote(store, quote176);
+
+    assert.equal(result.saved, true);
+    assert.equal(result.collisionDetected, false);
+    assert.equal(result.quote.quoteNumber, 11);
+    assert.deepEqual(await findQuoteRecordByNumber(store, 11), result.quote);
+  });
+
+  it("reports a collision when another writer claims the same number in the gap", async () => {
+    // Simulates the race the store can't prevent: something else inserts a record
+    // under the number we just allocated, between our add() and our own re-check.
+    class RacyStore implements QuoteStore {
+      constructor(private readonly inner: QuoteStore) {}
+      list(): Promise<Quote[]> {
+        return this.inner.list();
+      }
+      get(id: string): Promise<Quote | null> {
+        return this.inner.get(id);
+      }
+      async add(input: Parameters<QuoteStore["add"]>[0]): Promise<Quote> {
+        const saved = await this.inner.add(input);
+        await this.inner.add({ ...input, clientId: "racing-writer" });
+        return saved;
+      }
+      update(id: string, update: Parameters<QuoteStore["update"]>[1]): Promise<Quote | null> {
+        return this.inner.update(id, update);
+      }
+      remove(id: string): Promise<Quote | null> {
+        return this.inner.remove(id);
+      }
+    }
+    const store = new RacyStore(new InMemoryQuoteStore());
+
+    const result = await allocateAndSaveQuote(store, quote176);
+
+    assert.equal(result.saved, true);
+    assert.equal(result.collisionDetected, true);
+    assert.equal(result.quote.quoteNumber, 1);
   });
 });

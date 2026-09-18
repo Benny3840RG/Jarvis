@@ -1,6 +1,6 @@
 import type { QuoteStore } from "../quotes/quote.js";
 import { renderQuoteText } from "./quoteRenderer.js";
-import { saveQuoteRecord } from "./quoteRecordStore.js";
+import { allocateAndSaveQuote, saveQuoteRecord } from "./quoteRecordStore.js";
 import type { QuoteData, QuoteItem } from "./quoteTypes.js";
 
 /** Minimal line-reader abstraction so the intake flow can be driven by a real terminal or a test. */
@@ -112,6 +112,12 @@ export async function collectQuoteData(
  * Runs the interactive quote intake flow end-to-end, prints the rendered
  * quote, and — when a store is supplied — saves it afterward. Persistence
  * failures are reported but never hide or replace the quote already shown.
+ *
+ * When the caller doesn't pin `options.quoteNumber`, the number is allocated
+ * right before saving (not before the Q&A) so the store-read-then-write race
+ * with a concurrent quote:create is as short as it can be without changing
+ * the shared persistence module; see `allocateAndSaveQuote` for why it can't
+ * be fully closed, and how a remaining collision is still reported.
  */
 export async function runCreateQuote(
   io: QuoteIntakeIo,
@@ -121,20 +127,34 @@ export async function runCreateQuote(
 ): Promise<QuoteData> {
   write('Jarvis: Let\'s build a quote. Answer the prompts below (or "y"/"n" where asked).');
   try {
-    const quote = await collectQuoteData(io, write, options);
-    write("");
-    write(renderQuoteText(quote));
+    let quote = await collectQuoteData(io, write, options);
     if (store) {
-      try {
-        await saveQuoteRecord(store, quote);
-      } catch (error: unknown) {
-        write(
-          `Jarvis: Could not save quote #${quote.quoteNumber} (${
-            error instanceof Error ? error.message : String(error)
-          }). The quote above was not saved — copy it now if you need it.`,
-        );
+      if (options.quoteNumber === undefined) {
+        const result = await allocateAndSaveQuote(store, quote);
+        quote = result.quote;
+        if (!result.saved) {
+          write(
+            `Jarvis: Could not save quote #${quote.quoteNumber} (${result.error}). The quote below was not saved — copy it now if you need it.`,
+          );
+        } else if (result.collisionDetected) {
+          write(
+            `Jarvis: Quote #${quote.quoteNumber} may have been assigned to another quote saved at the same time — run "npm run quotes:show -- ${quote.quoteNumber}" to check before relying on this number.`,
+          );
+        }
+      } else {
+        try {
+          await saveQuoteRecord(store, quote);
+        } catch (error: unknown) {
+          write(
+            `Jarvis: Could not save quote #${quote.quoteNumber} (${
+              error instanceof Error ? error.message : String(error)
+            }). The quote below was not saved — copy it now if you need it.`,
+          );
+        }
       }
     }
+    write("");
+    write(renderQuoteText(quote));
     return quote;
   } finally {
     io.close();

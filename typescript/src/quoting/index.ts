@@ -16,9 +16,11 @@ export {
   toQuoteInput,
 } from "./quoteRecordAdapter.js";
 export {
+  allocateAndSaveQuote,
   findQuoteRecordByNumber,
   listRecentQuoteRecords,
   nextQuoteRecordNumber,
   saveQuoteRecord,
+  type AllocateAndSaveResult,
   type QuoteRecordSummary,
 } from "./quoteRecordStore.js";
