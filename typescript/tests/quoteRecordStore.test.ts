@@ -6,6 +6,7 @@ import type { Quote, QuoteStore } from "../src/quotes/quote.js";
 import { runCreateQuote, type QuoteIntakeIo } from "../src/quoting/createQuote.js";
 import { quote176 } from "../src/quoting/fixtures/quote176.js";
 import { calculateQuoteTotals } from "../src/quoting/quoteCalculator.js";
+import { fromQuoteRecord } from "../src/quoting/quoteRecordAdapter.js";
 import {
   allocateAndSaveQuote,
   findQuoteRecordByNumber,
@@ -222,17 +223,69 @@ describe("allocateAndSaveQuote", () => {
     const result = await allocateAndSaveQuote(store, quote176);
 
     assert.equal(result.saved, true);
-    assert.equal(result.collisionDetected, false);
     assert.equal(result.quote.quoteNumber, 11);
     assert.deepEqual(await findQuoteRecordByNumber(store, 11), result.quote);
   });
 
-  it("reports a collision when another writer claims the same number in the gap", async () => {
-    // Simulates the race the store can't prevent: something else inserts a record
-    // under the number we just allocated, between our add() and our own re-check.
-    class RacyStore implements QuoteStore {
+  // Simulates the race the store can't prevent: something else inserts a record
+  // under the number we just allocated, between our add() and our own re-check.
+  class RacyStore implements QuoteStore {
+    constructor(
+      private readonly inner: QuoteStore,
+      private collisionsRemaining: number,
+    ) {}
+    list(): Promise<Quote[]> {
+      return this.inner.list();
+    }
+    get(id: string): Promise<Quote | null> {
+      return this.inner.get(id);
+    }
+    async add(input: Parameters<QuoteStore["add"]>[0]): Promise<Quote> {
+      const saved = await this.inner.add(input);
+      if (this.collisionsRemaining > 0) {
+        this.collisionsRemaining--;
+        await this.inner.add({ ...input, clientId: "racing-writer" });
+      }
+      return saved;
+    }
+    update(id: string, update: Parameters<QuoteStore["update"]>[1]): Promise<Quote | null> {
+      return this.inner.update(id, update);
+    }
+    remove(id: string): Promise<Quote | null> {
+      return this.inner.remove(id);
+    }
+  }
+
+  it("self-heals a single detected collision by removing its duplicate and retrying", async () => {
+    const store = new RacyStore(new InMemoryQuoteStore(), 1);
+
+    const result = await allocateAndSaveQuote(store, quote176);
+
+    assert.equal(result.saved, true);
+    // The racing writer legitimately kept number 1; we retried onto number 2.
+    assert.equal(result.quote.quoteNumber, 2);
+    assert.deepEqual(await findQuoteRecordByNumber(store, 2), result.quote);
+    const recordsAtNumber2 = (await store.list()).filter(
+      (record) => fromQuoteRecord(record)?.quoteNumber === 2,
+    );
+    assert.equal(recordsAtNumber2.length, 1);
+  });
+
+  it("gives up after exhausting every attempt against a persistently racing writer", async () => {
+    const store = new RacyStore(new InMemoryQuoteStore(), 1000);
+
+    const result = await allocateAndSaveQuote(store, quote176, 3);
+
+    assert.equal(result.saved, false);
+    assert.ok(result.error);
+  });
+
+  it("still reports success when the post-save uniqueness check itself fails to read", async () => {
+    class UnreadableAfterSaveStore implements QuoteStore {
+      private addedOnce = false;
       constructor(private readonly inner: QuoteStore) {}
-      list(): Promise<Quote[]> {
+      async list(): Promise<Quote[]> {
+        if (this.addedOnce) throw new Error("disk read failed");
         return this.inner.list();
       }
       get(id: string): Promise<Quote | null> {
@@ -240,7 +293,7 @@ describe("allocateAndSaveQuote", () => {
       }
       async add(input: Parameters<QuoteStore["add"]>[0]): Promise<Quote> {
         const saved = await this.inner.add(input);
-        await this.inner.add({ ...input, clientId: "racing-writer" });
+        this.addedOnce = true;
         return saved;
       }
       update(id: string, update: Parameters<QuoteStore["update"]>[1]): Promise<Quote | null> {
@@ -250,12 +303,11 @@ describe("allocateAndSaveQuote", () => {
         return this.inner.remove(id);
       }
     }
-    const store = new RacyStore(new InMemoryQuoteStore());
+    const store = new UnreadableAfterSaveStore(new InMemoryQuoteStore());
 
     const result = await allocateAndSaveQuote(store, quote176);
 
     assert.equal(result.saved, true);
-    assert.equal(result.collisionDetected, true);
     assert.equal(result.quote.quoteNumber, 1);
   });
 });

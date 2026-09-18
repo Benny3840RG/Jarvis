@@ -30,7 +30,6 @@ export async function saveQuoteRecord(store: QuoteStore, quote: QuoteData): Prom
 export type AllocateAndSaveResult = {
   quote: QuoteData;
   saved: boolean;
-  collisionDetected: boolean;
   error?: string;
 };
 
@@ -38,45 +37,72 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+const DEFAULT_MAX_ALLOCATION_ATTEMPTS = 5;
+
 /**
  * Allocates the next quote number and saves it as close together as this
- * shared, lock-free store allows, then checks whether another writer landed
- * the same number in that gap (`nextQuoteRecordNumber` + `add` isn't atomic —
- * `JsonQuoteStore` exposes no primitive for that, and adding one would mean
- * redesigning the shared persistence module). This doesn't make allocation
- * atomic; it narrows the race window from the whole interactive session down
- * to a single save, and reports a collision it still can't fully prevent
- * instead of silently letting two quotes share a number.
+ * shared, lock-free store allows (`nextQuoteRecordNumber` + `add` isn't
+ * atomic — `JsonQuoteStore` exposes no locking primitive for that, and
+ * adding one would mean redesigning the shared persistence module). After
+ * saving, it re-reads the store to check whether another writer landed the
+ * same number in that gap; if so it removes its own just-added duplicate and
+ * retries with a freshly computed number, up to `maxAttempts` times, so a
+ * detected race self-heals into a clean, non-duplicate state instead of
+ * merely being reported. A failure to save, or to verify uniqueness, or
+ * exhausting every attempt, is returned rather than thrown, so the caller
+ * can still show the collected quote even when persistence didn't succeed.
  */
 export async function allocateAndSaveQuote(
   store: QuoteStore,
   quote: QuoteData,
+  maxAttempts = DEFAULT_MAX_ALLOCATION_ATTEMPTS,
 ): Promise<AllocateAndSaveResult> {
-  let quoteNumber: number;
-  try {
-    quoteNumber = await nextQuoteRecordNumber(store);
-  } catch (error: unknown) {
-    return { quote, saved: false, collisionDetected: false, error: errorMessage(error) };
-  }
+  let lastFailure: AllocateAndSaveResult = {
+    quote,
+    saved: false,
+    error: "Could not allocate a unique quote number.",
+  };
 
-  const finalQuote: QuoteData = { ...quote, quoteNumber };
-  let saved: Quote;
-  try {
-    saved = await store.add(toQuoteInput(finalQuote));
-  } catch (error: unknown) {
-    return {
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    let quoteNumber: number;
+    try {
+      quoteNumber = await nextQuoteRecordNumber(store);
+    } catch (error: unknown) {
+      return { quote, saved: false, error: errorMessage(error) };
+    }
+
+    const finalQuote: QuoteData = { ...quote, quoteNumber };
+    let saved: Quote;
+    try {
+      saved = await store.add(toQuoteInput(finalQuote));
+    } catch (error: unknown) {
+      return { quote: finalQuote, saved: false, error: errorMessage(error) };
+    }
+
+    let records: Quote[];
+    try {
+      records = await store.list();
+    } catch {
+      // The save itself already succeeded; a failure to re-read for the
+      // uniqueness check is not a save failure — report success rather than
+      // losing an already-persisted quote over it.
+      return { quote: finalQuote, saved: true };
+    }
+
+    const collided = records.some(
+      (record) => record.id !== saved.id && fromQuoteRecord(record)?.quoteNumber === quoteNumber,
+    );
+    if (!collided) return { quote: finalQuote, saved: true };
+
+    await store.remove(saved.id).catch(() => {});
+    lastFailure = {
       quote: finalQuote,
       saved: false,
-      collisionDetected: false,
-      error: errorMessage(error),
+      error: `Quote number ${quoteNumber} was claimed by a concurrent save; retried.`,
     };
   }
 
-  const records = await store.list();
-  const collisionDetected = records.some(
-    (record) => record.id !== saved.id && fromQuoteRecord(record)?.quoteNumber === quoteNumber,
-  );
-  return { quote: finalQuote, saved: true, collisionDetected };
+  return lastFailure;
 }
 
 /** Most recently created quotes first, capped at `limit`. Records not created by this module are skipped. */

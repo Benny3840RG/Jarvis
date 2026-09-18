@@ -115,9 +115,8 @@ export async function collectQuoteData(
  *
  * When the caller doesn't pin `options.quoteNumber`, the number is allocated
  * right before saving (not before the Q&A) so the store-read-then-write race
- * with a concurrent quote:create is as short as it can be without changing
- * the shared persistence module; see `allocateAndSaveQuote` for why it can't
- * be fully closed, and how a remaining collision is still reported.
+ * with a concurrent quote:create is as short as it can be, and self-heals if
+ * it still happens — see `allocateAndSaveQuote`.
  */
 export async function runCreateQuote(
   io: QuoteIntakeIo,
@@ -135,10 +134,6 @@ export async function runCreateQuote(
         if (!result.saved) {
           write(
             `Jarvis: Could not save quote #${quote.quoteNumber} (${result.error}). The quote below was not saved — copy it now if you need it.`,
-          );
-        } else if (result.collisionDetected) {
-          write(
-            `Jarvis: Quote #${quote.quoteNumber} may have been assigned to another quote saved at the same time — run "npm run quotes:show -- ${quote.quoteNumber}" to check before relying on this number.`,
           );
         }
       } else {
