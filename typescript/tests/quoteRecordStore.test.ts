@@ -461,6 +461,40 @@ describe("allocateAndSaveQuote", () => {
     assert.match(result.warning ?? "", /could not confirm it's unique/);
   });
 
+  it("still includes the warning when the settle re-check itself fails to read, not just the first check", async () => {
+    class UnreadableOnSettleRecheckStore implements QuoteStore {
+      private listCalls = 0;
+      constructor(private readonly inner: QuoteStore) {}
+      async list(): Promise<Quote[]> {
+        this.listCalls++;
+        // 1st call: nextQuoteRecordNumber. 2nd: the first checkWinner (must
+        // succeed so this reaches "won" and triggers the settle re-check).
+        // 3rd+: the settle re-check itself — this is what's under test.
+        if (this.listCalls > 2) throw new Error("disk read failed on settle re-check");
+        return this.inner.list();
+      }
+      get(id: string): Promise<Quote | null> {
+        return this.inner.get(id);
+      }
+      add(input: Parameters<QuoteStore["add"]>[0]): Promise<Quote> {
+        return this.inner.add(input);
+      }
+      update(id: string, update: Parameters<QuoteStore["update"]>[1]): Promise<Quote | null> {
+        return this.inner.update(id, update);
+      }
+      remove(id: string): Promise<Quote | null> {
+        return this.inner.remove(id);
+      }
+    }
+    const store = new UnreadableOnSettleRecheckStore(new InMemoryQuoteStore());
+
+    const result = await allocateAndSaveQuote(store, quote176);
+
+    assert.equal(result.saved, true);
+    assert.equal(result.quote.quoteNumber, 1);
+    assert.match(result.warning ?? "", /could not confirm it's unique/);
+  });
+
   it("detects a collision against a native (non-tagged) record and self-heals when it loses the tiebreak", async () => {
     // A legacy or otherwise-shared-store writer that never used this module's
     // adapter still has a native `number` field, which must count too.

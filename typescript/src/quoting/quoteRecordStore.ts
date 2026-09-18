@@ -27,11 +27,19 @@ export async function saveQuoteRecord(store: QuoteStore, quote: QuoteData): Prom
   return store.add(toQuoteInput(quote));
 }
 
+/**
+ * `saved: true` means the write happened and this call's own checks found no
+ * other claim on the number — it is a best-effort result, not a proof of
+ * global uniqueness. This store has no locking primitive, so nothing short
+ * of redesigning it can make that proof possible; see `allocateAndSaveQuote`.
+ * `warning` is set when even that best-effort check couldn't run (a re-read
+ * failed) — the save still happened, but uniqueness genuinely wasn't
+ * confirmed, unlike a plain `saved: true`.
+ */
 export type AllocateAndSaveResult = {
   quote: QuoteData;
   saved: boolean;
   error?: string;
-  /** Set when `saved` is true but uniqueness couldn't be confirmed — the write happened, but a concurrent duplicate may still exist undetected. */
   warning?: string;
 };
 
@@ -135,19 +143,19 @@ export async function allocateAndSaveQuote(
       return { quote: finalQuote, saved: false, error: errorMessage(error) };
     }
 
-    let check = await checkWinner(store, quoteNumber, saved.id);
-    if (check.outcome === "unreadable") {
+    const unreadableResult = (error: unknown): AllocateAndSaveResult => ({
+      quote: finalQuote,
+      saved: true,
       // The save itself already succeeded; a failure to re-read for the
       // uniqueness check is not a save failure — report success rather than
       // losing an already-persisted quote over it. But don't pretend
       // uniqueness was confirmed when it wasn't: flag it so the caller can
       // warn, rather than silently risking an undetected duplicate number.
-      return {
-        quote: finalQuote,
-        saved: true,
-        warning: `Saved as quote #${quoteNumber}, but could not confirm it's unique (${errorMessage(check.error)}) — run "npm run quotes:list" to check for a duplicate.`,
-      };
-    }
+      warning: `Saved as quote #${quoteNumber}, but could not confirm it's unique (${errorMessage(error)}) — run "npm run quotes:list" to check for a duplicate.`,
+    });
+
+    let check = await checkWinner(store, quoteNumber, saved.id);
+    if (check.outcome === "unreadable") return unreadableResult(check.error);
     if (check.outcome === "vanished") {
       return {
         quote: finalQuote,
@@ -160,10 +168,14 @@ export async function allocateAndSaveQuote(
       // Confirm again after a short settle window: the first check can only
       // see writers that had already landed, so a near-simultaneous late
       // arrival that would outrank us under the same rule might not have
-      // shown up yet.
+      // shown up yet. This narrows the window; it is not, and cannot be made
+      // into, a proof that nothing lands after this second check either —
+      // see the function doc comment. Same handling as the first check on
+      // an unreadable re-read, so this isn't silently more confident than it
+      // has grounds to be.
       await delay(WINNER_SETTLE_DELAY_MS);
       check = await checkWinner(store, quoteNumber, saved.id);
-      if (check.outcome === "unreadable") return { quote: finalQuote, saved: true };
+      if (check.outcome === "unreadable") return unreadableResult(check.error);
       if (check.outcome === "vanished") {
         return {
           quote: finalQuote,
