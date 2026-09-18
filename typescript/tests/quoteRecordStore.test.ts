@@ -323,6 +323,45 @@ describe("allocateAndSaveQuote", () => {
     assert.equal(recordsAtNumber2.length, 1);
   });
 
+  it("catches a late arrival during the settle window instead of declaring an early win", async () => {
+    // The phantom lands only after our own add() returns — a single
+    // immediate check would see nothing and wrongly declare victory. It has
+    // to arrive during the settle delay for this test to prove anything.
+    class LateArrivalStore implements QuoteStore {
+      private injected = false;
+      constructor(private readonly inner: FakeQuoteStore) {}
+      list(): Promise<Quote[]> {
+        return this.inner.list();
+      }
+      get(id: string): Promise<Quote | null> {
+        return this.inner.get(id);
+      }
+      async add(input: Parameters<QuoteStore["add"]>[0]): Promise<Quote> {
+        const saved = await this.inner.add(input);
+        if (!this.injected) {
+          this.injected = true;
+          setTimeout(() => {
+            this.inner.seed({ number: input.number, createdAt: saved.createdAt - 1000 });
+          }, 5);
+        }
+        return saved;
+      }
+      update(id: string, update: Parameters<QuoteStore["update"]>[1]): Promise<Quote | null> {
+        return this.inner.update(id, update);
+      }
+      remove(id: string): Promise<Quote | null> {
+        return this.inner.remove(id);
+      }
+    }
+    const store = new LateArrivalStore(new FakeQuoteStore());
+
+    const result = await allocateAndSaveQuote(store, quote176);
+
+    assert.equal(result.saved, true);
+    // The late-arriving earlier claim wins number 1; we retried onto number 2.
+    assert.equal(result.quote.quoteNumber, 2);
+  });
+
   it("keeps its own record, and doesn't touch the other side, when it wins the tiebreak", async () => {
     class LaterCollisionOnceStore implements QuoteStore {
       private injected = false;

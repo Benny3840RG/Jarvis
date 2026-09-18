@@ -40,6 +40,11 @@ function errorMessage(error: unknown): string {
 }
 
 const DEFAULT_MAX_ALLOCATION_ATTEMPTS = 5;
+const WINNER_SETTLE_DELAY_MS = 25;
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 function recordQuoteNumber(record: Quote): number | null {
   return fromQuoteRecord(record)?.quoteNumber ?? nativeQuoteNumber(record);
@@ -49,6 +54,33 @@ function recordQuoteNumber(record: Quote): number | null {
 function isEarlierClaim(a: Quote, b: Quote): boolean {
   if (a.createdAt !== b.createdAt) return a.createdAt < b.createdAt;
   return a.id < b.id;
+}
+
+type WinnerCheck =
+  | { outcome: "won" }
+  | { outcome: "lost" }
+  | { outcome: "vanished" }
+  | { outcome: "unreadable"; error: unknown };
+
+/** Reads every record sharing `quoteNumber` right now and reports whether `ownRecordId` is the deterministic winner among them. */
+async function checkWinner(
+  store: QuoteStore,
+  quoteNumber: number,
+  ownRecordId: string,
+): Promise<WinnerCheck> {
+  let records: Quote[];
+  try {
+    records = await store.list();
+  } catch (error: unknown) {
+    return { outcome: "unreadable", error };
+  }
+  const contenders = records.filter((record) => recordQuoteNumber(record) === quoteNumber);
+  const ownRecord = contenders.find((record) => record.id === ownRecordId);
+  if (!ownRecord) return { outcome: "vanished" };
+  const winner = contenders.reduce((best, record) =>
+    isEarlierClaim(record, best) ? record : best,
+  );
+  return winner.id === ownRecordId ? { outcome: "won" } : { outcome: "lost" };
 }
 
 /**
@@ -61,11 +93,20 @@ function isEarlierClaim(a: Quote, b: Quote): boolean {
  * compute identically (`isEarlierClaim`) — so if two writers raced to the
  * same number, only the loser removes its own record and retries, rather
  * than both reacting to "a collision exists" and both tearing their write
- * down (which could otherwise leave both retrying forever). This narrows,
- * but — being read-then-write over a store with no locking primitive — can't
- * fully close, the race; exhausting every attempt is returned as a failure
- * rather than thrown, so the caller can still show the collected quote even
- * when persistence didn't succeed.
+ * down.
+ *
+ * That first check alone is not enough: it can only see contenders that have
+ * already written by the time it reads, so the very first writer to check
+ * can find itself alone, declare victory, and return — before a second
+ * writer (whose record would have outranked it under the same rule) has
+ * even landed. So an apparent win is re-verified once more after
+ * `WINNER_SETTLE_DELAY_MS`, giving a near-simultaneous late arrival a chance
+ * to show up before this call commits to success. This shrinks that window;
+ * it cannot close it — no amount of re-checking can prove nothing arrives a
+ * moment later without an actual lock, which this shared store doesn't
+ * provide. Exhausting every attempt is returned as a failure rather than
+ * thrown, so the caller can still show the collected quote even when
+ * persistence didn't succeed.
  */
 export async function allocateAndSaveQuote(
   store: QuoteStore,
@@ -94,10 +135,8 @@ export async function allocateAndSaveQuote(
       return { quote: finalQuote, saved: false, error: errorMessage(error) };
     }
 
-    let records: Quote[];
-    try {
-      records = await store.list();
-    } catch (error: unknown) {
+    let check = await checkWinner(store, quoteNumber, saved.id);
+    if (check.outcome === "unreadable") {
       // The save itself already succeeded; a failure to re-read for the
       // uniqueness check is not a save failure — report success rather than
       // losing an already-persisted quote over it. But don't pretend
@@ -106,13 +145,10 @@ export async function allocateAndSaveQuote(
       return {
         quote: finalQuote,
         saved: true,
-        warning: `Saved as quote #${quoteNumber}, but could not confirm it's unique (${errorMessage(error)}) — run "npm run quotes:list" to check for a duplicate.`,
+        warning: `Saved as quote #${quoteNumber}, but could not confirm it's unique (${errorMessage(check.error)}) — run "npm run quotes:list" to check for a duplicate.`,
       };
     }
-
-    const contenders = records.filter((record) => recordQuoteNumber(record) === quoteNumber);
-    const ownRecord = contenders.find((record) => record.id === saved.id);
-    if (!ownRecord) {
+    if (check.outcome === "vanished") {
       return {
         quote: finalQuote,
         saved: false,
@@ -120,14 +156,27 @@ export async function allocateAndSaveQuote(
       };
     }
 
-    const winner = contenders.reduce((best, record) =>
-      isEarlierClaim(record, best) ? record : best,
-    );
-    if (winner.id === saved.id) return { quote: finalQuote, saved: true };
+    if (check.outcome === "won") {
+      // Confirm again after a short settle window: the first check can only
+      // see writers that had already landed, so a near-simultaneous late
+      // arrival that would outrank us under the same rule might not have
+      // shown up yet.
+      await delay(WINNER_SETTLE_DELAY_MS);
+      check = await checkWinner(store, quoteNumber, saved.id);
+      if (check.outcome === "unreadable") return { quote: finalQuote, saved: true };
+      if (check.outcome === "vanished") {
+        return {
+          quote: finalQuote,
+          saved: false,
+          error: `Quote number ${quoteNumber} was saved but the record could not be found on the settle re-check.`,
+        };
+      }
+      if (check.outcome === "won") return { quote: finalQuote, saved: true };
+    }
 
-    // We lost the tiebreak against a concurrent writer holding the same
-    // number. Undo our own record before retrying — not the winner's — so
-    // both sides never remove their own write for the same collision.
+    // Lost (either check): a concurrent writer holds the same number under
+    // the same rule. Undo our own record before retrying — not the winner's
+    // — so both sides never remove their own write for the same collision.
     try {
       const removed = await store.remove(saved.id);
       if (!removed) {

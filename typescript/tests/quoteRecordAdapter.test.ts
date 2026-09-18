@@ -14,6 +14,38 @@ describe("isQuoteData", () => {
     assert.equal(isQuoteData(quote176), true);
   });
 
+  it("rejects a calendar date that doesn't exist, even though Date would silently roll it over", () => {
+    // new Date("2026-02-31T00:00:00") rolls over to March 3rd instead of rejecting it.
+    assert.equal(isQuoteData({ ...quote176, issueDate: "2026-02-31" }), false);
+    assert.equal(isQuoteData({ ...quote176, issueDate: "2026-04-31" }), false);
+    assert.equal(isQuoteData({ ...quote176, issueDate: "2026-13-01" }), false);
+  });
+
+  it("accepts a real leap-day date and rejects the same day in a non-leap year", () => {
+    assert.equal(isQuoteData({ ...quote176, issueDate: "2028-02-29" }), true);
+    assert.equal(isQuoteData({ ...quote176, issueDate: "2026-02-29" }), false);
+  });
+
+  it("rejects a blank or malformed issue date string", () => {
+    assert.equal(isQuoteData({ ...quote176, issueDate: "" }), false);
+    assert.equal(isQuoteData({ ...quote176, issueDate: "not-a-date" }), false);
+    assert.equal(isQuoteData({ ...quote176, issueDate: "07/30/2026" }), false);
+  });
+
+  it("rejects blank client name, property address, and project text", () => {
+    assert.equal(isQuoteData({ ...quote176, client: { ...quote176.client, name: "  " } }), false);
+    assert.equal(
+      isQuoteData({ ...quote176, client: { ...quote176.client, propertyAddress: "" } }),
+      false,
+    );
+    assert.equal(isQuoteData({ ...quote176, project: "" }), false);
+  });
+
+  it("rejects a blank line item description", () => {
+    const items = [{ ...quote176.items[0]!, description: "   " }];
+    assert.equal(isQuoteData({ ...quote176, items }), false);
+  });
+
   it("rejects a fractional quote number", () => {
     assert.equal(isQuoteData({ ...quote176, quoteNumber: 1.5 }), false);
   });
