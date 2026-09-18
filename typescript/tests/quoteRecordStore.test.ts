@@ -227,13 +227,66 @@ describe("allocateAndSaveQuote", () => {
     assert.deepEqual(await findQuoteRecordByNumber(store, 11), result.quote);
   });
 
-  // Simulates the race the store can't prevent: something else inserts a record
-  // under the number we just allocated, between our add() and our own re-check.
-  class RacyStore implements QuoteStore {
-    constructor(
-      private readonly inner: QuoteStore,
-      private collisionsRemaining: number,
-    ) {}
+  /**
+   * A QuoteStore whose add() lets a test pin the exact createdAt/id of each
+   * record, so collision-tiebreak outcomes (which key off createdAt, then id)
+   * are deterministic instead of depending on real timestamps/randomUUID().
+   */
+  class FakeQuoteStore implements QuoteStore {
+    records: Quote[] = [];
+    private counter = 0;
+
+    seed(fields: { number: string; createdAt: number; notes?: string; id?: string }): Quote {
+      const record: Quote = {
+        id: fields.id ?? `seed-${this.counter++}`,
+        clientId: "seed-client",
+        number: fields.number,
+        status: "draft",
+        lineItems: [],
+        subtotal: 0,
+        tax: 0,
+        total: 0,
+        createdAt: fields.createdAt,
+        updatedAt: fields.createdAt,
+        ...(fields.notes !== undefined ? { notes: fields.notes } : {}),
+      };
+      this.records.push(record);
+      return record;
+    }
+
+    list(): Promise<Quote[]> {
+      return Promise.resolve([...this.records]);
+    }
+    get(id: string): Promise<Quote | null> {
+      return Promise.resolve(this.records.find((record) => record.id === id) ?? null);
+    }
+    add(input: Parameters<QuoteStore["add"]>[0]): Promise<Quote> {
+      return Promise.resolve(
+        this.seed({
+          id: `real-${this.counter++}`,
+          number: input.number,
+          createdAt: Date.now(),
+          ...(input.notes !== undefined ? { notes: input.notes } : {}),
+        }),
+      );
+    }
+    update(_id: string, _update: Parameters<QuoteStore["update"]>[1]): Promise<Quote | null> {
+      throw new Error("not implemented in FakeQuoteStore");
+    }
+    remove(id: string): Promise<Quote | null> {
+      const index = this.records.findIndex((record) => record.id === id);
+      if (index === -1) return Promise.resolve(null);
+      const [removed] = this.records.splice(index, 1);
+      return Promise.resolve(removed);
+    }
+  }
+
+  // Simulates the race the store can't prevent: right after our own add(),
+  // something else's record with the same number turns out to already exist,
+  // strictly earlier by createdAt — so it deterministically wins the tiebreak.
+  class EarlierCollisionOnceStore implements QuoteStore {
+    private injected = false;
+    constructor(private readonly inner: FakeQuoteStore) {}
     list(): Promise<Quote[]> {
       return this.inner.list();
     }
@@ -242,9 +295,9 @@ describe("allocateAndSaveQuote", () => {
     }
     async add(input: Parameters<QuoteStore["add"]>[0]): Promise<Quote> {
       const saved = await this.inner.add(input);
-      if (this.collisionsRemaining > 0) {
-        this.collisionsRemaining--;
-        await this.inner.add({ ...input, clientId: "racing-writer" });
+      if (!this.injected) {
+        this.injected = true;
+        this.inner.seed({ number: input.number, createdAt: saved.createdAt - 1000 });
       }
       return saved;
     }
@@ -256,23 +309,80 @@ describe("allocateAndSaveQuote", () => {
     }
   }
 
-  it("self-heals a single detected collision by removing its duplicate and retrying", async () => {
-    const store = new RacyStore(new InMemoryQuoteStore(), 1);
+  it("self-heals when it loses the tiebreak against an earlier concurrent claim", async () => {
+    const store = new EarlierCollisionOnceStore(new FakeQuoteStore());
 
     const result = await allocateAndSaveQuote(store, quote176);
 
     assert.equal(result.saved, true);
-    // The racing writer legitimately kept number 1; we retried onto number 2.
+    // The earlier writer legitimately keeps number 1; we retried onto number 2.
     assert.equal(result.quote.quoteNumber, 2);
-    assert.deepEqual(await findQuoteRecordByNumber(store, 2), result.quote);
     const recordsAtNumber2 = (await store.list()).filter(
       (record) => fromQuoteRecord(record)?.quoteNumber === 2,
     );
     assert.equal(recordsAtNumber2.length, 1);
   });
 
-  it("gives up after exhausting every attempt against a persistently racing writer", async () => {
-    const store = new RacyStore(new InMemoryQuoteStore(), 1000);
+  it("keeps its own record, and doesn't touch the other side, when it wins the tiebreak", async () => {
+    class LaterCollisionOnceStore implements QuoteStore {
+      private injected = false;
+      constructor(private readonly inner: FakeQuoteStore) {}
+      list(): Promise<Quote[]> {
+        return this.inner.list();
+      }
+      get(id: string): Promise<Quote | null> {
+        return this.inner.get(id);
+      }
+      async add(input: Parameters<QuoteStore["add"]>[0]): Promise<Quote> {
+        const saved = await this.inner.add(input);
+        if (!this.injected) {
+          this.injected = true;
+          this.inner.seed({ number: input.number, createdAt: saved.createdAt + 1000 });
+        }
+        return saved;
+      }
+      update(id: string, update: Parameters<QuoteStore["update"]>[1]): Promise<Quote | null> {
+        return this.inner.update(id, update);
+      }
+      remove(id: string): Promise<Quote | null> {
+        return this.inner.remove(id);
+      }
+    }
+    const store = new LaterCollisionOnceStore(new FakeQuoteStore());
+
+    const result = await allocateAndSaveQuote(store, quote176);
+
+    assert.equal(result.saved, true);
+    assert.equal(result.quote.quoteNumber, 1);
+    // Both records remain: winning means doing nothing, not removing the loser's write.
+    const recordsAtNumber1 = (await store.list()).filter(
+      (record) => (fromQuoteRecord(record)?.quoteNumber ?? Number(record.number)) === 1,
+    );
+    assert.equal(recordsAtNumber1.length, 2);
+  });
+
+  it("gives up after exhausting every attempt against a persistently earlier racing writer", async () => {
+    class AlwaysEarlierCollisionStore implements QuoteStore {
+      constructor(private readonly inner: FakeQuoteStore) {}
+      list(): Promise<Quote[]> {
+        return this.inner.list();
+      }
+      get(id: string): Promise<Quote | null> {
+        return this.inner.get(id);
+      }
+      async add(input: Parameters<QuoteStore["add"]>[0]): Promise<Quote> {
+        const saved = await this.inner.add(input);
+        this.inner.seed({ number: input.number, createdAt: saved.createdAt - 1000 });
+        return saved;
+      }
+      update(id: string, update: Parameters<QuoteStore["update"]>[1]): Promise<Quote | null> {
+        return this.inner.update(id, update);
+      }
+      remove(id: string): Promise<Quote | null> {
+        return this.inner.remove(id);
+      }
+    }
+    const store = new AlwaysEarlierCollisionStore(new FakeQuoteStore());
 
     const result = await allocateAndSaveQuote(store, quote176, 3);
 
@@ -312,34 +422,10 @@ describe("allocateAndSaveQuote", () => {
     assert.match(result.warning ?? "", /could not confirm it's unique/);
   });
 
-  it("detects a collision against a native (non-tagged) record sharing the same number", async () => {
+  it("detects a collision against a native (non-tagged) record and self-heals when it loses the tiebreak", async () => {
     // A legacy or otherwise-shared-store writer that never used this module's
     // adapter still has a native `number` field, which must count too.
-    class NativeCollisionOnceStore implements QuoteStore {
-      private injected = false;
-      constructor(private readonly inner: QuoteStore) {}
-      list(): Promise<Quote[]> {
-        return this.inner.list();
-      }
-      get(id: string): Promise<Quote | null> {
-        return this.inner.get(id);
-      }
-      async add(input: Parameters<QuoteStore["add"]>[0]): Promise<Quote> {
-        const saved = await this.inner.add(input);
-        if (!this.injected) {
-          this.injected = true;
-          await this.inner.add({ clientId: "legacy-writer", number: input.number, lineItems: [] });
-        }
-        return saved;
-      }
-      update(id: string, update: Parameters<QuoteStore["update"]>[1]): Promise<Quote | null> {
-        return this.inner.update(id, update);
-      }
-      remove(id: string): Promise<Quote | null> {
-        return this.inner.remove(id);
-      }
-    }
-    const store = new NativeCollisionOnceStore(new InMemoryQuoteStore());
+    const store = new EarlierCollisionOnceStore(new FakeQuoteStore());
 
     const result = await allocateAndSaveQuote(store, quote176);
 
@@ -347,10 +433,10 @@ describe("allocateAndSaveQuote", () => {
     assert.equal(result.quote.quoteNumber, 2);
   });
 
-  it("stops immediately, without retrying, when cleaning up a detected duplicate fails", async () => {
-    class AlwaysCollidesAndCannotRemove implements QuoteStore {
+  it("stops immediately, without retrying, when cleaning up a lost tiebreak fails", async () => {
+    class UnremovableEarlierCollisionStore implements QuoteStore {
       addCalls = 0;
-      constructor(private readonly inner: QuoteStore) {}
+      constructor(private readonly inner: FakeQuoteStore) {}
       list(): Promise<Quote[]> {
         return this.inner.list();
       }
@@ -360,7 +446,7 @@ describe("allocateAndSaveQuote", () => {
       async add(input: Parameters<QuoteStore["add"]>[0]): Promise<Quote> {
         this.addCalls++;
         const saved = await this.inner.add(input);
-        await this.inner.add({ ...input, clientId: "racing-writer" });
+        this.inner.seed({ number: input.number, createdAt: saved.createdAt - 1000 });
         return saved;
       }
       update(id: string, update: Parameters<QuoteStore["update"]>[1]): Promise<Quote | null> {
@@ -370,7 +456,7 @@ describe("allocateAndSaveQuote", () => {
         return Promise.reject(new Error("remove failed"));
       }
     }
-    const store = new AlwaysCollidesAndCannotRemove(new InMemoryQuoteStore());
+    const store = new UnremovableEarlierCollisionStore(new FakeQuoteStore());
 
     const result = await allocateAndSaveQuote(store, quote176, 5);
 

@@ -41,18 +41,31 @@ function errorMessage(error: unknown): string {
 
 const DEFAULT_MAX_ALLOCATION_ATTEMPTS = 5;
 
+function recordQuoteNumber(record: Quote): number | null {
+  return fromQuoteRecord(record)?.quoteNumber ?? nativeQuoteNumber(record);
+}
+
+/** Deterministic ordering (earliest createdAt, id as a tiebreak) so two writers computing this over the same data always agree on the same winner without talking to each other. */
+function isEarlierClaim(a: Quote, b: Quote): boolean {
+  if (a.createdAt !== b.createdAt) return a.createdAt < b.createdAt;
+  return a.id < b.id;
+}
+
 /**
  * Allocates the next quote number and saves it as close together as this
  * shared, lock-free store allows (`nextQuoteRecordNumber` + `add` isn't
  * atomic — `JsonQuoteStore` exposes no locking primitive for that, and
  * adding one would mean redesigning the shared persistence module). After
- * saving, it re-reads the store to check whether another writer landed the
- * same number in that gap; if so it removes its own just-added duplicate and
- * retries with a freshly computed number, up to `maxAttempts` times, so a
- * detected race self-heals into a clean, non-duplicate state instead of
- * merely being reported. A failure to save, or to verify uniqueness, or
- * exhausting every attempt, is returned rather than thrown, so the caller
- * can still show the collected quote even when persistence didn't succeed.
+ * saving, it re-reads the store for every record sharing that number and
+ * picks a winner by a rule any concurrent caller reading the same data would
+ * compute identically (`isEarlierClaim`) — so if two writers raced to the
+ * same number, only the loser removes its own record and retries, rather
+ * than both reacting to "a collision exists" and both tearing their write
+ * down (which could otherwise leave both retrying forever). This narrows,
+ * but — being read-then-write over a store with no locking primitive — can't
+ * fully close, the race; exhausting every attempt is returned as a failure
+ * rather than thrown, so the caller can still show the collected quote even
+ * when persistence didn't succeed.
  */
 export async function allocateAndSaveQuote(
   store: QuoteStore,
@@ -97,19 +110,24 @@ export async function allocateAndSaveQuote(
       };
     }
 
-    // Matches both this module's tagged records and any other writer's native
-    // `number` field — the same two sources nextQuoteRecordNumber considers,
-    // so a plain legacy/shared-store writer can't slip past this check either.
-    const collided = records.some((record) => {
-      if (record.id === saved.id) return false;
-      if (fromQuoteRecord(record)?.quoteNumber === quoteNumber) return true;
-      return nativeQuoteNumber(record) === quoteNumber;
-    });
-    if (!collided) return { quote: finalQuote, saved: true };
+    const contenders = records.filter((record) => recordQuoteNumber(record) === quoteNumber);
+    const ownRecord = contenders.find((record) => record.id === saved.id);
+    if (!ownRecord) {
+      return {
+        quote: finalQuote,
+        saved: false,
+        error: `Quote number ${quoteNumber} was saved but the record could not be found in a follow-up read.`,
+      };
+    }
 
-    // Undo our duplicate before retrying. If that fails, stop rather than
-    // retry again — another failed cleanup would only leave more duplicates
-    // behind, and we can no longer promise the store ends up unambiguous.
+    const winner = contenders.reduce((best, record) =>
+      isEarlierClaim(record, best) ? record : best,
+    );
+    if (winner.id === saved.id) return { quote: finalQuote, saved: true };
+
+    // We lost the tiebreak against a concurrent writer holding the same
+    // number. Undo our own record before retrying — not the winner's — so
+    // both sides never remove their own write for the same collision.
     try {
       const removed = await store.remove(saved.id);
       if (!removed) {

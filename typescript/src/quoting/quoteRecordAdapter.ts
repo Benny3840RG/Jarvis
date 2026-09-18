@@ -26,12 +26,21 @@ function isPercentage(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 100;
 }
 
+function isNonBlankString(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function isIsoDate(value: unknown): value is string {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  return !Number.isNaN(new Date(`${value}T00:00:00`).getTime());
+}
+
 function isQuoteItem(value: unknown): value is QuoteItem {
   if (typeof value !== "object" || value === null) return false;
   const candidate = value as Partial<QuoteItem>;
   return (
     isPositiveInteger(candidate.number) &&
-    typeof candidate.description === "string" &&
+    isNonBlankString(candidate.description) &&
     isPositiveAmount(candidate.amountIncGst)
   );
 }
@@ -39,25 +48,27 @@ function isQuoteItem(value: unknown): value is QuoteItem {
 function isQuoteClient(value: unknown): value is QuoteClient {
   if (typeof value !== "object" || value === null) return false;
   const candidate = value as Partial<QuoteClient>;
-  return typeof candidate.name === "string" && typeof candidate.propertyAddress === "string";
+  return isNonBlankString(candidate.name) && isNonBlankString(candidate.propertyAddress);
 }
 
 /**
  * Domain-valid QuoteData: a positive whole quote number (so
  * nextQuoteRecordNumber can never derive a fractional "next" number from a
- * corrupt record), a positive whole valid-days period, a 0-100 deposit
- * percentage, and positive whole line-item numbers with positive amounts —
- * matching what the interactive intake itself already enforces.
+ * corrupt record), a real calendar date, a positive whole valid-days period,
+ * a 0-100 deposit percentage, non-blank client/project/description text, and
+ * positive whole line-item numbers with positive amounts — matching what the
+ * interactive intake itself already enforces, so a blank or malformed field
+ * can't be saved and then render as an empty line or "Invalid Date".
  */
 export function isQuoteData(value: unknown): value is QuoteData {
   if (typeof value !== "object" || value === null) return false;
   const candidate = value as Partial<QuoteData>;
   return (
     isPositiveInteger(candidate.quoteNumber) &&
-    typeof candidate.issueDate === "string" &&
+    isIsoDate(candidate.issueDate) &&
     isPositiveInteger(candidate.validDays) &&
     isQuoteClient(candidate.client) &&
-    typeof candidate.project === "string" &&
+    isNonBlankString(candidate.project) &&
     Array.isArray(candidate.items) &&
     candidate.items.every(isQuoteItem) &&
     isPercentage(candidate.depositPercentage) &&
