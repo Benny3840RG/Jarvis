@@ -145,41 +145,56 @@ export async function mergePR(input: MergeInput): Promise<void> {
       mergeAttemptCount: current.mergeAttemptCount + 1,
     }));
 
-    // Reconcile against the external system before trusting our own cache:
-    // if it's already merged with this exact SHA, this is a harmless retry.
-    const state = await mockRepoStateStore.get(input.repo);
-    if (state.isMerged) {
-      if (state.mergedSha !== input.expectedSha) {
+    // Reconcile against the external system and apply the merge mutation in
+    // a *single* atomic read-modify-write (one `update()` call, one lock
+    // acquisition), not a separate get()-then-update(). Two genuinely
+    // concurrent executions (e.g. a zombie worker racing its Temporal
+    // -rescheduled replacement) could otherwise both read `isMerged: false`
+    // before either writes, and both go on to apply the merge effect —
+    // exactly the duplicate-external-effect this reconciliation exists to
+    // prevent. Folding the check into the mutate callback means the second
+    // caller's `update()` only runs after the first's has already committed,
+    // so it always observes the post-merge state.
+    let alreadyMerged: { merged: true; sha: string } | undefined;
+    const nextState = await mockRepoStateStore.update(input.repo, (current) => {
+      if (current.isMerged) {
+        if (current.mergedSha !== input.expectedSha) {
+          throw new Error(
+            `Mission ${input.missionId}: repo ${input.repo} already merged at ${current.mergedSha}, expected ${input.expectedSha}`,
+          );
+        }
+        alreadyMerged = { merged: true, sha: current.mergedSha };
+        return current;
+      }
+
+      if (current.currentSha !== input.expectedSha) {
         throw new Error(
-          `Mission ${input.missionId}: repo ${input.repo} already merged at ${state.mergedSha}, expected ${input.expectedSha}`,
+          `Mission ${input.missionId}: HEAD SHA changed since approval (expected ${input.expectedSha}, got ${current.currentSha})`,
         );
       }
-      return { merged: true, sha: state.mergedSha };
-    }
 
-    if (state.currentSha !== input.expectedSha) {
-      throw new Error(
-        `Mission ${input.missionId}: HEAD SHA changed since approval (expected ${input.expectedSha}, got ${state.currentSha})`,
-      );
-    }
+      return {
+        ...current,
+        isMerged: true,
+        mergedSha: input.expectedSha,
+        mergeEffectCount: current.mergeEffectCount + 1,
+      };
+    });
 
-    await mockRepoStateStore.update(input.repo, (current) => ({
-      ...current,
-      isMerged: true,
-      mergedSha: input.expectedSha,
-      mergeEffectCount: current.mergeEffectCount + 1,
-    }));
+    if (alreadyMerged) {
+      return alreadyMerged;
+    }
 
     // PASS-13: held open *after* the mock mutation (the "GitHub accepted
     // the merge" moment) but before this Activity reports back, so a kill
     // here lands in the exact window where the external effect already
     // happened but Temporal hasn't durably recorded completion yet. The
-    // reconciliation check above (`state.isMerged`) is what makes the
-    // retry safe: it finds the merge already done and returns without
-    // re-mutating, rather than erroring or merging twice.
+    // reconciliation above is what makes the retry safe: it finds the merge
+    // already done and returns without re-mutating, rather than erroring or
+    // merging twice.
     await heartbeatingDelay(input.scenario?.mergeDelayMs ?? 0);
 
-    return { merged: true, sha: input.expectedSha };
+    return { merged: true, sha: nextState.mergedSha as string };
   });
 }
 

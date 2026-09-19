@@ -13,9 +13,24 @@ async function main(): Promise<void> {
   const worker = await createPassWorker();
   const runPromise = worker.run();
 
-  while (worker.getState() !== "RUNNING") {
-    await sleep(10);
-  }
+  // Race the readiness poll against `runPromise` itself: if the worker
+  // fails to start (e.g. can't reach the server) `run()` rejects before
+  // ever reaching RUNNING, and the poll loop below would otherwise spin
+  // forever waiting for a state transition that will never come — while
+  // `runPromise`'s rejection sits unobserved until Node's default
+  // unhandled-rejection policy kills the process with no useful message.
+  // Racing it in means that rejection reaches `main()`'s own catch handler
+  // immediately, with the real error attached.
+  await Promise.race([
+    (async () => {
+      while (worker.getState() !== "RUNNING") {
+        await sleep(10);
+      }
+    })(),
+    runPromise.then(() => {
+      throw new Error("Worker run() returned before reaching the RUNNING state");
+    }),
+  ]);
   console.log("WORKER_READY");
 
   await runPromise;

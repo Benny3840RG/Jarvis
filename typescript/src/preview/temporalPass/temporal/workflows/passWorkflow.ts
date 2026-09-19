@@ -86,6 +86,11 @@ export async function passWorkflow(intent: MissionIntent): Promise<MissionState>
   //    a fresh `getCurrentCommitSha` read, right before MERGE (PASS-09).
   //    This check only guards against a malformed/misdirected signal
   //    payload being accepted in the first place.
+  //  - approval is still undefined: the first valid response for an
+  //    outstanding request is immutable. Without this, a second signal for
+  //    the same cycle (e.g. a conflicting MODIFY arriving after an already
+  //    -applied APPROVE, before the workflow has resumed and cleared the
+  //    request) would silently overwrite Benny's actual decision.
   let approval: ApprovalResponse | undefined;
   let currentApprovalCycle = 0;
   let approvalRequestOutstanding = false;
@@ -93,6 +98,7 @@ export async function passWorkflow(intent: MissionIntent): Promise<MissionState>
 
   setHandler(bennyApprovalSignal, (response) => {
     if (!approvalRequestOutstanding) return;
+    if (approval !== undefined) return;
     if (response.approvalCycle !== currentApprovalCycle) return;
     if (response.missionId !== intent.id) return;
     if (response.candidateSha !== outstandingApprovedSha) return;
@@ -270,6 +276,20 @@ export async function passWorkflow(intent: MissionIntent): Promise<MissionState>
       );
     }
 
+    // Signal payloads are not runtime-validated by Temporal — a client can
+    // send any string as `decision`. Only REJECT, MODIFY, and the literal
+    // "APPROVE" are meaningful; anything else must fail closed rather than
+    // silently falling through to the approval path below.
+    if (firstApproval.decision !== "MODIFY" && (firstApproval.decision as string) !== "APPROVE") {
+      return terminal(
+        "FAILED",
+        phase,
+        reviewCycles,
+        "BENNY_APPROVAL",
+        `Invalid approval decision: ${String(firstApproval.decision)}`,
+      );
+    }
+
     if (firstApproval.decision === "MODIFY") {
       // Capture everything needed from `firstApproval` before resetting
       // `approval` — reading a *stale local* is fine, but reading
@@ -387,6 +407,18 @@ export async function passWorkflow(intent: MissionIntent): Promise<MissionState>
           reviewCycles,
           "BENNY_APPROVAL_MODIFY",
           secondApproval.reasoning ?? "Benny rejected modification",
+        );
+      }
+
+      // Same runtime-validation gap as the first response: only the literal
+      // "APPROVE" may proceed past this point.
+      if ((secondApproval.decision as string) !== "APPROVE") {
+        return terminal(
+          "FAILED",
+          phase,
+          reviewCycles,
+          "BENNY_APPROVAL_MODIFY",
+          `Invalid approval decision: ${String(secondApproval.decision)}`,
         );
       }
     }
