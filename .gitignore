@@ -10,6 +10,12 @@ __pycache__/
 typescript/data/jarvis-state.json*
 typescript/data/.jarvis-state.json.tmp-*
 
+# Temporal PASS prototype (src/preview/temporalPass) local idempotency/mock-repo state
+typescript/data/preview/temporal-pass-idempotency.json*
+typescript/data/preview/temporal-pass-mock-repo.json*
+typescript/data/preview/.temporal-pass-*.tmp-*
+typescript/data/preview/*.lock
+
 # TypeScript dependencies and generated output
 /typescript/node_modules/
 /typescript/dist/
