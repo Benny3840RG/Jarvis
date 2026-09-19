@@ -64,6 +64,15 @@ export interface MissionIntent {
     testUnrepairable?: boolean;
     /** Holds executeBuild open (heartbeating) this long, so PASS-01 can kill the worker mid-activity. */
     buildDelayMs?: number;
+    /**
+     * Holds mergePR open (heartbeating) this long *after* the mock external
+     * mutation has already happened but *before* the Activity returns — so
+     * PASS-13 can kill the worker in the exact window where GitHub has
+     * accepted the merge but Temporal hasn't yet durably recorded the
+     * Activity's completion, and prove the retry reconciles instead of
+     * duplicating or erroring.
+     */
+    mergeDelayMs?: number;
   };
 }
 
@@ -202,6 +211,7 @@ export interface MergeInput {
   repo: string;
   prNumber: number;
   expectedSha: string;
+  scenario?: MissionIntent["scenario"];
 }
 
 export interface NotifyInput {

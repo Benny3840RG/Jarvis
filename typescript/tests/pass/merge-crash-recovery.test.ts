@@ -1,0 +1,81 @@
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import { after, before, describe, it } from "node:test";
+import { setTimeout as sleep } from "node:timers/promises";
+
+import { Client, Connection } from "@temporalio/client";
+
+import { passWorkflow } from "../../src/preview/temporalPass/temporal/workflows/passWorkflow.js";
+import { ProcessHarness } from "./helpers/processHarness.js";
+
+// PASS-13: the nastiest Temporal window — the mock "GitHub" accepts the
+// merge (the mock repo's `isMerged`/`mergedSha` are already updated), and
+// only *then* does the worker get killed, before Temporal durably records
+// the Activity's completion. `scenario.mergeDelayMs` holds `mergePR` open
+// (heartbeating) in exactly that post-mutation, pre-return window. On
+// retry, the new worker must reconcile against the already-merged mock
+// repo state rather than erroring or merging a second time.
+describe("PASS-13 reconciles after a crash between the external effect and Activity completion", () => {
+  let harness: ProcessHarness;
+  let client: Client;
+
+  before(async () => {
+    harness = new ProcessHarness();
+    await harness.startServer();
+    await harness.startWorker();
+    const connection = await Connection.connect({ address: harness.address });
+    client = new Client({ connection, namespace: "default" });
+  });
+
+  after(async () => {
+    await client?.connection.close();
+    await harness.teardown();
+  });
+
+  it("reconciles the already-merged state instead of duplicating or failing the retry", async () => {
+    const missionId = `merge-crash-${randomUUID()}`;
+    const repo = `repo-${missionId}`;
+
+    const handle = await client.workflow.start(passWorkflow, {
+      taskQueue: harness.taskQueue,
+      workflowId: missionId,
+      args: [
+        {
+          id: missionId,
+          type: "SIMPLE_ACTION",
+          description: "merge crash recovery test",
+          context: { repo },
+          scenario: { mergeDelayMs: 4_000 },
+        },
+      ],
+    });
+
+    // BUILD/REVIEW/TEST/SHA-check/branch-check are all near-instant; by
+    // 750ms the mission should be inside mergePR's post-mutation delay.
+    await sleep(750);
+    harness.killWorker();
+    await harness.startWorker();
+
+    const result = await handle.result();
+    assert.equal(result.status, "COMPLETED");
+
+    const { IdempotencyStore } =
+      await import("../../src/preview/temporalPass/idempotency/idempotencyStore.js");
+    const { MockRepoStateStore } =
+      await import("../../src/preview/temporalPass/temporal/activities/mockRepoState.js");
+    const idempotencyStore = new IdempotencyStore(harness.idempotencyPath);
+    const repoStore = new MockRepoStateStore(harness.mockRepoPath);
+
+    const mergeEntry = await idempotencyStore.get(`${missionId}:merge:mergePR:v1`);
+    assert.equal(mergeEntry?.state, "completed");
+
+    const repoState = await repoStore.get(repo);
+    assert.equal(repoState.isMerged, true);
+    // A duplicated, uncoordinated merge would be visible as the mergedSha
+    // no longer matching the single build's commit — reconciliation means
+    // exactly one merge, against exactly one build.
+    const buildEntry = await idempotencyStore.get(`${missionId}:build:executeBuild:v1`);
+    const builtSha = (buildEntry?.result as { commitSha: string }).commitSha;
+    assert.equal(repoState.mergedSha, builtSha);
+  });
+});
