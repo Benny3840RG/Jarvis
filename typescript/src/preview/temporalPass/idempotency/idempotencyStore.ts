@@ -83,12 +83,25 @@ export class IdempotencyStore {
   }
 
   /**
-   * Runs `execute` at most once per `key` across any number of retries,
-   * process restarts, or Activity re-executions: if a completed entry
-   * already exists it's returned without re-running `execute`. Callers
-   * that need to reconcile against real external state first (e.g. "is
-   * this PR already merged?") should do that before calling this, since a
-   * cache hit here only proves *this store* has seen the operation before.
+   * Skips re-running `execute` for a `key` that already has a completed
+   * entry — the common case across sequential Activity retries and process
+   * restarts (Temporal never dispatches a second attempt for the same
+   * Activity task while a prior attempt is still live; a retry only
+   * happens after the prior one is confirmed dead/failed).
+   *
+   * This is **not** an atomic compare-and-swap: the check and the
+   * eventual `set()` are two separate operations with `execute()` running
+   * in between, unguarded by `lock`. Two genuinely concurrent callers for
+   * the same key (e.g. a "zombie" worker that missed its heartbeat timeout
+   * but is still actually running, racing the new worker Temporal
+   * rescheduled to) could both see "not completed" and both run
+   * `execute()`. For that reason `execute()` itself must reconcile against
+   * real external state first (e.g. "is this PR already merged?") rather
+   * than trusting a cache hit here alone — see `mergePR` in
+   * `mockPassActivities.ts` for the pattern, and PASS-13 for a test that
+   * measures the external effect count directly rather than just the
+   * final state, since two idempotent-but-duplicate executions can land on
+   * the same final state without proving only one of them ran.
    */
   async runIdempotent<T>(key: string, operation: string, execute: () => Promise<T>): Promise<T> {
     const existing = await this.get(key);

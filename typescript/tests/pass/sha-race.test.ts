@@ -49,6 +49,10 @@ describe("PASS-09 SHA changed after approval", () => {
       await import("../../src/preview/temporalPass/temporal/activities/mockRepoState.js");
     const repoStore = new MockRepoStateStore(env.mockRepoPath);
 
+    // The SHA Benny actually reviewed and is about to approve, captured
+    // *before* the out-of-band commit below lands.
+    const approvedCandidateSha = (await repoStore.get(repo)).currentSha;
+
     // Simulate an out-of-band commit landing on the branch after Benny has
     // seen (but not yet acted on) the candidate that was actually approved.
     await repoStore.update(repo, (state) => ({ ...state, currentSha: "race-condition-sha" }));
@@ -56,7 +60,7 @@ describe("PASS-09 SHA changed after approval", () => {
     await handle.signal(bennyApprovalSignal, {
       approvalId: "appr-1",
       missionId,
-      candidateSha: "n/a",
+      candidateSha: approvedCandidateSha,
       decision: "APPROVE",
       approvalCycle: 0,
     });

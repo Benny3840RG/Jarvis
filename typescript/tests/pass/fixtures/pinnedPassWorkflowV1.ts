@@ -1,3 +1,30 @@
+/**
+ * TEST FIXTURE ONLY — used exclusively by replay-upgrade.test.ts (PASS-14).
+ *
+ * A pinned snapshot of `passWorkflow.ts`, frozen at the point this fixture
+ * was added. Its job is to stand in for "a workflow version whose history
+ * is already in flight" so that a *future* edit to the real
+ * `passWorkflow.ts` gets checked for replay compatibility against it — the
+ * whole point is that this file does NOT get updated when the real one
+ * changes. (We tried freezing an actual serialized history JSON blob
+ * instead of pinning source, which is the more standard Temporal pattern —
+ * but it hit a real upstream dual-package-hazard bug in this repo's
+ * dependency tree: `@temporalio/common`, `@temporalio/proto` and
+ * `@temporalio/worker` each nest their own separate physical copy of
+ * `protobufjs@8.8.0` because a sibling dependency, `@grpc/proto-loader`,
+ * needs `protobufjs@7.x`, and protobufjs's own `instanceof Type` checks
+ * fail across those separate module instances even at the same version.
+ * `historyFromJSON`/`historyToJSON` in `@temporalio/common` throw "type
+ * must be a Type" as a result. A pinned-source fixture sidesteps that
+ * entirely — history is fetched and replayed in-memory as a real object
+ * the whole time, the same working path used elsewhere in this test file
+ * — while providing the identical guarantee: this file's behavior is
+ * fixed, so replaying its freshly-generated history against a changed
+ * `passWorkflow.ts` genuinely tests forward compatibility.)
+ *
+ * Never import this outside that test, and never "fix" it to match a
+ * future edit to the real file — that would defeat its purpose.
+ */
 import {
   condition,
   defineQuery,
@@ -15,9 +42,10 @@ import type {
   MissionStatus,
   ReviewResult,
   TestResult,
-} from "../../types.js";
+} from "../../../src/preview/temporalPass/types.js";
 
-type Activities = typeof import("../activities/mockPassActivities.js");
+type Activities =
+  typeof import("../../../src/preview/temporalPass/temporal/activities/mockPassActivities.js");
 
 // executeBuild and mergePR can be held open (heartbeating) by test-only
 // scenario knobs (buildDelayMs/mergeDelayMs — see PASS-01/PASS-13), so both
@@ -222,18 +250,6 @@ export async function passWorkflow(intent: MissionIntent): Promise<MissionState>
 
   // --- BENNY APPROVAL --------------------------------------------------------
   if (intent.constraints?.requireApproval) {
-    // Opened *before* the AWAITING_APPROVAL status/notifyBenny below, not
-    // after — a query-polling caller (see tests) can observe `status ===
-    // "AWAITING_APPROVAL"` the instant it's set, and notifyBenny is a real
-    // awaited Activity call that takes nonzero (and under load, sometimes
-    // non-trivial) wall-clock time. Flipping this flag afterward left a
-    // window where a signal sent right after the caller saw
-    // AWAITING_APPROVAL would be silently dropped as "no request
-    // outstanding," hanging the mission until the 72h default timeout —
-    // rare when everything's fast, real under concurrent test load.
-    outstandingApprovedSha = approvedSha;
-    approvalRequestOutstanding = true;
-
     phase = "AWAITING_APPROVAL";
     status = "AWAITING_APPROVAL";
 
@@ -249,6 +265,8 @@ export async function passWorkflow(intent: MissionIntent): Promise<MissionState>
       },
     });
 
+    outstandingApprovedSha = approvedSha;
+    approvalRequestOutstanding = true;
     const timeoutMs = intent.constraints.approvalTimeoutMs ?? DEFAULT_APPROVAL_TIMEOUT_MS;
     const received = await condition(() => readApproval() !== undefined, timeoutMs);
     approvalRequestOutstanding = false;
@@ -280,15 +298,6 @@ export async function passWorkflow(intent: MissionIntent): Promise<MissionState>
         firstApproval.modifications?.feedback ?? "Benny requested modifications";
       approval = undefined;
       currentApprovalCycle = 1;
-      approvalRequestOutstanding = false;
-      // Leaving `status` at "AWAITING_APPROVAL" through the rework/retest
-      // below would make it indistinguishable from "the second approval
-      // request is now open" to anyone polling status alone — it never
-      // actually left that value. A caller polling for AWAITING_APPROVAL
-      // right after sending MODIFY could then observe this *stale* leftover
-      // status, read the pre-rework SHA, and send its next signal before
-      // the real second window (and its new candidateSha) exists.
-      status = "RUNNING";
 
       phase = "REWORKING";
       buildResult = await executeRework({
@@ -334,9 +343,6 @@ export async function passWorkflow(intent: MissionIntent): Promise<MissionState>
         );
       }
 
-      outstandingApprovedSha = approvedSha;
-      approvalRequestOutstanding = true;
-
       phase = "AWAITING_APPROVAL";
       status = "AWAITING_APPROVAL";
       await notifyBenny({
@@ -351,6 +357,8 @@ export async function passWorkflow(intent: MissionIntent): Promise<MissionState>
         },
       });
 
+      outstandingApprovedSha = approvedSha;
+      approvalRequestOutstanding = true;
       const secondReceived = await condition(() => readApproval() !== undefined, timeoutMs);
       approvalRequestOutstanding = false;
       if (!secondReceived) {
