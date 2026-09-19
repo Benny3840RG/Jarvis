@@ -43,6 +43,7 @@
     "import:convex": "tsx src/tools/runConvexImport.ts",
     "test:node": "node --import tsx --test tests/*.test.ts jarvis-console-01/tests/*.test.ts",
     "test:convex": "vitest run --config vitest.config.mts --maxWorkers=1",
+    "test:temporal-pass": "node --import tsx --test tests/pass/*.test.ts",
     "outlook": "node --import tsx src/tools/runOutlookOnboarding.ts"
   },
   "dependencies": {
@@ -53,6 +54,11 @@
     "@nestjs/common": "^12.0.1",
     "@nestjs/core": "^12.0.1",
     "@nestjs/platform-fastify": "^12.0.1",
+    "@temporalio/activity": "^1.24.0",
+    "@temporalio/client": "^1.24.0",
+    "@temporalio/common": "^1.24.0",
+    "@temporalio/worker": "^1.24.0",
+    "@temporalio/workflow": "^1.24.0",
     "convex": "^1.45.0",
     "fastify": "^5.12.4",
     "reflect-metadata": "^0.2.2",
@@ -64,6 +70,7 @@
     "@edge-runtime/vm": "5.0.0",
     "@eslint/js": "^10.0.1",
     "@redocly/cli": "^2.52.1",
+    "@temporalio/testing": "^1.24.0",
     "@types/node": "^24.13.4",
     "ajv": "^8.20.0",
     "concurrently": "10.0.5",
@@ -79,7 +86,9 @@
   },
   "allowScripts": {
     "esbuild": false,
-    "fsevents": false
+    "fsevents": false,
+    "protobufjs@7.6.6": true,
+    "@swc/core@1.16.2": true
   },
   "overrides": {
     "find-my-way": "^9.7.0",
