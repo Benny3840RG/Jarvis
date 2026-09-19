@@ -15,8 +15,9 @@ export interface TemporalPassWorkerOptions {
 export async function createPassWorker(options: TemporalPassWorkerOptions = {}): Promise<Worker> {
   const address = options.address ?? process.env.TEMPORAL_ADDRESS ?? "localhost:7233";
   const namespace = options.namespace ?? process.env.TEMPORAL_NAMESPACE ?? "default";
-  const taskQueue =
-    options.taskQueue ?? process.env.TEMPORAL_TASK_QUEUE ?? `temporal-pass-${Date.now()}`;
+  // Must match TemporalOrchestrator's default exactly — see the comment
+  // there for why this can't be time-based.
+  const taskQueue = options.taskQueue ?? process.env.TEMPORAL_TASK_QUEUE ?? "temporal-pass";
 
   const connection = await NativeConnection.connect({ address });
 

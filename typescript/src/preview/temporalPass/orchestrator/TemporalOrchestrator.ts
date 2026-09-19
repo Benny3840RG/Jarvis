@@ -22,8 +22,14 @@ export class TemporalOrchestrator implements JarvisOrchestrator {
   constructor(options: TemporalOrchestratorOptions = {}) {
     const address = options.address ?? process.env.TEMPORAL_ADDRESS ?? "localhost:7233";
     const namespace = options.namespace ?? process.env.TEMPORAL_NAMESPACE ?? "default";
-    this.taskQueue =
-      options.taskQueue ?? process.env.TEMPORAL_TASK_QUEUE ?? `temporal-pass-${Date.now()}`;
+    // A time-based default (e.g. `temporal-pass-${Date.now()}`) would make an
+    // orchestrator and a worker started separately — the normal case outside
+    // tests, which always pass an explicit taskQueue — silently disagree on
+    // the queue name, since each side's Date.now() call resolves at a
+    // different millisecond. A fixed, stable default lets both sides agree
+    // out of the box; TEMPORAL_TASK_QUEUE is still there for anyone who
+    // needs real isolation (e.g. multiple environments sharing one server).
+    this.taskQueue = options.taskQueue ?? process.env.TEMPORAL_TASK_QUEUE ?? "temporal-pass";
 
     this.connectionPromise = Connection.connect({ address });
     this.clientPromise = this.connectionPromise.then(

@@ -47,6 +47,25 @@ const DEFAULT_APPROVAL_TIMEOUT_MS = 72 * 60 * 60 * 1000;
 const MAX_REVIEW_CYCLES = 3;
 const MAX_TEST_CYCLES = 2;
 
+/**
+ * Runtime shape check for a signal payload that TypeScript only promises is
+ * an `ApprovalResponse` at compile time. `decision` is checked for presence
+ * as a string only — whether it's one of the actual `ApprovalDecision`
+ * literals is validated later, where an invalid-but-well-typed value is
+ * rejected with a proper terminal failure state instead of silently dropped.
+ */
+function isWellFormedApprovalResponse(value: unknown): value is ApprovalResponse {
+  if (typeof value !== "object" || value === null) return false;
+  const candidate = value as Record<string, unknown>;
+  return (
+    typeof candidate.approvalId === "string" &&
+    typeof candidate.missionId === "string" &&
+    typeof candidate.candidateSha === "string" &&
+    typeof candidate.decision === "string" &&
+    typeof candidate.approvalCycle === "number"
+  );
+}
+
 export async function passWorkflow(intent: MissionIntent): Promise<MissionState> {
   const repo = intent.context?.repo ?? "mock-repo";
   const completedSteps: string[] = [];
@@ -97,6 +116,16 @@ export async function passWorkflow(intent: MissionIntent): Promise<MissionState>
   let outstandingApprovedSha = "";
 
   setHandler(bennyApprovalSignal, (response) => {
+    // Temporal deserializes whatever bytes a client sent — TypeScript's
+    // `ApprovalResponse` type is a compile-time-only promise, not a runtime
+    // guarantee. A malformed payload (null, a string, an object missing
+    // these fields) would otherwise throw inside this handler on property
+    // access, failing the workflow task; since a failed workflow task
+    // retries indefinitely against the same undeliverable signal, that
+    // would leave the mission stuck rather than just ignoring the bad
+    // signal. Validate the shape first and drop anything that doesn't
+    // match, same as any other misdirected/stale signal.
+    if (!isWellFormedApprovalResponse(response)) return;
     if (!approvalRequestOutstanding) return;
     if (approval !== undefined) return;
     if (response.approvalCycle !== currentApprovalCycle) return;

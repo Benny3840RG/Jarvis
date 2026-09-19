@@ -112,6 +112,19 @@ export class IdempotencyStore {
    * measures the external effect count directly rather than just the
    * final state, since two idempotent-but-duplicate executions can land on
    * the same final state without proving only one of them ran.
+   *
+   * The narrower, *sequential* case — a worker dies after `execute()` has
+   * already mutated external state but before `set()` records completion,
+   * so the next attempt reruns `execute()` — is safe even for activities
+   * like `executeBuild` that mint a fresh random value every call: the
+   * abandoned attempt's mutation is simply overwritten by the retry's, and
+   * the retry's own return value is what both the caller and the external
+   * state end up agreeing on. There's no window where a caller observes a
+   * result that doesn't match what actually landed, because only one
+   * attempt is ever live at a time in this case. PASS-01 exercises exactly
+   * this path (a real process kill mid-`executeBuild`, then a fresh worker
+   * retries) and asserts the final mock-repo state matches what the
+   * idempotency store recorded — not just that *some* build happened.
    */
   async runIdempotent<T>(key: string, operation: string, execute: () => Promise<T>): Promise<T> {
     const existing = await this.get(key);
