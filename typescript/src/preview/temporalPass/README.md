@@ -29,6 +29,31 @@ external side effects through the existing governed execution boundary
 `src/safety/safetyBinder.ts` and `src/orchestration/*`), not through this
 prototype. `PolicyEngine` may never become an independent execution gate.
 
+## Persistence scope: single host only
+
+The idempotency store (`idempotency/idempotencyStore.ts`) and the mock
+"GitHub" repo state (`temporal/activities/mockRepoState.ts`) are local JSON
+files on whatever host the worker process runs on. This is intentional for
+a single-worker preview — it reuses Jarvis's existing crash-safe atomic-write
+primitives (`writePrivateJsonFile`, `JsonFileLock`) instead of adding a new
+dependency — but it does **not** generalize past one host. Once Temporal
+workers can run across multiple hosts or replicas (production use), a local
+JSON file is the wrong authority for idempotency/external-state
+reconciliation: two workers on different machines would each have their own
+copy and could disagree. Convex (already Jarvis's shared durable store) or
+an equivalent shared store is the right fit at that point — this file store
+should not be carried into any multi-worker deployment as-is.
+
+Separately, note what the "reboot" test (PASS-02) does and doesn't prove: it
+kills and relaunches the Temporal server and worker as real OS processes
+against the same on-disk SQLite file, which proves _process restart_
+recovery. It does **not** prove sudden host power-loss durability —
+`writePrivateJsonFile` fsyncs the temp file before renaming it into place,
+but doesn't fsync the containing directory afterward, which is a narrow but
+real POSIX durability gap in that shared primitive (used elsewhere in Jarvis
+today, not introduced here). Don't read more into PASS-02 than "the worker
+and server processes can die and come back."
+
 ## Isolation
 
 - Lives entirely under `src/preview/`, per `docs/operations/preview-features.md`.
@@ -55,17 +80,33 @@ Two tiers:
 
 - **Tier 1** (`duplicate-signal`, `side-effect`, `latest-candidate`,
   `bounded-loops`, `rejection`, `sha-race`, `github-veto`,
-  `approval-timeout`): fast, in-process, via
-  `@temporalio/testing`'s `TestWorkflowEnvironment.createLocal()`.
-- **Tier 2** (`worker-kill`, `reboot`, `approval-recovery`): slower — spawns
-  a real `temporal server start-dev` process and a real worker process,
-  and `SIGKILL`s them to prove the mission survives.
+  `approval-timeout`, `timeout-race`, `replay-upgrade`): fast, in-process,
+  via `@temporalio/testing`'s `TestWorkflowEnvironment.createLocal()`.
+- **Tier 2** (`worker-kill`, `reboot`, `approval-recovery`,
+  `merge-crash-recovery`): slower — spawns a real `temporal server
+start-dev` process and a real worker process, and `SIGKILL`s them to
+  prove the mission survives.
 
-11 PASS acceptance criteria in total (`tests/pass/*.test.ts`), extending the
-original 10-test spec with `approval-timeout` (PASS-11), since
-`TestWorkflowEnvironment.createLocal()` runs on real wall-clock time and the
-72-hour approval wait needs its own coverage with a short, test-only
-override (`MissionIntent.constraints.approvalTimeoutMs`).
+14 PASS acceptance criteria in total (`tests/pass/*.test.ts`), extending the
+original 10-test spec with:
+
+- `approval-timeout` (PASS-11) — `TestWorkflowEnvironment.createLocal()`
+  runs on real wall-clock time, so the 72-hour approval wait needs its own
+  coverage with a short, test-only override
+  (`MissionIntent.constraints.approvalTimeoutMs`).
+- `timeout-race` (PASS-12) — a late approval signal arriving after the
+  mission has already timed out and closed must never resurrect it.
+- `merge-crash-recovery` (PASS-13) — kills the worker in the exact window
+  after the mock "GitHub" merge has already happened but before Temporal
+  durably records the Activity's completion
+  (`MissionIntent.scenario.mergeDelayMs`), proving the retry reconciles
+  against the already-merged state instead of duplicating or erroring.
+- `replay-upgrade` (PASS-14) — captures a real history from a mission
+  parked at `AWAITING_APPROVAL`, then uses `Worker.runReplayHistory` to
+  prove the current workflow code replays it cleanly, and that a
+  deliberately incompatible code change (`tests/pass/fixtures/
+brokenReplayWorkflow.ts`) is correctly rejected rather than silently
+  corrupting a mission that a real Jarvis deploy landed underneath.
 
 ## Next steps (out of scope here)
 

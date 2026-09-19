@@ -44,21 +44,23 @@ function repoOf(context: { repo?: string } | undefined): string {
   return context?.repo ?? "mock-repo";
 }
 
+/** Test-only hook: holds an Activity open, heartbeating, so a test can reliably SIGKILL the worker mid-flight. */
+async function heartbeatingDelay(delayMs: number): Promise<void> {
+  if (delayMs <= 0) return;
+  const heartbeatStepMs = 250;
+  const ctx = Context.current();
+  for (let elapsed = 0; elapsed < delayMs; elapsed += heartbeatStepMs) {
+    await sleep(Math.min(heartbeatStepMs, delayMs - elapsed));
+    ctx.heartbeat();
+  }
+}
+
 export async function executeBuild(input: BuildInput): Promise<BuildResult> {
   const key = `${input.missionId}:${input.stepId}:executeBuild:v1`;
   return idempotencyStore.runIdempotent(key, "executeBuild", async () => {
-    // Test-only hook (PASS-01): hold the activity open, heartbeating, so a
-    // test can reliably SIGKILL the worker while this activity is genuinely
-    // in flight rather than racing a near-instant mock.
-    const delayMs = input.intent.scenario?.buildDelayMs ?? 0;
-    if (delayMs > 0) {
-      const heartbeatStepMs = 250;
-      const ctx = Context.current();
-      for (let elapsed = 0; elapsed < delayMs; elapsed += heartbeatStepMs) {
-        await sleep(Math.min(heartbeatStepMs, delayMs - elapsed));
-        ctx.heartbeat();
-      }
-    }
+    // PASS-01: held open *before* the mock mutation, so a kill here means
+    // the mutation never happened and the retry starts clean.
+    await heartbeatingDelay(input.intent.scenario?.buildDelayMs ?? 0);
 
     const repo = repoOf(input.intent.context);
     const commitSha = `build-${input.missionId}-${randomUUID().slice(0, 8)}`;
@@ -156,6 +158,16 @@ export async function mergePR(input: MergeInput): Promise<void> {
       isMerged: true,
       mergedSha: input.expectedSha,
     }));
+
+    // PASS-13: held open *after* the mock mutation (the "GitHub accepted
+    // the merge" moment) but before this Activity reports back, so a kill
+    // here lands in the exact window where the external effect already
+    // happened but Temporal hasn't durably recorded completion yet. The
+    // reconciliation check above (`state.isMerged`) is what makes the
+    // retry safe: it finds the merge already done and returns without
+    // re-mutating, rather than erroring or merging twice.
+    await heartbeatingDelay(input.scenario?.mergeDelayMs ?? 0);
+
     return { merged: true, sha: input.expectedSha };
   });
 }

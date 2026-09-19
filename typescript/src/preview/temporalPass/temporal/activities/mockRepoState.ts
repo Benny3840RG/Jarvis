@@ -41,6 +41,9 @@ function seedState(repo: string): MockRepoState {
  * (PASS-02/PASS-03) doesn't spuriously reset the external system's state —
  * a real GitHub repo's state doesn't depend on whether Jarvis's worker is
  * currently running.
+ *
+ * SINGLE HOST ONLY (see README.md "Persistence scope") — same caveat as
+ * `idempotency/idempotencyStore.ts`.
  */
 export class MockRepoStateStore {
   private readonly lock: JsonFileLock;

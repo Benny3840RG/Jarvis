@@ -1,3 +1,12 @@
+/**
+ * TEST FIXTURE ONLY — used exclusively by replay-upgrade.test.ts (PASS-14)
+ * to prove that Temporal's replay determinism check actually catches a
+ * broken workflow-code upgrade, rather than silently corrupting a mission
+ * parked mid-flight. This is a copy of the real
+ * `src/preview/temporalPass/temporal/workflows/passWorkflow.ts` with ONE
+ * deliberate, marked change that makes it incompatible with histories
+ * produced by the real file. Never import this outside that test.
+ */
 import {
   condition,
   defineQuery,
@@ -15,9 +24,10 @@ import type {
   MissionStatus,
   ReviewResult,
   TestResult,
-} from "../../types.js";
+} from "../../../src/preview/temporalPass/types.js";
 
-type Activities = typeof import("../activities/mockPassActivities.js");
+type Activities =
+  typeof import("../../../src/preview/temporalPass/temporal/activities/mockPassActivities.js");
 
 // executeBuild and mergePR can be held open (heartbeating) by test-only
 // scenario knobs (buildDelayMs/mergeDelayMs — see PASS-01/PASS-13), so both
@@ -117,6 +127,20 @@ export async function passWorkflow(intent: MissionIntent): Promise<MissionState>
     intent,
   });
   completedSteps.push("BUILD");
+
+  // DELIBERATE BREAK (PASS-14 fixture only): a real history captured from
+  // the unmodified workflow has ActivityTaskScheduled(executeReview) as its
+  // second scheduled Activity. This extra call makes it
+  // ActivityTaskScheduled(notifyBenny) instead — a command-sequence mismatch
+  // that Temporal's replayer must reject when replaying that history
+  // against this file.
+  await notifyBenny({
+    missionId: intent.id,
+    stepId: "unexpected-extra-notify",
+    type: "BENNY_REQUEST",
+    recipient: "benny",
+    content: { summary: "this call should never have existed" },
+  });
 
   // --- REVIEW / REWORK (bounded) --------------------------------------------
   phase = "REVIEWING";

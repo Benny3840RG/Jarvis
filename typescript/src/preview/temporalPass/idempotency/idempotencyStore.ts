@@ -37,6 +37,11 @@ function isNodeError(error: unknown): error is NodeJS.ErrnoException {
  * of adding a new SQLite/Redis dependency — the whole point is that this
  * state must survive a real process/machine restart (PASS-02/PASS-03), not
  * just live in an in-memory Map.
+ *
+ * SINGLE HOST ONLY (see README.md "Persistence scope"): this is a local
+ * file, correct for one worker on one host. It does not generalize to
+ * multiple workers/hosts — that needs a shared store (e.g. Convex), not
+ * this file, since two hosts would each hold their own disagreeing copy.
  */
 export class IdempotencyStore {
   private readonly lock: JsonFileLock;
