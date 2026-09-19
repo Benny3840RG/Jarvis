@@ -136,6 +136,14 @@ export async function passWorkflow(intent: MissionIntent): Promise<MissionState>
     stepId: "build",
     intent,
   });
+  // BuildResult.success is part of the contract but the mock activity
+  // always returns true today — check it anyway. An activity that reports
+  // failure must not be silently treated as a usable build; review/test
+  // would otherwise run against (and merge could ship) a build the
+  // activity itself says didn't succeed.
+  if (!buildResult.success) {
+    return terminal("FAILED", phase, reviewCycles, "BUILD", "Build activity reported failure");
+  }
   completedSteps.push("BUILD");
 
   // --- REVIEW / REWORK (bounded) --------------------------------------------
@@ -157,6 +165,9 @@ export async function passWorkflow(intent: MissionIntent): Promise<MissionState>
       buildResult,
       reviewResult,
     });
+    if (!buildResult.success) {
+      return terminal("FAILED", phase, reviewCycles, "REWORK", "Rework activity reported failure");
+    }
 
     phase = "REVIEWING";
     reviewResult = await executeReview({
@@ -201,6 +212,15 @@ export async function passWorkflow(intent: MissionIntent): Promise<MissionState>
       buildResult,
       testResult,
     });
+    if (!buildResult.success) {
+      return terminal(
+        "FAILED",
+        phase,
+        testCycles,
+        "TEST_REPAIR",
+        "Repair activity reported failure",
+      );
+    }
 
     phase = "TESTING";
     testResult = await runTests({
@@ -318,6 +338,15 @@ export async function passWorkflow(intent: MissionIntent): Promise<MissionState>
         buildResult,
         reviewResult: { changesRequired: true, feedback: modificationFeedback, severity: "MAJOR" },
       });
+      if (!buildResult.success) {
+        return terminal(
+          "FAILED",
+          phase,
+          reviewCycles,
+          "MODIFY_REWORK",
+          "Rework activity reported failure",
+        );
+      }
       approvedSha = buildResult.commitSha;
 
       phase = "REVIEWING";

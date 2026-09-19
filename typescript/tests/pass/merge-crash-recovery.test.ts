@@ -6,7 +6,29 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { Client, Connection } from "@temporalio/client";
 
 import { passWorkflow } from "../../src/preview/temporalPass/temporal/workflows/passWorkflow.js";
+import { MockRepoStateStore } from "../../src/preview/temporalPass/temporal/activities/mockRepoState.js";
 import { ProcessHarness } from "./helpers/processHarness.js";
+
+/**
+ * Polls the mock repo state directly rather than sleeping a fixed duration.
+ * This test needs the kill to land specifically *after* mergePR's mutation
+ * (isMerged flips to true) but before it returns — a fixed sleep is a guess
+ * at that window, while `isMerged` becoming true is the actual event being
+ * waited for, observable through the same file the Activity itself writes.
+ */
+async function waitForRepoMerged(
+  repoStore: MockRepoStateStore,
+  repo: string,
+  timeoutMs = 5_000,
+): Promise<void> {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    const state = await repoStore.get(repo);
+    if (state.isMerged) return;
+    await sleep(25);
+  }
+  throw new Error(`Timed out waiting for repo "${repo}" to report isMerged`);
+}
 
 // PASS-13: the nastiest Temporal window — the mock "GitHub" accepts the
 // merge (the mock repo's `isMerged`/`mergedSha` are already updated), and
@@ -50,9 +72,8 @@ describe("PASS-13 reconciles after a crash between the external effect and Activ
       ],
     });
 
-    // BUILD/REVIEW/TEST/SHA-check/branch-check are all near-instant; by
-    // 750ms the mission should be inside mergePR's post-mutation delay.
-    await sleep(750);
+    const repoStore = new MockRepoStateStore(harness.mockRepoPath);
+    await waitForRepoMerged(repoStore, repo);
     harness.killWorker();
     await harness.startWorker();
 
@@ -61,10 +82,7 @@ describe("PASS-13 reconciles after a crash between the external effect and Activ
 
     const { IdempotencyStore } =
       await import("../../src/preview/temporalPass/idempotency/idempotencyStore.js");
-    const { MockRepoStateStore } =
-      await import("../../src/preview/temporalPass/temporal/activities/mockRepoState.js");
     const idempotencyStore = new IdempotencyStore(harness.idempotencyPath);
-    const repoStore = new MockRepoStateStore(harness.mockRepoPath);
 
     const mergeEntry = await idempotencyStore.get(`${missionId}:merge:mergePR:v1`);
     assert.equal(mergeEntry?.state, "completed");

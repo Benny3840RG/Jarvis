@@ -55,6 +55,22 @@ async function heartbeatingDelay(delayMs: number): Promise<void> {
   }
 }
 
+// executeBuild/executeRework/repairTests deliberately do NOT get the same
+// atomic check-and-mutate treatment as mergePR, even though they share the
+// same "idempotency cache check and execute() are non-atomic" gap: two
+// genuinely concurrent executions (a zombie worker racing its replacement)
+// could each write a *different* random commitSha, leaving the mock repo's
+// currentSha inconsistent with whichever BuildResult a given caller's
+// runIdempotent call happens to return. Unlike mergePR, that inconsistency
+// can never reach an unsafe outcome here: the independent SHA_VERIFICATION
+// step in passWorkflow.ts re-reads getCurrentCommitSha immediately before
+// merge and fails closed on any mismatch against what was actually approved
+// (PASS-09) — so the worst case is a spurious FAILED mission, never a merge
+// of the wrong commit or a duplicated external effect. mergePR's race was
+// worth closing because its failure mode was the latter (a duplicate real
+// merge); this one's failure mode is already a safe rejection, so it's left
+// as the same documented single-host/non-CAS limitation as the rest of
+// IdempotencyStore (see idempotencyStore.ts).
 export async function executeBuild(input: BuildInput): Promise<BuildResult> {
   const key = `${input.missionId}:${input.stepId}:executeBuild:v1`;
   return idempotencyStore.runIdempotent(key, "executeBuild", async () => {

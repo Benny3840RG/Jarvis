@@ -5,36 +5,32 @@ import { setTimeout as sleep } from "node:timers/promises";
 
 import { Client, Connection, type WorkflowHandle } from "@temporalio/client";
 
-import {
-  getMissionStateQuery,
-  passWorkflow,
-} from "../../src/preview/temporalPass/temporal/workflows/passWorkflow.js";
+import { passWorkflow } from "../../src/preview/temporalPass/temporal/workflows/passWorkflow.js";
 import { ProcessHarness } from "./helpers/processHarness.js";
 
 /**
- * Polls until the workflow reports `phase`, then waits one extra heartbeat
- * interval (`mockPassActivities.ts`'s `heartbeatingDelay` ticks every
- * 250ms). A fixed sleep alone only proves the workflow task was dispatched,
- * not that the Activity has actually reached and executed a `heartbeat()`
- * call — under worker startup/scheduling delay on a loaded CI box, a blind
- * sleep can still fire before that, letting the kill land before the
- * Activity is genuinely in flight.
+ * Polls workflow history for an `ActivityTaskStarted` event, rather than a
+ * fixed sleep or the workflow's own `phase` query. `phase` is set to
+ * "BUILDING" *before* `executeBuild` is even awaited — a signal that the
+ * workflow task ran, not that a worker has actually picked up and started
+ * executing the Activity. `ActivityTaskStarted` only appears in history once
+ * a worker has genuinely begun running it, which is the real "in flight"
+ * moment this test needs before killing that worker.
  */
-async function waitForPhaseThenOneHeartbeat(
+async function waitForActivityStarted(
   handle: WorkflowHandle<typeof passWorkflow>,
-  phase: string,
   timeoutMs = 5_000,
 ): Promise<void> {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
-    const state = await handle.query(getMissionStateQuery);
-    if (state.phase === phase) {
-      await sleep(300);
-      return;
-    }
+    const history = await handle.fetchHistory();
+    const started = (history.events ?? []).some(
+      (event) => event.activityTaskStartedEventAttributes != null,
+    );
+    if (started) return;
     await sleep(25);
   }
-  throw new Error(`Timed out waiting for phase "${phase}"`);
+  throw new Error("Timed out waiting for the build Activity to start");
 }
 
 // PASS-01: the mission survives a worker process crash. A build Activity is
@@ -78,9 +74,9 @@ describe("PASS-01 survives a worker process kill", () => {
       ],
     });
 
-    // Give the build Activity time to actually start (and heartbeat once)
-    // before pulling the rug out from under it.
-    await waitForPhaseThenOneHeartbeat(handle, "BUILDING");
+    // Give the build Activity time to actually start before pulling the rug
+    // out from under it.
+    await waitForActivityStarted(handle);
     harness.killWorker();
     await harness.startWorker();
 

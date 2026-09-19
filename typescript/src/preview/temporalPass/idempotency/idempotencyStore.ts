@@ -64,8 +64,18 @@ export class IdempotencyStore {
     }
     try {
       return JSON.parse(raw) as Store;
-    } catch {
-      return {};
+    } catch (error: unknown) {
+      // Unlike a missing file (a legitimate "no store yet" state), a file
+      // that exists but fails to parse is corruption — silently treating it
+      // as empty would discard every completed entry and let already
+      // -executed external effects (a merge, a notification) run again.
+      // Fail loud instead.
+      throw new Error(
+        `Jarvis idempotency store at ${this.filePath} is corrupted and could not be parsed: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+        { cause: error },
+      );
     }
   }
 

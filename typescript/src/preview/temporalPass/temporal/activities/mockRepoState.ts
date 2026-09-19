@@ -78,8 +78,18 @@ export class MockRepoStateStore {
     }
     try {
       return JSON.parse(raw) as Store;
-    } catch {
-      return {};
+    } catch (error: unknown) {
+      // Same reasoning as idempotencyStore.ts: a file that exists but fails
+      // to parse is corruption, not "no state yet." Silently resetting to
+      // {} here would make every repo look freshly seeded (currentSha back
+      // to a synthetic `seed-<repo>` value, isMerged reset to false),
+      // masking real merged/build state instead of surfacing the problem.
+      throw new Error(
+        `Jarvis mock repo state at ${this.filePath} is corrupted and could not be parsed: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+        { cause: error },
+      );
     }
   }
 
