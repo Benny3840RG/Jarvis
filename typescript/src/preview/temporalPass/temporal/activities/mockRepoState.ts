@@ -11,6 +11,16 @@ export interface MockRepoState {
   branchProtectionSatisfied: boolean;
   isMerged: boolean;
   mergedSha?: string;
+  /**
+   * Counters for tests that need to distinguish "the Activity function ran
+   * N times" from "the external effect happened once" (PASS-13) — the two
+   * are not the same thing under at-least-once execution, and a final-state
+   * assertion like `mergedSha === expectedSha` can't tell them apart on its
+   * own (two idempotent duplicate merges of the same SHA land on identical
+   * final state).
+   */
+  mergeAttemptCount: number;
+  mergeEffectCount: number;
 }
 
 type Store = Record<string, MockRepoState>;
@@ -32,6 +42,8 @@ function seedState(repo: string): MockRepoState {
     currentSha: `seed-${repo}`,
     branchProtectionSatisfied: true,
     isMerged: false,
+    mergeAttemptCount: 0,
+    mergeEffectCount: 0,
   };
 }
 

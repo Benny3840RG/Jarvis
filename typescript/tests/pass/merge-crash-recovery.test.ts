@@ -71,11 +71,18 @@ describe("PASS-13 reconciles after a crash between the external effect and Activ
 
     const repoState = await repoStore.get(repo);
     assert.equal(repoState.isMerged, true);
-    // A duplicated, uncoordinated merge would be visible as the mergedSha
-    // no longer matching the single build's commit — reconciliation means
-    // exactly one merge, against exactly one build.
     const buildEntry = await idempotencyStore.get(`${missionId}:build:executeBuild:v1`);
     const builtSha = (buildEntry?.result as { commitSha: string }).commitSha;
     assert.equal(repoState.mergedSha, builtSha);
+
+    // The real assertion: two Activity *attempts* happened (the interrupted
+    // one that got SIGKILLed mid-heartbeat, and the retry that reconciled
+    // against it), but the external effect only happened once. Comparing
+    // final state alone (mergedSha === builtSha, above) can't distinguish
+    // "merged once" from "merged twice with an idempotent identical
+    // result" — a second, uncoordinated merge landing on the same SHA would
+    // pass that comparison too. These counters can't.
+    assert.equal(repoState.mergeAttemptCount, 2, "expected the interrupted attempt plus one retry");
+    assert.equal(repoState.mergeEffectCount, 1, "expected the external merge effect exactly once");
   });
 });

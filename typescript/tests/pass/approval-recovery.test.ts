@@ -72,10 +72,15 @@ describe("PASS-03 approval wait survives a reboot", () => {
     const stateAfterReboot = await rebootedHandle.query(getMissionStateQuery);
     assert.equal(stateAfterReboot.status, "AWAITING_APPROVAL");
 
+    const { MockRepoStateStore } =
+      await import("../../src/preview/temporalPass/temporal/activities/mockRepoState.js");
+    const repoStore = new MockRepoStateStore(harness.mockRepoPath);
+    const candidateSha = (await repoStore.get(repo)).currentSha;
+
     await rebootedHandle.signal(bennyApprovalSignal, {
       approvalId: "appr-post-reboot",
       missionId,
-      candidateSha: "n/a",
+      candidateSha,
       decision: "APPROVE",
       approvalCycle: 0,
     });
@@ -83,9 +88,6 @@ describe("PASS-03 approval wait survives a reboot", () => {
     const result = await rebootedHandle.result();
     assert.equal(result.status, "COMPLETED");
 
-    const { MockRepoStateStore } =
-      await import("../../src/preview/temporalPass/temporal/activities/mockRepoState.js");
-    const repoStore = new MockRepoStateStore(harness.mockRepoPath);
     const repoState = await repoStore.get(repo);
     assert.equal(repoState.isMerged, true);
   });

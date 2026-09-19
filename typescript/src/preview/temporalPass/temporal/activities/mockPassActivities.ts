@@ -135,6 +135,16 @@ export async function checkBranchProtection(
 export async function mergePR(input: MergeInput): Promise<void> {
   const key = `${input.missionId}:${input.stepId}:mergePR:v1`;
   await idempotencyStore.runIdempotent(key, "mergePR", async () => {
+    // Counted on every real execute() (i.e. every idempotency-cache miss),
+    // independent of which branch below runs — see PASS-13, which asserts
+    // on this and mergeEffectCount directly rather than trusting a
+    // final-state comparison that two duplicate merges could satisfy
+    // identically.
+    await mockRepoStateStore.update(input.repo, (current) => ({
+      ...current,
+      mergeAttemptCount: current.mergeAttemptCount + 1,
+    }));
+
     // Reconcile against the external system before trusting our own cache:
     // if it's already merged with this exact SHA, this is a harmless retry.
     const state = await mockRepoStateStore.get(input.repo);
@@ -157,6 +167,7 @@ export async function mergePR(input: MergeInput): Promise<void> {
       ...current,
       isMerged: true,
       mergedSha: input.expectedSha,
+      mergeEffectCount: current.mergeEffectCount + 1,
     }));
 
     // PASS-13: held open *after* the mock mutation (the "GitHub accepted

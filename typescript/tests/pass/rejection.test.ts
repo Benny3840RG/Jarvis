@@ -40,10 +40,15 @@ describe("PASS-08 rejected approval cannot merge", () => {
 
     await waitForStatus(handle, "AWAITING_APPROVAL");
 
+    const { MockRepoStateStore } =
+      await import("../../src/preview/temporalPass/temporal/activities/mockRepoState.js");
+    const repoStore = new MockRepoStateStore(env.mockRepoPath);
+    const candidateSha = (await repoStore.get(repo)).currentSha;
+
     await handle.signal(bennyApprovalSignal, {
       approvalId: "appr-1",
       missionId,
-      candidateSha: "n/a",
+      candidateSha,
       decision: "REJECT",
       approvalCycle: 0,
       reasoning: "not ready",
@@ -54,9 +59,6 @@ describe("PASS-08 rejected approval cannot merge", () => {
     assert.equal(result.failedStep, "BENNY_APPROVAL");
     assert.ok(!result.completedSteps.includes("MERGE"));
 
-    const { MockRepoStateStore } =
-      await import("../../src/preview/temporalPass/temporal/activities/mockRepoState.js");
-    const repoStore = new MockRepoStateStore(env.mockRepoPath);
     const repoState = await repoStore.get(repo);
     assert.equal(repoState.isMerged, false);
   });

@@ -9,15 +9,19 @@ import {
   getMissionStateQuery,
   passWorkflow,
 } from "../../src/preview/temporalPass/temporal/workflows/passWorkflow.js";
-import { createPassTestEnv, type PassTestEnv } from "./helpers/testEnv.js";
+import { createPassTestEnv, type PassTestEnv, waitForStatus } from "./helpers/testEnv.js";
 
-// PASS-12: a late approval signal must never resurrect an already-terminal
-// mission. Temporal workflows execute deterministically from a single
-// ordered event history, so there's no true concurrent race inside the
-// workflow itself — the property to prove is that once the timeout has
-// already produced a terminal CANCELLED result, a signal arriving afterward
-// is not silently accepted and does not change that outcome.
-describe("PASS-12 late signal after timeout cannot resurrect the mission", () => {
+// PASS-12: approval/timeout ordering is resolved deterministically by
+// Temporal's single ordered event history — there's no true concurrent race
+// inside the workflow itself. Two deterministic cases:
+//  1. the signal is ordered before the timeout fires -> approval wins, the
+//     mission completes normally (the "timeout" is really just an upper
+//     bound that never gets hit);
+//  2. the timeout is ordered before any signal arrives -> CANCELLED is
+//     terminal, and a signal arriving afterward must never resurrect it
+//     ("late-signal-after-close protection", the case this module name
+//     originally focused on).
+describe("PASS-12 approval/timeout ordering", () => {
   let env: PassTestEnv;
 
   before(async () => {
@@ -28,13 +32,52 @@ describe("PASS-12 late signal after timeout cannot resurrect the mission", () =>
     await env.teardown();
   });
 
-  it("a signal sent after the mission has already timed out and closed is rejected, not applied", async () => {
-    const missionId = `timeout-race-${randomUUID()}`;
+  async function currentSha(repo: string): Promise<string> {
+    const { MockRepoStateStore } =
+      await import("../../src/preview/temporalPass/temporal/activities/mockRepoState.js");
+    const repoStore = new MockRepoStateStore(env.mockRepoPath);
+    return (await repoStore.get(repo)).currentSha;
+  }
+
+  it("a signal ordered comfortably before the timeout wins — the mission completes, not cancels", async () => {
+    const missionId = `timeout-race-wins-${randomUUID()}`;
     const repo = `repo-${missionId}`;
     const intent: MissionIntent = {
       id: missionId,
       type: "SIMPLE_ACTION",
-      description: "timeout race test",
+      description: "signal-before-timeout test",
+      // Long enough that the approval below is unambiguously ordered first;
+      // short enough the test doesn't hang if this regresses.
+      constraints: { requireApproval: true, approvalTimeoutMs: 5_000 },
+      context: { repo },
+    };
+
+    const handle = await env.testEnv.client.workflow.start(passWorkflow, {
+      taskQueue: env.taskQueue,
+      workflowId: missionId,
+      args: [intent],
+    });
+
+    await waitForStatus(handle, "AWAITING_APPROVAL");
+    await handle.signal(bennyApprovalSignal, {
+      approvalId: "appr-before-timeout",
+      missionId,
+      candidateSha: await currentSha(repo),
+      decision: "APPROVE",
+      approvalCycle: 0,
+    });
+
+    const result = await handle.result();
+    assert.equal(result.status, "COMPLETED");
+  });
+
+  it("a signal sent after the mission has already timed out and closed is rejected, not applied", async () => {
+    const missionId = `timeout-race-loses-${randomUUID()}`;
+    const repo = `repo-${missionId}`;
+    const intent: MissionIntent = {
+      id: missionId,
+      type: "SIMPLE_ACTION",
+      description: "timeout-before-signal test",
       constraints: { requireApproval: true, approvalTimeoutMs: 200 },
       context: { repo },
     };
@@ -57,7 +100,7 @@ describe("PASS-12 late signal after timeout cannot resurrect the mission", () =>
       await handle.signal(bennyApprovalSignal, {
         approvalId: "appr-too-late",
         missionId,
-        candidateSha: "n/a",
+        candidateSha: await currentSha(repo),
         decision: "APPROVE",
         approvalCycle: 0,
       });
