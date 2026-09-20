@@ -1,4 +1,6 @@
+import type { QuoteStore } from "../quotes/quote.js";
 import { renderQuoteText } from "./quoteRenderer.js";
+import { allocateAndSaveQuote, saveQuoteRecord } from "./quoteRecordStore.js";
 import type { QuoteData, QuoteItem } from "./quoteTypes.js";
 
 /** Minimal line-reader abstraction so the intake flow can be driven by a real terminal or a test. */
@@ -78,9 +80,10 @@ async function collectNotes(io: QuoteIntakeIo, write: QuoteIntakeWriter): Promis
 }
 
 /**
- * Interactively collects job details and builds a QuoteData object. Quote
- * numbering is a simple in-memory default here; a persistence-backed
- * numbering scheme is a future capability.
+ * Interactively collects job details and builds a QuoteData object.
+ * `options.quoteNumber` defaults to 1; callers that want it derived from
+ * saved quotes should compute it themselves (see `nextQuoteRecordNumber`)
+ * and pass it in.
  */
 export async function collectQuoteData(
   io: QuoteIntakeIo,
@@ -105,15 +108,48 @@ export async function collectQuoteData(
   };
 }
 
-/** Runs the interactive quote intake flow end-to-end and prints the rendered quote. */
+/**
+ * Runs the interactive quote intake flow end-to-end, prints the rendered
+ * quote, and — when a store is supplied — saves it afterward. Persistence
+ * failures are reported but never hide or replace the quote already shown.
+ *
+ * When the caller doesn't pin `options.quoteNumber`, the number is allocated
+ * right before saving (not before the Q&A) so the store-read-then-write race
+ * with a concurrent quote:create is as short as it can be, and self-heals if
+ * it still happens — see `allocateAndSaveQuote`.
+ */
 export async function runCreateQuote(
   io: QuoteIntakeIo,
   write: QuoteIntakeWriter,
   options: CreateQuoteOptions = {},
+  store?: QuoteStore,
 ): Promise<QuoteData> {
   write('Jarvis: Let\'s build a quote. Answer the prompts below (or "y"/"n" where asked).');
   try {
-    const quote = await collectQuoteData(io, write, options);
+    let quote = await collectQuoteData(io, write, options);
+    if (store) {
+      if (options.quoteNumber === undefined) {
+        const result = await allocateAndSaveQuote(store, quote);
+        quote = result.quote;
+        if (!result.saved) {
+          write(
+            `Jarvis: Could not save quote #${quote.quoteNumber} (${result.error}). The quote below was not saved — copy it now if you need it.`,
+          );
+        } else if (result.warning) {
+          write(`Jarvis: ${result.warning}`);
+        }
+      } else {
+        try {
+          await saveQuoteRecord(store, quote);
+        } catch (error: unknown) {
+          write(
+            `Jarvis: Could not save quote #${quote.quoteNumber} (${
+              error instanceof Error ? error.message : String(error)
+            }). The quote below was not saved — copy it now if you need it.`,
+          );
+        }
+      }
+    }
     write("");
     write(renderQuoteText(quote));
     return quote;

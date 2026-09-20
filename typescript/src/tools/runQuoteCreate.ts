@@ -1,9 +1,11 @@
 import { createInterface } from "node:readline/promises";
 
+import { JsonQuoteStore } from "../quotes/jsonQuoteStore.js";
 import { runCreateQuote } from "../quoting/createQuote.js";
 
 async function main(): Promise<void> {
   const rl = createInterface({ input: process.stdin, output: process.stdout });
+  const store = new JsonQuoteStore();
   await runCreateQuote(
     {
       question: (prompt: string) => rl.question(prompt),
@@ -14,6 +16,8 @@ async function main(): Promise<void> {
     (line: string) => {
       console.log(line);
     },
+    {},
+    store,
   );
 }
 

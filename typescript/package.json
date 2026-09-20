@@ -16,6 +16,8 @@
     "dev:live-work": "node --import tsx src/tools/runLiveWorkDev.ts",
     "quote:demo": "node --import tsx src/tools/runQuoteDemo.ts",
     "quote:create": "node --import tsx src/tools/runQuoteCreate.ts",
+    "quotes:list": "node --import tsx src/tools/runQuotesList.ts",
+    "quotes:show": "node --import tsx src/tools/runQuotesShow.ts",
     "search": "node --import tsx src/tools/runSearch.ts",
     "agent:check": "node --import tsx src/agent/main.ts",
     "agent:repl": "node --import tsx src/agent/replMain.ts",
