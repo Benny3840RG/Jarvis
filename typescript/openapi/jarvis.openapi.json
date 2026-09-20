@@ -1176,7 +1176,8 @@
             "$ref": "#/components/responses/Conflict"
           },
           "413": {
-            "$ref": "#/components/responses/PayloadTooLarge"
+            "description": "The incoming request or complete serialized provider request exceeds a configured byte or estimated input-token limit.",
+            "$ref": "#/components/responses/ProblemResponse"
           },
           "422": {
             "description": "The request or authority policy is invalid.",

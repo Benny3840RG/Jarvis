@@ -52,6 +52,9 @@ function makeReasoner(
   overrides: Partial<Awaited<ReturnType<TotalityReasoner["reason"]>>["draft"]> = {},
 ): TotalityReasoner {
   return {
+    serializeRequest(request, context) {
+      return JSON.stringify({ request, context });
+    },
     async reason() {
       return {
         responseId: "response-1",
@@ -112,11 +115,34 @@ function makePipeline(
 }
 
 describe("TotalityPipeline", () => {
+  it("rejects an adapter without a wire serializer before dispatch or journalling", async () => {
+    const journal = makeJournal();
+    let reasonerCalls = 0;
+    // Exercise a malformed adapter injected by an untyped caller.
+    const reasoner = {
+      async reason() {
+        reasonerCalls += 1;
+        return makeReasoner().reason(makeRequest(), {
+          project: makeProject(),
+          proposedAt: PROPOSED_AT,
+        });
+      },
+    } as unknown as TotalityReasoner;
+
+    await assert.rejects(
+      () => makePipeline(reasoner, journal).run(makeRequest()),
+      (error: unknown) => error instanceof TypeError && /serializeRequest/.test(error.message),
+    );
+    assert.equal(reasonerCalls, 0);
+    assert.deepEqual(journal.outcomes, []);
+  });
+
   it("rejects oversized stored project context before provider dispatch or journal commit", async () => {
     const project = { ...makeProject(), summary: "x".repeat(2_000) };
     const journal = makeJournal(project);
     let reasonerCalls = 0;
     const reasoner: TotalityReasoner = {
+      serializeRequest: makeReasoner().serializeRequest,
       async reason(request, context) {
         reasonerCalls += 1;
         return makeReasoner().reason(request, context);
@@ -333,6 +359,7 @@ describe("TotalityPipeline", () => {
   it("fails before reasoning when the requested project does not exist", async () => {
     let called = false;
     const reasoner: TotalityReasoner = {
+      serializeRequest: makeReasoner().serializeRequest,
       async reason() {
         called = true;
         return makeReasoner().reason(makeRequest(), { project: null, proposedAt: PROPOSED_AT });
@@ -384,6 +411,7 @@ describe("TotalityPipeline", () => {
     let reasonerCalled = false;
     let projectCalled = false;
     const reasoner: TotalityReasoner = {
+      serializeRequest: makeReasoner().serializeRequest,
       async reason() {
         reasonerCalled = true;
         return makeReasoner().reason(makeRequest(), {

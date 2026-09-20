@@ -59,8 +59,8 @@ export interface TotalityReasoningDraft {
 }
 
 export interface TotalityReasoner {
-  /** Production adapters return the exact serialized body used for provider dispatch. */
-  serializeRequest?(request: TotalityRequest, context: TotalityReasoningContext): string;
+  /** Return the exact serialized body used for provider dispatch, including all overhead. */
+  serializeRequest(request: TotalityRequest, context: TotalityReasoningContext): string;
   reason(
     request: TotalityRequest,
     context: TotalityReasoningContext,
@@ -177,9 +177,7 @@ export class TotalityPipeline {
       proposedAt,
       maxOutputTokens: this.quota.maxOutputTokens,
     };
-    const serializedProviderRequest = this.reasoner.serializeRequest
-      ? this.reasoner.serializeRequest(request, context)
-      : JSON.stringify({ request, context });
+    const serializedProviderRequest = this.reasoner.serializeRequest(request, context);
     const lease: TotalityQuotaLease = this.quota.acquire(request, serializedProviderRequest);
     try {
       const reasoning = await this.reasoner.reason(request, context);

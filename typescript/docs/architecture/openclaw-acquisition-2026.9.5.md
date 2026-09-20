@@ -15,9 +15,10 @@ OpenClaw runtime, plugin installation, model change or added dependency.
 | Bound response consumption and release readers on failure              | `integrations/boundedResponse.ts`, OpenAI and Gemini reasoners                       | Both success and error bodies stop above 1,048,576 actual streamed bytes. Missing or understated Content-Length does not bypass the cap.                         |
 | Keep cancellation effective after headers                              | Bounded reader consumes the existing provider timeout signal                         | A stalled body can be cancelled; reader cleanup does not wait for potentially hung stream cancellation.                                                          |
 
-The production adapters use the same serializer for quota accounting and their
-HTTP body. Injected reasoners without a serializer use a request-plus-context
-fallback; any future production adapter must supply its full wire serializer.
+Every reasoner must supply its full wire serializer, including instructions,
+schema and other provider overhead. The production adapters use the same
+serializer for quota accounting and their HTTP body. An injected reasoner without
+a serializer fails before quota admission, dispatch or outcome journalling.
 Quota admission and the synchronous dispatch serialization have no intervening
 await. Provider credentials stay in headers and are excluded from serialization.
 

@@ -11,6 +11,10 @@ keep their timeout active through body consumption. Oversized inputs fail before
 dispatch; response overflow fails without a retry or staged memory. No new
 runtime dependency, authority or persistent state was added.
 
+Review follow-up requires every injected reasoner to expose its full wire
+serializer and rejects missing serializers before dispatch. The Totality 413
+contract describes its configured request limits independently of backup limits.
+
 See [acquisition and provenance](architecture/openclaw-acquisition-2026.9.5.md)
 for the retained MIT licence, adopted patterns, failure-first regressions and
 components deferred after inspection. Exact candidate verification belongs to
