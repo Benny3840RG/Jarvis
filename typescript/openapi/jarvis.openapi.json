@@ -1129,7 +1129,7 @@
       "post": {
         "operationId": "reasonWithTotality",
         "summary": "Run proposal-only Totality reasoning with validation and audit journalling",
-        "description": "Runs proposal-only Totality reasoning against bounded authoritative project context. Successful typed memory suggestions are validated locally and staged as approval-required project-memory change sets in the same Convex transaction as validation and audit evidence. No memory is approved or applied by this operation.",
+        "description": "Runs proposal-only Totality reasoning against bounded authoritative project context. Admission limits cover both the incoming request and the complete serialized provider request, including project context, system instructions, routing and any output schema. Input tokens are estimated from UTF-8 bytes, not measured by a model tokenizer. Provider responses, including error bodies, are limited to 1048576 bytes. Oversized inputs are rejected before provider dispatch; oversized responses fail without staging memory or recording a successful outcome. Successful typed memory suggestions are validated locally and staged as approval-required project-memory change sets in the same Convex transaction as validation and audit evidence. No memory is approved or applied by this operation.",
         "tags": ["Runtime"],
         "x-mcp-tool": {
           "exposed": false,
@@ -1174,6 +1174,9 @@
           },
           "409": {
             "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
           },
           "422": {
             "description": "The request or authority policy is invalid.",

@@ -67,12 +67,24 @@ Optional transport values are:
 | `JARVIS_MAX_REQUEST_BYTES`                    | 1048576     | Remote request body limit, bounded to 1024–10485760 bytes.                          |
 | `JARVIS_RATE_LIMIT_MAX_REQUESTS`              | 60          | Per-client remote request budget per window.                                        |
 | `JARVIS_RATE_LIMIT_WINDOW_MS`                 | 60000       | Remote rate-limit window in milliseconds.                                           |
-| `JARVIS_TOTALITY_MAX_REQUEST_BYTES`           | 262144      | Aggregate Totality request-size ceiling before provider dispatch.                   |
-| `JARVIS_TOTALITY_MAX_INPUT_TOKENS`            | 32768       | Estimated aggregate input-token ceiling per Totality request.                       |
+| `JARVIS_TOTALITY_MAX_REQUEST_BYTES`           | 262144      | Independent byte ceiling for incoming and complete serialized provider requests.    |
+| `JARVIS_TOTALITY_MAX_INPUT_TOKENS`            | 32768       | Input estimate ceiling: ceil(complete provider request UTF-8 bytes / 4).            |
 | `JARVIS_TOTALITY_MAX_CONCURRENT`              | 4           | Maximum simultaneous Totality provider calls in one process.                        |
-| `JARVIS_TOTALITY_COST_UNITS_PER_WINDOW`       | 100000      | Rolling aggregate provider-cost reservation budget.                                 |
+| `JARVIS_TOTALITY_COST_UNITS_PER_WINDOW`       | 100000      | In-process fixed-window budget: estimated complete input plus reserved output.      |
 | `JARVIS_TOTALITY_MAX_OUTPUT_TOKENS`           | 4096        | Hard output-token ceiling sent to the provider.                                     |
-| `JARVIS_TOTALITY_QUOTA_WINDOW_MS`             | 3600000     | Rolling provider-cost quota window in milliseconds.                                 |
+| `JARVIS_TOTALITY_QUOTA_WINDOW_MS`             | 3600000     | Provider-cost quota window in milliseconds; resets on process restart.              |
+
+Totality admission includes the transmitted project context, routing, system instructions and
+provider output schema. Oversized input returns HTTP 413 before the provider is called; context
+is rejected whole, without silently dropping measurements or constraints. The bytes/4 token
+estimate is a heuristic, not a tokenizer or a currency limit. Quotas remain per process and are
+not shared across workers or persisted across restarts.
+
+Both OpenAI and Gemini response bodies, including errors, are capped at 1,048,576 streamed
+bytes. A misleading or missing `Content-Length` cannot bypass the cap. The existing request
+timeout remains active while reading the body. Overflow cancels the read and fails as a
+non-retryable provider processing error without staging memory. Model calls are not retried
+automatically. See [OpenClaw acquisition record](../architecture/openclaw-acquisition-2026.9.5.md).
 
 `JARVIS_SOURCE_VERSION` defaults to `development` for local work. Release automation should set
 it to the immutable source commit.

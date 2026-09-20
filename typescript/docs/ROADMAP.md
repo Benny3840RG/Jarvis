@@ -1,5 +1,26 @@
 # Jarvis TypeScript Roadmap
 
+## OpenClaw provider resource guards (2026-09-20, #574)
+
+Acquired portable patterns from OpenClaw v2026.9.5, pinned to
+`ec9c1a13db8938e5a3eaa51fca2e981cde2395a9`. Totality admission now counts each
+production adapter's complete serialized request, including stored project
+context, instructions, routing and schema. The incoming request remains
+independently bounded. Both model clients use a 1 MiB streaming response cap and
+keep their timeout active through body consumption. Oversized inputs fail before
+dispatch; response overflow fails without a retry or staged memory. No new
+runtime dependency, authority or persistent state was added.
+
+See [acquisition and provenance](architecture/openclaw-acquisition-2026.9.5.md)
+for the retained MIT licence, adopted patterns, failure-first regressions and
+components deferred after inspection. Exact candidate verification belongs to
+the draft PR; this entry does not establish live-provider or deployment proof.
+
+Next bounded candidates: preserve provider-directed Retry-After minimum waits;
+add MCP backend request deadlines/cancellation; scope durable provider quota
+accounting. Automatic model retries need per-attempt cost and ambiguity controls
+before adoption. Existing Temporal and deployment PR ownership is unchanged.
+
 ## Maintenance notification repair (2026-09-16, #548)
 
 Run `35058594031` correctly deferred #522 and #553 for base drift, but its
