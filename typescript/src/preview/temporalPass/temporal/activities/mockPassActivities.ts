@@ -38,44 +38,11 @@ const mockRepoStateStore = mockRepoPath
 // A retried Activity therefore returns the same decision for the same step.
 function logicalCycle(stepId: string, prefix: "review" | "test"): number {
   if (stepId === prefix) return 1;
-  const match = stepId.match(new RegExp(`^${prefix}-(\\d+)import { Context } from "@temporalio/activity";
-import { randomUUID } from "node:crypto";
-import { setTimeout as sleep } from "node:timers/promises";
-
-import { IdempotencyStore } from "../../idempotency/idempotencyStore.js";
-import type {
-  BranchProtectionInput,
-  BranchProtectionResult,
-  BuildInput,
-  BuildResult,
-  MergeInput,
-  NotifyInput,
-  RepairInput,
-  ReviewInput,
-  ReviewResult,
-  ReworkInput,
-  ShaCheckInput,
-  ShaCheckResult,
-  TestInput,
-  TestResult,
-} from "../../types.js";
-import { MockRepoStateStore } from "./mockRepoState.js";
-
-const idempotencyPath = process.env.TEMPORAL_PASS_IDEMPOTENCY_PATH;
-const mockRepoPath = process.env.TEMPORAL_PASS_MOCK_REPO_PATH;
-
-const idempotencyStore = idempotencyPath
-  ? new IdempotencyStore(idempotencyPath)
-  : new IdempotencyStore();
-const mockRepoStateStore = mockRepoPath
-  ? new MockRepoStateStore(mockRepoPath)
-  : new MockRepoStateStore();
-
-));
-  if (!match) throw new Error(`Invalid ${prefix} step id: ${stepId}`);
+  const match = stepId.match(new RegExp("^" + prefix + "-(\\d+)$"));
+  if (!match) throw new Error("Invalid " + prefix + " step id: " + stepId);
   const cycle = Number(match[1]);
   if (!Number.isSafeInteger(cycle) || cycle < 1)
-    throw new Error(`Invalid ${prefix} step id: ${stepId}`);
+    throw new Error("Invalid " + prefix + " step id: " + stepId);
   return cycle + 1;
 }
 
