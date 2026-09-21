@@ -1,3 +1,4 @@
+import { readBoundedResponseText } from "../boundedResponse.js";
 import type { TotalityRequest } from "../../runtime/totalityContracts.js";
 import { assertRequestAuthority } from "../../runtime/totalityContracts.js";
 import { routeTotalityTask } from "../../runtime/totalityPolicy.js";
@@ -243,6 +244,44 @@ export class OpenAITotalityReasoner {
     private readonly fetchImpl: FetchLike = fetch,
   ) {}
 
+  /** Exact credential-free body used for quota admission and provider dispatch. */
+  serializeRequest(request: TotalityRequest, context: TotalityReasoningContext): string {
+    const routing = routeTotalityTask({
+      taskType: request.taskType,
+      outputStyle: request.outputStyle,
+      domainContext: request.domainContext,
+    });
+    assertRequestAuthority(request, routing);
+    return JSON.stringify({
+      model: this.config.model,
+      instructions: TOTALITY_SYSTEM_INSTRUCTIONS,
+      input: JSON.stringify({
+        goal: request.goal,
+        domainContext: request.domainContext,
+        constraints: request.constraints,
+        inputs: request.inputs,
+        routing,
+        projectContext: context.project,
+        proposalTimestamp: context.proposedAt,
+      }),
+      store: false,
+      max_output_tokens:
+        context.maxOutputTokens ??
+        this.config.maxOutputTokens ??
+        DEFAULT_TOTALITY_MAX_OUTPUT_TOKENS,
+      text: {
+        format: {
+          type: "json_schema",
+          name: "jarvis_totality_draft",
+          description:
+            "A proposal-only technical reasoning draft with optional staged project-memory suggestions.",
+          strict: true,
+          schema: TOTALITY_DRAFT_SCHEMA,
+        },
+      },
+    });
+  }
+
   async reason(
     request: TotalityRequest,
     context: TotalityReasoningContext,
@@ -265,38 +304,11 @@ export class OpenAITotalityReasoner {
           "Content-Type": "application/json",
           "X-Client-Request-Id": clientRequestId,
         },
-        body: JSON.stringify({
-          model: this.config.model,
-          instructions: TOTALITY_SYSTEM_INSTRUCTIONS,
-          input: JSON.stringify({
-            goal: request.goal,
-            domainContext: request.domainContext,
-            constraints: request.constraints,
-            inputs: request.inputs,
-            routing,
-            projectContext: context.project,
-            proposalTimestamp: context.proposedAt,
-          }),
-          store: false,
-          max_output_tokens:
-            context.maxOutputTokens ??
-            this.config.maxOutputTokens ??
-            DEFAULT_TOTALITY_MAX_OUTPUT_TOKENS,
-          text: {
-            format: {
-              type: "json_schema",
-              name: "jarvis_totality_draft",
-              description:
-                "A proposal-only technical reasoning draft with optional staged project-memory suggestions.",
-              strict: true,
-              schema: TOTALITY_DRAFT_SCHEMA,
-            },
-          },
-        }),
+        body: this.serializeRequest(request, context),
         signal: controller.signal,
       });
 
-      const responseText = await response.text();
+      const responseText = await readBoundedResponseText(response, { signal: controller.signal });
       const payload = parseResponsePayload(responseText);
       if (!response.ok) {
         const message =

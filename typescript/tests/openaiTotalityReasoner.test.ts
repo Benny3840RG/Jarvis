@@ -244,3 +244,57 @@ describe("OpenAI Totality reasoner", () => {
     assert.equal(called, false);
   });
 });
+
+describe("OpenAI provider resource guards", () => {
+  it("budgets the exact dispatched body including project context and fixed instructions", async () => {
+    let dispatchedBody: unknown;
+    const reasoner = new OpenAITotalityReasoner(
+      { apiKey: "test-key", model: "gpt-5.6-terra", timeoutMs: 5000, maxOutputTokens: 4096 },
+      (async (_input, init) => {
+        dispatchedBody = init?.body;
+        return new Response(JSON.stringify(successfulPayload()));
+      }) as typeof fetch,
+    );
+    const request = makeRequest();
+    const context = makeContext();
+    context.project!.summary = "Brackets 🔩 and measurements. ".repeat(30);
+    const serialized = reasoner.serializeRequest(request, context);
+    await reasoner.reason(request, context);
+    assert.equal(dispatchedBody, serialized);
+    assert.ok(
+      Buffer.byteLength(serialized, "utf8") > Buffer.byteLength(JSON.stringify(request), "utf8"),
+    );
+    assert.ok(serialized.includes("Brackets 🔩"));
+    assert.ok(!serialized.includes("test-key"), "quota serialization must exclude credentials");
+  });
+
+  for (const status of [200, 503]) {
+    it(`rejects an oversized ${status} response without retrying or including body content`, async () => {
+      let calls = 0;
+      const marker = "private-provider-body";
+      const payload =
+        status === 200
+          ? { ...successfulPayload(), padding: marker + "x".repeat(1_048_576) }
+          : { error: { message: marker }, padding: "x".repeat(1_048_576) };
+      const reasoner = new OpenAITotalityReasoner(
+        { apiKey: "test-key", model: "gpt-5.6-terra", timeoutMs: 5000, maxOutputTokens: 4096 },
+        (async () => {
+          calls += 1;
+          return new Response(JSON.stringify(payload), {
+            status,
+            headers: { "content-length": "1" },
+          });
+        }) as typeof fetch,
+      );
+      await assert.rejects(
+        () => reasoner.reason(makeRequest(), makeContext()),
+        (error: unknown) =>
+          error instanceof OpenAIRequestError &&
+          !error.retryable &&
+          /limit|exceed|large/i.test(error.message) &&
+          !error.message.includes(marker),
+      );
+      assert.equal(calls, 1);
+    });
+  }
+});

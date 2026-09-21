@@ -45,6 +45,54 @@ describe("Totality provider quota", () => {
     );
   });
 
+  it("independently bounds the incoming request when the provider body is smaller", () => {
+    const quota = new TotalityQuota(CONFIG);
+
+    assert.throws(
+      () => quota.acquire(request({ goal: "x".repeat(2_000) }), "{}"),
+      (error: unknown) => error instanceof TotalityQuotaError && error.code === "request-too-large",
+    );
+  });
+
+  it("bounds the complete provider body by UTF-8 bytes without reserving rejected work", () => {
+    const quota = new TotalityQuota({ ...CONFIG, maxCostUnitsPerWindow: 350 });
+
+    assert.throws(
+      () => quota.acquire(request(), "é".repeat(501)),
+      (error: unknown) => error instanceof TotalityQuotaError && error.code === "request-too-large",
+    );
+
+    const lease = quota.acquire(request(), "é".repeat(500));
+    lease.release();
+    assert.throws(
+      () => quota.acquire(request(), "é".repeat(500)),
+      (error: unknown) =>
+        error instanceof TotalityQuotaError && error.code === "provider-cost-quota",
+    );
+  });
+
+  it("estimates provider input tokens from the complete serialized body", () => {
+    const quota = new TotalityQuota({ ...CONFIG, maxEstimatedInputTokens: 200 });
+
+    assert.throws(
+      () => quota.acquire(request(), "x".repeat(801)),
+      (error: unknown) => error instanceof TotalityQuotaError && error.code === "input-token-limit",
+    );
+    quota.acquire(request(), "x".repeat(800)).release();
+  });
+
+  it("reserves the cost of the complete provider body on every accepted call", () => {
+    const quota = new TotalityQuota(CONFIG);
+    quota.acquire(request(), "x".repeat(800)).release();
+    quota.acquire(request(), "x".repeat(800)).release();
+
+    assert.throws(
+      () => quota.acquire(request(), "x".repeat(800)),
+      (error: unknown) =>
+        error instanceof TotalityQuotaError && error.code === "provider-cost-quota",
+    );
+  });
+
   it("bounds concurrent provider calls and reserves aggregate cost units", () => {
     const quota = new TotalityQuota(CONFIG);
     const lease = quota.acquire(request());
