@@ -31,14 +31,53 @@ const mockRepoStateStore = mockRepoPath
   ? new MockRepoStateStore(mockRepoPath)
   : new MockRepoStateStore();
 
-// Read-only mock decisions don't need idempotency-store durability, but they
-// do need per-mission call counters to drive the bounded-loop test scenarios
-// (PASS-06/07/08). An in-memory Map is fine here: these activities have no
-// external side effects to duplicate, so losing the counter on a worker
-// restart just means "review/tests pass a little sooner than the scenario
-// asked for," never a correctness violation.
-const reviewCallCounts = new Map<string, number>();
-const testCallCounts = new Map<string, number>();
+// Mock REVIEW/TEST decisions must be stable across Activity retries and
+// worker restarts. The workflow already gives every logical cycle a stable
+// stepId ("review", "review-1", ... / "test", "test-1", ...), so derive the
+// scenario ordinal from that durable input instead of process-local counters.
+// A retried Activity therefore returns the same decision for the same step.
+function logicalCycle(stepId: string, prefix: "review" | "test"): number {
+  if (stepId === prefix) return 1;
+  const match = stepId.match(new RegExp(`^${prefix}-(\\d+)import { Context } from "@temporalio/activity";
+import { randomUUID } from "node:crypto";
+import { setTimeout as sleep } from "node:timers/promises";
+
+import { IdempotencyStore } from "../../idempotency/idempotencyStore.js";
+import type {
+  BranchProtectionInput,
+  BranchProtectionResult,
+  BuildInput,
+  BuildResult,
+  MergeInput,
+  NotifyInput,
+  RepairInput,
+  ReviewInput,
+  ReviewResult,
+  ReworkInput,
+  ShaCheckInput,
+  ShaCheckResult,
+  TestInput,
+  TestResult,
+} from "../../types.js";
+import { MockRepoStateStore } from "./mockRepoState.js";
+
+const idempotencyPath = process.env.TEMPORAL_PASS_IDEMPOTENCY_PATH;
+const mockRepoPath = process.env.TEMPORAL_PASS_MOCK_REPO_PATH;
+
+const idempotencyStore = idempotencyPath
+  ? new IdempotencyStore(idempotencyPath)
+  : new IdempotencyStore();
+const mockRepoStateStore = mockRepoPath
+  ? new MockRepoStateStore(mockRepoPath)
+  : new MockRepoStateStore();
+
+));
+  if (!match) throw new Error(`Invalid ${prefix} step id: ${stepId}`);
+  const cycle = Number(match[1]);
+  if (!Number.isSafeInteger(cycle) || cycle < 1)
+    throw new Error(`Invalid ${prefix} step id: ${stepId}`);
+  return cycle + 1;
+}
 
 function repoOf(context: { repo?: string } | undefined): string {
   return context?.repo ?? "mock-repo";
@@ -87,8 +126,7 @@ export async function executeBuild(input: BuildInput): Promise<BuildResult> {
 
 export async function executeReview(input: ReviewInput): Promise<ReviewResult> {
   const requiredCycles = input.scenario?.reviewChangesForCycles ?? 0;
-  const count = (reviewCallCounts.get(input.missionId) ?? 0) + 1;
-  reviewCallCounts.set(input.missionId, count);
+  const count = logicalCycle(input.stepId, "review");
 
   if (count <= requiredCycles) {
     return {
@@ -111,8 +149,7 @@ export async function executeRework(input: ReworkInput): Promise<BuildResult> {
 
 export async function runTests(input: TestInput): Promise<TestResult> {
   const requiredFailures = input.scenario?.testFailuresForCycles ?? 0;
-  const count = (testCallCounts.get(input.missionId) ?? 0) + 1;
-  testCallCounts.set(input.missionId, count);
+  const count = logicalCycle(input.stepId, "test");
 
   if (count <= requiredFailures) {
     return {
