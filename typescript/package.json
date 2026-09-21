@@ -18,6 +18,7 @@
     "quote:create": "node --import tsx src/tools/runQuoteCreate.ts",
     "quotes:list": "node --import tsx src/tools/runQuotesList.ts",
     "quotes:show": "node --import tsx src/tools/runQuotesShow.ts",
+    "search": "node --import tsx src/tools/runSearch.ts",
     "agent:check": "node --import tsx src/agent/main.ts",
     "agent:repl": "node --import tsx src/agent/replMain.ts",
     "test": "npm run test:node && npm run test:convex",
