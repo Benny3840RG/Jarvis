@@ -41,10 +41,18 @@ export class TotalityQuota {
     return this.config.maxOutputTokens;
   }
 
-  acquire(request: TotalityRequest): TotalityQuotaLease {
-    const bytes = requestBytes(request);
-    if (bytes > this.config.maxRequestBytes) throw new TotalityQuotaError("request-too-large");
+  acquire(request: TotalityRequest, serializedProviderRequest?: string): TotalityQuotaLease {
+    const incomingBytes = requestBytes(request);
+    const bytes =
+      serializedProviderRequest === undefined
+        ? incomingBytes
+        : Buffer.byteLength(serializedProviderRequest, "utf8");
+    if (incomingBytes > this.config.maxRequestBytes || bytes > this.config.maxRequestBytes) {
+      throw new TotalityQuotaError("request-too-large");
+    }
 
+    // Keep the configured estimate while accounting for the complete provider
+    // body: project context, instructions, schema and serialization overhead.
     const estimatedInputTokens = Math.ceil(bytes / 4);
     if (estimatedInputTokens > this.config.maxEstimatedInputTokens) {
       throw new TotalityQuotaError("input-token-limit");

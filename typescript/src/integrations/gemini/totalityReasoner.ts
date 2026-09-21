@@ -1,3 +1,4 @@
+import { readBoundedResponseText } from "../boundedResponse.js";
 import type { TotalityRequest } from "../../runtime/totalityContracts.js";
 import { assertRequestAuthority } from "../../runtime/totalityContracts.js";
 import { routeTotalityTask } from "../../runtime/totalityPolicy.js";
@@ -177,6 +178,44 @@ export class GeminiTotalityReasoner {
     private readonly fetchImpl: FetchLike = fetch,
   ) {}
 
+  /** Exact credential-free body used for quota admission and provider dispatch. */
+  serializeRequest(request: TotalityRequest, context: TotalityReasoningContext): string {
+    const routing = routeTotalityTask({
+      taskType: request.taskType,
+      outputStyle: request.outputStyle,
+      domainContext: request.domainContext,
+    });
+    assertRequestAuthority(request, routing);
+    return JSON.stringify({
+      systemInstruction: { parts: [{ text: TOTALITY_SYSTEM_INSTRUCTIONS }] },
+      contents: [
+        {
+          role: "user",
+          parts: [
+            {
+              text: JSON.stringify({
+                goal: request.goal,
+                domainContext: request.domainContext,
+                constraints: request.constraints,
+                inputs: request.inputs,
+                routing,
+                projectContext: context.project,
+                proposalTimestamp: context.proposedAt,
+              }),
+            },
+          ],
+        },
+      ],
+      generationConfig: {
+        responseMimeType: "application/json",
+        maxOutputTokens:
+          context.maxOutputTokens ??
+          this.config.maxOutputTokens ??
+          DEFAULT_TOTALITY_MAX_OUTPUT_TOKENS,
+      },
+    });
+  }
+
   async reason(
     request: TotalityRequest,
     context: TotalityReasoningContext,
@@ -204,39 +243,12 @@ export class GeminiTotalityReasoner {
             "Content-Type": "application/json",
             "X-Client-Request-Id": clientRequestId,
           },
-          body: JSON.stringify({
-            systemInstruction: { parts: [{ text: TOTALITY_SYSTEM_INSTRUCTIONS }] },
-            contents: [
-              {
-                role: "user",
-                parts: [
-                  {
-                    text: JSON.stringify({
-                      goal: request.goal,
-                      domainContext: request.domainContext,
-                      constraints: request.constraints,
-                      inputs: request.inputs,
-                      routing,
-                      projectContext: context.project,
-                      proposalTimestamp: context.proposedAt,
-                    }),
-                  },
-                ],
-              },
-            ],
-            generationConfig: {
-              responseMimeType: "application/json",
-              maxOutputTokens:
-                context.maxOutputTokens ??
-                this.config.maxOutputTokens ??
-                DEFAULT_TOTALITY_MAX_OUTPUT_TOKENS,
-            },
-          }),
+          body: this.serializeRequest(request, context),
           signal: controller.signal,
         },
       );
 
-      const responseText = await response.text();
+      const responseText = await readBoundedResponseText(response, { signal: controller.signal });
       const payload = parseResponsePayload(responseText);
       if (!response.ok) {
         const message =
