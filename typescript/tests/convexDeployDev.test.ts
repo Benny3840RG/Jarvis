@@ -56,7 +56,7 @@ cp.execFileSync = (_exe, args) => Buffer.from(args[0] === 'status' ? '' : '${sha
 cp.spawnSync = (_exe, args, options) => {
   const input = JSON.parse(fs.readFileSync(${JSON.stringify(fixture)}, 'utf8'));
   fs.appendFileSync(${JSON.stringify(calls)}, JSON.stringify({args, envKeys:Object.keys(options.env)})+'\\n');
-  const text = '${target}\\n' + (input.message || '') + '\\n' + (args.includes('--verbose') ? 'startPush: '+JSON.stringify({schemaChange:{indexDiffs:input.startIndexes},environmentVariables:{PRIVATE_TEST_VALUE:'never-print-this-provider-secret'}}, null, 2)+'\\n'+JSON.stringify(input.plan, null, 2) : 'Would have deployed') + '\\n';
+  const text = '${target}\\n' + (input.message || '') + '\\n' + (args.includes('--verbose') ? 'startPush: '+JSON.stringify({schemaChange:{...(input.startSchemaChange || {}),indexDiffs:input.startIndexes},environmentVariables:{PRIVATE_TEST_VALUE:'never-print-this-provider-secret'}}, null, 2)+'\\n'+JSON.stringify(input.plan, null, 2) : 'Would have deployed') + '\\n';
   return {status:input.status??0, stdout:Buffer.from(text), stderr:Buffer.alloc(0)};
 };
 if (process.env.JARVIS_TEST_RECEIPT_RACE === '1') {
@@ -73,8 +73,9 @@ syncBuiltinESMExports();
     message = "",
     startIndexes: unknown = {},
     receiptRace = false,
+    startSchemaChange: Record<string, unknown> = {},
   ) {
-    writeFileSync(fixture, JSON.stringify({ plan, status, message, startIndexes }));
+    writeFileSync(fixture, JSON.stringify({ plan, status, message, startIndexes, startSchemaChange }));
     return spawnSync(
       process.execPath,
       ["--import", preload, resolve("scripts/convex-deploy-dev-outgoing-ram-798.mjs"), mode],
@@ -344,6 +345,38 @@ test("a receipt consumed by a competing process cannot authorize a second deploy
     assert.equal(
       h.calls().some((c) => !c.args.includes("--dry-run")),
       false,
+    );
+  } finally {
+    h.close();
+  }
+});
+
+
+for (const [field, value] of [
+  ["allocatedComponentIds", { root: "component-id" }],
+  ["schemaIds", { root: "schema-id" }],
+  ["allocatedComponentIds", []],
+] as const) {
+  test(`unsupported start-phase ${field} evidence fails closed`, () => {
+    const h = harness();
+    try {
+      assert.notEqual(h.run("--dry-run", noChange, 0, "", {}, false, { [field]: value }).status, 0);
+      assert.equal(existsSync(h.receipt), false);
+    } finally {
+      h.close();
+    }
+  });
+}
+
+test("empty start-phase allocation maps are accepted", () => {
+  const h = harness();
+  try {
+    assert.equal(
+      h.run("--verify", noChange, 0, "", {}, false, {
+        allocatedComponentIds: {},
+        schemaIds: {},
+      }).status,
+      0,
     );
   } finally {
     h.close();
