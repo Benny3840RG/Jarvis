@@ -351,7 +351,6 @@ test("a receipt consumed by a competing process cannot authorize a second deploy
   }
 });
 
-
 for (const [field, value] of [
   ["allocatedComponentIds", { root: "component-id" }],
   ["schemaIds", { root: "schema-id" }],
@@ -360,7 +359,10 @@ for (const [field, value] of [
   test(`unsupported start-phase ${field} evidence fails closed`, () => {
     const h = harness();
     try {
-      assert.notEqual(h.run("--dry-run", noChange, 0, "", {}, false, { [field]: value }).status, 0);
+      assert.notEqual(
+        h.run("--dry-run", noChange, 0, "", {}, false, { [field]: value }).status,
+        0,
+      );
       assert.equal(existsSync(h.receipt), false);
     } finally {
       h.close();
