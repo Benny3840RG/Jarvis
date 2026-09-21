@@ -87,8 +87,8 @@
   "allowScripts": {
     "esbuild": false,
     "fsevents": false,
-    "protobufjs@7.6.6": true,
-    "@swc/core@1.16.2": true
+    "@swc/core": true,
+    "protobufjs": false
   },
   "overrides": {
     "find-my-way": "^9.7.0",
