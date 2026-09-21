@@ -9,7 +9,7 @@ const BANK_BSB = "313-140";
 const BANK_ACCOUNT = "12553206";
 const BANK_PAYID = "0413 926 324";
 
-function formatCurrency(amount: number): string {
+export function formatCurrency(amount: number): string {
   return amount.toLocaleString("en-AU", {
     style: "currency",
     currency: "AUD",
