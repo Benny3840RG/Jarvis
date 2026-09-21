@@ -7,8 +7,13 @@ import {
   type TotalityJournal,
   type TotalityProjectContext,
   type TotalityReasoner,
+  type TotalityReasoningContext,
 } from "../src/totality/totalityPipeline.js";
-import { TotalityQuota, type TotalityQuotaConfig } from "../src/totality/totalityQuota.js";
+import {
+  TotalityQuota,
+  TotalityQuotaError,
+  type TotalityQuotaConfig,
+} from "../src/totality/totalityQuota.js";
 
 const PROPOSED_AT = "2026-07-16T00:00:00.000Z";
 
@@ -47,6 +52,9 @@ function makeReasoner(
   overrides: Partial<Awaited<ReturnType<TotalityReasoner["reason"]>>["draft"]> = {},
 ): TotalityReasoner {
   return {
+    serializeRequest(request, context) {
+      return JSON.stringify({ request, context });
+    },
     async reason() {
       return {
         responseId: "response-1",
@@ -107,6 +115,118 @@ function makePipeline(
 }
 
 describe("TotalityPipeline", () => {
+  it("rejects an adapter without a wire serializer before dispatch or journalling", async () => {
+    const journal = makeJournal();
+    let reasonerCalls = 0;
+    // Exercise a malformed adapter injected by an untyped caller.
+    const reasoner = {
+      async reason() {
+        reasonerCalls += 1;
+        return makeReasoner().reason(makeRequest(), {
+          project: makeProject(),
+          proposedAt: PROPOSED_AT,
+        });
+      },
+    } as unknown as TotalityReasoner;
+
+    await assert.rejects(
+      () => makePipeline(reasoner, journal).run(makeRequest()),
+      (error: unknown) => error instanceof TypeError && /serializeRequest/.test(error.message),
+    );
+    assert.equal(reasonerCalls, 0);
+    assert.deepEqual(journal.outcomes, []);
+  });
+
+  it("rejects oversized stored project context before provider dispatch or journal commit", async () => {
+    const project = { ...makeProject(), summary: "x".repeat(2_000) };
+    const journal = makeJournal(project);
+    let reasonerCalls = 0;
+    const reasoner: TotalityReasoner = {
+      serializeRequest: makeReasoner().serializeRequest,
+      async reason(request, context) {
+        reasonerCalls += 1;
+        return makeReasoner().reason(request, context);
+      },
+    };
+    const quota = new TotalityQuota({
+      maxRequestBytes: 1_000,
+      maxEstimatedInputTokens: 250,
+      maxConcurrentRequests: 1,
+      maxCostUnitsPerWindow: 350,
+      maxOutputTokens: 100,
+      windowMs: 60_000,
+    });
+    const pipeline = makePipeline(reasoner, journal, quota);
+
+    await assert.rejects(
+      () => pipeline.run(makeRequest()),
+      (error: unknown) => error instanceof TotalityQuotaError && error.code === "request-too-large",
+    );
+    assert.equal(reasonerCalls, 0);
+    assert.deepEqual(journal.outcomes, []);
+
+    project.summary = "A short project summary.";
+    assert.equal((await pipeline.run(makeRequest())).status, "completed");
+    assert.equal(reasonerCalls, 1);
+    assert.equal(journal.outcomes.length, 1);
+  });
+
+  it("budgets the provider serializer including instructions and schema before dispatch", async () => {
+    const journal = makeJournal();
+    let reasonerCalls = 0;
+    let serializationCalls = 0;
+    const reasoner: TotalityReasoner = {
+      serializeRequest(request, context) {
+        serializationCalls += 1;
+        return JSON.stringify({ request, context, instructions: "x".repeat(2_000), schema: {} });
+      },
+      async reason(request, context) {
+        reasonerCalls += 1;
+        return makeReasoner().reason(request, context);
+      },
+    };
+    const pipeline = makePipeline(
+      reasoner,
+      journal,
+      new TotalityQuota({
+        maxRequestBytes: 1_000,
+        maxEstimatedInputTokens: 250,
+        maxConcurrentRequests: 1,
+        maxCostUnitsPerWindow: 1_000,
+        maxOutputTokens: 100,
+        windowMs: 60_000,
+      }),
+    );
+
+    await assert.rejects(
+      () => pipeline.run(makeRequest()),
+      (error: unknown) => error instanceof TotalityQuotaError && error.code === "request-too-large",
+    );
+    assert.equal(serializationCalls, 1);
+    assert.equal(reasonerCalls, 0);
+    assert.deepEqual(journal.outcomes, []);
+  });
+
+  it("uses the same project, timestamp and output limit for budgeting and dispatch", async () => {
+    let serializedContext: TotalityReasoningContext | undefined;
+    const reasoner: TotalityReasoner = {
+      serializeRequest(request, context) {
+        serializedContext = context;
+        return JSON.stringify({ request, context });
+      },
+      async reason(request, context) {
+        assert.equal(context, serializedContext);
+        assert.equal(context.proposedAt, PROPOSED_AT);
+        assert.equal(context.maxOutputTokens, 4_096);
+        assert.deepEqual(context.project, makeProject());
+        return makeReasoner().reason(request, context);
+      },
+    };
+
+    const response = await makePipeline(reasoner, makeJournal()).run(makeRequest());
+    assert.equal(response.status, "completed");
+  });
+
   it("returns a completed proposal only after atomic journalling", async () => {
     const journal = makeJournal();
     const pipeline = makePipeline(makeReasoner(), journal);
@@ -239,6 +359,7 @@ describe("TotalityPipeline", () => {
   it("fails before reasoning when the requested project does not exist", async () => {
     let called = false;
     const reasoner: TotalityReasoner = {
+      serializeRequest: makeReasoner().serializeRequest,
       async reason() {
         called = true;
         return makeReasoner().reason(makeRequest(), { project: null, proposedAt: PROPOSED_AT });
@@ -290,6 +411,7 @@ describe("TotalityPipeline", () => {
     let reasonerCalled = false;
     let projectCalled = false;
     const reasoner: TotalityReasoner = {
+      serializeRequest: makeReasoner().serializeRequest,
       async reason() {
         reasonerCalled = true;
         return makeReasoner().reason(makeRequest(), {
