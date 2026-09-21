@@ -149,6 +149,17 @@ function runConvex(dryRun, key) {
   // corrupted evidence and must fail closed rather than default to "no diffs".
   if (Object.hasOwn(schemaChange, "indexDiffs") && schemaChange.indexDiffs === null)
     fail("Unsupported start-phase schema-change evidence.");
+  for (const key of ["allocatedComponentIds", "schemaIds"]) {
+    if (!Object.hasOwn(schemaChange, key)) continue;
+    const value = schemaChange[key];
+    if (
+      !value ||
+      typeof value !== "object" ||
+      Array.isArray(value) ||
+      Object.keys(value).length !== 0
+    )
+      fail("Unsupported start-phase schema-change evidence.");
+  }
   const preflightIndexDiffs = schemaChange.indexDiffs ?? {};
   if (
     typeof preflightIndexDiffs !== "object" ||
