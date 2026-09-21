@@ -59,6 +59,8 @@ export interface TotalityReasoningDraft {
 }
 
 export interface TotalityReasoner {
+  /** Return the exact serialized body used for provider dispatch, including all overhead. */
+  serializeRequest(request: TotalityRequest, context: TotalityReasoningContext): string;
   reason(
     request: TotalityRequest,
     context: TotalityReasoningContext,
@@ -169,14 +171,16 @@ export class TotalityPipeline {
       throw new Error("Project context does not exist.");
     }
 
-    const lease: TotalityQuotaLease = this.quota.acquire(request);
+    const proposedAt = this.now().toISOString();
+    const context: TotalityReasoningContext = {
+      project,
+      proposedAt,
+      maxOutputTokens: this.quota.maxOutputTokens,
+    };
+    const serializedProviderRequest = this.reasoner.serializeRequest(request, context);
+    const lease: TotalityQuotaLease = this.quota.acquire(request, serializedProviderRequest);
     try {
-      const proposedAt = this.now().toISOString();
-      const reasoning = await this.reasoner.reason(request, {
-        project,
-        proposedAt,
-        maxOutputTokens: this.quota.maxOutputTokens,
-      });
+      const reasoning = await this.reasoner.reason(request, context);
       let memoryProposal = emptyMemoryProposal();
       let memoryProposalFailure: string | null = null;
 

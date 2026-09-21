@@ -111,6 +111,9 @@ function successfulPipeline(
   quota?: TotalityQuota,
 ): TotalityPipeline {
   const reasoner: TotalityReasoner = {
+    serializeRequest(request, context) {
+      return JSON.stringify({ request, context });
+    },
     async reason() {
       return {
         responseId: "response-1",
@@ -306,6 +309,9 @@ describe("Totality HTTP boundary", () => {
 
   it("maps provider rate limits without leaking provider details", async () => {
     const reasoner: TotalityReasoner = {
+      serializeRequest(request, context) {
+        return JSON.stringify({ request, context });
+      },
       async reason() {
         throw new OpenAIRequestError("sensitive upstream detail", 429, true);
       },
@@ -325,6 +331,9 @@ describe("Totality HTTP boundary", () => {
 
   it("distinguishes rejected provider credentials without leaking provider details", async () => {
     const reasoner: TotalityReasoner = {
+      serializeRequest(request, context) {
+        return JSON.stringify({ request, context });
+      },
       async reason() {
         throw new OpenAIRequestError("sensitive credential detail", 401, false);
       },
@@ -344,6 +353,9 @@ describe("Totality HTTP boundary", () => {
 
   it("distinguishes rejected provider requests without leaking provider details", async () => {
     const reasoner: TotalityReasoner = {
+      serializeRequest(request, context) {
+        return JSON.stringify({ request, context });
+      },
       async reason() {
         throw new OpenAIRequestError("sensitive request detail", 400, false);
       },
