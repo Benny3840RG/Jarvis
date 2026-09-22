@@ -33,11 +33,13 @@ const mockRepoStateStore = mockRepoPath
 
 // Mock REVIEW/TEST decisions must be stable across Activity retries and
 // worker restarts. The workflow already gives every logical cycle a stable
-// stepId ("review", "review-1", ... / "test", "test-1", ...), so derive the
-// scenario ordinal from that durable input instead of process-local counters.
-// A retried Activity therefore returns the same decision for the same step.
+// stepId ("review", "review-1", ... / "test", "test-1", ... — plus the
+// one-off "post-modify-review"/"post-modify-test" re-checks after a Benny
+// MODIFY response), so derive the scenario ordinal from that durable input
+// instead of process-local counters. A retried Activity therefore returns
+// the same decision for the same step.
 function logicalCycle(stepId: string, prefix: "review" | "test"): number {
-  if (stepId === prefix) return 1;
+  if (stepId === prefix || stepId === `post-modify-${prefix}`) return 1;
   const match = stepId.match(new RegExp("^" + prefix + "-(\\d+)$"));
   if (!match) throw new Error("Invalid " + prefix + " step id: " + stepId);
   const cycle = Number(match[1]);
