@@ -18,7 +18,7 @@ const MAX_NODE_COUNT = 100;
 const MAX_RECOVERY_EVIDENCE = 20;
 const MAX_RETRIES = 5;
 const SAFE_RETRY_FAILURE_CODES = new Set(["execution_budget_exceeded"]);
-const ORCHESTRATION_TRIGGER_METADATA_KEYS = new Set([
+export const ORCHESTRATION_TRIGGER_METADATA_KEYS = new Set([
   "taskType",
   "scheduleId",
   "requestId",

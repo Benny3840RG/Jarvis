@@ -43,6 +43,8 @@ function approval(overrides: Partial<ApprovalRef> = {}): ApprovalRef {
     authorityEnvelopeHash: computeAuthorityEnvelopeHash(missionAuthority),
     effectiveRisk: 2,
     policyDecisionFingerprint: computePolicyDecisionFingerprint(mergeDefinition),
+    policySubjectVersion: 1,
+    transitionCommitted: false,
     ...overrides,
   };
 }

@@ -43,6 +43,36 @@ test("comment-only Claude action uses the scoped workflow token without OIDC exc
   );
 });
 
+test("Temporal PASS proof is read-only, exact-head bound and supply-chain pinned", () => {
+  const workflow = fs.readFileSync(
+    new URL("../workflows/temporal-pass.yml", import.meta.url),
+    "utf8",
+  );
+  assert.match(workflow, /^name: Temporal PASS proof$/m);
+  assert.match(workflow, /^  pull_request:/m);
+  assert.doesNotMatch(workflow, /\bcache:\s+npm\b/);
+  assert.ok(
+    workflow.includes("run: npm ci --ignore-scripts --cache"),
+  );
+  assert.doesNotMatch(workflow, /^  workflow_dispatch:/m);
+  assert.match(workflow, /^  contents:\s+read$/m);
+  assert.match(workflow, /^  pull-requests:\s+read$/m);
+  assert.doesNotMatch(workflow, /^\s+(?:contents|pull-requests|issues|actions|statuses|checks):\s+write$/m);
+  assert.match(workflow, /pull\.head\?\.sha !== process\.env\.INPUT_HEAD/);
+  assert.match(workflow, /pull\?\.head\?\.repo\?\.full_name !== sameRepo/);
+  assert.match(workflow, /ref: \$\{\{ steps\.candidate\.outputs\.head \}\}/);
+  assert.match(
+    workflow,
+    /temporal_cli_1\.9\.1_linux_amd64\.tar\.gz/,
+  );
+  assert.match(
+    workflow,
+    /09a0326a51db84d02735e53542b9ebd8c4758daf47482a9ab0abce15844e60d5/,
+  );
+  assert.match(workflow, /sha256sum --check/);
+  assert.match(workflow, /npm run test:temporal-pass/);
+});
+
 async function runFinalize(overrides = {}) {
   const workflow = fs.readFileSync(
     new URL("../workflows/jarvis-autobuild.yml", import.meta.url),
@@ -644,6 +674,69 @@ test("does not treat header-shaped hunk content as path metadata", () => {
   for (const patch of patches) {
     assert.equal(evaluatePatch(patch.join("\n")).ok, false);
   }
+});
+
+test("allows authority vocabulary only in added test descriptions", () => {
+  const descriptionPatch = [
+    "diff --git a/typescript/tests/developmentStateMachine.test.ts b/typescript/tests/developmentStateMachine.test.ts",
+    "--- a/typescript/tests/developmentStateMachine.test.ts",
+    "+++ b/typescript/tests/developmentStateMachine.test.ts",
+    "@@ -1,0 +1,2 @@",
+    "+test(\"authority envelope hash is deterministic\", () => {",
+    "+  assert.equal(left, right);",
+  ].join("\n");
+  assert.deepEqual(evaluatePatch(descriptionPatch), { ok: true, reasons: [] });
+
+  const executableTestPatch = [
+    "diff --git a/typescript/tests/developmentStateMachine.test.ts b/typescript/tests/developmentStateMachine.test.ts",
+    "--- a/typescript/tests/developmentStateMachine.test.ts",
+    "+++ b/typescript/tests/developmentStateMachine.test.ts",
+    "@@ -1,0 +1,1 @@",
+    "+const authority = computeAuthorityEnvelopeHash(envelope);",
+  ].join("\n");
+  const executableTestResult = evaluatePatch(executableTestPatch);
+  assert.equal(executableTestResult.ok, false);
+  assert.ok(
+    executableTestResult.reasons.some((reason) =>
+      reason.includes("authority-sensitive"),
+    ),
+  );
+
+  const inlineExecutablePatch = [
+    "diff --git a/typescript/tests/developmentStateMachine.test.ts b/typescript/tests/developmentStateMachine.test.ts",
+    "--- a/typescript/tests/developmentStateMachine.test.ts",
+    "+++ b/typescript/tests/developmentStateMachine.test.ts",
+    "@@ -1,0 +1,1 @@",
+    "+test(\"authority behavior\", () => { const authority = input.authority; });",
+  ].join("\n");
+  assert.equal(evaluatePatch(inlineExecutablePatch).ok, false);
+
+  const interpolatedTemplatePatch = [
+    "diff --git a/typescript/tests/developmentStateMachine.test.ts b/typescript/tests/developmentStateMachine.test.ts",
+    "--- a/typescript/tests/developmentStateMachine.test.ts",
+    "+++ b/typescript/tests/developmentStateMachine.test.ts",
+    "@@ -1,0 +1,1 @@",
+    "+test(\`${requireApprovalBeforeExecution()}\`, () => {});",
+  ].join("\n");
+  assert.equal(evaluatePatch(interpolatedTemplatePatch).ok, false);
+
+  const sourcePatch = [
+    "diff --git a/typescript/src/development/stateMachine.ts b/typescript/src/development/stateMachine.ts",
+    "--- a/typescript/src/development/stateMachine.ts",
+    "+++ b/typescript/src/development/stateMachine.ts",
+    "@@ -1,0 +1,1 @@",
+    "+const authority = input.authority;",
+  ].join("\n");
+  assert.equal(evaluatePatch(sourcePatch).ok, false);
+
+  const removedTestPatch = [
+    "diff --git a/typescript/tests/developmentStateMachine.test.ts b/typescript/tests/developmentStateMachine.test.ts",
+    "--- a/typescript/tests/developmentStateMachine.test.ts",
+    "+++ b/typescript/tests/developmentStateMachine.test.ts",
+    "@@ -1,1 +0,0 @@",
+    "-test(\"authority behavior\", () => {});",
+  ].join("\n");
+  assert.equal(evaluatePatch(removedTestPatch).ok, false);
 });
 
 test("allows ordinary implementation patches", () => {
