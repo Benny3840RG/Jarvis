@@ -13,6 +13,14 @@ authoriser and committer. The commit path validates trusted identity, current
 claim/lease/fencing, authority envelope, approval and current subject version
 before it appends history. COMPLETE remains ΩΣ-only.
 
+Policy is a governed aggregate. Its `subjectVersion` is the only ordering
+field; approvals store that number as `policySubjectVersion` and do not carry
+a second `sequenceNumber`. An approval is consumed when its bound transition
+commits (`transitionCommitted`). `PENDING_ONLY` retroactive invalidation skips
+those consumed approvals. `affectedApprovals: "ALL"` is a high-impact write:
+Phase 1 admits it only at risk class 3 with an audit trail. Rate limits, a
+second operator confirmation, and a counted blast radius are deferred.
+
 ## DEV_TRANSITION_IDEA_TO_SPECIFIED
 
 Validates the issue, objective, acceptance criteria and invariants before a

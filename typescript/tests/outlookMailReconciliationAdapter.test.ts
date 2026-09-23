@@ -98,6 +98,7 @@ describe("OutlookMailReconciliationAdapter", () => {
         status: "unresolved";
         errorCode: string;
         retryAfterMs?: number;
+        retryAfterUnschedulable?: boolean;
       };
     }> = [
       {
@@ -124,6 +125,14 @@ describe("OutlookMailReconciliationAdapter", () => {
           status: "unresolved",
           errorCode: "outlook-graph-throttled",
           retryAfterMs: 120_000,
+        },
+      },
+      {
+        observation: { status: "throttled", retryAfterUnschedulable: true },
+        expected: {
+          status: "unresolved",
+          errorCode: "outlook-graph-throttled",
+          retryAfterUnschedulable: true,
         },
       },
       {

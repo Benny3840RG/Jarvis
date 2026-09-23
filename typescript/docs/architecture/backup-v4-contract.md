@@ -250,3 +250,46 @@ events, remain explicitly unsupported and must make both S6 composition decoding
 and the joint restore refuse before insertion. They are never ignored or removed
 to make shared-action comparison pass. Broader evidence recovery remains work in
 the same authoritative archive path.
+
+### S5 closed terminal orchestration history (partial)
+
+`convex/backupS5.ts:capture` is an authenticated read of the three orchestration
+tables only: `orchestrationRuns`, `orchestrationSteps`, and
+`orchestrationReconciliations`. It requires the existing service token and
+independent approval token. Limits are 100 rows per table, 300 rows total, and
+512 KiB of canonical payload. Overflow aborts. Capture is raw: a queued, running,
+leased, retryable, or pending database can still be captured. That capture is not
+restorable and does not mark the `orchestration` archive group present.
+`directCreateReceipts`, `internalActionResults`, external effect receipts, and
+every `notesAndEvidence` table stay outside this primitive. `export-v4` is
+unchanged and still writes `completeness: partial`.
+
+The unregistered `restoreS5TerminalOrchestration` helper is not a public mutation
+and has no CLI entry. It refuses any nonempty application table, including
+foreign-owner rows. It admits only closed terminal history:
+
+- runs in `succeeded` or `failed`, with recovery state `none`, `recovered`, or
+  `escalated`;
+- steps in `succeeded` or `failed` with `retryable: false`, attempt at least 1,
+  an operation id, and no `leaseOwner`, `leaseToken`, or `leaseExpiresAt`;
+- reconciliations in `succeeded`, `failed`, or `escalated` (never `pending`),
+  bound to the same step attempt and operation;
+- trigger payloads limited to the producer metadata allowlist and finite
+  primitives (strings at most 4000 characters).
+
+Queued, running, and indeterminate runs, retryable failures, live leases, pending
+reconciliations, and unclassified trigger payloads are refused before insert.
+Logical run, step, and reconciliation ids are preserved. Convex physical ids are
+remapped in typed, table-scoped maps that also retain source `_creationTime`.
+Historical `leaseFencingToken` is kept when present. Restore does not call
+`beginRun`, `markStepRunning`, `retryFailedStep`, or reconciliation workers, so
+it does not renew approvals, reactivate leases, or resume effects.
+
+`verifyRestoredS5TerminalOrchestration` re-captures the destination, checks
+counts, identity maps, nondecreasing target creation times, and semantic equality
+aside from `_id` and `_creationTime`. Ordinary `getRun` and `listSteps` must
+match and must not expose a lease token, owner, or expiry. The result is
+`completeness: partial` and `verifiedGroups: []`. A matching `beginRun` replays
+the restored idempotency key; `markStepRunning` and `retryFailedStep` cannot
+restart the restored terminal rows. This does not restore external effect
+receipts and does not seal the orchestration group.

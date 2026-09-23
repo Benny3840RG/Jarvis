@@ -1,5 +1,61 @@
 # Jarvis TypeScript Roadmap
 
+## S5 terminal orchestration restore (2026-09-23)
+
+Isolated Convex adapter for closed terminal orchestration history only.
+`backupS5.capture` reads owner-scoped runs, steps, and reconciliations without
+validating terminal shape. `restoreS5TerminalOrchestration` is an unregistered
+helper: empty application database, typed physical-id maps, logical ids kept.
+Restore admits succeeded/failed runs, non-retryable terminal steps with no live
+lease fields, and non-pending reconciliations whose trigger payload is on the
+producer allowlist. Verification returns `completeness: partial` and
+`verifiedGroups: []`. Tests prove idempotent `beginRun` replay and that
+`markStepRunning` / `retryFailedStep` cannot restart restored rows.
+
+This does not cover `notesAndEvidence`. It does not restore queued, running, or
+indeterminate runs, retryable failures, live leases, pending reconciliations,
+unclassified trigger payloads, `directCreateReceipts`, `internalActionResults`,
+or external effect receipts. `export-v4` is unchanged, so written archives stay
+partial and full recovery still refuses them. No archive group is sealed.
+
+See [the v4 contract](architecture/backup-v4-contract.md) S5 section.
+
+## Policy subjectVersion and transitionCommitted (2026-09-23)
+
+Policy ordering reuses the policy aggregate's `subjectVersion`. Approvals
+snapshot it as `policySubjectVersion`; there is no second `sequenceNumber`.
+An approval is consumed when its bound transition commits
+(`transitionCommitted`). That is not mission `COMPLETE`, which stays the
+ΩΣ-only state. `PENDING_ONLY` invalidation skips consumed approvals.
+`affectedApprovals: "ALL"` is admissible in this phase only at risk class 3
+with an audit trail. Rate limits, dual confirmation, and a counted blast
+radius are not implemented.
+
+The development merge commit copies `policySubjectVersion` from the approved
+tool-action arguments and refuses the transition when that snapshot is missing.
+A committed transition event records `approvalTransitionCommitted: true`.
+No live provider or deployment was run.
+
+## OpenClaw Retry-After and MCP deadlines (2026-09-23)
+
+Provider throttling no longer schedules the next reconciliation attempt earlier
+than a parsed Retry-After. Microsoft Graph 429 responses accept delta-seconds,
+including values above the previous 300 second drop, and IMF-fixdate values
+measured from an injected clock. A past date is an elapsed wait of zero. Junk
+and obsolete date forms still produce no provider minimum. A delay that cannot
+be represented as a safe future timestamp escalates as
+`provider-retry-after-unschedulable` instead of being shortened. Local
+exponential backoff remains a separate floor and is still capped by `maxRetryMs`.
+
+The MCP preview's `JarvisApiClient` now aborts every backend call at 30 seconds
+by default, or `JARVIS_MCP_BACKEND_DEADLINE_MS` when set to an integer from 1
+to 120000. An invalid setting fails closed at configuration. Closing the MCP
+HTTP response before it finishes cancels the outbound call. This does not roll
+back a Jarvis HTTP mutation that has already been accepted, and it does not add
+Totality caller-disconnect cancellation or durable cross-process quotas.
+
+No live Microsoft Graph request, ChatGPT session, or deployment was run.
+
 ## OpenClaw provider resource guards (2026-09-20, #574)
 
 Acquired portable patterns from OpenClaw v2026.9.5, pinned to
@@ -20,10 +76,12 @@ for the retained MIT licence, adopted patterns, failure-first regressions and
 components deferred after inspection. Exact candidate verification belongs to
 the draft PR; this entry does not establish live-provider or deployment proof.
 
-Next bounded candidates: preserve provider-directed Retry-After minimum waits;
-add MCP backend request deadlines/cancellation; scope durable provider quota
-accounting. Automatic model retries need per-attempt cost and ambiguity controls
-before adoption. Existing Temporal and deployment PR ownership is unchanged.
+Provider-directed Retry-After minimum waits and MCP backend deadlines are
+implemented by the 2026-09-23 follow-up above. Remaining bounded candidates:
+scope durable provider quota accounting, and Totality caller-disconnect
+cancellation. Automatic model retries need per-attempt cost and ambiguity
+controls before adoption. Existing Temporal and deployment PR ownership is
+unchanged.
 
 ## Maintenance notification repair (2026-09-16, #548)
 
@@ -383,11 +441,17 @@ rather than an occasional operator action.
 
 ## Next steps
 
+Provider Retry-After minimum waits and MCP backend deadlines shipped in the
+2026-09-23 section above. They are not open work.
+
 1. **Complete remaining archive v4 domains.** Core/memory and cross-referenced
-   business records are implemented in v4. Next are notes/evidence and durable
-   orchestration, including replay identities and reference validation. Preserve
-   logical IDs in an empty destination; translate platform IDs with typed,
-   table-scoped maps. Follow [the v4 contract](architecture/backup-v4-contract.md).
+   business records are implemented in v4. A closed terminal orchestration
+   subset now restores through an isolated adapter (see the 2026-09-23 note):
+   logical IDs kept, physical IDs mapped, empty destination required, no group
+   seal. Still refused: `notesAndEvidence`, queued/running/indeterminate runs,
+   retryable steps, live leases, pending reconciliations, unclassified trigger
+   payloads, idempotency/effect receipts, and quote aggregate/blob recovery.
+   Follow [the v4 contract](architecture/backup-v4-contract.md).
 2. **Quote delivery / PDF artifact backup.** The delivery-attempt/outcome ledger
    is authoritative history, including failed and indeterminate outcomes;
    re-sending cannot restore it. PDF bytes are only conditionally regenerable
@@ -395,12 +459,15 @@ rather than an occasional operator action.
    and pinned renderer, with a verified digest. Blob backup remains in scope.
    See the [domain inventory](architecture/authoritative-domain-inventory.md)
    and [v4 contract](architecture/backup-v4-contract.md).
-3. **`personalTraitsService.ts` dead code.** `addNote` and `priorityRank` on
+3. **Remaining OpenClaw guards.** Scope durable provider quota accounting, and
+   cancel Totality work when the caller disconnects. Do not add automatic paid
+   model retries until per-attempt cost and ambiguity controls exist.
+4. **`personalTraitsService.ts` dead code.** `addNote` and `priorityRank` on
    `PersonalTraitsService` (`src/runtime/personalTraitsService.ts`) are
    unused anywhere in the codebase or tests (only `dailyBrief`/`motivation`
    are wired into `cli.ts`). Low priority cleanup: delete them, or wire them
    up if they were meant to ship.
-4. **Convex test coverage measurement.** `npm run test:coverage` only
+5. **Convex test coverage measurement.** `npm run test:coverage` only
    instruments `tests/*.test.ts` and `jarvis-console-01/tests/*.test.ts` via
    Node's built-in coverage; the parallel `convex/*.test.ts` suite (running
    under vitest via `npm run test:convex`) isn't included in that report, so

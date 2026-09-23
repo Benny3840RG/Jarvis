@@ -17,7 +17,7 @@ export type OutlookMessageStatusResult =
       internetMessageId?: string;
     }
   | { status: "not-observable" }
-  | { status: "throttled"; retryAfterMs?: number }
+  | { status: "throttled"; retryAfterMs?: number; retryAfterUnschedulable?: boolean }
   | { status: "unavailable" }
   | { status: "rejected" }
   | { status: "invalid" };
@@ -42,11 +42,16 @@ export class OutlookReconciliationError extends Error {
   }
 }
 
-function unresolved(errorCode: string, retryAfterMs?: number): ProviderReconciliationResult {
+function unresolved(
+  errorCode: string,
+  retryAfterMs?: number,
+  retryAfterUnschedulable?: boolean,
+): ProviderReconciliationResult {
   return {
     status: "unresolved",
     errorCode,
     ...(retryAfterMs === undefined ? {} : { retryAfterMs }),
+    ...(retryAfterUnschedulable ? { retryAfterUnschedulable: true } : {}),
   };
 }
 
@@ -128,7 +133,11 @@ export class OutlookMailReconciliationAdapter implements ProviderReconciliationA
       case "not-observable":
         return unresolved("outlook-message-not-observable");
       case "throttled":
-        return unresolved("outlook-graph-throttled", status.retryAfterMs);
+        return unresolved(
+          "outlook-graph-throttled",
+          status.retryAfterUnschedulable ? undefined : status.retryAfterMs,
+          status.retryAfterUnschedulable,
+        );
       case "unavailable":
         return unresolved("outlook-graph-unavailable");
       case "rejected":

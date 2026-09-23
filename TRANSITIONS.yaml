@@ -97,6 +97,24 @@ projection_contract:
   replay_must_be_deterministic: true
   duplicate_event_application_must_be_idempotent: true
 
+policy_versioning:
+  aggregate: policy
+  ordering_field: subjectVersion
+  sequence_number: absent
+  approval_snapshot_field: policySubjectVersion
+  human_version_field: version
+  retroactive_invalidation:
+    default_scope: PENDING_ONLY
+    scopes: [PENDING_ONLY, ALL]
+    pending_only_skips: transitionCommitted
+    affected_approvals: [ALL, approvalIds]
+    all_scope_phase1:
+      authority: RISK_3
+      audit_trail_required: true
+      rate_limits: deferred_phase2
+      secondary_confirmation: deferred_phase2
+      blast_radius_analysis: deferred_phase2
+
 states:
   - IDEA
   - SPECIFIED

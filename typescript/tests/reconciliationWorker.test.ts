@@ -301,6 +301,97 @@ describe("ReconciliationWorker", () => {
     ]);
   });
 
+  it("keeps a provider Retry-After that is longer than the local retry cap", async () => {
+    const store = new FakeStore();
+    const worker = new ReconciliationWorker({
+      store,
+      adapters: [
+        adapter("demo-provider", {
+          status: "unresolved",
+          errorCode: "provider-throttled",
+          retryAfterMs: 120_000,
+        }),
+      ],
+      now: () => NOW,
+      leaseToken: () => "lease-generated",
+      maxAttempts: 3,
+      baseRetryMs: 1_000,
+      maxRetryMs: 10_000,
+    });
+
+    const result = await worker.runOnce({
+      workerId: "worker-1",
+      leaseMs: 5_000,
+      signal: new AbortController().signal,
+    });
+
+    assert.deepEqual(result, {
+      status: "released",
+      reconciliationId: "reconciliation-1",
+      nextAttemptAt: NOW + 120_000,
+    });
+    assert.equal(store.releaseCalls[0]?.nextAttemptAt, NOW + 120_000);
+    assert.equal(store.releaseCalls[0]?.maxAttempts, 3);
+  });
+
+  it("does not let a short provider Retry-After undercut the local backoff", async () => {
+    const store = new FakeStore(claim({ attemptCount: 3 }));
+    const worker = new ReconciliationWorker({
+      store,
+      adapters: [
+        adapter("demo-provider", {
+          status: "unresolved",
+          errorCode: "provider-throttled",
+          retryAfterMs: 500,
+        }),
+      ],
+      now: () => NOW,
+      leaseToken: () => "lease-generated",
+      baseRetryMs: 1_000,
+      maxRetryMs: 10_000,
+    });
+
+    await worker.runOnce({
+      workerId: "worker-1",
+      leaseMs: 5_000,
+      signal: new AbortController().signal,
+    });
+
+    assert.equal(store.releaseCalls[0]?.nextAttemptAt, NOW + 4_000);
+  });
+
+  it("escalates an unschedulable provider Retry-After instead of retrying sooner", async () => {
+    const store = new FakeStore();
+    const worker = new ReconciliationWorker({
+      store,
+      adapters: [
+        adapter("demo-provider", {
+          status: "unresolved",
+          errorCode: "provider-throttled",
+          retryAfterUnschedulable: true,
+        }),
+      ],
+      now: () => NOW,
+      leaseToken: () => "lease-generated",
+      maxAttempts: 5,
+      maxRetryMs: 10_000,
+    });
+
+    const result = await worker.runOnce({
+      workerId: "worker-1",
+      leaseMs: 5_000,
+      signal: new AbortController().signal,
+    });
+
+    assert.deepEqual(result, {
+      status: "escalated",
+      reconciliationId: "reconciliation-1",
+      reason: "provider-retry-after-unschedulable",
+    });
+    assert.equal(store.releaseCalls[0]?.maxAttempts, 1);
+    assert.equal(store.releaseCalls[0]?.nextAttemptAt, NOW);
+  });
+
   it("escalates an unknown provider without attempting the external effect", async () => {
     const store = new FakeStore(claim({ provider: "unregistered-provider" }));
     const worker = new ReconciliationWorker({

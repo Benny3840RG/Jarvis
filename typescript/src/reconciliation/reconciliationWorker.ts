@@ -162,14 +162,17 @@ export class ReconciliationWorker {
     }
 
     const completionNow = this.now();
-    const requestedDelay = providerResult.retryAfterMs;
-    const retryDelay =
-      requestedDelay === undefined
-        ? this.retryDelay(claim.reconciliation.attemptCount)
-        : Math.min(
-            this.maxRetryMs,
-            positiveInteger(requestedDelay, "Provider reconciliation retry delay"),
-          );
+    if (providerResult.retryAfterUnschedulable) {
+      return this.releaseUnschedulable(reconciliationId, input.workerId, leaseToken, completionNow);
+    }
+    const retryDelay = this.minimumRetryDelay(
+      claim.reconciliation.attemptCount,
+      providerResult.retryAfterMs,
+      completionNow,
+    );
+    if (retryDelay === "unschedulable") {
+      return this.releaseUnschedulable(reconciliationId, input.workerId, leaseToken, completionNow);
+    }
     return this.release(
       reconciliationId,
       input.workerId,
@@ -177,6 +180,42 @@ export class ReconciliationWorker {
       providerResult.errorCode,
       completionNow + retryDelay,
       this.maxAttempts,
+    );
+  }
+
+  /**
+   * A provider Retry-After is a minimum. Local backoff may wait longer, and the
+   * configured maximum bounds only that local backoff. It must not pull a
+   * provider-directed wait forward.
+   */
+  private minimumRetryDelay(
+    attemptCount: number,
+    requestedDelay: number | undefined,
+    now: number,
+  ): number | "unschedulable" {
+    const localDelay = this.retryDelay(attemptCount);
+    if (requestedDelay === undefined) return localDelay;
+    if (!Number.isSafeInteger(requestedDelay) || requestedDelay < 0) {
+      throw new Error("Provider reconciliation retry delay must be a non-negative safe integer.");
+    }
+    const delay = Math.max(localDelay, requestedDelay);
+    if (!Number.isSafeInteger(now + delay)) return "unschedulable";
+    return delay;
+  }
+
+  private releaseUnschedulable(
+    reconciliationId: string,
+    workerId: string,
+    leaseToken: string,
+    now: number,
+  ): Promise<ReconciliationRunResult> {
+    return this.release(
+      reconciliationId,
+      workerId,
+      leaseToken,
+      "provider-retry-after-unschedulable",
+      now,
+      1,
     );
   }
 

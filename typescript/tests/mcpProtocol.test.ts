@@ -115,6 +115,17 @@ async function freePort(): Promise<number> {
   return port;
 }
 
+function isCancelledToolResult(
+  value: unknown,
+): value is { isError?: boolean; content: Array<{ type: string; text?: string }> } {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "content" in value &&
+    Array.isArray(value.content)
+  );
+}
+
 function mockFetch(): typeof fetch {
   return (async (input: string | URL | Request) => {
     const path = new URL(String(input)).pathname;
@@ -231,6 +242,88 @@ describe("Jarvis MCP preview protocol", () => {
       assert.equal(widget?.mimeType, "text/html;profile=mcp-app");
       assert.ok(widget && "text" in widget);
       assert.match(widget.text, /JARVIS \/\/ OPERATOR CONSOLE/);
+    } finally {
+      await client.close();
+      await running.close();
+    }
+  });
+
+  it("cancels the backend call when the MCP client disconnects", async () => {
+    let backendSignal: AbortSignal | undefined;
+    const fetchImpl = ((_input: string | URL | Request, init?: RequestInit) => {
+      backendSignal = init?.signal ?? undefined;
+      return new Promise<Response>((_resolve, reject) => {
+        const signal = init?.signal;
+        const abort = () => reject(new DOMException("The operation was aborted.", "AbortError"));
+        if (!signal) {
+          reject(new Error("missing deadline signal"));
+          return;
+        }
+        if (signal.aborted) abort();
+        else signal.addEventListener("abort", abort, { once: true });
+      });
+    }) as typeof fetch;
+    const config: JarvisMcpConfig = {
+      host: "127.0.0.1",
+      port: await freePort(),
+      api: {
+        baseUrl: new URL("http://127.0.0.1:3000/"),
+        serviceToken: "preview-test-token",
+        backendDeadlineMs: 30_000,
+      },
+    };
+    const running = await startJarvisMcpHttpServer(
+      config,
+      new JarvisApiClient(config.api, fetchImpl),
+    );
+    const client = new Client({ name: "jarvis-preview-test", version: "0.1.0" });
+    try {
+      await client.connect(new StreamableHTTPClientTransport(new URL(running.url)));
+      const call = client.callTool({ name: "get_jarvis_status", arguments: {} }).then(
+        (value) => value,
+        (error: unknown) => error,
+      );
+      await new Promise<void>((resolve, reject) => {
+        const started = Date.now();
+        const timer = setInterval(() => {
+          if (backendSignal) {
+            clearInterval(timer);
+            resolve();
+          } else if (Date.now() - started > 2_000) {
+            clearInterval(timer);
+            reject(new Error("backend call did not start"));
+          }
+        }, 5);
+      });
+      let closing: Promise<unknown>;
+      try {
+        closing = Promise.resolve(client.close()).then(
+          () => undefined,
+          (error: unknown) => error,
+        );
+      } catch (error: unknown) {
+        closing = Promise.resolve(error);
+      }
+      await new Promise<void>((resolve, reject) => {
+        const started = Date.now();
+        const timer = setInterval(() => {
+          if (backendSignal?.aborted) {
+            clearInterval(timer);
+            resolve();
+          } else if (Date.now() - started > 2_000) {
+            clearInterval(timer);
+            reject(new Error("backend call stayed running after disconnect"));
+          }
+        }, 5);
+      });
+      const outcome = await Promise.race([call, closing]);
+      const rendered = outcome instanceof Error ? String(outcome) : JSON.stringify(outcome);
+      assert.doesNotMatch(rendered, /preview-test-token/);
+      if (isCancelledToolResult(outcome)) {
+        assert.equal(outcome.isError, true);
+        const text = outcome.content.find((item) => item.type === "text");
+        assert.equal(text?.text, "Jarvis API request was cancelled.");
+      }
     } finally {
       await client.close();
       await running.close();

@@ -16,7 +16,15 @@ Events are not authority by themselves. An event records that an authorised subs
 
 ```ts
 export type ActorRef = {
-  actorType: "operator" | "control-plane" | "controller" | "worker" | "model" | "provider" | "omega" | "reconciler";
+  actorType:
+    | "operator"
+    | "control-plane"
+    | "controller"
+    | "worker"
+    | "model"
+    | "provider"
+    | "omega"
+    | "reconciler";
   actorId: string;
 };
 
@@ -60,41 +68,57 @@ A reducer must fail closed on an unsupported event schema. Historical events are
 ## Required semantics
 
 ### eventId
+
 Globally unique immutable event identifier. Reducers must be idempotent by event ID: replaying an already-applied event cannot change the projection a second time.
 
 ### eventType
+
 Stable semantic event name. Event type and transition ID are related but not identical: operations/observations may emit events without committing a state transition.
 
 ### eventSchemaVersion
+
 Version of the payload/envelope contract consumed by compatible reducer versions.
 
 ### subjectId
+
 Stable ID of the mission/action/entity whose history contains the event.
 
 ### transitionId
+
 Required for a committed or rejected governed transition attempt. Must reference a stable ID in `TRANSITIONS.yaml`.
 
+### Approval consumption versus mission COMPLETE
+
+`transitionCommitted` means the approval's bound transition has been durably recorded as executed. A committed transition event that carried an approval records `approvalTransitionCommitted: true` and the snapshotted `policySubjectVersion`. That flag is not the mission state `COMPLETE`. Only ΩΣ commits `COMPLETE`, through `DEV_TRANSITION_MERGED_TO_COMPLETE`. `PENDING_ONLY` policy invalidation applies to approvals whose `transitionCommitted` is still false.
+
 ### requestedBy / evaluatedBy / authorisedBy / committedBy
+
 Roles are recorded separately. Missing roles are allowed only when the event type legitimately does not use that role. A committed transition must record the authoritative committer required by its transition definition.
 
 Actor role fields are evidence about who participated; they are not authentication. The commit boundary must validate authenticated capability/claim material and bind it to the required role before emitting a committed transition event.
 
 ### occurredAt
+
 When the real-world/system fact occurred, if known.
 
 ### recordedAt
+
 When Jarvis durably recorded the event. Must be server-derived for authoritative writes.
 
 ### evidenceIds
+
 References durable evidence/receipt/verification records supporting the event. IDs must never be invented by a model and treated as proven merely because they are syntactically present.
 
 ### correlationId
+
 Groups all events belonging to one logical mission/request flow.
 
 ### causationId
+
 References the immediate prior event that caused this event where a causal link is known. This enables `why did Jarvis do this?` traversal without inferring causality from timestamps.
 
 ### reducerVersion
+
 Version of the deterministic reducer contract that consumed or is expected to consume the event when producing a projection.
 
 ## Rejected transition attempts are durable
