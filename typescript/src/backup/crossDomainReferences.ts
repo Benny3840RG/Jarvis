@@ -8,7 +8,8 @@ import { UuidRemapper } from "./uuidRemapper.js";
  * It is not applied today:
  * - archive v3 (`src/backup/backup.ts`) does not contain these domains;
  * - archive v4 writes the JSON business records with logical ids preserved;
- * - `notesAndEvidence` is outside both archives.
+ * - `notesAndEvidence` is not a sealed archive group. Its isolated adapter
+ *   preserves logical ids and does not call this remapper.
  *
  * Primary `id` is intentionally absent: the caller assigns that id. Invoice
  * `payments[].id` and enquiry `attachmentRefs` are not entity foreign keys.

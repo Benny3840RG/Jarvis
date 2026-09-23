@@ -5,6 +5,7 @@ import {
   assertUniqueMeasurementKeys,
 } from "../../../convex/memoryChangeSetLogic.js";
 import { encodeS4Payload } from "./convexCapture.js";
+import { validateS4ComponentAndRiskRecords } from "./s4ComponentRisk.js";
 import type { S4ProjectNotesSource } from "./s4ProjectNotes.js";
 
 const KINDS = new Set(["fact", "assumption", "measurement", "decision"]);
@@ -26,19 +27,28 @@ function fields(value: Record<string, unknown>, names: string[]): boolean {
 export function validateS4MemoryHistory(source: S4ProjectNotesSource): void {
   const projects = new Map(source.projects.map((row) => [row.projectKey, row]));
   const records = new Map<string, (typeof source.projectRecords)[number]>();
+  const seen = new Set<string>();
   const groups = new Map<string, number>();
   const currentByProject = new Map<string, MemoryRecord[]>();
   for (const row of source.projectRecords) {
     if (
       !projects.has(row.projectKey) ||
       !logical(row.recordId) ||
-      !KINDS.has(row.kind) ||
       row.record.kind !== row.kind ||
       row.record.recordId !== row.recordId
     )
       throw new Error("Unsupported or inconsistent project memory record reference.");
     const identity = key(row.projectKey, row.recordId);
-    if (records.has(identity)) throw new Error("Duplicate project record logical identity.");
+    if (seen.has(identity)) throw new Error("Duplicate project record logical identity.");
+    seen.add(identity);
+    const group = key(row.projectKey, row.kind);
+    const count = (groups.get(group) ?? 0) + 1;
+    groups.set(group, count);
+    if (count > 100) throw new Error("Project record group exceeds ordinary read limit of 100.");
+    // Components and risks are closed current rows, not memory-change history.
+    if (row.kind === "component" || row.kind === "risk") continue;
+    if (!KINDS.has(row.kind))
+      throw new Error("Unsupported or inconsistent project memory record reference.");
     records.set(identity, row);
     // The storage validator and the four-kind check above establish this subset.
     const definition = row.record as MemoryRecord;
@@ -48,12 +58,9 @@ export function validateS4MemoryHistory(source: S4ProjectNotesSource): void {
     const current = currentByProject.get(row.projectKey) ?? [];
     current.push(definition);
     currentByProject.set(row.projectKey, current);
-    const group = key(row.projectKey, row.kind);
-    const count = (groups.get(group) ?? 0) + 1;
-    groups.set(group, count);
-    if (count > 100) throw new Error("Project record group exceeds ordinary read limit of 100.");
   }
   for (const current of currentByProject.values()) assertUniqueMeasurementKeys(current);
+  validateS4ComponentAndRiskRecords(source);
   const changes = new Map<string, (typeof source.memoryChangeSets)[number]>();
   for (const row of source.memoryChangeSets) {
     const project = projects.get(row.projectKey);
@@ -75,10 +82,6 @@ export function validateS4MemoryHistory(source: S4ProjectNotesSource): void {
       !Number.isFinite(row.updatedAt)
     )
       throw new Error("Invalid memory change set revision or timestamp.");
-    const normalized = normalizeMemoryRecords(row.records);
-    assertUniqueMeasurementKeys(normalized);
-    if (encodeS4Payload(normalized).payloadJson !== encodeS4Payload(row.records).payloadJson)
-      throw new Error("Memory definitions do not match their canonical producer values.");
     const ids = new Set<string>();
     for (const record of row.records) {
       if (!KINDS.has(record.kind) || !logical(record.recordId) || ids.has(record.recordId))
@@ -87,6 +90,10 @@ export function validateS4MemoryHistory(source: S4ProjectNotesSource): void {
       if (row.state === "applied" && !records.has(key(row.projectKey, record.recordId)))
         throw new Error("Applied memory record reference is missing.");
     }
+    const normalized = normalizeMemoryRecords(row.records);
+    assertUniqueMeasurementKeys(normalized);
+    if (encodeS4Payload(normalized).payloadJson !== encodeS4Payload(row.records).payloadJson)
+      throw new Error("Memory definitions do not match their canonical producer values.");
     if (
       row.state === "applied" &&
       (row.appliedRevision !== row.baseRevision + 1 ||
