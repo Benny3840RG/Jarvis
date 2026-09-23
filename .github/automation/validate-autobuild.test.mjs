@@ -676,16 +676,40 @@ test("does not treat header-shaped hunk content as path metadata", () => {
   }
 });
 
-test("allows authority vocabulary in recognised test files without exempting source", () => {
-  const testPatch = [
+test("allows authority vocabulary only in added test descriptions", () => {
+  const descriptionPatch = [
     "diff --git a/typescript/tests/developmentStateMachine.test.ts b/typescript/tests/developmentStateMachine.test.ts",
     "--- a/typescript/tests/developmentStateMachine.test.ts",
     "+++ b/typescript/tests/developmentStateMachine.test.ts",
     "@@ -1,0 +1,2 @@",
-    "+const authority = computeAuthorityEnvelopeHash(envelope);",
-    "+assert.equal(result.approval, authority);",
+    "+test(\"authority envelope hash is deterministic\", () => {",
+    "+  assert.equal(left, right);",
   ].join("\n");
-  assert.deepEqual(evaluatePatch(testPatch), { ok: true, reasons: [] });
+  assert.deepEqual(evaluatePatch(descriptionPatch), { ok: true, reasons: [] });
+
+  const executableTestPatch = [
+    "diff --git a/typescript/tests/developmentStateMachine.test.ts b/typescript/tests/developmentStateMachine.test.ts",
+    "--- a/typescript/tests/developmentStateMachine.test.ts",
+    "+++ b/typescript/tests/developmentStateMachine.test.ts",
+    "@@ -1,0 +1,1 @@",
+    "+const authority = computeAuthorityEnvelopeHash(envelope);",
+  ].join("\n");
+  const executableTestResult = evaluatePatch(executableTestPatch);
+  assert.equal(executableTestResult.ok, false);
+  assert.ok(
+    executableTestResult.reasons.some((reason) =>
+      reason.includes("authority-sensitive"),
+    ),
+  );
+
+  const inlineExecutablePatch = [
+    "diff --git a/typescript/tests/developmentStateMachine.test.ts b/typescript/tests/developmentStateMachine.test.ts",
+    "--- a/typescript/tests/developmentStateMachine.test.ts",
+    "+++ b/typescript/tests/developmentStateMachine.test.ts",
+    "@@ -1,0 +1,1 @@",
+    "+test(\"authority behavior\", () => { const authority = input.authority; });",
+  ].join("\n");
+  assert.equal(evaluatePatch(inlineExecutablePatch).ok, false);
 
   const sourcePatch = [
     "diff --git a/typescript/src/development/stateMachine.ts b/typescript/src/development/stateMachine.ts",
@@ -694,26 +718,16 @@ test("allows authority vocabulary in recognised test files without exempting sou
     "@@ -1,0 +1,1 @@",
     "+const authority = input.authority;",
   ].join("\n");
-  const sourceResult = evaluatePatch(sourcePatch);
-  assert.equal(sourceResult.ok, false);
-  assert.ok(
-    sourceResult.reasons.some((reason) => reason.includes("authority-sensitive")),
-  );
+  assert.equal(evaluatePatch(sourcePatch).ok, false);
 
   const removedTestPatch = [
     "diff --git a/typescript/tests/developmentStateMachine.test.ts b/typescript/tests/developmentStateMachine.test.ts",
     "--- a/typescript/tests/developmentStateMachine.test.ts",
     "+++ b/typescript/tests/developmentStateMachine.test.ts",
     "@@ -1,1 +0,0 @@",
-    "-const authority = computeAuthorityEnvelopeHash(envelope);",
+    "-test(\"authority behavior\", () => {});",
   ].join("\n");
-  const removedResult = evaluatePatch(removedTestPatch);
-  assert.equal(removedResult.ok, false);
-  assert.ok(
-    removedResult.reasons.some((reason) =>
-      reason.includes("authority-sensitive"),
-    ),
-  );
+  assert.equal(evaluatePatch(removedTestPatch).ok, false);
 });
 
 test("allows ordinary implementation patches", () => {
