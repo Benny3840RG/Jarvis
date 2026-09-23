@@ -88,11 +88,23 @@ Exactly one registered external effect is wired through the stable boundary:
   is Convex. The activity then refuses and does not call the provider.
 - The workflow runs this only when `intent.context.governedQuoteSend` names
   an already-approved action, after owner approval and before the mocked
-  merge. One Temporal attempt. No retry after `indeterminate`.
+  merge.
+- A returned indeterminate receipt completes the activity, so Temporal does
+  not schedule another provider attempt. `maximumAttempts` is 2 only so a
+  worker death before that return can be retried once. The retry must observe
+  the durable reconciliation instead of calling `sendPrepared` again.
 
-Live Microsoft Graph / Outlook commissioning is **unproven**. Tests use the
-real `quotes:send` definition with a seam provider and in-memory durable
-gates. They do not send email and do not contact Graph.
+`createGovernedExternalOperationFromEnv()` is null on JSON persistence, and an
+in-memory Convex test dies with the worker. The crash proof therefore sets
+`TEMPORAL_PASS_GOVERNED_QUOTE_SEND_DIR`. That seam still constructs the real
+`GovernedExternalOperation` over file-backed claim, receipt, and reconciliation
+records, with a controlled `sendPrepared` that records one accept and then
+heartbeats. It is single-host, it is not production Convex, and it never calls
+Microsoft Graph.
+
+Live Microsoft Graph / Outlook commissioning is **unproven**. Node tests use
+the real `quotes:send` definition with a seam provider. They do not send email
+and do not contact Graph.
 
 ## Running the tests (opt-in, infra-heavy)
 
@@ -110,9 +122,9 @@ Two tiers:
   `approval-timeout`, `timeout-race`, `replay-upgrade`): fast, in-process,
   via `@temporalio/testing`'s `TestWorkflowEnvironment.createLocal()`.
 - **Tier 2** (`worker-kill`, `reboot`, `approval-recovery`,
-  `merge-crash-recovery`): slower — spawns a real `temporal server
-start-dev` process and a real worker process, and `SIGKILL`s them to
-  prove the mission survives.
+  `merge-crash-recovery`, `quote-send-crash-recovery`): slower — spawns a
+  real `temporal server start-dev` process and a real worker process, and
+  `SIGKILL`s them to prove the mission survives.
 
 14 PASS acceptance criteria in total (`tests/pass/*.test.ts`), extending the
 original 10-test spec with:
@@ -128,6 +140,12 @@ original 10-test spec with:
   durably records the Activity's completion
   (`MissionIntent.scenario.mergeDelayMs`), proving the retry reconciles
   against the already-merged state instead of duplicating or erroring.
+  `mergePR` stays this mock and cannot auto-merge.
+- `quote-send-crash-recovery` — kills the worker after the controlled
+  `quotes:send` provider has accepted once and before the activity result is
+  recorded. The retry's receipt is `indeterminate` with
+  `retry-blocked-pending-reconciliation`, and the accept count stays 1.
+  This is the test-only file gate above, not a live Convex or Graph proof.
 - `replay-upgrade` (PASS-14) — captures a real history from a mission
   parked at `AWAITING_APPROVAL`, then uses `Worker.runReplayHistory` to
   prove the current workflow code replays it cleanly, and that a
@@ -137,11 +155,10 @@ brokenReplayWorkflow.ts`) is correctly rejected rather than silently
 
 ## Next steps (out of scope here)
 
-Prove `quotes:send` across a worker crash: the provider may already have
-accepted the draft while Temporal has not recorded the activity result, and
-the retry must observe the stable reconciliation instead of sending again.
-That proof needs the Temporal CLI and a durable Convex gate. It is not a
-live Graph send.
+The worker-kill proof for `quotes:send` is `quote-send-crash-recovery`. It
+does not commission Outlook, and it does not exercise a live Convex
+deployment. Production `createGovernedExternalOperationFromEnv()` remains null
+unless persistence is Convex.
 
 Still mocked: build, review, rework, test, repair, `getCurrentCommitSha`,
 `checkBranchProtection`, `notifyBenny`, and `mergePR`. Real read-only GitHub

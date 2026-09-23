@@ -7,6 +7,10 @@ import type { ToolAction, ToolActionService } from "../../../../actions/toolActi
 import type { ToolExecutionReceipt } from "../../../../actions/toolExecution.js";
 import { ConvexToolActionService } from "../../../../persistence/convexToolActions.js";
 import type { ToolAuthority } from "../../../../runtime/totalityPolicy.js";
+import {
+  GOVERNED_QUOTE_SEND_DIR_ENV,
+  loadFileBackedGovernedQuoteSendGate,
+} from "./governedQuoteSendFileGate.js";
 
 /**
  * The only registered external effect this preview activity may run.
@@ -58,11 +62,18 @@ export type GovernedQuoteSendExecuteInput = {
 export type GovernedQuoteSendInput = GovernedQuoteSendProposeInput | GovernedQuoteSendExecuteInput;
 
 /**
- * Production wiring. Null unless Convex persistence is selected, in which
+ * Production wiring is null unless Convex persistence is selected, in which
  * case the stable boundary and the existing Convex ToolAction store are used.
- * This does not construct an email provider and does not approve anything.
+ *
+ * `TEMPORAL_PASS_GOVERNED_QUOTE_SEND_DIR` is a test-only seam. It still
+ * constructs the real `GovernedExternalOperation` over file-backed claim,
+ * receipt, and reconciliation records so a worker can die after accept and
+ * a new process can observe that reconciliation. It does not call Microsoft
+ * Graph and it is not a second approval store.
  */
 export function loadGovernedQuoteSendGateFromEnv(): GovernedQuoteSendGate | null {
+  const directory = process.env[GOVERNED_QUOTE_SEND_DIR_ENV]?.trim();
+  if (directory) return loadFileBackedGovernedQuoteSendGate(directory);
   const operation = createGovernedExternalOperationFromEnv();
   if (!operation) return null;
   const actions = new ConvexToolActionService();

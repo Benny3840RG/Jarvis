@@ -21,14 +21,18 @@ Preview Temporal (#572) now calls this adapter for `quotes:send` only
 `createGovernedExternalOperationFromEnv()` returns null, does not approve,
 rejects a PolicyEngine allowlist through the stable boundary, and returns an
 indeterminate receipt without a second provider send. `mergePR` stays the
-file-backed mock. Live Microsoft Graph commissioning and crash-retry proof
-against Convex remain unproven.
+file-backed mock. A worker kill after the controlled `sendPrepared` accept
+is proven by `tests/pass/quote-send-crash-recovery.test.ts`: the retry
+observes `retry-blocked-pending-reconciliation` and the accept count stays 1.
+That seam is the test-only file gate
+(`TEMPORAL_PASS_GOVERNED_QUOTE_SEND_DIR`), not a live Convex deployment.
+Live Microsoft Graph commissioning remains unproven.
 
 Next:
 
-1. Prove an indeterminate `quotes:send` survives a worker kill without a
-   second provider send, using the Temporal CLI and the Convex gate. Do not
-   send live mail.
+1. Commission `quotes:send` against a dev Convex deployment without live mail,
+   then repeat the crash proof there. Do not contact Microsoft Graph until
+   Benny authorises Outlook commissioning.
 2. Leave `verifyExecutionEligibility` without a second ΩΣ check; Omega
    contracts remain single-use and are gated inside `claimSingleUseExecution`.
 

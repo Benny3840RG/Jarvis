@@ -63,7 +63,13 @@ part of this path.
 
 The admitted operation is `quotes:send`. `github:merge-pull-request` stays
 mocked. Live Graph commissioning is unproven; the activity tests stop at the
-`QuoteEmailProvider` seam.
+`QuoteEmailProvider` seam. JSON persistence makes
+`createGovernedExternalOperationFromEnv()` return null, so the Temporal crash
+proof uses `TEMPORAL_PASS_GOVERNED_QUOTE_SEND_DIR`: the same
+`GovernedExternalOperation` class over file-backed claim, receipt, and
+reconciliation records. A SIGKILL after one controlled accept retries against
+that open reconciliation and does not call `sendPrepared` again. That file
+gate is single-host and is not a Convex deployment.
 
 The preview activity `executeGovernedQuoteSend` does the following:
 

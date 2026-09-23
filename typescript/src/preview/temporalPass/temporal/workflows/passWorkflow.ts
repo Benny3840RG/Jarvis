@@ -40,13 +40,16 @@ const {
   startToCloseTimeout: "30 seconds",
 });
 
-// One attempt. An indeterminate quotes:send receipt is reconciliation, not a
-// signal to call the provider again. Merge stays on the mocked mergePR activity.
+// A returned indeterminate receipt completes this activity, so Temporal does
+// not schedule another provider attempt. maximumAttempts 2 exists only so a
+// worker death before that return can be retried once; the retry must observe
+// the durable reconciliation instead of sending again. Merge stays mocked.
 const { executeGovernedQuoteSend } = proxyActivities<
   Pick<typeof import("../activities/governedQuoteSend.js"), "executeGovernedQuoteSend">
 >({
   startToCloseTimeout: "30 seconds",
-  retry: { maximumAttempts: 1 },
+  heartbeatTimeout: "2 seconds",
+  retry: { maximumAttempts: 2 },
 });
 
 export const bennyApprovalSignal = defineSignal<[ApprovalResponse]>("bennyApproval");
