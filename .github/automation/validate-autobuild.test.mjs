@@ -699,6 +699,21 @@ test("allows authority vocabulary in recognised test files without exempting sou
   assert.ok(
     sourceResult.reasons.some((reason) => reason.includes("authority-sensitive")),
   );
+
+  const removedTestPatch = [
+    "diff --git a/typescript/tests/developmentStateMachine.test.ts b/typescript/tests/developmentStateMachine.test.ts",
+    "--- a/typescript/tests/developmentStateMachine.test.ts",
+    "+++ b/typescript/tests/developmentStateMachine.test.ts",
+    "@@ -1,1 +0,0 @@",
+    "-const authority = computeAuthorityEnvelopeHash(envelope);",
+  ].join("\n");
+  const removedResult = evaluatePatch(removedTestPatch);
+  assert.equal(removedResult.ok, false);
+  assert.ok(
+    removedResult.reasons.some((reason) =>
+      reason.includes("authority-sensitive"),
+    ),
+  );
 });
 
 test("allows ordinary implementation patches", () => {
