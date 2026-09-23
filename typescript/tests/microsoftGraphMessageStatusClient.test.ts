@@ -123,24 +123,102 @@ describe("MicrosoftGraphMessageStatusClient", () => {
     }
   });
 
-  it("accepts only bounded integer Retry-After seconds", async () => {
-    for (const value of ["0", "301", "Wed, 28 Jul 2026 00:00:00 GMT", "junk"]) {
+  it("preserves integer Retry-After waits, including those above 300 seconds", async () => {
+    const cases = [
+      { value: "0", retryAfterMs: 0 },
+      { value: "120", retryAfterMs: 120_000 },
+      { value: " 301 ", retryAfterMs: 301_000 },
+      { value: "86400", retryAfterMs: 86_400_000 },
+    ];
+    for (const { value, retryAfterMs } of cases) {
+      assert.deepEqual(
+        await clientReturning(
+          new Response(null, { status: 429, headers: { "retry-after": value } }),
+        ).getMessageStatus({
+          ...INPUT,
+          signal: new AbortController().signal,
+        }),
+        { status: "throttled", retryAfterMs },
+      );
+    }
+  });
+
+  it("parses an IMF-fixdate Retry-After from the supplied clock", async () => {
+    const now = Date.parse("Wed, 28 Jul 2026 00:00:00 GMT");
+    const client = new MicrosoftGraphMessageStatusClient({
+      async getAccessToken() {
+        return "access-token";
+      },
+      async fetch() {
+        return new Response(null, {
+          status: 429,
+          headers: { "retry-after": "Wed, 28 Jul 2026 00:02:00 GMT" },
+        });
+      },
+      now: () => now,
+    });
+
+    assert.deepEqual(
+      await client.getMessageStatus({
+        ...INPUT,
+        signal: new AbortController().signal,
+      }),
+      { status: "throttled", retryAfterMs: 120_000 },
+    );
+  });
+
+  it("treats a past IMF-fixdate as an elapsed provider wait", async () => {
+    const now = Date.parse("Wed, 28 Jul 2026 00:05:00 GMT");
+    const client = new MicrosoftGraphMessageStatusClient({
+      async getAccessToken() {
+        return "access-token";
+      },
+      async fetch() {
+        return new Response(null, {
+          status: 429,
+          headers: { "retry-after": "Wed, 28 Jul 2026 00:00:00 GMT" },
+        });
+      },
+      now: () => now,
+    });
+
+    assert.deepEqual(
+      await client.getMessageStatus({
+        ...INPUT,
+        signal: new AbortController().signal,
+      }),
+      { status: "throttled", retryAfterMs: 0 },
+    );
+  });
+
+  it("does not invent a wait for a missing, junk, or obsolete Retry-After", async () => {
+    for (const headers of [
+      undefined,
+      { "retry-after": "junk" },
+      { "retry-after": "120.5" },
+      { "retry-after": "Wednesday, 28-Jul-26 00:00:00 GMT" },
+    ]) {
       const result = await clientReturning(
-        new Response(null, { status: 429, headers: { "retry-after": value } }),
+        new Response(null, { status: 429, ...(headers ? { headers } : {}) }),
       ).getMessageStatus({
         ...INPUT,
         signal: new AbortController().signal,
       });
       assert.deepEqual(result, { status: "throttled" });
     }
+  });
 
-    assert.deepEqual(
-      await clientReturning(new Response(null, { status: 429 })).getMessageStatus({
-        ...INPUT,
-        signal: new AbortController().signal,
+  it("refuses to shorten an integer Retry-After that cannot be scheduled", async () => {
+    const result = await clientReturning(
+      new Response(null, {
+        status: 429,
+        headers: { "retry-after": String(Number.MAX_SAFE_INTEGER) },
       }),
-      { status: "throttled" },
-    );
+    ).getMessageStatus({
+      ...INPUT,
+      signal: new AbortController().signal,
+    });
+    assert.deepEqual(result, { status: "throttled", retryAfterUnschedulable: true });
   });
 
   it("returns invalid for malformed successful payloads", async () => {

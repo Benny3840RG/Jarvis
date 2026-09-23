@@ -85,6 +85,11 @@ export type ProviderReconciliationResult =
       status: "unresolved";
       errorCode: string;
       retryAfterMs?: number;
+      /**
+       * The provider named a Retry-After that cannot be represented as a safe
+       * future timestamp. Callers must not replace it with a shorter delay.
+       */
+      retryAfterUnschedulable?: boolean;
     };
 
 export interface ProviderReconciliationAdapter {

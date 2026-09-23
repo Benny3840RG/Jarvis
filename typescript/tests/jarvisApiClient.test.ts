@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 
 import type { SystemStatus } from "../src/http/contracts.js";
 import { JarvisApiClient, JarvisApiError } from "../src/mcp/jarvisApiClient.js";
+import { runWithMcpRequestSignal } from "../src/mcp/requestSignal.js";
 
 const STATUS: SystemStatus = {
   status: "ok",
@@ -154,5 +155,127 @@ describe("Jarvis MCP REST client", () => {
       completedTasks: 1,
       reminders: 1,
     });
+  });
+
+  it("aborts a hung backend call when the MCP deadline expires", async () => {
+    let captured: AbortSignal | undefined;
+    const fetchImpl = ((_input: string | URL | Request, init?: RequestInit) => {
+      captured = init?.signal ?? undefined;
+      return new Promise((_resolve, reject) => {
+        const signal = init?.signal;
+        const abort = () => reject(new DOMException("The operation was aborted.", "AbortError"));
+        if (!signal) {
+          reject(new Error("missing deadline signal"));
+          return;
+        }
+        if (signal.aborted) abort();
+        else signal.addEventListener("abort", abort, { once: true });
+      });
+    }) as typeof fetch;
+    const client = new JarvisApiClient(
+      {
+        baseUrl: new URL("http://127.0.0.1:3000/"),
+        serviceToken: "secret-token",
+        backendDeadlineMs: 30,
+      },
+      fetchImpl,
+    );
+    const started = Date.now();
+
+    await assert.rejects(
+      () => client.getStatus(),
+      (error: unknown) =>
+        error instanceof JarvisApiError &&
+        error.status === 504 &&
+        error.problemType === "urn:jarvis:problem:mcp-backend-deadline" &&
+        error.message === "Jarvis API request exceeded the MCP backend deadline." &&
+        !error.message.includes("secret-token"),
+    );
+
+    assert.equal(captured?.aborted, true);
+    assert.ok(Date.now() - started < 1_000);
+  });
+
+  it("cancels the backend call when the caller aborts before the deadline", async () => {
+    const caller = new AbortController();
+    let captured: AbortSignal | undefined;
+    const fetchImpl = ((_input: string | URL | Request, init?: RequestInit) => {
+      captured = init?.signal ?? undefined;
+      caller.abort();
+      return new Promise((_resolve, reject) => {
+        const signal = init?.signal;
+        const abort = () => reject(new DOMException("The operation was aborted.", "AbortError"));
+        if (signal?.aborted) abort();
+        else signal?.addEventListener("abort", abort, { once: true });
+      });
+    }) as typeof fetch;
+    const client = new JarvisApiClient(
+      {
+        baseUrl: new URL("http://127.0.0.1:3000/"),
+        serviceToken: "secret-token",
+        backendDeadlineMs: 30_000,
+      },
+      fetchImpl,
+    );
+    const started = Date.now();
+
+    await assert.rejects(
+      () => client.getDevelopmentLiveWork(caller.signal),
+      (error: unknown) =>
+        error instanceof JarvisApiError &&
+        error.status === 499 &&
+        error.problemType === "urn:jarvis:problem:mcp-backend-cancelled" &&
+        error.message === "Jarvis API request was cancelled." &&
+        !error.message.includes("secret-token"),
+    );
+
+    assert.equal(captured?.aborted, true);
+    assert.ok(Date.now() - started < 1_000);
+  });
+
+  it("cancels the backend call when the active MCP request disconnects", async () => {
+    const disconnect = new AbortController();
+    let captured: AbortSignal | undefined;
+    const fetchImpl = ((_input: string | URL | Request, init?: RequestInit) => {
+      captured = init?.signal ?? undefined;
+      return new Promise((_resolve, reject) => {
+        const signal = init?.signal;
+        const abort = () => reject(new DOMException("The operation was aborted.", "AbortError"));
+        if (signal?.aborted) abort();
+        else signal?.addEventListener("abort", abort, { once: true });
+      });
+    }) as typeof fetch;
+    const client = new JarvisApiClient(
+      {
+        baseUrl: new URL("http://127.0.0.1:3000/"),
+        serviceToken: "secret-token",
+        backendDeadlineMs: 30_000,
+      },
+      fetchImpl,
+    );
+
+    const pending = runWithMcpRequestSignal(disconnect.signal, () => client.getStatus());
+    await new Promise<void>((resolve, reject) => {
+      const started = Date.now();
+      const timer = setInterval(() => {
+        if (captured) {
+          clearInterval(timer);
+          resolve();
+        } else if (Date.now() - started > 1_000) {
+          clearInterval(timer);
+          reject(new Error("backend call did not start"));
+        }
+      }, 5);
+    });
+    disconnect.abort();
+
+    await assert.rejects(
+      pending,
+      (error: unknown) =>
+        error instanceof JarvisApiError &&
+        error.status === 499 &&
+        error.message === "Jarvis API request was cancelled.",
+    );
+    assert.equal(captured?.aborted, true);
   });
 });
