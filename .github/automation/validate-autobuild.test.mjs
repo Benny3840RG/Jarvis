@@ -43,6 +43,36 @@ test("comment-only Claude action uses the scoped workflow token without OIDC exc
   );
 });
 
+test("Temporal PASS proof is read-only, exact-head bound and supply-chain pinned", () => {
+  const workflow = fs.readFileSync(
+    new URL("../workflows/temporal-pass.yml", import.meta.url),
+    "utf8",
+  );
+  assert.match(workflow, /^name: Temporal PASS proof$/m);
+  assert.match(workflow, /^  pull_request:/m);
+  assert.doesNotMatch(workflow, /\bcache:\s+npm\b/);
+  assert.ok(
+    workflow.includes("run: npm ci --ignore-scripts --cache"),
+  );
+  assert.doesNotMatch(workflow, /^  workflow_dispatch:/m);
+  assert.match(workflow, /^  contents:\s+read$/m);
+  assert.match(workflow, /^  pull-requests:\s+read$/m);
+  assert.doesNotMatch(workflow, /^\s+(?:contents|pull-requests|issues|actions|statuses|checks):\s+write$/m);
+  assert.match(workflow, /pull\.head\?\.sha !== process\.env\.INPUT_HEAD/);
+  assert.match(workflow, /pull\?\.head\?\.repo\?\.full_name !== sameRepo/);
+  assert.match(workflow, /ref: \$\{\{ steps\.candidate\.outputs\.head \}\}/);
+  assert.match(
+    workflow,
+    /temporal_cli_1\.9\.1_linux_amd64\.tar\.gz/,
+  );
+  assert.match(
+    workflow,
+    /09a0326a51db84d02735e53542b9ebd8c4758daf47482a9ab0abce15844e60d5/,
+  );
+  assert.match(workflow, /sha256sum --check/);
+  assert.match(workflow, /npm run test:temporal-pass/);
+});
+
 async function runFinalize(overrides = {}) {
   const workflow = fs.readFileSync(
     new URL("../workflows/jarvis-autobuild.yml", import.meta.url),
