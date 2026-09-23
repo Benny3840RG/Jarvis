@@ -61,17 +61,23 @@ function pipeWithPrefix(
   proc.stderr.on("data", (chunk: Buffer) => process.stderr.write(`[${prefix}] ${chunk}`));
 }
 
-function waitForWorkerReady(
+export function waitForWorkerReady(
   proc: ChildProcess & { stdout: Readable; stderr: Readable },
   timeoutMs = 20_000,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
+    const marker = "WORKER_READY";
+    let stdoutTail = "";
     const timer = setTimeout(() => {
       cleanup();
       reject(new Error("Worker process did not report WORKER_READY in time"));
     }, timeoutMs);
     function onData(chunk: Buffer): void {
-      if (chunk.toString("utf8").includes("WORKER_READY")) {
+      // Stream chunks are arbitrary boundaries. Retain a bounded tail so a
+      // marker split across two writes (for example "WORKER_" + "READY")
+      // is still detected without accumulating unbounded worker output.
+      stdoutTail = (stdoutTail + chunk.toString("utf8")).slice(-marker.length * 2);
+      if (stdoutTail.includes(marker)) {
         cleanup();
         resolve();
       }
