@@ -32,6 +32,30 @@ Next:
    to drift.
 3. Leave `notesAndEvidence` out until a capture group exists.
 
+## HTTP and Convex rate limits (2026-09-23)
+
+`@fastify/rate-limit` is registered on the Nest Fastify adapter in
+`createJarvisHttpApp`. Loopback defaults to 1000 requests per 60 seconds
+(`JARVIS_HTTP_RATE_LIMIT_MAX`, `JARVIS_HTTP_RATE_LIMIT_WINDOW_MS`). When the
+remote gateway is enabled, the plugin uses the existing
+`JARVIS_RATE_LIMIT_*` budget and the gateway hook does not keep a second
+counter. Exceeded requests return problem+json 429 with `Retry-After`.
+Invalid HTTP limit configuration fails closed at startup.
+
+`@convex-dev/rate-limiter` is installed from `convex/convex.config.ts`.
+New `developmentState.recordModelInvocation` events consume a fixed window
+per owner and provider (`JARVIS_CONVEX_MODEL_INVOCATION_RATE` default 120,
+period default 60 seconds). Replays of the same event do not consume a unit.
+Exhaustion throws `{ kind: "RateLimited", retryAfter }` with `retryAfter` in
+milliseconds. `retryAfterHeaderSeconds` converts that wait for an HTTP
+`Retry-After` header.
+
+Not changed: missions, transitions, approvals, orchestration leases, backup,
+jarvis-console-01, or the isolated-ingress commissioning process. Outbound
+Graph and model HTTP quotas are not wired to this Convex window. The HTTP
+limiter keeps at most 10000 live client keys in the current process and
+rejects a new key when that map is full. No live deployment was run.
+
 ## S5 terminal orchestration restore (2026-09-23)
 
 Isolated Convex adapter for closed terminal orchestration history only.
