@@ -3,6 +3,7 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 
+import { UuidRemapper } from "../backup/uuidRemapper.js";
 import { validateReminderDue, type ReminderDue } from "../reminders/due.js";
 import {
   DOCUMENT_VERSION,
@@ -75,17 +76,6 @@ function snapshotFromDocument(document: PersistedDocument): PersistenceSnapshot 
     tasks: document.tasks.map(cloneTask),
     reminders: document.reminders.map(cloneReminder),
   };
-}
-
-function remapIds(value: unknown, ids: ReadonlyMap<string, string>): unknown {
-  if (typeof value === "string") return ids.get(value) ?? value;
-  if (Array.isArray(value)) return value.map((entry) => remapIds(entry, ids));
-  if (typeof value === "object" && value !== null) {
-    return Object.fromEntries(
-      Object.entries(value).map(([key, entry]) => [key, remapIds(entry, ids)]),
-    );
-  }
-  return value;
 }
 
 function reminderDue(reminder: Reminder): ReminderDue | undefined {
@@ -355,11 +345,13 @@ export class JSONPersistence implements PersistenceProvider {
           throw new Error("Restore refused: the target provider is not empty.");
         }
 
-        const taskIds = new Map<string, string>();
-        const reminderIds = new Map<string, string>();
+        // Separate maps: a task id may equal a reminder id. Assistant state can
+        // hold only one replacement string, and reminders win, matching the
+        // previous merged-map walk. Each row still keeps its own new id.
+        const taskIds = new UuidRemapper();
+        const reminderIds = new UuidRemapper();
         const tasks = source.tasks.map((task) => {
-          const id = randomUUID();
-          taskIds.set(task.id, id);
+          const id = taskIds.remap(task.id);
           return {
             id,
             title: task.title,
@@ -368,13 +360,12 @@ export class JSONPersistence implements PersistenceProvider {
             createdAt: Date.now(),
           };
         });
-        const reminders = source.reminders.map((reminder) => {
-          const id = randomUUID();
-          reminderIds.set(reminder.id, id);
-          return restoredReminder(id, reminder);
-        });
-        const allIds = new Map<string, string>([...taskIds.entries(), ...reminderIds.entries()]);
-        const state = remapIds(source.state, allIds) as AssistantState;
+        const reminders = source.reminders.map((reminder) =>
+          restoredReminder(reminderIds.remap(reminder.id), reminder),
+        );
+        const state = UuidRemapper.fromMap(
+          new Map<string, string>([...taskIds.mapping(), ...reminderIds.mapping()]),
+        ).translateKnown(source.state) as AssistantState;
         const restoredDocument: PersistedDocument = {
           version: DOCUMENT_VERSION,
           state,
@@ -384,8 +375,8 @@ export class JSONPersistence implements PersistenceProvider {
         await this.writeDocument(restoredDocument);
         return {
           snapshot: snapshotFromDocument(restoredDocument),
-          taskIds,
-          reminderIds,
+          taskIds: taskIds.mapping(),
+          reminderIds: reminderIds.mapping(),
         };
       }),
     );
