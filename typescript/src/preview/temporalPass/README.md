@@ -62,10 +62,37 @@ and server processes can die and come back."
 - Tests live under `typescript/tests/pass/`, outside the default
   `tests/*.test.ts` glob, so they don't run as part of `npm test`/`npm run
 check`.
-- No real GitHub API calls, no real credentials, no `main` branch touches —
-  every external system (`getCurrentCommitSha`, `mergePR`,
-  `checkBranchProtection`) is a local, file-backed mock
-  (`temporal/activities/mockRepoState.ts`).
+- No real GitHub API calls, no real credentials, no `main` branch touches.
+  `getCurrentCommitSha`, `checkBranchProtection`, and `mergePR` stay local
+  file-backed mocks (`temporal/activities/mockRepoState.ts`). `mergePR` is
+  still the mock and is not the registered `github:merge-pull-request` tool.
+  It cannot auto-merge a real pull request.
+
+## Admitted real operation
+
+Exactly one registered external effect is wired through the stable boundary:
+
+- **`quotes:send`** (`executeGovernedQuoteSend`), the only non-merge tool in
+  `ToolExecutionService` with an `externalProvider`.
+- Registry path: `createGovernedExternalOperationFromEnv()` →
+  `ToolExecutionService` → `createQuoteSendToolDefinition` →
+  `QuoteEmailProvider` (`microsoft-graph-mail-connections-v1`). The activity
+  calls `propose` or `execute` only. It does not approve, and it does not
+  call the provider. The tool definition calls the provider only after the
+  claim or eligibility gate.
+- The activity returns the stable receipt. Provider acceptance is
+  `indeterminate` with a reconciliation id; the activity does not send again.
+- A PolicyEngine allowlist is not authority. The stable boundary rejects it
+  before a claim or a provider call.
+- `createGovernedExternalOperationFromEnv()` returns null unless persistence
+  is Convex. The activity then refuses and does not call the provider.
+- The workflow runs this only when `intent.context.governedQuoteSend` names
+  an already-approved action, after owner approval and before the mocked
+  merge. One Temporal attempt. No retry after `indeterminate`.
+
+Live Microsoft Graph / Outlook commissioning is **unproven**. Tests use the
+real `quotes:send` definition with a seam provider and in-memory durable
+gates. They do not send email and do not contact Graph.
 
 ## Running the tests (opt-in, infra-heavy)
 
@@ -110,6 +137,13 @@ brokenReplayWorkflow.ts`) is correctly rejected rather than silently
 
 ## Next steps (out of scope here)
 
-Real read-only GitHub PR → real disposable branch with write operations →
-real Claude/Codex activities → benchmark on the target hardware → decide
-Temporal alone vs. Temporal + Shannon components vs. full Shannon backend.
+Prove `quotes:send` across a worker crash: the provider may already have
+accepted the draft while Temporal has not recorded the activity result, and
+the retry must observe the stable reconciliation instead of sending again.
+That proof needs the Temporal CLI and a durable Convex gate. It is not a
+live Graph send.
+
+Still mocked: build, review, rework, test, repair, `getCurrentCommitSha`,
+`checkBranchProtection`, `notifyBenny`, and `mergePR`. Real read-only GitHub
+PR reads, disposable-branch writes, and real Claude/Codex activities remain
+out of scope.

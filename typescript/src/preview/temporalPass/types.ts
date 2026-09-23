@@ -47,6 +47,16 @@ export interface MissionIntent {
     repo?: string;
     branch?: string;
     prNumber?: number;
+    /**
+     * When set, the workflow executes this already-approved `quotes:send`
+     * action through `GovernedExternalOperation` after owner approval and
+     * before the still-mocked merge. The activity does not approve it.
+     */
+    governedQuoteSend?: {
+      projectId: string;
+      actionId: string;
+      authority: "T0" | "T1" | "T2" | "T3";
+    };
     [key: string]: unknown;
   };
   /**

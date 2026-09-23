@@ -2,6 +2,7 @@ import { NativeConnection, Worker } from "@temporalio/worker";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { executeGovernedQuoteSend } from "./activities/governedQuoteSend.js";
 import * as activities from "./activities/mockPassActivities.js";
 
 const dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -26,6 +27,6 @@ export async function createPassWorker(options: TemporalPassWorkerOptions = {}):
     namespace,
     taskQueue,
     workflowsPath: path.join(dirname, "workflows", "passWorkflow.ts"),
-    activities,
+    activities: { ...activities, executeGovernedQuoteSend },
   });
 }

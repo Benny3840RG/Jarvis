@@ -40,6 +40,15 @@ const {
   startToCloseTimeout: "30 seconds",
 });
 
+// One attempt. An indeterminate quotes:send receipt is reconciliation, not a
+// signal to call the provider again. Merge stays on the mocked mergePR activity.
+const { executeGovernedQuoteSend } = proxyActivities<
+  Pick<typeof import("../activities/governedQuoteSend.js"), "executeGovernedQuoteSend">
+>({
+  startToCloseTimeout: "30 seconds",
+  retry: { maximumAttempts: 1 },
+});
+
 export const bennyApprovalSignal = defineSignal<[ApprovalResponse]>("bennyApproval");
 export const getMissionStateQuery = defineQuery<MissionState, []>("getMissionState");
 
@@ -482,6 +491,26 @@ export async function passWorkflow(intent: MissionIntent): Promise<MissionState>
     }
 
     completedSteps.push("BENNY_APPROVAL");
+  }
+
+  const governedQuoteSend = intent.context?.governedQuoteSend;
+  if (governedQuoteSend) {
+    const receipt = await executeGovernedQuoteSend({
+      mode: "execute",
+      projectId: governedQuoteSend.projectId,
+      actionId: governedQuoteSend.actionId,
+      authority: governedQuoteSend.authority,
+    });
+    if (receipt.status === "blocked" || receipt.status === "failed") {
+      return terminal(
+        "FAILED",
+        phase,
+        reviewCycles,
+        "GOVERNED_QUOTE_SEND",
+        receipt.errorCode ?? receipt.status,
+      );
+    }
+    completedSteps.push("GOVERNED_QUOTE_SEND");
   }
 
   // --- SHA verification + branch protection + MERGE ---------------------------

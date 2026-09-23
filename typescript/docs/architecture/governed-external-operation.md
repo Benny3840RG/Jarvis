@@ -59,10 +59,13 @@ part of this path.
   the Temporal entry.
 - No live Convex deployment was exercised.
 
-## How preview Temporal (#572) should call this
+## How preview Temporal (#572) calls this
 
-After that branch is rebased onto a main that contains this adapter, replace
-one mocked external activity by:
+The admitted operation is `quotes:send`. `github:merge-pull-request` stays
+mocked. Live Graph commissioning is unproven; the activity tests stop at the
+`QuoteEmailProvider` seam.
+
+The preview activity `executeGovernedQuoteSend` does the following:
 
 1. `createGovernedExternalOperationFromEnv()` and stop if it returns null.
 2. `propose(...)` to stage the ToolAction. Do not approve inside the activity.
