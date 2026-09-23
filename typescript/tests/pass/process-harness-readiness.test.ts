@@ -21,7 +21,10 @@ describe("Temporal PASS worker readiness framing", () => {
     assert.ok(proc.stdout);
     assert.ok(proc.stderr);
     await waitForWorkerReady(
-      proc as typeof proc & { stdout: NonNullable<typeof proc.stdout>; stderr: NonNullable<typeof proc.stderr> },
+      proc as typeof proc & {
+        stdout: NonNullable<typeof proc.stdout>;
+        stderr: NonNullable<typeof proc.stderr>;
+      },
       2_000,
     );
     proc.kill("SIGKILL");
