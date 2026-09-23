@@ -15,8 +15,9 @@ import { randomUUID } from "node:crypto";
  * to remap every string in a business record.
  *
  * Archive v4 still writes logical business ids verbatim and does not use this
- * helper. `notesAndEvidence` is not in the archive. Convex mutations keep
- * their own copy of the known-id walk; they do not import this module.
+ * helper. The isolated notes/evidence adapter also preserves logical ids and
+ * does not import this module. Convex mutations keep their own copy of the
+ * known-id walk.
  */
 export type CreateId = () => string;
 
