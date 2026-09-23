@@ -28,6 +28,7 @@ import { findLatestDevelopmentEvidence } from "./developmentEvidence.js";
 import { evaluateOmegaCompletion } from "../src/omega/policy.js";
 import type { OmegaCompletionInput } from "../src/omega/policy.js";
 import { resolveTrustedModelProfile } from "../src/development/modelResourceGovernance.js";
+import { consumeModelInvocationBudget } from "./rateLimits.js";
 import { collectBounded, requireOwner } from "./authHelpers.js";
 import {
   developmentActorRefValidator,
@@ -870,6 +871,8 @@ export const recordModelInvocation = mutation({
       }
       return publicDevelopmentEvent(existing);
     }
+
+    await consumeModelInvocationBudget(ctx, ownerId, provider);
 
     const now = Date.now();
     const occurredAt = new Date(now).toISOString();

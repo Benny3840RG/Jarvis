@@ -8,6 +8,7 @@
  * @module
  */
 
+import type { ComponentApi } from "@convex-dev/rate-limiter/_generated/component.js";
 import type * as assets from "../assets.js";
 import type * as assistantState from "../assistantState.js";
 import type * as auditEvents from "../auditEvents.js";
@@ -158,4 +159,6 @@ export declare const internal: FilterApi<
   FunctionReference<any, "internal">
 >;
 
-export declare const components: {};
+export declare const components: {
+  rateLimiter: ComponentApi<"rateLimiter">;
+};
