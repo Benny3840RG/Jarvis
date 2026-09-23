@@ -1,5 +1,25 @@
 # Jarvis TypeScript Roadmap
 
+## S5 terminal orchestration restore (2026-09-23)
+
+Isolated Convex adapter for closed terminal orchestration history only.
+`backupS5.capture` reads owner-scoped runs, steps, and reconciliations without
+validating terminal shape. `restoreS5TerminalOrchestration` is an unregistered
+helper: empty application database, typed physical-id maps, logical ids kept.
+Restore admits succeeded/failed runs, non-retryable terminal steps with no live
+lease fields, and non-pending reconciliations whose trigger payload is on the
+producer allowlist. Verification returns `completeness: partial` and
+`verifiedGroups: []`. Tests prove idempotent `beginRun` replay and that
+`markStepRunning` / `retryFailedStep` cannot restart restored rows.
+
+This does not cover `notesAndEvidence`. It does not restore queued, running, or
+indeterminate runs, retryable failures, live leases, pending reconciliations,
+unclassified trigger payloads, `directCreateReceipts`, `internalActionResults`,
+or external effect receipts. `export-v4` is unchanged, so written archives stay
+partial and full recovery still refuses them. No archive group is sealed.
+
+See [the v4 contract](architecture/backup-v4-contract.md) S5 section.
+
 ## Policy subjectVersion and transitionCommitted (2026-09-23)
 
 Policy ordering reuses the policy aggregate's `subjectVersion`. Approvals
@@ -425,10 +445,13 @@ Provider Retry-After minimum waits and MCP backend deadlines shipped in the
 2026-09-23 section above. They are not open work.
 
 1. **Complete remaining archive v4 domains.** Core/memory and cross-referenced
-   business records are implemented in v4. Next are notes/evidence and durable
-   orchestration, including replay identities and reference validation. Preserve
-   logical IDs in an empty destination; translate platform IDs with typed,
-   table-scoped maps. Follow [the v4 contract](architecture/backup-v4-contract.md).
+   business records are implemented in v4. A closed terminal orchestration
+   subset now restores through an isolated adapter (see the 2026-09-23 note):
+   logical IDs kept, physical IDs mapped, empty destination required, no group
+   seal. Still refused: `notesAndEvidence`, queued/running/indeterminate runs,
+   retryable steps, live leases, pending reconciliations, unclassified trigger
+   payloads, idempotency/effect receipts, and quote aggregate/blob recovery.
+   Follow [the v4 contract](architecture/backup-v4-contract.md).
 2. **Quote delivery / PDF artifact backup.** The delivery-attempt/outcome ledger
    is authoritative history, including failed and indeterminate outcomes;
    re-sending cannot restore it. PDF bytes are only conditionally regenerable
