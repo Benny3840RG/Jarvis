@@ -49,11 +49,21 @@ Neither agent may:
 Every merge and deployment requires a fresh, explicit decision from Benny
 against the exact candidate or release.
 
-Jarvis supplies a required machine gate, not owner approval. A candidate is not
-eligible for Benny's merge decision until the exact head has all required trusted
-CI and a successful `jarvis-pr-maintenance/review` status. Missing, pending,
-failed, stale or differently bound evidence blocks. A new commit or base change
-invalidates the prior peer review and Jarvis PASS.
+Jarvis supplies machine evidence, not owner approval. A candidate is not
+eligible for Benny's merge decision until the exact head has every trusted check
+that the **current branch-protection source of truth actually requires**, plus the
+mission-specific proof required by its acceptance criteria and a clean independent
+peer review. Missing, pending, failed, stale or differently bound required evidence
+blocks. A new commit or base change invalidates the prior peer review and
+candidate-bound evidence.
+
+`jarvis-pr-maintenance/review` is additional advisory machine-review evidence
+unless the current effective branch-protection policy explicitly names it as a
+required check. A blocked advisory maintenance result caused only by bounded
+review infrastructure or unavailable context must not silently become an extra
+merge gate. It also must not erase concrete findings: any validated finding
+published for the candidate remains unresolved until repaired or independently
+disproved on the same exact head.
 
 ## Source of truth and mission claim
 
@@ -154,28 +164,34 @@ The reviewer starts only after the builder supplies an exact head SHA.
 A reviewer must block rather than guess when essential context, provenance or
 test evidence is unavailable.
 
-## Jarvis gate
+## Jarvis machine review
 
-After the peer reviewer reports a clean exact head, Jarvis must independently
-observe that same candidate through `jarvis-pr-maintenance`:
+After the peer reviewer reports a candidate, `jarvis-pr-maintenance` may
+independently observe that same exact head:
 
 1. Re-read the PR number, base SHA, head SHA and complete required-check evidence.
 2. Accept only trusted successful TypeScript, PR Evidence and CodeQL producers.
 3. Run the isolated read-only review and bind its result to the exact candidate.
-4. Publish `jarvis-pr-maintenance/review = success` only for a clean review and
-   trusted green CI.
-5. Publish failure or remain non-success for missing context, real findings,
-   untrusted evidence, stale identity or incomplete execution.
+4. Publish `jarvis-pr-maintenance/review = success` only for a clean bounded
+   review and trusted green CI.
+5. Publish non-success for missing context, real findings, untrusted evidence,
+   stale identity or incomplete execution.
+6. Preserve every validated concrete finding even when another review segment is
+   blocked for missing context; incomplete review may block a machine PASS but
+   may never discard defect evidence.
 
-The Jarvis PASS must be a required `main` merge status. It does not approve,
-merge, deploy, commission, close an issue or satisfy Omega evidence. Only Benny
-may act after the gate passes.
+The status does not approve, merge, deploy, commission, close an issue or satisfy
+Omega evidence. Whether GitHub requires this status for merge is defined only by
+the current branch-protection policy in
+`docs/operations/branch-protection.md`. The current decided policy intentionally
+does **not** require it because bounded segmented review has produced false
+infrastructure/context blocks on otherwise valid candidates. Do not recreate that
+known deadlock by treating an advisory failure as a hidden required check.
 
-This operating model is not enforced merely because this document is merged.
-Activation requires live GitHub protection for `main` that names the Jarvis
-status as a required check, followed by API readback and an ordinary-PR refusal
-and success drill. Until that evidence exists, treat the gate as configured but
-unenforced.
+If branch protection is later changed to require this status, that change needs
+its own owner-approved configuration and live refusal/success proof. Until then,
+required CI, mission-specific proof, independent peer review, unresolved concrete
+findings and Benny's exact-candidate decision remain separate gates.
 
 ## Handoff format
 
@@ -209,9 +225,13 @@ Merge authorised: NO
 Deployment authorised: NO
 ```
 
-`OWNER DECISION REQUIRED` is valid only when the exact reviewed candidate also
-has `jarvis-pr-maintenance/review = success`. Otherwise the verdict remains
-`BLOCKED` or `REPAIR REQUIRED`.
+`OWNER DECISION REQUIRED` is valid only when the exact reviewed candidate has
+a clean independent peer review, all currently required trusted exact-head checks
+and mission-specific proof, and no unresolved concrete finding. A
+`jarvis-pr-maintenance/review = success` result is additional evidence when
+available; it is mandatory only if the current branch-protection policy or the
+mission's explicit acceptance criteria require it. An advisory infrastructure or
+context block with no unresolved finding does not manufacture a new owner gate.
 
 ## Terminal transition
 
