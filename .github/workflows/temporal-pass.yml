@@ -82,7 +82,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: typescript
-        run: npm ci
+        run: npm ci --ignore-scripts --cache "$RUNNER_TEMP/npm-cache"
 
       - name: Install pinned Temporal CLI
         shell: bash

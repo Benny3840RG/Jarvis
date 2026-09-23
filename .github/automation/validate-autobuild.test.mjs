@@ -51,6 +51,9 @@ test("Temporal PASS proof is read-only, exact-head bound and supply-chain pinned
   assert.match(workflow, /^name: Temporal PASS proof$/m);
   assert.match(workflow, /^  pull_request:/m);
   assert.doesNotMatch(workflow, /\bcache:\s+npm\b/);
+  assert.ok(
+    workflow.includes("run: npm ci --ignore-scripts --cache"),
+  );
   assert.match(workflow, /^  workflow_dispatch:/m);
   assert.match(workflow, /^  contents:\s+read$/m);
   assert.match(workflow, /^  pull-requests:\s+read$/m);
