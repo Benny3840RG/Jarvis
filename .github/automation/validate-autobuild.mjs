@@ -231,7 +231,7 @@ export function evaluatePatch(patch) {
     const scannedContent =
       line.startsWith("+") && TEST_PATH.test(currentPath)
         ? content.replace(
-            /^(\s*(?:test|it|describe)\s*\(\s*)(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`)/,
+            /^(\s*(?:test|it|describe)\s*\(\s*)(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')/,
             "$1",
           )
         : content;
