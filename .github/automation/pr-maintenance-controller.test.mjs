@@ -4,6 +4,7 @@ import {
   reviewRunTitle,
   hasReviewAttempt,
   reviewBudgetAvailable,
+  reviewAttemptState,
   eligiblePull,
   listWorkflowHistory,
 } from "./pr-maintenance-controller.mjs";
@@ -38,10 +39,10 @@ test("a review attempt is identified by provider run history, never by comment t
     hasReviewAttempt([run], { ...identity, fingerprint: "d".repeat(64) }),
     false,
   );
-  // Cancellation also consumes an automatic attempt: sweeps cannot spend forever.
+  // A terminal failure consumes budget but does not masquerade as an active lock.
   assert.equal(
     hasReviewAttempt([{ ...run, conclusion: "cancelled" }], identity),
-    true,
+    false,
   );
 });
 
@@ -55,7 +56,7 @@ test("failed publication retains the exact-attempt lock and the two-attempt budg
     conclusion: "failure",
     run_attempt: 1,
   };
-  assert.equal(hasReviewAttempt([failed], identity, 501), true);
+  assert.equal(hasReviewAttempt([failed], identity, 501), false);
   assert.equal(hasReviewAttempt([failed], identity, 500), false);
   assert.equal(reviewBudgetAvailable([failed], identity, 500, 2), true);
   assert.equal(reviewBudgetAvailable([failed], identity, 500, 3), false);
@@ -75,6 +76,28 @@ test("failed publication retains the exact-attempt lock and the two-attempt budg
   assert.throws(
     () => reviewRunTitle({ ...identity, headSha: "a".repeat(8) }),
     /identity/,
+  );
+});
+
+test("failed review attempts retry once, a new exact SHA resets review identity, and exhaustion is explicit", () => {
+  const failed = {
+    id: 500,
+    display_title: reviewRunTitle(identity),
+    path: ".github/workflows/jarvis-pr-maintenance.yml",
+    event: "workflow_dispatch",
+    head_branch: "main",
+    conclusion: "failure",
+    run_attempt: 1,
+  };
+  assert.equal(reviewAttemptState([failed], identity), "retryable");
+  assert.equal(hasReviewAttempt([failed], identity), false);
+  assert.equal(
+    reviewAttemptState([failed], { ...identity, headSha: "d".repeat(40) }),
+    "unattempted",
+  );
+  assert.equal(
+    reviewAttemptState([failed, { ...failed, id: 501 }], identity),
+    "exhausted",
   );
 });
 

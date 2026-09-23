@@ -457,19 +457,25 @@ export function segmentReceipt(plan, index, raw) {
   };
 }
 export function aggregateSegments(plan, receipts) {
-  const blocked = {
-    verdict: "blocked",
-    summary:
-      "Segmented review lacks complete valid evidence; inspect segment results. No approval inferred.",
-    findings: [],
-  };
+  const blocked = (findings = []) =>
+    parseReview(
+      JSON.stringify({
+        verdict: "blocked",
+        summary:
+          findings.length > 0
+            ? `Segmented review is incomplete, but ${findings.length} validated finding(s) were preserved. Missing context still blocks any pass or approval inference.`
+            : "Segmented review lacks complete valid evidence; inspect segment results. No approval inferred.",
+        findings,
+      }),
+    );
   try {
     validateReviewPlan(plan);
     if (!Array.isArray(receipts) || receipts.length !== plan.prompts.length)
-      return blocked;
+      return blocked();
     const seen = new Set();
     const findings = [];
     let requested = false;
+    let incomplete = false;
     for (const receipt of receipts) {
       if (
         !receipt ||
@@ -481,7 +487,7 @@ export function aggregateSegments(plan, receipts) {
           segmentReceipt(plan, receipt.index, receipt.raw),
         )
       )
-        return blocked;
+        return blocked(findings);
       seen.add(receipt.index);
       const value = JSON.parse(receipt.raw);
       if (
@@ -491,11 +497,10 @@ export function aggregateSegments(plan, receipts) {
           (x) => typeof x !== "string" || !x.trim() || x.length > 2000,
         )
       )
-        return blocked;
+        return blocked(findings);
       const { contextRequests, ...reviewValue } = value;
       const review = parseReview(JSON.stringify(reviewValue));
-      if (contextRequests.length || review.verdict === "blocked")
-        return blocked;
+      incomplete ||= contextRequests.length > 0 || review.verdict === "blocked";
       requested ||= review.verdict === "changes_requested";
       for (const finding of review.findings) {
         const fileIndex = plan.manifest.files.findIndex(
@@ -526,10 +531,11 @@ export function aggregateSegments(plan, receipts) {
             ),
           )
         )
-          return blocked;
+          return blocked(findings);
         findings.push(finding);
       }
     }
+    if (incomplete) return blocked(findings);
     return parseReview(
       JSON.stringify({
         verdict: requested ? "changes_requested" : "pass",
@@ -538,6 +544,6 @@ export function aggregateSegments(plan, receipts) {
       }),
     );
   } catch {
-    return blocked;
+    return blocked();
   }
 }

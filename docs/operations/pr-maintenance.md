@@ -1,9 +1,10 @@
 # Jarvis PR maintenance
 
 The Actions handover performs independent review and bounded repair. Its
-exact-candidate `jarvis-pr-maintenance/review` status is the required Jarvis PASS
-for agent-authored PRs. It does not grant owner approval, merge authority or a
-durable Development completion claim.
+exact-candidate `jarvis-pr-maintenance/review` status is advisory machine-review
+evidence and an internal maintenance signal; whether GitHub requires that status
+for merge is defined only by the current branch-protection policy. It does not
+grant owner approval, merge authority or a durable Development completion claim.
 
 ## Runtime path
 
@@ -20,11 +21,16 @@ durable Development completion claim.
    untrusted data. It runs separately with read-only permissions and no write
    token. It cannot execute candidate code, approve, merge or deploy.
 5. A fresh publisher validates strict review output and re-observes the exact
-   candidate and CI. Changed evidence discards the old review. Invalid output,
-   unavailable context or invented file locations produces a blocked result.
+   candidate and CI. Changed evidence discards the old review. Invalid output or
+   invented file locations fail closed. If one segment lacks essential context,
+   the aggregate remains blocked, but concrete findings already validated from
+   other exact-bound segments are preserved rather than discarded.
 6. A passing review plus trusted green CI produces `awaiting-owner`. Actionable
-   findings or failed checks may request a repair only for an authentic generated
-   `automation/issue-N/run-ID` candidate whose source issue remains approved.
+   findings, including validated findings preserved from an otherwise incomplete
+   segmented review, or failed checks may request a repair only for an authentic
+   generated `automation/issue-N/run-ID` candidate whose source issue remains
+   approved. On manually coordinated PRs the same findings are published for the
+   assigned builder; no repair authority is invented.
 7. The existing builder performs at most two repairs on that same branch/PR. It
    installs trusted dependencies and controls before inspecting candidate Git
    objects, applies the original cumulative policy before checkout and after
@@ -78,6 +84,7 @@ existing workflow group. Live notification proof requires this change on main.
 | New commits or changed base/checks | Old review discarded; no stale push or stale pass.                                                                                                                                 |
 | Main moved or unhealthy            | No repair dispatch. Repair claims are not inferred from the request comment.                                                                                                       |
 | Provider timeout during dispatch   | Unconfirmed result; inspect owning run history before retrying.                                                                                                                    |
+| Temporal preview proof             | `temporal-pass.yml` runs the full exact-head PASS suite with a checksum-pinned Temporal CLI; reviewer sandboxes do not need a preinstalled CLI.                                    |
 
 A completed initial builder failure is observed by
 `jarvis-autobuild-recovery.yml` from trusted default-branch workflow code. The
@@ -108,12 +115,16 @@ window, capped at 100 runs, to refuse stale failures when a newer build exists.
 Unavailable or incomplete history leaves the issue unchanged. These workflow
 paths are executed by the same regression suite; they are not live retry proof.
 
-The namespaced `jarvis-pr-maintenance/review` status must be required by the
-effective `main` protection policy for Claude/Codex work. It never impersonates
+A terminal failed or cancelled independent review remains retryable exactly once for the same candidate identity. The scheduler distinguishes that terminal failure from an active or successfully published review; it re-dispatches only through `jarvis-pr-maintenance.yml`. A new candidate SHA starts fresh exact-candidate review scheduling. If the finite review budget is exhausted, the coordinator re-observes the candidate, writes one idempotent `automation-blocked` PR notice, and gives the single owner action: resolve the unavailable evidence and publish a new candidate SHA. It does not invoke a builder, clear a mission lock, approve, merge, deploy, or advance Omega.
+
+The namespaced `jarvis-pr-maintenance/review` status never impersonates
 TypeScript, PR Evidence or CodeQL checks and cannot satisfy the owner or existing
-ToolAction approval boundary. Blocked results retain their linked run. A passing
-status means only that the exact candidate reached `awaiting-owner` with trusted
-green CI and a clean bounded review.
+ToolAction approval boundary. Its merge-enforcement status is determined by
+`docs/operations/branch-protection.md`; the current decided policy intentionally
+does not require it because bounded segmented review can fail on infrastructure
+or context despite a clean candidate. Blocked results retain their linked run and
+any validated findings. A passing status means only that the exact candidate
+reached `awaiting-owner` with trusted green CI and a clean bounded review.
 
 Manual entry: Actions → **Jarvis PR maintenance** → Run workflow on `main`, mode
 `sweep`; optionally specify a PR number. Exact review dispatch fields are normally

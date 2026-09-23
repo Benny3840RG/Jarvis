@@ -190,7 +190,7 @@ async function seedBoundClaimedSubject(t: ReturnType<typeof harness>) {
 
 async function seedAuthoritativeGitHubMerge(
   t: ReturnType<typeof harness>,
-  overrides: { effectiveRisk?: number } = {},
+  overrides: { effectiveRisk?: number; policySubjectVersion?: number | null } = {},
 ) {
   const reviewedHeadSha = "a".repeat(40);
   const mergeCommitSha = "b".repeat(40);
@@ -224,6 +224,9 @@ async function seedAuthoritativeGitHubMerge(
       authorityEnvelopeHash,
       policyDecisionFingerprint: policyFingerprint,
       effectiveRisk: overrides.effectiveRisk ?? 4,
+      ...(overrides.policySubjectVersion === null
+        ? {}
+        : { policySubjectVersion: overrides.policySubjectVersion ?? 3 }),
     },
     rationale: "Merge the approved and independently reviewed pull request.",
     requiredAuthority: "T3",
@@ -926,6 +929,8 @@ describe("developmentState.commit", () => {
           authorityEnvelopeHash: "authority",
           effectiveRisk: 3,
           policyDecisionFingerprint: "policy",
+          policySubjectVersion: 1,
+          transitionCommitted: false,
         },
         mergeEvidence: {
           reviewedHeadSha: "sha-1",
@@ -967,7 +972,29 @@ describe("developmentState.commit", () => {
     expect(outcome.event.payload).toMatchObject({
       approvalId: evidence.actionId,
       mergeReceiptKey: evidence.receiptKey,
+      approvalTransitionCommitted: true,
+      policySubjectVersion: 3,
+      to: "MERGED",
     });
+    expect(outcome.subject.state).not.toBe("COMPLETE");
+  });
+
+  it("refuses a merge approval that has no policy subjectVersion snapshot", async () => {
+    const t = harness();
+    await seedSubject(t, { state: "READY_TO_MERGE", fencingToken: 1 });
+    const evidence = await seedAuthoritativeGitHubMerge(t, { policySubjectVersion: null });
+
+    const outcome = await t.mutation(api.developmentState.commit, {
+      ...claimedToBuildingArgs({
+        transitionId: "DEV_TRANSITION_READY_TO_MERGE_TO_MERGED",
+        to: "MERGED",
+        mergeReceiptKey: evidence.receiptKey,
+      }),
+    });
+
+    expect(outcome.kind).toBe("REJECTED");
+    expect(outcome.reasons).toContain("POLICY_SUBJECT_VERSION_REQUIRED");
+    expect(outcome.subject.state).toBe("READY_TO_MERGE");
   });
 
   it("rejects an approved merge action changed after approval", async () => {

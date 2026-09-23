@@ -106,6 +106,32 @@ test("missing duplicate mismatched truncated and context-requested results block
   ])
     assert.equal(aggregateSegments(plan, receipts).verdict, "blocked");
 });
+test("blocked segments preserve validated findings while still refusing a pass", () => {
+  const plan = make([file("hello")]);
+  const finding = {
+    file: "typescript/openapi/jarvis.openapi.json",
+    line: 1,
+    severity: "medium",
+    message: "Concrete defect visible in supplied primary source.",
+  };
+  const receipts = [
+    segmentReceipt(
+      plan,
+      0,
+      JSON.stringify({
+        verdict: "blocked",
+        summary: "Concrete defect found but more context is still required.",
+        findings: [finding],
+        contextRequests: ["unchanged imported dependency"],
+      }),
+    ),
+  ];
+  const result = aggregateSegments(plan, receipts);
+  assert.equal(result.verdict, "blocked");
+  assert.deepEqual(result.findings, [finding]);
+  assert.match(result.summary, /validated finding/);
+});
+
 test("caps cannot be expanded by oversized files or excessive escaped content", () => {
   assert.throws(() => make([file("x".repeat(512 * 1024 + 1))]));
   assert.throws(() =>

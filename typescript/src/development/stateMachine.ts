@@ -85,12 +85,10 @@ export type LeaseInfo = {
 };
 
 /**
- * Approval records remain immutable — no `consumed`/`exercised` flag is
- * carried here by design (handover "Approval use"). `EXERCISED` is derived
- * elsewhere from durable execution-intent history, not stored on the
- * approval itself. Binds to an exact subject/transition/effect/authority
- * envelope/policy context so a valid-looking approval can't be replayed
- * against a materially different proposal.
+ * Binds an approval to an exact subject, transition, effect, authority
+ * envelope, and policy subject version. `transitionCommitted` is the
+ * consumption fact for the bound transition. It is not mission `COMPLETE`,
+ * which remains the ΩΣ-only development state.
  */
 export type ApprovalRef = {
   readonly approvalId: string;
@@ -106,9 +104,16 @@ export type ApprovalRef = {
   readonly authorityEnvelopeHash: string;
   readonly effectiveRisk: number;
   readonly policyDecisionFingerprint: string;
+  /** Snapshot of the policy aggregate's subjectVersion at approval time. */
+  readonly policySubjectVersion: number;
+  /** True once the bound transition has been durably recorded as executed. */
+  readonly transitionCommitted: boolean;
 };
 
-/** Semantic policy version, kept independent of the aggregate/subject sequence number. */
+/**
+ * Human-readable policy version. Ordering reuses the policy aggregate's
+ * `subjectVersion`; there is no separate sequenceNumber.
+ */
 export type PolicyVersion = {
   readonly version: string;
   readonly validFrom: string;
@@ -116,21 +121,19 @@ export type PolicyVersion = {
   readonly retroactiveInvalidation?: RetroactiveInvalidation;
 };
 
-export type VersionedPolicy = {
+/** One governed policy aggregate version. `subjectVersion` is the only order. */
+export type PolicyHistoryEntry = PolicyVersion & {
   readonly subjectVersion: number;
-  readonly policy: PolicyVersion;
 };
 
 /**
- * Preserved per the handover verbatim — scoped invalidation, never silently
- * replaced by a global one. Not yet consumed by a gate in this kernel; the
- * shape exists so a future policy-versioning integration doesn't have to
- * invent it under time pressure.
+ * Scoped invalidation. `scope` defaults to PENDING_ONLY, which skips
+ * approvals whose bound transition has already committed.
  */
 export type RetroactiveInvalidation = {
   readonly transitionIds: readonly string[];
   readonly affectedApprovals: "ALL" | { readonly approvalIds: readonly string[] };
-  readonly scope: "PENDING_ONLY" | "ALL";
+  readonly scope?: "PENDING_ONLY" | "ALL";
   readonly reason: string;
 };
 
@@ -210,6 +213,12 @@ export type TransitionRequest = {
   readonly omegaCompletionInput?: OmegaCompletionInput;
   readonly expectedSubjectVersion?: number;
   readonly currentSubjectVersion?: number;
+  /**
+   * Policy aggregate history and its current subjectVersion. Supply both or
+   * neither. A partial pair fails closed rather than skipping invalidation.
+   */
+  readonly policyHistory?: readonly PolicyHistoryEntry[];
+  readonly currentPolicySubjectVersion?: number;
   /** The subject's latest known fencing token, analogous to currentSubjectVersion. */
   readonly currentFencingToken?: number;
 };
@@ -304,6 +313,80 @@ export function computeAuthorityEnvelopeHash(envelope: CapabilityEnvelope): stri
   return digest(AUTHORITY_ENVELOPE_HASH_VERSION, envelope);
 }
 
+const ALL_SCOPE_INVALIDATION_RISK_CLASS = 3;
+
+/**
+ * Phase 1 gate for `affectedApprovals: "ALL"`. Rate limits, dual confirmation,
+ * and blast-radius counts are not implemented; risk class 3 and an audit trail
+ * are required before that write is admissible.
+ */
+export function evaluateAllScopeInvalidation(input: {
+  readonly invalidation: RetroactiveInvalidation;
+  readonly authorityRiskClass: number;
+  readonly auditTrailRecorded: boolean;
+}): { readonly admissible: boolean; readonly reasons: readonly string[] } {
+  if (input.invalidation.affectedApprovals !== "ALL") {
+    return { admissible: true, reasons: Object.freeze([]) };
+  }
+  const reasons: string[] = [];
+  if (
+    !Number.isSafeInteger(input.authorityRiskClass) ||
+    input.authorityRiskClass < ALL_SCOPE_INVALIDATION_RISK_CLASS
+  ) {
+    reasons.push("ALL_SCOPE_RISK_3_REQUIRED");
+  }
+  if (!input.auditTrailRecorded || input.invalidation.reason.trim().length === 0) {
+    reasons.push("ALL_SCOPE_AUDIT_TRAIL_REQUIRED");
+  }
+  return { admissible: reasons.length === 0, reasons: Object.freeze(reasons) };
+}
+
+/** Policy subjectVersion order. Versions at or before the approval snapshot are not retroactive. */
+export function isRetroactivelyInvalidated(
+  approval: Pick<ApprovalRef, "approvalId" | "policySubjectVersion" | "transitionCommitted">,
+  transitionId: string,
+  policyHistory: readonly PolicyHistoryEntry[],
+  currentSubjectVersion: number,
+): boolean {
+  const relevantVersions = policyHistory.filter(
+    (entry) =>
+      entry.subjectVersion > approval.policySubjectVersion &&
+      entry.subjectVersion <= currentSubjectVersion,
+  );
+  for (const policy of relevantVersions) {
+    const invalidation = policy.retroactiveInvalidation;
+    if (!invalidation) continue;
+    if (!invalidation.transitionIds.includes(transitionId)) continue;
+    const scope = invalidation.scope ?? "PENDING_ONLY";
+    const targeted =
+      invalidation.affectedApprovals === "ALL" ||
+      invalidation.affectedApprovals.approvalIds.includes(approval.approvalId);
+    if (!targeted) continue;
+    if (scope === "PENDING_ONLY" && approval.transitionCommitted) continue;
+    return true;
+  }
+  return false;
+}
+
+/** Records that the bound transition committed. Does not set mission COMPLETE. */
+export function markApprovalTransitionCommitted<T extends ApprovalRef>(approval: T): T {
+  if (approval.transitionCommitted) return approval;
+  return { ...approval, transitionCommitted: true };
+}
+
+export function committedApprovalEventFields(approval: ApprovalRef): {
+  readonly approvalId: string;
+  readonly approvalTransitionCommitted: true;
+  readonly policySubjectVersion: number;
+} {
+  const consumed = markApprovalTransitionCommitted(approval);
+  return {
+    approvalId: consumed.approvalId,
+    approvalTransitionCommitted: true,
+    policySubjectVersion: consumed.policySubjectVersion,
+  };
+}
+
 /**
  * Fingerprints only the decision-relevant fields of a transition
  * definition, so an unrelated registry change doesn't invalidate an
@@ -382,6 +465,25 @@ function approvalGateReason(
   if (approval.policyDecisionFingerprint !== computePolicyDecisionFingerprint(definition)) {
     return "APPROVAL_STALE_POLICY_CONTEXT";
   }
+  if (!Number.isSafeInteger(approval.policySubjectVersion) || approval.policySubjectVersion < 0) {
+    return "APPROVAL_POLICY_SUBJECT_VERSION_INVALID";
+  }
+  const historySupplied = request.policyHistory !== undefined;
+  const currentSupplied = request.currentPolicySubjectVersion !== undefined;
+  if (historySupplied !== currentSupplied) return "POLICY_HISTORY_INCOMPLETE";
+  if (
+    request.policyHistory !== undefined &&
+    request.currentPolicySubjectVersion !== undefined &&
+    isRetroactivelyInvalidated(
+      approval,
+      request.transitionId,
+      request.policyHistory,
+      request.currentPolicySubjectVersion,
+    )
+  ) {
+    return "APPROVAL_RETROACTIVELY_INVALIDATED";
+  }
+  if (approval.transitionCommitted) return "APPROVAL_TRANSITION_ALREADY_COMMITTED";
   return undefined;
 }
 

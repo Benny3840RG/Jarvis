@@ -4,6 +4,7 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 
 import type { JarvisMcpConfig } from "./config.js";
 import { JarvisApiClient } from "./jarvisApiClient.js";
+import { runWithMcpRequestSignal } from "./requestSignal.js";
 import { createJarvisMcpServer } from "./server.js";
 import {
   captureMcpBoundary,
@@ -98,15 +99,19 @@ export async function startJarvisMcpHttpServer(
         sessionIdGenerator: undefined,
         enableJsonResponse: true,
       });
+      const disconnect = new AbortController();
       response.on("close", () => {
+        if (!response.writableFinished) disconnect.abort();
         void transport.close();
         void server.close();
       });
       const startedAt = performance.now();
       let outcome: "success" | "failure" = "success";
       try {
-        await server.connect(transport);
-        await transport.handleRequest(request, response);
+        await runWithMcpRequestSignal(disconnect.signal, async () => {
+          await server.connect(transport);
+          await transport.handleRequest(request, response);
+        });
       } catch {
         outcome = "failure";
         if (!response.headersSent) {

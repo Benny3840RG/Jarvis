@@ -45,15 +45,33 @@ export function reviewRunTitle({ pullNumber, headSha, baseSha, fingerprint }) {
   return `Jarvis PR review #${pullNumber} ${headSha} ${baseSha} ${fingerprint}`;
 }
 
-export function hasReviewAttempt(runs, identity, excludeRunId) {
+function matchingReviewRuns(runs, identity, excludeRunId) {
   const title = reviewRunTitle(identity);
-  return runs.some(
+  return runs.filter(
     (run) =>
       run.id !== excludeRunId &&
       run.path === WORKFLOW &&
       run.head_branch === "main" &&
       run.event === "workflow_dispatch" &&
       run.display_title === title,
+  );
+}
+
+export function reviewAttemptState(runs, identity, excludeRunId) {
+  const matching = matchingReviewRuns(runs, identity, excludeRunId);
+  if (!matching.length) return "unattempted";
+  if (matching.some((run) => !run.conclusion)) return "active";
+  if (matching.some((run) => run.conclusion === "success")) return "complete";
+  const spent = matching.reduce(
+    (count, run) => count + Math.max(1, Number(run.run_attempt) || 1),
+    0,
+  );
+  return spent >= 2 ? "exhausted" : "retryable";
+}
+
+export function hasReviewAttempt(runs, identity, excludeRunId) {
+  return ["active", "complete"].includes(
+    reviewAttemptState(runs, identity, excludeRunId),
   );
 }
 
@@ -289,8 +307,111 @@ async function publishBaseDrift({ github, owner, repo, drift, core }) {
   );
 }
 
-// Dispatching records the exact candidate in GitHub's run metadata. A comment
-// that claims a successful review cannot suppress a real review or spend a repair.
+const AUTOMATION_BLOCKED_MARKER =
+  "<!-- jarvis-pr-maintenance:automation-blocked:v1 -->";
+const ownAutomationBlockedNotice = (comment) =>
+  comment.user?.login === "github-actions[bot]" &&
+  comment.user?.type === "Bot" &&
+  comment.body?.startsWith(AUTOMATION_BLOCKED_MARKER);
+
+async function publishAutomationBlocked({
+  github,
+  owner,
+  repo,
+  observation,
+  core,
+}) {
+  const comments = [];
+  const ids = new Set();
+  for (let page = 1; ; page++) {
+    const { data } = await github.rest.issues.listComments({
+      owner,
+      repo,
+      issue_number: observation.identity.pullNumber,
+      per_page: 100,
+      page,
+    });
+    if (!Array.isArray(data) || data.length > 100)
+      throw new Error("Automation-blocked comment history is unavailable.");
+    for (const comment of data) {
+      if (!Number.isSafeInteger(comment.id) || ids.has(comment.id))
+        throw new Error(
+          "Automation-blocked comment history has invalid identities.",
+        );
+      ids.add(comment.id);
+      comments.push(comment);
+    }
+    if (data.length < 100) break;
+    if (page === 10)
+      throw new Error("Automation-blocked comment history exceeds its bound.");
+  }
+  const refreshed = await current(
+    github,
+    owner,
+    repo,
+    observation.identity.pullNumber,
+  );
+  assertIdentity(refreshed.identity, observation.identity);
+  const candidateLine =
+    "Candidate: `" +
+    observation.identity.headSha +
+    "` · Base: `" +
+    observation.identity.baseSha +
+    "`";
+  const body = [
+    AUTOMATION_BLOCKED_MARKER,
+    "### Jarvis review automation blocked",
+    candidateLine,
+    "Result: **automation-blocked** — the bounded review retry budget is exhausted.",
+    "Owner action: resolve the review evidence, push a new exact candidate SHA, and let the maintained review workflow evaluate that new candidate.",
+    "This records scheduling evidence only. It does not approve, merge, deploy, or complete the mission.",
+  ].join("\n\n");
+  const existing = comments.findLast(
+    (comment) =>
+      ownAutomationBlockedNotice(comment) &&
+      comment.body.includes(candidateLine),
+  );
+  if (existing?.body === body) return;
+  const { data: written } = existing
+    ? await github.rest.issues.updateComment({
+        owner,
+        repo,
+        comment_id: existing.id,
+        body,
+      })
+    : await github.rest.issues.createComment({
+        owner,
+        repo,
+        issue_number: observation.identity.pullNumber,
+        body,
+      });
+  if (
+    !Number.isSafeInteger(written?.id) ||
+    (existing && written.id !== existing.id)
+  )
+    throw new Error("Automation-blocked notice publication was not confirmed.");
+  const { data: observed } = await github.rest.issues.getComment({
+    owner,
+    repo,
+    comment_id: written.id,
+  });
+  if (
+    observed?.id !== written.id ||
+    !ownAutomationBlockedNotice(observed) ||
+    observed.body !== body
+  )
+    throw new Error(
+      "Automation-blocked notice publication was not confirmed by provider readback.",
+    );
+  core.warning(
+    "PR #" +
+      observation.identity.pullNumber +
+      " is automation-blocked at " +
+      observation.identity.headSha +
+      ".",
+  );
+}
+
 export async function durableCandidateReady(
   pull,
   repository,
@@ -373,11 +494,29 @@ export async function sweep({
       repo,
       candidate.created_at,
     );
-    if (hasReviewAttempt(history, observation.identity)) continue;
-    if (!reviewBudgetAvailable(history, observation.identity)) {
-      core.warning(
-        `PR #${candidate.number} reached its two-review limit for this head; owner attention required.`,
-      );
+    const attemptState = reviewAttemptState(history, observation.identity);
+    if (["active", "complete"].includes(attemptState)) continue;
+    if (
+      attemptState === "exhausted" ||
+      !reviewBudgetAvailable(history, observation.identity)
+    ) {
+      try {
+        await publishAutomationBlocked({
+          github,
+          owner,
+          repo,
+          observation,
+          core,
+        });
+      } catch (error) {
+        core.warning(
+          "PR #" +
+            candidate.number +
+            " automation-blocked notice is unconfirmed: " +
+            printable(error.message) +
+            ".",
+        );
+      }
       continue;
     }
     const identity = observation.identity;
