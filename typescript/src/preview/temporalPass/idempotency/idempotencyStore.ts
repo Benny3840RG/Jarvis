@@ -28,6 +28,51 @@ function isNodeError(error: unknown): error is NodeJS.ErrnoException {
   return error instanceof Error && "code" in error;
 }
 
+function isTimestamp(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    value.length > 0 &&
+    Number.isFinite(Date.parse(value))
+  );
+}
+
+function parseStore(raw: string): Store {
+  const value: unknown = JSON.parse(raw);
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("idempotency store root must be an object");
+  }
+
+  for (const [key, entry] of Object.entries(value)) {
+    if (
+      !key ||
+      entry === null ||
+      typeof entry !== "object" ||
+      Array.isArray(entry)
+    ) {
+      throw new Error(`invalid idempotency entry for ${JSON.stringify(key)}`);
+    }
+    const record = entry as Record<string, unknown>;
+    const keys = Object.keys(record);
+    if (
+      keys.some(
+        (field) =>
+          !["operation", "state", "result", "createdAt", "completedAt"].includes(
+            field,
+          ),
+      ) ||
+      typeof record.operation !== "string" ||
+      record.operation.length === 0 ||
+      !["pending", "completed", "failed"].includes(String(record.state)) ||
+      !isTimestamp(record.createdAt) ||
+      (record.completedAt !== undefined && !isTimestamp(record.completedAt))
+    ) {
+      throw new Error(`invalid idempotency entry for ${JSON.stringify(key)}`);
+    }
+  }
+
+  return value as Store;
+}
+
 /**
  * File-backed idempotency store for the Temporal PASS prototype.
  *
@@ -63,7 +108,7 @@ export class IdempotencyStore {
       throw error;
     }
     try {
-      return JSON.parse(raw) as Store;
+      return parseStore(raw);
     } catch (error: unknown) {
       // Unlike a missing file (a legitimate "no store yet" state), a file
       // that exists but fails to parse is corruption — silently treating it
