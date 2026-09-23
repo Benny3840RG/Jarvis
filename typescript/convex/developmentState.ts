@@ -11,6 +11,7 @@ import {
 } from "../src/development/reducer.js";
 import { canonicalJson } from "../src/actions/canonicalJson.js";
 import {
+  committedApprovalEventFields,
   computeAuthorityEnvelopeHash,
   computePolicyDecisionFingerprint,
   evaluateDevelopmentTransition,
@@ -1208,11 +1209,15 @@ export const commit = mutation({
                                     mergeReceipt.policyVersion !==
                                       orchestrationRun.policyFingerprint
                                   ? "APPROVAL_STALE_POLICY_CONTEXT"
-                                  : typeof mergeArguments?.effectiveRisk !== "number" ||
-                                      !Number.isFinite(mergeArguments.effectiveRisk) ||
-                                      mergeArguments.effectiveRisk < 4
-                                    ? "MERGE_RISK_BINDING_INVALID"
-                                    : undefined;
+                                  : typeof mergeArguments?.policySubjectVersion !== "number" ||
+                                      !Number.isSafeInteger(mergeArguments.policySubjectVersion) ||
+                                      mergeArguments.policySubjectVersion < 0
+                                    ? "POLICY_SUBJECT_VERSION_REQUIRED"
+                                    : typeof mergeArguments?.effectiveRisk !== "number" ||
+                                        !Number.isFinite(mergeArguments.effectiveRisk) ||
+                                        mergeArguments.effectiveRisk < 4
+                                      ? "MERGE_RISK_BINDING_INVALID"
+                                      : undefined;
     const trustedMergeApproval =
       trustedMergeReason === undefined &&
       mergeAction &&
@@ -1234,6 +1239,8 @@ export const commit = mutation({
             policyDecisionFingerprint: computePolicyDecisionFingerprint(
               DEVELOPMENT_TRANSITIONS.DEV_TRANSITION_READY_TO_MERGE_TO_MERGED,
             ),
+            policySubjectVersion: mergeArguments!.policySubjectVersion as number,
+            transitionCommitted: false,
           }
         : undefined;
     // VERIFYING->REVIEW and the two REVIEW exits must prove a genuine
@@ -1402,7 +1409,7 @@ export const commit = mutation({
           sourceSubjectVersion: subject.subjectVersion,
           resultingSubjectVersion: subject.subjectVersion + 1,
           ...(request.effectPayload ? { effectPayload: request.effectPayload } : {}),
-          ...(request.approval ? { approvalId: request.approval.approvalId } : {}),
+          ...(request.approval ? committedApprovalEventFields(request.approval) : {}),
           ...(request.lease ? { leaseFencingToken: request.lease.fencingToken } : {}),
           ...(mergeReceiptKey ? { mergeReceiptKey } : {}),
         })

@@ -66,6 +66,20 @@ transition_binding:
   unknown_governing_id: REJECTED
   committed_event_requires_actor_separation: true
 
+approval_consumption:
+  term: transitionCommitted
+  meaning: bound_transition_durably_recorded_as_executed
+  pending_only_invalidates_when: transitionCommitted_is_false
+  committed_transition_payload:
+    - approvalId
+    - approvalTransitionCommitted
+    - policySubjectVersion
+  mission_complete:
+    term: COMPLETE
+    authority: omega
+    transition_id: DEV_TRANSITION_MERGED_TO_COMPLETE
+    not_an_approval_consumption_signal: true
+
 model_invocation_receipt:
   event_type: DEV_MODEL_INVOCATION_RECORDED
   model_identity_authority: trusted_runtime_or_provider_metadata
