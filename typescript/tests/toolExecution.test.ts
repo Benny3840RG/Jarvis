@@ -587,4 +587,80 @@ describe("consent-lifecycle execution enforcement (R-048/R-049/R-050)", () => {
     assert.equal(second.status, "succeeded");
     assert.equal(executions.count, 2);
   });
+
+  it("maps an Omega execution-gate refusal to not-authorized and does not consume or invoke", async () => {
+    for (const blockReason of [
+      "omega-mission-not-executable",
+      "omega-contract-not-authorized",
+      "omega-contract-authority-mismatch",
+    ] as const) {
+      const executions = { count: 0 };
+      const claims: SingleUseConsumptionClaimStore = {
+        async claim(): Promise<SingleUseExecutionClaimResult> {
+          return { claimed: false, claimId: "", blockReason };
+        },
+      };
+      const executor = new ToolExecutionService(
+        [definition(executions)],
+        new InMemoryToolExecutionReceiptStore(),
+        undefined,
+        claims,
+      );
+      const result = await executor.execute({
+        action: { ...action, consumptionPolicy: "single-use" },
+        authority: "T1",
+        idempotencyKey: `omega-${blockReason}`,
+      });
+      assert.equal(result.status, "blocked");
+      assert.equal(result.errorCode, "not-authorized");
+      assert.equal(executions.count, 0);
+    }
+  });
+
+  it("maps an expired Omega contract to approval-expired without invoking the definition", async () => {
+    const executions = { count: 0 };
+    const claims: SingleUseConsumptionClaimStore = {
+      async claim(): Promise<SingleUseExecutionClaimResult> {
+        return { claimed: false, claimId: "", blockReason: "omega-contract-expired" };
+      },
+    };
+    const executor = new ToolExecutionService(
+      [definition(executions)],
+      new InMemoryToolExecutionReceiptStore(),
+      undefined,
+      claims,
+    );
+    const result = await executor.execute({
+      action: { ...action, consumptionPolicy: "single-use" },
+      authority: "T1",
+      idempotencyKey: "omega-contract-expired",
+    });
+    assert.equal(result.status, "blocked");
+    assert.equal(result.errorCode, "approval-expired");
+    assert.equal(executions.count, 0);
+  });
+
+  it("does not report an unrecognised claim refusal as approval-consumed", async () => {
+    const executions = { count: 0 };
+    const claims: SingleUseConsumptionClaimStore = {
+      async claim(): Promise<SingleUseExecutionClaimResult> {
+        return { claimed: false, claimId: "winner-without-reason" };
+      },
+    };
+    const executor = new ToolExecutionService(
+      [definition(executions)],
+      new InMemoryToolExecutionReceiptStore(),
+      undefined,
+      claims,
+    );
+    const result = await executor.execute({
+      action: { ...action, consumptionPolicy: "single-use" },
+      authority: "T1",
+      idempotencyKey: "unknown-claim-refusal",
+    });
+    assert.equal(result.status, "blocked");
+    assert.equal(result.errorCode, "not-authorized");
+    assert.notEqual(result.errorCode, "approval-consumed");
+    assert.equal(executions.count, 0);
+  });
 });
