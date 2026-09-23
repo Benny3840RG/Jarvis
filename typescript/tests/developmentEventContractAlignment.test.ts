@@ -58,6 +58,40 @@ function validEvent(overrides: Partial<JarvisEvent> = {}): JarvisEvent {
   };
 }
 
+test("approval consumption is transitionCommitted and is not mission COMPLETE", () => {
+  const contract = canonicalEvents() as EventContract & {
+    approval_consumption: {
+      term: string;
+      pending_only_invalidates_when: string;
+      committed_transition_payload: string[];
+      mission_complete: {
+        term: string;
+        transition_id: string;
+        not_an_approval_consumption_signal: boolean;
+      };
+    };
+  };
+  assert.equal(contract.approval_consumption.term, "transitionCommitted");
+  assert.equal(
+    contract.approval_consumption.pending_only_invalidates_when,
+    "transitionCommitted_is_false",
+  );
+  assert.deepEqual(contract.approval_consumption.committed_transition_payload, [
+    "approvalId",
+    "approvalTransitionCommitted",
+    "policySubjectVersion",
+  ]);
+  assert.equal(contract.approval_consumption.mission_complete.term, "COMPLETE");
+  assert.equal(
+    contract.approval_consumption.mission_complete.transition_id,
+    "DEV_TRANSITION_MERGED_TO_COMPLETE",
+  );
+  assert.equal(
+    contract.approval_consumption.mission_complete.not_an_approval_consumption_signal,
+    true,
+  );
+});
+
 test("EVENTS.yaml is the machine-readable source for the exact Development event types and envelope", () => {
   const contract = canonicalEvents();
   assert.equal(contract.schema_version, 1);

@@ -47,6 +47,39 @@ function runtimeFields(id: string): Record<string, unknown> {
   return entry as Record<string, unknown>;
 }
 
+test("policy ordering reuses subjectVersion and does not declare sequenceNumber", () => {
+  const contract = canonicalTransitions() as CanonicalTransitionContract & {
+    policy_versioning: {
+      aggregate: string;
+      ordering_field: string;
+      sequence_number: string;
+      approval_snapshot_field: string;
+      retroactive_invalidation: {
+        default_scope: string;
+        pending_only_skips: string;
+        all_scope_phase1: { authority: string; audit_trail_required: boolean };
+      };
+    };
+  };
+  assert.equal(contract.policy_versioning.aggregate, "policy");
+  assert.equal(contract.policy_versioning.ordering_field, "subjectVersion");
+  assert.equal(contract.policy_versioning.sequence_number, "absent");
+  assert.equal(contract.policy_versioning.approval_snapshot_field, "policySubjectVersion");
+  assert.equal(contract.policy_versioning.retroactive_invalidation.default_scope, "PENDING_ONLY");
+  assert.equal(
+    contract.policy_versioning.retroactive_invalidation.pending_only_skips,
+    "transitionCommitted",
+  );
+  assert.equal(
+    contract.policy_versioning.retroactive_invalidation.all_scope_phase1.authority,
+    "RISK_3",
+  );
+  assert.equal(
+    contract.policy_versioning.retroactive_invalidation.all_scope_phase1.audit_trail_required,
+    true,
+  );
+});
+
 test("root TRANSITIONS.yaml is the sole machine-readable transition authority", () => {
   const rootTransitionFiles = readdirSync(repoRoot).filter((file) =>
     file.endsWith("TRANSITIONS.yaml"),

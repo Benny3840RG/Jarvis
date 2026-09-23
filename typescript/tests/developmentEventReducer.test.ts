@@ -402,6 +402,8 @@ test("a committed transition's event durably records which approval authorised i
       authorityEnvelopeHash: computeAuthorityEnvelopeHash(missionAuthority),
       effectiveRisk: 2,
       policyDecisionFingerprint: computePolicyDecisionFingerprint(mergeDefinition),
+      policySubjectVersion: 1,
+      transitionCommitted: false,
     },
   };
 
@@ -413,4 +415,7 @@ test("a committed transition's event durably records which approval authorised i
 
   assert.equal(outcome.kind, "COMMITTED");
   assert.equal(outcome.event.payload.approvalId, "approval-audit-1");
+  assert.equal(outcome.event.payload.approvalTransitionCommitted, true);
+  assert.equal(outcome.event.payload.policySubjectVersion, 1);
+  assert.notEqual(outcome.event.payload.to, "COMPLETE");
 });

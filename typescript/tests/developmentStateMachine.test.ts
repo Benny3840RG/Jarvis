@@ -222,6 +222,8 @@ test("risk class 2 merge is admitted with matching explicit operator approval", 
         policyDecisionFingerprint: computePolicyDecisionFingerprint(
           DEVELOPMENT_TRANSITIONS.DEV_TRANSITION_READY_TO_MERGE_TO_MERGED,
         ),
+        policySubjectVersion: 1,
+        transitionCommitted: false,
       },
     }),
   );

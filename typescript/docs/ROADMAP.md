@@ -1,5 +1,21 @@
 # Jarvis TypeScript Roadmap
 
+## Policy subjectVersion and transitionCommitted (2026-09-23)
+
+Policy ordering reuses the policy aggregate's `subjectVersion`. Approvals
+snapshot it as `policySubjectVersion`; there is no second `sequenceNumber`.
+An approval is consumed when its bound transition commits
+(`transitionCommitted`). That is not mission `COMPLETE`, which stays the
+ΩΣ-only state. `PENDING_ONLY` invalidation skips consumed approvals.
+`affectedApprovals: "ALL"` is admissible in this phase only at risk class 3
+with an audit trail. Rate limits, dual confirmation, and a counted blast
+radius are not implemented.
+
+The development merge commit copies `policySubjectVersion` from the approved
+tool-action arguments and refuses the transition when that snapshot is missing.
+A committed transition event records `approvalTransitionCommitted: true`.
+No live provider or deployment was run.
+
 ## OpenClaw Retry-After and MCP deadlines (2026-09-23)
 
 Provider throttling no longer schedules the next reconciliation attempt earlier
