@@ -20,7 +20,8 @@ import type { ToolAction, ToolActionState } from "../actions/toolActions.js";
 import type { SystemStatus } from "../http/contracts.js";
 import type { Reminder, Task } from "../persistence/persistence.js";
 import type { TaskUpdate } from "../persistence/updates.js";
-import type { JarvisApiConfig } from "./config.js";
+import { resolveMcpBackendDeadlineMs, type JarvisApiConfig } from "./config.js";
+import { currentMcpRequestSignal } from "./requestSignal.js";
 import { stableRoute, type SentryRuntime } from "../observability/sentry.js";
 
 export type ReminderRequestUpdate = {
@@ -96,12 +97,42 @@ function parseJson(text: string): unknown {
   }
 }
 
+type LinkedDeadline = {
+  signal: AbortSignal;
+  dispose: () => void;
+  abortedByCaller: () => boolean;
+};
+
 export class JarvisApiClient {
+  private readonly deadlineMs: number;
+
   constructor(
     private readonly config: JarvisApiConfig,
     private readonly fetchImpl: FetchLike = fetch,
     private readonly observability?: SentryRuntime,
-  ) {}
+  ) {
+    this.deadlineMs = resolveMcpBackendDeadlineMs(config.backendDeadlineMs);
+  }
+
+  private linkDeadline(parents: readonly AbortSignal[]): LinkedDeadline {
+    const controller = new AbortController();
+    const onAbort = () => {
+      if (!controller.signal.aborted) controller.abort();
+    };
+    for (const parent of parents) {
+      if (parent.aborted) onAbort();
+      else parent.addEventListener("abort", onAbort, { once: true });
+    }
+    const timeout = setTimeout(onAbort, this.deadlineMs);
+    return {
+      signal: controller.signal,
+      dispose: () => {
+        clearTimeout(timeout);
+        for (const parent of parents) parent.removeEventListener("abort", onAbort);
+      },
+      abortedByCaller: () => parents.some((parent) => parent.aborted),
+    };
+  }
 
   private async request<T>(
     method: string,
@@ -111,6 +142,10 @@ export class JarvisApiClient {
     const startedAt = performance.now();
     const route = stableRoute(path);
     let statusCode = 0;
+    const parents = [options.signal, currentMcpRequestSignal()].filter(
+      (signal): signal is AbortSignal => signal !== undefined,
+    );
+    const deadline = this.linkDeadline(parents);
     try {
       const url = new URL(path.replace(/^\//, ""), this.config.baseUrl);
       const headers: Record<string, string> = {
@@ -122,20 +157,41 @@ export class JarvisApiClient {
       if (options.idempotencyKey) headers["Idempotency-Key"] = options.idempotencyKey;
 
       let response: Response;
+      let text: string;
       try {
         response = await this.fetchImpl(url, {
           method,
           headers,
           ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }),
-          ...(options.signal === undefined ? {} : { signal: options.signal }),
+          signal: deadline.signal,
         });
         statusCode = response.status;
+        text = await response.text();
       } catch (error: unknown) {
+        if (deadline.abortedByCaller()) {
+          statusCode = 499;
+          throw new JarvisApiError(
+            "Jarvis API request was cancelled.",
+            499,
+            "urn:jarvis:problem:mcp-backend-cancelled",
+            null,
+          );
+        }
+        if (deadline.signal.aborted) {
+          statusCode = 504;
+          throw new JarvisApiError(
+            "Jarvis API request exceeded the MCP backend deadline.",
+            504,
+            "urn:jarvis:problem:mcp-backend-deadline",
+            null,
+          );
+        }
         const message = error instanceof Error ? error.message : String(error);
         throw new JarvisApiError(`Jarvis API network request failed: ${message}`, 503, null, null);
+      } finally {
+        deadline.dispose();
       }
 
-      const text = await response.text();
       const payload = parseJson(text);
       if (!response.ok) {
         const problem = safeProblem(payload);
