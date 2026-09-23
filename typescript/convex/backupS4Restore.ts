@@ -49,6 +49,7 @@ export async function insertS4Rows(
     projectRecords: [],
     memoryChangeSets: [],
     toolActions: [],
+    toolExecutionReceipts: [],
     auditEvents: [],
   };
   for (const row of source.projects) {
@@ -79,6 +80,15 @@ export async function insertS4Rows(
     const { _id, _creationTime, ...fields } = row;
     const targetId = await ctx.db.insert("toolActions", fields);
     identities.toolActions.push({ sourceId: _id, targetId, sourceCreationTime: _creationTime });
+  }
+  for (const row of source.toolExecutionReceipts) {
+    const { _id, _creationTime, ...fields } = row;
+    const targetId = await ctx.db.insert("toolExecutionReceipts", fields);
+    identities.toolExecutionReceipts.push({
+      sourceId: _id,
+      targetId,
+      sourceCreationTime: _creationTime,
+    });
   }
   for (const row of source.auditEvents) {
     const { _id, _creationTime, ...fields } = row;

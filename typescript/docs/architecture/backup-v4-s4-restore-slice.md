@@ -11,7 +11,7 @@ mutation. No deployment, CLI, automatic import, or provider connection is added.
 Its caller must provide a single mutation transaction on an isolated database.
 It requires existing owner and independent approval credentials, validates the
 source owner, and refuses any nonempty application table, including foreign-owner
-rows. It inserts only projects, notes, supported projectRecords, terminal memoryChangeSets, never-approved rejected notes.create ToolActions and their typed auditEvents through the existing persisted schemas;
+rows. It inserts only projects, notes, supported projectRecords, terminal memoryChangeSets, never-approved rejected notes.create ToolActions, their typed auditEvents, and closed denial-decision toolExecutionReceipts through the existing persisted schemas;
 it never invokes ordinary create/approval/reconciliation operations. Failure
 rolls back the transaction; retry starts with an empty target.
 
@@ -110,14 +110,13 @@ bounds apply across both memory and action history, not separately per producer.
 Normal `toolActions.get` and fresh `ConvexToolActionService.get` readback join the
 existing typed identity maps and tagged digest proof. Approval remains refused;
 matching stage/reject replay keeps the action and all history unchanged. An
-intentional denied execution drill occurs only **after** restore verification:
-the existing executor adds its expected blocked decision receipt, while no tool
-runs and all business/action/audit rows stay unchanged. This preserves existing
-audit behavior; denial is not falsely described as a read-only operation. Such a
-post-drill capture contains an unsupported receipt and cannot be reverified as
-this closed slice. Existing fingerprints and opaque argument values are preserved.
+intentional denied execution drill can be captured with the closed denial-decision
+receipt below. The drill still blocks: no tool runs, and business, action, and
+audit rows stay unchanged. Denial is not a read-only operation when it writes
+that receipt. A post-drill capture that adds any other receipt form cannot be
+restored as this slice. Existing fingerprints and opaque argument values are preserved.
 Task/reminder create proposals and all target-ID operations, approved/revoked/expired
-histories, receipts, reconciliations and worker state remain unsupported.
+histories, primary-key effect receipts, reconciliations and worker state remain unsupported.
 
 ## Remaining S4 graph classification
 
@@ -126,23 +125,23 @@ unsupported by the restore slice. Logical relationships are preserved by typed
 scope, not by replacing strings matching a physical-ID map. Unclassified payloads
 are explicit blockers to group verification.
 
-| Table                         | Traced relationship and identity                                                                                                                                                              | Remaining restore requirement                                                                                                                                                                                                                                                                  |
-| ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| projectRecords                | `projectRecords.upsert` resolves `projectKey` through projects and indexes `(owner, projectKey, recordId)`. `record.recordId` duplicates the logical record identity.                         | Four memory kinds, empty-attribute components, and bounded risks are admitted. `component.parentComponentId` is a same-project logical record id and is not rewritten. Non-empty `attributes`, constraint `value`, task `dependencies`, and event `payload` stay unclassified and are refused. |
-| memoryChangeSets              | `memoryChangeSets.recordsForChangeSet` resolves nested `records[].recordId` against projectRecords within the project. Base/applied revisions bind the project snapshot.                      | Restore proposals and applied records consistently; retain approval history without invoking apply/approve. Pending approved proposals must remain unable to execute during restore.                                                                                                           |
-| toolActions                   | `toolActions` uses logical `actionId`, `requestId`, project scope and idempotency key; approval/consumption fields and `singleUseClaimId` carry execution history.                            | Classify `arguments` by tool/operation and safety binding. Physical task/note/build IDs may be embedded in operation inputs; do not rewrite opaque arguments or mint replacement approval/fingerprint authority.                                                                               |
-| toolExecutionReceipts         | `toolExecutionReceipts.record` preserves caller receipt/action IDs and resolves replay by logical `receiptKey`. Optional legacy fields are allowed.                                           | Preserve receipt scope, action/effect fingerprints, indeterminate status and optional omissions. Trace operation-specific inputs together with action/reconciliation/S5 history before translating any physical reference.                                                                     |
-| externalReconciliations       | `findReceipt` resolves `receiptKey` through the owner index; `receiptId` is the receipt's logical field, not `_id`. Action/execution/project keys are recorded alongside provider references. | Remove live lease capability from operational restored state without losing archived history; retain indeterminate/escalated outcomes. Provider IDs remain opaque. Resolve receipt/action links and safety binding before enabling ordinary stores.                                            |
-| developmentSubjects           | `developmentState` resolves logical `subjectId`, explicit Omega mission binding, orchestration run/node binding, and last event.                                                              | S5 is required for run/node edges. Preserve generations, fencing history and missing legacy bindings; do not infer completion from audit events.                                                                                                                                               |
-| developmentEvents             | Existing state queries scope event/request IDs by owner and subject. Causation/evidence IDs and arbitrary typed-event payloads are persisted with canonical request/event fingerprints.       | Classify every event producer, including payload lease data and physical IDs embedded in canonical request text. Preserve historical fingerprints as data; never replay them as fresh authority.                                                                                               |
-| runtimeEvents                 | `runtimeEvents` owns logical event IDs, sequence, correlation and event metadata.                                                                                                             | Preserve sequence and ordering; inventory metadata by event producer before claiming reference completeness.                                                                                                                                                                                   |
-| auditEvents                   | `reasoningJournal` and other writers persist request/scope keys plus event-specific arbitrary payloads.                                                                                       | Scope is not uniformly a project foreign key. Inventory producers; audit evidence cannot hydrate authority or completion.                                                                                                                                                                      |
-| validationReports             | `reasoningJournal` stores request/scope keys, checks and diagnostic strings.                                                                                                                  | Preserve request linkage and historical results; diagnostic text is opaque, not a global ID-remapping surface.                                                                                                                                                                                 |
-| omegaMissions                 | Mission ID is logical; project key and acceptance-criterion IDs/evidence references define the mission graph.                                                                                 | Verify project/evidence edges. Preserve future assessment metadata as stale history; require fresh assessment rather than import completion authority.                                                                                                                                         |
-| omegaActionContracts          | `omegaActionContracts` resolves `toolActionId` using the action ID index. Mission/contract IDs, execution claim and reconciled receipt key are logical.                                       | Restore connected action/receipt history; preserve expiry and consumption. Scope is arbitrary and approval references require producer-specific classification.                                                                                                                                |
-| omegaEvidence                 | `omegaMissions.recordEvidence` resolves `contradicts[]` as mission-scoped logical evidence IDs. `sourceRef` is source-type-dependent.                                                         | Verify contradiction edges. Classify source references by source type; do not treat every sourceRef as a physical row ID.                                                                                                                                                                      |
-| omegaValidationProofs         | `recordValidationProof` resolves criterion IDs and evidenceRefs within the mission; proof ID is logical.                                                                                      | Restore these edges together and retain historical validation without asserting present completion.                                                                                                                                                                                            |
-| omegaContradictionResolutions | Resolution writer verifies both mission-scoped evidence IDs and the actual contradiction edge.                                                                                                | Retain decision actor/time and edge; never invoke the approval-token resolution mutation during restore.                                                                                                                                                                                       |
+| Table                         | Traced relationship and identity                                                                                                                                                                                                       | Remaining restore requirement                                                                                                                                                                                                                                                                  |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| projectRecords                | `projectRecords.upsert` resolves `projectKey` through projects and indexes `(owner, projectKey, recordId)`. `record.recordId` duplicates the logical record identity.                                                                  | Four memory kinds, empty-attribute components, and bounded risks are admitted. `component.parentComponentId` is a same-project logical record id and is not rewritten. Non-empty `attributes`, constraint `value`, task `dependencies`, and event `payload` stay unclassified and are refused. |
+| memoryChangeSets              | `memoryChangeSets.recordsForChangeSet` resolves nested `records[].recordId` against projectRecords within the project. Base/applied revisions bind the project snapshot.                                                               | Restore proposals and applied records consistently; retain approval history without invoking apply/approve. Pending approved proposals must remain unable to execute during restore.                                                                                                           |
+| toolActions                   | `toolActions` uses logical `actionId`, `requestId`, project scope and idempotency key; approval/consumption fields and `singleUseClaimId` carry execution history.                                                                     | Classify `arguments` by tool/operation and safety binding. Physical task/note/build IDs may be embedded in operation inputs; do not rewrite opaque arguments or mint replacement approval/fingerprint authority.                                                                               |
+| toolExecutionReceipts         | `toolExecutionReceipts.save` preserves caller receipt/action IDs and resolves replay by logical `receiptKey`. Optional legacy fields are allowed. The denial producer stores its row on a decision key, not the primary execution key. | The closed `not-authorized` decision receipt for a rejected `notes.create` action is admitted below. Primary-key effect receipts, indeterminate status, effect fingerprints, and every optional omission stay refused.                                                                         |
+| externalReconciliations       | `findReceipt` resolves `receiptKey` through the owner index; `receiptId` is the receipt's logical field, not `_id`. Action/execution/project keys are recorded alongside provider references.                                          | Remove live lease capability from operational restored state without losing archived history; retain indeterminate/escalated outcomes. Provider IDs remain opaque. Resolve receipt/action links and safety binding before enabling ordinary stores.                                            |
+| developmentSubjects           | `developmentState` resolves logical `subjectId`, explicit Omega mission binding, orchestration run/node binding, and last event.                                                                                                       | S5 is required for run/node edges. Preserve generations, fencing history and missing legacy bindings; do not infer completion from audit events.                                                                                                                                               |
+| developmentEvents             | Existing state queries scope event/request IDs by owner and subject. Causation/evidence IDs and arbitrary typed-event payloads are persisted with canonical request/event fingerprints.                                                | Classify every event producer, including payload lease data and physical IDs embedded in canonical request text. Preserve historical fingerprints as data; never replay them as fresh authority.                                                                                               |
+| runtimeEvents                 | `runtimeEvents` owns logical event IDs, sequence, correlation and event metadata.                                                                                                                                                      | Preserve sequence and ordering; inventory metadata by event producer before claiming reference completeness.                                                                                                                                                                                   |
+| auditEvents                   | `reasoningJournal` and other writers persist request/scope keys plus event-specific arbitrary payloads.                                                                                                                                | Scope is not uniformly a project foreign key. Inventory producers; audit evidence cannot hydrate authority or completion.                                                                                                                                                                      |
+| validationReports             | `reasoningJournal` stores request/scope keys, checks and diagnostic strings.                                                                                                                                                           | Preserve request linkage and historical results; diagnostic text is opaque, not a global ID-remapping surface.                                                                                                                                                                                 |
+| omegaMissions                 | Mission ID is logical; project key and acceptance-criterion IDs/evidence references define the mission graph.                                                                                                                          | Verify project/evidence edges. Preserve future assessment metadata as stale history; require fresh assessment rather than import completion authority.                                                                                                                                         |
+| omegaActionContracts          | `omegaActionContracts` resolves `toolActionId` using the action ID index. Mission/contract IDs, execution claim and reconciled receipt key are logical.                                                                                | Restore connected action/receipt history; preserve expiry and consumption. Scope is arbitrary and approval references require producer-specific classification.                                                                                                                                |
+| omegaEvidence                 | `omegaMissions.recordEvidence` resolves `contradicts[]` as mission-scoped logical evidence IDs. `sourceRef` is source-type-dependent.                                                                                                  | Verify contradiction edges. Classify source references by source type; do not treat every sourceRef as a physical row ID.                                                                                                                                                                      |
+| omegaValidationProofs         | `recordValidationProof` resolves criterion IDs and evidenceRefs within the mission; proof ID is logical.                                                                                                                               | Restore these edges together and retain historical validation without asserting present completion.                                                                                                                                                                                            |
+| omegaContradictionResolutions | Resolution writer verifies both mission-scoped evidence IDs and the actual contradiction edge.                                                                                                                                         | Retain decision actor/time and edge; never invoke the approval-token resolution mutation during restore.                                                                                                                                                                                       |
 
 ## Closed component and risk rows
 
@@ -180,13 +179,67 @@ Ordinary `projectRecords.listByKind` readback and the tagged digest cover these
 rows. Verification stays `completeness: partial` with `verifiedGroups: []`.
 `export-v4` does not seal `notesAndEvidence`.
 
-The next increment must classify receipts, reconciliations, development bindings,
-and omega edges, or a producer-specific subset of component attributes and
-constraint values. Action/receipt/reconciliation restore needs an explicit inert
-operational representation before it is safe. Development bindings cannot be
-called verified until they are restored in the same empty target as the closed
-terminal orchestration subset. None of these remaining edges is waived by this
-document.
+## Closed denial-decision receipts
+
+The same unregistered adapter now admits one receipt producer and nothing else
+in `toolExecutionReceipts`. Logical `receiptKey` and `receiptId` stay verbatim.
+Convex physical ids stay on the existing table-scoped S4 identity list.
+`UuidRemapper` is not used: this path does not mint logical ids.
+
+Admitted receipts are the rows `ToolExecutionService` writes from
+`persistDecision` when a never-approved rejected `notes.create` action is
+executed and blocked with `not-authorized`. The stored key is
+`projectId:actionId:idempotencyKey:decision:receiptId:completedAt`, using the
+producer's receipt id and the ISO form of `completedAt`. Default policy version
+`totality-policy:v1`, source `tool-execution-service`, and correlation id equal
+to the action request id are required. The action fingerprint must match
+`fingerprintToolAction` for that rejected action. `startedAt` and `completedAt`
+are integer epoch milliseconds, and `completedAt` is not earlier than
+`startedAt`. The receipt must name that action's project, request, tool,
+operation, and actor.
+
+This row is denial evidence. It is not stored at the primary execution key, so
+restore does not install a replay hit. It carries the execute-phase safety
+binding for an internal registered tool when granted authority equals the
+action's required authority, approval is absent, and the action state is not
+approved. That binding is compared with `bindSafety` and stored unchanged. It
+carries no `approvalId`, effect fingerprint, provider reference, reconciliation
+id, or output digest. Restore inserts the captured document directly and does
+not call `toolExecutionReceipts.save`, so omega receipt reconciliation is not
+scheduled.
+
+A later `execute` of the same rejected action still blocks, runs no tool, and
+appends a new decision receipt. The restored row stays unchanged. `approve`
+still fails because the action remains rejected.
+
+Still refused:
+
+- any receipt whose key is the primary execution key, including `succeeded`,
+  `failed`, `indeterminate`, `dry-run`, and other `blocked` outcomes;
+- any extra field the denial producer omits, including `approvalId`,
+  `effectFingerprint`, `reconciliationId`, `outputDigest`, and `provider`;
+- a safety binding that does not match that execute-phase producer, including
+  a denial made with a different granted authority or an unregistered tool;
+- caller overrides of policy version, source, or correlation id;
+- `externalReconciliations`, including a claimed row with a live lease sitting
+  beside an otherwise closed denial receipt;
+- component `attributes` and constraint `value`, including a scalar string
+  value, because no producer classification exists for those `v.any()` fields;
+- development bindings and omega rows.
+
+Ordinary `toolExecutionReceipts.get` readback and the tagged digest cover the
+admitted rows. The joint S4/S6 primitive accepts these receipts only when the
+S6 copy is byte-identical to the classified S4 rows. A mismatched S6 receipt
+inventory fails before insert. Verification stays `completeness: partial` with
+`verifiedGroups: []`. `export-v4` does not seal `notesAndEvidence`.
+
+The next increment must classify primary-key effect receipts together with an
+inert reconciliation representation, or a producer-specific subset of component
+attributes and constraint values. Development bindings cannot be called verified
+until they are restored in the same empty target as the closed terminal
+orchestration subset. Omega edges stay refused until a contradiction, evidence,
+and mission graph closes without minting completion authority. None of these
+remaining edges is waived by this document.
 
 ## Joint S4 and mutable-quote proof (2026-09-11)
 
@@ -204,8 +257,10 @@ owner rows, then uses the existing typed insertion helpers within one Convex
 transaction. A later quote insertion failure rolls back earlier S4 rows. The
 standalone restore wrappers keep their original empty-target and unsupported-data
 checks. Only the existing strict rejected-note-action classifier can admit shared
-actions; receipts, reconciliations, active approvals and all other action forms
-remain unsupported.
+actions. Shared receipts are admitted only when they are the closed
+denial-decision rows the S4 classifier already accepted and the S6 copy matches
+those rows byte for byte. Reconciliations, active approvals, and every other
+receipt form remain unsupported.
 
 `verifyRestoredS4S6` reuses the ordinary S4/S6 store verifiers, a single joint
 provider recapture, table-scoped identity maps, exact restored digests, and actual

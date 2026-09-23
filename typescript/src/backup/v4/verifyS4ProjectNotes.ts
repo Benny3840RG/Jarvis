@@ -5,6 +5,7 @@ import { api } from "../../../convex/_generated/api.js";
 import type { Doc } from "../../../convex/_generated/dataModel.js";
 import { ConvexMemoryChangeSetService } from "../../persistence/convexMemoryChangeSets.js";
 import { ConvexToolActionService } from "../../persistence/convexToolActions.js";
+import { ConvexToolExecutionReceiptStore } from "../../persistence/convexToolExecutionReceipts.js";
 import { ConvexNoteStore } from "../../persistence/convexNotes.js";
 import { ConvexTotalityJournal } from "../../persistence/convexTotalityJournal.js";
 import type { ConvexClientLike } from "../../persistence/convexPersistence.js";
@@ -48,11 +49,13 @@ export async function verifyRestoredS4ProjectNotes(
     projectRecords: [] as Doc<"projectRecords">[],
     memoryChangeSets: [] as Doc<"memoryChangeSets">[],
     toolActions: [] as Doc<"toolActions">[],
+    toolExecutionReceipts: [] as Doc<"toolExecutionReceipts">[],
     auditEvents: [] as Doc<"auditEvents">[],
   };
   const projects = new ConvexTotalityJournal(client, serviceToken),
     notes = new ConvexNoteStore(client, serviceToken);
   const actions = new ConvexToolActionService(client, serviceToken);
+  const receipts = new ConvexToolExecutionReceiptStore(client, serviceToken);
   const memory = new ConvexMemoryChangeSetService(client, serviceToken);
   const recordGroups = new Map<string, Doc<"projectRecords">[]>();
   const auditRequests = new Map<string, Doc<"auditEvents">[]>();
@@ -260,6 +263,49 @@ export async function verifyRestoredS4ProjectNotes(
           _id: original._id,
           _creationTime: original._creationTime,
         });
+      } else if (table === "toolExecutionReceipts") {
+        const original = source.toolExecutionReceipts[i]!;
+        const row = (await client.query(api.toolExecutionReceipts.get, {
+          serviceToken,
+          receiptKey: original.receiptKey,
+        })) as Doc<"toolExecutionReceipts"> | null;
+        if (!row || row._id !== mapping.targetId)
+          throw new Error("Restored denial receipt identity mismatch.");
+        if (
+          !isDeepStrictEqual(
+            row,
+            actual.toolExecutionReceipts.find((value) => value._id === row._id),
+          )
+        )
+          throw new Error("Restored denial receipt changed during readback.");
+        const normal = await receipts.get(original.receiptKey);
+        if (
+          !isDeepStrictEqual(normal, {
+            receiptId: row.receiptId,
+            actionId: row.actionId,
+            requestId: row.requestId,
+            projectId: row.projectId,
+            idempotencyKey: row.idempotencyKey,
+            actionFingerprint: row.actionFingerprint,
+            tool: row.tool,
+            operation: row.operation,
+            actor: row.actor,
+            policyVersion: row.policyVersion,
+            correlationId: row.correlationId,
+            source: row.source,
+            status: row.status,
+            errorCode: row.errorCode,
+            safetyBinding: row.safetyBinding,
+            startedAt: new Date(row.startedAt).toISOString(),
+            completedAt: new Date(row.completedAt).toISOString(),
+          })
+        )
+          throw new Error("Ordinary denial receipt read mismatch.");
+        restored.toolExecutionReceipts.push({
+          ...row,
+          _id: original._id,
+          _creationTime: original._creationTime,
+        });
       } else {
         const original = source.auditEvents[i]!;
         const requestId = original.requestId!;
@@ -300,6 +346,7 @@ export async function verifyRestoredS4ProjectNotes(
     referenceCount:
       restored.notes.length +
       restored.toolActions.length +
+      restored.toolExecutionReceipts.length +
       restored.projectRecords.length +
       restored.memoryChangeSets.length +
       restored.auditEvents.length +
