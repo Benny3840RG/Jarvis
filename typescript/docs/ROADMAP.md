@@ -1,5 +1,17 @@
 # Jarvis TypeScript Roadmap
 
+## Verification failure routes to repair (2026-09-23, #550)
+
+`DEV_TRANSITION_VERIFYING_TO_REPAIR_REQUIRED` now uses the trusted evidence
+boundary. Repair admits a worker checkpoint recorded as failed, including one
+with no commit SHA, or blocking verification evidence for the current head. A
+missing checkpoint, a successful worker without blocking evidence, or a clean
+result stays in `VERIFYING`. A clean receipt contradicts a failed checkpoint
+and is refused. A clean review still cannot enter repair.
+The pure kernel does not decide these gates; the Convex commit is the proof.
+This does not clear the automation-blocked label or run a live verification
+provider.
+
 ## Governed external operation boundary (2026-09-23)
 
 `GovernedExternalOperation` is the adapter a later Temporal activity must call
