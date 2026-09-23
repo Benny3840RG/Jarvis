@@ -21,16 +21,28 @@ async function main(): Promise<void> {
   // unhandled-rejection policy kills the process with no useful message.
   // Racing it in means that rejection reaches `main()`'s own catch handler
   // immediately, with the real error attached.
-  await Promise.race([
-    (async () => {
-      while (worker.getState() !== "RUNNING") {
-        await sleep(10);
-      }
-    })(),
-    runPromise.then(() => {
-      throw new Error("Worker run() returned before reaching the RUNNING state");
-    }),
-  ]);
+  const readinessAbort = new AbortController();
+  try {
+    await Promise.race([
+      (async () => {
+        try {
+          while (worker.getState() !== "RUNNING") {
+            await sleep(10, undefined, { signal: readinessAbort.signal });
+          }
+        } catch (error: unknown) {
+          if (!readinessAbort.signal.aborted) throw error;
+        }
+      })(),
+      runPromise.then(() => {
+        throw new Error("Worker run() returned before reaching the RUNNING state");
+      }),
+    ]);
+  } finally {
+    // If run() wins the race (failure or early return), stop the readiness
+    // timer immediately. Otherwise the outstanding timer can keep this thin
+    // worker process alive after shutdown and make Tier 2 tests hang.
+    readinessAbort.abort();
+  }
   console.log("WORKER_READY");
 
   await runPromise;
