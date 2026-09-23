@@ -1,5 +1,31 @@
 # Jarvis TypeScript Roadmap
 
+## Governed external operation boundary (2026-09-23)
+
+`GovernedExternalOperation` is the adapter a later Temporal activity must call
+for one external effect. It stages through the existing ToolAction service and
+executes only through `ToolExecutionService`, which already claims single-use
+actions (including the ΩΣ gate) or verifies reusable actions, writes receipts,
+and schedules external reconciliation. Omega claim refusals now map to
+`not-authorized` or `approval-expired` instead of `approval-consumed`, because
+those refusals do not write the claim. The adapter rejects a PolicyEngine
+allowlist, the fail-open in-memory gates, an unclassified consumption policy,
+and any non-external tool. `createGovernedExternalOperationFromEnv` returns
+null unless Convex persistence is selected. No new approval system, Temporal
+workflow, or GitHub merge activity was added.
+
+See [the boundary note](architecture/governed-external-operation.md).
+
+Next:
+
+1. Rebase preview Temporal (#572) onto this boundary and replace one mocked
+   external activity with `createGovernedExternalOperationFromEnv`. Do not let
+   that preview `PolicyEngine` become the execution gate.
+2. Keep direct provider calls out of the activity. The registered tool
+   definition runs only after the claim or eligibility gate.
+3. Leave `verifyExecutionEligibility` without a second ΩΣ check; Omega
+   contracts remain single-use and are gated inside `claimSingleUseExecution`.
+
 ## S4 closed component and risk restore (2026-09-23)
 
 The existing unregistered S4 adapter now restores current component and risk

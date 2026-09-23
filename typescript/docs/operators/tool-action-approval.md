@@ -73,6 +73,22 @@ expired reusable action is now refused with the same `errorCode`s (`"not-authori
 as the single-use path above, and expiry is durably observed the same way. Neither block reason invokes the
 provider.
 
+An ΩΣ contract or mission refusal from `claimSingleUseExecution`
+(`omega-mission-not-executable`, `omega-contract-not-authorized`,
+`omega-contract-authority-mismatch`, `omega-contract-expired`) is also not
+consumption. The claim is not written. Those refusals map to `not-authorized`,
+except an expired Omega contract, which maps to `approval-expired`. A missing
+block reason maps to `not-authorized` rather than `approval-consumed`.
+
+A later Temporal activity must call `GovernedExternalOperation` in
+`src/actions/governedExternalOperation.ts` (`createGovernedExternalOperationFromEnv`
+when Convex persistence is selected). That adapter reloads the stored action
+and then uses this executor. It refuses a PolicyEngine allowlist, the fail-open
+in-memory claim and eligibility defaults, an unclassified consumption policy,
+and any tool that is not a registered external operation. It does not approve
+and it does not add a second policy engine. See
+[the boundary note](../architecture/governed-external-operation.md).
+
 Revocation (`POST .../revoke`, see below) is owner-scoped, idempotent for a repeated identical reason, and
 prospective-only: it stops a future execution attempt and never claims to undo one already in flight. **This
 consumed-conflict refusal applies only to single-use actions** — the only ones with a single, atomic attempt
