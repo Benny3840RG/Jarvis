@@ -676,6 +676,31 @@ test("does not treat header-shaped hunk content as path metadata", () => {
   }
 });
 
+test("allows authority vocabulary in recognised test files without exempting source", () => {
+  const testPatch = [
+    "diff --git a/typescript/tests/developmentStateMachine.test.ts b/typescript/tests/developmentStateMachine.test.ts",
+    "--- a/typescript/tests/developmentStateMachine.test.ts",
+    "+++ b/typescript/tests/developmentStateMachine.test.ts",
+    "@@ -1,0 +1,2 @@",
+    "+const authority = computeAuthorityEnvelopeHash(envelope);",
+    "+assert.equal(result.approval, authority);",
+  ].join("\n");
+  assert.deepEqual(evaluatePatch(testPatch), { ok: true, reasons: [] });
+
+  const sourcePatch = [
+    "diff --git a/typescript/src/development/stateMachine.ts b/typescript/src/development/stateMachine.ts",
+    "--- a/typescript/src/development/stateMachine.ts",
+    "+++ b/typescript/src/development/stateMachine.ts",
+    "@@ -1,0 +1,1 @@",
+    "+const authority = input.authority;",
+  ].join("\n");
+  const sourceResult = evaluatePatch(sourcePatch);
+  assert.equal(sourceResult.ok, false);
+  assert.ok(
+    sourceResult.reasons.some((reason) => reason.includes("authority-sensitive")),
+  );
+});
+
 test("allows ordinary implementation patches", () => {
   assert.deepEqual(
     evaluatePatch(
