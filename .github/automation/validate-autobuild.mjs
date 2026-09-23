@@ -222,13 +222,20 @@ export function evaluatePatch(patch) {
     // executable path is still scanned: `oldPath` for the removed lines is the
     // original location, which does not match here.
     if (/^docs\/.+\.md$/.test(currentPath)) continue;
-    // New test coverage needs to be able to name authority/security behavior
-    // without being mistaken for an executable authority change. Removed test
-    // lines stay scanned so an autonomous patch cannot launder or weaken an
-    // existing authority-sensitive assertion through a rename or deletion.
-    // Secret-like material is independently rejected by the trusted workflow.
-    if (line.startsWith("+") && TEST_PATH.test(currentPath)) continue;
-    if (sensitive.test(line.slice(1))) {
+    // Test titles are descriptive evidence, not executable authority changes.
+    // Neutralize only the first literal passed to test/it/describe on added
+    // recognised test lines. The rest of the line remains scanned, so code such
+    // as `const authority = ...` or an inline authority-changing callback still
+    // fails closed. Removed test lines remain fully scanned.
+    const content = line.slice(1);
+    const scannedContent =
+      line.startsWith("+") && TEST_PATH.test(currentPath)
+        ? content.replace(
+            /^(\s*(?:test|it|describe)\s*\(\s*)(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`)/,
+            "$1",
+          )
+        : content;
+    if (sensitive.test(scannedContent)) {
       reasons.push(
         `authority-sensitive patch content at diff line ${index + 1}`,
       );
