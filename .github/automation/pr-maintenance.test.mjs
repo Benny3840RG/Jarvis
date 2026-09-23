@@ -140,6 +140,30 @@ test("only failed verification or concrete review findings can request a bounded
     }),
     "blocked",
   );
+  const blockedWithFinding = {
+    ...review,
+    verdict: "blocked",
+    findings: [
+      {
+        file: "a.ts",
+        line: 1,
+        severity: "medium",
+        message: "Concrete defect survives an incomplete review.",
+      },
+    ],
+  };
+  assert.equal(
+    maintenanceDisposition({ ...input, review: blockedWithFinding }),
+    "repair",
+  );
+  assert.equal(
+    maintenanceDisposition({
+      ...input,
+      review: blockedWithFinding,
+      repairEligible: false,
+    }),
+    "owner-repair-required",
+  );
 });
 
 test("review context uses complete exact-revision file contents and fails closed on omissions", async () => {
