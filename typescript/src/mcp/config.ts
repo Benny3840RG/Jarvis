@@ -1,8 +1,14 @@
 import { isIP } from "node:net";
 
+export const MCP_BACKEND_DEADLINE_MIN_MS = 1;
+export const MCP_BACKEND_DEADLINE_MAX_MS = 120_000;
+export const MCP_BACKEND_DEADLINE_DEFAULT_MS = 30_000;
+
 export type JarvisApiConfig = {
   baseUrl: URL;
   serviceToken: string;
+  /** Overrides the default MCP-to-HTTP deadline. Omitted values use the default. */
+  backendDeadlineMs?: number;
 };
 
 export type JarvisMcpConfig = {
@@ -98,6 +104,39 @@ function resolveHost(env: NodeJS.ProcessEnv): string {
   return host;
 }
 
+export function resolveMcpBackendDeadlineMs(value: number | undefined): number {
+  if (value === undefined) return MCP_BACKEND_DEADLINE_DEFAULT_MS;
+  if (
+    !Number.isSafeInteger(value) ||
+    value < MCP_BACKEND_DEADLINE_MIN_MS ||
+    value > MCP_BACKEND_DEADLINE_MAX_MS
+  ) {
+    throw new Error(
+      `MCP backend deadline must be an integer between ${MCP_BACKEND_DEADLINE_MIN_MS} and ${MCP_BACKEND_DEADLINE_MAX_MS} milliseconds.`,
+    );
+  }
+  return value;
+}
+
+function parseBackendDeadline(value: string | undefined): number | undefined {
+  const raw = optionalText(value);
+  if (raw === undefined) return undefined;
+  if (!/^\d+$/.test(raw)) {
+    throw new Error(
+      `JARVIS_MCP_BACKEND_DEADLINE_MS must be an integer between ${MCP_BACKEND_DEADLINE_MIN_MS} and ${MCP_BACKEND_DEADLINE_MAX_MS}.`,
+    );
+  }
+  const deadline = Number(raw);
+  try {
+    resolveMcpBackendDeadlineMs(deadline);
+  } catch {
+    throw new Error(
+      `JARVIS_MCP_BACKEND_DEADLINE_MS must be an integer between ${MCP_BACKEND_DEADLINE_MIN_MS} and ${MCP_BACKEND_DEADLINE_MAX_MS}.`,
+    );
+  }
+  return deadline;
+}
+
 function resolveApiBaseUrl(env: NodeJS.ProcessEnv): URL {
   const fallbackPort = optionalText(env.JARVIS_HTTP_PORT) ?? "3000";
   const raw = optionalText(env.JARVIS_API_BASE_URL) ?? `http://127.0.0.1:${fallbackPort}`;
@@ -132,6 +171,7 @@ export function resolveJarvisMcpConfig(env: NodeJS.ProcessEnv = process.env): Ja
     api: {
       baseUrl: resolveApiBaseUrl(env),
       serviceToken: requiredSecret(env.JARVIS_SERVICE_TOKEN, "JARVIS_SERVICE_TOKEN"),
+      backendDeadlineMs: parseBackendDeadline(env.JARVIS_MCP_BACKEND_DEADLINE_MS),
     },
   };
 }

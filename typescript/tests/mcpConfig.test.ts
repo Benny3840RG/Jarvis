@@ -88,4 +88,34 @@ describe("Jarvis MCP preview configuration", () => {
       /between 1 and 65535/,
     );
   });
+
+  it("fails closed on an invalid backend deadline and keeps a bounded override", () => {
+    assert.equal(
+      resolveJarvisMcpConfig({ JARVIS_SERVICE_TOKEN: "test-service-token" }).api.backendDeadlineMs,
+      undefined,
+    );
+    assert.throws(
+      () =>
+        resolveJarvisMcpConfig({
+          JARVIS_SERVICE_TOKEN: "test-service-token",
+          JARVIS_MCP_BACKEND_DEADLINE_MS: "0",
+        }),
+      /JARVIS_MCP_BACKEND_DEADLINE_MS/,
+    );
+    assert.throws(
+      () =>
+        resolveJarvisMcpConfig({
+          JARVIS_SERVICE_TOKEN: "test-service-token",
+          JARVIS_MCP_BACKEND_DEADLINE_MS: "soon",
+        }),
+      /JARVIS_MCP_BACKEND_DEADLINE_MS/,
+    );
+    assert.equal(
+      resolveJarvisMcpConfig({
+        JARVIS_SERVICE_TOKEN: "test-service-token",
+        JARVIS_MCP_BACKEND_DEADLINE_MS: "15000",
+      }).api.backendDeadlineMs,
+      15_000,
+    );
+  });
 });
