@@ -711,6 +711,15 @@ test("allows authority vocabulary only in added test descriptions", () => {
   ].join("\n");
   assert.equal(evaluatePatch(inlineExecutablePatch).ok, false);
 
+  const interpolatedTemplatePatch = [
+    "diff --git a/typescript/tests/developmentStateMachine.test.ts b/typescript/tests/developmentStateMachine.test.ts",
+    "--- a/typescript/tests/developmentStateMachine.test.ts",
+    "+++ b/typescript/tests/developmentStateMachine.test.ts",
+    "@@ -1,0 +1,1 @@",
+    "+test(\`${requireApprovalBeforeExecution()}\`, () => {});",
+  ].join("\n");
+  assert.equal(evaluatePatch(interpolatedTemplatePatch).ok, false);
+
   const sourcePatch = [
     "diff --git a/typescript/src/development/stateMachine.ts b/typescript/src/development/stateMachine.ts",
     "--- a/typescript/src/development/stateMachine.ts",
