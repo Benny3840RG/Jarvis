@@ -41,8 +41,8 @@ restore path calls it yet.
 - v3 archives still omit those domains.
 - v4 writes the JSON business records with logical ids preserved.
 - `notesAndEvidence` is not sealed in either archive. The isolated S4 adapter
-  preserves logical note, component, and risk ids and does not call
-  `UuidRemapper`.
+  preserves logical note, component, risk, and denial-receipt ids and does not
+  call `UuidRemapper`.
 - Invoice `payments[].id` and enquiry `attachmentRefs` are not in the field list.
 
 A later minting restore has to `remap` or `bind` every primary id on one

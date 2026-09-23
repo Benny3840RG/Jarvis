@@ -206,6 +206,9 @@ const AUTHORITY_LEVEL: Record<ToolAuthority, number> = {
 const MAX_TIMEOUT_MS = 30_000;
 const ACTION_FINGERPRINT_VERSION = "jarvis-action-fingerprint:v1";
 const EFFECT_FINGERPRINT_VERSION = "jarvis-effect-fingerprint:v1";
+/** Default metadata on a decision receipt when execute() supplies no override. */
+export const DEFAULT_TOOL_EXECUTION_POLICY_VERSION = "totality-policy:v1";
+export const DEFAULT_TOOL_EXECUTION_SOURCE = "tool-execution-service";
 
 function digest(value: unknown): string {
   return sha256Hex(canonicalJson(value));
@@ -261,7 +264,10 @@ export function fingerprintToolEffect(action: ToolAction): string {
   return `${EFFECT_FINGERPRINT_VERSION}:${hash}`;
 }
 
-function internalExecutionKey(action: ToolAction, idempotencyKey: string): string {
+function internalExecutionKey(
+  action: Pick<ToolAction, "projectId" | "actionId">,
+  idempotencyKey: string,
+): string {
   return `${action.projectId}:${action.actionId}:${idempotencyKey}`;
 }
 
@@ -306,7 +312,7 @@ export function computeExternalReconciliationId(
 }
 
 function receiptId(
-  action: ToolAction,
+  action: Pick<ToolAction, "projectId" | "actionId">,
   idempotencyKey: string,
   status: ToolExecutionStatus,
 ): string {
@@ -316,6 +322,23 @@ function receiptId(
     idempotencyKey,
     status,
   }).slice(0, 32);
+}
+
+/**
+ * Identity of a `persistDecision` row. The storage key is not the primary
+ * execution key, so this record is denial evidence rather than a replay hit.
+ */
+export function persistedDecisionReceiptIdentity(
+  action: Pick<ToolAction, "projectId" | "actionId">,
+  idempotencyKey: string,
+  status: ToolExecutionStatus,
+  completedAtIso: string,
+): { receiptId: string; receiptKey: string } {
+  const id = receiptId(action, idempotencyKey, status);
+  return {
+    receiptId: id,
+    receiptKey: `${internalExecutionKey(action, idempotencyKey)}:decision:${id}:${completedAtIso}`,
+  };
 }
 
 type ExecutionMetadata = {
@@ -358,9 +381,9 @@ function receipt(
     operation: action.operation,
     actor: action.proposedBy,
     ...(metadata.approvalId === undefined ? {} : { approvalId: metadata.approvalId }),
-    policyVersion: metadata.policyVersion ?? "totality-policy:v1",
+    policyVersion: metadata.policyVersion ?? DEFAULT_TOOL_EXECUTION_POLICY_VERSION,
     correlationId: metadata.correlationId ?? action.requestId,
-    source: metadata.source ?? "tool-execution-service",
+    source: metadata.source ?? DEFAULT_TOOL_EXECUTION_SOURCE,
     ...(metadata.provider === undefined ? {} : { provider: metadata.provider }),
     ...(metadata.providerRequestId === undefined
       ? {}

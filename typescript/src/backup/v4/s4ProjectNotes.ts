@@ -1,4 +1,5 @@
 import { jsonToConvex } from "convex/values";
+import { validateS4DenialReceipts } from "./s4DenialReceipts.js";
 import { validateS4RejectedActions } from "./s4RejectedActions.js";
 import { validateS4MemoryHistory } from "./s4MemoryHistory.js";
 import type { Doc, Id } from "../../../convex/_generated/dataModel.js";
@@ -18,6 +19,7 @@ export const S4_RESTORE_TABLES = [
   "notes",
   "memoryChangeSets",
   "toolActions",
+  "toolExecutionReceipts",
   "auditEvents",
 ] as const;
 export type S4RestoreTable = (typeof S4_RESTORE_TABLES)[number];
@@ -71,6 +73,7 @@ export function readS4ProjectNotes(capture: S4EncodedCapture): S4ProjectNotesSou
     projectRecords: [],
     memoryChangeSets: [],
     toolActions: [],
+    toolExecutionReceipts: [],
     auditEvents: [],
   };
   let totalRows = 0;
@@ -120,6 +123,8 @@ export function readS4ProjectNotes(capture: S4EncodedCapture): S4ProjectNotesSou
     else if (table === "memoryChangeSets")
       result.memoryChangeSets = entry.documents as Doc<"memoryChangeSets">[];
     else if (table === "toolActions") result.toolActions = entry.documents as Doc<"toolActions">[];
+    else if (table === "toolExecutionReceipts")
+      result.toolExecutionReceipts = entry.documents as Doc<"toolExecutionReceipts">[];
     else result.auditEvents = entry.documents as Doc<"auditEvents">[];
   }
   const projects = new Set<string>();
@@ -155,6 +160,7 @@ export function readS4ProjectNotes(capture: S4EncodedCapture): S4ProjectNotesSou
     if (count > 100) throw new Error("Audit request exceeds ordinary read limit of 100.");
   }
   const actionEvents = validateS4RejectedActions(result);
+  validateS4DenialReceipts(result);
   validateS4MemoryHistory({
     ...result,
     auditEvents: result.auditEvents.filter((event) => !actionEvents.has(event)),
