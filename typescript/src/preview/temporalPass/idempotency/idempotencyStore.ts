@@ -171,7 +171,11 @@ export class IdempotencyStore {
    * retries) and asserts the final mock-repo state matches what the
    * idempotency store recorded — not just that *some* build happened.
    */
-  async runIdempotent<T>(key: string, operation: string, execute: () => Promise<T>): Promise<T> {
+  async runIdempotent<T>(
+    key: string,
+    operation: string,
+    execute: () => Promise<T>,
+  ): Promise<T> {
     const existing = await this.get(key);
     if (existing?.state === "completed") {
       return existing.result as T;
