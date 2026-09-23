@@ -8,6 +8,7 @@ import {
   computePolicyDecisionFingerprint,
   evaluateDevelopmentTransition,
   type CapabilityEnvelope,
+  type TransitionDefinition,
   type TransitionRequest,
 } from "../src/development/stateMachine.js";
 
@@ -42,6 +43,78 @@ function baseRequest(overrides: Partial<TransitionRequest> = {}): TransitionRequ
     ...overrides,
   };
 }
+
+test("authority envelope hashing is deterministic for independently-built equal envelopes", () => {
+  const first: CapabilityEnvelope = {
+    repositories: ["Benny3840RG/Jarvis"],
+    branches: ["agent/example"],
+    externalEffects: ["github.merge"],
+    maxRiskClass: 3,
+  };
+  const second: CapabilityEnvelope = {
+    repositories: ["Benny3840RG/Jarvis"],
+    branches: ["agent/example"],
+    externalEffects: ["github.merge"],
+    maxRiskClass: 3,
+  };
+
+  assert.equal(computeAuthorityEnvelopeHash(first), computeAuthorityEnvelopeHash(second));
+});
+
+test("authority envelope hashing is sensitive to every envelope field", () => {
+  const envelope: CapabilityEnvelope = {
+    repositories: ["Benny3840RG/Jarvis"],
+    branches: ["agent/example"],
+    externalEffects: ["github.merge"],
+    maxRiskClass: 3,
+  };
+
+  assert.notEqual(
+    computeAuthorityEnvelopeHash(envelope),
+    computeAuthorityEnvelopeHash({ ...envelope, repositories: ["other/repository"] }),
+  );
+  assert.notEqual(
+    computeAuthorityEnvelopeHash(envelope),
+    computeAuthorityEnvelopeHash({ ...envelope, branches: ["main"] }),
+  );
+  assert.notEqual(
+    computeAuthorityEnvelopeHash(envelope),
+    computeAuthorityEnvelopeHash({ ...envelope, externalEffects: ["github.close_issue"] }),
+  );
+  assert.notEqual(
+    computeAuthorityEnvelopeHash(envelope),
+    computeAuthorityEnvelopeHash({ ...envelope, maxRiskClass: 4 }),
+  );
+});
+
+test("policy decision fingerprint ignores unrelated transition definition changes", () => {
+  const definition: TransitionDefinition =
+    DEVELOPMENT_TRANSITIONS.DEV_TRANSITION_CLAIMED_TO_BUILDING;
+  const changedUnrelatedFields: TransitionDefinition = {
+    ...definition,
+    gates: ["different_gate"],
+    evaluator: "different_evaluator",
+  };
+
+  assert.equal(
+    computePolicyDecisionFingerprint(definition),
+    computePolicyDecisionFingerprint(changedUnrelatedFields),
+  );
+});
+
+test("policy decision fingerprint is sensitive to side-effect class and invariants", () => {
+  const definition: TransitionDefinition =
+    DEVELOPMENT_TRANSITIONS.DEV_TRANSITION_CLAIMED_TO_BUILDING;
+
+  assert.notEqual(
+    computePolicyDecisionFingerprint(definition),
+    computePolicyDecisionFingerprint({ ...definition, sideEffectClass: "S3" }),
+  );
+  assert.notEqual(
+    computePolicyDecisionFingerprint(definition),
+    computePolicyDecisionFingerprint({ ...definition, invariants: ["different_invariant"] }),
+  );
+});
 
 test("transition registry exposes stable claimed-to-building contract", () => {
   const transition = DEVELOPMENT_TRANSITIONS.DEV_TRANSITION_CLAIMED_TO_BUILDING;
@@ -149,6 +222,8 @@ test("risk class 2 merge is admitted with matching explicit operator approval", 
         policyDecisionFingerprint: computePolicyDecisionFingerprint(
           DEVELOPMENT_TRANSITIONS.DEV_TRANSITION_READY_TO_MERGE_TO_MERGED,
         ),
+        policySubjectVersion: 1,
+        transitionCommitted: false,
       },
     }),
   );

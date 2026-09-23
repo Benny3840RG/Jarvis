@@ -90,6 +90,12 @@ Jarvis MCP:  http://127.0.0.1:8787/mcp
 `npm run start:mcp` starts only the MCP adapter and expects Jarvis HTTP to already be running.
 `JARVIS_API_BASE_URL` may override its backend URL.
 
+Each MCP call to Jarvis HTTP has a 30 second deadline (`JARVIS_MCP_BACKEND_DEADLINE_MS`,
+an integer from 1 to 120000). An invalid value refuses startup. If the ChatGPT
+connection closes first, the adapter cancels the outbound HTTP call. That stops
+the preview waiting; it does not undo a task or reminder the HTTP API has already
+accepted.
+
 ## Binding guard
 
 The HTTP and MCP adapters bind to loopback by default. Any non-loopback `JARVIS_HTTP_HOST` or

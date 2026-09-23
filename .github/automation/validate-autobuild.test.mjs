@@ -676,6 +676,69 @@ test("does not treat header-shaped hunk content as path metadata", () => {
   }
 });
 
+test("allows authority vocabulary only in added test descriptions", () => {
+  const descriptionPatch = [
+    "diff --git a/typescript/tests/developmentStateMachine.test.ts b/typescript/tests/developmentStateMachine.test.ts",
+    "--- a/typescript/tests/developmentStateMachine.test.ts",
+    "+++ b/typescript/tests/developmentStateMachine.test.ts",
+    "@@ -1,0 +1,2 @@",
+    "+test(\"authority envelope hash is deterministic\", () => {",
+    "+  assert.equal(left, right);",
+  ].join("\n");
+  assert.deepEqual(evaluatePatch(descriptionPatch), { ok: true, reasons: [] });
+
+  const executableTestPatch = [
+    "diff --git a/typescript/tests/developmentStateMachine.test.ts b/typescript/tests/developmentStateMachine.test.ts",
+    "--- a/typescript/tests/developmentStateMachine.test.ts",
+    "+++ b/typescript/tests/developmentStateMachine.test.ts",
+    "@@ -1,0 +1,1 @@",
+    "+const authority = computeAuthorityEnvelopeHash(envelope);",
+  ].join("\n");
+  const executableTestResult = evaluatePatch(executableTestPatch);
+  assert.equal(executableTestResult.ok, false);
+  assert.ok(
+    executableTestResult.reasons.some((reason) =>
+      reason.includes("authority-sensitive"),
+    ),
+  );
+
+  const inlineExecutablePatch = [
+    "diff --git a/typescript/tests/developmentStateMachine.test.ts b/typescript/tests/developmentStateMachine.test.ts",
+    "--- a/typescript/tests/developmentStateMachine.test.ts",
+    "+++ b/typescript/tests/developmentStateMachine.test.ts",
+    "@@ -1,0 +1,1 @@",
+    "+test(\"authority behavior\", () => { const authority = input.authority; });",
+  ].join("\n");
+  assert.equal(evaluatePatch(inlineExecutablePatch).ok, false);
+
+  const interpolatedTemplatePatch = [
+    "diff --git a/typescript/tests/developmentStateMachine.test.ts b/typescript/tests/developmentStateMachine.test.ts",
+    "--- a/typescript/tests/developmentStateMachine.test.ts",
+    "+++ b/typescript/tests/developmentStateMachine.test.ts",
+    "@@ -1,0 +1,1 @@",
+    "+test(\`${requireApprovalBeforeExecution()}\`, () => {});",
+  ].join("\n");
+  assert.equal(evaluatePatch(interpolatedTemplatePatch).ok, false);
+
+  const sourcePatch = [
+    "diff --git a/typescript/src/development/stateMachine.ts b/typescript/src/development/stateMachine.ts",
+    "--- a/typescript/src/development/stateMachine.ts",
+    "+++ b/typescript/src/development/stateMachine.ts",
+    "@@ -1,0 +1,1 @@",
+    "+const authority = input.authority;",
+  ].join("\n");
+  assert.equal(evaluatePatch(sourcePatch).ok, false);
+
+  const removedTestPatch = [
+    "diff --git a/typescript/tests/developmentStateMachine.test.ts b/typescript/tests/developmentStateMachine.test.ts",
+    "--- a/typescript/tests/developmentStateMachine.test.ts",
+    "+++ b/typescript/tests/developmentStateMachine.test.ts",
+    "@@ -1,1 +0,0 @@",
+    "-test(\"authority behavior\", () => {});",
+  ].join("\n");
+  assert.equal(evaluatePatch(removedTestPatch).ok, false);
+});
+
 test("allows ordinary implementation patches", () => {
   assert.deepEqual(
     evaluatePatch(

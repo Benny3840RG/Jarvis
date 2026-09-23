@@ -22,6 +22,7 @@ import {
   type JarvisEvent,
 } from "./events.js";
 import {
+  committedApprovalEventFields,
   evaluateDevelopmentTransition,
   type DevelopmentState,
   type TransitionRequest,
@@ -380,7 +381,7 @@ export class InMemoryDevelopmentProjectionStore {
           to: request.to,
           sourceSubjectVersion: current.subjectVersion,
           resultingSubjectVersion: current.subjectVersion + 1,
-          ...(request.approval ? { approvalId: request.approval.approvalId } : {}),
+          ...(request.approval ? committedApprovalEventFields(request.approval) : {}),
           ...(request.lease ? { leaseFencingToken: request.lease.fencingToken } : {}),
         })
       : buildEvent("DEV_TRANSITION_REJECTED", request, context, {

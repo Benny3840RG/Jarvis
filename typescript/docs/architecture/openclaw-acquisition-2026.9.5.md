@@ -78,11 +78,18 @@ live/E2E soak: that is not Jarvis validation evidence.
 | [Tool loop detection](https://github.com/openclaw/openclaw/blob/ec9c1a13db8938e5a3eaa51fca2e981cde2395a9/src/agents/tool-loop-detection.ts)                 | Keep for pressure-testing future model-driven tool loops. Jarvis already has execution claims, bounded development attempts and external reconciliation; no replacement governance engine.                                                                           |
 | Atomic updater, plugin hot-loading, specialist teams, browser and voice stack                                                                               | Not imported. These need separately scoped integration and deployment/rollback proof, and overlap existing Jarvis infrastructure.                                                                                                                                    |
 
-Additional confirmed Jarvis gaps for later missions: Graph Retry-After parsing
-ignores HTTP dates and may shorten long waits; MCP backend calls lack a default
-deadline; Totality has no caller-disconnect cancellation; provider quotas are not
-durable across processes. Directory-entry fsync was already recorded in the
-roadmap. No claim is made that these are fixed here.
+The follow-up candidate preserves provider Retry-After minimum waits and gives
+MCP backend calls a default deadline plus disconnect cancellation. Graph parsing
+accepts delta-seconds and IMF-fixdate values and does not drop a longer wait.
+The reconciliation worker treats that delay as a floor: local backoff may wait
+longer, and an unrepresentable delay escalates instead of retrying early.
+`JarvisApiClient` aborts its outbound HTTP call at the configured deadline or
+when the MCP request signal aborts. Aborting that call does not roll back a
+Jarvis HTTP mutation that has already been accepted.
+
+Still open: Totality has no caller-disconnect cancellation, and provider quotas
+are not durable across processes. Directory-entry fsync was already recorded in
+the roadmap. No live Graph, ChatGPT, or deployment proof is claimed here.
 
 ## Validation and authority
 
