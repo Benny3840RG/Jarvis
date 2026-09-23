@@ -1,5 +1,37 @@
 # Jarvis TypeScript Roadmap
 
+## Backup id remapper (2026-09-23)
+
+`src/backup/uuidRemapper.ts` is the old→new id map for paths that mint ids on
+restore. Repeated lookups stay stable. `remapFields` / `remapArrayFields`
+touch only named fields. `translateKnown` is the existing assistant-state walk
+(replace a string only when it is already mapped). JSON empty-target restore
+mints task and reminder ids through it, and v3 backup restore binds
+store-assigned build ids before rewriting `buildLogs.buildId` and
+`upgrades.buildId`.
+
+Decisions: one remapper instance is not shared across tasks and reminders,
+because those collections may reuse an id string; assistant state still keeps
+the reminder id when they collide. Archive v4 is unchanged and still writes
+logical business ids verbatim. `CROSS_DOMAIN_REFERENCE_FIELDS` names the
+foreign keys a later minting restore must thread through this helper. It does
+not add those domains to the v3 archive.
+
+Not in this slice: clients, quotes, invoices, projects, properties, enquiries,
+and errands in the v3 provider archive; `notesAndEvidence`; Convex mutation
+restore (it keeps its own known-id walk); invoice payment ids; enquiry
+attachment refs.
+
+Next:
+
+1. When a minting restore of the JSON business stores is actually required,
+   bind or remap every primary id, then `remapCrossDomainReferences`, and fail
+   closed on an unknown foreign key. Do not bolt that onto v4's verbatim write.
+2. Point the Convex assistant-state restore at the same known-id rule without
+   importing Node-only backup code into a mutation, if that duplication starts
+   to drift.
+3. Leave `notesAndEvidence` out until a capture group exists.
+
 ## S5 terminal orchestration restore (2026-09-23)
 
 Isolated Convex adapter for closed terminal orchestration history only.

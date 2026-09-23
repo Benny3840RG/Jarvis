@@ -24,6 +24,7 @@ import { JsonAssetStore } from "../assets/jsonAssetStore.js";
 import type { Preference } from "../preferences/preference.js";
 import { JsonPreferenceStore } from "../preferences/jsonPreferenceStore.js";
 import type { MemoryStoreBundle } from "../importer/importMemoryStores.js";
+import { UuidRemapper } from "./uuidRemapper.js";
 
 const BACKUP_FORMAT = "jarvis-backup" as const;
 const BACKUP_VERSION = 3 as const;
@@ -34,12 +35,13 @@ const MAX_BACKUP_BYTES = 10 * 1024 * 1024;
 /**
  * Builds/build logs/upgrades/assets/preferences: the "memory store" domains that
  * `npm run import:convex` already treats as one self-contained bundle. They were
- * added to the backup archive in version 3. Every other durable-memory domain
- * (clients, quotes, invoices, projects, properties, enquiries, errands, ...) is
- * cross-referenced by id (e.g. a quote holds a clientId) and is intentionally
- * NOT covered yet — restoring those safely needs a consistent id remap across
- * every domain that references them, not just a per-domain copy. See
- * typescript/docs/ROADMAP.md.
+ * added to the backup archive in version 3. Clients, quotes, invoices, projects,
+ * properties, enquiries, and errands stay out of this v3 archive. Archive v4
+ * can capture those JSON business records and writes their logical ids
+ * verbatim; it does not run them through `UuidRemapper`. `notesAndEvidence`
+ * is outside both archives. A later minting restore of those stores must thread
+ * foreign keys through `UuidRemapper` and `CROSS_DOMAIN_REFERENCE_FIELDS`
+ * (`src/backup/crossDomainReferences.ts`). See typescript/docs/ROADMAP.md.
  */
 export type BackupMemoryStores = MemoryStoreBundle;
 
@@ -634,17 +636,6 @@ export async function readBackupFile(filePath: string): Promise<BackupArchive> {
   }
 }
 
-function remapIds(value: unknown, ids: ReadonlyMap<string, string>): unknown {
-  if (typeof value === "string") return ids.get(value) ?? value;
-  if (Array.isArray(value)) return value.map((entry) => remapIds(entry, ids));
-  if (isRecord(value)) {
-    return Object.fromEntries(
-      Object.entries(value).map(([key, entry]) => [key, remapIds(entry, ids)]),
-    );
-  }
-  return value;
-}
-
 function taskSignatures(tasks: Task[]): string[] {
   return tasks.map((task) => JSON.stringify([task.title, task.completed, task.category])).sort();
 }
@@ -749,7 +740,7 @@ export function assertRestoredBackup(
     ...result.taskIds.entries(),
     ...result.reminderIds.entries(),
   ]);
-  const expectedState = remapIds(archive.state, allIds);
+  const expectedState = UuidRemapper.fromMap(allIds).translateKnown(archive.state);
   if (!isDeepStrictEqual(snapshot.state, expectedState)) {
     throw new Error("Restored assistant state does not match the backup.");
   }
@@ -796,7 +787,11 @@ async function restoreMemoryStores(
   memoryStores: BackupMemoryStores,
   archive: BackupArchive,
 ): Promise<RestoredMemory> {
-  const buildIds = new Map<string, string>();
+  const buildIds = new UuidRemapper({
+    createId() {
+      throw new Error("Build ids are assigned by the destination store.");
+    },
+  });
   const builds: Build[] = [];
   for (const build of archive.builds) {
     const created = await memoryStores.builds.add({
@@ -807,13 +802,13 @@ async function restoreMemoryStores(
       ...(build.nickname === undefined ? {} : { nickname: build.nickname }),
       ...(build.notes === undefined ? {} : { notes: build.notes }),
     });
-    buildIds.set(build.id, created.id);
+    buildIds.bind(build.id, created.id);
     builds.push(created);
   }
 
   const buildLogs: BuildLogEntry[] = [];
   for (const log of archive.buildLogs) {
-    const buildId = buildIds.get(log.buildId);
+    const buildId = buildIds.lookup(log.buildId);
     if (buildId === undefined) {
       throw new Error(
         `Backup restore refused: build log ${log.id} references unknown build ${log.buildId}.`,
@@ -832,7 +827,7 @@ async function restoreMemoryStores(
 
   const upgrades: Upgrade[] = [];
   for (const upgrade of archive.upgrades) {
-    const buildId = buildIds.get(upgrade.buildId);
+    const buildId = buildIds.lookup(upgrade.buildId);
     if (buildId === undefined) {
       throw new Error(
         `Backup restore refused: upgrade ${upgrade.id} references unknown build ${upgrade.buildId}.`,
@@ -879,7 +874,7 @@ async function restoreMemoryStores(
     );
   }
 
-  return { buildIds, builds, buildLogs, upgrades, assets, preferences };
+  return { buildIds: buildIds.mapping(), builds, buildLogs, upgrades, assets, preferences };
 }
 
 function assertRestoredMemoryStores(restored: RestoredMemory, archive: BackupArchive): void {
