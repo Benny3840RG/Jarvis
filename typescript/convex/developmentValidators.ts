@@ -83,6 +83,8 @@ export const developmentApprovalValidator = v.object({
   authorityEnvelopeHash: v.string(),
   effectiveRisk: v.number(),
   policyDecisionFingerprint: v.string(),
+  policySubjectVersion: v.number(),
+  transitionCommitted: v.boolean(),
 });
 
 export const developmentMergeOperationOutcomeValidator = v.union(

@@ -19,4 +19,6 @@ export const githubMergeArguments = z.object({
   authorityEnvelopeHash: z.string().trim().min(1),
   policyDecisionFingerprint: z.string().trim().min(1),
   effectiveRisk: z.number().int().min(4),
+  /** Policy aggregate subjectVersion snapshotted at approval time. */
+  policySubjectVersion: z.number().int().nonnegative().optional(),
 });

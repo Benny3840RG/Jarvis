@@ -222,7 +222,20 @@ export function evaluatePatch(patch) {
     // executable path is still scanned: `oldPath` for the removed lines is the
     // original location, which does not match here.
     if (/^docs\/.+\.md$/.test(currentPath)) continue;
-    if (sensitive.test(line.slice(1))) {
+    // Test titles are descriptive evidence, not executable authority changes.
+    // Neutralize only a leading single- or double-quoted title passed to
+    // test/it/describe on added recognised test lines. Template literals stay
+    // scanned because `${...}` expressions execute at module load. The rest of
+    // the line and all removed test lines remain fully scanned.
+    const content = line.slice(1);
+    const scannedContent =
+      line.startsWith("+") && TEST_PATH.test(currentPath)
+        ? content.replace(
+            /^(\s*(?:test|it|describe)\s*\(\s*)(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')/,
+            "$1",
+          )
+        : content;
+    if (sensitive.test(scannedContent)) {
       reasons.push(
         `authority-sensitive patch content at diff line ${index + 1}`,
       );
