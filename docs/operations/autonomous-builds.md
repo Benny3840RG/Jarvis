@@ -2,6 +2,8 @@
 
 Jarvis implements **one bounded GitHub issue at a time**. It creates a draft PR, then [PR maintenance](pr-maintenance.md) performs independent advisory review and can request at most two guarded repairs on the same PR. Owner approval, merge, commissioning and deployment remain separate gates.
 
+A terminal failed or cancelled exact-candidate maintenance review receives one bounded automatic redispatch. Exhaustion publishes an idempotent `automation-blocked` notice on the PR; it does not start another builder, bypass the queue, or create merge or deployment authority.
+
 `jarvis-autobuild.yml` no longer runs on the `automation-approved` label. It has a single trigger, `workflow_dispatch`, and one repository-global concurrency group, so only one autonomous-build worker can ever run. `jarvis-queue-advance.yml` is the sole coordinator: it verifies `main` is healthy, then dispatches the builder for the next eligible approved issue. A mission occupies the queue from dispatch until its pull request is merged or closed — not just while the coding worker runs (see [Queue advance](#queue-advance)).
 
 ## Smoke-test verification

@@ -19,7 +19,8 @@ function fixture() {
   const head = "a".repeat(40),
     base = "b".repeat(40);
   const writes = [],
-    history = [];
+    history = [],
+    comments = [];
   const pull = {
     number: 12,
     created_at: "2026-09-10T00:00:00Z",
@@ -139,7 +140,20 @@ function fixture() {
             labels: [{ name: "automation-approved" }],
           },
         }),
-        createComment: record("comment"),
+        createComment: async (args) => {
+          const comment = {
+            id: comments.length + 1,
+            user: { login: "github-actions[bot]", type: "Bot" },
+            body: args.body,
+          };
+          comments.push(comment);
+          writes.push({ kind: "comment", ...args });
+          return { data: comment };
+        },
+        listComments: async () => ({ data: comments }),
+        getComment: async ({ comment_id }) => ({
+          data: comments.find((comment) => comment.id === comment_id),
+        }),
       },
     },
     paginate: async (method, args) => method(args),
@@ -155,6 +169,7 @@ function fixture() {
     history,
     checkSets,
     runs,
+    comments,
     core,
     async identity() {
       const e = await collectCandidateChecks({
@@ -357,6 +372,72 @@ test("full sweep prepare publish cycle produces advisory owner gate and run-hist
   );
   assert.equal(f.writes.filter((w) => w.kind === "dispatch").length, 1);
   // No mock approval/merge endpoint exists: invoking one fails this test.
+});
+
+test("sweep redispatches a terminal failed review once for the same exact candidate", async () => {
+  const f = fixture();
+  const identity = await f.identity();
+  f.history.push({
+    id: 500,
+    display_title: reviewRunTitle(identity),
+    path: [".github", "workflows", "jarvis-pr-maintenance.yml"].join("/"),
+    event: "workflow_dispatch",
+    head_branch: "main",
+    conclusion: "failure",
+    run_attempt: 1,
+  });
+  assert.deepEqual(
+    await sweep({
+      candidateReady: async () => true,
+      github: f.github,
+      owner: "o",
+      repo: "r",
+      core: f.core,
+    }),
+    identity,
+  );
+  assert.equal(f.writes.filter((write) => write.kind === "dispatch").length, 1);
+});
+
+test("review retry exhaustion publishes one exact automation-blocked owner action", async () => {
+  const f = fixture();
+  const identity = await f.identity();
+  for (const id of [500, 501]) {
+    f.history.push({
+      id,
+      display_title: reviewRunTitle(identity),
+      path: [".github", "workflows", "jarvis-pr-maintenance.yml"].join("/"),
+      event: "workflow_dispatch",
+      head_branch: "main",
+      conclusion: "failure",
+      run_attempt: 1,
+    });
+  }
+  await sweep({
+    candidateReady: async () => true,
+    github: f.github,
+    owner: "o",
+    repo: "r",
+    core: f.core,
+  });
+  await sweep({
+    candidateReady: async () => true,
+    github: f.github,
+    owner: "o",
+    repo: "r",
+    core: f.core,
+  });
+  const notices = f.writes.filter(
+    (write) =>
+      write.kind === "comment" &&
+      write.body.includes("jarvis-pr-maintenance:automation-blocked:v1"),
+  );
+  assert.equal(notices.length, 1);
+  assert.ok(
+    notices[0].body.includes(
+      "Owner action: resolve the review evidence, push a new exact candidate SHA, and let the maintained review workflow evaluate that new candidate",
+    ),
+  );
 });
 
 test("durable scheduling defers mutable or foreign candidates before consuming review budget", async () => {

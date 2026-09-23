@@ -192,7 +192,8 @@ export function maintenanceDisposition({
     repairCount < 0
   )
     return "blocked";
-  if (review?.verdict === "blocked") return "blocked";
+  if (review?.verdict === "blocked" && (review.findings?.length ?? 0) === 0)
+    return "blocked";
   // Missing authority/provenance cannot be repaired by changing application code.
   if (
     ci.problems.some((problem) =>
@@ -202,7 +203,9 @@ export function maintenanceDisposition({
     return "blocked";
   if (!ci.ok && ci.problems.length === 0) return "waiting-ci";
   const needsRepair =
-    ci.problems.length > 0 || review?.verdict === "changes_requested";
+    ci.problems.length > 0 ||
+    review?.verdict === "changes_requested" ||
+    (review?.verdict === "blocked" && (review.findings?.length ?? 0) > 0);
   if (needsRepair) {
     if (!repairEligible) return "owner-repair-required";
     return repairCount >= 2 ? "blocked" : "repair";

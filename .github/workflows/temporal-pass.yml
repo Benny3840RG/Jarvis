@@ -1,0 +1,94 @@
+name: Temporal PASS proof
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "typescript/src/preview/temporalPass/**"
+      - "typescript/tests/pass/**"
+      - "typescript/package.json"
+      - "typescript/package-lock.json"
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: temporal-pass-${{ github.repository }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  temporal-pass:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Resolve exact candidate
+        id: candidate
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          INPUT_PR: ${{ inputs.pull_request_number }}
+          INPUT_HEAD: ${{ inputs.expected_head_sha }}
+        with:
+          script: |
+            const sameRepo = `${context.repo.owner}/${context.repo.repo}`;
+            let pull;
+            if (context.eventName === "pull_request") {
+              pull = context.payload.pull_request;
+            } else {
+              const pullNumber = Number(process.env.INPUT_PR);
+              if (!Number.isSafeInteger(pullNumber) || pullNumber < 1) {
+                throw new Error("A positive pull request number is required.");
+              }
+              const response = await github.rest.pulls.get({
+                ...context.repo,
+                pull_number: pullNumber,
+              });
+              pull = response.data;
+              if (pull.head?.sha !== process.env.INPUT_HEAD) {
+                throw new Error("Candidate head changed; refusing stale Temporal proof.");
+              }
+            }
+            if (
+              pull?.state !== "open" ||
+              pull?.base?.ref !== "main" ||
+              pull?.head?.repo?.full_name !== sameRepo ||
+              !/^[a-f0-9]{40}$/.test(pull?.head?.sha || "")
+            ) {
+              throw new Error("Temporal proof requires an open same-repository PR targeting main.");
+            }
+            core.setOutput("head", pull.head.sha);
+            core.setOutput("pr", String(pull.number));
+
+      - name: Check out exact candidate
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ steps.candidate.outputs.head }}
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version-file: typescript/.nvmrc
+
+      - name: Install dependencies
+        working-directory: typescript
+        run: npm ci --ignore-scripts --cache "$RUNNER_TEMP/npm-cache"
+
+      - name: Install pinned Temporal CLI
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/temporal-cli.tar.gz"
+          root="$RUNNER_TEMP/temporal-cli"
+          curl --fail --silent --show-error --location \
+            --output "$archive" \
+            "https://github.com/temporalio/cli/releases/download/v1.9.1/temporal_cli_1.9.1_linux_amd64.tar.gz"
+          echo "09a0326a51db84d02735e53542b9ebd8c4758daf47482a9ab0abce15844e60d5  $archive" | sha256sum --check -
+          mkdir -p "$root"
+          tar -xzf "$archive" -C "$root"
+          test -x "$root/temporal"
+          echo "$root" >> "$GITHUB_PATH"
+
+      - name: Run full Temporal PASS suite
+        working-directory: typescript
+        run: timeout --foreground --kill-after=15s 5m npm run test:temporal-pass
