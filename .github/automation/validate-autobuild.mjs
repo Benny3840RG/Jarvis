@@ -223,10 +223,10 @@ export function evaluatePatch(patch) {
     // original location, which does not match here.
     if (/^docs\/.+\.md$/.test(currentPath)) continue;
     // Test titles are descriptive evidence, not executable authority changes.
-    // Neutralize only the first literal passed to test/it/describe on added
-    // recognised test lines. The rest of the line remains scanned, so code such
-    // as `const authority = ...` or an inline authority-changing callback still
-    // fails closed. Removed test lines remain fully scanned.
+    // Neutralize only a leading single- or double-quoted title passed to
+    // test/it/describe on added recognised test lines. Template literals stay
+    // scanned because `${...}` expressions execute at module load. The rest of
+    // the line and all removed test lines remain fully scanned.
     const content = line.slice(1);
     const scannedContent =
       line.startsWith("+") && TEST_PATH.test(currentPath)
