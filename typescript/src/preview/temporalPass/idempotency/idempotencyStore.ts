@@ -29,11 +29,7 @@ function isNodeError(error: unknown): error is NodeJS.ErrnoException {
 }
 
 function isTimestamp(value: unknown): value is string {
-  return (
-    typeof value === "string" &&
-    value.length > 0 &&
-    Number.isFinite(Date.parse(value))
-  );
+  return typeof value === "string" && value.length > 0 && Number.isFinite(Date.parse(value));
 }
 
 function parseStore(raw: string): Store {
@@ -43,22 +39,14 @@ function parseStore(raw: string): Store {
   }
 
   for (const [key, entry] of Object.entries(value)) {
-    if (
-      !key ||
-      entry === null ||
-      typeof entry !== "object" ||
-      Array.isArray(entry)
-    ) {
+    if (!key || entry === null || typeof entry !== "object" || Array.isArray(entry)) {
       throw new Error(`invalid idempotency entry for ${JSON.stringify(key)}`);
     }
     const record = entry as Record<string, unknown>;
     const keys = Object.keys(record);
     if (
       keys.some(
-        (field) =>
-          !["operation", "state", "result", "createdAt", "completedAt"].includes(
-            field,
-          ),
+        (field) => !["operation", "state", "result", "createdAt", "completedAt"].includes(field),
       ) ||
       typeof record.operation !== "string" ||
       record.operation.length === 0 ||
@@ -171,11 +159,7 @@ export class IdempotencyStore {
    * retries) and asserts the final mock-repo state matches what the
    * idempotency store recorded — not just that *some* build happened.
    */
-  async runIdempotent<T>(
-    key: string,
-    operation: string,
-    execute: () => Promise<T>,
-  ): Promise<T> {
+  async runIdempotent<T>(key: string, operation: string, execute: () => Promise<T>): Promise<T> {
     const existing = await this.get(key);
     if (existing?.state === "completed") {
       return existing.result as T;
