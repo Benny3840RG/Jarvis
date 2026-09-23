@@ -79,6 +79,11 @@ import { ConvexExternalReconciliationStore } from "../persistence/convexExternal
 import type { ExternalReconciliationReadStore } from "../reconciliation/externalReconciliation.js";
 import type { RuntimeReconciliationHealth } from "../reconciliation/runtimeReconciliationHost.js";
 import { resolveHttpAppConfig, type HttpAppConfig } from "./config.js";
+import {
+  registerHttpRateLimit,
+  type HttpRateLimitConfig,
+  resolveHttpRateLimitConfig,
+} from "./httpRateLimit.js";
 import { evaluateRemoteGatewayRequest } from "./remoteGateway.js";
 import { createOidcVerifier, type OidcVerifier } from "./oidcVerifier.js";
 import { JarvisHttpModule } from "./jarvisHttpModule.js";
@@ -133,6 +138,11 @@ export type CreateJarvisHttpAppOptions = (
   activityEventReader?: ActivityEventReader | null;
   developmentLiveWorkSource?: DevelopmentLiveWorkSource | null;
   telemetry?: PostHogTelemetry;
+  /**
+   * Overrides the process-wide HTTP rate limit. Tests use this so a low budget
+   * does not depend on environment variables shared with other cases.
+   */
+  httpRateLimit?: HttpRateLimitConfig;
   /**
    * Invoked once per Fastify route as it is registered. Exposed so contract
    * tests can enumerate the routes the app actually serves without parsing the
@@ -297,22 +307,31 @@ export async function createJarvisHttpApp(
     // also makes `request.ip` below trust-aware by the same Fastify mechanism.
     ...(remoteGateway ? { trustProxy: [...remoteGateway.trustedProxy] } : {}),
   });
+  const httpRateLimit =
+    options.httpRateLimit ?? resolveHttpRateLimitConfig(process.env, remoteGateway);
+  await registerHttpRateLimit(adapter.getInstance(), httpRateLimit);
   if (remoteGateway !== undefined) {
     adapter.getInstance().addHook("onRequest", async (request, reply) => {
       const contentLengthHeader = request.headers["content-length"];
       const contentLength =
         typeof contentLengthHeader === "string" ? Number(contentLengthHeader) : undefined;
-      const decision = evaluateRemoteGatewayRequest(remoteGateway, {
-        origin: typeof request.headers.origin === "string" ? request.headers.origin : undefined,
-        // Fastify's own `request.protocol` getter is trust-aware: it only
-        // honours X-Forwarded-Proto when the *direct* socket peer matches the
-        // configured `trustProxy` set above, otherwise it reports the real
-        // socket's TLS state. A raw header read here would let any directly-
-        // connecting client spoof this check regardless of trustProxy.
-        forwardedProto: request.protocol,
-        contentLength,
-        clientKey: request.ip,
-      });
+      const decision = evaluateRemoteGatewayRequest(
+        remoteGateway,
+        {
+          origin: typeof request.headers.origin === "string" ? request.headers.origin : undefined,
+          // Fastify's own `request.protocol` getter is trust-aware: it only
+          // honours X-Forwarded-Proto when the *direct* socket peer matches the
+          // configured `trustProxy` set above, otherwise it reports the real
+          // socket's TLS state. A raw header read here would let any directly-
+          // connecting client spoof this check regardless of trustProxy.
+          forwardedProto: request.protocol,
+          contentLength,
+          clientKey: request.ip,
+        },
+        Date.now(),
+        // One counter: `@fastify/rate-limit` already applied this client's budget.
+        { enforceRateLimit: false },
+      );
       if (decision.allowed) return;
       const status =
         decision.code === "tls-required"
