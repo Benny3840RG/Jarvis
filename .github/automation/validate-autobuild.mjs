@@ -222,6 +222,11 @@ export function evaluatePatch(patch) {
     // executable path is still scanned: `oldPath` for the removed lines is the
     // original location, which does not match here.
     if (/^docs\/.+\.md$/.test(currentPath)) continue;
+    // Test files need to be able to name the authority/security behavior they
+    // verify without being mistaken for executable authority changes. Keep all
+    // non-test paths scanned; secret-like material is rejected separately by
+    // the candidate-content secret scan in the trusted workflow.
+    if (TEST_PATH.test(currentPath)) continue;
     if (sensitive.test(line.slice(1))) {
       reasons.push(
         `authority-sensitive patch content at diff line ${index + 1}`,
