@@ -181,7 +181,7 @@ independently observe that same exact head:
    may never discard defect evidence.
 
 The status does not approve, merge, deploy, commission, close an issue or satisfy
-Omega evidence. Whether GitHub requires this status for merge is defined only by
+Omega evidence. A terminal failed or cancelled review for an unchanged exact candidate may receive one bounded automatic redispatch. After that budget is exhausted, maintenance publishes one exact-SHA `automation-blocked` notice with the owner action to resolve the evidence and publish a new candidate SHA. This is scheduler evidence, not an owner decision, repair authority, merge, deployment or completion transition. Whether GitHub requires this status for merge is defined only by
 the current branch-protection policy in
 `docs/operations/branch-protection.md`. The current decided policy intentionally
 does **not** require it because bounded segmented review has produced false

@@ -84,7 +84,7 @@ existing workflow group. Live notification proof requires this change on main.
 | New commits or changed base/checks | Old review discarded; no stale push or stale pass.                                                                                                                                 |
 | Main moved or unhealthy            | No repair dispatch. Repair claims are not inferred from the request comment.                                                                                                       |
 | Provider timeout during dispatch   | Unconfirmed result; inspect owning run history before retrying.                                                                                                                    |
-| Temporal preview proof             | `temporal-pass.yml` runs the full exact-head PASS suite with a checksum-pinned Temporal CLI; reviewer sandboxes do not need a preinstalled CLI.                                  |
+| Temporal preview proof             | `temporal-pass.yml` runs the full exact-head PASS suite with a checksum-pinned Temporal CLI; reviewer sandboxes do not need a preinstalled CLI.                                    |
 
 A completed initial builder failure is observed by
 `jarvis-autobuild-recovery.yml` from trusted default-branch workflow code. The
@@ -114,6 +114,8 @@ It rejects duplicate source-run recovery and uses a complete provider history
 window, capped at 100 runs, to refuse stale failures when a newer build exists.
 Unavailable or incomplete history leaves the issue unchanged. These workflow
 paths are executed by the same regression suite; they are not live retry proof.
+
+A terminal failed or cancelled independent review remains retryable exactly once for the same candidate identity. The scheduler distinguishes that terminal failure from an active or successfully published review; it re-dispatches only through `jarvis-pr-maintenance.yml`. A new candidate SHA starts fresh exact-candidate review scheduling. If the finite review budget is exhausted, the coordinator re-observes the candidate, writes one idempotent `automation-blocked` PR notice, and gives the single owner action: resolve the unavailable evidence and publish a new candidate SHA. It does not invoke a builder, clear a mission lock, approve, merge, deploy, or advance Omega.
 
 The namespaced `jarvis-pr-maintenance/review` status never impersonates
 TypeScript, PR Evidence or CodeQL checks and cannot satisfy the owner or existing
