@@ -1,5 +1,30 @@
 # Jarvis TypeScript Roadmap
 
+## S4 closed component and risk restore (2026-09-23)
+
+The existing unregistered S4 adapter now restores current component and risk
+rows with the projects, notes, four-kind memory history, and rejected
+`notes.create` actions it already admitted. Components require an empty
+`attributes` object and a closed same-project `parentComponentId` graph. Risks
+require canonical text and integer likelihood/consequence scores from 1 to 5.
+Logical ids stay verbatim, so `UuidRemapper` is not used. Convex physical ids
+stay on the existing table-scoped identity list. Verification returns
+`completeness: partial` and `verifiedGroups: []`. `export-v4` does not seal
+`notesAndEvidence`.
+
+Still refused: non-empty component attributes, constraints, tasks, events,
+tool execution receipts, external reconciliations, development bindings, omega
+rows, and every live approval or lease. See
+[the S4 restore slice](architecture/backup-v4-s4-restore-slice.md).
+
+Next:
+
+1. Classify a producer-specific component-attribute or constraint-value subset,
+   or stop at this boundary until one exists.
+2. Inert receipt and reconciliation restore, still without sealing the group.
+3. Keep development and omega edges out until they can be restored with the
+   closed terminal orchestration subset in one empty target.
+
 ## Backup id remapper (2026-09-23)
 
 `src/backup/uuidRemapper.ts` is the old→new id map for paths that mint ids on
@@ -30,7 +55,8 @@ Next:
 2. Point the Convex assistant-state restore at the same known-id rule without
    importing Node-only backup code into a mutation, if that duplication starts
    to drift.
-3. Leave `notesAndEvidence` out until a capture group exists.
+3. Do not point `notesAndEvidence` logical ids at `UuidRemapper`. The isolated
+   S4 subset preserves them; the archive group stays unsealed.
 
 ## HTTP and Convex rate limits (2026-09-23)
 

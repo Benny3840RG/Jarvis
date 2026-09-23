@@ -38,8 +38,9 @@ const MAX_BACKUP_BYTES = 10 * 1024 * 1024;
  * added to the backup archive in version 3. Clients, quotes, invoices, projects,
  * properties, enquiries, and errands stay out of this v3 archive. Archive v4
  * can capture those JSON business records and writes their logical ids
- * verbatim; it does not run them through `UuidRemapper`. `notesAndEvidence`
- * is outside both archives. A later minting restore of those stores must thread
+ * verbatim; it does not run them through `UuidRemapper`. The isolated
+ * notes/evidence adapter preserves logical ids and does not use this helper.
+ * A later minting restore of the JSON business stores must thread
  * foreign keys through `UuidRemapper` and `CROSS_DOMAIN_REFERENCE_FIELDS`
  * (`src/backup/crossDomainReferences.ts`). See typescript/docs/ROADMAP.md.
  */
