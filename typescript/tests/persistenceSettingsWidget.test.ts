@@ -16,7 +16,8 @@ describe("Persistence settings page", () => {
     assert.match(page, /Settings/);
     assert.match(page, /Active provider/);
     assert.match(page, /will not silently fall back/i);
-    assert.match(page, /type="radio"[^>]*disabled/);
+    assert.match(page, /id="provider-active"/);
+    assert.doesNotMatch(page, /type="radio"/);
     assert.match(page, /Partial \/ JSON-only/);
     assert.match(page, /notesAndEvidence, orchestration, quoteAggregate/);
     assert.match(page, /npm run backup -- export\|verify\|restore/);
@@ -43,6 +44,21 @@ describe("Persistence settings page", () => {
       [...dashboard.matchAll(/data-settings-tab="([^"]+)"/g)].map((match) => match[1]),
       ["general", "credentials", "persistence", "danger"],
     );
+    const persistenceStart = dashboard.indexOf('id="view-persistence"');
+    const persistenceEnd = dashboard.indexOf('id="view-danger"');
+    assert.ok(persistenceStart !== -1 && persistenceEnd > persistenceStart);
+    const persistence = dashboard.slice(persistenceStart, persistenceEnd);
+    assert.match(persistence, /id="persistence-backup"[^>]*>\s*Backup\s*</);
+    assert.match(persistence, /class="settings-save"/);
+    assert.doesNotMatch(
+      persistence.match(/<button[^>]*id="persistence-restore-classic"[^>]*>/)?.[0] ?? "",
+      /settings-save/,
+    );
+    assert.match(persistence, /<details id="persistence-classic-format">/);
+    assert.match(persistence, /<details id="persistence-v4-format">/);
+    assert.doesNotMatch(persistence, /<details[^>]*\sopen/);
+    assert.doesNotMatch(persistence, /type="radio"/);
+    assert.match(persistence, /id="persistence-provider-label"/);
     assert.match(dashboard, /id="persistence-health-glance"/);
     assert.match(dashboard, /id="persistence-export-warning"/);
     assert.match(dashboard, /show_persistence_settings/);
@@ -67,10 +83,17 @@ describe("Persistence settings page", () => {
     assert.match(dialog("dialog-restore-v4"), /class="danger"/);
     assert.match(dialog("dialog-resume-v4"), /class="danger"/);
     assert.doesNotMatch(dialog("dialog-export-classic"), /class="danger"/);
-    assert.match(page, /function keepResumeExplicit\(\)/);
-    assert.match(page, /if \(!result \|\| result\.status !== "completed"\) keepResumeExplicit\(\)/);
-    assert.match(page, /id="restore-v4-resume" type="checkbox" \/>/);
-    assert.doesNotMatch(page, /id="restore-v4-resume" type="checkbox" checked/);
+    assert.doesNotMatch(
+      dialog("dialog-restore-v4"),
+      /restore-v4-resume|type="checkbox"[^>]*resume/,
+    );
+    assert.doesNotMatch(page, /keepResumeExplicit|restore-v4-resume/);
+    assert.match(page, /resume:\s*false/);
     assert.match(page, /cancel\.focus\(\)/);
+    assert.match(page, /id="open-export-classic"[^>]*>\s*Backup\s*</);
+    assert.match(page, /class="primary"/);
+    assert.match(page, /<details id="classic-format">/);
+    assert.match(page, /<details id="v4-format">/);
+    assert.doesNotMatch(page, /<details[^>]*\sopen/);
   });
 });
