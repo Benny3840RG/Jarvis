@@ -65,6 +65,30 @@ reminder remove <id>
 
 Update flags may be supplied in either order. At least one supported flag is required, duplicate or unknown flags are rejected, and `--due` cannot be combined with `--clear-due`. Fuzzy phrases containing `task` or `remind` do not write data. Jarvis prints the supported command syntax instead.
 
+### Quoting
+
+```bash
+cd typescript
+npm run quote:create
+npm run quotes:list
+npm run quotes:show -- <quoteNumber>
+```
+
+`quote:create` is an interactive terminal wizard: it asks for client name, property address, and project title, then repeatedly offers to add a line item (description plus amount inc GST) and, at the end, optional free-form notes. The quote number is auto-allocated, the issue date defaults to today, the quote is valid 30 days, and the deposit is 30% — none of these are prompted for or overridable from the command line. The rendered quote is always printed at the end, even if saving it failed; a save failure is reported but never hides or replaces the quote already shown.
+
+`quotes:list` prints the 20 most recently saved quotes (number, client, project, total inc GST, issue date). `quotes:show -- <quoteNumber>` prints one saved quote's full rendered text, or a not-found message if that number doesn't exist.
+
+Quotes are JSON-only for now: these three commands always use `typescript/data/jarvis-quotes.json` regardless of `PERSISTENCE_PROVIDER` — there is no Convex-backed quote store yet, and quotes are not yet included in `npm run backup` (see **Not yet covered** below).
+
+### Search (Perplexity)
+
+```bash
+cd typescript
+npm run search -- "<query>"
+```
+
+Calls Perplexity's chat completions API and prints the answer, followed by a `Sources:` list of citation URLs (omitted when there are none). Requires `PERPLEXITY_API_KEY` in the environment. Optional overrides: `PERPLEXITY_MODEL` (default `sonar`) and `PERPLEXITY_TIMEOUT_MS` (default `30000`, must be an integer from 1000 to 300000).
+
 ### Operator API contract
 
 The versioned implementation contract for Jarvis's HTTP and private ChatGPT App adapters is
