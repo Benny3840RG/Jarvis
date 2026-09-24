@@ -3,14 +3,17 @@
 Jarvis exposes a localhost-first NestJS/Fastify system boundary alongside the maintained CLI.
 This stage implements only the operations whose runtime behaviour is complete:
 
-| Method           | Path                             | Authentication | Purpose                                                     |
-| ---------------- | -------------------------------- | -------------- | ----------------------------------------------------------- |
-| GET              | `/healthz`                       | Public         | Process liveness only; never reads persistence.             |
-| GET              | `/api/v1/help`                   | Bearer token   | Lists only operations implemented by the running adapter.   |
-| GET              | `/api/v1/status`                 | Bearer token   | Checks persistence, timezone, layer readiness, and Z-State. |
-| GET              | `/api/v1/reminders`              | ******         | Lists durable reminders.                                    |
-| POST             | `/api/v1/reminders`              | ******         | Creates a durable reminder.                                 |
-| GET/PATCH/DELETE | `/api/v1/reminders/{reminderId}` | ******         | Reads, updates, or removes one reminder.                    |
+| Method           | Path                             | Authentication | Purpose                                                         |
+| ---------------- | -------------------------------- | -------------- | --------------------------------------------------------------- |
+| GET              | `/healthz`                       | Public         | Process liveness only; never reads persistence.                 |
+| GET              | `/api/v1/help`                   | Bearer token   | Lists only operations implemented by the running adapter.       |
+| GET              | `/api/v1/status`                 | Bearer token   | Checks persistence, timezone, layer readiness, and Z-State.     |
+| GET              | `/api/v1/settings/general`       | Bearer token   | Read-only reminder timezone status. Invalid zones stay invalid. |
+| GET              | `/api/v1/reminders`              | ******         | Lists durable reminders.                                        |
+| POST             | `/api/v1/reminders`              | ******         | Creates a durable reminder.                                     |
+| GET/PATCH/DELETE | `/api/v1/reminders/{reminderId}` | ******         | Reads, updates, or removes one reminder.                        |
+
+`GET /api/v1/settings/general` does not store display preferences. Theme, contrast, and motion stay in the operator console. CLI output is unchanged.
 
 The adapter also implements `/api/v1/tasks` (including completion), `/api/v1/totality/reason`, and
 the project-scoped memory-change-set and tool-action proposal routes. Tool-action approval changes

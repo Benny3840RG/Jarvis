@@ -89,6 +89,7 @@
     "publicSubmissionReady": false,
     "dataOperationIds": [
       "getJarvisStatus",
+      "getOperatorGeneralSettings",
       "listTasks",
       "getTask",
       "createTask",
@@ -241,6 +242,51 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/SystemStatus"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/settings/general": {
+      "get": {
+        "operationId": "getOperatorGeneralSettings",
+        "summary": "Read operator general settings",
+        "description": "Returns the effective IANA timezone used for local wall-clock reminder normalization, and whether it came from JARVIS_TIMEZONE or the machine. An invalid configured zone stays invalid: the machine zone is reported and is not applied. This read does not write timezone, durable preferences, display preferences, or authority. Console theme, contrast, and motion stay in the console. Phase A does not edit the timezone in-app.",
+        "tags": ["System"],
+        "x-mcp-tool": {
+          "exposed": true,
+          "title": "Read general settings",
+          "description": "Use this to show Settings → General timezone status. It does not change timezone, preferences, ToolActions, or completion authority.",
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Read-only general settings. Invalid timezone configuration is reported with HTTP 200 and valid=false.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorGeneralSettings"
                 }
               }
             }
@@ -6911,6 +6957,56 @@
           "checkedAt": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "OperatorGeneralSettings": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Phase A Settings → General read model. Display preferences are console-local and are not part of this object.",
+        "required": ["timezone"],
+        "properties": {
+          "timezone": {
+            "$ref": "#/components/schemas/TimezoneStatus"
+          }
+        }
+      },
+      "TimezoneStatus": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Effective reminder timezone. effectiveIana is null when configuration is invalid. machineIana is informational and is not substituted for an invalid JARVIS_TIMEZONE.",
+        "required": ["effectiveIana", "source", "envRaw", "valid", "machineIana"],
+        "properties": {
+          "effectiveIana": {
+            "type": ["string", "null"],
+            "minLength": 1,
+            "maxLength": 128,
+            "description": "IANA timezone used by reminder normalization. Null when the configured zone is invalid."
+          },
+          "source": {
+            "type": "string",
+            "enum": ["env", "machine"]
+          },
+          "envRaw": {
+            "type": ["string", "null"],
+            "minLength": 1,
+            "maxLength": 128,
+            "description": "Trimmed JARVIS_TIMEZONE when it is a safe label. Null when unset, blank, or unsafe to echo."
+          },
+          "valid": {
+            "type": "boolean"
+          },
+          "validationError": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300,
+            "description": "Safe validation detail. Omitted when the timezone is valid. Contains no secrets."
+          },
+          "machineIana": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "description": "Machine IANA timezone. Not applied when source is env and valid is false."
           }
         }
       },

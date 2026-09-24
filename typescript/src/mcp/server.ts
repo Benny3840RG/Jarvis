@@ -520,6 +520,17 @@ const statusSchema = z.object({
   checkedAt: z.string(),
 });
 
+const operatorGeneralSettingsSchema = z.object({
+  timezone: z.object({
+    effectiveIana: z.string().min(1).max(128).nullable(),
+    source: z.enum(["env", "machine"]),
+    envRaw: z.string().min(1).max(128).nullable(),
+    valid: z.boolean(),
+    validationError: z.string().min(1).max(300).optional(),
+    machineIana: z.string().min(1).max(128),
+  }),
+});
+
 const countsSchema = z.object({
   activeTasks: z.number().int().nonnegative(),
   completedTasks: z.number().int().nonnegative(),
@@ -768,6 +779,39 @@ export function createJarvisMcpServer(client: JarvisApiClient): McpServer {
         return {
           content: [{ type: "text" as const, text: `Jarvis status is ${status.status}.` }],
           structuredContent: { status },
+        };
+      } catch (error: unknown) {
+        return safeError(error);
+      }
+    },
+  );
+
+  registerAppTool(
+    server,
+    "get_general_settings",
+    {
+      title: "Read general settings",
+      description:
+        "Use this to show Settings → General timezone status. It does not change timezone, preferences, ToolActions, or completion authority.",
+      inputSchema: {},
+      outputSchema: { settings: operatorGeneralSettingsSchema },
+      annotations: readAnnotations,
+      _meta: {
+        ui: { resourceUri: JARVIS_DASHBOARD_URI, visibility: ["model", "app"] },
+        "openai/outputTemplate": JARVIS_DASHBOARD_URI,
+      },
+    },
+    async () => {
+      try {
+        const settings = await client.getOperatorGeneralSettings();
+        const timezone = settings.timezone;
+        const message =
+          timezone.valid && timezone.effectiveIana
+            ? `Effective timezone is ${timezone.effectiveIana} (${timezone.source === "env" ? "JARVIS_TIMEZONE" : "machine default"}).`
+            : "Timezone is invalid. Reminder commands that need local wall-clock time will fail until JARVIS_TIMEZONE is a valid IANA timezone.";
+        return {
+          content: [{ type: "text" as const, text: message }],
+          structuredContent: { settings },
         };
       } catch (error: unknown) {
         return safeError(error);

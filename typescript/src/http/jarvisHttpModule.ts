@@ -54,6 +54,7 @@ import { ReconciliationController } from "./reconciliationController.js";
 import { ReminderController } from "./reminderController.js";
 import { RequestIdInterceptor } from "./requestId.js";
 import { ServiceTokenGuard } from "./serviceTokenGuard.js";
+import { GeneralSettingsController } from "./generalSettingsController.js";
 import { HealthController, OperatorSystemController } from "./systemControllers.js";
 import { SystemStatusService } from "./systemStatusService.js";
 import { TaskController } from "./taskController.js";
@@ -129,6 +130,7 @@ export class JarvisHttpModule {
       controllers: [
         HealthController,
         OperatorSystemController,
+        GeneralSettingsController,
         TotalityController,
         MemoryChangeSetController,
         TaskController,
