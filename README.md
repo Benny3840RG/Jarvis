@@ -131,6 +131,28 @@ cd typescript
 npm run openapi:lint
 ```
 
+### Live-work terminal monitor
+
+```bash
+cd typescript
+npm run monitor                    # full-screen, refreshes every 5s
+npm run monitor -- --once          # print one frame and exit (pipe-friendly)
+npm run monitor -- --interval 2 --no-color --width 100
+npm run dev:live-work              # same flags, but also starts/reuses the HTTP runtime for you
+```
+
+`monitor` is the terminal twin of the browser Live Work HUD: it polls the same
+authenticated `GET /api/v1/development/live-work` endpoint (`JARVIS_API_BASE_URL` +
+`JARVIS_SERVICE_TOKEN` from `.env.local`) that `npm run start:http` serves, so that
+service must already be running and reachable. `dev:live-work` removes that step —
+it reuses an already-running HTTP runtime if the route already answers, otherwise
+starts `src/http/main.ts` itself, waits for it to become reachable, runs the same
+monitor in-process, and on exit cleans up only the HTTP process it started (a
+reused runtime is never touched). See
+[`typescript/docs/operators/development-live-work.md`](typescript/docs/operators/development-live-work.md)
+for the underlying read-model contract (mission/issue projection, availability
+states, ΩΣ readiness semantics) both surfaces render.
+
 ### Reminder due values
 
 Jarvis always preserves the exact `--due` text as `dueRaw`. It also stores `dueAt` and `dueTimezone` when the value can be interpreted conservatively. Supported normalized forms include ISO timestamps with an offset, `YYYY-MM-DD`, Australian `DD/MM/YYYY`, `today 9am`, `tomorrow 9am`, and named weekdays such as `Friday 9am`.
