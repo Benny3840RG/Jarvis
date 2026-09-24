@@ -9,6 +9,8 @@ This stage implements only the operations whose runtime behaviour is complete:
 | GET              | `/api/v1/help`                   | Bearer token   | Lists only operations implemented by the running adapter.       |
 | GET              | `/api/v1/status`                 | Bearer token   | Checks persistence, timezone, layer readiness, and Z-State.     |
 | GET              | `/api/v1/settings/general`       | Bearer token   | Read-only reminder timezone status. Invalid zones stay invalid. |
+| GET              | `/api/v1/settings/credentials`   | Bearer token   | Fingerprints, overlap, and bind posture. No token values.       |
+| GET              | `/settings/credentials`          | Loopback only  | Guided rotation page. Not served off loopback.                  |
 | GET              | `/api/v1/reminders`              | ******         | Lists durable reminders.                                        |
 | POST             | `/api/v1/reminders`              | ******         | Creates a durable reminder.                                     |
 | GET/PATCH/DELETE | `/api/v1/reminders/{reminderId}` | ******         | Reads, updates, or removes one reminder.                        |
@@ -39,6 +41,12 @@ JARVIS_SOURCE_VERSION=<build commit or immutable source identifier>
 `PERSISTENCE_PROVIDER` defaults to `json`; `convex` keeps the existing `CONVEX_URL` and service
 token requirements. `JARVIS_SERVICE_TOKEN_PREVIOUS` is accepted only while a current token is
 also configured, preserving the documented rotation overlap and failing closed otherwise.
+`GET /api/v1/settings/credentials` reports that overlap as a short fingerprint, not as the token.
+The public loopback page shows fingerprint chips only and does not embed SHA-256 digests. End
+overlap is a link to `/settings/danger`, not a remove command. See
+[credentials-settings.md](credentials-settings.md). A missing
+service token makes dependent status fail closed. A missing approval token warns that approvals
+are unavailable.
 
 `JARVIS_APPROVAL_TOKEN` (with optional `JARVIS_APPROVAL_TOKEN_PREVIOUS` during rotation) is a
 second, separately held secret required by `POST .../tool-actions/{actionId}/approve` in addition

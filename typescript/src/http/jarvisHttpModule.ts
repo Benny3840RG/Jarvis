@@ -28,6 +28,7 @@ import type { ExternalReconciliationReadStore } from "../reconciliation/external
 import type { RuntimeReconciliationHealth } from "../reconciliation/runtimeReconciliationHost.js";
 import type { ActivityEventReader } from "../operations/activityTimeline.js";
 import type { DevelopmentLiveWorkSource } from "../development/liveWork.js";
+import type { CredentialsRuntime } from "../settings/credentialsStatus.js";
 import type { HttpAppConfig } from "./config.js";
 import type { OidcVerifier } from "./oidcVerifier.js";
 import { ActivityTimelineController } from "./activityTimelineController.js";
@@ -54,6 +55,7 @@ import { ReconciliationController } from "./reconciliationController.js";
 import { ReminderController } from "./reminderController.js";
 import { RequestIdInterceptor } from "./requestId.js";
 import { ServiceTokenGuard } from "./serviceTokenGuard.js";
+import { CredentialsController } from "./credentialsController.js";
 import { GeneralSettingsController } from "./generalSettingsController.js";
 import { HealthController, OperatorSystemController } from "./systemControllers.js";
 import { SystemStatusService } from "./systemStatusService.js";
@@ -62,6 +64,7 @@ import { ToolActionController } from "./toolActionController.js";
 import { TotalityController } from "./totalityController.js";
 import {
   HTTP_APP_CONFIG,
+  HTTP_CREDENTIALS,
   HTTP_OIDC_VERIFIER,
   HTTP_BUSINESS_SETTINGS_STORE,
   HTTP_ENQUIRY_STORE,
@@ -120,6 +123,7 @@ export type JarvisHttpModuleOptions = {
   noteStore: NoteStore;
   activityEventReader: ActivityEventReader | null;
   developmentLiveWorkSource: DevelopmentLiveWorkSource | null;
+  credentials: CredentialsRuntime;
 };
 
 @Module({})
@@ -131,6 +135,7 @@ export class JarvisHttpModule {
         HealthController,
         OperatorSystemController,
         GeneralSettingsController,
+        CredentialsController,
         TotalityController,
         MemoryChangeSetController,
         TaskController,
@@ -158,6 +163,7 @@ export class JarvisHttpModule {
       ],
       providers: [
         { provide: HTTP_APP_CONFIG, useValue: options.config },
+        { provide: HTTP_CREDENTIALS, useValue: options.credentials },
         { provide: HTTP_OIDC_VERIFIER, useValue: options.oidcVerifier },
         { provide: HTTP_PERSISTENCE, useValue: options.persistence },
         { provide: HTTP_CLIENT_STORE, useValue: options.clientStore },

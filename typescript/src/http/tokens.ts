@@ -1,4 +1,5 @@
 export const HTTP_APP_CONFIG = Symbol("HTTP_APP_CONFIG");
+export const HTTP_CREDENTIALS = Symbol("HTTP_CREDENTIALS");
 export const HTTP_OIDC_VERIFIER = Symbol("HTTP_OIDC_VERIFIER");
 export const HTTP_PERSISTENCE = Symbol("HTTP_PERSISTENCE");
 export const HTTP_PROVIDER_NAME = Symbol("HTTP_PROVIDER_NAME");

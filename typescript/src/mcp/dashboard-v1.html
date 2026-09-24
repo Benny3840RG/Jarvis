@@ -7,24 +7,24 @@
     <style>
       :root {
         color-scheme: dark;
-        --bg: #05060a;
-        --panel: #0b0e15;
-        --panel-2: #111522;
+        --bg: #1c1612;
+        --panel: #2a211c;
+        --panel-2: #241c18;
         --panel-3: #171b29;
         --line: #282d3d;
         --line-bright: #494f68;
-        --text: #f4f5fb;
-        --muted: #949bb0;
-        --violet: #b933ff;
-        --violet-soft: rgba(185, 51, 255, 0.14);
-        --magenta: #ff2fbf;
-        --green: #39ff88;
-        --green-soft: rgba(57, 255, 136, 0.12);
+        --text: #f6efe6;
+        --muted: #c4b5a5;
+        --violet: #c47b4a;
+        --violet-soft: rgba(196, 123, 74, 0.14);
+        --magenta: #a85a3a;
+        --green: #d7a15f;
+        --green-soft: rgba(215, 161, 95, 0.12);
         --orange: #ff7a18;
         --orange-soft: rgba(255, 122, 24, 0.14);
-        --red: #ff5c75;
+        --red: #a33b32;
         --yellow: #f0c75e;
-        --brand-gradient: linear-gradient(90deg, #ff7a18 0%, #b933ff 48%, #39ff88 100%);
+        --brand-gradient: linear-gradient(90deg, #ff7a18 0%, #c47b4a 48%, #d7a15f 100%);
         font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       }
       * { box-sizing: border-box; }
@@ -36,8 +36,8 @@
         overflow-x: hidden;
         color: var(--text);
         background:
-          radial-gradient(circle at 10% -5%, rgba(185, 51, 255, 0.19), transparent 34rem),
-          radial-gradient(circle at 96% 25%, rgba(57, 255, 136, 0.1), transparent 31rem),
+          radial-gradient(circle at 10% -5%, rgba(196, 123, 74, 0.19), transparent 34rem),
+          radial-gradient(circle at 96% 25%, rgba(215, 161, 95, 0.1), transparent 31rem),
           linear-gradient(180deg, #06070c, var(--bg));
       }
       button, input, select { font: inherit; }
@@ -46,12 +46,12 @@
       .shell { width: min(100%, 1580px); margin: 0 auto; padding: 10px; }
       .hud-frame {
         overflow: hidden;
-        border: 1px solid rgba(185, 51, 255, 0.42);
+        border: 1px solid rgba(196, 123, 74, 0.42);
         border-radius: 18px;
         background: rgba(5, 6, 10, 0.95);
-        box-shadow: 0 22px 70px rgba(0,0,0,.5), inset 0 0 42px rgba(185,51,255,.05);
+        box-shadow: 0 22px 70px rgba(0,0,0,.5), inset 0 0 42px rgba(196,123,74,.05);
       }
-      .top-glow { height: 3px; background: var(--brand-gradient); box-shadow: 0 0 22px rgba(185,51,255,.72); }
+      .top-glow { height: 3px; background: var(--brand-gradient); box-shadow: 0 0 22px rgba(196,123,74,.72); }
       .topbar {
         display: flex; align-items: center; justify-content: space-between; gap: 14px;
         min-height: 60px; padding: 10px 14px; border-bottom: 1px solid var(--line);
@@ -61,11 +61,11 @@
       .mark {
         position: relative; display: grid; flex: 0 0 auto; place-items: center;
         width: 42px; height: 42px; border: 1px solid var(--violet); border-radius: 12px;
-        background: radial-gradient(circle, rgba(57,255,136,.18), transparent 45%), var(--violet-soft);
+        background: radial-gradient(circle, rgba(215,161,95,.18), transparent 45%), var(--violet-soft);
         color: var(--green); font-weight: 950; letter-spacing: .08em;
-        box-shadow: 0 0 20px rgba(185,51,255,.35), inset 0 0 18px rgba(185,51,255,.14);
+        box-shadow: 0 0 20px rgba(196,123,74,.35), inset 0 0 18px rgba(196,123,74,.14);
       }
-      .mark::before, .mark::after { content: ""; position: absolute; border: 1px solid rgba(57,255,136,.62); border-radius: 50%; }
+      .mark::before, .mark::after { content: ""; position: absolute; border: 1px solid rgba(215,161,95,.62); border-radius: 50%; }
       .mark::before { width: 25px; height: 25px; animation: pulse 2.6s ease-in-out infinite; }
       .mark::after { width: 31px; height: 31px; border-style: dashed; animation: spin 10s linear infinite; }
       .brand h1 { margin: 0; overflow: hidden; font-size: 15px; letter-spacing: .16em; text-overflow: ellipsis; white-space: nowrap; }
@@ -77,15 +77,15 @@
         background: rgba(13,16,24,.92); color: var(--muted); font-size: 11px; font-weight: 800;
       }
       .pill { display: inline-flex; align-items: center; gap: 7px; padding: 0 11px; }
-      .pill.ok { border-color: rgba(57,255,136,.35); background: var(--green-soft); color: var(--green); }
-      .pill.bad { border-color: rgba(255,92,117,.5); color: var(--red); }
+      .pill.ok { border-color: rgba(215,161,95,.35); background: var(--green-soft); color: var(--green); }
+      .pill.bad { border-color: rgba(163,59,50,.5); color: var(--red); }
       .pill.pending { border-color: rgba(240,199,94,.5); color: var(--yellow); }
       .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; box-shadow: 0 0 11px currentColor; }
       .icon-button { width: 34px; padding: 0; color: var(--text); }
       .icon-button:hover, .rail-button:hover, .ghost:hover { border-color: var(--line-bright); background: var(--panel-3); }
       .telemetry {
         display: grid; grid-template-columns: repeat(6, minmax(0,1fr)); border-bottom: 1px solid var(--line);
-        background-image: linear-gradient(rgba(185,51,255,.035) 1px, transparent 1px), linear-gradient(90deg,rgba(185,51,255,.035) 1px,transparent 1px);
+        background-image: linear-gradient(rgba(196,123,74,.035) 1px, transparent 1px), linear-gradient(90deg,rgba(196,123,74,.035) 1px,transparent 1px);
         background-size: 22px 22px;
       }
       .telemetry > div { min-width: 0; padding: 8px 10px; border-right: 1px solid var(--line); }
@@ -102,15 +102,15 @@
       .panel {
         position: relative; min-width: 0; overflow: hidden; border: 1px solid var(--line); border-radius: 15px;
         background: linear-gradient(145deg, rgba(18,21,34,.95), rgba(8,10,16,.98));
-        box-shadow: inset 0 0 28px rgba(185,51,255,.035);
+        box-shadow: inset 0 0 28px rgba(196,123,74,.035);
       }
       .panel::before {
         content: ""; position: absolute; inset: 0; pointer-events: none;
-        background-image: linear-gradient(rgba(185,51,255,.032) 1px,transparent 1px), linear-gradient(90deg,rgba(185,51,255,.032) 1px,transparent 1px);
+        background-image: linear-gradient(rgba(196,123,74,.032) 1px,transparent 1px), linear-gradient(90deg,rgba(196,123,74,.032) 1px,transparent 1px);
         background-size: 24px 24px; mask-image: linear-gradient(180deg,rgba(0,0,0,.92),transparent 88%);
       }
-      .panel.violet { border-color: rgba(185,51,255,.43); box-shadow: inset 0 0 32px rgba(185,51,255,.05), 0 0 16px rgba(185,51,255,.06); }
-      .panel.green { border-color: rgba(57,255,136,.3); }
+      .panel.violet { border-color: rgba(196,123,74,.43); box-shadow: inset 0 0 32px rgba(196,123,74,.05), 0 0 16px rgba(196,123,74,.06); }
+      .panel.green { border-color: rgba(215,161,95,.3); }
       .panel-content { position: relative; z-index: 1; height: 100%; }
       .panel-header {
         display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 39px;
@@ -125,7 +125,7 @@
         width: 100%; min-height: 48px; padding: 7px 8px; border: 1px solid transparent;
         border-left: 2px solid transparent; border-radius: 9px; background: transparent; color: var(--muted); text-align: left;
       }
-      .rail-button.active { border-color: rgba(185,51,255,.25); border-left-color: var(--violet); background: var(--violet-soft); color: var(--text); }
+      .rail-button.active { border-color: rgba(196,123,74,.25); border-left-color: var(--violet); background: var(--violet-soft); color: var(--text); }
       .rail-icon { display: grid; place-items: center; width: 29px; height: 29px; border: 1px solid var(--line); border-radius: 8px; color: var(--violet); font-size: 12px; font-weight: 900; }
       .rail-button strong { display: block; font-size: 12px; }
       .rail-button small { display: block; margin-top: 2px; color: var(--muted); font-size: 9px; }
@@ -163,13 +163,38 @@
       .settings-dl { display: grid; grid-template-columns: 110px minmax(0,1fr); gap: 6px 10px; margin: 0; }
       .settings-dl dt { color: var(--muted); font-size: 11px; font-weight: 800; }
       .settings-dl dd { margin: 0; font-size: 13px; overflow-wrap: anywhere; }
-      .settings-banner { padding: 10px 12px; border: 2px solid var(--red); border-radius: 10px; background: rgba(255,92,117,.12); color: var(--text); font-size: 12px; line-height: 1.45; }
+      .settings-banner { padding: 10px 12px; border: 2px solid var(--red); border-radius: 10px; background: rgba(163,59,50,.12); color: var(--text); font-size: 12px; line-height: 1.45; }
       .settings-banner[hidden], .settings-note[hidden] { display: none !important; }
       .settings-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
       .settings-actions a, .settings-choice { color: var(--text); }
       .settings-choice { display: flex; flex-wrap: wrap; gap: 12px; }
       .settings-choice label, .settings-check { display: inline-flex; align-items: center; gap: 6px; color: var(--text); font-size: 13px; }
-      .settings-save { justify-self: start; min-height: 36px; padding: 0 12px; border: 1px solid var(--line-bright); border-radius: 8px; background: var(--panel-3); color: var(--text); font-size: 12px; font-weight: 800; }
+      .settings-save { justify-self: start; min-height: 44px; padding: 0 12px; border: 1px solid var(--line-bright); border-radius: 8px; background: var(--panel-3); color: var(--text); font-size: 16px; font-weight: 800; }
+      .settings-shell { font-size: 16px; }
+      .settings-shell h2, .settings-shell h3, .settings-shell .settings-title { font-size: 16px; }
+      .settings-shell .settings-layout h2 { font-size: 22px; }
+      .settings-shell .settings-card h3 { font-size: 16px; }
+      .settings-shell .settings-layout > p,
+      .settings-shell .settings-card p,
+      .settings-shell .settings-card li { font-size: 12px; }
+      .settings-shell .settings-status,
+      .settings-shell .settings-dl dd,
+      .settings-shell [role="status"] { font-size: 14px; font-weight: 600; }
+      .settings-shell button,
+      .settings-shell .settings-save,
+      .settings-shell .settings-check,
+      .settings-shell .settings-choice label,
+      .settings-shell .settings-actions a,
+      .settings-shell .settings-tabs button,
+      .settings-shell input,
+      .settings-shell select { min-height: 44px; }
+      .settings-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 12px; }
+      .settings-tabs button { min-height: 44px; padding: 0 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel-3); color: var(--text); font-size: 16px; }
+      .settings-tabs button.active { border-color: var(--accent, var(--violet)); }
+      .settings-panel { display: none; }
+      .settings-panel.active { display: block; }
+      #view-settings { overflow: auto; height: 100%; }
+      .fp-chip { display: inline-flex; align-items: center; min-height: 44px; max-width: 11rem; overflow: hidden; padding: 0 12px; border: 1px solid var(--line); border-radius: 999px; font-size: 14px; font-weight: 600; }
       button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
       html[data-console-contrast="increase"] button:focus-visible,
       html[data-console-contrast="increase"] input:focus-visible,
@@ -244,6 +269,13 @@
       .chart-wrap { display: grid; place-items: center; min-height: 0; padding: 10px; }
       .chart-wrap svg { width: min(100%,500px); max-height: 390px; }
       .systems-view { display: grid; grid-template-columns: minmax(280px,.88fr) minmax(0,1.12fr); gap: 9px; height: 100%; padding: 9px; }
+      .credentials-view { display: grid; gap: 9px; height: 100%; padding: 9px; overflow: auto; }
+      .cred-card { border: 1px solid var(--line); border-radius: 12px; padding: 10px; background: rgba(5,6,10,.42); }
+      .cred-card h3 { margin: 0 0 6px; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; }
+      .cred-card p, .cred-card li { margin: 4px 0; color: var(--muted); font-size: 11px; }
+      .fp { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+      .cred-warn { color: var(--yellow); }
+      .cred-bad { color: var(--red); }
       .system-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 6px; padding: 8px; }
       .system-item, .matrix-item { padding: 9px; border: 1px solid var(--line); border-radius: 8px; background: rgba(5,6,10,.4); }
       .system-item span, .matrix-item span { display: block; color: var(--muted); font-size: 8px; text-transform: uppercase; }
@@ -255,18 +287,18 @@
       .layer.partial span, .layer.inactive span { color: var(--yellow); } .layer.blocked span { color: var(--red); }
       .radar-grid polygon, .radar-axes line { fill: none; stroke: var(--line); stroke-width: 1; }
       .radar-labels text { fill: var(--muted); font-size: 9px; }
-      .provider-card { margin: 8px; padding: 9px; border: 1px solid rgba(57,255,136,.24); border-radius: 9px; background: var(--green-soft); }
+      .provider-card { margin: 8px; padding: 9px; border: 1px solid rgba(215,161,95,.24); border-radius: 9px; background: var(--green-soft); }
       .provider-card span { display: block; color: var(--muted); font-size: 8px; text-transform: uppercase; }
       .provider-card b { display: block; margin-top: 5px; color: var(--green); font-size: 12px; }
       .matrix { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 5px; margin-top: 7px; }
-      .activity-row:first-child { border-color: rgba(185,51,255,.4); background: var(--violet-soft); }
+      .activity-row:first-child { border-color: rgba(196,123,74,.4); background: var(--violet-soft); }
       .bottom-band { grid-column: 1/-1; display: grid; grid-template-columns: minmax(0,1.12fr) minmax(300px,.88fr); gap: 9px; }
       .category-content { display: grid; grid-template-columns: minmax(0,1fr) 170px; gap: 12px; height: calc(100% - 39px); padding: 9px 11px; }
       .category-bars { display: grid; align-content: center; gap: 7px; }
       .category-row { display: grid; grid-template-columns: 72px minmax(0,1fr) 27px; align-items: center; gap: 7px; font-size: 9px; }
       .bar-track { height: 8px; overflow: hidden; border: 1px solid var(--line); border-radius: 999px; background: rgba(5,6,10,.52); }
       .bar-fill { height: 100%; border-radius: inherit; background: linear-gradient(90deg,var(--violet),var(--magenta)); transition: width .24s ease; }
-      .category-row:nth-child(even) .bar-fill { background: linear-gradient(90deg,var(--green),#50dcff); }
+      .category-row:nth-child(even) .bar-fill { background: linear-gradient(90deg,var(--green),#d7a15f); }
       .completion-card { display: grid; place-items: center; border-left: 1px solid var(--line); }
       .completion-ring { position: relative; width: 112px; aspect-ratio: 1; }
       .completion-ring svg { width: 100%; height: 100%; }
@@ -284,8 +316,8 @@
       .empty { display: grid; place-items: center; min-height: 70px; padding: 14px; color: var(--muted); font-size: 10px; text-align: center; }
       .footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 7px; min-height: 33px; padding: 6px 12px; border-top: 1px solid var(--line); color: var(--muted); font-size: 9px; }
       .stream { display: flex; flex-wrap: wrap; gap: 14px; } .live { color: var(--green); font-weight: 900; }
-      .toast { position: fixed; left: 50%; bottom: 18px; z-index: 30; width: min(calc(100% - 28px),520px); transform: translate(-50%,140%); padding: 12px 14px; border: 1px solid rgba(185,51,255,.5); border-radius: 11px; background: #11141d; box-shadow: 0 18px 55px rgba(0,0,0,.58); font-size: 11px; transition: transform .18s ease; }
-      .toast.show { transform: translate(-50%,0); } .toast.error { border-color: rgba(255,92,117,.62); }
+      .toast { position: fixed; left: 50%; bottom: 18px; z-index: 30; width: min(calc(100% - 28px),520px); transform: translate(-50%,140%); padding: 12px 14px; border: 1px solid rgba(196,123,74,.5); border-radius: 11px; background: #11141d; box-shadow: 0 18px 55px rgba(0,0,0,.58); font-size: 11px; transition: transform .18s ease; }
+      .toast.show { transform: translate(-50%,0); } .toast.error { border-color: rgba(163,59,50,.62); }
       @keyframes spin { to { transform: rotate(360deg); } }
       @keyframes pulse { 0%,100% { opacity:.38; transform:scale(.93); } 50% { opacity:1; transform:scale(1.05); } }
       @media (max-width:1120px) {
@@ -306,33 +338,33 @@
       @media (prefers-reduced-motion:reduce) { *,*::before,*::after { animation-duration:.01ms!important; animation-iteration-count:1!important; transition-duration:.01ms!important; } }
     
       /* Console 01 visual master: industrial cartoon reactor HUD. */
-      :root { --console-cyan:#39e6ff; --console-cyan-soft:rgba(57,230,255,.14); --console-amber:#ffb25b; --console-steel:#202634; }
-      body { background:radial-gradient(circle at 50% 30%,rgba(57,230,255,.09),transparent 34rem),radial-gradient(circle at 15% 0%,rgba(185,51,255,.18),transparent 30rem),radial-gradient(circle at 95% 70%,rgba(255,122,24,.12),transparent 34rem),#05060a; }
-      .hud-frame { position:relative; border:2px solid #32394a; border-radius:24px; background:linear-gradient(145deg,#090b11,#05060a 60%,#0b0d13); box-shadow:0 28px 90px rgba(0,0,0,.62),inset 0 0 0 2px #111520,inset 0 0 55px rgba(57,230,255,.035); clip-path:polygon(1.2% 0,98.8% 0,100% 2.2%,100% 97.8%,98.8% 100%,1.2% 100%,0 97.8%,0 2.2%); }
+      :root { --console-cyan:#c4a574; --console-cyan-soft:rgba(196,165,116,.14); --console-amber:#ffb25b; --console-steel:#202634; }
+      body { background:radial-gradient(circle at 50% 30%,rgba(196,165,116,.09),transparent 34rem),radial-gradient(circle at 15% 0%,rgba(196,123,74,.18),transparent 30rem),radial-gradient(circle at 95% 70%,rgba(255,122,24,.12),transparent 34rem),#05060a; }
+      .hud-frame { position:relative; border:2px solid #32394a; border-radius:24px; background:linear-gradient(145deg,#090b11,#05060a 60%,#0b0d13); box-shadow:0 28px 90px rgba(0,0,0,.62),inset 0 0 0 2px #111520,inset 0 0 55px rgba(196,165,116,.035); clip-path:polygon(1.2% 0,98.8% 0,100% 2.2%,100% 97.8%,98.8% 100%,1.2% 100%,0 97.8%,0 2.2%); }
       .hud-frame::before,.hud-frame::after { content:""; position:absolute; z-index:20; width:130px; height:16px; pointer-events:none; background:repeating-linear-gradient(90deg,#ff7a18 0 13px,#111520 13px 20px); box-shadow:0 0 18px rgba(255,122,24,.28); }
       .hud-frame::before { top:0; left:8%; } .hud-frame::after { right:8%; bottom:0; }
-      .top-glow { height:4px; background:linear-gradient(90deg,#ff7a18,#ffb25b,#b933ff,#39e6ff,#39ff88); }
+      .top-glow { height:4px; background:linear-gradient(90deg,#ff7a18,#ffb25b,#c47b4a,#c4a574,#d7a15f); }
       .topbar { background:linear-gradient(180deg,#151a24,#090b11); border-bottom-color:#3a4254; }
-      .mascot-mark { width:54px; height:54px; border-color:rgba(255,178,91,.7); background:radial-gradient(circle,rgba(57,230,255,.15),transparent 60%),#0a0d14; }
-      .mascot-mark::before,.mascot-mark::after { display:none; } .mascot-mark svg { width:48px; height:48px; filter:drop-shadow(0 0 8px rgba(57,230,255,.28)); }
+      .mascot-mark { width:54px; height:54px; border-color:rgba(255,178,91,.7); background:radial-gradient(circle,rgba(196,165,116,.15),transparent 60%),#0a0d14; }
+      .mascot-mark::before,.mascot-mark::after { display:none; } .mascot-mark svg { width:48px; height:48px; filter:drop-shadow(0 0 8px rgba(196,165,116,.28)); }
       .brand h1 { color:#f6f3e9; text-shadow:0 0 14px rgba(255,178,91,.18); } .brand p b { color:var(--console-amber); }
-      .panel,.section-card,.mission-core,.queue-panel { border-color:#343b4c; background:linear-gradient(145deg,rgba(25,30,42,.97),rgba(7,9,14,.99)); box-shadow:inset 0 0 0 1px rgba(255,255,255,.025),inset 0 0 32px rgba(57,230,255,.025); }
+      .panel,.section-card,.mission-core,.queue-panel { border-color:#343b4c; background:linear-gradient(145deg,rgba(25,30,42,.97),rgba(7,9,14,.99)); box-shadow:inset 0 0 0 1px rgba(255,255,255,.025),inset 0 0 32px rgba(196,165,116,.025); }
       .panel::after,.section-card::after,.mission-core::before,.queue-panel::after { content:""; position:absolute; inset:5px; pointer-events:none; border:1px solid rgba(255,178,91,.06); border-radius:10px; }
-      .panel-header,.section-head,.mission-heading { background:linear-gradient(90deg,rgba(255,122,24,.08),rgba(185,51,255,.08),rgba(57,230,255,.06)); }
-      .violet-edge { border-color:rgba(185,51,255,.5); } .green-edge { border-color:rgba(57,230,255,.42); }
+      .panel-header,.section-head,.mission-heading { background:linear-gradient(90deg,rgba(255,122,24,.08),rgba(196,123,74,.08),rgba(196,165,116,.06)); }
+      .violet-edge { border-color:rgba(196,123,74,.5); } .green-edge { border-color:rgba(196,165,116,.42); }
       .telemetry-strip { background:linear-gradient(180deg,#10141d,#080a10); }
       .telemetry-item:nth-child(3n+1) b { color:var(--console-amber); } .telemetry-item:nth-child(3n+2) b { color:var(--console-cyan); } .telemetry-item:nth-child(3n) b { color:#c77dff; }
       .mission-visual::before,.mission-visual::after { content:""; position:absolute; width:54%; height:3px; top:50%; left:23%; z-index:0; background:linear-gradient(90deg,transparent,var(--console-cyan),#fff,var(--violet),transparent); filter:blur(.3px) drop-shadow(0 0 8px var(--console-cyan)); opacity:.52; transform:rotate(-11deg); }
       .mission-visual::after { transform:rotate(13deg); opacity:.34; }
-      .mission-ring { width:min(360px,80%); filter:drop-shadow(0 0 18px rgba(57,230,255,.15)); }
-      .mission-ring::before { content:""; position:absolute; inset:10%; border-radius:50%; background:conic-gradient(from 20deg,rgba(255,122,24,.16),rgba(185,51,255,.18),rgba(57,230,255,.18),rgba(57,255,136,.13),rgba(255,122,24,.16)); box-shadow:inset 0 0 28px rgba(0,0,0,.78),0 0 28px rgba(57,230,255,.12); }
+      .mission-ring { width:min(360px,80%); filter:drop-shadow(0 0 18px rgba(196,165,116,.15)); }
+      .mission-ring::before { content:""; position:absolute; inset:10%; border-radius:50%; background:conic-gradient(from 20deg,rgba(255,122,24,.16),rgba(196,123,74,.18),rgba(196,165,116,.18),rgba(215,161,95,.13),rgba(255,122,24,.16)); box-shadow:inset 0 0 28px rgba(0,0,0,.78),0 0 28px rgba(196,165,116,.12); }
       .mission-mascot { position:absolute; z-index:3; inset:25% 25% 31%; display:grid; place-items:center; pointer-events:none; }
-      .mission-mascot svg { width:100%; max-height:100%; filter:drop-shadow(0 0 10px rgba(57,230,255,.35)) drop-shadow(0 0 8px rgba(185,51,255,.25)); }
+      .mission-mascot svg { width:100%; max-height:100%; filter:drop-shadow(0 0 10px rgba(196,165,116,.35)) drop-shadow(0 0 8px rgba(196,123,74,.25)); }
       .mission-copy { position:absolute; display:grid; z-index:4; inset:66% 13% 8%; place-content:start center; padding-top:4px; overflow:auto; }
       .mission-copy h2 { font-size:clamp(13px,1.5vw,20px); -webkit-line-clamp:2; } .mission-copy p { color:var(--console-cyan); }
-      .core-gauge { filter:drop-shadow(0 0 12px rgba(57,230,255,.12)); }
+      .core-gauge { filter:drop-shadow(0 0 12px rgba(196,165,116,.12)); }
       .rail-icon,.capture-tab.active,.primary-button { border-color:var(--console-amber); }
-      .rail-button.active { border-left-color:var(--console-amber); background:linear-gradient(90deg,rgba(255,122,24,.15),rgba(185,51,255,.08)); }
+      .rail-button.active { border-left-color:var(--console-amber); background:linear-gradient(90deg,rgba(255,122,24,.15),rgba(196,123,74,.08)); }
       .rail-button.active .rail-icon { color:var(--console-amber); }
       .primary-button,.capture-submit { background:linear-gradient(90deg,#ff8a28,#ffb25b); color:#100a04; box-shadow:0 0 18px rgba(255,122,24,.22); }
       .bar-fill { background:linear-gradient(90deg,var(--violet),var(--console-cyan),var(--console-amber)); }
@@ -343,7 +375,7 @@
       .inbox-row { display:grid; gap:3px; padding:9px; border:1px solid var(--line); border-radius:8px; background:rgba(5,6,10,.42); }
       .inbox-row strong { font-size:10px; } .inbox-row small { display:block; color:var(--muted); font-size:9px; }
       .inbox-row .sev { display:inline-block; margin-right:6px; padding:1px 6px; border-radius:999px; font-size:8px; font-weight:900; text-transform:uppercase; }
-      .sev-critical, .sev-high { background:rgba(255,92,117,.16); color:var(--red); }
+      .sev-critical, .sev-high { background:rgba(163,59,50,.16); color:var(--red); }
       .sev-elevated { background:rgba(255,122,24,.16); color:var(--orange); }
       .sev-normal, .sev-informational { background:rgba(148,155,176,.16); color:var(--muted); }
       .source-status-row { display:flex; justify-content:space-between; gap:8px; padding:5px 9px; border-bottom:1px solid var(--line); font-size:9px; }
@@ -434,7 +466,7 @@
                 <button class="rail-button" type="button" data-view="operations"><span class="rail-icon">⌁</span><span><strong>Operations</strong><small>Daily brief</small></span><span class="rail-count" id="nav-operations-count">0</span></button>
                 <button class="rail-button" type="button" data-view="livework"><span class="rail-icon">⛭</span><span><strong>Live Work</strong><small>Mission pipeline</small></span><span class="rail-count" id="nav-livework-count">0</span></button>
                 <button class="rail-button" type="button" data-view="systems"><span class="rail-icon">◇</span><span><strong>Systems</strong><small>Runtime layers</small></span><span class="rail-count" id="nav-system-count">0</span></button>
-                <button class="rail-button" type="button" data-view="general"><span class="rail-icon">⚙</span><span><strong>Settings</strong><small>General</small></span><span class="rail-count" aria-hidden="true">–</span></button>
+                <button class="rail-button" type="button" data-view="settings"><span class="rail-icon">⚙</span><span><strong>Settings</strong><small>General, credentials, persistence, danger</small></span><span class="rail-count" id="nav-settings-count">0</span></button>
               </div>
             </nav>
             <section class="panel violet left-priorities">
@@ -454,9 +486,9 @@
       <svg viewBox="0 0 180 180" focusable="false">
         <path d="M57 42h66l14 30v45c0 25-21 44-47 44s-47-19-47-44V72z" fill="#d8dde8" stroke="#06070c" stroke-width="8"/>
         <path d="M60 45l12-25h36l12 25" fill="none" stroke="#ff9a35" stroke-width="10" stroke-linecap="round"/>
-        <path d="M71 22h38" stroke="#39e6ff" stroke-width="5" stroke-linecap="round"/>
+        <path d="M71 22h38" stroke="#c4a574" stroke-width="5" stroke-linecap="round"/>
         <ellipse cx="73" cy="91" rx="14" ry="22" fill="#070912"/><ellipse cx="108" cy="91" rx="14" ry="22" fill="#070912"/>
-        <ellipse cx="77" cy="84" rx="5" ry="8" fill="#b933ff"/><ellipse cx="112" cy="84" rx="5" ry="8" fill="#39e6ff"/>
+        <ellipse cx="77" cy="84" rx="5" ry="8" fill="#c47b4a"/><ellipse cx="112" cy="84" rx="5" ry="8" fill="#c4a574"/>
         <circle cx="90" cy="111" r="7" fill="#070912"/>
         <path d="M67 127c13 14 33 14 46 0" fill="none" stroke="#070912" stroke-width="8" stroke-linecap="round"/>
         <path d="M44 76H31v39h13M136 76h13v39h-13" fill="#778093" stroke="#06070c" stroke-width="8"/>
@@ -606,10 +638,50 @@
                       <div class="system-item"><span>Provider / model</span><b id="reasoning-provider">UNKNOWN</b></div>
                     </div>
                   </article>
-                  <article class="panel green"><div class="panel-header"><h2>Layer readiness radar</h2><span>LIVE STATUS</span></div><div class="chart-wrap"><svg viewBox="0 0 400 400" role="img" aria-label="Jarvis runtime layer readiness"><g class="radar-grid" id="radar-grid"></g><g class="radar-axes" id="radar-axes"></g><polygon id="layer-radar-polygon" points="200,200" fill="rgba(185,51,255,.18)" stroke="var(--violet)" stroke-width="3" /><g class="radar-labels" id="radar-labels"></g></svg></div></article>
+                  <article class="panel green"><div class="panel-header"><h2>Layer readiness radar</h2><span>LIVE STATUS</span></div><div class="chart-wrap"><svg viewBox="0 0 400 400" role="img" aria-label="Jarvis runtime layer readiness"><g class="radar-grid" id="radar-grid"></g><g class="radar-axes" id="radar-axes"></g><polygon id="layer-radar-polygon" points="200,200" fill="rgba(196,123,74,.18)" stroke="var(--violet)" stroke-width="3" /><g class="radar-labels" id="radar-labels"></g></svg></div></article>
                 </div>
               </section>
-              <section class="view" id="view-general" aria-labelledby="general-heading">
+              <section class="view" id="view-settings">
+                <div class="settings-shell">
+                  <h2 class="settings-title">Settings</h2>
+                  <nav class="settings-tabs" aria-label="Settings">
+                    <button class="active" type="button" data-settings-tab="general" aria-selected="true">General</button>
+                    <button type="button" data-settings-tab="credentials" aria-selected="false">Credentials</button>
+                    <button type="button" data-settings-tab="persistence" aria-selected="false">Persistence</button>
+                    <button type="button" data-settings-tab="danger" aria-selected="false">Danger zone</button>
+                  </nav>
+                  <div class="settings-panel" data-settings-panel="credentials" id="view-credentials">
+                    <div class="credentials-view">
+                      <article class="panel violet">
+                        <div class="panel-header"><h2>Credentials</h2><span class="settings-status">Not verified</span></div>
+                        <div class="panel-content" style="padding:10px">
+                          <p id="credentials-intro">Machine credentials are not a sign-in. This console shows collapsed fingerprint chips and runbook links. It does not generate secrets or call Convex. End is not offered here.</p>
+                          <p class="cred-bad" id="credentials-banner" hidden></p>
+                          <p class="cred-warn" id="credentials-approvals" hidden></p>
+                          <div id="credentials-cards"></div>
+                          <p class="note" id="credentials-local"></p>
+                          <p><a href="/settings/danger">Open Danger zone</a></p>
+                          <ul id="credentials-links"></ul>
+                        </div>
+                      </article>
+                    </div>
+                  </div>
+                  <div class="settings-panel" data-settings-panel="persistence" id="view-persistence">
+                    <div class="settings-layout">
+                      <h2>Persistence</h2>
+                      <p class="settings-status">Read only</p>
+                      <p>The authorised provider is on the Systems rail. This tab does not wipe Convex or local JSON.</p>
+                    </div>
+                  </div>
+                  <div class="settings-panel" data-settings-panel="danger" id="view-danger">
+                    <div class="settings-layout">
+                      <h2>Danger zone</h2>
+                      <p class="settings-status">Not verified</p>
+                      <p>Ending overlap is not offered in Credentials. This console does not remove tokens and does not wipe Convex.</p>
+                      <p class="settings-actions"><a href="/settings/danger">Open Danger zone</a></p>
+                    </div>
+                  </div>
+                  <div class="settings-panel active" data-settings-panel="general" id="view-general" aria-labelledby="general-heading">
                 <div class="settings-layout">
                   <h2 id="general-heading">General</h2>
                   <p>Preferences for how Jarvis interprets time and how this console looks.</p>
@@ -642,6 +714,8 @@
                     <button class="settings-save" id="save-display-preferences" type="button">Save display preferences</button>
                     <p id="display-save-status" role="status"></p>
                   </article>
+                </div>
+                  </div>
                 </div>
               </section>
             </div>
@@ -682,7 +756,7 @@
     <script>
       (() => {
         "use strict";
-        const state = { status: null, generalSettings: null, lastStatusAt: 0, tasks: [], reminders: [], brief: null, quotes: [], quoteRegisterStatus: "unavailable", counts: { activeTasks: 0, completedTasks: 0, reminders: 0 }, captureMode: "task", activities: [], selectedQuoteSummary: null, selectedQuote: null, quoteDetailState: "empty", quoteRequestGeneration: 0, inbox: null, activity: null, liveWork: null };
+        const state = { status: null, generalSettings: null, lastStatusAt: 0, tasks: [], reminders: [], brief: null, quotes: [], quoteRegisterStatus: "unavailable", counts: { activeTasks: 0, completedTasks: 0, reminders: 0 }, captureMode: "task", activities: [], selectedQuoteSummary: null, selectedQuote: null, quoteDetailState: "empty", quoteRequestGeneration: 0, inbox: null, activity: null, liveWork: null, credentials: null };
         const STATUS_STALE_MS = 45000;
         let rpcId = 0;
         let healthCheckInFlight = false;
@@ -811,7 +885,7 @@
             healthCheckInFlight = false;
           }
         }
-        function update(result) { const data = structured(result); if (!data || typeof data !== "object") return; if (data.status && typeof data.status === "object") { state.status = data.status; state.lastStatusAt = Date.now(); } if (data.settings && data.settings.timezone && typeof data.settings.timezone === "object") state.generalSettings = data.settings; if (Array.isArray(data.tasks)) state.tasks = data.tasks; if (Array.isArray(data.reminders)) state.reminders = data.reminders; if (data.brief && typeof data.brief === "object") state.brief = data.brief; if (data.quoteRegister && typeof data.quoteRegister === "object") { state.quoteRegisterStatus = data.quoteRegister.status === "ready" ? "ready" : "unavailable"; state.quotes = Array.isArray(data.quoteRegister.quotes) ? data.quoteRegister.quotes : []; } if ("inbox" in data) state.inbox = data.inbox; if ("activity" in data) state.activity = data.activity; if ("liveWork" in data) state.liveWork = data.liveWork; if (data.counts && typeof data.counts === "object") state.counts = data.counts; else recalc(); render(); }
+        function update(result) { const data = structured(result); if (!data || typeof data !== "object") return; if (data.status && typeof data.status === "object") { state.status = data.status; state.lastStatusAt = Date.now(); } if (data.settings && data.settings.timezone && typeof data.settings.timezone === "object") state.generalSettings = data.settings; if (Array.isArray(data.tasks)) state.tasks = data.tasks; if (Array.isArray(data.reminders)) state.reminders = data.reminders; if (data.brief && typeof data.brief === "object") state.brief = data.brief; if (data.quoteRegister && typeof data.quoteRegister === "object") { state.quoteRegisterStatus = data.quoteRegister.status === "ready" ? "ready" : "unavailable"; state.quotes = Array.isArray(data.quoteRegister.quotes) ? data.quoteRegister.quotes : []; } if ("inbox" in data) state.inbox = data.inbox; if ("activity" in data) state.activity = data.activity; if ("liveWork" in data) state.liveWork = data.liveWork; if ("credentials" in data) state.credentials = data.credentials; if (data.counts && typeof data.counts === "object") state.counts = data.counts; else recalc(); render(); }
         window.addEventListener("message", (event) => { if (event.source !== window.parent) return; const message = event.data; if (!message || message.jsonrpc !== "2.0") return; if (typeof message.id === "number") { const waiting = pending.get(message.id); if (!waiting) return; pending.delete(message.id); if (message.error) waiting.reject(message.error); else waiting.resolve(message.result); return; } if (message.method === "ui/notifications/tool-result") update(message.params); }, { passive: true });
         const bridgeReady = (async () => { await request("ui/initialize", { appInfo: { name: "jarvis-dashboard", version: "0.2.0" }, appCapabilities: {}, protocolVersion: "2026-01-26" }); notify("ui/notifications/initialized", {}); bridgeInitialised = true; void checkConnectionHealth(true); activity("HUD bridge online", "MCP Apps connection initialised"); })();
         async function callTool(name, args = {}) { await bridgeReady; const result = await request("tools/call", { name, arguments: args }); update(result); return result; }
@@ -1117,9 +1191,68 @@
           note.hidden = true;
           text(byId("tz-effective"), timezone.effectiveIana);
         }
-        function render() { renderCounts(); renderFocus(); renderBoard(); renderReminders(); renderSystems(); renderCategories(); renderPriorities(); renderRightReminders(); renderOperations(); renderActivity(); renderInbox(); renderActivityTimeline(); renderLiveWork(); renderGeneral(); }
+        function renderCredentials() {
+          const root = byId("credentials-cards");
+          if (!root) return;
+          const credentials = state.credentials;
+          const banner = byId("credentials-banner");
+          const approvals = byId("credentials-approvals");
+          const local = byId("credentials-local");
+          const links = byId("credentials-links");
+          root.replaceChildren();
+          links.replaceChildren();
+          if (!credentials) {
+            banner.hidden = true;
+            approvals.hidden = false;
+            text(approvals, "Credentials status could not be reached.");
+            text(local, "Generate and rotate on the loopback settings page. This console does not mint secrets.");
+            text(byId("nav-settings-count"), 0);
+            return;
+          }
+          banner.hidden = !credentials.banner;
+          if (credentials.banner) text(banner, credentials.banner);
+          approvals.hidden = !credentials.approvalsWarning;
+          if (credentials.approvalsWarning) text(approvals, credentials.approvalsWarning);
+          credentials.tokens.forEach((card) => {
+            const section = document.createElement("section");
+            section.className = "cred-card";
+            const title = document.createElement("h3");
+            text(title, card.label);
+            const statusLine = document.createElement("p");
+            statusLine.className = "settings-status";
+            text(statusLine, card.statusLabel + " · " + card.overlapLabel);
+            const fingerprint = document.createElement("span");
+            fingerprint.className = "fp-chip";
+            text(fingerprint, card.fingerprint || "—");
+            section.append(title, statusLine, fingerprint);
+            if (card.warning) {
+              const warn = document.createElement("p");
+              warn.className = card.equalsServiceToken ? "cred-bad" : "cred-warn";
+              text(warn, card.warning);
+              section.append(warn);
+            }
+            root.append(section);
+          });
+          text(local, credentials.localPage
+            ? "Generate and rotate on the local host page " + credentials.localPage + ". This console does not mint secrets or call Convex."
+            : "Generate stays on the loopback host. This console does not mint secrets or call Convex.");
+          const docs = credentials.docs || {};
+          [["Open HTTP API docs", docs.httpApi], ["Open MCP preview runbook", docs.mcpPreview], ["Open exposure / remote gateway docs", docs.exposure], ["Open rotation runbook", docs.rotation]].forEach(([label, href]) => {
+            if (!href) return;
+            const item = document.createElement("li");
+            const anchor = document.createElement("a");
+            anchor.href = href;
+            anchor.rel = "noreferrer";
+            text(anchor, label);
+            item.append(anchor);
+            links.append(item);
+          });
+          text(byId("nav-settings-count"), credentials.failClosed ? "!" : credentials.tokens.filter((card) => card.configured).length);
+        }
+        function render() { renderCounts(); renderFocus(); renderBoard(); renderReminders(); renderSystems(); renderCategories(); renderPriorities(); renderRightReminders(); renderOperations(); renderActivity(); renderInbox(); renderActivityTimeline(); renderLiveWork(); renderGeneral(); renderCredentials(); }
         function setCaptureMode(mode) { state.captureMode = mode; document.querySelectorAll("[data-capture]").forEach((button) => button.classList.toggle("active",button.dataset.capture === mode)); const category = byId("capture-category"); const due = byId("capture-due"); if (mode === "task") { text(byId("capture-title-label"),"Task command"); text(byId("capture-detail-copy"),"Category"); category.hidden = false; due.hidden = true; text(byId("capture-submit"),"ADD TASK"); } else { text(byId("capture-title-label"),"Reminder command"); text(byId("capture-detail-copy"),"When"); category.hidden = true; due.hidden = false; text(byId("capture-submit"),"SET REMINDER"); } }
         document.querySelectorAll("[data-view]").forEach((button) => button.addEventListener("click",() => { document.querySelectorAll("[data-view]").forEach((candidate) => candidate.classList.toggle("active",candidate === button)); document.querySelectorAll(".view").forEach((view) => view.classList.toggle("active",view.id === `view-${button.dataset.view}`)); }));
+        document.querySelectorAll("[data-settings-tab]").forEach((button) => button.addEventListener("click", () => { const tab = button.dataset.settingsTab; document.querySelectorAll("[data-settings-tab]").forEach((candidate) => { const selected = candidate === button; candidate.classList.toggle("active", selected); candidate.setAttribute("aria-selected", selected ? "true" : "false"); }); document.querySelectorAll("[data-settings-panel]").forEach((panel) => panel.classList.toggle("active", panel.dataset.settingsPanel === tab)); }));
         document.querySelectorAll("[data-capture]").forEach((button) => button.addEventListener("click",() => setCaptureMode(button.dataset.capture)));
         byId("refresh").addEventListener("click",async () => { const button = byId("refresh"); button.disabled = true; try { await callTool("show_jarvis_dashboard"); try { update(await request("tools/call", { name: "get_general_settings", arguments: {} }, 10000)); } catch { state.generalSettings = null; renderGeneral(); } activity("Snapshot refreshed","Live dashboard state reloaded"); toast("Jarvis HUD refreshed."); } catch { toast("Jarvis refresh failed.",true); } finally { button.disabled = false; } });
         byId("save-display-preferences").addEventListener("click", saveDisplayPreferences);

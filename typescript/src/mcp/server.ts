@@ -537,6 +537,56 @@ const countsSchema = z.object({
   reminders: z.number().int().nonnegative(),
 });
 
+const credentialTokenSchema = z.object({
+  id: z.enum(["service", "approval", "delivery"]),
+  label: z.string(),
+  configured: z.boolean(),
+  statusLabel: z.string(),
+  fingerprint: z.string().nullable(),
+  owner: z.string().nullable(),
+  overlapActive: z.boolean(),
+  overlapLabel: z.string(),
+  note: z.string(),
+  equalsServiceToken: z.boolean(),
+  warning: z.string().nullable(),
+});
+
+const credentialsStatusSchema = z
+  .object({
+    failClosed: z.boolean(),
+    banner: z.string().nullable(),
+    approvalsWarning: z.string().nullable(),
+    generation: z.enum(["local-page", "unavailable"]),
+    localPage: z.string().nullable(),
+    tokens: z.array(credentialTokenSchema).length(3),
+    bind: z.object({
+      httpHost: z.string(),
+      httpPort: z.number().int(),
+      httpAuth: z.enum(["Bearer service token", "OIDC access token"]),
+      mcpBind: z.string(),
+      mcpToken: z.literal("Injected server-side only"),
+      remotePosture: z.enum(["configured", "blocked"]),
+      remoteLabel: z.enum(["Configured", "Blocked (fail closed)"]),
+      loopbackOnly: z.boolean(),
+      liveness: z.literal("GET /healthz (public)"),
+    }),
+    exposure: z.object({
+      mode: z.enum(["Loopback (supported default)", "Remote"]),
+      remoteHttp: z.enum(["off", "configured"]),
+      remoteHttpLabel: z.string(),
+    }),
+    docs: z.object({
+      httpApi: z.string(),
+      mcpPreview: z.string(),
+      exposure: z.string(),
+      rotation: z.string(),
+      credentials: z.string(),
+      security: z.string(),
+    }),
+    parity: z.array(z.object({ ui: z.string(), command: z.string() })),
+  })
+  .nullable();
+
 const dashboardOutputSchema = {
   status: statusSchema,
   tasks: z.array(taskSchema),
@@ -554,6 +604,7 @@ const dashboardOutputSchema = {
   // `null` means the live-work endpoint itself could not be reached — distinct
   // from `{status: "unavailable"}` (no mission in flight / provider not Convex).
   liveWork: liveWorkResultSchema.nullable(),
+  credentials: credentialsStatusSchema,
   counts: countsSchema,
 };
 

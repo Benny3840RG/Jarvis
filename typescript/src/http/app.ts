@@ -78,6 +78,10 @@ import type { TotalityPipeline } from "../totality/totalityPipeline.js";
 import { ConvexExternalReconciliationStore } from "../persistence/convexExternalReconciliations.js";
 import type { ExternalReconciliationReadStore } from "../reconciliation/externalReconciliation.js";
 import type { RuntimeReconciliationHealth } from "../reconciliation/runtimeReconciliationHost.js";
+import {
+  selectCredentialsRuntime,
+  type CredentialsRuntime,
+} from "../settings/credentialsStatus.js";
 import { resolveHttpAppConfig, type HttpAppConfig } from "./config.js";
 import {
   registerHttpRateLimit,
@@ -144,6 +148,17 @@ export type CreateJarvisHttpAppOptions = (
    */
   httpRateLimit?: HttpRateLimitConfig;
   /**
+   * Fingerprint read model captured at process start. Tests inject this so a
+   * fixture token never has to live in `process.env`.
+   */
+  credentialsRuntime?: CredentialsRuntime;
+  /**
+   * Environment for the credentials page when no runtime is injected. Production
+   * omits this and reads `process.env` through `captureCredentialsFromEnv`.
+   * An `HttpAppConfig` is not a credentials source: it has no delivery token.
+   */
+  credentialsEnv?: NodeJS.ProcessEnv;
+  /**
    * Invoked once per Fastify route as it is registered. Exposed so contract
    * tests can enumerate the routes the app actually serves without parsing the
    * formatted `printRoutes` tree. The `url` is in Fastify `:param` form.
@@ -177,6 +192,10 @@ export async function createJarvisHttpApp(
   const providerName = options.providerName ?? resolvePersistenceProviderName();
   const persistence = options.persistence ?? createPersistenceFromEnv();
   const config = options.config ?? resolveHttpAppConfig();
+  const credentials = selectCredentialsRuntime(
+    options.credentialsRuntime,
+    options.credentialsEnv ?? process.env,
+  );
   const oidcVerifier =
     options.oidcVerifier ??
     (config.authMode === "oidc" && config.oidc !== undefined
@@ -409,6 +428,7 @@ export async function createJarvisHttpApp(
       noteStore,
       activityEventReader,
       developmentLiveWorkSource,
+      credentials,
     }),
     adapter,
     { logger: options.logger, abortOnError: false },

@@ -53,6 +53,28 @@ Next:
 3. Do not treat this cancellation path as voice, reminder, or monitoring
    cancellation.
 
+## Credentials settings, Phase A (2026-09-24)
+
+Settings is one HUD rail with four tabs: General, Credentials, Persistence, and Danger zone.
+`GET /api/v1/settings/credentials` returns SHA-256 fingerprints, overlap flags, and loopback
+versus fail-closed remote posture. The Credentials tab shows collapsed fingerprint chips and
+runbook links. Generation stays on the loopback page `GET /settings/credentials`. That page does
+not call `npx convex env set` and does not embed service-token digests. A missing service token
+fails closed on the page and on dependent status. A missing approval token warns “Approvals
+unavailable.” A delivery token that matches the service token is refused on the status card.
+
+Next:
+
+1. Keep Convex env changes operator-driven. Do not add a widget control that writes deployment env.
+2. If a later Operations surface starts or stops `npm run start:http`, keep it off this page.
+3. Phase B account sign-in stays out of Credentials. OIDC here is remote HTTP identity only.
+
+End overlap does not trust caller `verify`. Idle stays not-verified and is never offered.
+`decideEndOverlap` returns `offered: false`, `executesRemoval: false`, and no commands. A
+server-attested passing result only moves posture to guarding. Removal is `GET /settings/danger`,
+which does not wipe Convex. Production HTTP and preview select credentials with
+`captureCredentialsFromEnv`, not from `HttpAppConfig`, which has no delivery token.
+
 ## Verification failure routes to repair (2026-09-23, #550)
 
 `DEV_TRANSITION_VERIFYING_TO_REPAIR_REQUIRED` now uses the trusted evidence
