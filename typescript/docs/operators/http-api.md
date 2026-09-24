@@ -3,14 +3,26 @@
 Jarvis exposes a localhost-first NestJS/Fastify system boundary alongside the maintained CLI.
 This stage implements only the operations whose runtime behaviour is complete:
 
-| Method           | Path                             | Authentication | Purpose                                                     |
-| ---------------- | -------------------------------- | -------------- | ----------------------------------------------------------- |
-| GET              | `/healthz`                       | Public         | Process liveness only; never reads persistence.             |
-| GET              | `/api/v1/help`                   | Bearer token   | Lists only operations implemented by the running adapter.   |
-| GET              | `/api/v1/status`                 | Bearer token   | Checks persistence, timezone, layer readiness, and Z-State. |
-| GET              | `/api/v1/reminders`              | ******         | Lists durable reminders.                                    |
-| POST             | `/api/v1/reminders`              | ******         | Creates a durable reminder.                                 |
-| GET/PATCH/DELETE | `/api/v1/reminders/{reminderId}` | ******         | Reads, updates, or removes one reminder.                    |
+| Method           | Path                             | Authentication | Purpose                                                         |
+| ---------------- | -------------------------------- | -------------- | --------------------------------------------------------------- |
+| GET              | `/healthz`                       | Public         | Process liveness only; never reads persistence.                 |
+| GET              | `/api/v1/help`                   | Bearer token   | Lists only operations implemented by the running adapter.       |
+| GET              | `/api/v1/status`                 | Bearer token   | Checks persistence, timezone, layer readiness, and Z-State.     |
+| GET              | `/api/v1/settings/general`       | Bearer token   | Read-only reminder timezone status. Invalid zones stay invalid. |
+| GET              | `/api/v1/settings/credentials`   | Bearer token   | Fingerprints, overlap, and bind posture. No token values.       |
+| GET              | `/settings/credentials`          | Loopback only  | Guided rotation page. Not served off loopback.                  |
+| GET              | `/settings/limits`               | Loopback only  | Provider-quota read model. Unknown until a store is chosen.     |
+| GET              | `/api/v1/reminders`              | ******         | Lists durable reminders.                                        |
+| POST             | `/api/v1/reminders`              | ******         | Creates a durable reminder.                                     |
+| GET/PATCH/DELETE | `/api/v1/reminders/{reminderId}` | ******         | Reads, updates, or removes one reminder.                        |
+
+`GET /api/v1/settings/general` does not store display preferences. Theme, contrast, and motion stay in the operator console. CLI output is unchanged.
+
+Settings → Danger zone is loopback `GET /settings/danger`, plus `GET /api/v1/settings/danger-zone`,
+`GET /api/v1/settings/danger-zone/page`, and `POST /api/v1/settings/danger-zone/actions/{actionId}`.
+It is the only End overlap path. It wraps the CLI overlap removal and local JSON quarantine
+described in [`danger-zone.md`](danger-zone.md). It does not delete Convex owner data and does not
+store a Bearer token in sessionStorage.
 
 The adapter also implements `/api/v1/tasks` (including completion), `/api/v1/totality/reason`, and
 the project-scoped memory-change-set and tool-action proposal routes. Tool-action approval changes
@@ -36,6 +48,12 @@ JARVIS_SOURCE_VERSION=<build commit or immutable source identifier>
 `PERSISTENCE_PROVIDER` defaults to `json`; `convex` keeps the existing `CONVEX_URL` and service
 token requirements. `JARVIS_SERVICE_TOKEN_PREVIOUS` is accepted only while a current token is
 also configured, preserving the documented rotation overlap and failing closed otherwise.
+`GET /api/v1/settings/credentials` reports that overlap as a short fingerprint, not as the token.
+The public loopback page shows fingerprint chips only and does not embed SHA-256 digests. End
+overlap is a link to `/settings/danger`, not a remove command. See
+[credentials-settings.md](credentials-settings.md). A missing
+service token makes dependent status fail closed. A missing approval token warns that approvals
+are unavailable.
 
 `JARVIS_APPROVAL_TOKEN` (with optional `JARVIS_APPROVAL_TOKEN_PREVIOUS` during rotation) is a
 second, separately held secret required by `POST .../tool-actions/{actionId}/approve` in addition
@@ -65,8 +83,10 @@ Optional transport values are:
 | `JARVIS_OIDC_SUBJECT`                         | unset       | Exact verified OIDC `sub` claim authorised for the single Jarvis owner.             |
 | `JARVIS_ALLOWED_ORIGINS`                      | unset       | Comma-separated HTTPS browser origins accepted by the remote gateway.               |
 | `JARVIS_MAX_REQUEST_BYTES`                    | 1048576     | Remote request body limit, bounded to 1024–10485760 bytes.                          |
-| `JARVIS_RATE_LIMIT_MAX_REQUESTS`              | 60          | Per-client remote request budget per window.                                        |
+| `JARVIS_RATE_LIMIT_MAX_REQUESTS`              | 60          | Per-client remote request budget applied by `@fastify/rate-limit`.                  |
 | `JARVIS_RATE_LIMIT_WINDOW_MS`                 | 60000       | Remote rate-limit window in milliseconds.                                           |
+| `JARVIS_HTTP_RATE_LIMIT_MAX`                  | 1000        | Per-client loopback HTTP budget. Ignored while the remote gateway is enabled.       |
+| `JARVIS_HTTP_RATE_LIMIT_WINDOW_MS`            | 60000       | Loopback HTTP rate-limit window in milliseconds.                                    |
 | `JARVIS_TOTALITY_MAX_REQUEST_BYTES`           | 262144      | Independent byte ceiling for incoming and complete serialized provider requests.    |
 | `JARVIS_TOTALITY_MAX_INPUT_TOKENS`            | 32768       | Input estimate ceiling: ceil(complete provider request UTF-8 bytes / 4).            |
 | `JARVIS_TOTALITY_MAX_CONCURRENT`              | 4           | Maximum simultaneous Totality provider calls in one process.                        |
@@ -85,6 +105,29 @@ bytes. A misleading or missing `Content-Length` cannot bypass the cap. The exist
 timeout remains active while reading the body. Overflow cancels the read and fails as a
 non-retryable provider processing error without staging memory. Model calls are not retried
 automatically. See [OpenClaw acquisition record](../architecture/openclaw-acquisition-2026.9.5.md).
+
+Loopback HTTP rate limiting uses `@fastify/rate-limit` on the Nest Fastify adapter.
+The default budget is 1000 requests per 60 seconds per client address so a single
+local operator is not locked out. An invalid `JARVIS_HTTP_RATE_LIMIT_*` value
+fails startup. When the remote gateway is enabled, that same plugin uses
+`JARVIS_RATE_LIMIT_MAX_REQUESTS` and `JARVIS_RATE_LIMIT_WINDOW_MS` instead, so a
+request is counted once. TLS, origin, and body-size checks stay in the remote
+gateway hook. A limited response is HTTP 429 `application/problem+json` with
+`Retry-After` in seconds. The limiter keeps at most 10000 live client keys in
+the current process. A new key is rejected after expired windows are dropped.
+It is not a shared quota across workers, and it does not cover the isolated-ingress
+commissioning process.
+
+Convex model-invocation writes (`developmentState.recordModelInvocation`) consume
+a separate `@convex-dev/rate-limiter` fixed window, keyed by owner and provider.
+`JARVIS_CONVEX_MODEL_INVOCATION_RATE` defaults to 120 and
+`JARVIS_CONVEX_MODEL_INVOCATION_PERIOD_MS` defaults to 60000. An invalid value
+fails the mutation closed. Idempotent replays of the same event do not consume
+another unit. Exhaustion throws Convex error data
+`{ kind: "RateLimited", name: "modelInvocation", retryAfter }` where `retryAfter`
+is milliseconds. Callers that surface HTTP `Retry-After` must convert with
+`retryAfterHeaderSeconds` (whole seconds, minimum 1). This does not throttle
+outbound Microsoft Graph or model HTTP calls.
 
 `JARVIS_SOURCE_VERSION` defaults to `development` for local work. Release automation should set
 it to the immutable source commit.

@@ -188,6 +188,10 @@ unset OLD_TOKEN NEW_TOKEN
 
 If the smoke test fails, keep `JARVIS_SERVICE_TOKEN_PREVIOUS` set until the local token is corrected. Removing it is the revocation step for the old credential. Never paste either token into Git, logs, issues, or chat.
 
+The loopback Settings → Credentials page (`http://127.0.0.1:3000/settings/credentials` while `npm run start:http` is bound to loopback) guides token generation and the stdin `env set` steps. The JSON status and the page show short fingerprint chips. The page does not embed SHA-256 digests and does not offer End overlap. Removal stays on `/settings/danger`. The page does not call `npx convex env set` for you. See [`typescript/docs/operators/credentials-settings.md`](typescript/docs/operators/credentials-settings.md).
+
+Settings → Danger zone (`http://127.0.0.1:3000/settings/danger` on that same loopback bind) is the only End path. Confirmations are `END OVERLAP`, `END APPROVAL OVERLAP`, and `END DELIVERY OVERLAP`. It runs `npx convex env remove` for the matching previous variable and does not delete Convex owner data. Reset local JSON and Clear local quarantine files under `typescript/data/` and leave Convex untouched. Backup is a link to Persistence Backup, not an export on this page. See [`typescript/docs/operators/danger-zone.md`](typescript/docs/operators/danger-zone.md).
+
 ### Live Convex smoke test
 
 The smoke command refuses any deployment whose `CONVEX_DEPLOYMENT` does not start with `dev:`. It creates, updates, lists, re-reads through fresh provider instances, completes, removes, and cleans up a uniquely named task and reminder. It verifies task title/category changes and reminder title/due changes before cleanup. Cleanup is attempted after both successful and failed runs, and surfaced errors redact the configured service token.
@@ -215,6 +219,8 @@ npm run backup -- verify "$BACKUP_FILE"
 
 `verify` restores the archive into isolated temporary JSON storage, checks tasks, reminders, completion state, due fields, builds/build logs/upgrades/assets/preferences, and remapped id references, then deletes the temporary files. It does not touch the configured live provider.
 
+Settings → Persistence (operator console) shows the active provider and wraps these commands. It does not switch providers, fall back from Convex to JSON, or treat an archive v4 partial archive as full recovery. See `typescript/docs/operators/persistence-settings.md`.
+
 A real restore is deliberately empty-target only and requires an explicit confirmation flag:
 
 ```bash
@@ -223,7 +229,7 @@ npm run backup -- restore "$BACKUP_FILE" --confirm-empty-target
 
 Restore refuses any provider or memory store that already contains data. It rolls back records created during a failed restore of assistant state, tasks, and reminders (that portion is one atomic operation); builds, build logs, upgrades, assets, and preferences are restored afterward with one `add()` call per record and are not covered by that same rollback — see the `BackupMemoryStores` doc comment in `typescript/src/backup/backup.ts`. Because JSON and Convex issue their own record IDs and timestamps, a portable restore recreates those values; known and nested record-ID references inside assistant state and build logs/upgrades' `buildId` are remapped automatically. The archive retains the original IDs and timestamps for audit purposes.
 
-**Not yet covered:** clients, quotes, invoices, projects, properties, enquiries, and errands are separate JSON-backed domains that are *not* included in the backup archive yet. Unlike builds/build logs/upgrades/assets/preferences, these domains are densely cross-referenced by id (a quote holds a `clientId`, an invoice holds a `quoteId`, etc.), so restoring them safely needs one consistent id-remap applied across every domain at once, not a per-domain copy. See `typescript/docs/ROADMAP.md` for the plan.
+**Not yet covered:** clients, quotes, invoices, projects, properties, enquiries, and errands are separate JSON-backed domains that are _not_ included in the backup archive yet. Unlike builds/build logs/upgrades/assets/preferences, these domains are densely cross-referenced by id (a quote holds a `clientId`, an invoice holds a `quoteId`, etc.), so restoring them safely needs one consistent id-remap applied across every domain at once, not a per-domain copy. See `typescript/docs/ROADMAP.md` for the plan.
 
 ## Checks
 

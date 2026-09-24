@@ -251,6 +251,23 @@ and the joint restore refuse before insertion. They are never ignored or removed
 to make shared-action comparison pass. Broader evidence recovery remains work in
 the same authoritative archive path.
 
+### S4 closed component and risk rows (partial)
+
+The existing unregistered `restoreS4ProjectNotes` helper now also admits current
+`component` and `risk` project records on top of the closed projects, notes,
+four-kind memory history, and never-approved rejected `notes.create` actions.
+Empty destination, owner match, and typed physical-id maps are unchanged.
+Logical record ids, including `parentComponentId`, are preserved. `UuidRemapper`
+is not applied, because this restore does not mint logical ids.
+
+Only components with an empty `attributes` object and a closed same-project
+parent graph are admitted. Only risks with canonical text and integer scores
+from 1 to 5 are admitted. Non-empty attributes, constraints, tasks, events,
+receipts, reconciliations, development bindings, and omega rows stay refused.
+Verification remains `completeness: partial` with no verified group, and
+`export-v4` still does not mark `notesAndEvidence` present. See
+[the S4 restore slice](backup-v4-s4-restore-slice.md).
+
 ### S5 closed terminal orchestration history (partial)
 
 `convex/backupS5.ts:capture` is an authenticated read of the three orchestration

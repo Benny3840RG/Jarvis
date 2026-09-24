@@ -25,6 +25,7 @@ import {
   type DashboardSnapshot,
   type ReminderRequestUpdate,
 } from "./jarvisApiClient.js";
+import { registerPersistenceSettingsTools } from "./persistenceSettingsTools.js";
 import { JARVIS_INSTRUCTIONS, JARVIS_PERSONA_MARKDOWN, JARVIS_PERSONA_URI } from "./persona.js";
 
 export const JARVIS_DASHBOARD_URI = "ui://jarvis/dashboard-v1.html";
@@ -520,11 +521,72 @@ const statusSchema = z.object({
   checkedAt: z.string(),
 });
 
+const operatorGeneralSettingsSchema = z.object({
+  timezone: z.object({
+    effectiveIana: z.string().min(1).max(128).nullable(),
+    source: z.enum(["env", "machine"]),
+    envRaw: z.string().min(1).max(128).nullable(),
+    valid: z.boolean(),
+    validationError: z.string().min(1).max(300).optional(),
+    machineIana: z.string().min(1).max(128),
+  }),
+});
+
 const countsSchema = z.object({
   activeTasks: z.number().int().nonnegative(),
   completedTasks: z.number().int().nonnegative(),
   reminders: z.number().int().nonnegative(),
 });
+
+const credentialTokenSchema = z.object({
+  id: z.enum(["service", "approval", "delivery"]),
+  label: z.string(),
+  configured: z.boolean(),
+  statusLabel: z.string(),
+  fingerprint: z.string().nullable(),
+  owner: z.string().nullable(),
+  overlapActive: z.boolean(),
+  overlapLabel: z.string(),
+  note: z.string(),
+  equalsServiceToken: z.boolean(),
+  warning: z.string().nullable(),
+});
+
+const credentialsStatusSchema = z
+  .object({
+    failClosed: z.boolean(),
+    banner: z.string().nullable(),
+    approvalsWarning: z.string().nullable(),
+    generation: z.enum(["local-page", "unavailable"]),
+    localPage: z.string().nullable(),
+    tokens: z.array(credentialTokenSchema).length(3),
+    bind: z.object({
+      httpHost: z.string(),
+      httpPort: z.number().int(),
+      httpAuth: z.enum(["Bearer service token", "OIDC access token"]),
+      mcpBind: z.string(),
+      mcpToken: z.literal("Injected server-side only"),
+      remotePosture: z.enum(["configured", "blocked"]),
+      remoteLabel: z.enum(["Configured", "Blocked (fail closed)"]),
+      loopbackOnly: z.boolean(),
+      liveness: z.literal("GET /healthz (public)"),
+    }),
+    exposure: z.object({
+      mode: z.enum(["Loopback (supported default)", "Remote"]),
+      remoteHttp: z.enum(["off", "configured"]),
+      remoteHttpLabel: z.string(),
+    }),
+    docs: z.object({
+      httpApi: z.string(),
+      mcpPreview: z.string(),
+      exposure: z.string(),
+      rotation: z.string(),
+      credentials: z.string(),
+      security: z.string(),
+    }),
+    parity: z.array(z.object({ ui: z.string(), command: z.string() })),
+  })
+  .nullable();
 
 const dashboardOutputSchema = {
   status: statusSchema,
@@ -543,6 +605,7 @@ const dashboardOutputSchema = {
   // `null` means the live-work endpoint itself could not be reached — distinct
   // from `{status: "unavailable"}` (no mission in flight / provider not Convex).
   liveWork: liveWorkResultSchema.nullable(),
+  credentials: credentialsStatusSchema,
   counts: countsSchema,
 };
 
@@ -768,6 +831,39 @@ export function createJarvisMcpServer(client: JarvisApiClient): McpServer {
         return {
           content: [{ type: "text" as const, text: `Jarvis status is ${status.status}.` }],
           structuredContent: { status },
+        };
+      } catch (error: unknown) {
+        return safeError(error);
+      }
+    },
+  );
+
+  registerAppTool(
+    server,
+    "get_general_settings",
+    {
+      title: "Read general settings",
+      description:
+        "Use this to show Settings → General timezone status. It does not change timezone, preferences, ToolActions, or completion authority.",
+      inputSchema: {},
+      outputSchema: { settings: operatorGeneralSettingsSchema },
+      annotations: readAnnotations,
+      _meta: {
+        ui: { resourceUri: JARVIS_DASHBOARD_URI, visibility: ["model", "app"] },
+        "openai/outputTemplate": JARVIS_DASHBOARD_URI,
+      },
+    },
+    async () => {
+      try {
+        const settings = await client.getOperatorGeneralSettings();
+        const timezone = settings.timezone;
+        const message =
+          timezone.valid && timezone.effectiveIana
+            ? `Effective timezone is ${timezone.effectiveIana} (${timezone.source === "env" ? "JARVIS_TIMEZONE" : "machine default"}).`
+            : "Timezone is invalid. Reminder commands that need local wall-clock time will fail until JARVIS_TIMEZONE is a valid IANA timezone.";
+        return {
+          content: [{ type: "text" as const, text: message }],
+          structuredContent: { settings },
         };
       } catch (error: unknown) {
         return safeError(error);
@@ -2574,6 +2670,8 @@ export function createJarvisMcpServer(client: JarvisApiClient): McpServer {
       }
     },
   );
+
+  registerPersistenceSettingsTools(server, client);
 
   return server;
 }

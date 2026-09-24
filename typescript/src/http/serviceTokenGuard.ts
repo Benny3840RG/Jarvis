@@ -92,7 +92,7 @@ export class ServiceTokenGuard implements CanActivate {
         HttpStatus.SERVICE_UNAVAILABLE,
         "authentication-unavailable",
         "Service Authentication Unavailable",
-        "Jarvis service authentication is not configured.",
+        "Jarvis service authentication is not configured. Dependent status is fail-closed until a service token is set.",
       );
     }
 

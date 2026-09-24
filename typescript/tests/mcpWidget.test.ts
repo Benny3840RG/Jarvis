@@ -355,9 +355,10 @@ describe("Jarvis preview widget", () => {
     assert.doesNotThrow(() => new Script(source));
   });
 
-  it("uses the violet-green HUD treatment while retaining Beez Treez branding", () => {
-    assert.match(widget, /#b933ff/i);
-    assert.match(widget, /#39ff88/i);
+  it("uses the warm instrument HUD treatment while retaining Beez Treez branding", () => {
+    assert.doesNotMatch(widget, /#b933ff|#39ff88|#ff2fbf|#39e6ff/i);
+    assert.match(widget, /#c47b4a/i);
+    assert.match(widget, /#d7a15f/i);
     assert.match(widget, /#ff7a18/i);
     assert.match(widget, /--brand-gradient/);
     assert.match(widget, /Beez Treez/);

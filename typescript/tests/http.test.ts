@@ -260,6 +260,55 @@ describe("Jarvis HTTP system boundary", () => {
           mcpExposed: true,
         },
         {
+          operationId: "getOperatorGeneralSettings",
+          summary: "Read operator general settings",
+          mutating: false,
+          destructive: false,
+          mcpExposed: true,
+        },
+        {
+          operationId: "getCredentialsStatus",
+          summary: "Read machine-credential fingerprints and bind posture",
+          mutating: false,
+          destructive: false,
+          mcpExposed: true,
+        },
+        {
+          operationId: "getCredentialsPage",
+          summary: "Open the loopback credentials settings page",
+          mutating: false,
+          destructive: false,
+          mcpExposed: false,
+        },
+        {
+          operationId: "getDangerSettingsPage",
+          summary: "Open the loopback danger settings page",
+          mutating: false,
+          destructive: false,
+          mcpExposed: false,
+        },
+        {
+          operationId: "getLimitsSettingsPage",
+          summary: "Open the loopback limits settings page",
+          mutating: false,
+          destructive: false,
+          mcpExposed: false,
+        },
+        {
+          operationId: "endCredentialOverlap",
+          summary: "Report that credential overlap removal is not offered",
+          mutating: true,
+          destructive: false,
+          mcpExposed: false,
+        },
+        {
+          operationId: "checkDeliveryCredential",
+          summary: "Check a delivery-token digest against the service token",
+          mutating: true,
+          destructive: false,
+          mcpExposed: false,
+        },
+        {
           operationId: "reasonWithTotality",
           summary: "Run proposal-only Totality reasoning with validation and audit journalling",
           mutating: true,
@@ -322,6 +371,9 @@ describe("Jarvis HTTP system boundary", () => {
             "updateReminder",
             "deleteReminder",
           ].includes(operationId),
+        ),
+        ...IMPLEMENTED_CAPABILITIES.filter(({ operationId }) =>
+          ["getDangerZone", "getDangerZonePage", "executeDangerZoneAction"].includes(operationId),
         ),
       ],
     });
@@ -617,7 +669,8 @@ describe("Jarvis HTTP system boundary", () => {
       type: "urn:jarvis:problem:authentication-unavailable",
       title: "Service Authentication Unavailable",
       status: 503,
-      detail: "Jarvis service authentication is not configured.",
+      detail:
+        "Jarvis service authentication is not configured. Dependent status is fail-closed until a service token is set.",
       instance: "/api/v1/help",
       requestId: response.headers["x-request-id"],
     });

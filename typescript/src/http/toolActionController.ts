@@ -43,7 +43,7 @@ function approvalUnavailable(): JarvisProblem {
     503,
     "tool-action-approval-token-unavailable",
     "Tool Action Approval Token Unavailable",
-    "Tool action approval requires a separately configured approval token.",
+    "Approvals unavailable. Tool action approval requires a separately configured approval token.",
   );
 }
 
