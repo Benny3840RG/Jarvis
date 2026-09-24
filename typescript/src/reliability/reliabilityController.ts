@@ -41,6 +41,9 @@ export type ReliabilityControllerOptions = {
 const DEFAULT_FAILURE_THRESHOLD = 3;
 const DEFAULT_COOLDOWN_MS = 5_000;
 const DEFAULT_PROBE_TIMEOUT_MS = 5_000;
+// Node clamps setTimeout delays above this to ~1ms instead of actually waiting,
+// which would make an over-large probeTimeoutMs fire almost immediately.
+const MAX_TIMER_DELAY_MS = 2_147_483_647;
 
 class CircuitBreaker {
   private state: ReliabilityCircuitState = "closed";
@@ -120,8 +123,14 @@ export class ReliabilityController {
     if (!Number.isSafeInteger(this.cooldownMs) || this.cooldownMs < 1) {
       throw new Error("Reliability cooldown must be a positive safe integer.");
     }
-    if (!Number.isSafeInteger(this.probeTimeoutMs) || this.probeTimeoutMs < 1) {
-      throw new Error("Reliability probe timeout must be a positive safe integer.");
+    if (
+      !Number.isSafeInteger(this.probeTimeoutMs) ||
+      this.probeTimeoutMs < 1 ||
+      this.probeTimeoutMs > MAX_TIMER_DELAY_MS
+    ) {
+      throw new Error(
+        `Reliability probe timeout must be a positive integer no greater than ${MAX_TIMER_DELAY_MS} (Node's max timer delay).`,
+      );
     }
   }
 
@@ -129,10 +138,12 @@ export class ReliabilityController {
     const breaker = this.breakerFor(dependency);
     if (!breaker.tryAcquire(this.clock())) throw new CircuitOpenError();
 
+    // Deliberately not unref()'d: a probe with no other active event-loop
+    // handle (e.g. a hung in-memory promise) must not let the process exit
+    // before this timeout can reject and record the failure.
     let timeoutHandle: NodeJS.Timeout | undefined;
     const timeout = new Promise<never>((_, reject) => {
       timeoutHandle = setTimeout(() => reject(new ProbeTimeoutError()), this.probeTimeoutMs);
-      timeoutHandle.unref?.();
     });
 
     try {

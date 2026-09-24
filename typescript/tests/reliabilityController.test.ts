@@ -117,4 +117,13 @@ describe("ReliabilityController", () => {
     await new Promise((resolve) => setTimeout(resolve, 60));
     assert.equal(controller.snapshot("persistence").state, "open");
   });
+
+  it("rejects a probeTimeoutMs beyond Node's max timer delay", () => {
+    // Above this, Node clamps setTimeout to fire almost immediately instead of
+    // actually waiting — a silent, surprising near-instant timeout.
+    assert.throws(
+      () => new ReliabilityController({ probeTimeoutMs: 2_147_483_648 }),
+      /no greater than 2147483647/,
+    );
+  });
 });
