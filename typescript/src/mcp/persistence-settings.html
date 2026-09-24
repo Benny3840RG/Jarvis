@@ -247,7 +247,7 @@
       </section>
 
       <section class="card" aria-labelledby="backup-heading">
-        <h2 id="backup-heading">Backup</h2>
+        <h2 id="backup-heading">Backup / Export</h2>
         <p id="secret-never-in-archive">
           Archives must not contain service, approval, or delivery tokens. Jarvis does not write
           those secrets into the backup file.
@@ -256,8 +256,9 @@
           Archive v4 is <span id="v4-label">Partial / JSON-only</span>. This is not a complete
           backup.
         </p>
-        <div class="actions">
+        <div class="actions" id="backup-export-cluster" aria-label="Backup / Export">
           <button type="button" class="primary" id="open-export-classic" disabled>Backup</button>
+          <button type="button" class="secondary" id="open-export" disabled>Export</button>
         </div>
         <details id="classic-format">
           <summary>Classic</summary>
@@ -286,13 +287,18 @@
             <button type="button" id="open-export-v4" disabled>Export v4…</button>
             <button type="button" id="open-verify-v4">Verify v4…</button>
             <button type="button" class="danger" id="open-restore-v4">Restore v4…</button>
+          </div>
+        </details>
+        <details id="resume-format">
+          <summary>Resume</summary>
+          <p class="note">
+            Resume is a separate action. A failed restore does not turn into resume.
+          </p>
+          <div class="actions">
             <button type="button" class="danger" id="open-resume-v4">
               Resume interrupted v4 restore…
             </button>
           </div>
-          <p class="note">
-            Resume is a separate action. A failed restore does not turn into resume.
-          </p>
         </details>
         <details>
           <summary>Equivalent commands</summary>
@@ -631,6 +637,7 @@
         refusal.hidden = !settings.backup.v4ExportRefusal;
         refusal.textContent = settings.backup.v4ExportRefusal || "";
         byId("open-export-classic").disabled = !settings.actions.exportClassic;
+        byId("open-export").disabled = !settings.actions.exportClassic;
         byId("open-restore-classic").disabled = !settings.actions.restoreClassic;
         byId("open-export-v4").disabled = !settings.actions.exportV4;
         byId("export-classic-file").value = settings.suggestedClassicPath;
@@ -697,6 +704,7 @@
       byId("open-export-classic").addEventListener("click", () =>
         openDialog("dialog-export-classic"),
       );
+      byId("open-export").addEventListener("click", () => openDialog("dialog-export-classic"));
       byId("open-verify-classic").addEventListener("click", () =>
         openDialog("dialog-verify-classic"),
       );

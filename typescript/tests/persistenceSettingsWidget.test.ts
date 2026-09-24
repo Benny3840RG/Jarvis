@@ -48,12 +48,34 @@ describe("Persistence settings page", () => {
     const persistenceEnd = dashboard.indexOf('id="view-danger"');
     assert.ok(persistenceStart !== -1 && persistenceEnd > persistenceStart);
     const persistence = dashboard.slice(persistenceStart, persistenceEnd);
-    assert.match(persistence, /id="persistence-backup"[^>]*>\s*Backup\s*</);
-    assert.match(persistence, /class="settings-save"/);
+    const backupExport =
+      persistence.match(/id="persistence-backup-export"[\s\S]*?<\/div>/)?.[0] ?? "";
+    assert.match(backupExport, /Backup \/ Export/);
+    assert.match(
+      backupExport,
+      /class="settings-save"[^>]*id="persistence-backup"[^>]*>\s*Backup\s*</,
+    );
+    assert.match(backupExport, /id="persistence-export"[^>]*>\s*Export\s*</);
+    assert.doesNotMatch(
+      backupExport.match(/<button[^>]*id="persistence-export"[^>]*>/)?.[0] ?? "",
+      /settings-save/,
+    );
+    assert.doesNotMatch(backupExport, /[Rr]estore/);
+    assert.equal([...persistence.matchAll(/class="settings-save"/g)].length, 1);
     assert.doesNotMatch(
       persistence.match(/<button[^>]*id="persistence-restore-classic"[^>]*>/)?.[0] ?? "",
       /settings-save/,
     );
+    assert.doesNotMatch(
+      persistence.match(/<button[^>]*id="persistence-restore-v4"[^>]*>/)?.[0] ?? "",
+      /settings-save/,
+    );
+    const dashboardV4 =
+      persistence.match(/<details id="persistence-v4-format">[\s\S]*?<\/details>/)?.[0] ?? "";
+    assert.match(dashboardV4, /id="persistence-restore-v4"/);
+    assert.doesNotMatch(dashboardV4, /persistence-resume-v4|Resume interrupted/);
+    assert.match(persistence, /<details id="persistence-resume">/);
+    assert.match(persistence, /id="persistence-resume-v4"/);
     assert.match(persistence, /<details id="persistence-classic-format">/);
     assert.match(persistence, /<details id="persistence-v4-format">/);
     assert.doesNotMatch(persistence, /<details[^>]*\sopen/);
@@ -90,7 +112,20 @@ describe("Persistence settings page", () => {
     assert.doesNotMatch(page, /keepResumeExplicit|restore-v4-resume/);
     assert.match(page, /resume:\s*false/);
     assert.match(page, /cancel\.focus\(\)/);
-    assert.match(page, /id="open-export-classic"[^>]*>\s*Backup\s*</);
+    const backupExport = page.match(/id="backup-export-cluster"[\s\S]*?<\/div>/)?.[0] ?? "";
+    assert.match(backupExport, /Backup \/ Export/);
+    assert.match(backupExport, /class="primary"[^>]*id="open-export-classic"[^>]*>\s*Backup\s*</);
+    assert.match(backupExport, /id="open-export"[^>]*>\s*Export\s*</);
+    assert.doesNotMatch(
+      backupExport.match(/<button[^>]*id="open-export"[^>]*>/)?.[0] ?? "",
+      /primary/,
+    );
+    assert.doesNotMatch(backupExport, /[Rr]estore|resume/);
+    const widgetV4 = page.match(/<details id="v4-format">[\s\S]*?<\/details>/)?.[0] ?? "";
+    assert.match(widgetV4, /id="open-restore-v4"/);
+    assert.doesNotMatch(widgetV4, /open-resume-v4|restore-v4-resume|Resume interrupted/);
+    assert.match(page, /<details id="resume-format">/);
+    assert.match(page, /id="open-resume-v4"/);
     assert.match(page, /class="primary"/);
     assert.match(page, /<details id="classic-format">/);
     assert.match(page, /<details id="v4-format">/);

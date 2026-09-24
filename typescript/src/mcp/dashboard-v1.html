@@ -686,11 +686,12 @@
                         <p>Change PERSISTENCE_PROVIDER in .env.local, then restart. This tab does not switch providers.</p>
                       </article>
                       <article class="settings-card" id="persistence-backup-card">
-                        <h3>Backup</h3>
+                        <h3>Backup / Export</h3>
                         <p id="persistence-export-warning">Archives must not contain service, approval, or delivery tokens. Jarvis does not write those secrets into the backup file.</p>
                         <p>Archive v4 is <span id="persistence-v4-label">Partial / JSON-only</span>. This is not a complete backup.</p>
-                        <div class="settings-actions">
+                        <div class="settings-actions" id="persistence-backup-export" aria-label="Backup / Export">
                           <button type="button" class="settings-save" id="persistence-backup">Backup</button>
+                          <button type="button" id="persistence-export">Export</button>
                         </div>
                         <details id="persistence-classic-format">
                           <summary>Classic</summary>
@@ -709,9 +710,14 @@
                             <button type="button" id="persistence-export-v4">Export v4…</button>
                             <button type="button" id="persistence-verify-v4">Verify v4…</button>
                             <button type="button" id="persistence-restore-v4">Restore v4…</button>
+                          </div>
+                        </details>
+                        <details id="persistence-resume">
+                          <summary>Resume</summary>
+                          <p>Resume is a separate action. A failed restore does not turn into resume.</p>
+                          <div class="settings-actions">
                             <button type="button" id="persistence-resume-v4">Resume interrupted v4 restore…</button>
                           </div>
-                          <p>Resume is a separate action. A failed restore does not turn into resume.</p>
                         </details>
                       </article>
                       <section data-persistence-dialog id="persistence-dialog-export-classic" hidden>
@@ -1391,7 +1397,7 @@
         }
         let persistenceView = null;
         function openPersistenceDialog(id) { document.querySelectorAll("[data-persistence-dialog]").forEach((dialog) => { dialog.hidden = true; }); const dialog = byId(id); if (!dialog) return; dialog.hidden = false; const cancel = dialog.querySelector("[data-persistence-cancel]"); if (cancel) cancel.focus(); }
-        function renderPersistence(settings) { persistenceView = settings; text(byId("persistence-honesty"), settings.honesty); const banner = byId("persistence-banner"); banner.hidden = !settings.provider.banner; text(banner, settings.provider.banner || ""); text(byId("persistence-provider-label"), settings.provider.active ? "Active provider: " + settings.provider.active : "Provider unset"); text(byId("persistence-convex"), settings.provider.convexDeployment ? "deployment " + settings.provider.convexDeployment : "deployment not configured"); text(byId("persistence-json"), "path " + settings.provider.jsonStatePath); text(byId("persistence-provider-chip"), settings.provider.active || "unset"); text(byId("persistence-health-chip"), settings.health.status); text(byId("persistence-glance"), settings.health.status); text(byId("persistence-export-warning"), settings.backup.exportWarning); text(byId("persistence-v4-label"), settings.backup.v4Label); const refusal = byId("persistence-v4-refusal"); refusal.hidden = !settings.backup.v4ExportRefusal; text(refusal, settings.backup.v4ExportRefusal || ""); byId("persistence-backup").disabled = !settings.actions.exportClassic; byId("persistence-restore-classic").disabled = !settings.actions.restoreClassic; byId("persistence-export-v4").disabled = !settings.actions.exportV4; const classicFile = byId("persistence-export-classic-file"); const v4File = byId("persistence-export-v4-file"); if (!classicFile.value) classicFile.value = settings.suggestedClassicPath; if (!v4File.value) v4File.value = settings.suggestedV4Path; }
+        function renderPersistence(settings) { persistenceView = settings; text(byId("persistence-honesty"), settings.honesty); const banner = byId("persistence-banner"); banner.hidden = !settings.provider.banner; text(banner, settings.provider.banner || ""); text(byId("persistence-provider-label"), settings.provider.active ? "Active provider: " + settings.provider.active : "Provider unset"); text(byId("persistence-convex"), settings.provider.convexDeployment ? "deployment " + settings.provider.convexDeployment : "deployment not configured"); text(byId("persistence-json"), "path " + settings.provider.jsonStatePath); text(byId("persistence-provider-chip"), settings.provider.active || "unset"); text(byId("persistence-health-chip"), settings.health.status); text(byId("persistence-glance"), settings.health.status); text(byId("persistence-export-warning"), settings.backup.exportWarning); text(byId("persistence-v4-label"), settings.backup.v4Label); const refusal = byId("persistence-v4-refusal"); refusal.hidden = !settings.backup.v4ExportRefusal; text(refusal, settings.backup.v4ExportRefusal || ""); byId("persistence-backup").disabled = !settings.actions.exportClassic; byId("persistence-export").disabled = !settings.actions.exportClassic; byId("persistence-restore-classic").disabled = !settings.actions.restoreClassic; byId("persistence-export-v4").disabled = !settings.actions.exportV4; const classicFile = byId("persistence-export-classic-file"); const v4File = byId("persistence-export-v4-file"); if (!classicFile.value) classicFile.value = settings.suggestedClassicPath; if (!v4File.value) v4File.value = settings.suggestedV4Path; }
         async function loadPersistence() { try { const result = await request("tools/call", { name: "show_persistence_settings", arguments: {} }, 10000); const data = structured(result); if (!data || !data.settings) throw new Error("missing"); renderPersistence(data.settings); } catch { text(byId("persistence-glance"), "Health unreachable"); } }
         async function runPersistence(action, fields, resultId) { try { const result = await request("tools/call", { name: "run_persistence_settings_action", arguments: Object.assign({ action }, fields) }, 10000); const data = structured(result); const outcome = data && data.result; if (!outcome) throw new Error("missing"); text(byId(resultId), outcome.detail); return outcome; } catch { text(byId(resultId), "Action failed."); return null; } }
         function render() { renderCounts(); renderFocus(); renderBoard(); renderReminders(); renderSystems(); renderCategories(); renderPriorities(); renderRightReminders(); renderOperations(); renderActivity(); renderInbox(); renderActivityTimeline(); renderLiveWork(); renderGeneral(); renderCredentials(); }
@@ -1407,6 +1413,7 @@
         byId("persistence-refresh").addEventListener("click", () => { void loadPersistence(); });
         document.querySelectorAll("[data-persistence-cancel]").forEach((button) => button.addEventListener("click", () => { const dialog = button.closest("[data-persistence-dialog]"); if (dialog) dialog.hidden = true; }));
         byId("persistence-backup").addEventListener("click", () => openPersistenceDialog("persistence-dialog-export-classic"));
+        byId("persistence-export").addEventListener("click", () => openPersistenceDialog("persistence-dialog-export-classic"));
         byId("persistence-export-v4").addEventListener("click", () => { const blocked = byId("persistence-export-v4-blocked"); const refusal = persistenceView && persistenceView.backup.v4ExportRefusal; blocked.hidden = !refusal; text(blocked, refusal || ""); byId("persistence-export-v4-submit").disabled = Boolean(refusal); openPersistenceDialog("persistence-dialog-export-v4"); });
         byId("persistence-verify-classic").addEventListener("click", () => openPersistenceDialog("persistence-dialog-verify-classic"));
         byId("persistence-verify-v4").addEventListener("click", () => openPersistenceDialog("persistence-dialog-verify-v4"));
