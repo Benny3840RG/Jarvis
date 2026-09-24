@@ -28,9 +28,16 @@ import type { ExternalReconciliationReadStore } from "../reconciliation/external
 import type { RuntimeReconciliationHealth } from "../reconciliation/runtimeReconciliationHost.js";
 import type { ActivityEventReader } from "../operations/activityTimeline.js";
 import type { DevelopmentLiveWorkSource } from "../development/liveWork.js";
+import type { CredentialsRuntime } from "../settings/credentialsStatus.js";
+import {
+  createPersistenceSettingsService,
+  PersistenceSettingsService,
+} from "../settings/persistenceSettingsService.js";
 import type { HttpAppConfig } from "./config.js";
 import type { OidcVerifier } from "./oidcVerifier.js";
+import type { DangerZoneService } from "../settings/dangerZone/service.js";
 import { ActivityTimelineController } from "./activityTimelineController.js";
+import { DangerZoneController } from "./dangerZoneController.js";
 import { DevelopmentLiveWorkController } from "./developmentLiveWorkController.js";
 import { BusinessSettingsController } from "./businessSettingsController.js";
 import { EnquiryController } from "./enquiryController.js";
@@ -40,6 +47,7 @@ import { BuildController } from "./buildController.js";
 import { BuildLogController } from "./buildLogController.js";
 import { UpgradeController } from "./upgradeController.js";
 import { AssetController } from "./assetController.js";
+import { PersistenceSettingsController } from "./persistenceSettingsController.js";
 import { PreferenceController } from "./preferenceController.js";
 import { NoteController } from "./noteController.js";
 import { OperationsInboxController } from "./operationsInboxController.js";
@@ -54,6 +62,9 @@ import { ReconciliationController } from "./reconciliationController.js";
 import { ReminderController } from "./reminderController.js";
 import { RequestIdInterceptor } from "./requestId.js";
 import { ServiceTokenGuard } from "./serviceTokenGuard.js";
+import { CredentialsController } from "./credentialsController.js";
+import { LimitsController } from "./limitsController.js";
+import { GeneralSettingsController } from "./generalSettingsController.js";
 import { HealthController, OperatorSystemController } from "./systemControllers.js";
 import { SystemStatusService } from "./systemStatusService.js";
 import { TaskController } from "./taskController.js";
@@ -61,6 +72,7 @@ import { ToolActionController } from "./toolActionController.js";
 import { TotalityController } from "./totalityController.js";
 import {
   HTTP_APP_CONFIG,
+  HTTP_CREDENTIALS,
   HTTP_OIDC_VERIFIER,
   HTTP_BUSINESS_SETTINGS_STORE,
   HTTP_ENQUIRY_STORE,
@@ -80,6 +92,7 @@ import {
   HTTP_NOTE_STORE,
   HTTP_ACTIVITY_EVENTS,
   HTTP_DEVELOPMENT_LIVE_WORK,
+  HTTP_DANGER_ZONE,
   HTTP_MEMORY_CHANGE_SETS,
   HTTP_PERSISTENCE,
   HTTP_PROVIDER_NAME,
@@ -119,6 +132,8 @@ export type JarvisHttpModuleOptions = {
   noteStore: NoteStore;
   activityEventReader: ActivityEventReader | null;
   developmentLiveWorkSource: DevelopmentLiveWorkSource | null;
+  credentials: CredentialsRuntime;
+  dangerZone: DangerZoneService;
 };
 
 @Module({})
@@ -129,6 +144,9 @@ export class JarvisHttpModule {
       controllers: [
         HealthController,
         OperatorSystemController,
+        GeneralSettingsController,
+        CredentialsController,
+        LimitsController,
         TotalityController,
         MemoryChangeSetController,
         TaskController,
@@ -147,15 +165,18 @@ export class JarvisHttpModule {
         BuildLogController,
         UpgradeController,
         AssetController,
+        PersistenceSettingsController,
         PreferenceController,
         NoteController,
         BriefController,
         OperationsInboxController,
         ActivityTimelineController,
         DevelopmentLiveWorkController,
+        DangerZoneController,
       ],
       providers: [
         { provide: HTTP_APP_CONFIG, useValue: options.config },
+        { provide: HTTP_CREDENTIALS, useValue: options.credentials },
         { provide: HTTP_OIDC_VERIFIER, useValue: options.oidcVerifier },
         { provide: HTTP_PERSISTENCE, useValue: options.persistence },
         { provide: HTTP_CLIENT_STORE, useValue: options.clientStore },
@@ -179,7 +200,26 @@ export class JarvisHttpModule {
           provide: HTTP_DEVELOPMENT_LIVE_WORK,
           useValue: options.developmentLiveWorkSource,
         },
+        { provide: HTTP_DANGER_ZONE, useValue: options.dangerZone },
         { provide: HTTP_PROVIDER_NAME, useValue: options.providerName },
+        {
+          provide: PersistenceSettingsService,
+          useFactory: (
+            persistence: JarvisHttpModuleOptions["persistence"],
+            providerName: JarvisHttpModuleOptions["providerName"],
+            config: HttpAppConfig,
+          ) =>
+            createPersistenceSettingsService({
+              persistence,
+              runningProvider: providerName,
+              secrets: [
+                config.currentToken,
+                config.previousToken,
+                process.env.JARVIS_SERVICE_TOKEN,
+              ],
+            }),
+          inject: [HTTP_PERSISTENCE, HTTP_PROVIDER_NAME, HTTP_APP_CONFIG],
+        },
         {
           provide: HTTP_RECONCILIATION_HEALTH,
           useValue: options.reconciliationHealth,

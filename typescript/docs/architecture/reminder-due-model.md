@@ -12,6 +12,8 @@ Jarvis stores reminder timing in three fields:
 
 The CLI parser is deliberately conservative. It accepts explicit ISO instants, local ISO or Australian calendar dates, `today` or `tomorrow` with a time, and named weekdays with a time. Local wall-clock input uses `JARVIS_TIMEZONE` or the machine IANA timezone. Invalid calendar dates, non-existent daylight-saving wall times, and repeated daylight-saving wall times are left unnormalized.
 
+Settings → General reads that same resolution through `inspectReminderTimezone`. It shows the effective IANA zone and whether the source is `JARVIS_TIMEZONE` or the machine. An invalid configured zone is reported and is not replaced with the machine zone. Changing the zone is an edit to `.env.local` followed by a process restart. Console theme, contrast, and motion are stored only in the console under `console.*` keys and do not affect this parser or other CLI output.
+
 For local wall-clock input, `dueTimezone` is an IANA timezone such as `Australia/Melbourne`. For an ISO instant containing an explicit offset, it is a fixed-offset descriptor such as `UTC+10:00`. Both forms are validated before storage or restore.
 
 JSON document version 2 and backup version 2 use these fields. Version 1 JSON documents, version 1 backup archives, and existing Convex rows with the legacy `due` field are read compatibly and mapped to `dueRaw` without fabricating a timestamp.

@@ -9,6 +9,7 @@ import type { SystemStatus } from "../src/http/contracts.js";
 import { JarvisApiClient } from "../src/mcp/jarvisApiClient.js";
 import { createJarvisMcpServer } from "../src/mcp/server.js";
 import { MCP_TOOL_OPERATIONS, formatOperation } from "../src/mcp/operationContract.js";
+import { buildPersistenceSettingsView } from "../src/settings/persistenceSettings.js";
 
 const HTTP_METHODS = new Set(["get", "post", "put", "patch", "delete"]);
 const SERVICE_TOKEN = "binding-test-token";
@@ -25,6 +26,7 @@ const DASHBOARD_READS = new Set([
   "GET /api/v1/operations/inbox",
   "GET /api/v1/operations/activity",
   "GET /api/v1/development/live-work",
+  "GET /api/v1/settings/credentials",
 ]);
 
 const STATUS: SystemStatus = {
@@ -230,6 +232,54 @@ function sampleBrief() {
 /** Schema-valid mock responses so tool output validation never short-circuits a probe. */
 function mockResponse(method: string, path: string): Response {
   if (path === "/api/v1/status") return Response.json(STATUS);
+  if (path === "/api/v1/settings/general") {
+    return Response.json({
+      timezone: {
+        effectiveIana: "Australia/Melbourne",
+        source: "env",
+        envRaw: "Australia/Melbourne",
+        valid: true,
+        machineIana: "Australia/Melbourne",
+      },
+    });
+  }
+  if (path === "/api/v1/settings/persistence") {
+    return Response.json(
+      buildPersistenceSettingsView({
+        reconciliation: { kind: "active", provider: "json" },
+        health: {
+          state: "ok",
+          status: "State file readable",
+          checkedAt: "2026-09-24T00:00:00.000Z",
+          detail: null,
+        },
+        convexDeployment: null,
+        jsonStatePath: "typescript/data/jarvis-state.json",
+        now: new Date("2026-09-24T00:00:00.000Z"),
+      }),
+    );
+  }
+  if (path === "/api/v1/settings/persistence/actions") {
+    return Response.json({
+      status: "completed",
+      action: "verify-classic",
+      code: null,
+      detail: "Backup verified in isolated temporary JSON.",
+      path: "backups/jarvis.json",
+      counts: {
+        tasks: 1,
+        reminders: 0,
+        builds: 0,
+        buildLogs: 0,
+        upgrades: 0,
+        assets: 0,
+        preferences: 0,
+      },
+      v4: null,
+      destination: null,
+      verifyRecommended: false,
+    });
+  }
   if (path === "/api/v1/development/live-work")
     return Response.json({ data: { status: "available", pipeline: null } });
   if (path === "/api/v1/tasks") {
@@ -365,6 +415,9 @@ function classify(matchers: OpenApiOperation[], request: RecordedRequest): strin
 const TOOL_INVOCATIONS: Record<string, Record<string, unknown>> = {
   show_jarvis_dashboard: {},
   get_jarvis_status: {},
+  get_general_settings: {},
+  show_persistence_settings: {},
+  run_persistence_settings_action: { action: "verify-classic", file: "backups/jarvis.json" },
   get_development_live_work: {},
   list_tasks: {},
   get_task: { taskId: "task-1" },

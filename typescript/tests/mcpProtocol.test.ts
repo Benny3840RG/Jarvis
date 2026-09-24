@@ -228,6 +228,7 @@ describe("Jarvis MCP preview protocol", () => {
         inbox: null,
         activity: null,
         liveWork: null,
+        credentials: null,
         counts: {
           activeTasks: 1,
           completedTasks: 0,

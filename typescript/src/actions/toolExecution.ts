@@ -116,6 +116,20 @@ export class InMemoryToolExecutionReceiptStore implements ToolExecutionReceiptSt
   }
 }
 
+/**
+ * Reasons `claimSingleUseExecution` can return with `claimed: false`.
+ * The Omega reasons match `convex/toolActions.ts` and are not consumption:
+ * the mutation does not set `singleUseClaimId` when ΩΣ refuses the gate.
+ */
+export type SingleUseClaimBlockReason =
+  | "already-claimed"
+  | "not-approved"
+  | "expired"
+  | "omega-mission-not-executable"
+  | "omega-contract-not-authorized"
+  | "omega-contract-expired"
+  | "omega-contract-authority-mismatch";
+
 export type SingleUseExecutionClaimResult = {
   claimed: boolean;
   claimId: string;
@@ -125,9 +139,25 @@ export type SingleUseExecutionClaimResult = {
    * and `"expired"` mean the store's own authoritative, same-transaction
    * check found the action no longer approved or its approval expired —
    * decided fresh at claim time, never from the caller's earlier snapshot.
+   * Omega reasons are the same fresh read of the ΩΣ contract and mission.
    */
-  blockReason?: "already-claimed" | "not-approved" | "expired";
+  blockReason?: SingleUseClaimBlockReason;
 };
+
+/**
+ * Maps an authoritative claim or eligibility refusal onto a receipt code.
+ * Only `"already-claimed"` is consumption. Every other reason, including an
+ * Omega gate refusal and a missing reason, stays fail-closed as
+ * not-authorized or approval-expired so a caller cannot treat an unconsumed
+ * refusal as if the external effect had been spent.
+ */
+export function executionBlockErrorCode(blockReason: string | undefined): ToolExecutionErrorCode {
+  if (blockReason === "expired" || blockReason === "omega-contract-expired") {
+    return "approval-expired";
+  }
+  if (blockReason === "already-claimed") return "approval-consumed";
+  return "not-authorized";
+}
 
 /**
  * Authoritative, atomic consumption gate for single-use governed actions.
@@ -422,6 +452,23 @@ export class ToolExecutionService {
   /** Whether a `tool:operation` definition is registered — evidence for integration-commissioning checks. */
   isRegistered(tool: string, operation: string): boolean {
     return this.definitions.has(`${tool}:${operation}`);
+  }
+
+  /** Provider name when this `tool:operation` performs an external effect. */
+  externalProviderFor(tool: string, operation: string): string | undefined {
+    return this.definitions.get(`${tool}:${operation}`)?.externalProvider;
+  }
+
+  /**
+   * The in-memory claim store does not re-read approval state, and the
+   * in-memory eligibility store allows every reusable action. Either default
+   * is fail-open for a caller that did not supply the Convex gate.
+   */
+  usesFailOpenExecutionGate(): boolean {
+    return (
+      this.claims instanceof InMemorySingleUseConsumptionClaimStore ||
+      this.eligibility instanceof InMemoryExecutionEligibilityStore
+    );
   }
 
   async execute(input: ExecuteInput): Promise<ToolExecutionReceipt> {
@@ -797,9 +844,11 @@ export class ToolExecutionService {
     // claim(); the store's own atomicity (Convex OCC for the real
     // deployment, a synchronous check-then-set for the in-memory default)
     // guarantees exactly one caller receives `claimed: true`, and the claim
-    // is never released, so a `blockReason` of `"approval-consumed"` proves
-    // this is a replay of a claim someone else already holds — never
-    // confusable with the "not-approved"/"expired" cases above.
+    // is never released, so a `blockReason` of `"already-claimed"` proves
+    // this is a replay of a claim someone else already holds and maps to
+    // `"approval-consumed"`. Omega gate refusals are not consumption: the
+    // claim was not written, and they map to `"not-authorized"` or
+    // `"approval-expired"` instead.
     //
     // Reusable actions have nothing to claim (they may legitimately execute
     // more than once), but skipping this re-check for them would leave the
@@ -810,25 +859,31 @@ export class ToolExecutionService {
     if (input.action.consumptionPolicy === "single-use") {
       const claim = await this.claims.claim(input.action, input.idempotencyKey);
       if (!claim.claimed) {
-        const errorCode =
-          claim.blockReason === "not-approved"
-            ? "not-authorized"
-            : claim.blockReason === "expired"
-              ? "approval-expired"
-              : "approval-consumed";
         return this.persistDecision(
           key,
-          receipt(input.action, input.idempotencyKey, "blocked", errorCode, startedAt, input),
+          receipt(
+            input.action,
+            input.idempotencyKey,
+            "blocked",
+            executionBlockErrorCode(claim.blockReason),
+            startedAt,
+            input,
+          ),
         );
       }
     } else {
       const verification = await this.eligibility.verify(input.action);
       if (!verification.eligible) {
-        const errorCode =
-          verification.blockReason === "expired" ? "approval-expired" : "not-authorized";
         return this.persistDecision(
           key,
-          receipt(input.action, input.idempotencyKey, "blocked", errorCode, startedAt, input),
+          receipt(
+            input.action,
+            input.idempotencyKey,
+            "blocked",
+            executionBlockErrorCode(verification.blockReason),
+            startedAt,
+            input,
+          ),
         );
       }
     }
