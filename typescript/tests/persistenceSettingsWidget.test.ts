@@ -50,16 +50,12 @@ describe("Persistence settings page", () => {
     const persistence = dashboard.slice(persistenceStart, persistenceEnd);
     const backupExport =
       persistence.match(/id="persistence-backup-export"[\s\S]*?<\/div>/)?.[0] ?? "";
-    assert.match(backupExport, /Backup \/ Export/);
+    assert.match(backupExport, /Backup\/Export/);
     assert.match(
       backupExport,
-      /class="settings-save"[^>]*id="persistence-backup"[^>]*>\s*Backup\s*</,
+      /class="settings-save"[^>]*id="persistence-backup"[^>]*>\s*Backup\/Export\s*</,
     );
-    assert.match(backupExport, /id="persistence-export"[^>]*>\s*Export\s*</);
-    assert.doesNotMatch(
-      backupExport.match(/<button[^>]*id="persistence-export"[^>]*>/)?.[0] ?? "",
-      /settings-save/,
-    );
+    assert.equal(backupExport.match(/<button/g)?.length ?? 0, 1);
     assert.doesNotMatch(backupExport, /[Rr]estore/);
     assert.equal([...persistence.matchAll(/class="settings-save"/g)].length, 1);
     assert.doesNotMatch(
@@ -113,13 +109,12 @@ describe("Persistence settings page", () => {
     assert.match(page, /resume:\s*false/);
     assert.match(page, /cancel\.focus\(\)/);
     const backupExport = page.match(/id="backup-export-cluster"[\s\S]*?<\/div>/)?.[0] ?? "";
-    assert.match(backupExport, /Backup \/ Export/);
-    assert.match(backupExport, /class="primary"[^>]*id="open-export-classic"[^>]*>\s*Backup\s*</);
-    assert.match(backupExport, /id="open-export"[^>]*>\s*Export\s*</);
-    assert.doesNotMatch(
-      backupExport.match(/<button[^>]*id="open-export"[^>]*>/)?.[0] ?? "",
-      /primary/,
+    assert.match(backupExport, /Backup\/Export/);
+    assert.match(
+      backupExport,
+      /class="primary"[^>]*id="open-export-classic"[^>]*>\s*Backup\/Export\s*</,
     );
+    assert.equal(backupExport.match(/<button/g)?.length ?? 0, 1);
     assert.doesNotMatch(backupExport, /[Rr]estore|resume/);
     const widgetV4 = page.match(/<details id="v4-format">[\s\S]*?<\/details>/)?.[0] ?? "";
     assert.match(widgetV4, /id="open-restore-v4"/);

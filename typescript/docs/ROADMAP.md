@@ -77,7 +77,7 @@ which does not wipe Convex. Production HTTP and preview select credentials with
 
 ## Settings → Persistence, phase A (2026-09-24)
 
-Persistence is the third tab on the single Settings rail (General, Credentials, Persistence, Danger zone). It reads `PERSISTENCE_PROVIDER` and a health glance, and wraps `npm run backup` (classic and archive v4). v4 stays labeled Partial / JSON-only. Export warns that archives must not contain service tokens. Convex blocks v4 export. Classic restore requires the empty-target confirmation. v4 restore requires `--allow-partial`. The primary cluster is Backup / Export: Backup is the sole primary control, and Export is the secondary control for the same classic export. Restore is not primary. Resume is a separate disclosure, not part of restore. Service tokens are redacted. No provider switch, JSON fallback, merge, or restore-drill button. Credentials end-overlap and digests stay off this tab.
+Persistence is the third tab on the single Settings rail (General, Credentials, Persistence, Danger zone). It reads `PERSISTENCE_PROVIDER` and a health glance, and wraps `npm run backup` (classic and archive v4). v4 stays labeled Partial / JSON-only. Export warns that archives must not contain service tokens. Convex blocks v4 export. Classic restore requires the empty-target confirmation. v4 restore requires `--allow-partial`. The one primary control is Backup/Export. Restore stays behind the collapsed Classic and v4 disclosures. Resume is a separate disclosure, not part of restore. Service tokens are redacted. No provider switch, JSON fallback, merge, or restore-drill button. Credentials end-overlap and digests stay off this tab.
 
 See [persistence settings](operators/persistence-settings.md).
 
