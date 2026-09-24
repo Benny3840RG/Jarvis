@@ -152,14 +152,24 @@ workflow, or GitHub merge activity was added.
 
 See [the boundary note](architecture/governed-external-operation.md).
 
+Preview Temporal (#572) now calls this adapter for `quotes:send` only
+(`executeGovernedQuoteSend`). The activity refuses when
+`createGovernedExternalOperationFromEnv()` returns null, does not approve,
+rejects a PolicyEngine allowlist through the stable boundary, and returns an
+indeterminate receipt without a second provider send. `mergePR` stays the
+file-backed mock. A worker kill after the controlled `sendPrepared` accept
+is proven by `tests/pass/quote-send-crash-recovery.test.ts`: the retry
+observes `retry-blocked-pending-reconciliation` and the accept count stays 1.
+That seam is the test-only file gate
+(`TEMPORAL_PASS_GOVERNED_QUOTE_SEND_DIR`), not a live Convex deployment.
+Live Microsoft Graph commissioning remains unproven.
+
 Next:
 
-1. Rebase preview Temporal (#572) onto this boundary and replace one mocked
-   external activity with `createGovernedExternalOperationFromEnv`. Do not let
-   that preview `PolicyEngine` become the execution gate.
-2. Keep direct provider calls out of the activity. The registered tool
-   definition runs only after the claim or eligibility gate.
-3. Leave `verifyExecutionEligibility` without a second ΩΣ check; Omega
+1. Commission `quotes:send` against a dev Convex deployment without live mail,
+   then repeat the crash proof there. Do not contact Microsoft Graph until
+   Benny authorises Outlook commissioning.
+2. Leave `verifyExecutionEligibility` without a second ΩΣ check; Omega
    contracts remain single-use and are gated inside `claimSingleUseExecution`.
 
 ## S4 closed component and risk restore (2026-09-23)
