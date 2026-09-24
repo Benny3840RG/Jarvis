@@ -204,8 +204,7 @@ printf 'JARVIS_SERVICE_TOKEN=%s\n' "$NEW_TOKEN" >> .env.local
 chmod 600 .env.local
 
 unset JARVIS_SERVICE_TOKEN
-npm run smoke:convex
-npx convex env remove JARVIS_SERVICE_TOKEN_PREVIOUS
+npm run smoke:convex && npx convex env remove JARVIS_SERVICE_TOKEN_PREVIOUS
 
 unset OLD_TOKEN NEW_TOKEN
 ```
