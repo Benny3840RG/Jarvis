@@ -80,6 +80,7 @@
       .pill.ok { border-color: rgba(215,161,95,.35); background: var(--green-soft); color: var(--green); }
       .pill.bad { border-color: rgba(163,59,50,.5); color: var(--red); }
       .pill.pending { border-color: rgba(240,199,94,.5); color: var(--yellow); }
+      a.limits-now { min-height: 44px; padding: 0 14px; color: var(--muted); font-size: 14px; font-weight: 600; text-decoration: none; }
       .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; box-shadow: 0 0 11px currentColor; }
       .icon-button { width: 34px; padding: 0; color: var(--text); }
       .icon-button:hover, .rail-button:hover, .ghost:hover { border-color: var(--line-bright); background: var(--panel-3); }
@@ -424,6 +425,7 @@
           <div class="top-actions">
             <span class="pill source-pill" id="source-pill">SOURCE · CONNECTING</span>
             <span class="pill ok" id="status-pill"><span class="dot"></span><span id="status-label">CONNECTING</span></span>
+            <a class="pill limits-now" id="limits-now-chip" data-now-chip="limits" href="/settings/limits">Limits · UNKNOWN</a>
             <span class="pill" id="clock">00:00:00</span>
             <button class="icon-button" id="refresh" type="button" aria-label="Refresh Jarvis">↻</button>
           </div>
@@ -468,7 +470,7 @@
                 <button class="rail-button" type="button" data-view="operations"><span class="rail-icon">⌁</span><span><strong>Operations</strong><small>Daily brief</small></span><span class="rail-count" id="nav-operations-count">0</span></button>
                 <button class="rail-button" type="button" data-view="livework"><span class="rail-icon">⛭</span><span><strong>Live Work</strong><small>Mission pipeline</small></span><span class="rail-count" id="nav-livework-count">0</span></button>
                 <button class="rail-button" type="button" data-view="systems"><span class="rail-icon">◇</span><span><strong>Systems</strong><small>Runtime layers</small></span><span class="rail-count" id="nav-system-count">0</span></button>
-                <button class="rail-button" type="button" data-view="settings"><span class="rail-icon">⚙</span><span><strong>Settings</strong><small>General, credentials, persistence, danger</small></span><span class="rail-count" id="nav-settings-count">0</span></button>
+                <button class="rail-button" type="button" data-view="settings"><span class="rail-icon">⚙</span><span><strong>Settings</strong><small>General, credentials, persistence, limits, danger</small></span><span class="rail-count" id="nav-settings-count">0</span></button>
               </div>
             </nav>
             <section class="panel violet left-priorities">
@@ -650,6 +652,7 @@
                     <a class="active" href="#view-general" data-settings-tab="general" aria-current="page">General</a>
                     <a href="#view-credentials" data-settings-tab="credentials">Credentials</a>
                     <a href="#view-persistence" data-settings-tab="persistence">Persistence</a>
+                    <a href="#view-limits" data-settings-tab="limits">Limits</a>
                     <a href="#view-danger" data-settings-tab="danger">Danger zone</a>
                   </nav>
                   <div class="settings-panel" data-settings-panel="credentials" id="view-credentials">
@@ -814,6 +817,22 @@
                           </div>
                         </article>
                       </section>
+                    </div>
+                  </div>
+                  <div class="settings-panel" data-settings-panel="limits" id="view-limits">
+                    <div class="settings-layout">
+                      <h2>Limits</h2>
+                      <p class="settings-banner" role="status">Limits are not durably enforced yet. The quota store is pending Benny's choice. This page is a read model only. Partial OK.</p>
+                      <p class="settings-status">UNKNOWN. Remaining is not invented.</p>
+                      <p>Operator only. There is no team-admin path. The NOW chip on this console is not editable.</p>
+                      <ul>
+                        <li>API / provider rate — Soft UNKNOWN — Hard No hard stop — Reset period Unknown</li>
+                        <li>Concurrency — Soft UNKNOWN — Hard No hard stop — Reset period Unknown</li>
+                        <li>Storage / backup — Soft UNKNOWN — Hard No hard stop — Reset period Unknown</li>
+                        <li>Retention — Soft UNKNOWN — Hard No hard stop — Reset period Unknown</li>
+                        <li>Delivery — Soft UNKNOWN — Hard No hard stop — Reset period Unknown</li>
+                      </ul>
+                      <p class="settings-actions"><a href="/settings/limits">Open Limits</a></p>
                     </div>
                   </div>
                   <div class="settings-panel" data-settings-panel="danger" id="view-danger">
@@ -1410,7 +1429,7 @@
         function render() { renderCounts(); renderFocus(); renderBoard(); renderReminders(); renderSystems(); renderCategories(); renderPriorities(); renderRightReminders(); renderOperations(); renderActivity(); renderInbox(); renderActivityTimeline(); renderLiveWork(); renderGeneral(); renderCredentials(); }
         function setCaptureMode(mode) { state.captureMode = mode; document.querySelectorAll("[data-capture]").forEach((button) => button.classList.toggle("active",button.dataset.capture === mode)); const category = byId("capture-category"); const due = byId("capture-due"); if (mode === "task") { text(byId("capture-title-label"),"Task command"); text(byId("capture-detail-copy"),"Category"); category.hidden = false; due.hidden = true; text(byId("capture-submit"),"ADD TASK"); } else { text(byId("capture-title-label"),"Reminder command"); text(byId("capture-detail-copy"),"When"); category.hidden = true; due.hidden = false; text(byId("capture-submit"),"SET REMINDER"); } }
         document.querySelectorAll("[data-view]").forEach((button) => button.addEventListener("click",() => { document.querySelectorAll("[data-view]").forEach((candidate) => candidate.classList.toggle("active",candidate === button)); document.querySelectorAll(".view").forEach((view) => view.classList.toggle("active",view.id === `view-${button.dataset.view}`)); }));
-        const settingsTabByHash = { "view-general": "general", "view-credentials": "credentials", "view-persistence": "persistence", "view-danger": "danger" };
+        const settingsTabByHash = { "view-general": "general", "view-credentials": "credentials", "view-persistence": "persistence", "view-limits": "limits", "view-danger": "danger" };
         function showSettingsTab(tab) { document.querySelectorAll("[data-settings-tab]").forEach((candidate) => { const selected = candidate.dataset.settingsTab === tab; candidate.classList.toggle("active", selected); if (selected) candidate.setAttribute("aria-current", "page"); else candidate.removeAttribute("aria-current"); }); document.querySelectorAll("[data-settings-panel]").forEach((panel) => panel.classList.toggle("active", panel.dataset.settingsPanel === tab)); if (tab === "persistence") void loadPersistence(); }
         function activateNamedView(name) { document.querySelectorAll("[data-view]").forEach((candidate) => candidate.classList.toggle("active", candidate.dataset.view === name)); document.querySelectorAll(".view").forEach((view) => view.classList.toggle("active", view.id === `view-${name}`)); }
         function applySettingsHash() { const tab = settingsTabByHash[location.hash.slice(1)]; if (!tab) return; activateNamedView("settings"); showSettingsTab(tab); }

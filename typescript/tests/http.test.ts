@@ -288,6 +288,13 @@ describe("Jarvis HTTP system boundary", () => {
           mcpExposed: false,
         },
         {
+          operationId: "getLimitsSettingsPage",
+          summary: "Open the loopback limits settings page",
+          mutating: false,
+          destructive: false,
+          mcpExposed: false,
+        },
+        {
           operationId: "endCredentialOverlap",
           summary: "Report that credential overlap removal is not offered",
           mutating: true,

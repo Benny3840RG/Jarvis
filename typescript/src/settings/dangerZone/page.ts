@@ -184,6 +184,7 @@ export function renderDangerZonePage(model: DangerZoneModel): string {
       <span class="tab">General</span>
       <a class="tab" href="/settings/credentials">Credentials</a>
       <a class="tab" href="${escapeHtml(PERSISTENCE_BACKUP_HREF)}">Persistence</a>
+      <a class="tab" href="/settings/limits">Limits</a>
       <a class="tab" href="/settings/danger" aria-current="page">Danger zone</a>
     </nav>
     <h1>Danger zone</h1>

@@ -1,5 +1,15 @@
 # Jarvis TypeScript Roadmap
 
+## Settings → Limits, G4 read model (2026-09-24)
+
+Settings shell order for this tip is General, Credentials, Persistence, Limits, Danger zone. Limits is a loopback page at `GET /settings/limits` and a console tab. The durable quota store is not selected, so every provider resource (API/provider rate, concurrency, storage/backup, retention, delivery) is UNKNOWN, hard stops read “No hard stop”, and the reset period is Unknown. The HUD shows one NOW chip, `Limits · UNKNOWN`, linking to `/settings/limits`. It is not editable. Typed confirmation explains blast radius and does not save. There is no seats, billing, paywall, notifications, or sessions tab, and no team-admin path.
+
+Next:
+
+1. Choose the durable quota store before any write or enforcement path.
+2. Keep the NOW chip as one projection of the worst real reading. Do not paint OK from an unread store.
+3. Dual clear of the previous four-tab shell remains owed outside this tip.
+
 ## Settings → General, timezone A0 (2026-09-24)
 
 Operator console Settings → General shows the effective IANA timezone from

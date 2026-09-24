@@ -42,7 +42,7 @@ describe("Persistence settings page", () => {
     assert.equal(rails.filter((rail) => rail === "settings").length, 1);
     assert.deepEqual(
       [...dashboard.matchAll(/data-settings-tab="([^"]+)"/g)].map((match) => match[1]),
-      ["general", "credentials", "persistence", "danger"],
+      ["general", "credentials", "persistence", "limits", "danger"],
     );
     const persistenceStart = dashboard.indexOf('id="view-persistence"');
     const persistenceEnd = dashboard.indexOf('id="view-danger"');

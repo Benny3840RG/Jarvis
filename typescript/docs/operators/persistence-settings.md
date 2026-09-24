@@ -2,7 +2,7 @@
 
 The Persistence page is a control surface over the existing backup commands. It does not select a provider, merge archives, or invent a second recovery path (JARVIS-006).
 
-Open it from the operator console **Settings** rail, then the Persistence tab (General, Credentials, Persistence, Danger zone). `show_persistence_settings` on the private MCP adapter opens the same read model. The tab reads `GET /api/v1/settings/persistence` and runs actions with `POST /api/v1/settings/persistence/actions`.
+Open it from the operator console **Settings** rail, then the Persistence tab (General, Credentials, Persistence, Limits, Danger zone). `show_persistence_settings` on the private MCP adapter opens the same read model. The tab reads `GET /api/v1/settings/persistence` and runs actions with `POST /api/v1/settings/persistence/actions`.
 
 | Page action     | Command                                                              |
 | --------------- | -------------------------------------------------------------------- |

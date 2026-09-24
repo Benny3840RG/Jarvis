@@ -8,7 +8,7 @@ import { renderDangerZonePage } from "../src/settings/dangerZone/page.js";
 const widget = readFileSync(new URL("../src/mcp/dashboard-v1.html", import.meta.url), "utf8");
 
 describe("settings shell", () => {
-  it("keeps one Settings rail and four tabs", () => {
+  it("keeps one Settings rail and puts Limits before Danger", () => {
     const rails = [...widget.matchAll(/data-view="([^"]+)"/g)].map((match) => match[1]);
     assert.deepEqual(rails, [
       "focus",
@@ -21,10 +21,11 @@ describe("settings shell", () => {
     ]);
     assert.equal(rails.filter((rail) => rail === "settings").length, 1);
     const tabs = [...widget.matchAll(/data-settings-tab="([^"]+)"/g)].map((match) => match[1]);
-    assert.deepEqual(tabs, ["general", "credentials", "persistence", "danger"]);
+    assert.deepEqual(tabs, ["general", "credentials", "persistence", "limits", "danger"]);
     assert.match(widget, /<a [^>]*href="#view-general"/);
     assert.match(widget, /<a [^>]*href="#view-credentials"/);
     assert.match(widget, /<a [^>]*href="#view-persistence"/);
+    assert.match(widget, /<a [^>]*href="#view-limits"/);
     assert.match(widget, /<a [^>]*href="#view-danger"/);
     assert.doesNotMatch(widget, /<button[^>]*data-settings-tab/);
     assert.match(widget, /id="view-settings"/);
