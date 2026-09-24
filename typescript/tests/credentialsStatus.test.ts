@@ -7,6 +7,7 @@ import {
   captureCredentials,
   decideEndOverlap,
   deliveryDigestCollides,
+  endOverlapControl,
   END_OVERLAP_PHRASE,
   fingerprintSecret,
   parseDeliveryCheckRequest,
@@ -118,6 +119,47 @@ describe("credential fingerprints", () => {
     assert.equal(deliveryDigestCollides(secretDigest(DELIVERY), current.serviceDigests), false);
     assert.equal(parseDeliveryCheckRequest({ digestSha256: SERVICE }).ok, false);
     assert.equal(parseDeliveryCheckRequest({ digestSha256: secretDigest(SERVICE) }).ok, true);
+  });
+
+  it("does not offer End on idle and does not trust client verify alone", () => {
+    const idleControl = endOverlapControl({
+      confirmation: END_OVERLAP_PHRASE,
+      verify: "idle",
+      context: "card",
+      attestedPassing: true,
+    });
+    assert.equal(idleControl.offered, false);
+    assert.equal(idleControl.primary, false);
+    assert.equal(idleControl.allowed, false);
+
+    const clientOnly = decideEndOverlap({
+      tokenId: "delivery",
+      confirmation: END_OVERLAP_PHRASE,
+      verify: "passing",
+      context: "wizard",
+    });
+    assert.equal(clientOnly.posture, "not-verified");
+    assert.equal(clientOnly.offered, false);
+    assert.equal(clientOnly.primary, false);
+    assert.equal(clientOnly.allowed, false);
+    assert.equal(clientOnly.executesRemoval, false);
+    assert.deepEqual(clientOnly.commands, []);
+    assert.equal(clientOnly.dangerHref, "/settings/danger#delivery");
+
+    const attestedIdle = decideEndOverlap(
+      {
+        tokenId: "approval",
+        confirmation: END_OVERLAP_PHRASE,
+        verify: "idle",
+        context: "card",
+      },
+      { attestedPassing: true },
+    );
+    assert.equal(attestedIdle.posture, "guarding");
+    assert.equal(attestedIdle.offered, false);
+    assert.equal(attestedIdle.executesRemoval, false);
+    assert.deepEqual(attestedIdle.commands, []);
+    assert.equal(attestedIdle.dangerHref, "/settings/danger#approval");
   });
 
   it("does not offer End from client verify and never executes removal", () => {
@@ -261,8 +303,16 @@ describe("credentials page and MCP surface", () => {
     assert.equal(html.includes(secretDigest(SERVICE)), false);
     assert.equal(html.includes(secretDigest(PREVIOUS)), false);
     assert.match(html, /fp-chip/);
+    assert.match(html, /href="\/settings\/danger#service"/);
+    assert.match(html, /href="\/settings\/danger#approval"/);
+    assert.match(html, /href="\/settings\/danger#delivery"/);
     assert.match(html, /"\/settings\/danger#" \+ card\.id/);
     assert.match(html, /"\/settings\/danger#" \+ flowId/);
+    const embedded = html.match(/id="credentials-model">([^<]*)<\/script>/);
+    assert.ok(embedded?.[1]);
+    const pageModel = JSON.parse(embedded[1]) as { status?: unknown; serviceDigests?: unknown };
+    assert.equal("serviceDigests" in pageModel, false);
+    assert.equal(JSON.stringify(pageModel).includes(secretDigest(SERVICE)), false);
     assert.match(html, /href="#settings-general"/);
     assert.match(html, /href="#settings-persistence"/);
     assert.match(html, /id="settings-general"/);
@@ -300,6 +350,22 @@ describe("credentials page and MCP surface", () => {
     assert.match(credentialsView, /Guarding still has no End button/);
     assert.doesNotMatch(credentialsView, /<button[^>]*>\s*End\b/);
     assert.match(widget, /does not mint secrets/);
+    assert.match(widget, /href="\/settings\/danger#service"/);
+    assert.match(widget, /href="\/settings\/danger#approval"/);
+    assert.match(widget, /href="\/settings\/danger#delivery"/);
+    const pageSource = readFileSync(
+      new URL("../src/settings/credentialsPage.ts", import.meta.url),
+      "utf8",
+    );
+    const statusSource = readFileSync(
+      new URL("../src/settings/credentialsStatus.ts", import.meta.url),
+      "utf8",
+    );
+    assert.doesNotMatch(
+      pageSource,
+      /function openEnd|id="end-dialog"|endOverlapCommands|openEnd\(/,
+    );
+    assert.doesNotMatch(statusSource, /function endOverlapCommands/);
     assert.doesNotMatch(
       credentialsView,
       /Generate new token|crypto\.getRandomValues|localStorage|sessionStorage|npx convex env set/,

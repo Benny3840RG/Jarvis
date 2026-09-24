@@ -91,6 +91,11 @@ export function renderCredentialsPage(model: CredentialsPageModel): string {
     <h1 id="settings-credentials">Credentials</h1>
     <p class="status" id="verify-status">Not verified</p>
     <p class="note" id="verify-note">Idle has no End button. Guarding is shown only after this server attests a passing smoke result, and it still does not offer End.</p>
+    <nav aria-label="Danger zone cards">
+      <a class="link" href="/settings/danger#service">Open Danger zone for the service token</a>
+      <a class="link" href="/settings/danger#approval">Open Danger zone for the approval token</a>
+      <a class="link" href="/settings/danger#delivery">Open Danger zone for the delivery token</a>
+    </nav>
     <p class="lede">Machine credentials authenticate Jarvis clients and gated operations. They are not a sign-in. Secrets are never shown in full after first reveal. Report security issues without including token values.</p>
     <div id="banner" class="banner" hidden></div>
     <div id="approvals" class="warn" hidden></div>

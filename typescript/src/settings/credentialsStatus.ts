@@ -179,10 +179,12 @@ export function endOverlapControl(input: {
   context: EndOverlapContext;
   attestedPassing: boolean;
 }): { offered: false; primary: false; allowed: false } {
-  // Client verify, the typed phrase, and context never offer removal.
-  // Server attestation does not offer it either: Credentials does not execute End.
+  // Idle never offers End. A caller-supplied passing value is not attestation,
+  // and Credentials does not execute removal in any posture.
+  if (input.verify === "idle") {
+    return { offered: false, primary: false, allowed: false };
+  }
   void (input.confirmation === END_OVERLAP_PHRASE);
-  void input.verify;
   void input.context;
   void input.attestedPassing;
   return { offered: false, primary: false, allowed: false };

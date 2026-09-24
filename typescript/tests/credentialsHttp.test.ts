@@ -354,6 +354,10 @@ describe("credentials HTTP boundary", () => {
     assert.equal(page.body.includes(SERVICE), false);
     assert.equal(page.body.includes(DELIVERY), false);
     assert.doesNotMatch(page.body, /sessionStorage/);
+    assert.match(page.body, /href="\/settings\/danger#service"/);
+    assert.match(page.body, /href="\/settings\/danger#approval"/);
+    assert.match(page.body, /href="\/settings\/danger#delivery"/);
+    assert.doesNotMatch(page.body, /function openEnd|id="end-dialog"|endOverlapCommands/);
 
     const danger = await server.inject({ method: "GET", url: "/settings/danger" });
     assert.equal(danger.statusCode, 200);
