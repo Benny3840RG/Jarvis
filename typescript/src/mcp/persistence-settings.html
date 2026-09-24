@@ -1,0 +1,819 @@
+<!doctype html>
+<html lang="en-AU">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Jarvis Settings — Persistence</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #1c1612;
+        --panel: #2a211c;
+        --line: #494f68;
+        --text: #f6efe6;
+        --muted: #c4b5a5;
+        --green: #d7a15f;
+        --amber: #f0c75e;
+        --red: #a33b32;
+        --danger: #a33b32;
+        --accent: #c47b4a;
+        font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font-size: 12px;
+      }
+      button,
+      input {
+        font: inherit;
+      }
+      button {
+        cursor: pointer;
+      }
+      button:disabled {
+        cursor: not-allowed;
+        opacity: 0.55;
+      }
+      .page {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        width: min(100%, 40rem);
+        margin: 0 auto;
+        padding: 12px;
+      }
+      h1,
+      h2,
+      h3 {
+        margin: 0;
+        font-size: 16px;
+      }
+      .lede,
+      .note,
+      .meta {
+        color: var(--muted);
+      }
+      .card,
+      .dialog {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        padding: 12px;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: var(--panel);
+      }
+      .dialog[hidden] {
+        display: none;
+      }
+      .stack,
+      .actions,
+      .choices {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      label {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      .choice {
+        flex-direction: row;
+        align-items: center;
+        gap: 8px;
+      }
+      input[type="text"] {
+        width: 100%;
+        min-height: 44px;
+        padding: 8px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #07140e;
+        color: var(--text);
+        user-select: text;
+      }
+      .path {
+        user-select: text;
+        overflow-wrap: anywhere;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 0.85rem;
+      }
+      button,
+      .choice,
+      a {
+        min-height: 44px;
+      }
+      button {
+        padding: 8px 12px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #241c18;
+        color: var(--text);
+      }
+      button.danger {
+        background: var(--danger);
+        border-color: var(--red);
+        color: white;
+      }
+      button.secondary {
+        background: transparent;
+      }
+      button.primary {
+        background: var(--accent);
+        color: #1c1612;
+        font-weight: 800;
+      }
+      details > summary {
+        display: flex;
+        align-items: center;
+        min-height: 44px;
+        font-size: 16px;
+      }
+      .glance {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+      }
+      .fp-chip,
+      .status {
+        display: inline-flex;
+        align-items: center;
+        max-width: 11rem;
+        min-height: 44px;
+        overflow: hidden;
+        padding: 0 12px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        font-size: 14px;
+        font-weight: 600;
+      }
+      .ok {
+        color: var(--green);
+      }
+      .degraded {
+        color: var(--amber);
+      }
+      .fail,
+      .banner {
+        color: var(--red);
+      }
+      .banner {
+        padding: 10px;
+        border: 1px solid var(--red);
+        border-radius: 8px;
+        background: rgba(157, 36, 48, 0.25);
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      td {
+        padding: 6px 0;
+        vertical-align: top;
+        overflow-wrap: anywhere;
+      }
+      td:first-child {
+        padding-right: 8px;
+        color: var(--muted);
+      }
+      .result {
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
+      @media (max-width: 420px) {
+        .page {
+          padding: 8px;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          animation-duration: 0.01ms !important;
+          animation-iteration-count: 1 !important;
+          transition-duration: 0.01ms !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <header>
+        <p class="meta">Settings</p>
+        <h1>Persistence</h1>
+        <p class="lede" id="honesty">
+          Provider selection is explicit. Jarvis will not silently fall back from Convex to JSON.
+        </p>
+      </header>
+
+      <section class="card" aria-labelledby="provider-heading">
+        <h2 id="provider-heading">Active provider</h2>
+        <p id="provider-banner" class="banner" hidden></p>
+        <p class="status" id="provider-active">Read only</p>
+        <p class="path" id="convex-deployment"></p>
+        <p class="path" id="json-path"></p>
+        <p class="note" id="provider-helper">
+          Change PERSISTENCE_PROVIDER in `.env.local`, then restart.
+        </p>
+        <p class="note path" id="json-note"></p>
+        <p>
+          <a
+            id="docs-link"
+            href="https://github.com/Benny3840/Jarvis/blob/main/typescript/docs/architecture/ownership-and-concurrency.md"
+            >Open ownership / provider docs</a
+          >
+        </p>
+      </section>
+
+      <section class="card" aria-labelledby="health-heading">
+        <h2 id="health-heading">Health</h2>
+        <div class="glance" id="health-glance">
+          <span class="fp-chip" id="provider-chip">Provider</span>
+          <span class="fp-chip" id="health-chip">Health</span>
+        </div>
+        <p>Status <strong id="health-status" class="status degraded">Checking</strong></p>
+        <p>
+          Checked <span id="health-checked">—</span>
+          <button type="button" id="refresh" disabled>Refresh</button>
+        </p>
+        <p id="health-detail" class="note">—</p>
+      </section>
+
+      <section class="card" aria-labelledby="backup-heading">
+        <h2 id="backup-heading">Backup</h2>
+        <p id="secret-never-in-archive">
+          Archives must not contain service, approval, or delivery tokens. Jarvis does not write
+          those secrets into the backup file.
+        </p>
+        <p>
+          Archive v4 is <span id="v4-label">Partial / JSON-only</span>. This is not a complete
+          backup.
+        </p>
+        <div class="actions">
+          <button type="button" class="primary" id="open-export-classic" disabled>Backup</button>
+        </div>
+        <details id="classic-format">
+          <summary>Classic</summary>
+          <p class="note">
+            Provider-neutral archive for core assistant data.
+            <span class="path">npm run backup -- export|verify|restore</span>
+          </p>
+          <p class="note" id="classic-coverage"></p>
+          <div class="actions">
+            <button type="button" id="open-verify-classic">Verify classic…</button>
+            <button type="button" class="danger" id="open-restore-classic" disabled>
+              Restore…
+            </button>
+          </div>
+        </details>
+        <details id="v4-format">
+          <summary>Archive v4</summary>
+          <p class="note">JSON-only. Broader groups; today always completeness: partial.</p>
+          <p>Present: <span class="path" id="v4-present">core, memory, businessRecords</span></p>
+          <p>
+            Absent:
+            <span class="path" id="v4-absent">notesAndEvidence, orchestration, quoteAggregate</span>
+          </p>
+          <p id="v4-refusal" class="banner" hidden></p>
+          <div class="actions">
+            <button type="button" id="open-export-v4" disabled>Export v4…</button>
+            <button type="button" id="open-verify-v4">Verify v4…</button>
+            <button type="button" class="danger" id="open-restore-v4">Restore v4…</button>
+            <button type="button" class="danger" id="open-resume-v4">
+              Resume interrupted v4 restore…
+            </button>
+          </div>
+          <p class="note">
+            Resume is a separate action. A failed restore does not turn into resume.
+          </p>
+        </details>
+        <details>
+          <summary>Equivalent commands</summary>
+          <table id="command-table">
+            <tbody>
+              <tr>
+                <td>Export classic</td>
+                <td class="path">npm run backup -- export &lt;file&gt;</td>
+              </tr>
+              <tr>
+                <td>Verify classic</td>
+                <td class="path">npm run backup -- verify &lt;file&gt;</td>
+              </tr>
+              <tr>
+                <td>Restore classic</td>
+                <td class="path">npm run backup -- restore &lt;file&gt; --confirm-empty-target</td>
+              </tr>
+              <tr>
+                <td>Export v4</td>
+                <td class="path">npm run backup -- export-v4 &lt;file&gt;</td>
+              </tr>
+              <tr>
+                <td>Verify v4</td>
+                <td class="path">npm run backup -- verify-v4 &lt;file&gt;</td>
+              </tr>
+              <tr>
+                <td>Restore v4</td>
+                <td class="path">
+                  npm run backup -- restore-v4 &lt;file&gt; &lt;dir&gt; --allow-partial
+                </td>
+              </tr>
+              <tr>
+                <td>Resume v4</td>
+                <td class="path">
+                  npm run backup -- restore-v4 &lt;file&gt; &lt;dir&gt; --allow-partial --resume
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <p class="note">
+            Restore drill (`npm run restore-drill`) stays in docs and dev. It is not available in
+            Settings.
+          </p>
+        </details>
+      </section>
+
+      <section
+        class="dialog"
+        id="dialog-export-classic"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="export-classic-title"
+        hidden
+      >
+        <h2 id="export-classic-title">Export classic backup</h2>
+        <label>Destination <input class="path" id="export-classic-file" type="text" /></label>
+        <p class="note">
+          Will not overwrite an existing file. File created with private permissions.
+        </p>
+        <p class="note">
+          Archives must not contain service, approval, or delivery tokens. Jarvis does not write
+          those secrets into the backup file.
+        </p>
+        <p class="result" id="export-classic-result"></p>
+        <div class="actions">
+          <button type="button" data-cancel autofocus>Cancel</button>
+          <button type="button" id="export-classic-submit">Export</button>
+          <button type="button" class="secondary" id="export-classic-verify" hidden>
+            Verify recommended
+          </button>
+        </div>
+      </section>
+
+      <section
+        class="dialog"
+        id="dialog-verify-classic"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="verify-classic-title"
+        hidden
+      >
+        <h2 id="verify-classic-title">Verify classic backup</h2>
+        <label>File <input class="path" id="verify-classic-file" type="text" /></label>
+        <p class="note">Restores into isolated temporary JSON. Does not touch the live provider.</p>
+        <p class="result" id="verify-classic-result"></p>
+        <div class="actions">
+          <button type="button" data-cancel autofocus>Cancel</button>
+          <button type="button" id="verify-classic-submit">Verify</button>
+        </div>
+      </section>
+
+      <section
+        class="dialog"
+        id="dialog-restore-classic"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="restore-classic-title"
+        hidden
+      >
+        <h2 id="restore-classic-title">Restore classic backup</h2>
+        <p class="fail">
+          Empty-target only. Refuses if the provider already contains data. Jarvis will not merge.
+        </p>
+        <label>File <input class="path" id="restore-classic-file" type="text" /></label>
+        <label class="choice"
+          ><input id="restore-classic-ack" type="checkbox" /> I understand IDs and timestamps are
+          recreated</label
+        >
+        <label
+          >Type restore <input id="restore-classic-phrase" type="text" autocomplete="off"
+        /></label>
+        <p class="note">
+          Included: assistant state, tasks, reminders, builds, logs, upgrades, assets, preferences.
+          Gaps: denser business domains may need v4.
+        </p>
+        <p class="result" id="restore-classic-result"></p>
+        <div class="actions">
+          <button type="button" data-cancel autofocus>Cancel</button>
+          <button type="button" class="danger" id="restore-classic-submit">Restore</button>
+        </div>
+      </section>
+
+      <section
+        class="dialog"
+        id="dialog-export-v4"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="export-v4-title"
+        hidden
+      >
+        <h2 id="export-v4-title">Export archive v4</h2>
+        <p id="export-v4-blocked" class="banner" hidden></p>
+        <div id="export-v4-fields" class="stack">
+          <label>Destination <input class="path" id="export-v4-file" type="text" /></label>
+          <p>Completeness today: <strong>partial</strong></p>
+          <p>Present: <span class="path">core, memory, businessRecords</span></p>
+          <p>Absent: <span class="path">notesAndEvidence, orchestration, quoteAggregate</span></p>
+          <p class="note">
+            Unresolved references in the source are captured as-is and listed after export.
+          </p>
+          <p class="note">
+            Archives must not contain service, approval, or delivery tokens. Jarvis does not write
+            those secrets into the backup file.
+          </p>
+        </div>
+        <p class="result" id="export-v4-result"></p>
+        <div class="actions">
+          <button type="button" data-cancel autofocus>Cancel</button>
+          <button type="button" id="export-v4-submit">Export v4</button>
+        </div>
+      </section>
+
+      <section
+        class="dialog"
+        id="dialog-verify-v4"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="verify-v4-title"
+        hidden
+      >
+        <h2 id="verify-v4-title">Verify archive v4</h2>
+        <label>File <input class="path" id="verify-v4-file" type="text" /></label>
+        <p class="note">
+          Throwaway directory. Never live storage. Result lists verified groups and absent groups.
+        </p>
+        <p class="result" id="verify-v4-result"></p>
+        <div class="actions">
+          <button type="button" data-cancel autofocus>Cancel</button>
+          <button type="button" id="verify-v4-submit">Verify v4</button>
+        </div>
+      </section>
+
+      <section
+        class="dialog"
+        id="dialog-restore-v4"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="restore-v4-title"
+        hidden
+      >
+        <h2 id="restore-v4-title">Restore archive v4</h2>
+        <p class="fail">
+          Never merges. Never overwrites. Destination rules are strict. This is not full recovery
+          while groups are absent.
+        </p>
+        <label>Archive <input class="path" id="restore-v4-file" type="text" /></label>
+        <label>Destination dir <input class="path" id="restore-v4-dir" type="text" /></label>
+        <label class="choice"
+          ><input id="restore-v4-partial" type="checkbox" checked /> allow-partial (required while
+          archives are partial)</label
+        >
+        <p class="note">Resume is not part of this restore. Use Resume interrupted v4 restore.</p>
+        <label class="choice"
+          ><input id="restore-v4-ack" type="checkbox" /> I understand this is a staged development
+          restore, not full recovery, while groups are absent.</label
+        >
+        <label
+          >Type restore-v4 <input id="restore-v4-phrase" type="text" autocomplete="off"
+        /></label>
+        <p class="result" id="restore-v4-result"></p>
+        <div class="actions">
+          <button type="button" data-cancel autofocus>Cancel</button>
+          <button type="button" class="danger" id="restore-v4-submit">Restore v4</button>
+        </div>
+      </section>
+
+      <section
+        class="dialog"
+        id="dialog-resume-v4"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="resume-v4-title"
+        hidden
+      >
+        <h2 id="resume-v4-title">Resume interrupted v4 restore</h2>
+        <p class="note">
+          Shown only as an explicit action. A failed restore does not turn into resume.
+        </p>
+        <label>Archive <input class="path" id="resume-v4-file" type="text" /></label>
+        <label>Destination dir <input class="path" id="resume-v4-dir" type="text" /></label>
+        <button type="button" id="resume-v4-check">Check destination</button>
+        <p class="result" id="resume-v4-result"></p>
+        <label class="choice"
+          ><input id="resume-v4-partial" type="checkbox" checked /> allow-partial</label
+        >
+        <label class="choice"
+          ><input id="resume-v4-ack" type="checkbox" /> I understand this is a staged development
+          restore, not full recovery, while groups are absent.</label
+        >
+        <label
+          >Type restore-v4 <input id="resume-v4-phrase" type="text" autocomplete="off"
+        /></label>
+        <div class="actions">
+          <button type="button" data-cancel autofocus>Cancel</button>
+          <button type="button" class="danger" id="resume-v4-submit" disabled>Resume v4</button>
+        </div>
+      </section>
+    </main>
+    <script>
+      const state = { settings: null, rpcId: 0, pending: new Map() };
+      const byId = (id) => document.getElementById(id);
+      const text = (id, value) => {
+        byId(id).textContent = value == null ? "" : String(value);
+      };
+      function request(method, params) {
+        return new Promise((resolve, reject) => {
+          const id = ++state.rpcId;
+          state.pending.set(id, { resolve, reject });
+          window.parent.postMessage({ jsonrpc: "2.0", id, method, params }, "*");
+        });
+      }
+      window.addEventListener("message", (event) => {
+        if (event.source !== window.parent) return;
+        const message = event.data;
+        if (!message || message.jsonrpc !== "2.0" || typeof message.id !== "number") return;
+        const waiting = state.pending.get(message.id);
+        if (!waiting) return;
+        state.pending.delete(message.id);
+        if (message.error) waiting.reject(message.error);
+        else waiting.resolve(message.result);
+      });
+      function structured(result) {
+        return result && result.structuredContent ? result.structuredContent : result;
+      }
+      function relativeTime(iso) {
+        const then = Date.parse(iso);
+        if (!Number.isFinite(then)) return iso || "—";
+        const seconds = Math.max(0, Math.round((Date.now() - then) / 1000));
+        if (seconds < 10) return "just now";
+        if (seconds < 60) return `${seconds} seconds ago`;
+        const minutes = Math.round(seconds / 60);
+        if (minutes < 60) return `${minutes} minute${minutes === 1 ? "" : "s"} ago`;
+        const hours = Math.round(minutes / 60);
+        return `${hours} hour${hours === 1 ? "" : "s"} ago`;
+      }
+      function openDialog(id) {
+        document.querySelectorAll(".dialog").forEach((dialog) => {
+          dialog.hidden = true;
+        });
+        const dialog = byId(id);
+        dialog.hidden = false;
+        const cancel = dialog.querySelector("[data-cancel]");
+        if (cancel) cancel.focus();
+      }
+      function closeDialog(dialog) {
+        dialog.hidden = true;
+      }
+      document.querySelectorAll("[data-cancel]").forEach((button) => {
+        button.addEventListener("click", () => closeDialog(button.closest(".dialog")));
+      });
+      function showResult(id, message, failed) {
+        const el = byId(id);
+        el.textContent = message || "";
+        el.classList.toggle("fail", Boolean(failed));
+      }
+      function render(settings) {
+        state.settings = settings;
+        text("honesty", settings.honesty);
+        const banner = byId("provider-banner");
+        banner.hidden = !settings.provider.banner;
+        banner.textContent = settings.provider.banner || "";
+        text(
+          "provider-active",
+          settings.provider.active
+            ? `Active provider: ${settings.provider.active}`
+            : "Provider unset",
+        );
+        text(
+          "convex-deployment",
+          settings.provider.convexDeployment
+            ? `deployment ${settings.provider.convexDeployment}`
+            : "deployment not configured",
+        );
+        text("json-path", `path ${settings.provider.jsonStatePath}`);
+        text("provider-helper", settings.provider.helper);
+        text("json-note", settings.provider.jsonStoresNote);
+        text("provider-chip", settings.provider.active ?? "unset");
+        text("secret-never-in-archive", settings.backup.exportWarning);
+        const health = settings.health;
+        const status = byId("health-status");
+        text("health-chip", health.status);
+        status.textContent = health.status;
+        status.className =
+          health.state === "ok" ? "ok" : health.state === "degraded" ? "degraded" : "fail";
+        text("health-checked", relativeTime(health.checkedAt));
+        text("health-detail", health.detail || "—");
+        byId("refresh").disabled = false;
+        text(
+          "classic-coverage",
+          `Included: ${settings.backup.classicIncluded}. Gaps: ${settings.backup.classicGaps}`,
+        );
+        text("v4-label", settings.backup.v4Label);
+        text("v4-present", settings.backup.v4Present.join(", "));
+        text("v4-absent", settings.backup.v4Absent.join(", "));
+        const refusal = byId("v4-refusal");
+        refusal.hidden = !settings.backup.v4ExportRefusal;
+        refusal.textContent = settings.backup.v4ExportRefusal || "";
+        byId("open-export-classic").disabled = !settings.actions.exportClassic;
+        byId("open-restore-classic").disabled = !settings.actions.restoreClassic;
+        byId("open-export-v4").disabled = !settings.actions.exportV4;
+        byId("export-classic-file").value = settings.suggestedClassicPath;
+        byId("export-v4-file").value = settings.suggestedV4Path;
+        const table = byId("command-table");
+        table.replaceChildren();
+        settings.backup.commands.forEach((entry) => {
+          const row = document.createElement("tr");
+          const name = document.createElement("td");
+          const command = document.createElement("td");
+          name.textContent = entry.action;
+          command.textContent = entry.exposedInSettings
+            ? entry.command
+            : `${entry.command} — not available in Settings`;
+          command.className = "path";
+          row.append(name, command);
+          table.append(row);
+        });
+        if (settings.fallbackCta || settings.providerSwitch) {
+          throw new Error("Persistence settings must not offer a provider fallback.");
+        }
+      }
+      async function callTool(name, args) {
+        const result = await request("tools/call", { name, arguments: args || {} });
+        return structured(result);
+      }
+      async function refresh() {
+        const button = byId("refresh");
+        button.disabled = true;
+        text("health-status", "Checking");
+        try {
+          const data = await callTool("show_persistence_settings");
+          if (!data.settings) throw new Error("Persistence settings were not returned.");
+          render(data.settings);
+        } catch (error) {
+          text("health-status", "Unreachable");
+          text("health-detail", error && error.message ? error.message : "Refresh failed.");
+          button.disabled = false;
+        }
+      }
+      async function run(action, fields, resultId) {
+        try {
+          const data = await callTool("run_persistence_settings_action", { action, ...fields });
+          const result = data.result;
+          if (!result) throw new Error("Persistence action returned no result.");
+          const failed = result.status !== "completed";
+          showResult(resultId, result.detail, failed);
+          if (result.v4) {
+            showResult(
+              resultId,
+              `${result.detail}\n${result.v4.headline}`,
+              failed || result.v4.completeness === "partial",
+            );
+          }
+          return result;
+        } catch (error) {
+          showResult(resultId, error && error.message ? error.message : "Action failed.", true);
+          return null;
+        }
+      }
+      byId("refresh").addEventListener("click", () => {
+        void refresh();
+      });
+      byId("open-export-classic").addEventListener("click", () =>
+        openDialog("dialog-export-classic"),
+      );
+      byId("open-verify-classic").addEventListener("click", () =>
+        openDialog("dialog-verify-classic"),
+      );
+      byId("open-restore-classic").addEventListener("click", () =>
+        openDialog("dialog-restore-classic"),
+      );
+      byId("open-export-v4").addEventListener("click", () => {
+        const blocked = byId("export-v4-blocked");
+        const refusal = state.settings && state.settings.backup.v4ExportRefusal;
+        blocked.hidden = !refusal;
+        blocked.textContent = refusal || "";
+        byId("export-v4-fields").hidden = Boolean(refusal);
+        byId("export-v4-submit").disabled = Boolean(refusal);
+        openDialog("dialog-export-v4");
+      });
+      byId("open-verify-v4").addEventListener("click", () => openDialog("dialog-verify-v4"));
+      byId("open-restore-v4").addEventListener("click", () => {
+        openDialog("dialog-restore-v4");
+      });
+      byId("open-resume-v4").addEventListener("click", () => {
+        byId("resume-v4-submit").disabled = true;
+        showResult(
+          "resume-v4-result",
+          "Check the destination. Resume stays disabled until it is an interrupted restore of this archive.",
+          false,
+        );
+        openDialog("dialog-resume-v4");
+      });
+      byId("export-classic-submit").addEventListener("click", async () => {
+        const file = byId("export-classic-file").value.trim();
+        const result = await run("export-classic", { file }, "export-classic-result");
+        byId("export-classic-verify").hidden = !(result && result.verifyRecommended);
+      });
+      byId("export-classic-verify").addEventListener("click", () => {
+        byId("verify-classic-file").value = byId("export-classic-file").value;
+        openDialog("dialog-verify-classic");
+      });
+      byId("verify-classic-submit").addEventListener("click", () => {
+        void run(
+          "verify-classic",
+          { file: byId("verify-classic-file").value.trim() },
+          "verify-classic-result",
+        );
+      });
+      byId("restore-classic-submit").addEventListener("click", () => {
+        void run(
+          "restore-classic",
+          {
+            file: byId("restore-classic-file").value.trim(),
+            confirmEmptyTarget: true,
+            understandIdsRecreated: byId("restore-classic-ack").checked,
+            typedConfirmation: byId("restore-classic-phrase").value.trim(),
+          },
+          "restore-classic-result",
+        );
+      });
+      byId("export-v4-submit").addEventListener("click", () => {
+        void run("export-v4", { file: byId("export-v4-file").value.trim() }, "export-v4-result");
+      });
+      byId("verify-v4-submit").addEventListener("click", () => {
+        void run("verify-v4", { file: byId("verify-v4-file").value.trim() }, "verify-v4-result");
+      });
+      byId("restore-v4-submit").addEventListener("click", () => {
+        void run(
+          "restore-v4",
+          {
+            file: byId("restore-v4-file").value.trim(),
+            destination: byId("restore-v4-dir").value.trim(),
+            allowPartial: byId("restore-v4-partial").checked,
+            acknowledgePartial: byId("restore-v4-ack").checked,
+            resume: false,
+            typedConfirmation: byId("restore-v4-phrase").value.trim(),
+          },
+          "restore-v4-result",
+        );
+      });
+      byId("resume-v4-check").addEventListener("click", async () => {
+        const result = await run(
+          "inspect-v4-destination",
+          {
+            file: byId("resume-v4-file").value.trim(),
+            destination: byId("resume-v4-dir").value.trim(),
+          },
+          "resume-v4-result",
+        );
+        byId("resume-v4-submit").disabled = !(
+          result &&
+          result.destination &&
+          result.destination.resumeAvailable
+        );
+      });
+      byId("resume-v4-submit").addEventListener("click", () => {
+        void run(
+          "resume-v4",
+          {
+            file: byId("resume-v4-file").value.trim(),
+            destination: byId("resume-v4-dir").value.trim(),
+            allowPartial: byId("resume-v4-partial").checked,
+            acknowledgePartial: byId("resume-v4-ack").checked,
+            resume: true,
+            typedConfirmation: byId("resume-v4-phrase").value.trim(),
+          },
+          "resume-v4-result",
+        );
+      });
+      const bridgeReady = request("ui/initialize", {
+        appInfo: { name: "jarvis-persistence-settings", version: "0.1.0" },
+        appCapabilities: {},
+        protocolVersion: "2026-01-26",
+      }).then(() => {
+        window.parent.postMessage(
+          { jsonrpc: "2.0", method: "ui/notifications/initialized", params: {} },
+          "*",
+        );
+        return refresh();
+      });
+      void bridgeReady;
+    </script>
+  </body>
+</html>

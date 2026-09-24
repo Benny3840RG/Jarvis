@@ -1,3 +1,4 @@
+import { register as registerRateLimiter } from "@convex-dev/rate-limiter/test";
 import { anyApi } from "convex/server";
 import { convexTest } from "convex-test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -8,7 +9,9 @@ import { modules } from "./test.setup.js";
 const SERVICE_TOKEN = "development-model-invocation-service-token";
 
 function harness() {
-  return convexTest(schema, modules);
+  const t = convexTest(schema, modules);
+  registerRateLimiter(t);
+  return t;
 }
 
 beforeEach(() => vi.stubEnv("JARVIS_SERVICE_TOKEN", SERVICE_TOKEN));

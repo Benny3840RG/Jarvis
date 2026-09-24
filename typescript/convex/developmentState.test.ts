@@ -1107,7 +1107,7 @@ describe("developmentState.commit", () => {
  */
 async function seedVerifyingCheckpoint(
   t: ReturnType<typeof harness>,
-  input: { subjectId?: string; headSha: string },
+  input: { subjectId?: string; headSha: string; workerSucceeded?: boolean },
 ) {
   const subjectId = input.subjectId ?? "mission-1";
   const now = Date.now();
@@ -1134,7 +1134,7 @@ async function seedVerifyingCheckpoint(
           runId: "run-1",
           pullNumber: 1,
           headSha: input.headSha,
-          workerSucceeded: true,
+          workerSucceeded: input.workerSucceeded ?? true,
         },
       },
       createdAt: now,
@@ -1273,6 +1273,123 @@ describe("developmentState.commit -- verification/review evidence gates", () => 
         } as Record<string, unknown>),
       }),
     ).rejects.toThrow();
+  });
+
+  it("rejects VERIFYING -> REPAIR_REQUIRED when verification has not conclusively failed", async () => {
+    const t = harness();
+    await seedSubject(t, { state: "VERIFYING" });
+
+    const missingHead = await t.mutation(api.developmentState.commit, {
+      serviceToken: SERVICE_TOKEN,
+      subjectId: "mission-1",
+      eventId: "event-1",
+      requestId: "request-1",
+      correlationId: "correlation-1",
+      transitionId: "DEV_TRANSITION_VERIFYING_TO_REPAIR_REQUIRED",
+      to: "REPAIR_REQUIRED",
+      requestedBy: { actorType: "worker", actorId: "verifier-1" },
+      committedBy: { actorType: "controller", actorId: "development-controller" },
+    });
+    expect(missingHead.kind).toBe("REJECTED");
+    expect(missingHead.reasons).toContain("VERIFICATION_HEAD_NOT_ESTABLISHED");
+    expect(missingHead.subject.state).toBe("VERIFYING");
+
+    await seedVerifyingCheckpoint(t, { headSha: HEAD_SHA });
+    const missingEvidence = await t.mutation(api.developmentState.commit, {
+      serviceToken: SERVICE_TOKEN,
+      subjectId: "mission-1",
+      eventId: "event-2",
+      requestId: "request-2",
+      correlationId: "correlation-2",
+      transitionId: "DEV_TRANSITION_VERIFYING_TO_REPAIR_REQUIRED",
+      to: "REPAIR_REQUIRED",
+      requestedBy: { actorType: "worker", actorId: "verifier-1" },
+      committedBy: { actorType: "controller", actorId: "development-controller" },
+    });
+    expect(missingEvidence.kind).toBe("REJECTED");
+    expect(missingEvidence.reasons).toContain("VERIFICATION_EVIDENCE_REQUIRED");
+
+    await recordEvidence(t, { kind: "verification", headSha: HEAD_SHA, outcome: "clean" });
+    const cleanEvidence = await t.mutation(api.developmentState.commit, {
+      serviceToken: SERVICE_TOKEN,
+      subjectId: "mission-1",
+      eventId: "event-3",
+      requestId: "request-3",
+      correlationId: "correlation-3",
+      transitionId: "DEV_TRANSITION_VERIFYING_TO_REPAIR_REQUIRED",
+      to: "REPAIR_REQUIRED",
+      requestedBy: { actorType: "worker", actorId: "verifier-1" },
+      committedBy: { actorType: "controller", actorId: "development-controller" },
+    });
+    expect(cleanEvidence.kind).toBe("REJECTED");
+    expect(cleanEvidence.reasons).toContain("VERIFICATION_EVIDENCE_NOT_BLOCKING");
+    expect(cleanEvidence.subject.state).toBe("VERIFYING");
+  });
+
+  it("commits VERIFYING -> REPAIR_REQUIRED when the worker checkpoint itself failed", async () => {
+    const t = harness();
+    await seedSubject(t, { state: "VERIFYING" });
+    await seedVerifyingCheckpoint(t, { headSha: "", workerSucceeded: false });
+
+    const outcome = await t.mutation(api.developmentState.commit, {
+      serviceToken: SERVICE_TOKEN,
+      subjectId: "mission-1",
+      eventId: "event-1",
+      requestId: "request-1",
+      correlationId: "correlation-1",
+      transitionId: "DEV_TRANSITION_VERIFYING_TO_REPAIR_REQUIRED",
+      to: "REPAIR_REQUIRED",
+      requestedBy: { actorType: "worker", actorId: "verifier-1" },
+      committedBy: { actorType: "controller", actorId: "development-controller" },
+    });
+
+    expect(outcome.kind).toBe("COMMITTED");
+    expect(outcome.subject.state).toBe("REPAIR_REQUIRED");
+  });
+
+  it("commits VERIFYING -> REPAIR_REQUIRED only when head-bound verification evidence is blocking", async () => {
+    const t = harness();
+    await seedSubject(t, { state: "VERIFYING" });
+    await seedVerifyingCheckpoint(t, { headSha: HEAD_SHA });
+    await recordEvidence(t, { kind: "verification", headSha: HEAD_SHA, outcome: "blocking" });
+
+    const outcome = await t.mutation(api.developmentState.commit, {
+      serviceToken: SERVICE_TOKEN,
+      subjectId: "mission-1",
+      eventId: "event-1",
+      requestId: "request-1",
+      correlationId: "correlation-1",
+      transitionId: "DEV_TRANSITION_VERIFYING_TO_REPAIR_REQUIRED",
+      to: "REPAIR_REQUIRED",
+      requestedBy: { actorType: "worker", actorId: "verifier-1" },
+      committedBy: { actorType: "controller", actorId: "development-controller" },
+    });
+
+    expect(outcome.kind).toBe("COMMITTED");
+    expect(outcome.subject.state).toBe("REPAIR_REQUIRED");
+  });
+
+  it("rejects REVIEW -> REPAIR_REQUIRED when the recorded review is clean", async () => {
+    const t = harness();
+    await seedSubject(t, { state: "REVIEW" });
+    await seedVerifyingCheckpoint(t, { headSha: HEAD_SHA });
+    await recordEvidence(t, { kind: "review", headSha: HEAD_SHA, outcome: "clean" });
+
+    const outcome = await t.mutation(api.developmentState.commit, {
+      serviceToken: SERVICE_TOKEN,
+      subjectId: "mission-1",
+      eventId: "event-1",
+      requestId: "request-1",
+      correlationId: "correlation-1",
+      transitionId: "DEV_TRANSITION_REVIEW_TO_REPAIR_REQUIRED",
+      to: "REPAIR_REQUIRED",
+      requestedBy: { actorType: "worker", actorId: "reviewer-1" },
+      committedBy: { actorType: "controller", actorId: "development-controller" },
+    });
+
+    expect(outcome.kind).toBe("REJECTED");
+    expect(outcome.reasons).toContain("REVIEW_EVIDENCE_NOT_BLOCKING");
+    expect(outcome.subject.state).toBe("REVIEW");
   });
 
   it("commits VERIFYING -> REVIEW through the real commit boundary once genuine, head-bound verification evidence exists", async () => {

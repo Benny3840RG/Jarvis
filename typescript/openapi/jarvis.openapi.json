@@ -54,6 +54,10 @@
     {
       "name": "Tool Actions",
       "description": "Revision-bound tool-action proposal, inspection, approval, rejection, and execution through the reviewed server-side allowlist. Approval alone does not execute the operation."
+    },
+    {
+      "name": "Settings",
+      "description": "Operator settings. Danger zone wraps existing CLI and runbook actions that revoke previous tokens or quarantine local JSON. It does not delete Convex owner data."
     }
   ],
   "x-jarvis-architecture": {
@@ -89,6 +93,8 @@
     "publicSubmissionReady": false,
     "dataOperationIds": [
       "getJarvisStatus",
+      "getOperatorGeneralSettings",
+      "getCredentialsStatus",
       "listTasks",
       "getTask",
       "createTask",
@@ -104,6 +110,11 @@
     "restOnlyOperationIds": [
       "getHealth",
       "getHelp",
+      "getCredentialsPage",
+      "getDangerSettingsPage",
+      "getLimitsSettingsPage",
+      "endCredentialOverlap",
+      "checkDeliveryCredential",
       "executeConversation",
       "exportBackup",
       "verifyBackup",
@@ -120,7 +131,10 @@
       "getToolAction",
       "approveToolAction",
       "rejectToolAction",
-      "executeToolAction"
+      "executeToolAction",
+      "getDangerZone",
+      "getDangerZonePage",
+      "executeDangerZoneAction"
     ],
     "implementationStatus": "private-development-preview",
     "transport": "streamable-http-stateless",
@@ -254,6 +268,375 @@
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
           }
+        }
+      }
+    },
+    "/api/v1/settings/general": {
+      "get": {
+        "operationId": "getOperatorGeneralSettings",
+        "summary": "Read operator general settings",
+        "description": "Returns the effective IANA timezone used for local wall-clock reminder normalization, and whether it came from JARVIS_TIMEZONE or the machine. An invalid configured zone stays invalid: the machine zone is reported and is not applied. This read does not write timezone, durable preferences, display preferences, or authority. Console theme, contrast, and motion stay in the console. Phase A does not edit the timezone in-app.",
+        "tags": ["System"],
+        "x-mcp-tool": {
+          "exposed": true,
+          "title": "Read general settings",
+          "description": "Use this to show Settings → General timezone status. It does not change timezone, preferences, ToolActions, or completion authority.",
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Read-only general settings. Invalid timezone configuration is reported with HTTP 200 and valid=false.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorGeneralSettings"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/settings/credentials": {
+      "get": {
+        "operationId": "getCredentialsPage",
+        "summary": "Open the loopback credentials settings page",
+        "description": "Serves the local operator credentials page on a loopback bind only. This route is public (no Bearer token) so a missing service token can still show the fail-closed banner. The HTML shows collapsed fingerprint chips and rotation runbooks. It does not embed SHA-256 digests. A generated token is revealed once in the browser and is not sent to MCP or written into a URL. End overlap is not offered; the page links to GET /settings/danger. Non-loopback binds do not serve the page. There is no control that enables remote exposure.",
+        "tags": ["System"],
+        "security": [],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Loopback credentials settings HTML. Contains collapsed fingerprint chips and no raw secrets or SHA-256 digests. End overlap is not offered.",
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/settings/danger": {
+      "get": {
+        "operationId": "getDangerSettingsPage",
+        "summary": "Open the loopback danger settings page",
+        "description": "Serves the Danger zone page on a loopback bind only. This route is public (no Bearer token) so a missing service token can still show disabled overlap cards. It is the only End overlap surface. Confirmations are END OVERLAP, END APPROVAL OVERLAP, and END DELIVERY OVERLAP. Confirmed actions POST to /api/v1/settings/danger-zone/actions/{actionId}. The page does not store a Bearer token in sessionStorage. Reset and clear quarantine local JSON only. Convex owner data is not deleted. Backup is a link to Persistence Backup (/settings/persistence#backup), not an export on this page. Non-loopback binds do not serve the page.",
+        "tags": ["System"],
+        "security": [],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Loopback Danger zone HTML. End overlap confirmations live here. No sessionStorage Bearer, no Convex owner wipe, and backup links to Persistence Backup.",
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/settings/limits": {
+      "get": {
+        "operationId": "getLimitsSettingsPage",
+        "summary": "Open the loopback limits settings page",
+        "description": "Serves the local operator Limits page on a loopback bind only. This route is public (no Bearer token). It is a read model of provider quotas: API/provider rate, concurrency, storage/backup, retention, and delivery. The durable quota store is not selected, so every chip is UNKNOWN and hard stops read as No hard stop. The page does not persist quota values, does not enforce limits, and does not store a Bearer token. Typed confirmation explains blast radius and then refuses to save. Non-loopback binds do not serve the page. There is no seats, billing, paywall, or team-admin control.",
+        "tags": ["System"],
+        "security": [],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Loopback Limits settings HTML. Provider-quota cards are UNKNOWN. Nothing is written or enforced.",
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/api/v1/settings/credentials": {
+      "get": {
+        "operationId": "getCredentialsStatus",
+        "summary": "Read machine-credential fingerprints and bind posture",
+        "description": "Returns configured/overlap/fingerprint status for the service, approval, and delivery runtime tokens, plus HTTP/MCP bind and remote-gateway posture. Fingerprints are SHA-256 prefixes. Raw tokens are never included. A missing service token fails closed before this handler runs.",
+        "tags": ["System"],
+        "x-mcp-tool": {
+          "exposed": true,
+          "title": "Read Jarvis credential status",
+          "description": "Use this to show whether machine credentials are configured. Never request, repeat, or invent token values.",
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Fingerprint-only credential status.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CredentialsStatusResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/settings/credentials/end-overlap": {
+      "post": {
+        "operationId": "endCredentialOverlap",
+        "summary": "Report that credential overlap removal is not offered",
+        "description": "Does not remove a token and does not return a remove command. Client verify, context, and the confirmation phrase are ignored: they are not a gate and they are not attestation. This process does not observe npm run smoke:convex, so the live posture is not-verified. offered, allowed, and executesRemoval are always false, and commands is always empty. dangerHref is the Danger zone card for that token. The response does not echo the supplied confirmation. Typed confirm and removal stay out of Credentials.",
+        "tags": ["System"],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EndOverlapRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Removal is not offered. executesRemoval is false, commands is empty, and dangerHref points at the danger page. Client verify does not change that.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EndOverlapResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/settings/credentials/delivery-check": {
+      "post": {
+        "operationId": "checkDeliveryCredential",
+        "summary": "Check a delivery-token digest against the service token",
+        "description": "Compares a SHA-256 hex digest with the service token digest captured at process start. The raw delivery token is not accepted and is not returned. A match must be refused before the delivery token is stored.",
+        "tags": ["System"],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeliveryCheckRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Whether the digest matches the current or previous service token.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryCheckResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/settings/persistence": {
+      "get": {
+        "operationId": "getPersistenceSettings",
+        "summary": "Read Persistence settings",
+        "description": "Returns the active persistence provider, a fail-closed health probe, and the classic and archive v4 backup commands. The provider is read from configuration. This operation does not switch providers or fall back from Convex to JSON.",
+        "tags": ["System"],
+        "x-mcp-tool": {
+          "exposed": true,
+          "title": "Show Persistence settings",
+          "description": "Open Settings → Persistence and show the active provider, health, and backup commands.",
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Persistence settings projection. Not a second authority for provider selection or recovery.",
+            "headers": {
+              "X-Request-Id": { "$ref": "#/components/headers/RequestId" }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/PersistenceSettingsView" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "500": { "$ref": "#/components/responses/InternalServerError" }
+        }
+      }
+    },
+    "/api/v1/settings/persistence/actions": {
+      "post": {
+        "operationId": "runPersistenceSettingsAction",
+        "summary": "Run a Persistence backup action",
+        "description": "Runs one existing backup command (classic export, verify, or empty-target restore, or archive v4 export, verify, restore, or explicit resume). Refusals are returned in the body. This does not merge archives, mark a partial archive complete, or resume unless the action is resume-v4.",
+        "tags": ["System"],
+        "x-mcp-tool": {
+          "exposed": false,
+          "title": "Run a Persistence settings action",
+          "description": "Operator Settings only. Wraps npm run backup. Not offered as a model tool.",
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": true,
+            "openWorldHint": false,
+            "idempotentHint": false
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/PersistenceActionRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The backup command completed, or was refused or failed with a named operator result.",
+            "headers": {
+              "X-Request-Id": { "$ref": "#/components/headers/RequestId" }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/PersistenceActionResult" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "422": { "$ref": "#/components/responses/UnprocessableEntity" },
+          "500": { "$ref": "#/components/responses/InternalServerError" }
         }
       }
     },
@@ -1129,7 +1512,7 @@
       "post": {
         "operationId": "reasonWithTotality",
         "summary": "Run proposal-only Totality reasoning with validation and audit journalling",
-        "description": "Runs proposal-only Totality reasoning against bounded authoritative project context. Admission limits cover both the incoming request and the complete serialized provider request, including project context, system instructions, routing and any output schema. Input tokens are estimated from UTF-8 bytes, not measured by a model tokenizer. Provider responses, including error bodies, are limited to 1048576 bytes. Oversized inputs are rejected before provider dispatch; oversized responses fail without staging memory or recording a successful outcome. Successful typed memory suggestions are validated locally and staged as approval-required project-memory change sets in the same Convex transaction as validation and audit evidence. No memory is approved or applied by this operation.",
+        "description": "Runs proposal-only Totality reasoning against bounded authoritative project context. Admission limits cover both the incoming request and the complete serialized provider request, including project context, system instructions, routing and any output schema. Input tokens are estimated from UTF-8 bytes, not measured by a model tokenizer. Provider responses, including error bodies, are limited to 1048576 bytes. Oversized inputs are rejected before provider dispatch; oversized responses fail without staging memory or recording a successful outcome. Successful typed memory suggestions are validated locally and staged as approval-required project-memory change sets in the same Convex transaction as validation and audit evidence. No memory is approved or applied by this operation. Request-bound provider work is cancelled when the HTTP caller disconnects before the turn finishes. That cancellation does not start or roll back explicitly durable delegated work, and it does not undo a journal commit that has already started. A disconnect that can still receive a response is reported as 499 totality-caller-disconnected.",
         "tags": ["Runtime"],
         "x-mcp-tool": {
           "exposed": false,
@@ -1191,6 +1574,10 @@
           },
           "429": {
             "$ref": "#/components/responses/TooManyRequests"
+          },
+          "499": {
+            "description": "The caller disconnected before request-bound Totality work finished. Explicitly durable delegated work is not cancelled.",
+            "$ref": "#/components/responses/ProblemResponse"
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
@@ -6526,6 +6913,123 @@
           }
         }
       }
+    },
+    "/api/v1/settings/danger-zone": {
+      "get": {
+        "operationId": "getDangerZone",
+        "summary": "Read Danger zone blast radius and action state",
+        "description": "Returns the Phase A Danger zone cards. Overlap cards are disabled when no previous token is accepted. The delivery card is disabled when the delivery token is absent. Reset and clear name local JSON files and state that Convex owner data is untouched. No token values are returned.",
+        "tags": ["Settings"],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Danger zone read model.",
+            "headers": {
+              "X-Request-Id": { "$ref": "#/components/headers/RequestId" }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/DangerZoneModel" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "429": { "$ref": "#/components/responses/TooManyRequests" },
+          "500": { "$ref": "#/components/responses/InternalServerError" }
+        }
+      }
+    },
+    "/api/v1/settings/danger-zone/page": {
+      "get": {
+        "operationId": "getDangerZonePage",
+        "summary": "Render the Danger zone settings page",
+        "description": "HTML for the same Danger zone page as GET /settings/danger. Cancel is the default focused control. Credentials links to /settings/danger and does not execute End. The page does not store a Bearer token in sessionStorage. Backup is a link to Persistence Backup.",
+        "tags": ["Settings"],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Danger zone HTML page.",
+            "headers": {
+              "X-Request-Id": { "$ref": "#/components/headers/RequestId" }
+            },
+            "content": {
+              "text/html": {
+                "schema": { "type": "string" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "429": { "$ref": "#/components/responses/TooManyRequests" },
+          "500": { "$ref": "#/components/responses/InternalServerError" }
+        }
+      }
+    },
+    "/api/v1/settings/danger-zone/actions/{actionId}": {
+      "post": {
+        "operationId": "executeDangerZoneAction",
+        "summary": "Run one confirmed Danger zone action",
+        "description": "Runs one Phase A action after a case-sensitive confirmation string. End overlap removes only the matching PREVIOUS Convex env variable and any local previous assignment. Reset JSON quarantines jarvis-state.json. Clear local quarantines the local core, memory, and business JSON files and requires a verified backup from the last 24 hours or an explicit skip. Neither reset nor clear calls Convex delete APIs. Failures leave overlap in place when removal did not succeed, and responses never echo token values.",
+        "tags": ["Settings"],
+        "parameters": [
+          {
+            "name": "actionId",
+            "in": "path",
+            "required": true,
+            "schema": { "$ref": "#/components/schemas/DangerZoneActionId" }
+          }
+        ],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": true,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/DangerZoneActionRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The action completed. Convex owner data was not deleted.",
+            "headers": {
+              "X-Request-Id": { "$ref": "#/components/headers/RequestId" }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/DangerZoneActionResult" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "422": { "$ref": "#/components/responses/UnprocessableEntity" },
+          "429": { "$ref": "#/components/responses/TooManyRequests" },
+          "500": { "$ref": "#/components/responses/InternalServerError" }
+        }
+      }
     }
   },
   "components": {
@@ -6844,6 +7348,226 @@
           }
         }
       },
+      "CredentialsStatusResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["data"],
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/CredentialsStatus"
+          }
+        }
+      },
+      "CredentialsStatus": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "failClosed",
+          "banner",
+          "approvalsWarning",
+          "generation",
+          "localPage",
+          "tokens",
+          "bind",
+          "exposure",
+          "docs",
+          "parity"
+        ],
+        "properties": {
+          "failClosed": { "type": "boolean" },
+          "banner": {
+            "oneOf": [{ "type": "string", "minLength": 1, "maxLength": 400 }, { "type": "null" }]
+          },
+          "approvalsWarning": {
+            "oneOf": [{ "type": "string", "minLength": 1, "maxLength": 200 }, { "type": "null" }]
+          },
+          "generation": { "type": "string", "enum": ["local-page", "unavailable"] },
+          "localPage": {
+            "oneOf": [{ "type": "string", "minLength": 1, "maxLength": 256 }, { "type": "null" }]
+          },
+          "tokens": {
+            "type": "array",
+            "minItems": 3,
+            "maxItems": 3,
+            "items": { "$ref": "#/components/schemas/CredentialTokenCard" }
+          },
+          "bind": { "$ref": "#/components/schemas/CredentialBindStatus" },
+          "exposure": { "$ref": "#/components/schemas/CredentialExposure" },
+          "docs": { "$ref": "#/components/schemas/CredentialDocLinks" },
+          "parity": {
+            "type": "array",
+            "maxItems": 12,
+            "items": { "$ref": "#/components/schemas/CredentialParityCommand" }
+          }
+        }
+      },
+      "CredentialTokenCard": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "label",
+          "configured",
+          "statusLabel",
+          "fingerprint",
+          "owner",
+          "overlapActive",
+          "overlapLabel",
+          "note",
+          "equalsServiceToken",
+          "warning"
+        ],
+        "properties": {
+          "id": { "type": "string", "enum": ["service", "approval", "delivery"] },
+          "label": { "type": "string", "minLength": 1, "maxLength": 80 },
+          "configured": { "type": "boolean" },
+          "statusLabel": { "type": "string", "minLength": 1, "maxLength": 80 },
+          "fingerprint": {
+            "oneOf": [{ "type": "string", "minLength": 9, "maxLength": 9 }, { "type": "null" }]
+          },
+          "owner": {
+            "oneOf": [{ "type": "string", "minLength": 1, "maxLength": 64 }, { "type": "null" }]
+          },
+          "overlapActive": { "type": "boolean" },
+          "overlapLabel": { "type": "string", "minLength": 1, "maxLength": 80 },
+          "note": { "type": "string", "minLength": 1, "maxLength": 400 },
+          "equalsServiceToken": { "type": "boolean" },
+          "warning": {
+            "oneOf": [{ "type": "string", "minLength": 1, "maxLength": 200 }, { "type": "null" }]
+          }
+        }
+      },
+      "CredentialBindStatus": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "httpHost",
+          "httpPort",
+          "httpAuth",
+          "mcpBind",
+          "mcpToken",
+          "remotePosture",
+          "remoteLabel",
+          "loopbackOnly",
+          "liveness"
+        ],
+        "properties": {
+          "httpHost": { "type": "string", "minLength": 1, "maxLength": 253 },
+          "httpPort": { "type": "integer", "minimum": 1, "maximum": 65535 },
+          "httpAuth": { "type": "string", "enum": ["Bearer service token", "OIDC access token"] },
+          "mcpBind": { "type": "string", "minLength": 1, "maxLength": 280 },
+          "mcpToken": { "type": "string", "enum": ["Injected server-side only"] },
+          "remotePosture": { "type": "string", "enum": ["configured", "blocked"] },
+          "remoteLabel": { "type": "string", "enum": ["Configured", "Blocked (fail closed)"] },
+          "loopbackOnly": { "type": "boolean" },
+          "liveness": { "type": "string", "enum": ["GET /healthz (public)"] }
+        }
+      },
+      "CredentialExposure": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["mode", "remoteHttp", "remoteHttpLabel"],
+        "properties": {
+          "mode": { "type": "string", "enum": ["Loopback (supported default)", "Remote"] },
+          "remoteHttp": { "type": "string", "enum": ["off", "configured"] },
+          "remoteHttpLabel": { "type": "string", "minLength": 1, "maxLength": 120 }
+        }
+      },
+      "CredentialDocLinks": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["httpApi", "mcpPreview", "exposure", "rotation", "credentials", "security"],
+        "properties": {
+          "httpApi": { "type": "string", "format": "uri" },
+          "mcpPreview": { "type": "string", "format": "uri" },
+          "exposure": { "type": "string", "format": "uri" },
+          "rotation": { "type": "string", "format": "uri" },
+          "credentials": { "type": "string", "format": "uri" },
+          "security": { "type": "string", "format": "uri" }
+        }
+      },
+      "CredentialParityCommand": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["ui", "command"],
+        "properties": {
+          "ui": { "type": "string", "minLength": 1, "maxLength": 80 },
+          "command": { "type": "string", "minLength": 1, "maxLength": 200 }
+        }
+      },
+      "EndOverlapRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["tokenId", "confirmation", "verify", "context"],
+        "properties": {
+          "tokenId": { "type": "string", "enum": ["service", "approval", "delivery"] },
+          "confirmation": { "type": "string", "maxLength": 32 },
+          "verify": {
+            "type": "string",
+            "enum": ["idle", "passing", "failing"],
+            "description": "Not attestation. Idle never offers End. Passing does not offer End."
+          },
+          "context": {
+            "type": "string",
+            "enum": ["wizard", "card"],
+            "description": "Accepted and ignored. Card and idle do not unlock removal."
+          }
+        }
+      },
+      "EndOverlapResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "offered",
+          "primary",
+          "allowed",
+          "executesRemoval",
+          "commands",
+          "posture",
+          "dangerHref"
+        ],
+        "properties": {
+          "offered": { "type": "boolean", "const": false },
+          "primary": { "type": "boolean", "const": false },
+          "allowed": { "type": "boolean", "const": false },
+          "executesRemoval": { "type": "boolean", "const": false },
+          "commands": {
+            "type": "array",
+            "maxItems": 0,
+            "items": { "type": "string", "minLength": 1, "maxLength": 200 }
+          },
+          "posture": {
+            "type": "string",
+            "enum": ["not-verified", "guarding"],
+            "description": "not-verified until this process has attested a passing smoke result. guarding still does not offer End. Idle stays not-verified."
+          },
+          "dangerHref": {
+            "type": "string",
+            "enum": [
+              "/settings/danger#service",
+              "/settings/danger#approval",
+              "/settings/danger#delivery"
+            ],
+            "description": "Deep link to the Danger zone card for this token. Credentials does not execute removal."
+          }
+        }
+      },
+      "DeliveryCheckRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["digestSha256"],
+        "properties": {
+          "digestSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+        }
+      },
+      "DeliveryCheckResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["equalsServiceToken"],
+        "properties": {
+          "equalsServiceToken": { "type": "boolean" }
+        }
+      },
       "SystemStatus": {
         "type": "object",
         "additionalProperties": false,
@@ -6907,6 +7631,56 @@
           "checkedAt": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "OperatorGeneralSettings": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Phase A Settings → General read model. Display preferences are console-local and are not part of this object.",
+        "required": ["timezone"],
+        "properties": {
+          "timezone": {
+            "$ref": "#/components/schemas/TimezoneStatus"
+          }
+        }
+      },
+      "TimezoneStatus": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Effective reminder timezone. effectiveIana is null when configuration is invalid. machineIana is informational and is not substituted for an invalid JARVIS_TIMEZONE.",
+        "required": ["effectiveIana", "source", "envRaw", "valid", "machineIana"],
+        "properties": {
+          "effectiveIana": {
+            "type": ["string", "null"],
+            "minLength": 1,
+            "maxLength": 128,
+            "description": "IANA timezone used by reminder normalization. Null when the configured zone is invalid."
+          },
+          "source": {
+            "type": "string",
+            "enum": ["env", "machine"]
+          },
+          "envRaw": {
+            "type": ["string", "null"],
+            "minLength": 1,
+            "maxLength": 128,
+            "description": "Trimmed JARVIS_TIMEZONE when it is a safe label. Null when unset, blank, or unsafe to echo."
+          },
+          "valid": {
+            "type": "boolean"
+          },
+          "validationError": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300,
+            "description": "Safe validation detail. Omitted when the timezone is valid. Contains no secrets."
+          },
+          "machineIana": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "description": "Machine IANA timezone. Not applied when source is env and valid is false."
           }
         }
       },
@@ -12850,6 +13624,255 @@
             "type": "integer",
             "minimum": 0
           }
+        }
+      },
+      "PersistenceSettingsView": {
+        "type": "object",
+        "additionalProperties": true,
+        "required": [
+          "title",
+          "honesty",
+          "fallbackCta",
+          "providerSwitch",
+          "provider",
+          "health",
+          "backup"
+        ],
+        "properties": {
+          "title": { "const": "Persistence" },
+          "honesty": { "type": "string" },
+          "fallbackCta": { "type": "null" },
+          "providerSwitch": { "type": "null" },
+          "provider": { "type": "object", "additionalProperties": true },
+          "health": { "type": "object", "additionalProperties": true },
+          "backup": { "type": "object", "additionalProperties": true }
+        }
+      },
+      "PersistenceActionRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["action"],
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "export-classic",
+              "verify-classic",
+              "restore-classic",
+              "export-v4",
+              "verify-v4",
+              "restore-v4",
+              "resume-v4",
+              "inspect-v4-destination"
+            ]
+          },
+          "file": { "type": "string", "minLength": 1, "maxLength": 1024 },
+          "destination": { "type": "string", "minLength": 1, "maxLength": 1024 },
+          "confirmEmptyTarget": { "type": "boolean" },
+          "understandIdsRecreated": { "type": "boolean" },
+          "allowPartial": { "type": "boolean" },
+          "acknowledgePartial": { "type": "boolean" },
+          "resume": { "type": "boolean" },
+          "typedConfirmation": { "type": "string", "minLength": 1, "maxLength": 64 }
+        }
+      },
+      "PersistenceActionResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "status",
+          "action",
+          "code",
+          "detail",
+          "path",
+          "counts",
+          "v4",
+          "destination",
+          "verifyRecommended"
+        ],
+        "properties": {
+          "status": { "type": "string", "enum": ["completed", "refused", "failed"] },
+          "action": { "type": "string" },
+          "code": { "type": ["string", "null"] },
+          "detail": { "type": "string" },
+          "path": { "type": ["string", "null"] },
+          "counts": { "type": ["object", "null"], "additionalProperties": true },
+          "v4": { "type": ["object", "null"], "additionalProperties": true },
+          "destination": { "type": ["object", "null"], "additionalProperties": true },
+          "verifyRecommended": { "type": "boolean" }
+        }
+      },
+      "DangerZoneActionId": {
+        "type": "string",
+        "enum": [
+          "end-service-overlap",
+          "end-approval-overlap",
+          "end-delivery-overlap",
+          "reset-local-json",
+          "clear-local"
+        ]
+      },
+      "DangerZoneVerifiedBackup": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "verifiedAt"],
+        "properties": {
+          "path": { "type": "string", "minLength": 1, "maxLength": 4096 },
+          "verifiedAt": { "type": "string", "minLength": 1, "maxLength": 64 }
+        }
+      },
+      "DangerZoneCard": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "title",
+          "enabled",
+          "disabledReason",
+          "warning",
+          "blastRadius",
+          "confirm",
+          "cli",
+          "prerequisites",
+          "willQuarantine",
+          "willNotTouch",
+          "overlap",
+          "fingerprint"
+        ],
+        "properties": {
+          "id": { "$ref": "#/components/schemas/DangerZoneActionId" },
+          "title": { "type": "string" },
+          "enabled": { "type": "boolean" },
+          "disabledReason": { "type": ["string", "null"] },
+          "warning": { "type": ["string", "null"] },
+          "blastRadius": { "type": "array", "items": { "type": "string" } },
+          "confirm": { "type": "string" },
+          "cli": { "type": "string" },
+          "prerequisites": { "type": "array", "items": { "type": "string" } },
+          "willQuarantine": { "type": "array", "items": { "type": "string" } },
+          "willNotTouch": { "type": "array", "items": { "type": "string" } },
+          "overlap": { "type": ["string", "null"], "enum": ["on", "off", "not-configured", null] },
+          "fingerprint": { "type": ["string", "null"] }
+        }
+      },
+      "DangerZoneExclusion": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "reason"],
+        "properties": {
+          "id": { "type": "string" },
+          "reason": { "type": "string" }
+        }
+      },
+      "DangerZoneModel": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "title",
+          "lede",
+          "provider",
+          "verifiedBackup",
+          "cards",
+          "excluded",
+          "credentialsEndOverlapHref"
+        ],
+        "properties": {
+          "title": { "const": "Danger zone" },
+          "lede": { "type": "string" },
+          "provider": { "type": "string", "enum": ["json", "convex"] },
+          "verifiedBackup": {
+            "oneOf": [
+              { "$ref": "#/components/schemas/DangerZoneVerifiedBackup" },
+              { "type": "null" }
+            ]
+          },
+          "cards": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/DangerZoneCard" }
+          },
+          "excluded": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/DangerZoneExclusion" }
+          },
+          "credentialsEndOverlapHref": { "type": "string" }
+        }
+      },
+      "DangerZoneBackupChoice": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["mode", "path"],
+            "properties": {
+              "mode": { "const": "verified" },
+              "path": { "type": "string", "minLength": 1, "maxLength": 4096 }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["mode", "acceptIrreversibleLoss"],
+            "properties": {
+              "mode": { "const": "skip" },
+              "acceptIrreversibleLoss": { "type": "boolean" }
+            }
+          }
+        ]
+      },
+      "DangerZoneActionRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["confirmation"],
+        "properties": {
+          "confirmation": { "type": "string", "minLength": 1, "maxLength": 64 },
+          "acceptEmptyLocalCore": { "type": "boolean" },
+          "backup": { "$ref": "#/components/schemas/DangerZoneBackupChoice" }
+        }
+      },
+      "DangerZoneAuditRecord": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "actionId",
+          "timestamp",
+          "provider",
+          "pid",
+          "hostname",
+          "outcome",
+          "convexDataDeletes",
+          "quarantinedBasenames"
+        ],
+        "properties": {
+          "actionId": { "$ref": "#/components/schemas/DangerZoneActionId" },
+          "timestamp": { "type": "string" },
+          "provider": { "type": "string", "enum": ["json", "convex"] },
+          "pid": { "type": "integer", "minimum": 0 },
+          "hostname": { "type": "string" },
+          "outcome": { "const": "success" },
+          "convexDataDeletes": { "const": 0 },
+          "quarantinedBasenames": { "type": "array", "items": { "type": "string" } }
+        }
+      },
+      "DangerZoneActionResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "actionId",
+          "outcome",
+          "detail",
+          "convexDataDeletes",
+          "quarantinedPaths",
+          "overlap",
+          "audit"
+        ],
+        "properties": {
+          "actionId": { "$ref": "#/components/schemas/DangerZoneActionId" },
+          "outcome": { "const": "success" },
+          "detail": { "type": "string" },
+          "convexDataDeletes": { "const": 0 },
+          "quarantinedPaths": { "type": "array", "items": { "type": "string" } },
+          "overlap": { "type": ["string", "null"], "enum": ["off", null] },
+          "audit": { "$ref": "#/components/schemas/DangerZoneAuditRecord" }
         }
       }
     }
