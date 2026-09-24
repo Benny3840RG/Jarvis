@@ -56,8 +56,10 @@ gate on that page. Idle verification stays “Not verified”, and a caller-supp
 is not server attestation. `POST /api/v1/settings/credentials/end-overlap` ignores caller `verify`
 and returns `offered: false`, `executesRemoval: false`, an empty `commands` list, and `dangerHref`
 for that token (`/settings/danger#service`, `#approval`, or `#delivery`). Those links do not
-remove a token. `GET /settings/danger` is the only End path. It removes the previous token after
-the typed confirmation and does not wipe Convex owner data.
+remove a token. The page shows Not verified. Guarding is the only later posture, and only after
+this server attests a passing smoke result. Idle has no End button, and Guarding does not add
+one. `GET /settings/danger` is the only End path. It removes the previous token after the typed
+confirmation and does not wipe Convex owner data.
 
 If smoke fails, keep the previous token set until the local token is corrected. Do not paste
 tokens into Git, logs, issues, or chat. See [SECURITY.md](../../../SECURITY.md).

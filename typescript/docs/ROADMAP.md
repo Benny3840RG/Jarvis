@@ -95,10 +95,11 @@ Next:
 End overlap does not trust caller `verify`. Credentials has no End dialog and no client gate.
 `decideEndOverlap` returns `offered: false`, `executesRemoval: false`, no commands, and a
 per-token `dangerHref` (`/settings/danger#service`, `#approval`, or `#delivery`). A
-server-attested passing result only moves posture to guarding. Those fragments land on the
-Danger cards. Removal stays on `GET /settings/danger`, the only End path, after the typed
-confirmation. That page does not wipe Convex owner data. Production HTTP and preview select
-credentials with
+server-attested passing result only moves posture to guarding. The visible posture is Not
+verified until this server attests a passing smoke result, and then it is Guarding. Neither
+posture offers End. Those fragments land on the Danger cards. Removal stays on
+`GET /settings/danger`, the only End path, after the typed confirmation. That page does not
+wipe Convex owner data. Production HTTP and preview select credentials with
 `captureCredentialsFromEnv`, not from `HttpAppConfig`, which has no delivery token.
 
 ## Settings → Persistence, phase A (2026-09-24)
