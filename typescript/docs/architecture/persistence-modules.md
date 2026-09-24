@@ -59,3 +59,5 @@ runtime behaviour belongs in the focused modules below.
 - Convex calls use generated API references and service-token authentication.
 - Snapshot and restore operations remain provider-atomic.
 - Restore continues to refuse a non-empty target and remaps nested record IDs.
+  The JSON provider and v3 backup verification share `src/backup/uuidRemapper.ts`
+  for that walk. Convex restore still uses the mutation-local walk.

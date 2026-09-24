@@ -18,6 +18,13 @@ import type { QuoteSnapshot } from "../quotes/quoteLifecycle.js";
 import type { QuoteSummary } from "../quotes/quoteRepository.js";
 import type { ToolAction, ToolActionState } from "../actions/toolActions.js";
 import type { SystemStatus } from "../http/contracts.js";
+import type { OperatorGeneralSettings } from "../reminders/due.js";
+import type { CredentialsStatus } from "../settings/credentialsStatus.js";
+import type {
+  PersistenceActionInput,
+  PersistenceActionResult,
+  PersistenceSettingsView,
+} from "../settings/persistenceSettings.js";
 import type { Reminder, Task } from "../persistence/persistence.js";
 import type { TaskUpdate } from "../persistence/updates.js";
 import { resolveMcpBackendDeadlineMs, type JarvisApiConfig } from "./config.js";
@@ -44,6 +51,8 @@ export type DashboardSnapshot = {
   activity: ActivityTimelineResult | null;
   /** `null` means the live-work endpoint itself could not be reached — distinct from `{status: "unavailable"}`. */
   liveWork: LiveWorkResult | null;
+  /** `null` means the credentials endpoint itself could not be reached. */
+  credentials: CredentialsStatus | null;
   counts: {
     activeTasks: number;
     completedTasks: number;
@@ -246,6 +255,22 @@ export class JarvisApiClient {
 
   async getStatus(): Promise<SystemStatus> {
     return this.request<SystemStatus>("GET", "/api/v1/status");
+  }
+
+  async getOperatorGeneralSettings(): Promise<OperatorGeneralSettings> {
+    return this.request<OperatorGeneralSettings>("GET", "/api/v1/settings/general");
+  }
+
+  async getPersistenceSettings(): Promise<PersistenceSettingsView> {
+    return this.request<PersistenceSettingsView>("GET", "/api/v1/settings/persistence");
+  }
+
+  async runPersistenceSettingsAction(
+    body: PersistenceActionInput,
+  ): Promise<PersistenceActionResult> {
+    return this.request<PersistenceActionResult>("POST", "/api/v1/settings/persistence/actions", {
+      body,
+    });
   }
 
   async listTasks(): Promise<Task[]> {
@@ -700,6 +725,11 @@ export class JarvisApiClient {
     ).data;
   }
 
+  async getCredentials(): Promise<CredentialsStatus> {
+    return (await this.request<{ data: CredentialsStatus }>("GET", "/api/v1/settings/credentials"))
+      .data;
+  }
+
   async getDevelopmentLiveWork(signal?: AbortSignal): Promise<LiveWorkResult> {
     return (
       await this.request<DataResponse<LiveWorkResult>>("GET", "/api/v1/development/live-work", {
@@ -729,6 +759,10 @@ export class JarvisApiClient {
       (value) => value,
       () => null,
     );
+    const credentials = this.getCredentials().then(
+      (value) => value,
+      () => null,
+    );
     const [
       status,
       tasks,
@@ -738,6 +772,7 @@ export class JarvisApiClient {
       resolvedInbox,
       resolvedActivity,
       resolvedLiveWork,
+      resolvedCredentials,
     ] = await Promise.all([
       this.getStatus(),
       this.listTasks(),
@@ -747,6 +782,7 @@ export class JarvisApiClient {
       inbox,
       activity,
       liveWork,
+      credentials,
     ]);
     return {
       status,
@@ -757,6 +793,7 @@ export class JarvisApiClient {
       inbox: resolvedInbox,
       activity: resolvedActivity,
       liveWork: resolvedLiveWork,
+      credentials: resolvedCredentials,
       counts: {
         activeTasks: tasks.filter((task) => !task.completed).length,
         completedTasks: tasks.filter((task) => task.completed).length,

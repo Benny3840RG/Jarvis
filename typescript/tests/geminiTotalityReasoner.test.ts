@@ -1,12 +1,15 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
+import { JarvisProblem } from "../src/http/problemDetails.js";
+import { mapTotalityRouteError } from "../src/http/totalityController.js";
 import {
   GeminiRequestError,
   GeminiTotalityReasoner,
   resolveGeminiTotalityConfig,
 } from "../src/integrations/gemini/totalityReasoner.js";
 import type { TotalityRequest } from "../src/runtime/totalityContracts.js";
+import { TotalityCallerDisconnected } from "../src/totality/callerLifetime.js";
 import type { TotalityReasoningContext } from "../src/totality/totalityPipeline.js";
 
 function makeRequest(): TotalityRequest {
@@ -378,4 +381,76 @@ describe("Gemini provider resource guards", () => {
       assert.equal(calls, 1);
     });
   }
+
+  it("cancels a stalled provider body when the caller disconnects", async () => {
+    const caller = new AbortController();
+    let fetchSignal: AbortSignal | undefined;
+    let cancellation: unknown;
+    let bodyStarted: () => void = () => {};
+    const reading = new Promise<void>((resolve) => {
+      bodyStarted = resolve;
+    });
+    const reasoner = new GeminiTotalityReasoner(
+      { apiKey: "test-key", model: "gemini-2.5-flash", timeoutMs: 5_000, maxOutputTokens: 100 },
+      (async (_input, init) => {
+        fetchSignal = init?.signal ?? undefined;
+        return new Response(
+          new ReadableStream<Uint8Array>({
+            pull() {
+              bodyStarted();
+              return new Promise(() => {});
+            },
+            cancel(reason) {
+              cancellation = reason;
+            },
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }) as typeof fetch,
+    );
+
+    const pending = reasoner.reason(makeRequest(), makeContext(), caller.signal);
+    await reading;
+    caller.abort();
+    await assert.rejects(pending, (error: unknown) => error instanceof TotalityCallerDisconnected);
+    assert.equal(fetchSignal?.aborted, true);
+    assert.ok(cancellation instanceof Error);
+  });
+
+  it("keeps a parse failure when the caller aborts before it is classified", async () => {
+    const caller = new AbortController();
+    const response = new Response("not-json", {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+    Object.defineProperty(response, "ok", {
+      configurable: true,
+      get() {
+        caller.abort();
+        return true;
+      },
+    });
+    const reasoner = new GeminiTotalityReasoner(
+      { apiKey: "test-key", model: "gemini-2.5-flash", timeoutMs: 5_000, maxOutputTokens: 100 },
+      (async () => response) as typeof fetch,
+    );
+
+    const error = await reasoner.reason(makeRequest(), makeContext(), caller.signal).then(
+      () => {
+        throw new Error("expected the parse failure");
+      },
+      (caught: unknown) => caught,
+    );
+    assert.ok(error instanceof GeminiRequestError);
+    assert.equal(error.status, null);
+    assert.match(error.message, /processing failed/);
+    assert.equal(caller.signal.aborted, true);
+    assert.throws(
+      () => mapTotalityRouteError(error),
+      (mapped: unknown) =>
+        mapped instanceof JarvisProblem &&
+        mapped.getStatus() === 503 &&
+        mapped.slug === "reasoning-dependency-failed",
+    );
+  });
 });

@@ -64,9 +64,12 @@ export async function readBoundedResponseText(
     // Race once for the operation; per-chunk races would retain abort handlers per read.
     return await (aborted ? Promise.race([read(), aborted]) : read());
   } catch (error) {
+    // A caller abort can surface as a stream error. Prefer the signal reason so
+    // cancellation stays the disconnect, not a secondary read failure.
+    const failure = signal?.aborted ? abortReason(signal) : error;
     // Teed responses or a broken source may never settle their cancellation promise.
-    void reader.cancel(error).catch(() => undefined);
-    throw error;
+    void reader.cancel(failure).catch(() => undefined);
+    throw failure;
   } finally {
     if (signal && onAbort) signal.removeEventListener("abort", onAbort);
     reader.releaseLock();

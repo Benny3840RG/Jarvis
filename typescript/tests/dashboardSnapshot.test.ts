@@ -155,6 +155,7 @@ describe("dashboard snapshot", () => {
       "/api/v1/operations/inbox",
       "/api/v1/quotes",
       "/api/v1/reminders",
+      "/api/v1/settings/credentials",
       "/api/v1/status",
       "/api/v1/tasks",
     ]);
