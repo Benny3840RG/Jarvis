@@ -1,5 +1,42 @@
 # Jarvis TypeScript Roadmap
 
+## Baseline health check and two loose-end fixes (2026-09-24)
+
+Phase 0 orientation session: ran `npm ci` and a full `npm run check` on
+`main` after PRs #572 (Temporal PASS preview), #576, and #584 (dependabot
+bumps) merged. `tsc`, ESLint, Prettier, hygiene, and OpenAPI lint are all
+clean. The 5 `tests/outlookOnboarding.test.ts` failures already tracked as
+"known, pre-existing" across many prior PR evidence sections were confirmed
+by direct inspection to have one root cause in this sandbox: no IPv6
+loopback (`listen EAFNOSUPPORT: address family not supported ::1`), which
+cascades into the 4 tests sharing the same dual-address-family setup helper.
+This is a sandbox limitation, not a code defect, and does not reproduce in
+this repo's GitHub Actions runners.
+
+Found one real gap while establishing that baseline: `"test": "npm run
+test:node && npm run test:convex"` short-circuits on the first failure, so
+in this same sandbox the known Node-side failure was silently skipping the
+entire Convex/vitest suite (45 files, 435 cases) on every `npm run check`
+run — a real regression there could hide behind the same known failure.
+Fixed in a separate PR (`claude/fix-test-runner-short-circuit`, not this
+one) by reusing the `concurrently` pattern `check:static` already uses for
+the identical reason: both suites now always run, and the combined exit
+code still reflects either one failing.
+
+Also removed `addNote` and `priorityRank` from `PersonalTraitsService`
+(`src/runtime/personalTraitsService.ts`) per this file's own prior "Next
+steps" note: confirmed zero references anywhere in source or tests (only
+`dailyBrief`/`motivation` are wired into `cli.ts`), so this was genuinely
+dead code rather than an unshipped feature.
+
+Next:
+
+1. Apply the same `concurrently` fix to `test:coverage`'s identical `&&`
+   chain when Convex coverage reporting is actually combined (see the
+   existing "Convex test coverage measurement" note below).
+2. Continue through the "Next steps" list below in priority order; nothing
+   in this session's two fixes blocks or changes that ordering.
+
 ## Settings → Limits, G4 read model (2026-09-24)
 
 Settings shell order for this tip is General, Credentials, Persistence, Limits, Danger zone. Limits is a loopback page at `GET /settings/limits` and a console tab. The durable quota store is not selected, so every provider resource (API/provider rate, concurrency, storage/backup, retention, delivery) is UNKNOWN, hard stops read “No hard stop”, and the reset period is Unknown. The HUD shows one NOW chip, `Limits · UNKNOWN`, linking to `/settings/limits`. It is not editable. Typed confirmation explains blast radius and does not save. There is no seats, billing, paywall, notifications, or sessions tab, and no team-admin path.
@@ -714,22 +751,21 @@ Provider Retry-After minimum waits and MCP backend deadlines shipped in the
    and pinned renderer, with a verified digest. Blob backup remains in scope.
    See the [domain inventory](architecture/authoritative-domain-inventory.md)
    and [v4 contract](architecture/backup-v4-contract.md).
-3. **Remaining OpenClaw guards.** Scope durable provider quota accounting, and
-   cancel Totality work when the caller disconnects. Do not add automatic paid
-   model retries until per-attempt cost and ambiguity controls exist.
-4. **`personalTraitsService.ts` dead code.** `addNote` and `priorityRank` on
-   `PersonalTraitsService` (`src/runtime/personalTraitsService.ts`) are
-   unused anywhere in the codebase or tests (only `dailyBrief`/`motivation`
-   are wired into `cli.ts`). Low priority cleanup: delete them, or wire them
-   up if they were meant to ship.
-5. **Convex test coverage measurement.** `npm run test:coverage` only
+3. **Remaining OpenClaw guards.** Durable provider quota accounting across
+   processes is the only piece still open; caller-disconnect cancellation
+   shipped (2026-09-23 section above). Do not add automatic paid model
+   retries until per-attempt cost and ambiguity controls exist.
+4. **Convex test coverage measurement.** `npm run test:coverage` only
    instruments `tests/*.test.ts` and `jarvis-console-01/tests/*.test.ts` via
    Node's built-in coverage; the parallel `convex/*.test.ts` suite (running
    under vitest via `npm run test:convex`) isn't included in that report, so
    the coverage numbers for Convex-adjacent modules
    (`convexQuoteDeliveries.ts`, etc.) understate real coverage. Not urgent,
    but worth combining the two reports if coverage numbers start driving
-   decisions.
+   decisions. `test:coverage`'s own `&&` chain to `test:convex` has the same
+   short-circuit-on-failure issue `test` had before the 2026-09-24 fix below;
+   worth applying the same `concurrently` pattern there once combining the
+   reports is actually undertaken.
 
 ## Notes for future sessions
 
