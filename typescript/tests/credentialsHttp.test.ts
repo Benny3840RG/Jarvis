@@ -5,7 +5,6 @@ import type { NestFastifyApplication } from "@nestjs/platform-fastify";
 
 import { createJarvisHttpApp } from "../src/http/app.js";
 import type { HttpAppConfig } from "../src/http/config.js";
-import { renderDangerPage } from "../src/settings/credentialsPage.js";
 import {
   captureCredentials,
   secretDigest,
@@ -359,8 +358,11 @@ describe("credentials HTTP boundary", () => {
     assert.equal(danger.statusCode, 200);
     assert.match(danger.body, /Danger zone/);
     assert.match(danger.body, /href="\/settings\/credentials"/);
-    assert.doesNotMatch(danger.body, /END OVERLAP|env remove|sessionStorage|[0-9a-f]{64}/);
-    assert.equal(renderDangerPage().includes("Convex wipe is not part of this phase"), true);
+    assert.match(danger.body, /data-confirm="END OVERLAP"/);
+    assert.match(danger.body, /Open Persistence Backup/);
+    assert.match(danger.body, /Convex owner wipe needs a dedicated empty-target design/);
+    assert.doesNotMatch(danger.body, /sessionStorage|[0-9a-f]{64}/);
+    assert.equal(danger.body.includes(SERVICE), false);
 
     const httpMain = await import("node:fs").then((fs) =>
       fs.readFileSync(new URL("../src/http/main.ts", import.meta.url), "utf8"),

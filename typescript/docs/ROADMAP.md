@@ -18,6 +18,28 @@ Next:
 2. Keep display preferences out of `jarvis-preferences` unless a backup contract names `console.*`.
 3. Persistence and Credentials settings stay on their own pages.
 
+## Settings → Danger zone, Phase A (2026-09-24)
+
+Settings uses one shell: General, Credentials, Persistence, Danger. Danger is
+the only End path. Confirm strings are `END OVERLAP`, `END APPROVAL OVERLAP`,
+`END DELIVERY OVERLAP`, `RESET JSON`, and `CLEAR LOCAL`. Credentials links to
+`/settings/danger` and does not remove a previous token.
+
+Reset quarantines `jarvis-state.json` with the runtime `.corrupt-*` rename and
+does not call Convex. Clear local quarantines the core, memory, and business
+JSON files only, and only after a backup verify receipt from the last 24 hours
+or one explicit skip. Backup on this page is a link to Persistence Backup.
+`npm run backup -- verify` writes `<archive>.jarvis-verify.json` beside the
+archive. The page does not store a Bearer token in sessionStorage. A live lock,
+a symlink that leaves the data directory, and a permission error are named
+refusals. There is no Convex owner wipe.
+
+Next:
+
+1. Keep Convex owner wipe out of Settings until an empty-target design exists.
+2. Serve a loopback Persistence page at `/settings/persistence#backup` if the console tab is not the operator's browser.
+3. Keep display preferences out of danger-zone actions.
+
 ## Totality caller-disconnect cancellation (2026-09-23)
 
 Request-bound Totality work now stops when the HTTP caller disconnects.
@@ -71,8 +93,8 @@ Next:
 
 End overlap does not trust caller `verify`. Idle stays not-verified and is never offered.
 `decideEndOverlap` returns `offered: false`, `executesRemoval: false`, and no commands. A
-server-attested passing result only moves posture to guarding. Removal is `GET /settings/danger`,
-which does not wipe Convex. Production HTTP and preview select credentials with
+server-attested passing result only moves posture to guarding. Removal is `GET /settings/danger`.
+That page is the only End path and does not wipe Convex owner data. Production HTTP and preview select credentials with
 `captureCredentialsFromEnv`, not from `HttpAppConfig`, which has no delivery token.
 
 ## Settings → Persistence, phase A (2026-09-24)

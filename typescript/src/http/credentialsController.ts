@@ -1,7 +1,9 @@
 import { Body, Controller, Get, Header, HttpCode, Inject, Post, Res } from "@nestjs/common";
 import type { FastifyReply } from "fastify";
 
-import { renderCredentialsPage, renderDangerPage } from "../settings/credentialsPage.js";
+import { renderCredentialsPage } from "../settings/credentialsPage.js";
+import { renderDangerZonePage } from "../settings/dangerZone/page.js";
+import type { DangerZoneService } from "../settings/dangerZone/service.js";
 import {
   decideEndOverlap,
   deliveryDigestCollides,
@@ -12,7 +14,7 @@ import {
 } from "../settings/credentialsStatus.js";
 import { JarvisProblem } from "./problemDetails.js";
 import { PublicRoute } from "./publicRoute.js";
-import { HTTP_CREDENTIALS } from "./tokens.js";
+import { HTTP_CREDENTIALS, HTTP_DANGER_ZONE } from "./tokens.js";
 
 function invalidRequest(): never {
   throw new JarvisProblem(
@@ -25,7 +27,10 @@ function invalidRequest(): never {
 
 @Controller()
 export class CredentialsController {
-  constructor(@Inject(HTTP_CREDENTIALS) private readonly credentials: CredentialsRuntime) {}
+  constructor(
+    @Inject(HTTP_CREDENTIALS) private readonly credentials: CredentialsRuntime,
+    @Inject(HTTP_DANGER_ZONE) private readonly dangerZone: DangerZoneService,
+  ) {}
 
   @PublicRoute()
   @Get("settings/credentials")
@@ -51,7 +56,7 @@ export class CredentialsController {
   @PublicRoute()
   @Get("settings/danger")
   @Header("Referrer-Policy", "no-referrer")
-  danger(@Res({ passthrough: true }) reply: FastifyReply): string {
+  async danger(@Res({ passthrough: true }) reply: FastifyReply): Promise<string> {
     if (!this.credentials.serveLocalPage) {
       throw new JarvisProblem(
         404,
@@ -64,9 +69,9 @@ export class CredentialsController {
     reply.header("Cache-Control", "no-store");
     reply.header(
       "Content-Security-Policy",
-      "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src 'none'; connect-src 'none'; base-uri 'none'; form-action 'none'",
+      "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src 'none'; connect-src 'self'; base-uri 'none'; form-action 'none'",
     );
-    return renderDangerPage();
+    return renderDangerZonePage(await this.dangerZone.inspect());
   }
 
   @Get("api/v1/settings/credentials")

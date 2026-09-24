@@ -341,37 +341,4 @@ export function renderCredentialsPage(model: CredentialsPageModel): string {
 </html>`;
 }
 
-/** Loopback boundary page. It does not remove tokens and does not wipe Convex. */
-export function renderDangerPage(): string {
-  return `<!doctype html>
-<html lang="en-AU">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="referrer" content="no-referrer" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src 'none'; connect-src 'none'; base-uri 'none'; form-action 'none'" />
-  <title>Jarvis Settings · Danger zone</title>
-  <style>${PAGE_STYLE}</style>
-</head>
-<body>
-  <main>
-    <nav aria-label="Settings">
-      <span class="tab">General</span>
-      <a class="tab" href="/settings/credentials">Credentials</a>
-      <span class="tab">Persistence</span>
-      <a class="tab" href="/settings/danger" aria-current="page">Danger zone</a>
-    </nav>
-    <h1>Danger zone</h1>
-    <p class="status">Not verified. End is not offered until a server-attested smoke result exists, and this page still does not remove a token.</p>
-    <section class="card">
-      <h2>Overlap removal</h2>
-      <p>Credentials does not end overlap. There is no confirmation dialog and no remove command on this page.</p>
-      <p>Convex wipe is not part of this phase. Nothing here deletes deployment env or local JSON.</p>
-      <p><a class="link" href="/settings/credentials">Back to Credentials</a></p>
-    </section>
-  </main>
-</body>
-</html>`;
-}
-
 export const CREDENTIALS_PAGE_DOC_LINKS = CREDENTIAL_DOC_LINKS;

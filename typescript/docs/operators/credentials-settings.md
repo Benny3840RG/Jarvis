@@ -54,7 +54,8 @@ Convex changes stay operator-driven.
 End overlap is not offered on Credentials. Idle verification stays “Not verified”, and a
 caller-supplied passing value is not server attestation. `POST /api/v1/settings/credentials/end-overlap`
 returns `offered: false`, `executesRemoval: false`, and an empty `commands` list. The danger
-boundary is `GET /settings/danger`. That page does not remove a token and does not wipe Convex.
+boundary is `GET /settings/danger`. That page is the only End path. It removes the previous
+token after the typed confirmation and does not wipe Convex owner data.
 
 If smoke fails, keep the previous token set until the local token is corrected. Do not paste
 tokens into Git, logs, issues, or chat. See [SECURITY.md](../../../SECURITY.md).

@@ -54,6 +54,10 @@
     {
       "name": "Tool Actions",
       "description": "Revision-bound tool-action proposal, inspection, approval, rejection, and execution through the reviewed server-side allowlist. Approval alone does not execute the operation."
+    },
+    {
+      "name": "Settings",
+      "description": "Operator settings. Danger zone wraps existing CLI and runbook actions that revoke previous tokens or quarantine local JSON. It does not delete Convex owner data."
     }
   ],
   "x-jarvis-architecture": {
@@ -126,7 +130,10 @@
       "getToolAction",
       "approveToolAction",
       "rejectToolAction",
-      "executeToolAction"
+      "executeToolAction",
+      "getDangerZone",
+      "getDangerZonePage",
+      "executeDangerZoneAction"
     ],
     "implementationStatus": "private-development-preview",
     "transport": "streamable-http-stateless",
@@ -345,7 +352,7 @@
       "get": {
         "operationId": "getDangerSettingsPage",
         "summary": "Open the loopback danger settings page",
-        "description": "Serves the local danger boundary on a loopback bind only. This route is public (no Bearer token). The page does not remove tokens, does not return a remove command, and does not wipe Convex. It links back to GET /settings/credentials. Non-loopback binds do not serve the page.",
+        "description": "Serves the Danger zone page on a loopback bind only. This route is public (no Bearer token) so a missing service token can still show disabled overlap cards. It is the only End overlap surface. Confirmations are END OVERLAP, END APPROVAL OVERLAP, and END DELIVERY OVERLAP. Confirmed actions POST to /api/v1/settings/danger-zone/actions/{actionId}. The page does not store a Bearer token in sessionStorage. Reset and clear quarantine local JSON only. Convex owner data is not deleted. Backup is a link to Persistence Backup (/settings/persistence#backup), not an export on this page. Non-loopback binds do not serve the page.",
         "tags": ["System"],
         "security": [],
         "x-mcp-tool": {
@@ -359,7 +366,7 @@
         },
         "responses": {
           "200": {
-            "description": "Loopback danger settings HTML. No token removal and no Convex wipe.",
+            "description": "Loopback Danger zone HTML. End overlap confirmations live here. No sessionStorage Bearer, no Convex owner wipe, and backup links to Persistence Backup.",
             "content": {
               "text/html": {
                 "schema": {
@@ -6870,6 +6877,123 @@
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
           }
+        }
+      }
+    },
+    "/api/v1/settings/danger-zone": {
+      "get": {
+        "operationId": "getDangerZone",
+        "summary": "Read Danger zone blast radius and action state",
+        "description": "Returns the Phase A Danger zone cards. Overlap cards are disabled when no previous token is accepted. The delivery card is disabled when the delivery token is absent. Reset and clear name local JSON files and state that Convex owner data is untouched. No token values are returned.",
+        "tags": ["Settings"],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Danger zone read model.",
+            "headers": {
+              "X-Request-Id": { "$ref": "#/components/headers/RequestId" }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/DangerZoneModel" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "429": { "$ref": "#/components/responses/TooManyRequests" },
+          "500": { "$ref": "#/components/responses/InternalServerError" }
+        }
+      }
+    },
+    "/api/v1/settings/danger-zone/page": {
+      "get": {
+        "operationId": "getDangerZonePage",
+        "summary": "Render the Danger zone settings page",
+        "description": "HTML for the same Danger zone page as GET /settings/danger. Cancel is the default focused control. Credentials links to /settings/danger and does not execute End. The page does not store a Bearer token in sessionStorage. Backup is a link to Persistence Backup.",
+        "tags": ["Settings"],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Danger zone HTML page.",
+            "headers": {
+              "X-Request-Id": { "$ref": "#/components/headers/RequestId" }
+            },
+            "content": {
+              "text/html": {
+                "schema": { "type": "string" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "429": { "$ref": "#/components/responses/TooManyRequests" },
+          "500": { "$ref": "#/components/responses/InternalServerError" }
+        }
+      }
+    },
+    "/api/v1/settings/danger-zone/actions/{actionId}": {
+      "post": {
+        "operationId": "executeDangerZoneAction",
+        "summary": "Run one confirmed Danger zone action",
+        "description": "Runs one Phase A action after a case-sensitive confirmation string. End overlap removes only the matching PREVIOUS Convex env variable and any local previous assignment. Reset JSON quarantines jarvis-state.json. Clear local quarantines the local core, memory, and business JSON files and requires a verified backup from the last 24 hours or an explicit skip. Neither reset nor clear calls Convex delete APIs. Failures leave overlap in place when removal did not succeed, and responses never echo token values.",
+        "tags": ["Settings"],
+        "parameters": [
+          {
+            "name": "actionId",
+            "in": "path",
+            "required": true,
+            "schema": { "$ref": "#/components/schemas/DangerZoneActionId" }
+          }
+        ],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": true,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/DangerZoneActionRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The action completed. Convex owner data was not deleted.",
+            "headers": {
+              "X-Request-Id": { "$ref": "#/components/headers/RequestId" }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/DangerZoneActionResult" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "422": { "$ref": "#/components/responses/UnprocessableEntity" },
+          "429": { "$ref": "#/components/responses/TooManyRequests" },
+          "500": { "$ref": "#/components/responses/InternalServerError" }
         }
       }
     }
@@ -13534,6 +13658,179 @@
           "v4": { "type": ["object", "null"], "additionalProperties": true },
           "destination": { "type": ["object", "null"], "additionalProperties": true },
           "verifyRecommended": { "type": "boolean" }
+        }
+      },
+      "DangerZoneActionId": {
+        "type": "string",
+        "enum": [
+          "end-service-overlap",
+          "end-approval-overlap",
+          "end-delivery-overlap",
+          "reset-local-json",
+          "clear-local"
+        ]
+      },
+      "DangerZoneVerifiedBackup": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "verifiedAt"],
+        "properties": {
+          "path": { "type": "string", "minLength": 1, "maxLength": 4096 },
+          "verifiedAt": { "type": "string", "minLength": 1, "maxLength": 64 }
+        }
+      },
+      "DangerZoneCard": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "title",
+          "enabled",
+          "disabledReason",
+          "warning",
+          "blastRadius",
+          "confirm",
+          "cli",
+          "prerequisites",
+          "willQuarantine",
+          "willNotTouch",
+          "overlap",
+          "fingerprint"
+        ],
+        "properties": {
+          "id": { "$ref": "#/components/schemas/DangerZoneActionId" },
+          "title": { "type": "string" },
+          "enabled": { "type": "boolean" },
+          "disabledReason": { "type": ["string", "null"] },
+          "warning": { "type": ["string", "null"] },
+          "blastRadius": { "type": "array", "items": { "type": "string" } },
+          "confirm": { "type": "string" },
+          "cli": { "type": "string" },
+          "prerequisites": { "type": "array", "items": { "type": "string" } },
+          "willQuarantine": { "type": "array", "items": { "type": "string" } },
+          "willNotTouch": { "type": "array", "items": { "type": "string" } },
+          "overlap": { "type": ["string", "null"], "enum": ["on", "off", "not-configured", null] },
+          "fingerprint": { "type": ["string", "null"] }
+        }
+      },
+      "DangerZoneExclusion": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "reason"],
+        "properties": {
+          "id": { "type": "string" },
+          "reason": { "type": "string" }
+        }
+      },
+      "DangerZoneModel": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "title",
+          "lede",
+          "provider",
+          "verifiedBackup",
+          "cards",
+          "excluded",
+          "credentialsEndOverlapHref"
+        ],
+        "properties": {
+          "title": { "const": "Danger zone" },
+          "lede": { "type": "string" },
+          "provider": { "type": "string", "enum": ["json", "convex"] },
+          "verifiedBackup": {
+            "oneOf": [
+              { "$ref": "#/components/schemas/DangerZoneVerifiedBackup" },
+              { "type": "null" }
+            ]
+          },
+          "cards": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/DangerZoneCard" }
+          },
+          "excluded": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/DangerZoneExclusion" }
+          },
+          "credentialsEndOverlapHref": { "type": "string" }
+        }
+      },
+      "DangerZoneBackupChoice": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["mode", "path"],
+            "properties": {
+              "mode": { "const": "verified" },
+              "path": { "type": "string", "minLength": 1, "maxLength": 4096 }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["mode", "acceptIrreversibleLoss"],
+            "properties": {
+              "mode": { "const": "skip" },
+              "acceptIrreversibleLoss": { "type": "boolean" }
+            }
+          }
+        ]
+      },
+      "DangerZoneActionRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["confirmation"],
+        "properties": {
+          "confirmation": { "type": "string", "minLength": 1, "maxLength": 64 },
+          "acceptEmptyLocalCore": { "type": "boolean" },
+          "backup": { "$ref": "#/components/schemas/DangerZoneBackupChoice" }
+        }
+      },
+      "DangerZoneAuditRecord": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "actionId",
+          "timestamp",
+          "provider",
+          "pid",
+          "hostname",
+          "outcome",
+          "convexDataDeletes",
+          "quarantinedBasenames"
+        ],
+        "properties": {
+          "actionId": { "$ref": "#/components/schemas/DangerZoneActionId" },
+          "timestamp": { "type": "string" },
+          "provider": { "type": "string", "enum": ["json", "convex"] },
+          "pid": { "type": "integer", "minimum": 0 },
+          "hostname": { "type": "string" },
+          "outcome": { "const": "success" },
+          "convexDataDeletes": { "const": 0 },
+          "quarantinedBasenames": { "type": "array", "items": { "type": "string" } }
+        }
+      },
+      "DangerZoneActionResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "actionId",
+          "outcome",
+          "detail",
+          "convexDataDeletes",
+          "quarantinedPaths",
+          "overlap",
+          "audit"
+        ],
+        "properties": {
+          "actionId": { "$ref": "#/components/schemas/DangerZoneActionId" },
+          "outcome": { "const": "success" },
+          "detail": { "type": "string" },
+          "convexDataDeletes": { "const": 0 },
+          "quarantinedPaths": { "type": "array", "items": { "type": "string" } },
+          "overlap": { "type": ["string", "null"], "enum": ["off", null] },
+          "audit": { "$ref": "#/components/schemas/DangerZoneAuditRecord" }
         }
       }
     }

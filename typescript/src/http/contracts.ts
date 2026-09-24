@@ -297,4 +297,25 @@ export const IMPLEMENTED_CAPABILITIES: readonly Capability[] = [
     destructive: true,
     mcpExposed: true,
   },
+  {
+    operationId: "getDangerZone",
+    summary: "Read Danger zone blast radius and action state",
+    mutating: false,
+    destructive: false,
+    mcpExposed: false,
+  },
+  {
+    operationId: "getDangerZonePage",
+    summary: "Render the Danger zone settings page",
+    mutating: false,
+    destructive: false,
+    mcpExposed: false,
+  },
+  {
+    operationId: "executeDangerZoneAction",
+    summary: "Run one confirmed Danger zone action",
+    mutating: true,
+    destructive: true,
+    mcpExposed: false,
+  },
 ] as const;

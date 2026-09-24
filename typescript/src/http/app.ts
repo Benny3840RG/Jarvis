@@ -82,6 +82,11 @@ import {
   selectCredentialsRuntime,
   type CredentialsRuntime,
 } from "../settings/credentialsStatus.js";
+import {
+  createDangerZoneFromEnv,
+  createInactiveDangerZone,
+  type DangerZoneService,
+} from "../settings/dangerZone/service.js";
 import { resolveHttpAppConfig, type HttpAppConfig } from "./config.js";
 import {
   registerHttpRateLimit,
@@ -141,6 +146,7 @@ export type CreateJarvisHttpAppOptions = (
   noteStore?: NoteStore;
   activityEventReader?: ActivityEventReader | null;
   developmentLiveWorkSource?: DevelopmentLiveWorkSource | null;
+  dangerZone?: DangerZoneService;
   telemetry?: PostHogTelemetry;
   /**
    * Overrides the process-wide HTTP rate limit. Tests use this so a low budget
@@ -429,6 +435,11 @@ export async function createJarvisHttpApp(
       activityEventReader,
       developmentLiveWorkSource,
       credentials,
+      dangerZone:
+        options.dangerZone ??
+        (usesEnvironment
+          ? createDangerZoneFromEnv(providerName)
+          : createInactiveDangerZone(providerName)),
     }),
     adapter,
     { logger: options.logger, abortOnError: false },
