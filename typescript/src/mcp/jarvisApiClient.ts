@@ -20,6 +20,11 @@ import type { ToolAction, ToolActionState } from "../actions/toolActions.js";
 import type { SystemStatus } from "../http/contracts.js";
 import type { OperatorGeneralSettings } from "../reminders/due.js";
 import type { CredentialsStatus } from "../settings/credentialsStatus.js";
+import type {
+  PersistenceActionInput,
+  PersistenceActionResult,
+  PersistenceSettingsView,
+} from "../settings/persistenceSettings.js";
 import type { Reminder, Task } from "../persistence/persistence.js";
 import type { TaskUpdate } from "../persistence/updates.js";
 import { resolveMcpBackendDeadlineMs, type JarvisApiConfig } from "./config.js";
@@ -254,6 +259,18 @@ export class JarvisApiClient {
 
   async getOperatorGeneralSettings(): Promise<OperatorGeneralSettings> {
     return this.request<OperatorGeneralSettings>("GET", "/api/v1/settings/general");
+  }
+
+  async getPersistenceSettings(): Promise<PersistenceSettingsView> {
+    return this.request<PersistenceSettingsView>("GET", "/api/v1/settings/persistence");
+  }
+
+  async runPersistenceSettingsAction(
+    body: PersistenceActionInput,
+  ): Promise<PersistenceActionResult> {
+    return this.request<PersistenceActionResult>("POST", "/api/v1/settings/persistence/actions", {
+      body,
+    });
   }
 
   async listTasks(): Promise<Task[]> {

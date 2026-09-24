@@ -1,0 +1,99 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { describe, it } from "node:test";
+
+const page = readFileSync(new URL("../src/mcp/persistence-settings.html", import.meta.url), "utf8");
+const dashboard = readFileSync(new URL("../src/mcp/dashboard-v1.html", import.meta.url), "utf8");
+
+function dialog(id: string): string {
+  const match = page.match(new RegExp(`<section\\s[^>]*id="${id}"[\\s\\S]*?</section>`));
+  assert.ok(match, `missing dialog ${id}`);
+  return match[0];
+}
+
+describe("Persistence settings page", () => {
+  it("stacks both backup formats and does not offer a provider switch or JSON fallback", () => {
+    assert.match(page, /Settings/);
+    assert.match(page, /Active provider/);
+    assert.match(page, /will not silently fall back/i);
+    assert.match(page, /id="provider-active"/);
+    assert.doesNotMatch(page, /type="radio"/);
+    assert.match(page, /Partial \/ JSON-only/);
+    assert.match(page, /notesAndEvidence, orchestration, quoteAggregate/);
+    assert.match(page, /npm run backup -- export\|verify\|restore/);
+    assert.match(page, /settings\.backup\.commands/);
+    assert.match(page, /--confirm-empty-target/);
+    assert.match(page, /--allow-partial --resume/);
+    assert.match(page, /not available in Settings/);
+    assert.doesNotMatch(page, /Try JSON|fall back to JSON|restore-drill"/i);
+    assert.match(page, /display:\s*flex;\s*flex-direction:\s*column/);
+    assert.match(page, /user-select:\s*text/);
+    assert.match(page, /id="health-glance"/);
+    assert.match(page, /class="fp-chip"/);
+    assert.match(page, /must not contain service, approval, or delivery tokens/);
+    assert.match(page, /Resume is a separate action/);
+    assert.match(page, /min-height:\s*44px/);
+    assert.match(page, /font-size:\s*12px/);
+    assert.match(page, /font-size:\s*16px/);
+    assert.match(page, /font-size:\s*14px;\s*font-weight:\s*600/);
+    assert.match(page, /prefers-reduced-motion:\s*reduce/);
+    assert.doesNotMatch(page, /sessionStorage|#39ff88|#b933ff|#ff2fbf|#39e6ff/i);
+    const rails = [...dashboard.matchAll(/data-view="([^"]+)"/g)].map((match) => match[1]);
+    assert.equal(rails.filter((rail) => rail === "settings").length, 1);
+    assert.deepEqual(
+      [...dashboard.matchAll(/data-settings-tab="([^"]+)"/g)].map((match) => match[1]),
+      ["general", "credentials", "persistence", "danger"],
+    );
+    const persistenceStart = dashboard.indexOf('id="view-persistence"');
+    const persistenceEnd = dashboard.indexOf('id="view-danger"');
+    assert.ok(persistenceStart !== -1 && persistenceEnd > persistenceStart);
+    const persistence = dashboard.slice(persistenceStart, persistenceEnd);
+    assert.match(persistence, /id="persistence-backup"[^>]*>\s*Backup\s*</);
+    assert.match(persistence, /class="settings-save"/);
+    assert.doesNotMatch(
+      persistence.match(/<button[^>]*id="persistence-restore-classic"[^>]*>/)?.[0] ?? "",
+      /settings-save/,
+    );
+    assert.match(persistence, /<details id="persistence-classic-format">/);
+    assert.match(persistence, /<details id="persistence-v4-format">/);
+    assert.doesNotMatch(persistence, /<details[^>]*\sopen/);
+    assert.doesNotMatch(persistence, /type="radio"/);
+    assert.match(persistence, /id="persistence-provider-label"/);
+    assert.match(dashboard, /id="persistence-health-glance"/);
+    assert.match(dashboard, /id="persistence-export-warning"/);
+    assert.match(dashboard, /show_persistence_settings/);
+    assert.doesNotMatch(dashboard, /id="open-persistence-settings"/);
+  });
+
+  it("uses danger actions and focuses Cancel when a dialog opens", () => {
+    for (const id of [
+      "dialog-export-classic",
+      "dialog-verify-classic",
+      "dialog-restore-classic",
+      "dialog-export-v4",
+      "dialog-verify-v4",
+      "dialog-restore-v4",
+      "dialog-resume-v4",
+    ]) {
+      const source = dialog(id);
+      assert.match(source, /data-cancel autofocus/);
+      assert.match(source, />Cancel</);
+    }
+    assert.match(dialog("dialog-restore-classic"), /class="danger"/);
+    assert.match(dialog("dialog-restore-v4"), /class="danger"/);
+    assert.match(dialog("dialog-resume-v4"), /class="danger"/);
+    assert.doesNotMatch(dialog("dialog-export-classic"), /class="danger"/);
+    assert.doesNotMatch(
+      dialog("dialog-restore-v4"),
+      /restore-v4-resume|type="checkbox"[^>]*resume/,
+    );
+    assert.doesNotMatch(page, /keepResumeExplicit|restore-v4-resume/);
+    assert.match(page, /resume:\s*false/);
+    assert.match(page, /cancel\.focus\(\)/);
+    assert.match(page, /id="open-export-classic"[^>]*>\s*Backup\s*</);
+    assert.match(page, /class="primary"/);
+    assert.match(page, /<details id="classic-format">/);
+    assert.match(page, /<details id="v4-format">/);
+    assert.doesNotMatch(page, /<details[^>]*\sopen/);
+  });
+});

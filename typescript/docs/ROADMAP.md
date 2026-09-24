@@ -75,6 +75,18 @@ server-attested passing result only moves posture to guarding. Removal is `GET /
 which does not wipe Convex. Production HTTP and preview select credentials with
 `captureCredentialsFromEnv`, not from `HttpAppConfig`, which has no delivery token.
 
+## Settings → Persistence, phase A (2026-09-24)
+
+Persistence is the third tab on the single Settings rail (General, Credentials, Persistence, Danger zone). It reads `PERSISTENCE_PROVIDER` and a health glance, and wraps `npm run backup` (classic and archive v4). v4 stays labeled Partial / JSON-only. Export warns that archives must not contain service tokens. Convex blocks v4 export. Classic restore requires the empty-target confirmation. v4 restore requires `--allow-partial`. Resume is a separate action. Service tokens are redacted. No provider switch, JSON fallback, merge, or restore-drill button. Credentials end-overlap and digests stay off this tab.
+
+See [persistence settings](operators/persistence-settings.md).
+
+Next:
+
+1. Keep the page a projection of the CLI. Do not add a second restore implementation.
+2. When the three absent v4 groups land, stop forcing the partial label only after the manifest itself is `complete`.
+3. Do not expose Convex schema deploys or ownership changes on this page.
+
 ## Verification failure routes to repair (2026-09-23, #550)
 
 `DEV_TRANSITION_VERIFYING_TO_REPAIR_REQUIRED` now uses the trusted evidence

@@ -522,6 +522,83 @@
         }
       }
     },
+    "/api/v1/settings/persistence": {
+      "get": {
+        "operationId": "getPersistenceSettings",
+        "summary": "Read Persistence settings",
+        "description": "Returns the active persistence provider, a fail-closed health probe, and the classic and archive v4 backup commands. The provider is read from configuration. This operation does not switch providers or fall back from Convex to JSON.",
+        "tags": ["System"],
+        "x-mcp-tool": {
+          "exposed": true,
+          "title": "Show Persistence settings",
+          "description": "Open Settings → Persistence and show the active provider, health, and backup commands.",
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Persistence settings projection. Not a second authority for provider selection or recovery.",
+            "headers": {
+              "X-Request-Id": { "$ref": "#/components/headers/RequestId" }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/PersistenceSettingsView" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "500": { "$ref": "#/components/responses/InternalServerError" }
+        }
+      }
+    },
+    "/api/v1/settings/persistence/actions": {
+      "post": {
+        "operationId": "runPersistenceSettingsAction",
+        "summary": "Run a Persistence backup action",
+        "description": "Runs one existing backup command (classic export, verify, or empty-target restore, or archive v4 export, verify, restore, or explicit resume). Refusals are returned in the body. This does not merge archives, mark a partial archive complete, or resume unless the action is resume-v4.",
+        "tags": ["System"],
+        "x-mcp-tool": {
+          "exposed": false,
+          "title": "Run a Persistence settings action",
+          "description": "Operator Settings only. Wraps npm run backup. Not offered as a model tool.",
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": true,
+            "openWorldHint": false,
+            "idempotentHint": false
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/PersistenceActionRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The backup command completed, or was refused or failed with a named operator result.",
+            "headers": {
+              "X-Request-Id": { "$ref": "#/components/headers/RequestId" }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/PersistenceActionResult" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "422": { "$ref": "#/components/responses/UnprocessableEntity" },
+          "500": { "$ref": "#/components/responses/InternalServerError" }
+        }
+      }
+    },
     "/api/v1/runtime/conversations": {
       "post": {
         "operationId": "executeConversation",
@@ -13381,6 +13458,82 @@
             "type": "integer",
             "minimum": 0
           }
+        }
+      },
+      "PersistenceSettingsView": {
+        "type": "object",
+        "additionalProperties": true,
+        "required": [
+          "title",
+          "honesty",
+          "fallbackCta",
+          "providerSwitch",
+          "provider",
+          "health",
+          "backup"
+        ],
+        "properties": {
+          "title": { "const": "Persistence" },
+          "honesty": { "type": "string" },
+          "fallbackCta": { "type": "null" },
+          "providerSwitch": { "type": "null" },
+          "provider": { "type": "object", "additionalProperties": true },
+          "health": { "type": "object", "additionalProperties": true },
+          "backup": { "type": "object", "additionalProperties": true }
+        }
+      },
+      "PersistenceActionRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["action"],
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "export-classic",
+              "verify-classic",
+              "restore-classic",
+              "export-v4",
+              "verify-v4",
+              "restore-v4",
+              "resume-v4",
+              "inspect-v4-destination"
+            ]
+          },
+          "file": { "type": "string", "minLength": 1, "maxLength": 1024 },
+          "destination": { "type": "string", "minLength": 1, "maxLength": 1024 },
+          "confirmEmptyTarget": { "type": "boolean" },
+          "understandIdsRecreated": { "type": "boolean" },
+          "allowPartial": { "type": "boolean" },
+          "acknowledgePartial": { "type": "boolean" },
+          "resume": { "type": "boolean" },
+          "typedConfirmation": { "type": "string", "minLength": 1, "maxLength": 64 }
+        }
+      },
+      "PersistenceActionResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "status",
+          "action",
+          "code",
+          "detail",
+          "path",
+          "counts",
+          "v4",
+          "destination",
+          "verifyRecommended"
+        ],
+        "properties": {
+          "status": { "type": "string", "enum": ["completed", "refused", "failed"] },
+          "action": { "type": "string" },
+          "code": { "type": ["string", "null"] },
+          "detail": { "type": "string" },
+          "path": { "type": ["string", "null"] },
+          "counts": { "type": ["object", "null"], "additionalProperties": true },
+          "v4": { "type": ["object", "null"], "additionalProperties": true },
+          "destination": { "type": ["object", "null"], "additionalProperties": true },
+          "verifyRecommended": { "type": "boolean" }
         }
       }
     }

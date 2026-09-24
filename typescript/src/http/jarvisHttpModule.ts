@@ -29,6 +29,10 @@ import type { RuntimeReconciliationHealth } from "../reconciliation/runtimeRecon
 import type { ActivityEventReader } from "../operations/activityTimeline.js";
 import type { DevelopmentLiveWorkSource } from "../development/liveWork.js";
 import type { CredentialsRuntime } from "../settings/credentialsStatus.js";
+import {
+  createPersistenceSettingsService,
+  PersistenceSettingsService,
+} from "../settings/persistenceSettingsService.js";
 import type { HttpAppConfig } from "./config.js";
 import type { OidcVerifier } from "./oidcVerifier.js";
 import { ActivityTimelineController } from "./activityTimelineController.js";
@@ -41,6 +45,7 @@ import { BuildController } from "./buildController.js";
 import { BuildLogController } from "./buildLogController.js";
 import { UpgradeController } from "./upgradeController.js";
 import { AssetController } from "./assetController.js";
+import { PersistenceSettingsController } from "./persistenceSettingsController.js";
 import { PreferenceController } from "./preferenceController.js";
 import { NoteController } from "./noteController.js";
 import { OperationsInboxController } from "./operationsInboxController.js";
@@ -154,6 +159,7 @@ export class JarvisHttpModule {
         BuildLogController,
         UpgradeController,
         AssetController,
+        PersistenceSettingsController,
         PreferenceController,
         NoteController,
         BriefController,
@@ -188,6 +194,24 @@ export class JarvisHttpModule {
           useValue: options.developmentLiveWorkSource,
         },
         { provide: HTTP_PROVIDER_NAME, useValue: options.providerName },
+        {
+          provide: PersistenceSettingsService,
+          useFactory: (
+            persistence: JarvisHttpModuleOptions["persistence"],
+            providerName: JarvisHttpModuleOptions["providerName"],
+            config: HttpAppConfig,
+          ) =>
+            createPersistenceSettingsService({
+              persistence,
+              runningProvider: providerName,
+              secrets: [
+                config.currentToken,
+                config.previousToken,
+                process.env.JARVIS_SERVICE_TOKEN,
+              ],
+            }),
+          inject: [HTTP_PERSISTENCE, HTTP_PROVIDER_NAME, HTTP_APP_CONFIG],
+        },
         {
           provide: HTTP_RECONCILIATION_HEALTH,
           useValue: options.reconciliationHealth,

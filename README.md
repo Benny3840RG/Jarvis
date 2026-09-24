@@ -217,6 +217,8 @@ npm run backup -- verify "$BACKUP_FILE"
 
 `verify` restores the archive into isolated temporary JSON storage, checks tasks, reminders, completion state, due fields, builds/build logs/upgrades/assets/preferences, and remapped id references, then deletes the temporary files. It does not touch the configured live provider.
 
+Settings → Persistence (operator console) shows the active provider and wraps these commands. It does not switch providers, fall back from Convex to JSON, or treat an archive v4 partial archive as full recovery. See `typescript/docs/operators/persistence-settings.md`.
+
 A real restore is deliberately empty-target only and requires an explicit confirmation flag:
 
 ```bash

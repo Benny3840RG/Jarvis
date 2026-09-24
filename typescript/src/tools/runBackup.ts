@@ -1,4 +1,5 @@
 import { loadEnvFile } from "node:process";
+import { pathToFileURL } from "node:url";
 
 import {
   exportBackup,
@@ -38,7 +39,7 @@ function loadLocalEnvironment(): void {
  * invoices, projects, ...) is still outside backup's reach; see the backup
  * module's BackupMemoryStores doc comment and typescript/docs/ROADMAP.md.
  */
-function createMemoryStoresFromEnv(): BackupMemoryStores {
+export function createMemoryStoresFromEnv(): BackupMemoryStores {
   return resolvePersistenceProviderName() === "convex"
     ? {
         builds: new ConvexBuildStore(),
@@ -135,7 +136,9 @@ async function main(): Promise<void> {
   usage();
 }
 
-main().catch((error: unknown) => {
-  console.error("Backup command failed:", redactSecret(error, process.env.JARVIS_SERVICE_TOKEN));
-  process.exitCode = 1;
-});
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((error: unknown) => {
+    console.error("Backup command failed:", redactSecret(error, process.env.JARVIS_SERVICE_TOKEN));
+    process.exitCode = 1;
+  });
+}
