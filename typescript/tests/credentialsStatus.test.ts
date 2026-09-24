@@ -269,6 +269,10 @@ describe("credentials page and MCP surface", () => {
     assert.match(html, /id="settings-persistence"/);
     assert.match(html, /does not remove the previous token/);
     assert.match(html, /Not verified/);
+    assert.match(html, /Idle has no End button/);
+    assert.match(html, /Guarding is shown only after this server attests/);
+    assert.match(html, /still does not offer End/);
+    assert.doesNotMatch(html, /<button[^>]*>\s*End\b/);
     assert.match(html, /min-height:44px/);
     assert.match(html, /font-size:14px; font-weight:600/);
     assert.match(html, /font-size:16px/);
@@ -292,6 +296,9 @@ describe("credentials page and MCP surface", () => {
     assert.match(widget, /data-view="settings"/);
     assert.doesNotMatch(widget, /data-view="credentials"|data-view="general"/);
     assert.match(credentialsView, /does not generate secrets/);
+    assert.match(credentialsView, /Not verified/);
+    assert.match(credentialsView, /Guarding still has no End button/);
+    assert.doesNotMatch(credentialsView, /<button[^>]*>\s*End\b/);
     assert.match(widget, /does not mint secrets/);
     assert.doesNotMatch(
       credentialsView,

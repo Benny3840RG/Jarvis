@@ -55,6 +55,8 @@ End overlap is not offered on Credentials. There is no confirmation dialog and n
 gate. `POST /api/v1/settings/credentials/end-overlap` ignores caller `verify` and returns
 `offered: false`, `executesRemoval: false`, an empty `commands` list, and `dangerHref` for that
 token (`/settings/danger#service`, `#approval`, or `#delivery`). Those cards are deep links only.
+The page shows Not verified. Guarding is the only later posture, and only after this server
+attests a passing smoke result. Idle has no End button, and Guarding does not add one.
 Typed confirm and removal are not this phase. The page does not wipe Convex.
 
 If smoke fails, keep the previous token set until the local token is corrected. Do not paste

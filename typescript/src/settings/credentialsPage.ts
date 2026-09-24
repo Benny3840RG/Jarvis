@@ -89,7 +89,8 @@ export function renderCredentialsPage(model: CredentialsPageModel): string {
   <main>
     ${settingsNav("credentials")}
     <h1 id="settings-credentials">Credentials</h1>
-    <p class="status" id="verify-status">Not verified. End is not offered on this page.</p>
+    <p class="status" id="verify-status">Not verified</p>
+    <p class="note" id="verify-note">Idle has no End button. Guarding is shown only after this server attests a passing smoke result, and it still does not offer End.</p>
     <p class="lede">Machine credentials authenticate Jarvis clients and gated operations. They are not a sign-in. Secrets are never shown in full after first reveal. Report security issues without including token values.</p>
     <div id="banner" class="banner" hidden></div>
     <div id="approvals" class="warn" hidden></div>
@@ -369,7 +370,7 @@ export function renderDangerPage(): string {
   <main>
     ${settingsNav("danger")}
     <h1>Danger zone</h1>
-    <p class="status">Not verified. These cards are deep links only. Typed confirm and removal are not on this page.</p>
+    <p class="status">Not verified. These cards are deep links only. Guarding does not add an End button. Typed confirm and removal are not on this page.</p>
     <section class="card" id="service">
       <h2>Service token</h2>
       <p class="status">CLI only. This card does not confirm or remove the previous service token.</p>

@@ -34,6 +34,9 @@ describe("settings shell", () => {
     assert.match(widget, /font-size:\s*14px;\s*font-weight:\s*600/);
     assert.match(widget, /font-size:\s*16px/);
     assert.match(widget, /fp-chip/);
+    assert.match(widget, /\.cred-card h3 \{[^}]*font-size:\s*16px/);
+    assert.match(widget, /\.cred-card p, \.cred-card li \{[^}]*font-size:\s*12px/);
+    assert.match(widget, /\.settings-shell \.settings-dl dt \{ font-size: 12px; \}/);
     assert.match(widget, /href="\/settings\/danger"/);
     assert.doesNotMatch(widget, /sessionStorage|END OVERLAP|openEnd\(/);
     assert.doesNotMatch(widget, /#39ff88|#b933ff|#ff2fbf|#39e6ff/i);
@@ -48,6 +51,9 @@ describe("settings shell", () => {
     assert.match(html, /href="\/settings\/credentials#settings-general"/);
     assert.match(html, /href="\/settings\/credentials"/);
     assert.doesNotMatch(html, /<form|<span class="tab">/);
+    assert.match(html, /Not verified/);
+    assert.match(html, /Guarding does not add an End button/);
+    assert.doesNotMatch(html, /<button[^>]*>\s*End\b/);
     assert.match(html, /Convex wipe is not part of this phase/);
     assert.match(html, /min-height:44px/);
     assert.match(html, /font-size:14px; font-weight:600/);

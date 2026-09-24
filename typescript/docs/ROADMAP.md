@@ -72,9 +72,15 @@ Next:
 End overlap does not trust caller `verify`. Credentials has no End dialog and no client gate.
 `decideEndOverlap` returns `offered: false`, `executesRemoval: false`, no commands, and a
 per-token `dangerHref`. A server-attested passing result only moves posture to guarding. The
-Danger cards are deep links only and do not wipe Convex. Production HTTP and preview select
-credentials with
+Danger cards are deep links only and do not wipe Convex. The visible posture is Not verified
+until this server attests a passing smoke result, and then it is Guarding. Neither posture
+offers End. Production HTTP and preview select credentials with
 `captureCredentialsFromEnv`, not from `HttpAppConfig`, which has no delivery token.
+
+Deferred:
+
+- Persistence (#599): secret-never-in-archive Export warning, provider read-only panel, collapsed Classic/v4, separate Resume, and a health glance row.
+- Danger (#602): absorb End, no sessionStorage Bearer, one skip-backup control, quiet list then dialog, and a real Persistence backup call to action.
 
 ## Verification failure routes to repair (2026-09-23, #550)
 

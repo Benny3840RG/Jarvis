@@ -180,6 +180,7 @@
       .settings-shell .settings-status,
       .settings-shell .settings-dl dd,
       .settings-shell [role="status"] { font-size: 14px; font-weight: 600; }
+      .settings-shell .settings-dl dt { font-size: 12px; }
       .settings-shell button,
       .settings-shell .settings-save,
       .settings-shell .settings-check,
@@ -271,8 +272,8 @@
       .systems-view { display: grid; grid-template-columns: minmax(280px,.88fr) minmax(0,1.12fr); gap: 9px; height: 100%; padding: 9px; }
       .credentials-view { display: grid; gap: 9px; height: 100%; padding: 9px; overflow: auto; }
       .cred-card { border: 1px solid var(--line); border-radius: 12px; padding: 10px; background: rgba(5,6,10,.42); }
-      .cred-card h3 { margin: 0 0 6px; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; }
-      .cred-card p, .cred-card li { margin: 4px 0; color: var(--muted); font-size: 11px; }
+      .cred-card h3 { margin: 0 0 6px; font-size: 16px; letter-spacing: .08em; text-transform: uppercase; }
+      .cred-card p, .cred-card li { margin: 4px 0; color: var(--muted); font-size: 12px; }
       .fp { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
       .cred-warn { color: var(--yellow); }
       .cred-bad { color: var(--red); }
@@ -655,7 +656,7 @@
                       <article class="panel violet">
                         <div class="panel-header"><h2>Credentials</h2><span class="settings-status">Not verified</span></div>
                         <div class="panel-content" style="padding:10px">
-                          <p id="credentials-intro">Machine credentials are not a sign-in. This console shows collapsed fingerprint chips and runbook links. It does not generate secrets or call Convex. End is not offered here.</p>
+                          <p id="credentials-intro">Machine credentials are not a sign-in. This console shows collapsed fingerprint chips and runbook links. It does not generate secrets or call Convex. End is not offered here. Idle stays Not verified. Guarding still has no End button.</p>
                           <p class="cred-bad" id="credentials-banner" hidden></p>
                           <p class="cred-warn" id="credentials-approvals" hidden></p>
                           <div id="credentials-cards"></div>
