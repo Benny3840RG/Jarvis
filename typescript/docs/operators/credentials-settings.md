@@ -19,11 +19,10 @@ missing approval token warns “Approvals unavailable.” on Credentials and on 
 It does not block the rest of Settings.
 
 `GET /settings/credentials` is a public loopback route. It does not require a Bearer token, so the
-fail-closed banner can render when the service token is missing. The HTML embeds the full SHA-256
-digests of the current and previous service tokens. That is deliberate: the page content-security
-policy blocks network calls, and the browser still needs those digests to reject a delivery token
-that matches the service token. The digests are not the tokens. They are not in the JSON read
-model, the MCP widget, or a non-loopback response. Non-loopback binds do not serve the page.
+fail-closed banner can render when the service token is missing. The HTML shows collapsed
+fingerprint chips only. Full SHA-256 digests are not in the page model or the HTML. Delivery
+collision against the service token stays on the authenticated delivery-check route and on the
+status card after restart. Non-loopback binds do not serve the page.
 
 ## Where generation is allowed
 
@@ -46,17 +45,16 @@ Convex changes stay operator-driven.
 | --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
 | Generate service token      | `node -e 'console.log(require("node:crypto").randomBytes(32).toString("hex"))'`                                                     |
 | Set Convex current/previous | `printf '%s\n' "$OLD_TOKEN" \| npx convex env set JARVIS_SERVICE_TOKEN_PREVIOUS` and the same for `JARVIS_SERVICE_TOKEN`, via stdin |
-| Remove previous             | `npx convex env remove JARVIS_SERVICE_TOKEN_PREVIOUS` (approval and delivery use their own `*_PREVIOUS` names)                      |
+| Remove previous             | Open `/settings/danger`. Credentials does not remove the previous token.                                                            |
 | Local env                   | Edit `.env.local`, then `chmod 600 .env.local`                                                                                      |
 | Verify                      | `npm run smoke:convex` (deployments starting with `dev:` only)                                                                      |
 | HTTP status                 | `curl --config - http://127.0.0.1:3000/api/v1/status` with the Bearer value supplied from the environment, not from the page        |
 | Start HTTP / preview        | `npm run start:http` / `npm run start:preview`                                                                                      |
 
-End overlap asks you to type `END OVERLAP`. That reveals the `env remove` command. It does not run
-the command, and it does not change Convex or `.env.local`. Caller-supplied verification state is
-ignored: this page does not observe `npm run smoke:convex`, so idle, passing, and failing do not
-unlock or hide removal. The action is never the primary button. Removing the previous token is an
-operator command. Danger zone is not this page.
+End overlap is not offered on Credentials. Idle verification stays “Not verified”, and a
+caller-supplied passing value is not server attestation. `POST /api/v1/settings/credentials/end-overlap`
+returns `offered: false`, `executesRemoval: false`, and an empty `commands` list. The danger
+boundary is `GET /settings/danger`. That page does not remove a token and does not wipe Convex.
 
 If smoke fails, keep the previous token set until the local token is corrected. Do not paste
 tokens into Git, logs, issues, or chat. See [SECURITY.md](../../../SECURITY.md).

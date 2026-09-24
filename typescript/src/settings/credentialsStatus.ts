@@ -61,10 +61,9 @@ export type CredentialsStatus = {
   parity: ReadonlyArray<{ ui: string; command: string }>;
 };
 
+/** Loopback HTML model. Fingerprints only. Full digests stay on the server runtime. */
 export type CredentialsPageModel = {
   status: CredentialsStatus;
-  /** SHA-256 hex digests of the current and previous service tokens. Not the tokens. */
-  serviceDigests: readonly string[];
 };
 
 export type CredentialsRuntime = {
@@ -110,7 +109,7 @@ export const CREDENTIAL_PARITY: CredentialsStatus["parity"] = [
   },
   {
     ui: "Remove previous service token",
-    command: "npx convex env remove JARVIS_SERVICE_TOKEN_PREVIOUS",
+    command: "Open /settings/danger. Credentials does not remove the previous token.",
   },
   {
     ui: "Local env",
@@ -164,64 +163,63 @@ export function collidesWithServiceToken(
   return comparisons.some((digest) => timingSafeEqual(candidateDigest, Buffer.from(digest, "hex")));
 }
 
-export function endOverlapCommands(id: TokenCardId): readonly string[] {
-  switch (id) {
-    case "service":
-      return [
-        "npx convex env remove JARVIS_SERVICE_TOKEN_PREVIOUS",
-        "Remove JARVIS_SERVICE_TOKEN_PREVIOUS from .env.local if it is set, then chmod 600 .env.local",
-      ];
-    case "approval":
-      return [
-        "npx convex env remove JARVIS_APPROVAL_TOKEN_PREVIOUS",
-        "Remove JARVIS_APPROVAL_TOKEN_PREVIOUS from .env.local if it is set, then chmod 600 .env.local",
-      ];
-    case "delivery":
-      return [
-        "npx convex env remove JARVIS_DELIVERY_RUNTIME_TOKEN_PREVIOUS",
-        "Remove JARVIS_DELIVERY_RUNTIME_TOKEN_PREVIOUS from .env.local if it is set, then chmod 600 .env.local",
-      ];
-  }
-}
+export type EndOverlapPosture = "not-verified" | "guarding";
+
+export type EndOverlapServerAttestation = {
+  /**
+   * True only when this process has itself observed a passing smoke result.
+   * Never copied from the request body.
+   */
+  attestedPassing: boolean;
+};
 
 export function endOverlapControl(input: {
   confirmation: string;
   verify: VerifyState;
   context: EndOverlapContext;
-}): { offered: boolean; primary: boolean; allowed: boolean } {
-  // verify and context are not a smoke result. Idle must not unlock a hidden
-  // control, and a caller-supplied "passing" must not count as smoke.
+  attestedPassing: boolean;
+}): { offered: false; primary: false; allowed: false } {
+  // Client verify, the typed phrase, and context never offer removal.
+  // Server attestation does not offer it either: Credentials does not execute End.
+  void (input.confirmation === END_OVERLAP_PHRASE);
   void input.verify;
   void input.context;
-  return {
-    offered: true,
-    primary: false,
-    allowed: input.confirmation === END_OVERLAP_PHRASE,
-  };
+  void input.attestedPassing;
+  return { offered: false, primary: false, allowed: false };
 }
 
 export type EndOverlapDecision = {
-  offered: boolean;
-  primary: boolean;
-  allowed: boolean;
-  /** Always false. This response is CLI text. It does not remove a token. */
+  offered: false;
+  primary: false;
+  allowed: false;
+  /** Always false. Credentials does not remove a token. */
   executesRemoval: false;
-  commands: readonly string[];
+  commands: readonly [];
+  posture: EndOverlapPosture;
+  dangerHref: "/settings/danger";
 };
 
-export function decideEndOverlap(input: {
-  tokenId: TokenCardId;
-  confirmation: string;
-  verify: VerifyState;
-  context: EndOverlapContext;
-}): EndOverlapDecision {
-  const control = endOverlapControl(input);
+export function decideEndOverlap(
+  input: {
+    tokenId: TokenCardId;
+    confirmation: string;
+    verify: VerifyState;
+    context: EndOverlapContext;
+  },
+  server: EndOverlapServerAttestation = { attestedPassing: false },
+): EndOverlapDecision {
+  const control = endOverlapControl({ ...input, attestedPassing: server.attestedPassing });
+  // Idle is never attested. A caller-supplied passing value is not attestation.
+  const posture: EndOverlapPosture =
+    server.attestedPassing === true && input.verify !== "idle" ? "guarding" : "not-verified";
   return {
     offered: control.offered,
     primary: control.primary,
     allowed: control.allowed,
     executesRemoval: false,
-    commands: control.allowed ? endOverlapCommands(input.tokenId) : [],
+    commands: [],
+    posture,
+    dangerHref: "/settings/danger",
   };
 }
 
@@ -416,7 +414,7 @@ export function captureCredentials(source: CredentialsSource): CredentialsRuntim
   const serviceDigests = digestsOf(serviceTokens);
   return {
     status,
-    pageModel: { status, serviceDigests },
+    pageModel: { status },
     serveLocalPage: loopbackOnly,
     serviceDigests,
   };

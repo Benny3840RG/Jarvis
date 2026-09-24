@@ -5,6 +5,7 @@ import type { NestFastifyApplication } from "@nestjs/platform-fastify";
 
 import { createJarvisHttpApp } from "../src/http/app.js";
 import type { HttpAppConfig } from "../src/http/config.js";
+import { renderDangerPage } from "../src/settings/credentialsPage.js";
 import {
   captureCredentials,
   secretDigest,
@@ -155,7 +156,7 @@ describe("credentials HTTP boundary", () => {
     assert.equal(leaked.body.includes(SERVICE), false);
   });
 
-  it("returns CLI remove text for a matching phrase and ignores caller verify state", async () => {
+  it("does not offer or execute End when the client claims verify passed", async () => {
     const credentials = captureCredentials({
       serviceToken: SERVICE,
       httpHost: "127.0.0.1",
@@ -182,16 +183,20 @@ describe("credentials HTTP boundary", () => {
     });
     assert.equal(failing.statusCode, 200);
     const failingBody = failing.json() as {
+      offered: boolean;
       allowed: boolean;
       executesRemoval: boolean;
       commands: string[];
+      posture: string;
+      dangerHref: string;
     };
-    assert.equal(failingBody.allowed, true);
+    assert.equal(failingBody.offered, false);
+    assert.equal(failingBody.allowed, false);
     assert.equal(failingBody.executesRemoval, false);
-    assert.match(
-      failingBody.commands[0] ?? "",
-      /npx convex env remove JARVIS_SERVICE_TOKEN_PREVIOUS/,
-    );
+    assert.deepEqual(failingBody.commands, []);
+    assert.equal(failingBody.posture, "not-verified");
+    assert.equal(failingBody.dangerHref, "/settings/danger");
+    assert.doesNotMatch(failing.body, /npx convex env remove/);
 
     const idle = await server.inject({
       method: "POST",
@@ -205,8 +210,16 @@ describe("credentials HTTP boundary", () => {
       },
     });
     assert.equal(idle.statusCode, 200);
-    assert.equal((idle.json() as { executesRemoval: boolean }).executesRemoval, false);
-    assert.deepEqual((idle.json() as { commands: string[] }).commands, failingBody.commands);
+    const idleBody = idle.json() as {
+      offered: boolean;
+      executesRemoval: boolean;
+      commands: string[];
+      posture: string;
+    };
+    assert.equal(idleBody.offered, false);
+    assert.equal(idleBody.executesRemoval, false);
+    assert.equal(idleBody.posture, "not-verified");
+    assert.deepEqual(idleBody.commands, []);
 
     const pasted = await server.inject({
       method: "POST",
@@ -235,15 +248,21 @@ describe("credentials HTTP boundary", () => {
     });
     assert.equal(allowed.statusCode, 200);
     const decision = allowed.json() as {
+      offered: boolean;
       allowed: boolean;
       primary: boolean;
       executesRemoval: boolean;
       commands: string[];
+      posture: string;
+      dangerHref: string;
     };
-    assert.equal(decision.allowed, true);
+    assert.equal(decision.allowed, false);
+    assert.equal(decision.offered, false);
     assert.equal(decision.primary, false);
     assert.equal(decision.executesRemoval, false);
-    assert.match(decision.commands[0] ?? "", /npx convex env remove JARVIS_SERVICE_TOKEN_PREVIOUS/);
+    assert.equal(decision.posture, "not-verified");
+    assert.equal(decision.dangerHref, "/settings/danger");
+    assert.deepEqual(decision.commands, []);
     assert.equal(allowed.body.includes(SERVICE), false);
   });
 
@@ -330,9 +349,18 @@ describe("credentials HTTP boundary", () => {
 
     const page = await server.inject({ method: "GET", url: "/settings/credentials" });
     assert.equal(page.statusCode, 200);
-    assert.match(page.body, new RegExp(secretDigest(SERVICE)));
+    assert.doesNotMatch(page.body, /[0-9a-f]{64}/);
+    assert.equal(page.body.includes(secretDigest(SERVICE)), false);
     assert.equal(page.body.includes(SERVICE), false);
     assert.equal(page.body.includes(DELIVERY), false);
+    assert.doesNotMatch(page.body, /sessionStorage/);
+
+    const danger = await server.inject({ method: "GET", url: "/settings/danger" });
+    assert.equal(danger.statusCode, 200);
+    assert.match(danger.body, /Danger zone/);
+    assert.match(danger.body, /href="\/settings\/credentials"/);
+    assert.doesNotMatch(danger.body, /END OVERLAP|env remove|sessionStorage|[0-9a-f]{64}/);
+    assert.equal(renderDangerPage().includes("Convex wipe is not part of this phase"), true);
 
     const httpMain = await import("node:fs").then((fs) =>
       fs.readFileSync(new URL("../src/http/main.ts", import.meta.url), "utf8"),

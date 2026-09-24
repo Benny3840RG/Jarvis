@@ -1,0 +1,48 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { describe, it } from "node:test";
+
+import { renderDangerPage } from "../src/settings/credentialsPage.js";
+
+const widget = readFileSync(new URL("../src/mcp/dashboard-v1.html", import.meta.url), "utf8");
+
+describe("settings shell", () => {
+  it("keeps one Settings rail and four tabs", () => {
+    const rails = [...widget.matchAll(/data-view="([^"]+)"/g)].map((match) => match[1]);
+    assert.deepEqual(rails, [
+      "focus",
+      "board",
+      "reminders",
+      "operations",
+      "livework",
+      "systems",
+      "settings",
+    ]);
+    assert.equal(rails.filter((rail) => rail === "settings").length, 1);
+    const tabs = [...widget.matchAll(/data-settings-tab="([^"]+)"/g)].map((match) => match[1]);
+    assert.deepEqual(tabs, ["general", "credentials", "persistence", "danger"]);
+    assert.match(widget, /id="view-settings"/);
+    assert.match(widget, /id="console-motion"/);
+    assert.match(widget, /Reduce motion/);
+    assert.match(widget, /prefers-reduced-motion:\s*reduce/);
+    assert.match(widget, /min-height:\s*44px/);
+    assert.match(widget, /font-size:\s*14px;\s*font-weight:\s*600/);
+    assert.match(widget, /font-size:\s*16px/);
+    assert.match(widget, /fp-chip/);
+    assert.match(widget, /href="\/settings\/danger"/);
+    assert.doesNotMatch(widget, /sessionStorage|END OVERLAP|openEnd\(/);
+    assert.doesNotMatch(widget, /#39ff88|#b933ff|#ff2fbf|#39e6ff/i);
+  });
+
+  it("serves a danger page that does not remove tokens", () => {
+    const html = renderDangerPage();
+    assert.match(html, /Danger zone/);
+    assert.match(html, /href="\/settings\/credentials"/);
+    assert.match(html, /Convex wipe is not part of this phase/);
+    assert.match(html, /min-height:44px/);
+    assert.match(html, /font-size:14px; font-weight:600/);
+    assert.match(html, /prefers-reduced-motion:\s*reduce/);
+    assert.doesNotMatch(html, /END OVERLAP|env remove|sessionStorage|serviceDigests|[0-9a-f]{64}/);
+    assert.doesNotMatch(html, /#39ff88|#b933ff|#ff2fbf|#39e6ff/i);
+  });
+});

@@ -4,14 +4,54 @@ function embedJson(value: unknown): string {
   return JSON.stringify(value).replace(/</g, "\\u003c");
 }
 
+const PAGE_STYLE = `
+    :root { color-scheme: dark; --bg:#1c1612; --panel:#2a211c; --line:#5c4a3d; --text:#f6efe6; --muted:#c4b5a5; --accent:#c47b4a; --gold:#d7a15f; --danger:#a33b32; }
+    * { box-sizing: border-box; }
+    body { margin:0; font:16px/1.45 Inter, ui-sans-serif, system-ui, sans-serif; background:var(--bg); color:var(--text); }
+    main { width:min(920px, 100%); margin:0 auto; padding:20px 16px 48px; }
+    h1 { font-size:22px; margin:0 0 6px; }
+    h2 { font-size:16px; margin:0; }
+    p { margin:6px 0; font-size:16px; }
+    .lede, .note, .parity li, .steps li { color:var(--muted); font-size:16px; }
+    nav { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-bottom:16px; }
+    .tab, .link, button, input { min-height:44px; font-size:16px; }
+    .tab { display:inline-flex; align-items:center; padding:0 14px; border-radius:9px; border:1px solid var(--line); color:var(--muted); text-decoration:none; }
+    .tab[aria-current="page"], nav strong { color:var(--text); border-color:var(--accent); }
+    .status { font-size:14px; font-weight:600; margin:8px 0; }
+    .banner, .warn { border:1px solid rgba(215,161,95,.5); background:rgba(215,161,95,.12); color:var(--gold); border-radius:12px; padding:12px 14px; margin:12px 0; font-size:14px; font-weight:600; }
+    .banner { border-color:rgba(163,59,50,.55); background:rgba(163,59,50,.12); color:#f0c2bc; }
+    .grid { display:grid; gap:12px; }
+    .card { border:1px solid var(--line); border-radius:14px; background:var(--panel); padding:14px; }
+    .card header { display:flex; justify-content:space-between; gap:12px; align-items:baseline; }
+    dl { display:grid; grid-template-columns:140px minmax(0,1fr); gap:6px 10px; margin:10px 0; }
+    dt { color:var(--muted); font-size:16px; }
+    dd { margin:0; font-size:16px; }
+    .fp-chip { display:inline-flex; align-items:center; min-height:44px; max-width:11rem; overflow:hidden; padding:0 12px; border-radius:999px; border:1px solid var(--line); background:#241c18; font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size:14px; font-weight:600; letter-spacing:.02em; }
+    .error { color:#f0c2bc; font-size:14px; font-weight:600; }
+    .actions, .wizard-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+    button, .link { font:inherit; border-radius:9px; border:1px solid var(--line); background:#3a2e26; color:var(--text); padding:0 14px; text-decoration:none; display:inline-flex; align-items:center; min-height:44px; }
+    button.primary { border-color:var(--accent); background:#4a3428; }
+    button:disabled { opacity:.45; }
+    .secret { width:100%; font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background:#1c1612; color:var(--text); border:1px solid var(--line); border-radius:8px; padding:10px; }
+    .dialog { border:1px solid var(--line); border-radius:16px; background:#241c18; color:var(--text); width:min(640px, calc(100% - 24px)); padding:0; }
+    .dialog form, .dialog .body { padding:16px; }
+    .steps { padding-left:18px; }
+    pre { white-space:pre-wrap; background:#1c1612; border-radius:8px; padding:10px; color:var(--muted); font-size:16px; }
+    .parity { padding-left:18px; }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation: none !important; transition: none !important; }
+    }
+    @media (max-width:720px) {
+      dl { grid-template-columns:1fr; }
+      .actions button, .wizard-actions button, .link, .tab { width:100%; }
+    }
+`;
+
 /**
  * Loopback operator page. GET /settings/credentials is a public route so the
- * fail-closed banner can render without a Bearer token. The embedded model
- * contains short fingerprints plus full SHA-256 digests of the current and
- * previous service tokens. Those digests are not raw tokens. They stay in the
- * page so a delivery token can be rejected locally: the content-security policy
- * forbids network calls, so the revealed value cannot be posted to MCP or the
- * API. The authenticated JSON status response does not include the digests.
+ * fail-closed banner can render without a Bearer token. The embedded model is
+ * fingerprints and bind posture only. Full digests are not in the page. End
+ * overlap is not offered here; the Danger zone link is the boundary.
  */
 export function renderCredentialsPage(model: CredentialsPageModel): string {
   const data = embedJson(model);
@@ -23,48 +63,18 @@ export function renderCredentialsPage(model: CredentialsPageModel): string {
   <meta name="referrer" content="no-referrer" />
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src 'none'; connect-src 'none'; base-uri 'none'; form-action 'none'" />
   <title>Jarvis Settings · Credentials</title>
-  <style>
-    :root { color-scheme: dark; --bg:#05060a; --panel:#111522; --line:#282d3d; --text:#f4f5fb; --muted:#949bb0; --green:#39ff88; --yellow:#f0c75e; --red:#ff5c75; --violet:#b933ff; }
-    * { box-sizing: border-box; }
-    body { margin:0; font:15px/1.45 Inter, ui-sans-serif, system-ui, sans-serif; background:var(--bg); color:var(--text); }
-    main { width:min(920px, 100%); margin:0 auto; padding:20px 16px 48px; }
-    h1 { font-size:22px; margin:0 0 6px; }
-    h2 { font-size:15px; margin:0; }
-    p { margin:6px 0; }
-    .lede, .note, .parity li, .steps li { color:var(--muted); }
-    nav { display:flex; gap:10px; align-items:center; margin-bottom:16px; color:var(--muted); font-size:13px; }
-    nav strong { color:var(--text); }
-    .banner, .warn { border:1px solid rgba(240,199,94,.5); background:rgba(240,199,94,.1); color:var(--yellow); border-radius:12px; padding:12px 14px; margin:12px 0; }
-    .banner { border-color:rgba(255,92,117,.55); background:rgba(255,92,117,.1); color:var(--red); }
-    .grid { display:grid; gap:12px; }
-    .card { border:1px solid var(--line); border-radius:14px; background:var(--panel); padding:14px; }
-    .card header { display:flex; justify-content:space-between; gap:12px; align-items:baseline; }
-    dl { display:grid; grid-template-columns:140px minmax(0,1fr); gap:6px 10px; margin:10px 0; }
-    dt { color:var(--muted); }
-    dd { margin:0; }
-    .fp { font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; letter-spacing:.02em; }
-    .error { color:var(--red); }
-    .actions, .wizard-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
-    button, .link { font:inherit; border-radius:9px; border:1px solid var(--line); background:#171b29; color:var(--text); padding:8px 12px; text-decoration:none; display:inline-flex; }
-    button.primary { border-color:rgba(57,255,136,.45); background:rgba(57,255,136,.12); }
-    button.secondary { border-color:rgba(185,51,255,.45); }
-    button:disabled { opacity:.45; }
-    .secret { width:100%; font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background:#05060a; color:var(--text); border:1px solid var(--line); border-radius:8px; padding:10px; }
-    .dialog { border:1px solid var(--line); border-radius:16px; background:#0b0e15; color:var(--text); width:min(640px, calc(100% - 24px)); padding:0; }
-    .dialog form, .dialog .body { padding:16px; }
-    .steps { padding-left:18px; }
-    pre { white-space:pre-wrap; background:#05060a; border-radius:8px; padding:10px; color:var(--muted); }
-    .parity { padding-left:18px; }
-    @media (max-width:720px) {
-      dl { grid-template-columns:1fr; }
-      .actions button, .wizard-actions button, .link { width:100%; }
-    }
-  </style>
+  <style>${PAGE_STYLE}</style>
 </head>
 <body>
   <main>
-    <nav aria-label="Settings"><span>Settings</span><span>/</span><strong>Credentials</strong></nav>
+    <nav aria-label="Settings">
+      <span class="tab">General</span>
+      <a class="tab" href="/settings/credentials" aria-current="page">Credentials</a>
+      <span class="tab">Persistence</span>
+      <a class="tab" href="/settings/danger">Danger zone</a>
+    </nav>
     <h1>Credentials</h1>
+    <p class="status" id="verify-status">Not verified. End is not offered on this page.</p>
     <p class="lede">Machine credentials authenticate Jarvis clients and gated operations. They are not a sign-in. Secrets are never shown in full after first reveal. Report security issues without including token values.</p>
     <div id="banner" class="banner" hidden></div>
     <div id="approvals" class="warn" hidden></div>
@@ -75,7 +85,7 @@ export function renderCredentialsPage(model: CredentialsPageModel): string {
     <section class="card">
       <h2>CLI / runbook parity</h2>
       <ul class="parity" id="parity"></ul>
-      <p class="note">Convex <code>env set</code> stays operator-driven. This page does not call it and does not remove the previous token. End overlap only shows the CLI command. Danger zone is not this page. HTTP checks use <code>curl --config -</code> so the Bearer value stays in the environment, not in a shell argument. The embedded service digests are SHA-256 values for a local collision check, not the token.</p>
+      <p class="note">Convex <code>env set</code> stays operator-driven. This page does not call it and does not remove the previous token. Overlap removal is not offered here. Open Danger zone for that boundary. HTTP checks use <code>curl --config -</code> so the Bearer value stays in the environment, not in a shell argument. Fingerprints are short chips. Full digests are not in this page.</p>
     </section>
   </main>
   <dialog class="dialog" id="wizard">
@@ -87,23 +97,8 @@ export function renderCredentialsPage(model: CredentialsPageModel): string {
         <button type="button" id="wizard-cancel">Cancel</button>
         <button type="button" id="wizard-back" hidden>Back</button>
         <button type="button" class="primary" id="wizard-next">Continue</button>
-        <button type="button" class="secondary" id="wizard-end" hidden>End overlap…</button>
         <button type="button" class="primary" id="wizard-done" hidden>Done</button>
       </div>
-    </form>
-  </dialog>
-  <dialog class="dialog" id="end-dialog">
-    <form id="end-form">
-      <h2>End token overlap</h2>
-      <p id="end-copy"></p>
-      <label>Type <span class="fp">END OVERLAP</span>
-        <input class="secret" id="end-phrase" autocomplete="off" autocapitalize="off" spellcheck="false" />
-      </label>
-      <div class="wizard-actions">
-        <button type="button" id="end-cancel">Cancel</button>
-        <button type="submit" class="secondary" id="end-confirm" disabled>End overlap</button>
-      </div>
-      <pre id="end-commands" hidden></pre>
     </form>
   </dialog>
   <script type="application/json" id="credentials-model">${data}</script>
@@ -111,14 +106,7 @@ export function renderCredentialsPage(model: CredentialsPageModel): string {
     "use strict";
     const model = JSON.parse(document.getElementById("credentials-model").textContent);
     const status = model.status;
-    const serviceDigests = Array.isArray(model.serviceDigests) ? model.serviceDigests : [];
     let revealed = "";
-    function endOverlapControl(confirmation, verify, context) {
-      void verify;
-      void context;
-      const allowed = confirmation === "END OVERLAP";
-      return { offered: true, primary: false, allowed: allowed, executesRemoval: false };
-    }
     function text(el, value) { el.textContent = value == null ? "" : String(value); }
     function wipe() { revealed = ""; const box = document.getElementById("secret-box"); if (box) box.value = ""; }
     window.addEventListener("pagehide", wipe);
@@ -136,16 +124,24 @@ export function renderCredentialsPage(model: CredentialsPageModel): string {
       header.append(title);
       section.append(header);
       const list = document.createElement("dl");
-      const rows = [["Status", card.statusLabel], ["Fingerprint", card.fingerprint || "—"], ["Overlap", card.overlapLabel]];
-      if (card.owner) rows.splice(2, 0, ["Owner", card.owner]);
+      const rows = [["Status", card.statusLabel], ["Overlap", card.overlapLabel]];
+      if (card.owner) rows.splice(1, 0, ["Owner", card.owner]);
       rows.forEach(([label, value]) => {
         const dt = document.createElement("dt");
         const dd = document.createElement("dd");
         text(dt, label);
         text(dd, value);
-        if (label === "Fingerprint") dd.className = "fp";
+        if (label === "Status") dd.className = "status";
         list.append(dt, dd);
       });
+      const dt = document.createElement("dt");
+      const dd = document.createElement("dd");
+      text(dt, "Fingerprint");
+      const chip = document.createElement("span");
+      chip.className = "fp-chip";
+      text(chip, card.fingerprint || "—");
+      dd.append(chip);
+      list.append(dt, dd);
       section.append(list);
       const note = document.createElement("p");
       note.className = "note";
@@ -172,12 +168,7 @@ export function renderCredentialsPage(model: CredentialsPageModel): string {
       text(rotate, card.id === "delivery" && !card.configured ? "Configure…" : "Rotate…");
       rotate.addEventListener("click", () => openWizard(card.id));
       actions.append(rotate);
-      const end = document.createElement("button");
-      end.type = "button";
-      end.dataset.end = card.id;
-      text(end, "End overlap…");
-      end.addEventListener("click", () => openEnd(card.id, "card", "idle"));
-      actions.append(end);
+      actions.append(link("/settings/danger", "Open Danger zone"));
       section.append(actions);
       cards.append(section);
     });
@@ -241,7 +232,7 @@ export function renderCredentialsPage(model: CredentialsPageModel): string {
         title: "Configure delivery runtime token",
         env: "JARVIS_DELIVERY_RUNTIME_TOKEN",
         previous: "JARVIS_DELIVERY_RUNTIME_TOKEN_PREVIOUS",
-        duty: "Optional until delivery is enabled. The value must differ from the service token.",
+        duty: "Optional until delivery is enabled. The value must differ from the service token. This page does not keep a service digest, so compare after restart using the delivery card.",
         verify: "docs",
       },
     };
@@ -249,16 +240,12 @@ export function renderCredentialsPage(model: CredentialsPageModel): string {
     let flowId = "service";
     let step = 1;
     let verify = "idle";
-    async function sha256Hex(value) {
-      const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
-      return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
-    }
     function generateToken() {
       const bytes = new Uint8Array(32);
       crypto.getRandomValues(bytes);
       return [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
     }
-    async function renderWizard() {
+    function renderWizard() {
       const flow = flows[flowId];
       text(document.getElementById("wizard-title"), flow.title);
       text(document.getElementById("wizard-step"), "Step " + step + " of 4");
@@ -267,10 +254,6 @@ export function renderCredentialsPage(model: CredentialsPageModel): string {
       document.getElementById("wizard-back").hidden = step === 1;
       document.getElementById("wizard-next").hidden = step === 4;
       document.getElementById("wizard-done").hidden = step !== 4;
-      const end = document.getElementById("wizard-end");
-      const control = endOverlapControl("", verify, "wizard");
-      end.hidden = !control.offered;
-      end.classList.toggle("primary", control.primary);
       if (step === 1) {
         const copy = document.createElement("p");
         text(copy, "Generate a new token. It is shown once. Store it in .env.local as " + flow.env + ".");
@@ -291,25 +274,16 @@ export function renderCredentialsPage(model: CredentialsPageModel): string {
           const hint = document.createElement("p");
           hint.className = "note";
           text(hint, "It will not be shown again. Copy it to a private password manager or env file.");
-          const copy = document.createElement("button");
-          copy.type = "button";
-          text(copy, "Copy");
-          copy.addEventListener("click", () => navigator.clipboard.writeText(revealed));
+          const copyButton = document.createElement("button");
+          copyButton.type = "button";
+          text(copyButton, "Copy");
+          copyButton.addEventListener("click", () => navigator.clipboard.writeText(revealed));
           const label = document.createElement("label");
           const checkbox = document.createElement("input");
           checkbox.type = "checkbox";
           checkbox.id = "copied";
           label.append(checkbox, document.createTextNode(" I copied the token to a private password manager / env file"));
-          body.append(input, hint, copy, label);
-          if (flowId !== "service") {
-            const digest = await sha256Hex(revealed);
-            if (serviceDigests.includes(digest)) {
-              const error = document.createElement("p");
-              error.className = "error";
-              text(error, "Must differ from the service token.");
-              body.append(error);
-            }
-          }
+          body.append(input, hint, copyButton, label);
         }
       } else if (step === 2) {
         const copy = document.createElement("p");
@@ -324,7 +298,7 @@ export function renderCredentialsPage(model: CredentialsPageModel): string {
       } else {
         const copy = document.createElement("p");
         text(copy, flow.verify === "smoke"
-          ? "Run npm run smoke:convex only against deployments starting with dev:. The command reads the token from the environment."
+          ? "Run npm run smoke:convex only against deployments starting with dev:. The command reads the token from the environment. This page does not observe that result."
           : "No smoke:convex equivalent is required. Confirm the secret is stored apart from the service token.");
         const pass = document.createElement("button");
         pass.type = "button";
@@ -335,12 +309,11 @@ export function renderCredentialsPage(model: CredentialsPageModel): string {
         text(fail, flow.verify === "smoke" ? "Smoke failed" : "Verification failed");
         fail.addEventListener("click", () => { verify = "failing"; renderWizard(); });
         const state = document.createElement("p");
-        text(state, verify === "failing"
-          ? "You marked verification failed. That mark does not hide the CLI command. This page does not run smoke and does not remove the previous token."
-          : verify === "passing"
-            ? "You marked verification passed. This page did not run smoke. End overlap only shows the CLI command."
-            : "Smoke is not observed here. End overlap only shows the CLI command. Danger zone is not this page.");
-        body.append(copy, pass, fail, state, link(status.docs.credentials, "Open credentials runbook"));
+        state.className = "status";
+        text(state, verify === "idle"
+          ? "Not verified. End is not offered while verification is idle."
+          : "Guarding. A mark on this page is not server attestation, and End is not offered.");
+        body.append(copy, pass, fail, state, link("/settings/danger", "Open Danger zone"), link(status.docs.credentials, "Open credentials runbook"));
       }
     }
     function openWizard(id) {
@@ -353,58 +326,50 @@ export function renderCredentialsPage(model: CredentialsPageModel): string {
     }
     document.getElementById("wizard-cancel").addEventListener("click", () => { wipe(); wizard.close(); });
     document.getElementById("wizard-back").addEventListener("click", () => { if (step > 1) { step -= 1; renderWizard(); } });
-    document.getElementById("wizard-next").addEventListener("click", async () => {
+    document.getElementById("wizard-next").addEventListener("click", () => {
       if (step === 1) {
         if (!revealed) return;
         const copied = document.getElementById("copied");
         if (!copied || !copied.checked) return;
-        if (flowId !== "service") {
-          const digest = await sha256Hex(revealed);
-          if (serviceDigests.includes(digest)) return;
-        }
         wipe();
       }
       if (step < 4) { step += 1; renderWizard(); }
     });
     document.getElementById("wizard-done").addEventListener("click", () => { wipe(); wizard.close(); });
-    document.getElementById("wizard-end").addEventListener("click", () => openEnd(flowId, "wizard", verify));
-    const endDialog = document.getElementById("end-dialog");
-    let endId = "service";
-    let endVerify = "idle";
-    let endContext = "card";
-    function openEnd(id, context, verifyState) {
-      const control = endOverlapControl("", verifyState, context);
-      if (!control.offered) return;
-      endId = id;
-      endVerify = verifyState;
-      endContext = context;
-      document.getElementById("end-phrase").value = "";
-      document.getElementById("end-confirm").disabled = true;
-      document.getElementById("end-commands").hidden = true;
-      text(document.getElementById("end-copy"), "Shows the CLI command for the previous " + flows[id].env + " credential. This page does not remove it. Clients still on the old token fail closed only after you run that command yourself. Danger zone is not this page.");
-      endDialog.showModal();
-    }
-    document.getElementById("end-phrase").addEventListener("input", (event) => {
-      const control = endOverlapControl(event.target.value, endVerify, endContext);
-      document.getElementById("end-confirm").disabled = !control.allowed;
-      document.getElementById("end-confirm").classList.toggle("primary", control.primary);
-    });
-    document.getElementById("end-cancel").addEventListener("click", () => endDialog.close());
-    document.getElementById("end-form").addEventListener("submit", (event) => {
-      event.preventDefault();
-      const control = endOverlapControl(document.getElementById("end-phrase").value, endVerify, endContext);
-      if (!control.allowed || control.primary) return;
-      const commands = {
-        service: "npx convex env remove JARVIS_SERVICE_TOKEN_PREVIOUS",
-        approval: "npx convex env remove JARVIS_APPROVAL_TOKEN_PREVIOUS",
-        delivery: "npx convex env remove JARVIS_DELIVERY_RUNTIME_TOKEN_PREVIOUS",
-      };
-      const pre = document.getElementById("end-commands");
-      pre.hidden = false;
-      text(pre, commands[endId] + "\\nRemove the matching PREVIOUS variable from .env.local if it is set, then chmod 600 .env.local");
-      document.getElementById("end-phrase").value = "";
-    });
   </script>
+</body>
+</html>`;
+}
+
+/** Loopback boundary page. It does not remove tokens and does not wipe Convex. */
+export function renderDangerPage(): string {
+  return `<!doctype html>
+<html lang="en-AU">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="referrer" content="no-referrer" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src 'none'; connect-src 'none'; base-uri 'none'; form-action 'none'" />
+  <title>Jarvis Settings · Danger zone</title>
+  <style>${PAGE_STYLE}</style>
+</head>
+<body>
+  <main>
+    <nav aria-label="Settings">
+      <span class="tab">General</span>
+      <a class="tab" href="/settings/credentials">Credentials</a>
+      <span class="tab">Persistence</span>
+      <a class="tab" href="/settings/danger" aria-current="page">Danger zone</a>
+    </nav>
+    <h1>Danger zone</h1>
+    <p class="status">Not verified. End is not offered until a server-attested smoke result exists, and this page still does not remove a token.</p>
+    <section class="card">
+      <h2>Overlap removal</h2>
+      <p>Credentials does not end overlap. There is no confirmation dialog and no remove command on this page.</p>
+      <p>Convex wipe is not part of this phase. Nothing here deletes deployment env or local JSON.</p>
+      <p><a class="link" href="/settings/credentials">Back to Credentials</a></p>
+    </section>
+  </main>
 </body>
 </html>`;
 }

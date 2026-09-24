@@ -120,52 +120,62 @@ describe("credential fingerprints", () => {
     assert.equal(parseDeliveryCheckRequest({ digestSha256: secretDigest(SERVICE) }).ok, true);
   });
 
-  it("returns CLI text for a matching phrase and ignores caller verify state", () => {
-    const commands = [
-      "npx convex env remove JARVIS_SERVICE_TOKEN_PREVIOUS",
-      "Remove JARVIS_SERVICE_TOKEN_PREVIOUS from .env.local if it is set, then chmod 600 .env.local",
-    ];
-    const idle = decideEndOverlap({
-      tokenId: "service",
-      confirmation: END_OVERLAP_PHRASE,
-      verify: "idle",
-      context: "card",
-    });
+  it("does not offer End from client verify and never executes removal", () => {
+    const idle = decideEndOverlap(
+      {
+        tokenId: "service",
+        confirmation: END_OVERLAP_PHRASE,
+        verify: "idle",
+        context: "card",
+      },
+      { attestedPassing: true },
+    );
     const failing = decideEndOverlap({
       tokenId: "service",
       confirmation: END_OVERLAP_PHRASE,
       verify: "failing",
       context: "wizard",
     });
-    const passing = decideEndOverlap({
-      tokenId: "service",
-      confirmation: END_OVERLAP_PHRASE,
-      verify: "passing",
-      context: "wizard",
-    });
+    const passing = decideEndOverlap(
+      {
+        tokenId: "service",
+        confirmation: END_OVERLAP_PHRASE,
+        verify: "passing",
+        context: "wizard",
+      },
+      { attestedPassing: false },
+    );
     for (const decision of [idle, failing, passing]) {
-      assert.equal(decision.offered, true);
+      assert.equal(decision.offered, false);
       assert.equal(decision.primary, false);
-      assert.equal(decision.allowed, true);
+      assert.equal(decision.allowed, false);
       assert.equal(decision.executesRemoval, false);
-      assert.deepEqual(decision.commands, commands);
+      assert.deepEqual(decision.commands, []);
+      assert.equal(decision.dangerHref, "/settings/danger");
     }
-    const wrong = decideEndOverlap({
-      tokenId: "service",
-      confirmation: SERVICE,
-      verify: "passing",
-      context: "wizard",
-    });
-    assert.equal(wrong.allowed, false);
-    assert.equal(wrong.primary, false);
-    assert.equal(wrong.executesRemoval, false);
-    assert.deepEqual(wrong.commands, []);
+    assert.equal(idle.posture, "not-verified");
+    assert.equal(failing.posture, "not-verified");
+    assert.equal(passing.posture, "not-verified");
+    const attested = decideEndOverlap(
+      {
+        tokenId: "service",
+        confirmation: END_OVERLAP_PHRASE,
+        verify: "passing",
+        context: "wizard",
+      },
+      { attestedPassing: true },
+    );
+    assert.equal(attested.posture, "guarding");
+    assert.equal(attested.offered, false);
+    assert.equal(attested.executesRemoval, false);
+    assert.deepEqual(attested.commands, []);
     assert.equal(
       parseEndOverlapRequest({
         tokenId: "service",
         confirmation: SERVICE,
         verify: "passing",
         context: "wizard",
+        attestedPassing: true,
       }).ok,
       false,
     );
@@ -224,53 +234,43 @@ describe("credential fingerprints", () => {
 });
 
 describe("credentials page and MCP surface", () => {
-  it("reveals no secret in the loopback page and gates end overlap in the page script", () => {
+  it("keeps digests and End overlap out of the loopback page", () => {
     const captured = runtime();
     const html = renderCredentialsPage(captured.pageModel);
+    assert.equal("serviceDigests" in captured.pageModel, false);
     assertNoSecret(html, [SERVICE, APPROVAL, DELIVERY, PREVIOUS]);
     assert.match(html, /Generate new token/);
-    assert.match(html, /END OVERLAP/);
     assert.match(html, /connect-src 'none'/);
-    assert.match(html, new RegExp(secretDigest(SERVICE)));
-    assert.match(html, new RegExp(secretDigest(PREVIOUS)));
-    assert.equal(html.includes(secretDigest(DELIVERY)), false);
+    assert.doesNotMatch(html, /serviceDigests|END OVERLAP|openEnd\(|end-dialog|endOverlapCommands/);
+    assert.doesNotMatch(html, /[0-9a-f]{64}/);
+    assert.equal(html.includes(secretDigest(SERVICE)), false);
+    assert.equal(html.includes(secretDigest(PREVIOUS)), false);
+    assert.match(html, /fp-chip/);
+    assert.match(html, /href="\/settings\/danger"/);
     assert.match(html, /does not remove the previous token/);
-    assert.match(html, /Danger zone is not this page/);
+    assert.match(html, /Not verified/);
+    assert.match(html, /min-height:44px/);
+    assert.match(html, /font-size:14px; font-weight:600/);
+    assert.match(html, /font-size:16px/);
+    assert.match(html, /prefers-reduced-motion:\s*reduce/);
+    assert.doesNotMatch(html, /#39ff88|#b933ff|#ff2fbf|#39e6ff/i);
     assert.doesNotMatch(html, /stays hidden while verification is failing|hidden until smoke/);
     assert.doesNotMatch(
       html,
-      /localStorage|sessionStorage|Expose to LAN|npx convex env set [A-Za-z0-9]{16}/,
+      /localStorage|sessionStorage|Expose to LAN|npx convex env set [A-Za-z0-9]{16}|npx convex env remove/,
     );
     assert.match(html, /127\.0\.0\.1:3000/);
     assert.match(html, /Blocked \(fail closed\)/);
-    const match = html.match(
-      /function endOverlapControl\(confirmation, verify, context\) \{[\s\S]*?\n {4}\}/,
-    );
-    assert.ok(match);
-    const endOverlapControl = new Function(`${match[0]}; return endOverlapControl;`)() as (
-      confirmation: string,
-      verify: string,
-      context: string,
-    ) => { offered: boolean; primary: boolean; allowed: boolean; executesRemoval: boolean };
-    const idleCard = endOverlapControl(END_OVERLAP_PHRASE, "idle", "card");
-    const failingWizard = endOverlapControl(END_OVERLAP_PHRASE, "failing", "wizard");
-    const passingWizard = endOverlapControl(END_OVERLAP_PHRASE, "passing", "wizard");
-    for (const decision of [idleCard, failingWizard, passingWizard]) {
-      assert.equal(decision.primary, false);
-      assert.equal(decision.allowed, true);
-      assert.equal(decision.executesRemoval, false);
-    }
-    assert.equal(endOverlapControl("nope", "passing", "wizard").allowed, false);
-    assert.equal(endOverlapControl("nope", "idle", "card").allowed, false);
   });
 
   it("keeps the MCP widget on status and runbook links", () => {
     const widget = readFileSync(new URL("../src/mcp/dashboard-v1.html", import.meta.url), "utf8");
     const start = widget.indexOf('id="view-credentials"');
-    const end = widget.indexOf('id="view-systems"');
+    const end = widget.indexOf('id="view-persistence"');
     assert.ok(start !== -1 && end > start, "Credentials view was not found");
     const credentialsView = widget.slice(start, end);
-    assert.match(widget, /data-view="credentials"/);
+    assert.match(widget, /data-view="settings"/);
+    assert.doesNotMatch(widget, /data-view="credentials"|data-view="general"/);
     assert.match(credentialsView, /does not generate secrets/);
     assert.match(widget, /does not mint secrets/);
     assert.doesNotMatch(

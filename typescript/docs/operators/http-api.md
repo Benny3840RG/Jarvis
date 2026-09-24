@@ -42,8 +42,9 @@ JARVIS_SOURCE_VERSION=<build commit or immutable source identifier>
 token requirements. `JARVIS_SERVICE_TOKEN_PREVIOUS` is accepted only while a current token is
 also configured, preserving the documented rotation overlap and failing closed otherwise.
 `GET /api/v1/settings/credentials` reports that overlap as a short fingerprint, not as the token.
-The public loopback page also embeds SHA-256 digests of the current and previous service tokens
-for a local collision check. See [credentials-settings.md](credentials-settings.md). A missing
+The public loopback page shows fingerprint chips only and does not embed SHA-256 digests. End
+overlap is a link to `/settings/danger`, not a remove command. See
+[credentials-settings.md](credentials-settings.md). A missing
 service token makes dependent status fail closed. A missing approval token warns that approvals
 are unavailable.
 

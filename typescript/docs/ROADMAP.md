@@ -55,13 +55,13 @@ Next:
 
 ## Credentials settings, Phase A (2026-09-24)
 
-Settings → Credentials is a status and guided-rotation surface for the service, approval, and
-delivery runtime tokens. `GET /api/v1/settings/credentials` returns SHA-256 fingerprints, overlap
-flags, and loopback versus fail-closed remote posture. The MCP dashboard shows that status and
-runbook links. Generation and the typed End overlap flow live only on the loopback page
-`GET /settings/credentials`. That page does not call `npx convex env set`. A missing service
-token fails closed on the page and on dependent status. A missing approval token warns
-“Approvals unavailable.” A delivery token that matches the service token is refused.
+Settings is one HUD rail with four tabs: General, Credentials, Persistence, and Danger zone.
+`GET /api/v1/settings/credentials` returns SHA-256 fingerprints, overlap flags, and loopback
+versus fail-closed remote posture. The Credentials tab shows collapsed fingerprint chips and
+runbook links. Generation stays on the loopback page `GET /settings/credentials`. That page does
+not call `npx convex env set` and does not embed service-token digests. A missing service token
+fails closed on the page and on dependent status. A missing approval token warns “Approvals
+unavailable.” A delivery token that matches the service token is refused on the status card.
 
 Next:
 
@@ -69,11 +69,11 @@ Next:
 2. If a later Operations surface starts or stops `npm run start:http`, keep it off this page.
 3. Phase B account sign-in stays out of Credentials. OIDC here is remote HTTP identity only.
 
-End overlap does not treat caller `verify` as smoke. Idle does not unlock a hidden control, and
-the response is CLI text with `executesRemoval: false`. Removing the previous token is not this
-page. The public loopback page embeds service-token SHA-256 digests for a local collision check.
-`GET /api/v1/settings/credentials` stays fingerprint-only. Production HTTP and preview select that
-model with `captureCredentialsFromEnv`, not from `HttpAppConfig`, which has no delivery token.
+End overlap does not trust caller `verify`. Idle stays not-verified and is never offered.
+`decideEndOverlap` returns `offered: false`, `executesRemoval: false`, and no commands. A
+server-attested passing result only moves posture to guarding. Removal is `GET /settings/danger`,
+which does not wipe Convex. Production HTTP and preview select credentials with
+`captureCredentialsFromEnv`, not from `HttpAppConfig`, which has no delivery token.
 
 ## Verification failure routes to repair (2026-09-23, #550)
 

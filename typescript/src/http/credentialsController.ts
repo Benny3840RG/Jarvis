@@ -1,7 +1,7 @@
 import { Body, Controller, Get, Header, HttpCode, Inject, Post, Res } from "@nestjs/common";
 import type { FastifyReply } from "fastify";
 
-import { renderCredentialsPage } from "../settings/credentialsPage.js";
+import { renderCredentialsPage, renderDangerPage } from "../settings/credentialsPage.js";
 import {
   decideEndOverlap,
   deliveryDigestCollides,
@@ -48,6 +48,27 @@ export class CredentialsController {
     return renderCredentialsPage(this.credentials.pageModel);
   }
 
+  @PublicRoute()
+  @Get("settings/danger")
+  @Header("Referrer-Policy", "no-referrer")
+  danger(@Res({ passthrough: true }) reply: FastifyReply): string {
+    if (!this.credentials.serveLocalPage) {
+      throw new JarvisProblem(
+        404,
+        "not-found",
+        "Not Found",
+        "The local danger page is only served on a loopback bind.",
+      );
+    }
+    reply.header("Content-Type", "text/html; charset=utf-8");
+    reply.header("Cache-Control", "no-store");
+    reply.header(
+      "Content-Security-Policy",
+      "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src 'none'; connect-src 'none'; base-uri 'none'; form-action 'none'",
+    );
+    return renderDangerPage();
+  }
+
   @Get("api/v1/settings/credentials")
   getStatus(): { data: CredentialsStatus } {
     return { data: this.credentials.status };
@@ -56,22 +77,18 @@ export class CredentialsController {
   @Post("api/v1/settings/credentials/end-overlap")
   @HttpCode(200)
   endOverlap(@Body() body: unknown): {
-    offered: boolean;
-    primary: boolean;
-    allowed: boolean;
+    offered: false;
+    primary: false;
+    allowed: false;
     executesRemoval: false;
     commands: readonly string[];
+    posture: "not-verified" | "guarding";
+    dangerHref: "/settings/danger";
   } {
     const parsed = parseEndOverlapRequest(body);
     if (!parsed.ok) invalidRequest();
-    const decision = decideEndOverlap(parsed);
-    return {
-      offered: decision.offered,
-      primary: decision.primary,
-      allowed: decision.allowed,
-      executesRemoval: false,
-      commands: decision.commands,
-    };
+    // This process does not observe smoke. Client verify is not attestation.
+    return decideEndOverlap(parsed, { attestedPassing: false });
   }
 
   @Post("api/v1/settings/credentials/delivery-check")

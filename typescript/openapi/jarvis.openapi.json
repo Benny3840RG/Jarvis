@@ -107,6 +107,7 @@
       "getHealth",
       "getHelp",
       "getCredentialsPage",
+      "getDangerSettingsPage",
       "endCredentialOverlap",
       "checkDeliveryCredential",
       "executeConversation",
@@ -311,7 +312,7 @@
       "get": {
         "operationId": "getCredentialsPage",
         "summary": "Open the loopback credentials settings page",
-        "description": "Serves the local operator credentials page on a loopback bind only. This route is public (no Bearer token) so a missing service token can still show the fail-closed banner. The HTML shows short fingerprints and rotation runbooks, and it embeds SHA-256 digests of the current and previous service tokens so the browser can reject a colliding delivery token without a network call. Those digests are not raw tokens and are not included in GET /api/v1/settings/credentials. A generated token is revealed once in the browser and is not sent to MCP or written into a URL. Non-loopback binds do not serve the page. There is no control that enables remote exposure.",
+        "description": "Serves the local operator credentials page on a loopback bind only. This route is public (no Bearer token) so a missing service token can still show the fail-closed banner. The HTML shows collapsed fingerprint chips and rotation runbooks. It does not embed SHA-256 digests. A generated token is revealed once in the browser and is not sent to MCP or written into a URL. End overlap is not offered; the page links to GET /settings/danger. Non-loopback binds do not serve the page. There is no control that enables remote exposure.",
         "tags": ["System"],
         "security": [],
         "x-mcp-tool": {
@@ -325,7 +326,40 @@
         },
         "responses": {
           "200": {
-            "description": "Loopback credentials settings HTML. Contains no raw secrets. Because the route is public on loopback, the HTML embeds SHA-256 service-token digests for local collision checks. The authenticated JSON status API does not.",
+            "description": "Loopback credentials settings HTML. Contains collapsed fingerprint chips and no raw secrets or SHA-256 digests. End overlap is not offered.",
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/settings/danger": {
+      "get": {
+        "operationId": "getDangerSettingsPage",
+        "summary": "Open the loopback danger settings page",
+        "description": "Serves the local danger boundary on a loopback bind only. This route is public (no Bearer token). The page does not remove tokens, does not return a remove command, and does not wipe Convex. It links back to GET /settings/credentials. Non-loopback binds do not serve the page.",
+        "tags": ["System"],
+        "security": [],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Loopback danger settings HTML. No token removal and no Convex wipe.",
             "content": {
               "text/html": {
                 "schema": {
@@ -385,8 +419,8 @@
     "/api/v1/settings/credentials/end-overlap": {
       "post": {
         "operationId": "endCredentialOverlap",
-        "summary": "Confirm ending a credential overlap window",
-        "description": "Returns the operator CLI text for removing a previous token after the typed END OVERLAP phrase matches. verify and context are accepted and ignored: this process does not observe npm run smoke:convex, so a caller cannot unlock or hide removal by sending idle, passing, or failing. executesRemoval is always false. The operation does not change Convex or local env. Removing the previous token remains an operator command; Danger zone is not this endpoint. The response does not echo the supplied confirmation and is never the primary action.",
+        "summary": "Report that credential overlap removal is not offered",
+        "description": "Does not remove a token and does not return a remove command. verify, context, and the confirmation phrase are not attestation: this process does not observe npm run smoke:convex, so idle, passing, and failing never offer End. offered, allowed, and executesRemoval are always false, and commands is always empty. posture is not-verified until a server-attested passing smoke result exists, and even then Credentials does not execute removal. dangerHref is /settings/danger. The response does not echo the supplied confirmation.",
         "tags": ["System"],
         "x-mcp-tool": {
           "exposed": false,
@@ -409,7 +443,7 @@
         },
         "responses": {
           "200": {
-            "description": "CLI remove commands when the typed phrase matches. executesRemoval is false. verify does not change the result.",
+            "description": "Removal is not offered. executesRemoval is false, commands is empty, and dangerHref points at the danger page. Client verify does not change that.",
             "headers": {
               "X-Request-Id": {
                 "$ref": "#/components/headers/RequestId"
@@ -7236,7 +7270,7 @@
           "verify": {
             "type": "string",
             "enum": ["idle", "passing", "failing"],
-            "description": "Accepted and ignored. Not evidence that smoke passed or failed."
+            "description": "Not attestation. Idle never offers End. Passing does not offer End."
           },
           "context": {
             "type": "string",
@@ -7248,17 +7282,31 @@
       "EndOverlapResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["offered", "primary", "allowed", "executesRemoval", "commands"],
+        "required": [
+          "offered",
+          "primary",
+          "allowed",
+          "executesRemoval",
+          "commands",
+          "posture",
+          "dangerHref"
+        ],
         "properties": {
-          "offered": { "type": "boolean" },
-          "primary": { "type": "boolean" },
-          "allowed": { "type": "boolean" },
+          "offered": { "type": "boolean", "const": false },
+          "primary": { "type": "boolean", "const": false },
+          "allowed": { "type": "boolean", "const": false },
           "executesRemoval": { "type": "boolean", "const": false },
           "commands": {
             "type": "array",
-            "maxItems": 4,
+            "maxItems": 0,
             "items": { "type": "string", "minLength": 1, "maxLength": 200 }
-          }
+          },
+          "posture": {
+            "type": "string",
+            "enum": ["not-verified", "guarding"],
+            "description": "not-verified until this process has attested a passing smoke result. guarding still does not offer End. Idle stays not-verified."
+          },
+          "dangerHref": { "type": "string", "const": "/settings/danger" }
         }
       },
       "DeliveryCheckRequest": {

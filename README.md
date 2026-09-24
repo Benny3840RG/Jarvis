@@ -188,7 +188,7 @@ unset OLD_TOKEN NEW_TOKEN
 
 If the smoke test fails, keep `JARVIS_SERVICE_TOKEN_PREVIOUS` set until the local token is corrected. Removing it is the revocation step for the old credential. Never paste either token into Git, logs, issues, or chat.
 
-The loopback Settings → Credentials page (`http://127.0.0.1:3000/settings/credentials` while `npm run start:http` is bound to loopback) guides this same rotation. The JSON status shows short fingerprints. The page also embeds SHA-256 digests of the current and previous service tokens so a colliding delivery token can be rejected without a network call. End overlap shows the CLI remove command and does not run it. The page does not call `npx convex env set` for you. See [`typescript/docs/operators/credentials-settings.md`](typescript/docs/operators/credentials-settings.md).
+The loopback Settings → Credentials page (`http://127.0.0.1:3000/settings/credentials` while `npm run start:http` is bound to loopback) guides token generation and the stdin `env set` steps. The JSON status and the page show short fingerprint chips. The page does not embed SHA-256 digests and does not offer End overlap. Removal stays on `/settings/danger`, which does not run it. The page does not call `npx convex env set` for you. See [`typescript/docs/operators/credentials-settings.md`](typescript/docs/operators/credentials-settings.md).
 
 ### Live Convex smoke test
 
