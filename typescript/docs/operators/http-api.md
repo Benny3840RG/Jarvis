@@ -11,6 +11,7 @@ This stage implements only the operations whose runtime behaviour is complete:
 | GET              | `/api/v1/settings/general`       | Bearer token   | Read-only reminder timezone status. Invalid zones stay invalid. |
 | GET              | `/api/v1/settings/credentials`   | Bearer token   | Fingerprints, overlap, and bind posture. No token values.       |
 | GET              | `/settings/credentials`          | Loopback only  | Guided rotation page. Not served off loopback.                  |
+| GET              | `/settings/limits`               | Loopback only  | Provider-quota read model. Unknown until a store is chosen.     |
 | GET              | `/api/v1/reminders`              | ******         | Lists durable reminders.                                        |
 | POST             | `/api/v1/reminders`              | ******         | Creates a durable reminder.                                     |
 | GET/PATCH/DELETE | `/api/v1/reminders/{reminderId}` | ******         | Reads, updates, or removes one reminder.                        |

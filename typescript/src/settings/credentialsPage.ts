@@ -13,6 +13,7 @@ function settingsNav(): string {
       ${tab("#settings-general", "General", false)}
       ${tab("/settings/credentials", "Credentials", true)}
       ${tab("#settings-persistence", "Persistence", false)}
+      ${tab("/settings/limits", "Limits", false)}
       ${tab("/settings/danger", "Danger zone", false)}
     </nav>`;
 }

@@ -112,6 +112,7 @@
       "getHelp",
       "getCredentialsPage",
       "getDangerSettingsPage",
+      "getLimitsSettingsPage",
       "endCredentialOverlap",
       "checkDeliveryCredential",
       "executeConversation",
@@ -367,6 +368,39 @@
         "responses": {
           "200": {
             "description": "Loopback Danger zone HTML. End overlap confirmations live here. No sessionStorage Bearer, no Convex owner wipe, and backup links to Persistence Backup.",
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/settings/limits": {
+      "get": {
+        "operationId": "getLimitsSettingsPage",
+        "summary": "Open the loopback limits settings page",
+        "description": "Serves the local operator Limits page on a loopback bind only. This route is public (no Bearer token). It is a read model of provider quotas: API/provider rate, concurrency, storage/backup, retention, and delivery. The durable quota store is not selected, so every chip is UNKNOWN and hard stops read as No hard stop. The page does not persist quota values, does not enforce limits, and does not store a Bearer token. Typed confirmation explains blast radius and then refuses to save. Non-loopback binds do not serve the page. There is no seats, billing, paywall, or team-admin control.",
+        "tags": ["System"],
+        "security": [],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Loopback Limits settings HTML. Provider-quota cards are UNKNOWN. Nothing is written or enforced.",
             "content": {
               "text/html": {
                 "schema": {

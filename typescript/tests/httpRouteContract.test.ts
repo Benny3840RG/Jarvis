@@ -40,6 +40,7 @@ const PUBLIC_OPERATIONS = new Set([
   "GET /healthz",
   "GET /settings/credentials",
   "GET /settings/danger",
+  "GET /settings/limits",
 ]);
 
 function unusedPersistence(): PersistenceProvider {
