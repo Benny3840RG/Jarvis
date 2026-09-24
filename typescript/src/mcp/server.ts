@@ -25,6 +25,7 @@ import {
   type DashboardSnapshot,
   type ReminderRequestUpdate,
 } from "./jarvisApiClient.js";
+import { registerPersistenceSettingsTools } from "./persistenceSettingsTools.js";
 import { JARVIS_INSTRUCTIONS, JARVIS_PERSONA_MARKDOWN, JARVIS_PERSONA_URI } from "./persona.js";
 
 export const JARVIS_DASHBOARD_URI = "ui://jarvis/dashboard-v1.html";
@@ -2669,6 +2670,8 @@ export function createJarvisMcpServer(client: JarvisApiClient): McpServer {
       }
     },
   );
+
+  registerPersistenceSettingsTools(server, client);
 
   return server;
 }

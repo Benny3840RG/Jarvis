@@ -45,7 +45,10 @@ npm run backup -- restore-v4 <file> <empty-destination-dir> [--allow-partial] [-
 - **`restore-v4`** materialises the archive into a directory it creates itself.
 
 `PERSISTENCE_PROVIDER` must select `json`. Under `convex` the export refuses
-rather than writing an archive that omits the data actually in use.
+rather than writing an archive that omits the data actually in use. Settings →
+Persistence shows that refusal and labels v4 **Partial / JSON-only**. It wraps
+these commands; it does not add another recovery path. See
+[persistence settings](persistence-settings.md).
 
 ## What "strict and lossless" means here
 

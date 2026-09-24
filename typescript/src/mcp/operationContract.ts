@@ -34,6 +34,10 @@ export const MCP_TOOL_OPERATIONS: Readonly<Record<string, readonly OpenApiOperat
   ],
   get_jarvis_status: [{ method: "GET", path: "/api/v1/status" }],
   get_general_settings: [{ method: "GET", path: "/api/v1/settings/general" }],
+  show_persistence_settings: [{ method: "GET", path: "/api/v1/settings/persistence" }],
+  run_persistence_settings_action: [
+    { method: "POST", path: "/api/v1/settings/persistence/actions" },
+  ],
   list_tasks: [{ method: "GET", path: "/api/v1/tasks" }],
   get_task: [{ method: "GET", path: "/api/v1/tasks/{taskId}" }],
   create_task: [{ method: "POST", path: "/api/v1/tasks" }],

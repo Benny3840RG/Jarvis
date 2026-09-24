@@ -669,8 +669,140 @@
                   <div class="settings-panel" data-settings-panel="persistence" id="view-persistence">
                     <div class="settings-layout">
                       <h2>Persistence</h2>
-                      <p class="settings-status">Read only</p>
-                      <p>The authorised provider is on the Systems rail. This tab does not wipe Convex or local JSON.</p>
+                      <p id="persistence-honesty">Provider selection is explicit. Jarvis will not silently fall back from Convex to JSON.</p>
+                      <p class="settings-status" id="persistence-glance" role="status">Health checking</p>
+                      <div class="settings-actions" id="persistence-health-glance">
+                        <span class="fp-chip" id="persistence-provider-chip">Provider</span>
+                        <span class="fp-chip" id="persistence-health-chip">Health</span>
+                        <button type="button" id="persistence-refresh">Refresh health</button>
+                      </div>
+                      <article class="settings-card">
+                        <h3>Active provider</h3>
+                        <p id="persistence-banner" class="settings-banner" hidden></p>
+                        <label class="settings-check"><input type="radio" name="persistence-provider" value="convex" disabled /> Convex <span id="persistence-convex"></span></label>
+                        <label class="settings-check"><input type="radio" name="persistence-provider" value="json" disabled /> JSON <span id="persistence-json"></span></label>
+                        <p>Change PERSISTENCE_PROVIDER in .env.local, then restart. This tab does not switch providers.</p>
+                      </article>
+                      <article class="settings-card">
+                        <h3>Backup</h3>
+                        <p>Two formats exist. Pick deliberately.</p>
+                        <p id="persistence-export-warning">Archives must not contain service, approval, or delivery tokens. Jarvis does not write those secrets into the backup file.</p>
+                        <h3>Classic</h3>
+                        <p>Provider-neutral archive for core assistant data.</p>
+                        <div class="settings-actions">
+                          <button type="button" id="persistence-export-classic">Export classic…</button>
+                          <button type="button" id="persistence-verify-classic">Verify classic…</button>
+                          <button type="button" class="settings-save" id="persistence-restore-classic">Restore…</button>
+                        </div>
+                        <h3>Archive v4 <span id="persistence-v4-label">Partial / JSON-only</span></h3>
+                        <p>JSON-only. Broader groups; today always completeness: partial.</p>
+                        <p>Absent: notesAndEvidence, orchestration, quoteAggregate</p>
+                        <p id="persistence-v4-refusal" class="settings-banner" hidden></p>
+                        <div class="settings-actions">
+                          <button type="button" id="persistence-export-v4">Export v4…</button>
+                          <button type="button" id="persistence-verify-v4">Verify v4…</button>
+                          <button type="button" id="persistence-restore-v4">Restore v4…</button>
+                          <button type="button" id="persistence-resume-v4">Resume interrupted v4 restore…</button>
+                        </div>
+                        <p>Resume is a separate action. A failed restore does not turn into resume.</p>
+                      </article>
+                      <section data-persistence-dialog id="persistence-dialog-export-classic" hidden>
+                        <article class="settings-card">
+                          <h3>Export classic backup</h3>
+                          <p>Archives must not contain service, approval, or delivery tokens. Jarvis does not write those secrets into the backup file.</p>
+                          <label>Destination <input id="persistence-export-classic-file" type="text" /></label>
+                          <p id="persistence-export-classic-result" role="status"></p>
+                          <div class="settings-actions">
+                            <button type="button" data-persistence-cancel autofocus>Cancel</button>
+                            <button type="button" id="persistence-export-classic-submit">Export</button>
+                          </div>
+                        </article>
+                      </section>
+                      <section data-persistence-dialog id="persistence-dialog-export-v4" hidden>
+                        <article class="settings-card">
+                          <h3>Export archive v4</h3>
+                          <p id="persistence-export-v4-blocked" class="settings-banner" hidden></p>
+                          <p>Completeness today: partial. Partial / JSON-only.</p>
+                          <p>Archives must not contain service, approval, or delivery tokens. Jarvis does not write those secrets into the backup file.</p>
+                          <label>Destination <input id="persistence-export-v4-file" type="text" /></label>
+                          <p id="persistence-export-v4-result" role="status"></p>
+                          <div class="settings-actions">
+                            <button type="button" data-persistence-cancel autofocus>Cancel</button>
+                            <button type="button" id="persistence-export-v4-submit">Export v4</button>
+                          </div>
+                        </article>
+                      </section>
+                      <section data-persistence-dialog id="persistence-dialog-restore-classic" hidden>
+                        <article class="settings-card">
+                          <h3>Restore classic backup</h3>
+                          <p>Empty-target only. Refuses if the provider already contains data. Jarvis will not merge.</p>
+                          <label>File <input id="persistence-restore-classic-file" type="text" /></label>
+                          <label class="settings-check"><input id="persistence-restore-classic-ack" type="checkbox" /> I understand IDs and timestamps are recreated</label>
+                          <label>Type restore <input id="persistence-restore-classic-phrase" type="text" autocomplete="off" /></label>
+                          <p id="persistence-restore-classic-result" role="status"></p>
+                          <div class="settings-actions">
+                            <button type="button" data-persistence-cancel autofocus>Cancel</button>
+                            <button type="button" id="persistence-restore-classic-submit">Restore</button>
+                          </div>
+                        </article>
+                      </section>
+                      <section data-persistence-dialog id="persistence-dialog-restore-v4" hidden>
+                        <article class="settings-card">
+                          <h3>Restore archive v4</h3>
+                          <p>Never merges. This is not full recovery while groups are absent. Resume stays off.</p>
+                          <label>Archive <input id="persistence-restore-v4-file" type="text" /></label>
+                          <label>Destination dir <input id="persistence-restore-v4-dir" type="text" /></label>
+                          <label class="settings-check"><input id="persistence-restore-v4-partial" type="checkbox" checked /> allow-partial</label>
+                          <label class="settings-check"><input id="persistence-restore-v4-ack" type="checkbox" /> I understand this is a staged development restore, not full recovery, while groups are absent.</label>
+                          <label>Type restore-v4 <input id="persistence-restore-v4-phrase" type="text" autocomplete="off" /></label>
+                          <p id="persistence-restore-v4-result" role="status"></p>
+                          <div class="settings-actions">
+                            <button type="button" data-persistence-cancel autofocus>Cancel</button>
+                            <button type="button" id="persistence-restore-v4-submit">Restore v4</button>
+                          </div>
+                        </article>
+                      </section>
+                      <section data-persistence-dialog id="persistence-dialog-resume-v4" hidden>
+                        <article class="settings-card">
+                          <h3>Resume interrupted v4 restore</h3>
+                          <p>Shown only as an explicit action. A failed restore does not turn into resume.</p>
+                          <label>Archive <input id="persistence-resume-v4-file" type="text" /></label>
+                          <label>Destination dir <input id="persistence-resume-v4-dir" type="text" /></label>
+                          <label class="settings-check"><input id="persistence-resume-v4-partial" type="checkbox" checked /> allow-partial</label>
+                          <label class="settings-check"><input id="persistence-resume-v4-ack" type="checkbox" /> I understand this is a staged development restore, not full recovery, while groups are absent.</label>
+                          <label>Type restore-v4 <input id="persistence-resume-v4-phrase" type="text" autocomplete="off" /></label>
+                          <p id="persistence-resume-v4-result" role="status"></p>
+                          <div class="settings-actions">
+                            <button type="button" data-persistence-cancel autofocus>Cancel</button>
+                            <button type="button" id="persistence-resume-v4-check">Check destination</button>
+                            <button type="button" id="persistence-resume-v4-submit" disabled>Resume v4</button>
+                          </div>
+                        </article>
+                      </section>
+                      <section data-persistence-dialog id="persistence-dialog-verify-classic" hidden>
+                        <article class="settings-card">
+                          <h3>Verify classic backup</h3>
+                          <p>Restores into isolated temporary JSON. Does not touch the live provider.</p>
+                          <label>File <input id="persistence-verify-classic-file" type="text" /></label>
+                          <p id="persistence-verify-classic-result" role="status"></p>
+                          <div class="settings-actions">
+                            <button type="button" data-persistence-cancel autofocus>Cancel</button>
+                            <button type="button" id="persistence-verify-classic-submit">Verify</button>
+                          </div>
+                        </article>
+                      </section>
+                      <section data-persistence-dialog id="persistence-dialog-verify-v4" hidden>
+                        <article class="settings-card">
+                          <h3>Verify archive v4</h3>
+                          <p>Throwaway directory. Never live storage.</p>
+                          <label>File <input id="persistence-verify-v4-file" type="text" /></label>
+                          <p id="persistence-verify-v4-result" role="status"></p>
+                          <div class="settings-actions">
+                            <button type="button" data-persistence-cancel autofocus>Cancel</button>
+                            <button type="button" id="persistence-verify-v4-submit">Verify v4</button>
+                          </div>
+                        </article>
+                      </section>
                     </div>
                   </div>
                   <div class="settings-panel" data-settings-panel="danger" id="view-danger">
@@ -1249,16 +1381,38 @@
           });
           text(byId("nav-settings-count"), credentials.failClosed ? "!" : credentials.tokens.filter((card) => card.configured).length);
         }
+        let persistenceView = null;
+        function openPersistenceDialog(id) { document.querySelectorAll("[data-persistence-dialog]").forEach((dialog) => { dialog.hidden = true; }); const dialog = byId(id); if (!dialog) return; dialog.hidden = false; const cancel = dialog.querySelector("[data-persistence-cancel]"); if (cancel) cancel.focus(); }
+        function renderPersistence(settings) { persistenceView = settings; text(byId("persistence-honesty"), settings.honesty); const banner = byId("persistence-banner"); banner.hidden = !settings.provider.banner; text(banner, settings.provider.banner || ""); document.querySelectorAll('input[name="persistence-provider"]').forEach((input) => { input.disabled = true; input.checked = input.value === settings.provider.active; }); text(byId("persistence-convex"), settings.provider.convexDeployment ? "deployment " + settings.provider.convexDeployment : "deployment not configured"); text(byId("persistence-json"), "path " + settings.provider.jsonStatePath); text(byId("persistence-provider-chip"), settings.provider.active || "unset"); text(byId("persistence-health-chip"), settings.health.status); text(byId("persistence-glance"), settings.health.status); text(byId("persistence-export-warning"), settings.backup.exportWarning); text(byId("persistence-v4-label"), settings.backup.v4Label); const refusal = byId("persistence-v4-refusal"); refusal.hidden = !settings.backup.v4ExportRefusal; text(refusal, settings.backup.v4ExportRefusal || ""); byId("persistence-export-classic").disabled = !settings.actions.exportClassic; byId("persistence-restore-classic").disabled = !settings.actions.restoreClassic; byId("persistence-export-v4").disabled = !settings.actions.exportV4; const classicFile = byId("persistence-export-classic-file"); const v4File = byId("persistence-export-v4-file"); if (!classicFile.value) classicFile.value = settings.suggestedClassicPath; if (!v4File.value) v4File.value = settings.suggestedV4Path; }
+        async function loadPersistence() { try { const result = await request("tools/call", { name: "show_persistence_settings", arguments: {} }, 10000); const data = structured(result); if (!data || !data.settings) throw new Error("missing"); renderPersistence(data.settings); } catch { text(byId("persistence-glance"), "Health unreachable"); } }
+        async function runPersistence(action, fields, resultId) { try { const result = await request("tools/call", { name: "run_persistence_settings_action", arguments: Object.assign({ action }, fields) }, 10000); const data = structured(result); const outcome = data && data.result; if (!outcome) throw new Error("missing"); text(byId(resultId), outcome.detail); return outcome; } catch { text(byId(resultId), "Action failed."); return null; } }
         function render() { renderCounts(); renderFocus(); renderBoard(); renderReminders(); renderSystems(); renderCategories(); renderPriorities(); renderRightReminders(); renderOperations(); renderActivity(); renderInbox(); renderActivityTimeline(); renderLiveWork(); renderGeneral(); renderCredentials(); }
         function setCaptureMode(mode) { state.captureMode = mode; document.querySelectorAll("[data-capture]").forEach((button) => button.classList.toggle("active",button.dataset.capture === mode)); const category = byId("capture-category"); const due = byId("capture-due"); if (mode === "task") { text(byId("capture-title-label"),"Task command"); text(byId("capture-detail-copy"),"Category"); category.hidden = false; due.hidden = true; text(byId("capture-submit"),"ADD TASK"); } else { text(byId("capture-title-label"),"Reminder command"); text(byId("capture-detail-copy"),"When"); category.hidden = true; due.hidden = false; text(byId("capture-submit"),"SET REMINDER"); } }
         document.querySelectorAll("[data-view]").forEach((button) => button.addEventListener("click",() => { document.querySelectorAll("[data-view]").forEach((candidate) => candidate.classList.toggle("active",candidate === button)); document.querySelectorAll(".view").forEach((view) => view.classList.toggle("active",view.id === `view-${button.dataset.view}`)); }));
-        document.querySelectorAll("[data-settings-tab]").forEach((button) => button.addEventListener("click", () => { const tab = button.dataset.settingsTab; document.querySelectorAll("[data-settings-tab]").forEach((candidate) => { const selected = candidate === button; candidate.classList.toggle("active", selected); candidate.setAttribute("aria-selected", selected ? "true" : "false"); }); document.querySelectorAll("[data-settings-panel]").forEach((panel) => panel.classList.toggle("active", panel.dataset.settingsPanel === tab)); }));
+        document.querySelectorAll("[data-settings-tab]").forEach((button) => button.addEventListener("click", () => { const tab = button.dataset.settingsTab; document.querySelectorAll("[data-settings-tab]").forEach((candidate) => { const selected = candidate === button; candidate.classList.toggle("active", selected); candidate.setAttribute("aria-selected", selected ? "true" : "false"); }); document.querySelectorAll("[data-settings-panel]").forEach((panel) => panel.classList.toggle("active", panel.dataset.settingsPanel === tab)); if (tab === "persistence") void loadPersistence(); }));
         document.querySelectorAll("[data-capture]").forEach((button) => button.addEventListener("click",() => setCaptureMode(button.dataset.capture)));
-        byId("refresh").addEventListener("click",async () => { const button = byId("refresh"); button.disabled = true; try { await callTool("show_jarvis_dashboard"); try { update(await request("tools/call", { name: "get_general_settings", arguments: {} }, 10000)); } catch { state.generalSettings = null; renderGeneral(); } activity("Snapshot refreshed","Live dashboard state reloaded"); toast("Jarvis HUD refreshed."); } catch { toast("Jarvis refresh failed.",true); } finally { button.disabled = false; } });
+        byId("refresh").addEventListener("click",async () => { const button = byId("refresh"); button.disabled = true; try { await callTool("show_jarvis_dashboard"); try { update(await request("tools/call", { name: "get_general_settings", arguments: {} }, 10000)); } catch { state.generalSettings = null; renderGeneral(); } void loadPersistence(); activity("Snapshot refreshed","Live dashboard state reloaded"); toast("Jarvis HUD refreshed."); } catch { toast("Jarvis refresh failed.",true); } finally { button.disabled = false; } });
         byId("save-display-preferences").addEventListener("click", saveDisplayPreferences);
         const savedDisplay = loadSavedDisplayPreferences();
         applyConsoleDisplayPreferences(savedDisplay, document.documentElement);
         syncDisplayForm(savedDisplay);
+        byId("persistence-refresh").addEventListener("click", () => { void loadPersistence(); });
+        document.querySelectorAll("[data-persistence-cancel]").forEach((button) => button.addEventListener("click", () => { const dialog = button.closest("[data-persistence-dialog]"); if (dialog) dialog.hidden = true; }));
+        byId("persistence-export-classic").addEventListener("click", () => openPersistenceDialog("persistence-dialog-export-classic"));
+        byId("persistence-export-v4").addEventListener("click", () => { const blocked = byId("persistence-export-v4-blocked"); const refusal = persistenceView && persistenceView.backup.v4ExportRefusal; blocked.hidden = !refusal; text(blocked, refusal || ""); byId("persistence-export-v4-submit").disabled = Boolean(refusal); openPersistenceDialog("persistence-dialog-export-v4"); });
+        byId("persistence-verify-classic").addEventListener("click", () => openPersistenceDialog("persistence-dialog-verify-classic"));
+        byId("persistence-verify-v4").addEventListener("click", () => openPersistenceDialog("persistence-dialog-verify-v4"));
+        byId("persistence-restore-classic").addEventListener("click", () => openPersistenceDialog("persistence-dialog-restore-classic"));
+        byId("persistence-restore-v4").addEventListener("click", () => openPersistenceDialog("persistence-dialog-restore-v4"));
+        byId("persistence-resume-v4").addEventListener("click", () => { byId("persistence-resume-v4-submit").disabled = true; text(byId("persistence-resume-v4-result"), "Check the destination. Resume stays disabled until it is an interrupted restore of this archive."); openPersistenceDialog("persistence-dialog-resume-v4"); });
+        byId("persistence-export-classic-submit").addEventListener("click", () => { void runPersistence("export-classic", { file: byId("persistence-export-classic-file").value.trim() }, "persistence-export-classic-result"); });
+        byId("persistence-export-v4-submit").addEventListener("click", () => { void runPersistence("export-v4", { file: byId("persistence-export-v4-file").value.trim() }, "persistence-export-v4-result"); });
+        byId("persistence-verify-classic-submit").addEventListener("click", () => { void runPersistence("verify-classic", { file: byId("persistence-verify-classic-file").value.trim() }, "persistence-verify-classic-result"); });
+        byId("persistence-verify-v4-submit").addEventListener("click", () => { void runPersistence("verify-v4", { file: byId("persistence-verify-v4-file").value.trim() }, "persistence-verify-v4-result"); });
+        byId("persistence-restore-classic-submit").addEventListener("click", () => { void runPersistence("restore-classic", { file: byId("persistence-restore-classic-file").value.trim(), confirmEmptyTarget: true, understandIdsRecreated: byId("persistence-restore-classic-ack").checked, typedConfirmation: byId("persistence-restore-classic-phrase").value.trim() }, "persistence-restore-classic-result"); });
+        byId("persistence-restore-v4-submit").addEventListener("click", () => { void runPersistence("restore-v4", { file: byId("persistence-restore-v4-file").value.trim(), destination: byId("persistence-restore-v4-dir").value.trim(), allowPartial: byId("persistence-restore-v4-partial").checked, acknowledgePartial: byId("persistence-restore-v4-ack").checked, resume: false, typedConfirmation: byId("persistence-restore-v4-phrase").value.trim() }, "persistence-restore-v4-result"); });
+        byId("persistence-resume-v4-check").addEventListener("click", async () => { const outcome = await runPersistence("inspect-v4-destination", { file: byId("persistence-resume-v4-file").value.trim(), destination: byId("persistence-resume-v4-dir").value.trim() }, "persistence-resume-v4-result"); byId("persistence-resume-v4-submit").disabled = !(outcome && outcome.destination && outcome.destination.resumeAvailable); });
+        byId("persistence-resume-v4-submit").addEventListener("click", () => { void runPersistence("resume-v4", { file: byId("persistence-resume-v4-file").value.trim(), destination: byId("persistence-resume-v4-dir").value.trim(), allowPartial: byId("persistence-resume-v4-partial").checked, acknowledgePartial: byId("persistence-resume-v4-ack").checked, resume: true, typedConfirmation: byId("persistence-resume-v4-phrase").value.trim() }, "persistence-resume-v4-result"); });
         byId("capture-form").addEventListener("submit",async (event) => { event.preventDefault(); const input = byId("capture-title"); const title = input.value.trim(); if (!title) return; const button = byId("capture-submit"); button.disabled = true; try { if (state.captureMode === "task") { await callTool("create_task",{ title, category: byId("capture-category").value }); activity("Task captured",title); toast(`Added ${title}`); } else { const due = byId("capture-due").value.trim(); await callTool("create_reminder",{ title, ...(due ? { due: { text: due } } : {}) }); byId("capture-due").value = ""; activity("Reminder captured",title); toast(`Added reminder ${title}`); } input.value = ""; } catch { toast(state.captureMode === "task" ? "Could not add that task." : "Could not add that reminder.",true); } finally { button.disabled = false; } });
         function clock() { text(byId("clock"),new Date().toLocaleTimeString("en-AU",{hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:false})); }
         bridgeReady.then(async () => { try { update(await request("tools/call", { name: "get_general_settings", arguments: {} }, 10000)); } catch { state.generalSettings = null; renderGeneral(); } }).catch(() => {});
