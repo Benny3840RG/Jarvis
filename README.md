@@ -276,6 +276,18 @@ Restore refuses any provider or memory store that already contains data. It roll
 
 **Not yet covered:** clients, quotes, invoices, projects, properties, enquiries, and errands are separate JSON-backed domains that are _not_ included in the backup archive yet. Unlike builds/build logs/upgrades/assets/preferences, these domains are densely cross-referenced by id (a quote holds a `clientId`, an invoice holds a `quoteId`, etc.), so restoring them safely needs one consistent id-remap applied across every domain at once, not a per-domain copy. See `typescript/docs/ROADMAP.md` for the plan.
 
+### Agent orchestration prototype (standalone, legacy)
+
+```bash
+cd typescript
+npm run agent:check
+npm run agent:repl
+```
+
+`src/agent/*` is a self-contained conversation/plan/execute/learn prototype, separate from the maintained task/reminder CLI above and from the live `src/orchestration/*` DAG engine — it shares no code or state with either, and is not wired into the HTTP or MCP adapters. `agent:check` runs one representative scenario ("Start job j1") end to end and prints a structured report plus a governed-autonomy demo, exiting non-zero if any validation fails. `agent:repl` is an interactive session over a single in-memory agent system (state lives only for that session): type an utterance (`start job j1`, `prepare job j1`, `complete job j1`), `snapshot` for learning stats and a memory snapshot, or `help`.
+
+Both commands are real and test-covered, not dead code — but `docs/security/2026-09-12-full-repository-audit.md` (section 3) flags `src/agent/*` as an unresolved naming-collision hazard with the live governed modules (`OrchestrationGraph`, `SafetyEnvelope`/`SafetyResult` exist as two unrelated implementations, one per module) and recommends deciding whether to rename or retire it. That decision hasn't been made yet, so treat this as a standalone experimentation tool, not a supported part of Jarvis's governed pipeline.
+
 ## Checks
 
 ```bash
