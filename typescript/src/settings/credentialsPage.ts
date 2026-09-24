@@ -4,23 +4,16 @@ function embedJson(value: unknown): string {
   return JSON.stringify(value).replace(/</g, "\\u003c");
 }
 
-function settingsNav(current: "credentials" | "danger"): string {
+function settingsNav(): string {
   const tab = (href: string, label: string, active: boolean): string =>
     active
       ? `<a class="tab" href="${href}" aria-current="page">${label}</a>`
       : `<a class="tab" href="${href}">${label}</a>`;
-  const general =
-    current === "credentials" ? "#settings-general" : "/settings/credentials#settings-general";
-  const credentials = current === "credentials" ? "/settings/credentials" : "/settings/credentials";
-  const persistence =
-    current === "credentials"
-      ? "#settings-persistence"
-      : "/settings/credentials#settings-persistence";
   return `<nav aria-label="Settings">
-      ${tab(general, "General", false)}
-      ${tab(credentials, "Credentials", current === "credentials")}
-      ${tab(persistence, "Persistence", false)}
-      ${tab("/settings/danger", "Danger zone", current === "danger")}
+      ${tab("#settings-general", "General", false)}
+      ${tab("/settings/credentials", "Credentials", true)}
+      ${tab("#settings-persistence", "Persistence", false)}
+      ${tab("/settings/danger", "Danger zone", false)}
     </nav>`;
 }
 
@@ -87,10 +80,15 @@ export function renderCredentialsPage(model: CredentialsPageModel): string {
 </head>
 <body>
   <main>
-    ${settingsNav("credentials")}
+    ${settingsNav()}
     <h1 id="settings-credentials">Credentials</h1>
     <p class="status" id="verify-status">Not verified</p>
     <p class="note" id="verify-note">Idle has no End button. Guarding is shown only after this server attests a passing smoke result, and it still does not offer End.</p>
+    <nav aria-label="Danger zone cards">
+      <a class="link" href="/settings/danger#service">Open Danger zone for the service token</a>
+      <a class="link" href="/settings/danger#approval">Open Danger zone for the approval token</a>
+      <a class="link" href="/settings/danger#delivery">Open Danger zone for the delivery token</a>
+    </nav>
     <p class="lede">Machine credentials authenticate Jarvis clients and gated operations. They are not a sign-in. Secrets are never shown in full after first reveal. Report security issues without including token values.</p>
     <div id="banner" class="banner" hidden></div>
     <div id="approvals" class="warn" hidden></div>

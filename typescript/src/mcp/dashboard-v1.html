@@ -662,7 +662,9 @@
                           <p class="cred-warn" id="credentials-approvals" hidden></p>
                           <div id="credentials-cards"></div>
                           <p class="note" id="credentials-local"></p>
-                          <p><a href="/settings/danger">Open Danger zone</a></p>
+                          <p><a href="/settings/danger#service">Open Danger zone for the service token</a></p>
+                          <p><a href="/settings/danger#approval">Open Danger zone for the approval token</a></p>
+                          <p><a href="/settings/danger#delivery">Open Danger zone for the delivery token</a></p>
                           <ul id="credentials-links"></ul>
                         </div>
                       </article>
@@ -818,9 +820,11 @@
                     <div class="settings-layout">
                       <h2>Danger zone</h2>
                       <p class="settings-status">Not verified</p>
-                      <p>End overlap, reset, and clear local run on the Danger zone page. This console does not store a Bearer token and does not wipe Convex owner data.</p>
+                      <p>End overlap, reset, and clear local run on the Danger zone page. This console does not store a Bearer token and does not wipe Convex owner data. Credentials does not remove a token.</p>
                       <p class="settings-actions">
-                        <a href="/settings/danger">Open Danger zone</a>
+                        <a href="/settings/danger#service">Service token</a>
+                        <a href="/settings/danger#approval">Approval token</a>
+                        <a href="/settings/danger#delivery">Delivery token</a>
                         <a href="#persistence-backup" data-settings-jump="persistence">Open Persistence Backup</a>
                       </p>
                     </div>

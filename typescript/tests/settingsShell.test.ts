@@ -38,7 +38,9 @@ describe("settings shell", () => {
     assert.match(widget, /\.cred-card h3 \{[^}]*font-size:\s*16px/);
     assert.match(widget, /\.cred-card p, \.cred-card li \{[^}]*font-size:\s*12px/);
     assert.match(widget, /\.settings-shell \.settings-dl dt \{ font-size: 12px; \}/);
-    assert.match(widget, /href="\/settings\/danger"/);
+    assert.match(widget, /href="\/settings\/danger#service"/);
+    assert.match(widget, /href="\/settings\/danger#approval"/);
+    assert.match(widget, /href="\/settings\/danger#delivery"/);
     assert.match(widget, /Open Persistence Backup/);
     assert.match(widget, /data-settings-jump="persistence"/);
     assert.doesNotMatch(widget, /sessionStorage|END OVERLAP|openEnd\(/);
