@@ -17,6 +17,12 @@ This stage implements only the operations whose runtime behaviour is complete:
 
 `GET /api/v1/settings/general` does not store display preferences. Theme, contrast, and motion stay in the operator console. CLI output is unchanged.
 
+Settings → Danger zone is loopback `GET /settings/danger`, plus `GET /api/v1/settings/danger-zone`,
+`GET /api/v1/settings/danger-zone/page`, and `POST /api/v1/settings/danger-zone/actions/{actionId}`.
+It is the only End overlap path. It wraps the CLI overlap removal and local JSON quarantine
+described in [`danger-zone.md`](danger-zone.md). It does not delete Convex owner data and does not
+store a Bearer token in sessionStorage.
+
 The adapter also implements `/api/v1/tasks` (including completion), `/api/v1/totality/reason`, and
 the project-scoped memory-change-set and tool-action proposal routes. Tool-action approval changes
 proposal state only; there is intentionally no HTTP execution route in this stage.

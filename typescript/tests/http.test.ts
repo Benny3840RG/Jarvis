@@ -365,6 +365,9 @@ describe("Jarvis HTTP system boundary", () => {
             "deleteReminder",
           ].includes(operationId),
         ),
+        ...IMPLEMENTED_CAPABILITIES.filter(({ operationId }) =>
+          ["getDangerZone", "getDangerZonePage", "executeDangerZoneAction"].includes(operationId),
+        ),
       ],
     });
   });

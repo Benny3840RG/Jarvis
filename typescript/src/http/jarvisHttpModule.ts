@@ -35,7 +35,9 @@ import {
 } from "../settings/persistenceSettingsService.js";
 import type { HttpAppConfig } from "./config.js";
 import type { OidcVerifier } from "./oidcVerifier.js";
+import type { DangerZoneService } from "../settings/dangerZone/service.js";
 import { ActivityTimelineController } from "./activityTimelineController.js";
+import { DangerZoneController } from "./dangerZoneController.js";
 import { DevelopmentLiveWorkController } from "./developmentLiveWorkController.js";
 import { BusinessSettingsController } from "./businessSettingsController.js";
 import { EnquiryController } from "./enquiryController.js";
@@ -89,6 +91,7 @@ import {
   HTTP_NOTE_STORE,
   HTTP_ACTIVITY_EVENTS,
   HTTP_DEVELOPMENT_LIVE_WORK,
+  HTTP_DANGER_ZONE,
   HTTP_MEMORY_CHANGE_SETS,
   HTTP_PERSISTENCE,
   HTTP_PROVIDER_NAME,
@@ -129,6 +132,7 @@ export type JarvisHttpModuleOptions = {
   activityEventReader: ActivityEventReader | null;
   developmentLiveWorkSource: DevelopmentLiveWorkSource | null;
   credentials: CredentialsRuntime;
+  dangerZone: DangerZoneService;
 };
 
 @Module({})
@@ -166,6 +170,7 @@ export class JarvisHttpModule {
         OperationsInboxController,
         ActivityTimelineController,
         DevelopmentLiveWorkController,
+        DangerZoneController,
       ],
       providers: [
         { provide: HTTP_APP_CONFIG, useValue: options.config },
@@ -193,6 +198,7 @@ export class JarvisHttpModule {
           provide: HTTP_DEVELOPMENT_LIVE_WORK,
           useValue: options.developmentLiveWorkSource,
         },
+        { provide: HTTP_DANGER_ZONE, useValue: options.dangerZone },
         { provide: HTTP_PROVIDER_NAME, useValue: options.providerName },
         {
           provide: PersistenceSettingsService,

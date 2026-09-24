@@ -22,6 +22,7 @@ import { ConvexAssetStore } from "../assets/convexAssetStore.js";
 import { JsonPreferenceStore } from "../preferences/jsonPreferenceStore.js";
 import { ConvexPreferenceStore } from "../preferences/convexPreferenceStore.js";
 import { redactSecret } from "./convexSmoke.js";
+import { writeBackupVerifyReceipt } from "../settings/dangerZone/backupReceipt.js";
 import { runArchiveV4Command, isArchiveV4Command, archiveV4Usage } from "./runBackupV4.js";
 
 function loadLocalEnvironment(): void {
@@ -110,6 +111,7 @@ async function main(): Promise<void> {
   if (command === "verify") {
     if (confirmation !== undefined) usage();
     const result = await verifyBackupRestore(archive);
+    await writeBackupVerifyReceipt(filePath, new Date());
     console.log(
       `Backup verified in isolated storage: ${result.taskCount} task(s), ${result.reminderCount} reminder(s), ` +
         `${result.buildCount} build(s), ${result.buildLogCount} build log(s), ${result.upgradeCount} upgrade(s), ` +
