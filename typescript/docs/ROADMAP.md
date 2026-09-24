@@ -12,9 +12,12 @@ provider timeout. Disconnect that can still be written is HTTP 499
 Explicitly durable delegated jobs are admitted only after authority, project
 resolution and quota admission, and they do not receive the caller signal. A
 disconnect does not cancel them, wait for them, or roll back a journal commit
-that has already started. A caller that is already gone does not admit new
-durable work. Scheduled reminders, background indexing and monitoring are
-unchanged because nothing global listens for `request.close`.
+that has already started. Admission re-checks the caller, including after
+quota admission, so a disconnect in that gap does not start new durable work.
+A provider or parse failure keeps its own error when the caller has also
+aborted; HTTP 499 is only the caller-abort failure itself. Scheduled reminders,
+background indexing and monitoring are unchanged because nothing global listens
+for `request.close`.
 
 Adapted from OpenClaw's caller-lifetime split. Pinned inspection:
 v2026.9.5 `ec9c1a13db8938e5a3eaa51fca2e981cde2395a9` and v2026.9.6

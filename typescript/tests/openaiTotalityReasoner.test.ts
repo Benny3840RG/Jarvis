@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
+import { JarvisProblem } from "../src/http/problemDetails.js";
+import { mapTotalityRouteError } from "../src/http/totalityController.js";
 import {
   OpenAIRequestError,
   OpenAITotalityReasoner,
@@ -332,6 +334,42 @@ describe("OpenAI provider resource guards", () => {
     await assert.rejects(pending, (error: unknown) => error instanceof TotalityCallerDisconnected);
     assert.equal(fetchSignal?.aborted, true);
     assert.ok(cancellation instanceof Error);
+  });
+
+  it("keeps a provider failure when the caller aborts before it is classified", async () => {
+    const caller = new AbortController();
+    const response = new Response(JSON.stringify({ error: { message: "upstream exploded" } }), {
+      status: 500,
+      headers: { "content-type": "application/json" },
+    });
+    Object.defineProperty(response, "ok", {
+      configurable: true,
+      get() {
+        caller.abort();
+        return false;
+      },
+    });
+    const reasoner = new OpenAITotalityReasoner(
+      { apiKey: "test-key", model: "gpt-5.6-terra", timeoutMs: 5_000, maxOutputTokens: 100 },
+      (async () => response) as typeof fetch,
+    );
+
+    const error = await reasoner.reason(makeRequest(), makeContext(), caller.signal).then(
+      () => {
+        throw new Error("expected the provider failure");
+      },
+      (caught: unknown) => caught,
+    );
+    assert.ok(error instanceof OpenAIRequestError);
+    assert.equal(error.status, 500);
+    assert.equal(caller.signal.aborted, true);
+    assert.throws(
+      () => mapTotalityRouteError(error),
+      (mapped: unknown) =>
+        mapped instanceof JarvisProblem &&
+        mapped.getStatus() === 503 &&
+        mapped.slug === "reasoning-dependency-failed",
+    );
   });
 
   it("reports a provider timeout separately from caller disconnect", async () => {

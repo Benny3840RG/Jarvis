@@ -103,7 +103,8 @@ Jarvis adaptation, Totality only:
 - OpenAI and Gemini combine it with the existing provider timeout and pass it to `readBoundedResponseText`.
 - `durable: true` delegations are started with `signalForWork("durable")`, which returns no caller signal. They are not awaited by the turn.
 - A journal `commitOutcome` that has already started is left to finish.
-- Work is not admitted when the caller is already aborted, or when authority, project resolution or quota admission fails.
+- Work is not admitted when the caller is already aborted, or when authority, project resolution or quota admission fails. Durable admission checks the caller again at admit time, so a disconnect during quota admission cannot start `durable: true` work.
+- `asCallerDisconnected` maps only an abort reason, an `AbortError` tied to the caller signal, or `TotalityCallerDisconnected`. A concurrent provider or parse error keeps its own code.
 
 Not adopted: OpenClaw `AsyncWorkScope` / `AsyncLocalStorage`, the retry supervisor, gateway sockets, voice selection, cron, or worker placement. Provider quotas remain in-process. No live Graph, ChatGPT, model, or deployment proof is claimed here.
 

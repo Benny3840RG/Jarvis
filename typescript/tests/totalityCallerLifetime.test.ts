@@ -3,6 +3,7 @@ import { EventEmitter } from "node:events";
 import { describe, it } from "node:test";
 
 import {
+  asCallerDisconnected,
   bindCallerDisconnect,
   signalForWork,
   TotalityCallerDisconnected,
@@ -38,6 +39,17 @@ describe("Totality caller lifetime", () => {
     reply.destroyed = true;
     const signal = bindCallerDisconnect(reply);
     assert.equal(signal.aborted, true);
+  });
+
+  it("keeps a non-abort failure when the caller has also aborted", () => {
+    const caller = new AbortController();
+    caller.abort();
+    const parseFailure = new Error("OpenAI returned a non-JSON success response.");
+    assert.equal(asCallerDisconnected(caller.signal, parseFailure), parseFailure);
+
+    const abort = new Error("aborted");
+    abort.name = "AbortError";
+    assert.ok(asCallerDisconnected(caller.signal, abort) instanceof TotalityCallerDisconnected);
   });
 
   it("keeps durable work off the caller signal", () => {

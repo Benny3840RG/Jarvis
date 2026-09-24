@@ -19,6 +19,7 @@ import {
   type TotalityQuotaLease,
 } from "./totalityQuota.js";
 import {
+  asCallerDisconnected,
   assertExplicitDurability,
   signalForWork,
   throwIfCallerDisconnected,
@@ -307,9 +308,13 @@ export class TotalityPipeline {
     delegations: readonly TotalityDelegatedJob[],
     caller: AbortSignal | undefined,
   ): Array<Promise<void>> {
+    // Re-check at admit time. A disconnect during quota admission must not
+    // start durable work that the earlier check had already allowed.
+    throwIfCallerDisconnected(caller);
     const requestBound: Array<Promise<void>> = [];
     for (const job of delegations) {
       if (job.durable) {
+        throwIfCallerDisconnected(caller);
         const work = Promise.resolve().then(() => job.run(signalForWork("durable", caller)));
         this.admittedDurableWork.push(work);
         void work.then(
@@ -329,28 +334,35 @@ function observeCaller<T>(signal: AbortSignal | undefined, run: () => Promise<T>
   const promise = run();
   if (!signal) return promise;
   return new Promise<T>((resolve, reject) => {
+    let settled = false;
+    let abortTimer: ReturnType<typeof setTimeout> | undefined;
+    const finish = (error: unknown, value?: T) => {
+      if (settled) return;
+      settled = true;
+      if (abortTimer !== undefined) clearTimeout(abortTimer);
+      signal.removeEventListener("abort", onAbort);
+      if (error !== undefined) reject(error);
+      else resolve(value as T);
+    };
+    const settleWork = () => {
+      void promise.then(
+        (value) => {
+          if (signal.aborted) finish(new TotalityCallerDisconnected());
+          else finish(undefined, value);
+        },
+        (error: unknown) => finish(asCallerDisconnected(signal, error)),
+      );
+    };
     const onAbort = () => {
-      reject(new TotalityCallerDisconnected());
+      settleWork();
+      // A provider or parse failure in the same turn must win over this fallback.
+      abortTimer = setTimeout(() => finish(new TotalityCallerDisconnected()), 0);
     };
     if (signal.aborted) {
       onAbort();
-      void promise.then(
-        () => undefined,
-        () => undefined,
-      );
       return;
     }
     signal.addEventListener("abort", onAbort, { once: true });
-    promise.then(
-      (value) => {
-        signal.removeEventListener("abort", onAbort);
-        if (signal.aborted) reject(new TotalityCallerDisconnected());
-        else resolve(value);
-      },
-      (error: unknown) => {
-        signal.removeEventListener("abort", onAbort);
-        reject(error);
-      },
-    );
+    settleWork();
   });
 }

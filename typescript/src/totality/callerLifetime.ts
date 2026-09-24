@@ -85,10 +85,25 @@ export function linkProviderCancellation(options: { timeoutMs: number; caller?: 
   };
 }
 
+function isAbortError(error: unknown): error is Error {
+  return error instanceof Error && error.name === "AbortError";
+}
+
+function isCallerAbortFailure(caller: AbortSignal, error: unknown): boolean {
+  if (error === caller.reason) return true;
+  const cause = error instanceof Error ? error.cause : undefined;
+  if (cause === caller.reason || cause instanceof TotalityCallerDisconnected) return true;
+  return isAbortError(error) || isAbortError(cause);
+}
+
+/**
+ * Map only a failure caused by the caller signal. A provider, parse, or other
+ * error keeps its shape when the caller has also aborted.
+ */
 export function asCallerDisconnected(caller: AbortSignal | undefined, error: unknown): unknown {
   if (error instanceof TotalityCallerDisconnected) return error;
-  if (caller?.aborted) return new TotalityCallerDisconnected();
-  return error;
+  if (!caller?.aborted || !isCallerAbortFailure(caller, error)) return error;
+  return new TotalityCallerDisconnected();
 }
 
 /**

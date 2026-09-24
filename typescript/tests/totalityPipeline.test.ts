@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
+import { JarvisProblem } from "../src/http/problemDetails.js";
+import { mapTotalityRouteError } from "../src/http/totalityController.js";
+import { OpenAIRequestError } from "../src/integrations/openai/totalityReasoner.js";
 import type { TotalityRequest } from "../src/runtime/totalityContracts.js";
 import { TotalityCallerDisconnected } from "../src/totality/callerLifetime.js";
 import {
@@ -505,6 +508,77 @@ describe("TotalityPipeline", () => {
     assert.equal(reasoned, false);
     assert.equal(durableStarted, false);
     assert.equal(pipeline.detachedDurableWork.length, 0);
+  });
+
+  it("does not admit durable work when the caller disconnects during quota admission", async () => {
+    const caller = new AbortController();
+    let durableStarted = false;
+    const quota = new TotalityQuota({
+      maxRequestBytes: 100_000,
+      maxEstimatedInputTokens: 25_000,
+      maxConcurrentRequests: 1,
+      maxCostUnitsPerWindow: 100_000,
+      maxOutputTokens: 100,
+      windowMs: 60_000,
+    });
+    const acquire = quota.acquire.bind(quota);
+    quota.acquire = (request, serialized) => {
+      const lease = acquire(request, serialized);
+      caller.abort();
+      return lease;
+    };
+    const pipeline = makePipeline(makeReasoner(), makeJournal(), quota);
+
+    await assert.rejects(
+      () =>
+        pipeline.run(makeRequest(), {
+          signal: caller.signal,
+          delegations: [
+            {
+              durable: true,
+              async run() {
+                durableStarted = true;
+              },
+            },
+          ],
+        }),
+      (error: unknown) => error instanceof TotalityCallerDisconnected,
+    );
+    await Promise.resolve();
+    assert.equal(durableStarted, false);
+    assert.equal(pipeline.detachedDurableWork.length, 0);
+  });
+
+  it("keeps a provider failure when the caller aborts in the same turn", async () => {
+    const caller = new AbortController();
+    const pipeline = makePipeline(
+      {
+        serializeRequest() {
+          return "{}";
+        },
+        async reason() {
+          caller.abort();
+          throw new OpenAIRequestError("upstream exploded", 500, true);
+        },
+      },
+      makeJournal(),
+    );
+
+    const error = await pipeline.run(makeRequest(), { signal: caller.signal }).then(
+      () => {
+        throw new Error("expected the provider failure");
+      },
+      (caught: unknown) => caught,
+    );
+    assert.ok(error instanceof OpenAIRequestError);
+    assert.equal(error.status, 500);
+    assert.throws(
+      () => mapTotalityRouteError(error),
+      (mapped: unknown) =>
+        mapped instanceof JarvisProblem &&
+        mapped.getStatus() === 503 &&
+        mapped.slug === "reasoning-dependency-failed",
+    );
   });
 
   it("cancels request-bound work on caller disconnect and leaves admitted durable work running", async () => {
