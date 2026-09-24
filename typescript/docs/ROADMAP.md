@@ -69,10 +69,11 @@ Next:
 2. If a later Operations surface starts or stops `npm run start:http`, keep it off this page.
 3. Phase B account sign-in stays out of Credentials. OIDC here is remote HTTP identity only.
 
-End overlap does not trust caller `verify`. Idle stays not-verified and is never offered.
-`decideEndOverlap` returns `offered: false`, `executesRemoval: false`, and no commands. A
-server-attested passing result only moves posture to guarding. Removal is `GET /settings/danger`,
-which does not wipe Convex. Production HTTP and preview select credentials with
+End overlap does not trust caller `verify`. Credentials has no End dialog and no client gate.
+`decideEndOverlap` returns `offered: false`, `executesRemoval: false`, no commands, and a
+per-token `dangerHref`. A server-attested passing result only moves posture to guarding. The
+Danger cards are deep links only and do not wipe Convex. Production HTTP and preview select
+credentials with
 `captureCredentialsFromEnv`, not from `HttpAppConfig`, which has no delivery token.
 
 ## Verification failure routes to repair (2026-09-23, #550)

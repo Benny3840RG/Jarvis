@@ -188,6 +188,12 @@ export function endOverlapControl(input: {
   return { offered: false, primary: false, allowed: false };
 }
 
+export type DangerCardHref = `/settings/danger#${TokenCardId}`;
+
+export function dangerCardHref(tokenId: TokenCardId): DangerCardHref {
+  return `/settings/danger#${tokenId}`;
+}
+
 export type EndOverlapDecision = {
   offered: false;
   primary: false;
@@ -196,7 +202,7 @@ export type EndOverlapDecision = {
   executesRemoval: false;
   commands: readonly [];
   posture: EndOverlapPosture;
-  dangerHref: "/settings/danger";
+  dangerHref: DangerCardHref;
 };
 
 export function decideEndOverlap(
@@ -209,9 +215,10 @@ export function decideEndOverlap(
   server: EndOverlapServerAttestation = { attestedPassing: false },
 ): EndOverlapDecision {
   const control = endOverlapControl({ ...input, attestedPassing: server.attestedPassing });
-  // Idle is never attested. A caller-supplied passing value is not attestation.
-  const posture: EndOverlapPosture =
-    server.attestedPassing === true && input.verify !== "idle" ? "guarding" : "not-verified";
+  // Client verify is not a gate. Only this process can attest, and attestation
+  // still does not offer or execute removal.
+  void input.verify;
+  const posture: EndOverlapPosture = server.attestedPassing === true ? "guarding" : "not-verified";
   return {
     offered: control.offered,
     primary: control.primary,
@@ -219,7 +226,7 @@ export function decideEndOverlap(
     executesRemoval: false,
     commands: [],
     posture,
-    dangerHref: "/settings/danger",
+    dangerHref: dangerCardHref(input.tokenId),
   };
 }
 

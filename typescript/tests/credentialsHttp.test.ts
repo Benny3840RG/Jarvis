@@ -195,7 +195,7 @@ describe("credentials HTTP boundary", () => {
     assert.equal(failingBody.executesRemoval, false);
     assert.deepEqual(failingBody.commands, []);
     assert.equal(failingBody.posture, "not-verified");
-    assert.equal(failingBody.dangerHref, "/settings/danger");
+    assert.equal(failingBody.dangerHref, "/settings/danger#service");
     assert.doesNotMatch(failing.body, /npx convex env remove/);
 
     const idle = await server.inject({
@@ -261,7 +261,7 @@ describe("credentials HTTP boundary", () => {
     assert.equal(decision.primary, false);
     assert.equal(decision.executesRemoval, false);
     assert.equal(decision.posture, "not-verified");
-    assert.equal(decision.dangerHref, "/settings/danger");
+    assert.equal(decision.dangerHref, "/settings/danger#service");
     assert.deepEqual(decision.commands, []);
     assert.equal(allowed.body.includes(SERVICE), false);
   });
@@ -358,8 +358,11 @@ describe("credentials HTTP boundary", () => {
     const danger = await server.inject({ method: "GET", url: "/settings/danger" });
     assert.equal(danger.statusCode, 200);
     assert.match(danger.body, /Danger zone/);
+    assert.match(danger.body, /id="service"/);
+    assert.match(danger.body, /id="approval"/);
+    assert.match(danger.body, /id="delivery"/);
     assert.match(danger.body, /href="\/settings\/credentials"/);
-    assert.doesNotMatch(danger.body, /END OVERLAP|env remove|sessionStorage|[0-9a-f]{64}/);
+    assert.doesNotMatch(danger.body, /<form|END OVERLAP|env remove|sessionStorage|[0-9a-f]{64}/);
     assert.equal(renderDangerPage().includes("Convex wipe is not part of this phase"), true);
 
     const httpMain = await import("node:fs").then((fs) =>

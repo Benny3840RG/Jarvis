@@ -83,7 +83,8 @@ export class CredentialsController {
     executesRemoval: false;
     commands: readonly string[];
     posture: "not-verified" | "guarding";
-    dangerHref: "/settings/danger";
+    dangerHref:
+      "/settings/danger#service" | "/settings/danger#approval" | "/settings/danger#delivery";
   } {
     const parsed = parseEndOverlapRequest(body);
     if (!parsed.ok) invalidRequest();
