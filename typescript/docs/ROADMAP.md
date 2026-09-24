@@ -13,14 +13,15 @@ cascades into the 4 tests sharing the same dual-address-family setup helper.
 This is a sandbox limitation, not a code defect, and does not reproduce in
 this repo's GitHub Actions runners.
 
-Found and fixed one real gap while establishing that baseline: `"test":
-"npm run test:node && npm run test:convex"` short-circuits on the first
-failure, so in this same sandbox the known Node-side failure was silently
-skipping the entire Convex/vitest suite (45 files, 435 cases) on every
-`npm run check` run — a real regression there could hide behind the same
-known failure. Fixed by reusing the `concurrently` pattern `check:static`
-already uses for the identical reason: both suites now always run, and the
-combined exit code still reflects either one failing. See PR for this fix.
+Found one real gap while establishing that baseline: `"test": "npm run
+test:node && npm run test:convex"` short-circuits on the first failure, so
+in this same sandbox the known Node-side failure was silently skipping the
+entire Convex/vitest suite (45 files, 435 cases) on every `npm run check`
+run — a real regression there could hide behind the same known failure.
+Fixed in a separate PR (`claude/fix-test-runner-short-circuit`, not this
+one) by reusing the `concurrently` pattern `check:static` already uses for
+the identical reason: both suites now always run, and the combined exit
+code still reflects either one failing.
 
 Also removed `addNote` and `priorityRank` from `PersonalTraitsService`
 (`src/runtime/personalTraitsService.ts`) per this file's own prior "Next
