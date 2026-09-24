@@ -84,8 +84,8 @@ export type ProviderQuotaReadModel = {
 
 const SEVERITY: Record<QuotaChipState, number> = {
   STOPPED: 4,
-  WARN: 3,
-  UNKNOWN: 2,
+  UNKNOWN: 3,
+  WARN: 2,
   OK: 1,
   "NO LIMIT": 0,
 };
@@ -97,7 +97,8 @@ export const LIMITS_STORE_BANNER =
   "Limits are not durably enforced yet. The quota store is pending Benny's choice. This page is a read model only. Partial OK.";
 
 /**
- * One HUD projection. STOPPED outranks WARN, then UNKNOWN, then OK, then NO LIMIT.
+ * One HUD projection. Fail closed: STOPPED outranks UNKNOWN, then WARN, then OK.
+ * An unread quota outranks a soft warn. NO LIMIT is a known absence and ranks last.
  * An empty reading stays UNKNOWN. The chip is never an editor.
  */
 export function projectNowChip(states: readonly QuotaChipState[]): NowChip {

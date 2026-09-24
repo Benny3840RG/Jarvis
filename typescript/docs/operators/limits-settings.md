@@ -12,7 +12,7 @@ Open it from the operator console **Settings** rail. The tab order is General, C
 | Retention           | Soft | No hard stop | UNKNOWN                        | Unknown      |
 | Delivery            | Soft | No hard stop | UNKNOWN                        | Unknown      |
 
-Chip vocabulary is OK, WARN, STOPPED, UNKNOWN, and NO LIMIT. An unread store never renders OK and never invents a remaining count. Change-limit confirmation is `CHANGE LIMIT`. Submitting it reports that nothing was enforced. The page does not write Convex, JSON, or environment quota values, and it does not keep a Bearer token.
+Chip vocabulary is OK, WARN, STOPPED, UNKNOWN, and NO LIMIT. The one NOW chip ranks STOPPED above UNKNOWN above WARN above OK. An unread quota outranks a soft warn. An unread store never renders OK and never invents a remaining count. Change-limit confirmation is `CHANGE LIMIT`. Submitting it reports that nothing was enforced. The page does not write Convex, JSON, or environment quota values, and it does not keep a Bearer token.
 
 Seats, billing, and paywall are not on this page. There is no team-admin path. Notifications and Sessions are not settings tabs.
 

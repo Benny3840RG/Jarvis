@@ -139,6 +139,17 @@ describe("provider quota read model", () => {
     assert.equal(projectNowChip([]).state, "UNKNOWN");
     assert.equal(projectNowChip(["NO LIMIT", "OK"]).state, "OK");
   });
+
+  it("ranks STOPPED above UNKNOWN above WARN above OK", () => {
+    assert.equal(projectNowChip(["STOPPED", "UNKNOWN"]).state, "STOPPED");
+    assert.equal(projectNowChip(["UNKNOWN", "STOPPED"]).state, "STOPPED");
+    assert.equal(projectNowChip(["UNKNOWN", "WARN"]).state, "UNKNOWN");
+    assert.equal(projectNowChip(["WARN", "UNKNOWN"]).state, "UNKNOWN");
+    assert.equal(projectNowChip(["WARN", "OK"]).state, "WARN");
+    assert.equal(projectNowChip(["OK", "WARN"]).state, "WARN");
+    assert.equal(projectNowChip(["OK", "WARN", "UNKNOWN", "STOPPED"]).state, "STOPPED");
+    assert.equal(projectNowChip(["OK"]).state, "OK");
+  });
 });
 
 describe("limits page", () => {
