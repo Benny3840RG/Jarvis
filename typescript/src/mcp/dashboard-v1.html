@@ -185,17 +185,17 @@
       .settings-shell .settings-check,
       .settings-shell .settings-choice label,
       .settings-shell .settings-actions a,
-      .settings-shell .settings-tabs button,
+      .settings-shell .settings-tabs a,
       .settings-shell input,
       .settings-shell select { min-height: 44px; }
       .settings-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 12px; }
-      .settings-tabs button { min-height: 44px; padding: 0 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel-3); color: var(--text); font-size: 16px; }
+      .settings-tabs a { display: inline-flex; align-items: center; min-height: 44px; padding: 0 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel-3); color: var(--text); font-size: 16px; font-weight: 700; text-decoration: none; }
       .settings-shell details > summary { display: flex; align-items: center; min-height: 44px; font-size: 16px; }
-      .settings-tabs button.active { border-color: var(--accent, var(--violet)); }
+      .settings-tabs a.active { border-color: var(--accent, var(--violet)); }
       .settings-panel { display: none; }
       .settings-panel.active { display: block; }
       #view-settings { overflow: auto; height: 100%; }
-      .fp-chip { display: inline-flex; align-items: center; min-height: 44px; max-width: 11rem; overflow: hidden; padding: 0 12px; border: 1px solid var(--line); border-radius: 999px; font-size: 14px; font-weight: 600; }
+      .fp-chip { display: inline-flex; align-items: center; min-height: 44px; padding: 0 14px; border: 1px solid var(--line); border-radius: 999px; font-size: 20px; font-weight: 600; }
       button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
       html[data-console-contrast="increase"] button:focus-visible,
       html[data-console-contrast="increase"] input:focus-visible,
@@ -646,10 +646,10 @@
                 <div class="settings-shell">
                   <h2 class="settings-title">Settings</h2>
                   <nav class="settings-tabs" aria-label="Settings">
-                    <button class="active" type="button" data-settings-tab="general" aria-selected="true">General</button>
-                    <button type="button" data-settings-tab="credentials" aria-selected="false">Credentials</button>
-                    <button type="button" data-settings-tab="persistence" aria-selected="false">Persistence</button>
-                    <button type="button" data-settings-tab="danger" aria-selected="false">Danger zone</button>
+                    <a class="active" href="#view-general" data-settings-tab="general" aria-current="page">General</a>
+                    <a href="#view-credentials" data-settings-tab="credentials">Credentials</a>
+                    <a href="#view-persistence" data-settings-tab="persistence">Persistence</a>
+                    <a href="#view-danger" data-settings-tab="danger">Danger zone</a>
                   </nav>
                   <div class="settings-panel" data-settings-panel="credentials" id="view-credentials">
                     <div class="credentials-view">
@@ -1374,6 +1374,11 @@
               text(warn, card.warning);
               section.append(warn);
             }
+            const danger = document.createElement("a");
+            danger.href = "/settings/danger#" + card.id;
+            danger.rel = "noreferrer";
+            text(danger, "Open Danger zone");
+            section.append(danger);
             root.append(section);
           });
           text(local, credentials.localPage
@@ -1400,8 +1405,13 @@
         function render() { renderCounts(); renderFocus(); renderBoard(); renderReminders(); renderSystems(); renderCategories(); renderPriorities(); renderRightReminders(); renderOperations(); renderActivity(); renderInbox(); renderActivityTimeline(); renderLiveWork(); renderGeneral(); renderCredentials(); }
         function setCaptureMode(mode) { state.captureMode = mode; document.querySelectorAll("[data-capture]").forEach((button) => button.classList.toggle("active",button.dataset.capture === mode)); const category = byId("capture-category"); const due = byId("capture-due"); if (mode === "task") { text(byId("capture-title-label"),"Task command"); text(byId("capture-detail-copy"),"Category"); category.hidden = false; due.hidden = true; text(byId("capture-submit"),"ADD TASK"); } else { text(byId("capture-title-label"),"Reminder command"); text(byId("capture-detail-copy"),"When"); category.hidden = true; due.hidden = false; text(byId("capture-submit"),"SET REMINDER"); } }
         document.querySelectorAll("[data-view]").forEach((button) => button.addEventListener("click",() => { document.querySelectorAll("[data-view]").forEach((candidate) => candidate.classList.toggle("active",candidate === button)); document.querySelectorAll(".view").forEach((view) => view.classList.toggle("active",view.id === `view-${button.dataset.view}`)); }));
-        document.querySelectorAll("[data-settings-tab]").forEach((button) => button.addEventListener("click", () => { const tab = button.dataset.settingsTab; document.querySelectorAll("[data-settings-tab]").forEach((candidate) => { const selected = candidate === button; candidate.classList.toggle("active", selected); candidate.setAttribute("aria-selected", selected ? "true" : "false"); }); document.querySelectorAll("[data-settings-panel]").forEach((panel) => panel.classList.toggle("active", panel.dataset.settingsPanel === tab)); if (tab === "persistence") void loadPersistence(); }));
-        document.querySelectorAll("[data-settings-jump]").forEach((link) => link.addEventListener("click", (event) => { event.preventDefault(); const tab = link.getAttribute("data-settings-jump"); document.querySelectorAll("[data-settings-tab]").forEach((button) => { if (button.getAttribute("data-settings-tab") === tab) button.click(); }); const target = document.querySelector(link.getAttribute("href")); if (target instanceof HTMLElement) target.focus(); }));
+        const settingsTabByHash = { "view-general": "general", "view-credentials": "credentials", "view-persistence": "persistence", "view-danger": "danger" };
+        function showSettingsTab(tab) { document.querySelectorAll("[data-settings-tab]").forEach((candidate) => { const selected = candidate.dataset.settingsTab === tab; candidate.classList.toggle("active", selected); if (selected) candidate.setAttribute("aria-current", "page"); else candidate.removeAttribute("aria-current"); }); document.querySelectorAll("[data-settings-panel]").forEach((panel) => panel.classList.toggle("active", panel.dataset.settingsPanel === tab)); if (tab === "persistence") void loadPersistence(); }
+        function activateNamedView(name) { document.querySelectorAll("[data-view]").forEach((candidate) => candidate.classList.toggle("active", candidate.dataset.view === name)); document.querySelectorAll(".view").forEach((view) => view.classList.toggle("active", view.id === `view-${name}`)); }
+        function applySettingsHash() { const tab = settingsTabByHash[location.hash.slice(1)]; if (!tab) return; activateNamedView("settings"); showSettingsTab(tab); }
+        window.addEventListener("hashchange", applySettingsHash);
+        applySettingsHash();
+        document.querySelectorAll("[data-settings-jump]").forEach((link) => link.addEventListener("click", (event) => { event.preventDefault(); const tab = link.getAttribute("data-settings-jump"); activateNamedView("settings"); showSettingsTab(tab); const target = document.querySelector(link.getAttribute("href")); if (target instanceof HTMLElement) target.focus(); }));
         document.querySelectorAll("[data-capture]").forEach((button) => button.addEventListener("click",() => setCaptureMode(button.dataset.capture)));
         byId("refresh").addEventListener("click",async () => { const button = byId("refresh"); button.disabled = true; try { await callTool("show_jarvis_dashboard"); try { update(await request("tools/call", { name: "get_general_settings", arguments: {} }, 10000)); } catch { state.generalSettings = null; renderGeneral(); } void loadPersistence(); activity("Snapshot refreshed","Live dashboard state reloaded"); toast("Jarvis HUD refreshed."); } catch { toast("Jarvis refresh failed.",true); } finally { button.disabled = false; } });
         byId("save-display-preferences").addEventListener("click", saveDisplayPreferences);

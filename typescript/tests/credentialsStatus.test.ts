@@ -151,11 +151,23 @@ describe("credential fingerprints", () => {
       assert.equal(decision.allowed, false);
       assert.equal(decision.executesRemoval, false);
       assert.deepEqual(decision.commands, []);
-      assert.equal(decision.dangerHref, "/settings/danger");
+      assert.equal(decision.dangerHref, "/settings/danger#service");
     }
-    assert.equal(idle.posture, "not-verified");
+    assert.equal(idle.posture, "guarding");
     assert.equal(failing.posture, "not-verified");
     assert.equal(passing.posture, "not-verified");
+    assert.equal(
+      decideEndOverlap(
+        {
+          tokenId: "approval",
+          confirmation: END_OVERLAP_PHRASE,
+          verify: "passing",
+          context: "card",
+        },
+        { attestedPassing: false },
+      ).dangerHref,
+      "/settings/danger#approval",
+    );
     const attested = decideEndOverlap(
       {
         tokenId: "service",
@@ -241,12 +253,20 @@ describe("credentials page and MCP surface", () => {
     assertNoSecret(html, [SERVICE, APPROVAL, DELIVERY, PREVIOUS]);
     assert.match(html, /Generate new token/);
     assert.match(html, /connect-src 'none'/);
-    assert.doesNotMatch(html, /serviceDigests|END OVERLAP|openEnd\(|end-dialog|endOverlapCommands/);
+    assert.doesNotMatch(
+      html,
+      /serviceDigests|END OVERLAP|openEnd\(|end-dialog|endOverlapCommands|Smoke passed|<span class="tab">/,
+    );
     assert.doesNotMatch(html, /[0-9a-f]{64}/);
     assert.equal(html.includes(secretDigest(SERVICE)), false);
     assert.equal(html.includes(secretDigest(PREVIOUS)), false);
     assert.match(html, /fp-chip/);
-    assert.match(html, /href="\/settings\/danger"/);
+    assert.match(html, /"\/settings\/danger#" \+ card\.id/);
+    assert.match(html, /"\/settings\/danger#" \+ flowId/);
+    assert.match(html, /href="#settings-general"/);
+    assert.match(html, /href="#settings-persistence"/);
+    assert.match(html, /id="settings-general"/);
+    assert.match(html, /id="settings-persistence"/);
     assert.match(html, /does not remove the previous token/);
     assert.match(html, /Not verified/);
     assert.match(html, /min-height:44px/);

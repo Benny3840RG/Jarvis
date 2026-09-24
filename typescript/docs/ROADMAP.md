@@ -23,7 +23,8 @@ Next:
 Settings uses one shell: General, Credentials, Persistence, Danger. Danger is
 the only End path. Confirm strings are `END OVERLAP`, `END APPROVAL OVERLAP`,
 `END DELIVERY OVERLAP`, `RESET JSON`, and `CLEAR LOCAL`. Credentials links to
-`/settings/danger` and does not remove a previous token.
+`/settings/danger#service`, `#approval`, and `#delivery` on those End cards and
+does not remove a previous token.
 
 Reset quarantines `jarvis-state.json` with the runtime `.corrupt-*` rename and
 does not call Convex. Clear local quarantines the core, memory, and business
@@ -91,10 +92,13 @@ Next:
 2. If a later Operations surface starts or stops `npm run start:http`, keep it off this page.
 3. Phase B account sign-in stays out of Credentials. OIDC here is remote HTTP identity only.
 
-End overlap does not trust caller `verify`. Idle stays not-verified and is never offered.
-`decideEndOverlap` returns `offered: false`, `executesRemoval: false`, and no commands. A
-server-attested passing result only moves posture to guarding. Removal is `GET /settings/danger`.
-That page is the only End path and does not wipe Convex owner data. Production HTTP and preview select credentials with
+End overlap does not trust caller `verify`. Credentials has no End dialog and no client gate.
+`decideEndOverlap` returns `offered: false`, `executesRemoval: false`, no commands, and a
+per-token `dangerHref` (`/settings/danger#service`, `#approval`, or `#delivery`). A
+server-attested passing result only moves posture to guarding. Those fragments land on the
+Danger cards. Removal stays on `GET /settings/danger`, the only End path, after the typed
+confirmation. That page does not wipe Convex owner data. Production HTTP and preview select
+credentials with
 `captureCredentialsFromEnv`, not from `HttpAppConfig`, which has no delivery token.
 
 ## Settings → Persistence, phase A (2026-09-24)

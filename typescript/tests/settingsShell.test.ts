@@ -22,6 +22,11 @@ describe("settings shell", () => {
     assert.equal(rails.filter((rail) => rail === "settings").length, 1);
     const tabs = [...widget.matchAll(/data-settings-tab="([^"]+)"/g)].map((match) => match[1]);
     assert.deepEqual(tabs, ["general", "credentials", "persistence", "danger"]);
+    assert.match(widget, /<a [^>]*href="#view-general"/);
+    assert.match(widget, /<a [^>]*href="#view-credentials"/);
+    assert.match(widget, /<a [^>]*href="#view-persistence"/);
+    assert.match(widget, /<a [^>]*href="#view-danger"/);
+    assert.doesNotMatch(widget, /<button[^>]*data-settings-tab/);
     assert.match(widget, /id="view-settings"/);
     assert.match(widget, /id="console-motion"/);
     assert.match(widget, /Reduce motion/);
@@ -57,6 +62,9 @@ describe("settings shell", () => {
       }),
     );
     assert.match(html, /Danger zone/);
+    assert.match(html, /id="service"/);
+    assert.match(html, /id="approval"/);
+    assert.match(html, /id="delivery"/);
     assert.match(html, /href="\/settings\/credentials"/);
     assert.match(html, /href="\/settings\/danger"/);
     assert.match(html, /href="\/settings\/persistence#backup"/);

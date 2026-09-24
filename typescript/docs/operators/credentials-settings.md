@@ -51,11 +51,13 @@ Convex changes stay operator-driven.
 | HTTP status                 | `curl --config - http://127.0.0.1:3000/api/v1/status` with the Bearer value supplied from the environment, not from the page        |
 | Start HTTP / preview        | `npm run start:http` / `npm run start:preview`                                                                                      |
 
-End overlap is not offered on Credentials. Idle verification stays “Not verified”, and a
-caller-supplied passing value is not server attestation. `POST /api/v1/settings/credentials/end-overlap`
-returns `offered: false`, `executesRemoval: false`, and an empty `commands` list. The danger
-boundary is `GET /settings/danger`. That page is the only End path. It removes the previous
-token after the typed confirmation and does not wipe Convex owner data.
+End overlap is not offered on Credentials. There is no confirmation dialog and no client verify
+gate on that page. Idle verification stays “Not verified”, and a caller-supplied passing value
+is not server attestation. `POST /api/v1/settings/credentials/end-overlap` ignores caller `verify`
+and returns `offered: false`, `executesRemoval: false`, an empty `commands` list, and `dangerHref`
+for that token (`/settings/danger#service`, `#approval`, or `#delivery`). Those links do not
+remove a token. `GET /settings/danger` is the only End path. It removes the previous token after
+the typed confirmation and does not wipe Convex owner data.
 
 If smoke fails, keep the previous token set until the local token is corrected. Do not paste
 tokens into Git, logs, issues, or chat. See [SECURITY.md](../../../SECURITY.md).

@@ -4,6 +4,26 @@ function embedJson(value: unknown): string {
   return JSON.stringify(value).replace(/</g, "\\u003c");
 }
 
+function settingsNav(current: "credentials" | "danger"): string {
+  const tab = (href: string, label: string, active: boolean): string =>
+    active
+      ? `<a class="tab" href="${href}" aria-current="page">${label}</a>`
+      : `<a class="tab" href="${href}">${label}</a>`;
+  const general =
+    current === "credentials" ? "#settings-general" : "/settings/credentials#settings-general";
+  const credentials = current === "credentials" ? "/settings/credentials" : "/settings/credentials";
+  const persistence =
+    current === "credentials"
+      ? "#settings-persistence"
+      : "/settings/credentials#settings-persistence";
+  return `<nav aria-label="Settings">
+      ${tab(general, "General", false)}
+      ${tab(credentials, "Credentials", current === "credentials")}
+      ${tab(persistence, "Persistence", false)}
+      ${tab("/settings/danger", "Danger zone", current === "danger")}
+    </nav>`;
+}
+
 const PAGE_STYLE = `
     :root { color-scheme: dark; --bg:#1c1612; --panel:#2a211c; --line:#5c4a3d; --text:#f6efe6; --muted:#c4b5a5; --accent:#c47b4a; --gold:#d7a15f; --danger:#a33b32; }
     * { box-sizing: border-box; }
@@ -26,7 +46,7 @@ const PAGE_STYLE = `
     dl { display:grid; grid-template-columns:140px minmax(0,1fr); gap:6px 10px; margin:10px 0; }
     dt { color:var(--muted); font-size:16px; }
     dd { margin:0; font-size:16px; }
-    .fp-chip { display:inline-flex; align-items:center; min-height:44px; max-width:11rem; overflow:hidden; padding:0 12px; border-radius:999px; border:1px solid var(--line); background:#241c18; font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size:14px; font-weight:600; letter-spacing:.02em; }
+    .fp-chip { display:inline-flex; align-items:center; min-height:44px; padding:0 14px; border-radius:999px; border:1px solid var(--line); background:#241c18; font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size:20px; font-weight:600; letter-spacing:.02em; }
     .error { color:#f0c2bc; font-size:14px; font-weight:600; }
     .actions, .wizard-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
     button, .link { font:inherit; border-radius:9px; border:1px solid var(--line); background:#3a2e26; color:var(--text); padding:0 14px; text-decoration:none; display:inline-flex; align-items:center; min-height:44px; }
@@ -67,13 +87,8 @@ export function renderCredentialsPage(model: CredentialsPageModel): string {
 </head>
 <body>
   <main>
-    <nav aria-label="Settings">
-      <span class="tab">General</span>
-      <a class="tab" href="/settings/credentials" aria-current="page">Credentials</a>
-      <span class="tab">Persistence</span>
-      <a class="tab" href="/settings/danger">Danger zone</a>
-    </nav>
-    <h1>Credentials</h1>
+    ${settingsNav("credentials")}
+    <h1 id="settings-credentials">Credentials</h1>
     <p class="status" id="verify-status">Not verified. End is not offered on this page.</p>
     <p class="lede">Machine credentials authenticate Jarvis clients and gated operations. They are not a sign-in. Secrets are never shown in full after first reveal. Report security issues without including token values.</p>
     <div id="banner" class="banner" hidden></div>
@@ -82,6 +97,15 @@ export function renderCredentialsPage(model: CredentialsPageModel): string {
     <section class="card" id="http-card"></section>
     <section class="card" id="mcp-card"></section>
     <section class="card" id="exposure-card"></section>
+    <section class="card" id="settings-general">
+      <h2>General</h2>
+      <p>Timezone and display preferences stay on the operator console Settings tab. This page does not store them and does not change CLI output.</p>
+    </section>
+    <section class="card" id="settings-persistence">
+      <h2>Persistence</h2>
+      <p class="status">Read only</p>
+      <p>Export, verify, and restore are not this page. Nothing here changes JSON or Convex.</p>
+    </section>
     <section class="card">
       <h2>CLI / runbook parity</h2>
       <ul class="parity" id="parity"></ul>
@@ -168,7 +192,7 @@ export function renderCredentialsPage(model: CredentialsPageModel): string {
       text(rotate, card.id === "delivery" && !card.configured ? "Configure…" : "Rotate…");
       rotate.addEventListener("click", () => openWizard(card.id));
       actions.append(rotate);
-      actions.append(link("/settings/danger", "Open Danger zone"));
+      actions.append(link("/settings/danger#" + card.id, "Open Danger zone"));
       section.append(actions);
       cards.append(section);
     });
@@ -239,7 +263,6 @@ export function renderCredentialsPage(model: CredentialsPageModel): string {
     const wizard = document.getElementById("wizard");
     let flowId = "service";
     let step = 1;
-    let verify = "idle";
     function generateToken() {
       const bytes = new Uint8Array(32);
       crypto.getRandomValues(bytes);
@@ -298,29 +321,18 @@ export function renderCredentialsPage(model: CredentialsPageModel): string {
       } else {
         const copy = document.createElement("p");
         text(copy, flow.verify === "smoke"
-          ? "Run npm run smoke:convex only against deployments starting with dev:. The command reads the token from the environment. This page does not observe that result."
-          : "No smoke:convex equivalent is required. Confirm the secret is stored apart from the service token.");
-        const pass = document.createElement("button");
-        pass.type = "button";
-        text(pass, flow.verify === "smoke" ? "Smoke passed" : "Verification noted");
-        pass.addEventListener("click", () => { verify = "passing"; renderWizard(); });
-        const fail = document.createElement("button");
-        fail.type = "button";
-        text(fail, flow.verify === "smoke" ? "Smoke failed" : "Verification failed");
-        fail.addEventListener("click", () => { verify = "failing"; renderWizard(); });
+          ? "Run npm run smoke:convex only against deployments starting with dev:. This page does not observe that command and does not offer End."
+          : "No smoke:convex equivalent is required. Confirm the secret is stored apart from the service token. This page does not offer End.");
         const state = document.createElement("p");
         state.className = "status";
-        text(state, verify === "idle"
-          ? "Not verified. End is not offered while verification is idle."
-          : "Guarding. A mark on this page is not server attestation, and End is not offered.");
-        body.append(copy, pass, fail, state, link("/settings/danger", "Open Danger zone"), link(status.docs.credentials, "Open credentials runbook"));
+        text(state, "Not verified. Removal is CLI-only on the Danger zone card for this token.");
+        body.append(copy, state, link("/settings/danger#" + flowId, "Open Danger zone"), link(status.docs.credentials, "Open credentials runbook"));
       }
     }
     function openWizard(id) {
       wipe();
       flowId = id;
       step = 1;
-      verify = "idle";
       renderWizard();
       wizard.showModal();
     }

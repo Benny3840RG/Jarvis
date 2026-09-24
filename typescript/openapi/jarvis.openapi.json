@@ -427,7 +427,7 @@
       "post": {
         "operationId": "endCredentialOverlap",
         "summary": "Report that credential overlap removal is not offered",
-        "description": "Does not remove a token and does not return a remove command. verify, context, and the confirmation phrase are not attestation: this process does not observe npm run smoke:convex, so idle, passing, and failing never offer End. offered, allowed, and executesRemoval are always false, and commands is always empty. posture is not-verified until a server-attested passing smoke result exists, and even then Credentials does not execute removal. dangerHref is /settings/danger. The response does not echo the supplied confirmation.",
+        "description": "Does not remove a token and does not return a remove command. Client verify, context, and the confirmation phrase are ignored: they are not a gate and they are not attestation. This process does not observe npm run smoke:convex, so the live posture is not-verified. offered, allowed, and executesRemoval are always false, and commands is always empty. dangerHref is the Danger zone card for that token. The response does not echo the supplied confirmation. Typed confirm and removal stay out of Credentials.",
         "tags": ["System"],
         "x-mcp-tool": {
           "exposed": false,
@@ -7507,7 +7507,15 @@
             "enum": ["not-verified", "guarding"],
             "description": "not-verified until this process has attested a passing smoke result. guarding still does not offer End. Idle stays not-verified."
           },
-          "dangerHref": { "type": "string", "const": "/settings/danger" }
+          "dangerHref": {
+            "type": "string",
+            "enum": [
+              "/settings/danger#service",
+              "/settings/danger#approval",
+              "/settings/danger#delivery"
+            ],
+            "description": "Deep link to the Danger zone card for this token. Credentials does not execute removal."
+          }
         }
       },
       "DeliveryCheckRequest": {
