@@ -242,7 +242,7 @@ export class DangerZoneService {
       );
     }
     delete this.options.env[variableName];
-    const detail = `Removed ${variableName}. Clients still using the old token will fail closed. Restart local processes that loaded the previous environment. Convex owner data was not deleted.`;
+    const detail = `Immediately removed ${variableName}. Clients still using the previous token fail closed now. There is no grace period. Restart local processes that loaded the previous environment. Convex owner data was not deleted.`;
     return this.succeed(actionId, detail, [], "off");
   }
 

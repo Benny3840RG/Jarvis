@@ -102,7 +102,7 @@ export type CredentialFacts = {
 
 function overlapWarning(lastVerify: VerifyState): string | null {
   if (lastVerify === "passed") return null;
-  return "Clients on the old token will break. New-token verification has not passed (smoke:convex or status).";
+  return "Clients on the old token will break immediately. New-token verification has not passed. Ending overlap does not wait.";
 }
 
 function overlapCard(
@@ -185,9 +185,9 @@ export function buildDangerZoneModel(input: {
         "end-service-overlap",
         "End service-token overlap",
         [
-          `Revokes ${OVERLAP_PREVIOUS_ENV["end-service-overlap"]} on the Convex deployment (and any local previous, if tracked).`,
-          "Clients still using the old service token fail closed.",
+          `Immediately revokes ${OVERLAP_PREVIOUS_ENV["end-service-overlap"]}. Clients still using the previous service token fail closed at once. There is no grace period.`,
           "Local processes keep the environment they started with until they are restarted.",
+          "Convex owner data is not deleted.",
         ],
         facts,
         facts.serviceOverlap,
@@ -198,9 +198,9 @@ export function buildDangerZoneModel(input: {
         "end-approval-overlap",
         "End approval-token overlap",
         [
-          `Revokes ${OVERLAP_PREVIOUS_ENV["end-approval-overlap"]} on the Convex deployment (and any local previous, if tracked).`,
-          "Approval clients still using the old token fail closed.",
+          `Immediately revokes ${OVERLAP_PREVIOUS_ENV["end-approval-overlap"]}. Approval clients still using the previous token fail closed at once. There is no grace period.`,
           "Does not revoke the service token or the delivery token.",
+          "Convex owner data is not deleted.",
         ],
         facts,
         facts.approvalOverlap,
@@ -211,9 +211,9 @@ export function buildDangerZoneModel(input: {
         "end-delivery-overlap",
         "End delivery-token overlap",
         [
-          `Revokes ${OVERLAP_PREVIOUS_ENV["end-delivery-overlap"]} on the Convex deployment (and any local previous, if tracked).`,
-          "Delivery clients still using the old token fail closed.",
+          `Immediately revokes ${OVERLAP_PREVIOUS_ENV["end-delivery-overlap"]}. Delivery clients still using the previous token fail closed at once. There is no grace period.`,
           "Does not revoke the service token or the approval token.",
+          "Convex owner data is not deleted.",
         ],
         facts,
         facts.deliveryConfigured ? facts.deliveryOverlap : "not-configured",
@@ -227,8 +227,7 @@ export function buildDangerZoneModel(input: {
         disabledReason: null,
         warning: null,
         blastRadius: [
-          "Quarantines the current local JSON core document with a .corrupt-* rename and lets Jarvis start with an empty local core.",
-          "Convex data is NOT modified.",
+          "Immediately quarantines jarvis-state.json with a .corrupt-* rename. Jarvis can start with an empty local core. Convex data is NOT modified.",
           convexLocalNote,
         ],
         confirm: DANGER_ZONE_CONFIRM["reset-local-json"],
@@ -250,8 +249,7 @@ export function buildDangerZoneModel(input: {
         disabledReason: null,
         warning: null,
         blastRadius: [
-          "Quarantines local JSON stores on this machine: core, memory (builds, logs, upgrades, assets, preferences), and local business files when present.",
-          "Files are renamed aside with a .corrupt-* suffix. They are not unlinked.",
+          "Immediately quarantines local JSON on this machine: core, memory (builds, logs, upgrades, assets, preferences), and local business files when present. Files are renamed aside with a .corrupt-* suffix. They are not unlinked. Convex is untouched.",
           clearConvexNote,
         ],
         confirm: DANGER_ZONE_CONFIRM["clear-local"],

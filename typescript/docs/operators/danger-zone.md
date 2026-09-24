@@ -25,6 +25,8 @@ Backup (`/settings/persistence#backup`); this page does not export an archive.
 | Clear local          | Quarantine the local core, memory, and business JSON files with `.corrupt-*` renames. Convex is not modified. |
 | Safer prelude        | `npm run backup -- export <file>` then `npm run backup -- verify <file>`                                      |
 
+Each dialog states what is affected, then requires an exact typed confirmation. End overlap revokes the previous variable immediately. There is no grace period and no second End path on Credentials. The service token is sent once and cleared. It is not returned, logged, or shown again. Phase A does not wipe Convex owner data.
+
 Confirm strings, owned by Danger. Credentials does not collect them:
 
 - `END OVERLAP`

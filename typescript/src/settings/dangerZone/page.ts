@@ -48,17 +48,19 @@ function cardSection(card: DangerZoneCard, backupPath: string | null): string {
   const fingerprint =
     card.fingerprint === null
       ? ""
-      : `<p>Fingerprint <span class="fp-chip">${escapeHtml(card.fingerprint)}</span> (current)</p>`;
+      : `<p>Fingerprint of the current token <span class="fp-chip">${escapeHtml(card.fingerprint)}</span>. The token value is not shown.</p>`;
+  const affected = card.blastRadius[0] ?? card.title;
+  const rest = card.blastRadius.slice(1);
   return `<section class="card" id="${escapeHtml(card.id)}">
     <h2>${escapeHtml(card.title)}</h2>
     <p class="status">${escapeHtml(statusLine(card))}</p>
     <button type="button" class="danger" data-open="${escapeHtml(card.id)}"${disabled}>${escapeHtml(openLabel(card))}</button>
     <dialog data-action="${escapeHtml(card.id)}" data-confirm="${escapeHtml(card.confirm)}" data-backup-path="${escapeHtml(backupPath ?? "")}">
       <h3>${escapeHtml(card.title)}</h3>
+      <p class="blast">${escapeHtml(affected)}</p>
       <p class="status">${escapeHtml(statusLine(card))}</p>
       ${card.warning ? `<p class="warning">${escapeHtml(card.warning)}</p>` : ""}
-      <h3>What changes</h3>
-      ${list(card.blastRadius)}
+      ${rest.length > 0 ? list(rest) : ""}
       ${fingerprint}
       <p>Will quarantine:</p>
       ${list(card.willQuarantine)}
@@ -72,7 +74,7 @@ function cardSection(card: DangerZoneCard, backupPath: string | null): string {
         <p>${escapeHtml(card.cli)}</p>
         <p>Safer prelude, on Persistence Backup: <code>npm run backup -- export</code> then <code>npm run backup -- verify</code>.</p>
       </details>
-      <label class="confirm-label">Type ${escapeHtml(card.confirm)}
+      <label class="confirm-label">Type ${escapeHtml(card.confirm)} to confirm. The match is exact.
         <input name="confirmation" autocomplete="off" autocapitalize="off" spellcheck="false" />
       </label>
       <div class="actions">
@@ -174,7 +176,7 @@ export function renderDangerZonePage(model: DangerZoneModel): string {
     <h1>Danger zone</h1>
     <p class="lede">${escapeHtml(model.lede)}</p>
     <p class="status">Active provider: ${escapeHtml(model.provider)}. Credentials does not end overlap. This page is the only End path.</p>
-    <p class="note">The service token stays in this field until you leave the page. It is not written to browser storage.</p>
+    <p class="note">The service token is sent once with the action and then cleared. It is not shown again.</p>
     <label id="token-label">Service token for this action
       <input id="operator-token" type="password" autocomplete="off" spellcheck="false" />
     </label>
@@ -219,6 +221,7 @@ export function renderDangerZonePage(model: DangerZoneModel): string {
       submit.addEventListener("click", async () => {
         if (!ready()) return;
         const token = tokenField.value;
+        tokenField.value = "";
         if (!token) {
           result.textContent = "A service token is required. Nothing was changed.";
           return;
@@ -248,7 +251,6 @@ export function renderDangerZonePage(model: DangerZoneModel): string {
             refresh();
             return;
           }
-          tokenField.value = "";
           result.textContent = (payload.detail || "Done.") + " Reload the page to see the new state.";
         } catch {
           result.textContent = "The action could not be sent. Nothing further was changed by this page.";

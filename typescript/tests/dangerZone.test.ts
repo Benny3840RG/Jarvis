@@ -155,7 +155,9 @@ describe("end overlap", () => {
     const card = before.cards.find((entry) => entry.id === "end-service-overlap");
     assert.equal(card?.enabled, true);
     assert.equal(card?.overlap, "on");
-    assert.match(card?.warning ?? "", /old token will break/);
+    assert.match(card?.warning ?? "", /old token will break immediately/);
+    assert.match(card?.blastRadius[0] ?? "", /Immediately revokes JARVIS_SERVICE_TOKEN_PREVIOUS/);
+    assert.match(card?.blastRadius[0] ?? "", /no grace period/);
     const fingerprint = createHash("sha256").update(SECRET).digest("hex");
     assert.equal(card?.fingerprint, `${fingerprint.slice(0, 4)}…${fingerprint.slice(-4)}`);
 
@@ -175,6 +177,9 @@ describe("end overlap", () => {
     assert.equal(audit.includes(PREVIOUS), false);
     assert.equal(logs.join("\n").includes(SECRET), false);
     assert.equal(JSON.stringify(result).includes(SECRET), false);
+    assert.equal(JSON.stringify(result).includes(PREVIOUS), false);
+    assert.match(result.detail, /Immediately removed JARVIS_SERVICE_TOKEN_PREVIOUS/);
+    assert.match(result.detail, /no grace period/);
     const after = await zone.inspect();
     assert.equal(after.cards.find((entry) => entry.id === "end-service-overlap")?.enabled, false);
   });
@@ -486,7 +491,13 @@ describe("danger zone page", () => {
     assert.match(html, /JARVIS_SERVICE_TOKEN_PREVIOUS/);
     assert.match(html, /No previous token accepted\./);
     assert.match(html, /Delivery token is not configured\./);
+    assert.match(html, /class="blast">Immediately revokes JARVIS_SERVICE_TOKEN_PREVIOUS/);
+    assert.match(html, /There is no grace period/);
+    assert.match(html, /Type END OVERLAP to confirm\. The match is exact\./);
     assert.match(html, /data-confirm="END OVERLAP"/);
+    assert.match(html, /The token value is not shown/);
+    assert.match(html, /sent once with the action and then cleared/);
+    assert.doesNotMatch(html, /tokenField\.value = token|localStorage|type="text"/);
     assert.match(html, /data-confirm="END APPROVAL OVERLAP"/);
     assert.match(html, /data-confirm="END DELIVERY OVERLAP"/);
     assert.match(html, /data-confirm="RESET JSON"/);
