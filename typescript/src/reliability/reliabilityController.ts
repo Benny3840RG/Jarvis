@@ -2,12 +2,14 @@ import type { LayerStatus } from "../http/contracts.js";
 
 export type ReliabilityCircuitState = "closed" | "open" | "half-open";
 
+export type ReliabilityFailureCode = "probe-failed" | "probe-timeout";
+
 export type ReliabilitySnapshot = {
   state: ReliabilityCircuitState;
   consecutiveFailures: number;
   totalFailures: number;
   totalSuccesses: number;
-  lastFailureCode?: "probe-failed";
+  lastFailureCode?: ReliabilityFailureCode;
   lastCheckedAt?: number;
 };
 
@@ -20,21 +22,32 @@ export class CircuitOpenError extends Error {
   }
 }
 
+export class ProbeTimeoutError extends Error {
+  readonly code = "probe-timeout";
+
+  constructor() {
+    super("Reliability probe did not complete before the timeout.");
+    this.name = "ProbeTimeoutError";
+  }
+}
+
 export type ReliabilityControllerOptions = {
   clock?: () => number;
   failureThreshold?: number;
   cooldownMs?: number;
+  probeTimeoutMs?: number;
 };
 
 const DEFAULT_FAILURE_THRESHOLD = 3;
 const DEFAULT_COOLDOWN_MS = 5_000;
+const DEFAULT_PROBE_TIMEOUT_MS = 5_000;
 
 class CircuitBreaker {
   private state: ReliabilityCircuitState = "closed";
   private consecutiveFailures = 0;
   private totalFailures = 0;
   private totalSuccesses = 0;
-  private lastFailureCode: "probe-failed" | undefined;
+  private lastFailureCode: ReliabilityFailureCode | undefined;
   private lastCheckedAt: number | undefined;
   private openedAt: number | undefined;
   private halfOpenProbeInFlight = false;
@@ -64,10 +77,10 @@ class CircuitBreaker {
     this.openedAt = undefined;
   }
 
-  recordFailure(now: number): void {
+  recordFailure(now: number, code: ReliabilityFailureCode = "probe-failed"): void {
     this.totalFailures += 1;
     this.consecutiveFailures += 1;
-    this.lastFailureCode = "probe-failed";
+    this.lastFailureCode = code;
     this.lastCheckedAt = now;
     this.halfOpenProbeInFlight = false;
     if (this.state === "half-open" || this.consecutiveFailures >= this.failureThreshold) {
@@ -92,6 +105,7 @@ export class ReliabilityController {
   private readonly clock: () => number;
   private readonly failureThreshold: number;
   private readonly cooldownMs: number;
+  private readonly probeTimeoutMs: number;
   private readonly breakers = new Map<string, CircuitBreaker>();
   private readonly observedOutcomes = new Map<string, "success" | "failure">();
 
@@ -99,26 +113,41 @@ export class ReliabilityController {
     this.clock = options.clock ?? Date.now;
     this.failureThreshold = options.failureThreshold ?? DEFAULT_FAILURE_THRESHOLD;
     this.cooldownMs = options.cooldownMs ?? DEFAULT_COOLDOWN_MS;
+    this.probeTimeoutMs = options.probeTimeoutMs ?? DEFAULT_PROBE_TIMEOUT_MS;
     if (!Number.isSafeInteger(this.failureThreshold) || this.failureThreshold < 1) {
       throw new Error("Reliability failure threshold must be a positive safe integer.");
     }
     if (!Number.isSafeInteger(this.cooldownMs) || this.cooldownMs < 1) {
       throw new Error("Reliability cooldown must be a positive safe integer.");
     }
+    if (!Number.isSafeInteger(this.probeTimeoutMs) || this.probeTimeoutMs < 1) {
+      throw new Error("Reliability probe timeout must be a positive safe integer.");
+    }
   }
 
   async run<T>(dependency: string, probe: () => Promise<T>): Promise<T> {
     const breaker = this.breakerFor(dependency);
     if (!breaker.tryAcquire(this.clock())) throw new CircuitOpenError();
+
+    let timeoutHandle: NodeJS.Timeout | undefined;
+    const timeout = new Promise<never>((_, reject) => {
+      timeoutHandle = setTimeout(() => reject(new ProbeTimeoutError()), this.probeTimeoutMs);
+      timeoutHandle.unref?.();
+    });
+
     try {
-      const result = await probe();
+      const result = await Promise.race([probe(), timeout]);
       breaker.recordSuccess(this.clock());
       this.observedOutcomes.set(dependency, "success");
       return result;
     } catch (error) {
-      breaker.recordFailure(this.clock());
+      const code: ReliabilityFailureCode =
+        error instanceof ProbeTimeoutError ? "probe-timeout" : "probe-failed";
+      breaker.recordFailure(this.clock(), code);
       this.observedOutcomes.set(dependency, "failure");
       throw error;
+    } finally {
+      clearTimeout(timeoutHandle);
     }
   }
 
