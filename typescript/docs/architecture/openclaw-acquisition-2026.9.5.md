@@ -87,9 +87,27 @@ longer, and an unrepresentable delay escalates instead of retrying early.
 when the MCP request signal aborts. Aborting that call does not roll back a
 Jarvis HTTP mutation that has already been accepted.
 
-Still open: Totality has no caller-disconnect cancellation, and provider quotas
-are not durable across processes. Directory-entry fsync was already recorded in
-the roadmap. No live Graph, ChatGPT, or deployment proof is claimed here.
+## Caller-disconnect follow-up
+
+Inspected again on 2026-09-23, without importing OpenClaw runtime code.
+
+| Pin       | Commit                                     | What was read                                                                                                                                                                                                                                                                                                                              |
+| --------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| v2026.9.5 | `ec9c1a13db8938e5a3eaa51fca2e981cde2395a9` | `src/shared/async-work-scope.ts` already separates caller-owned work from `runOutsideAsyncWorkScope`. `src/infra/http-response-body-timeout.ts` cancels a reader when its signal aborts.                                                                                                                                                   |
+| v2026.9.6 | `eb377ac59e6c9fd6c7705028034812becf00271b` | The same split is clearer: `GatewayRequestOptions.signal` is an in-process caller lifetime and is never serialized into a request frame. Voice selection throws when that signal is aborted. `runOutsideAsyncWorkScope` still means the caller neither waits for the work nor closes it. No cleaner portable pattern replaced AbortSignal. |
+
+Jarvis adaptation, Totality only:
+
+- `bindCallerDisconnect` aborts when the HTTP response closes before it finishes.
+- `TotalityPipeline.run` passes that signal to the reasoner and to request-bound delegations.
+- OpenAI and Gemini combine it with the existing provider timeout and pass it to `readBoundedResponseText`.
+- `durable: true` delegations are started with `signalForWork("durable")`, which returns no caller signal. They are not awaited by the turn.
+- A journal `commitOutcome` that has already started is left to finish.
+- Work is not admitted when the caller is already aborted, or when authority, project resolution or quota admission fails.
+
+Not adopted: OpenClaw `AsyncWorkScope` / `AsyncLocalStorage`, the retry supervisor, gateway sockets, voice selection, cron, or worker placement. Provider quotas remain in-process. No live Graph, ChatGPT, model, or deployment proof is claimed here.
+
+Still open: provider quotas are not durable across processes. Directory-entry fsync was already recorded in the roadmap.
 
 ## Validation and authority
 

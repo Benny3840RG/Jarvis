@@ -5,7 +5,10 @@ import type { NestFastifyApplication } from "@nestjs/platform-fastify";
 
 import { createJarvisHttpApp } from "../src/http/app.js";
 import type { HttpAppConfig } from "../src/http/config.js";
+import { JarvisProblem } from "../src/http/problemDetails.js";
+import { mapTotalityRouteError } from "../src/http/totalityController.js";
 import { OpenAIRequestError } from "../src/integrations/openai/totalityReasoner.js";
+import { TotalityCallerDisconnected } from "../src/totality/callerLifetime.js";
 import type {
   AssistantState,
   PersistenceProvider,
@@ -176,6 +179,82 @@ afterEach(async () => {
 });
 
 describe("Totality HTTP boundary", () => {
+  it("maps caller disconnect to a 499 problem without provider detail", () => {
+    assert.throws(
+      () => mapTotalityRouteError(new TotalityCallerDisconnected()),
+      (error: unknown) =>
+        error instanceof JarvisProblem &&
+        error.getStatus() === 499 &&
+        error.slug === "totality-caller-disconnected" &&
+        !error.safeDetail.includes("OpenAI") &&
+        !error.safeDetail.includes("Gemini"),
+    );
+  });
+
+  it("aborts in-flight reasoning when the HTTP caller disconnects", async () => {
+    let callerSignal: AbortSignal | undefined;
+    let started: () => void = () => {};
+    const reasoningStarted = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    let committed = false;
+    const journal = noOpJournal();
+    const reasoner: TotalityReasoner = {
+      serializeRequest(request, context) {
+        return JSON.stringify({ request, context });
+      },
+      async reason(_request, _context, signal) {
+        callerSignal = signal;
+        started();
+        await new Promise((_resolve, reject) => {
+          signal?.addEventListener("abort", () => reject(new TotalityCallerDisconnected()), {
+            once: true,
+          });
+        });
+        throw new Error("request-bound reasoning continued after disconnect");
+      },
+    };
+    const pipeline = new TotalityPipeline(reasoner, {
+      getProjectContext: journal.getProjectContext,
+      async commitOutcome(input) {
+        committed = true;
+        return journal.commitOutcome(input);
+      },
+    });
+    const app = await makeApp(pipeline);
+    await app.listen({ host: "127.0.0.1", port: 0 });
+    const caller = new AbortController();
+    const response = fetch(`${await app.getUrl()}/api/v1/totality/reason`, {
+      method: "POST",
+      headers: { ...authHeaders(), "content-type": "application/json" },
+      body: JSON.stringify(body()),
+      signal: caller.signal,
+    });
+    await reasoningStarted;
+    caller.abort();
+    await assert.rejects(response);
+    await new Promise<void>((resolve, reject) => {
+      if (callerSignal?.aborted) {
+        resolve();
+        return;
+      }
+      const timer = setTimeout(
+        () => reject(new Error("HTTP caller signal was not aborted")),
+        2_000,
+      );
+      callerSignal?.addEventListener(
+        "abort",
+        () => {
+          clearTimeout(timer);
+          resolve();
+        },
+        { once: true },
+      );
+    });
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(committed, false);
+  });
+
   it("requires service-token authentication", async () => {
     const app = await makeApp(successfulPipeline());
     const response = await app.inject({

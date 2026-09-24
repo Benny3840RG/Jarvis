@@ -7,6 +7,7 @@ import {
   resolveOpenAITotalityConfig,
 } from "../src/integrations/openai/totalityReasoner.js";
 import type { TotalityRequest } from "../src/runtime/totalityContracts.js";
+import { TotalityCallerDisconnected } from "../src/totality/callerLifetime.js";
 import type { TotalityReasoningContext } from "../src/totality/totalityPipeline.js";
 
 function makeRequest(): TotalityRequest {
@@ -297,4 +298,60 @@ describe("OpenAI provider resource guards", () => {
       assert.equal(calls, 1);
     });
   }
+
+  it("cancels a stalled provider body when the caller disconnects", async () => {
+    const caller = new AbortController();
+    let fetchSignal: AbortSignal | undefined;
+    let cancellation: unknown;
+    let bodyStarted: () => void = () => {};
+    const reading = new Promise<void>((resolve) => {
+      bodyStarted = resolve;
+    });
+    const reasoner = new OpenAITotalityReasoner(
+      { apiKey: "test-key", model: "gpt-5.6-terra", timeoutMs: 5_000, maxOutputTokens: 100 },
+      (async (_input, init) => {
+        fetchSignal = init?.signal ?? undefined;
+        return new Response(
+          new ReadableStream<Uint8Array>({
+            pull() {
+              bodyStarted();
+              return new Promise(() => {});
+            },
+            cancel(reason) {
+              cancellation = reason;
+            },
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }) as typeof fetch,
+    );
+
+    const pending = reasoner.reason(makeRequest(), makeContext(), caller.signal);
+    await reading;
+    caller.abort();
+    await assert.rejects(pending, (error: unknown) => error instanceof TotalityCallerDisconnected);
+    assert.equal(fetchSignal?.aborted, true);
+    assert.ok(cancellation instanceof Error);
+  });
+
+  it("reports a provider timeout separately from caller disconnect", async () => {
+    const reasoner = new OpenAITotalityReasoner(
+      { apiKey: "test-key", model: "gpt-5.6-terra", timeoutMs: 20, maxOutputTokens: 100 },
+      (async () =>
+        new Response(
+          new ReadableStream<Uint8Array>({
+            pull() {
+              return new Promise(() => {});
+            },
+          }),
+          { status: 200 },
+        )) as typeof fetch,
+    );
+
+    await assert.rejects(
+      () => reasoner.reason(makeRequest(), makeContext()),
+      (error: unknown) =>
+        error instanceof OpenAIRequestError && error.retryable && /timed out/.test(error.message),
+    );
+  });
 });

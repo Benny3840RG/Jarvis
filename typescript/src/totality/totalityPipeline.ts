@@ -18,6 +18,13 @@ import {
   resolveTotalityQuotaConfig,
   type TotalityQuotaLease,
 } from "./totalityQuota.js";
+import {
+  assertExplicitDurability,
+  signalForWork,
+  throwIfCallerDisconnected,
+  TotalityCallerDisconnected,
+  type TotalityDelegatedJob,
+} from "./callerLifetime.js";
 
 export type TotalityProjectContext = {
   projectId: string;
@@ -64,8 +71,15 @@ export interface TotalityReasoner {
   reason(
     request: TotalityRequest,
     context: TotalityReasoningContext,
+    signal?: AbortSignal,
   ): Promise<TotalityReasoningDraft>;
 }
+
+export type TotalityRunOptions = {
+  /** In-process caller lifetime. Never read from the request body. */
+  signal?: AbortSignal;
+  delegations?: readonly TotalityDelegatedJob[];
+};
 
 export interface TotalityJournal {
   getProjectContext(projectId: string): Promise<TotalityProjectContext | null>;
@@ -150,6 +164,8 @@ function emptyMemoryProposal(): MaterializedReasoningMemoryProposal {
 }
 
 export class TotalityPipeline {
+  private readonly admittedDurableWork: Promise<void>[] = [];
+
   constructor(
     private readonly reasoner: TotalityReasoner,
     private readonly journal: TotalityJournal,
@@ -157,19 +173,32 @@ export class TotalityPipeline {
     private readonly quota: TotalityQuota = new TotalityQuota(resolveTotalityQuotaConfig()),
   ) {}
 
-  async run(request: TotalityRequest): Promise<TotalityResponse<TotalityReasoningResult>> {
+  /** Durable jobs admitted by earlier turns. Caller disconnect does not settle these. */
+  get detachedDurableWork(): readonly Promise<void>[] {
+    return this.admittedDurableWork;
+  }
+
+  async run(
+    request: TotalityRequest,
+    options: TotalityRunOptions = {},
+  ): Promise<TotalityResponse<TotalityReasoningResult>> {
     const routing = routeTotalityTask({
       taskType: request.taskType,
       outputStyle: request.outputStyle,
       domainContext: request.domainContext,
     });
     assertRequestAuthority(request, routing);
+    const delegations = options.delegations ?? [];
+    assertExplicitDurability(delegations);
+    const signal = options.signal;
+    throwIfCallerDisconnected(signal);
 
     const project =
       request.projectId === null ? null : await this.journal.getProjectContext(request.projectId);
     if (request.projectId !== null && project === null) {
       throw new Error("Project context does not exist.");
     }
+    throwIfCallerDisconnected(signal);
 
     const proposedAt = this.now().toISOString();
     const context: TotalityReasoningContext = {
@@ -178,9 +207,15 @@ export class TotalityPipeline {
       maxOutputTokens: this.quota.maxOutputTokens,
     };
     const serializedProviderRequest = this.reasoner.serializeRequest(request, context);
+    throwIfCallerDisconnected(signal);
     const lease: TotalityQuotaLease = this.quota.acquire(request, serializedProviderRequest);
     try {
-      const reasoning = await this.reasoner.reason(request, context);
+      const requestBound = this.admitDelegations(delegations, signal);
+      const [reasoning] = await Promise.all([
+        observeCaller(signal, () => this.reasoner.reason(request, context, signal)),
+        ...requestBound,
+      ]);
+      throwIfCallerDisconnected(signal);
       let memoryProposal = emptyMemoryProposal();
       let memoryProposalFailure: string | null = null;
 
@@ -267,4 +302,55 @@ export class TotalityPipeline {
       lease.release();
     }
   }
+
+  private admitDelegations(
+    delegations: readonly TotalityDelegatedJob[],
+    caller: AbortSignal | undefined,
+  ): Array<Promise<void>> {
+    const requestBound: Array<Promise<void>> = [];
+    for (const job of delegations) {
+      if (job.durable) {
+        const work = Promise.resolve().then(() => job.run(signalForWork("durable", caller)));
+        this.admittedDurableWork.push(work);
+        void work.then(
+          () => undefined,
+          () => undefined,
+        );
+        continue;
+      }
+      const signal = signalForWork("request-bound", caller);
+      requestBound.push(observeCaller(signal, () => job.run(signal)));
+    }
+    return requestBound;
+  }
+}
+
+function observeCaller<T>(signal: AbortSignal | undefined, run: () => Promise<T>): Promise<T> {
+  const promise = run();
+  if (!signal) return promise;
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => {
+      reject(new TotalityCallerDisconnected());
+    };
+    if (signal.aborted) {
+      onAbort();
+      void promise.then(
+        () => undefined,
+        () => undefined,
+      );
+      return;
+    }
+    signal.addEventListener("abort", onAbort, { once: true });
+    promise.then(
+      (value) => {
+        signal.removeEventListener("abort", onAbort);
+        if (signal.aborted) reject(new TotalityCallerDisconnected());
+        else resolve(value);
+      },
+      (error: unknown) => {
+        signal.removeEventListener("abort", onAbort);
+        reject(error);
+      },
+    );
+  });
 }

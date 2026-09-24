@@ -7,6 +7,7 @@ import {
   resolveGeminiTotalityConfig,
 } from "../src/integrations/gemini/totalityReasoner.js";
 import type { TotalityRequest } from "../src/runtime/totalityContracts.js";
+import { TotalityCallerDisconnected } from "../src/totality/callerLifetime.js";
 import type { TotalityReasoningContext } from "../src/totality/totalityPipeline.js";
 
 function makeRequest(): TotalityRequest {
@@ -378,4 +379,39 @@ describe("Gemini provider resource guards", () => {
       assert.equal(calls, 1);
     });
   }
+
+  it("cancels a stalled provider body when the caller disconnects", async () => {
+    const caller = new AbortController();
+    let fetchSignal: AbortSignal | undefined;
+    let cancellation: unknown;
+    let bodyStarted: () => void = () => {};
+    const reading = new Promise<void>((resolve) => {
+      bodyStarted = resolve;
+    });
+    const reasoner = new GeminiTotalityReasoner(
+      { apiKey: "test-key", model: "gemini-2.5-flash", timeoutMs: 5_000, maxOutputTokens: 100 },
+      (async (_input, init) => {
+        fetchSignal = init?.signal ?? undefined;
+        return new Response(
+          new ReadableStream<Uint8Array>({
+            pull() {
+              bodyStarted();
+              return new Promise(() => {});
+            },
+            cancel(reason) {
+              cancellation = reason;
+            },
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }) as typeof fetch,
+    );
+
+    const pending = reasoner.reason(makeRequest(), makeContext(), caller.signal);
+    await reading;
+    caller.abort();
+    await assert.rejects(pending, (error: unknown) => error instanceof TotalityCallerDisconnected);
+    assert.equal(fetchSignal?.aborted, true);
+    assert.ok(cancellation instanceof Error);
+  });
 });

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import type { TotalityRequest } from "../src/runtime/totalityContracts.js";
+import { TotalityCallerDisconnected } from "../src/totality/callerLifetime.js";
 import {
   TotalityPipeline,
   type TotalityJournal,
@@ -455,5 +456,246 @@ describe("TotalityPipeline", () => {
     const response = await pipeline.run(makeRequest());
 
     assert.equal(response.status, "completed");
+  });
+
+  it("rejects a delegation that does not say whether it is durable", async () => {
+    const pipeline = makePipeline(makeReasoner(), makeJournal());
+    await assert.rejects(
+      () =>
+        pipeline.run(makeRequest(), {
+          delegations: [{ durable: undefined as unknown as boolean, async run() {} }],
+        }),
+      /durable to true or false/,
+    );
+    assert.equal(pipeline.detachedDurableWork.length, 0);
+  });
+
+  it("does not admit durable work when the caller is already gone", async () => {
+    const caller = new AbortController();
+    caller.abort();
+    let durableStarted = false;
+    let reasoned = false;
+    const reasoner = makeReasoner();
+    const pipeline = makePipeline(
+      {
+        serializeRequest: reasoner.serializeRequest,
+        async reason(request, context, signal) {
+          reasoned = true;
+          return reasoner.reason(request, context, signal);
+        },
+      },
+      makeJournal(),
+    );
+
+    await assert.rejects(
+      () =>
+        pipeline.run(makeRequest(), {
+          signal: caller.signal,
+          delegations: [
+            {
+              durable: true,
+              async run() {
+                durableStarted = true;
+              },
+            },
+          ],
+        }),
+      (error: unknown) => error instanceof TotalityCallerDisconnected,
+    );
+    assert.equal(reasoned, false);
+    assert.equal(durableStarted, false);
+    assert.equal(pipeline.detachedDurableWork.length, 0);
+  });
+
+  it("cancels request-bound work on caller disconnect and leaves admitted durable work running", async () => {
+    const caller = new AbortController();
+    const quota = new TotalityQuota({
+      maxRequestBytes: 100_000,
+      maxEstimatedInputTokens: 25_000,
+      maxConcurrentRequests: 1,
+      maxCostUnitsPerWindow: 100_000,
+      maxOutputTokens: 100,
+      windowMs: 60_000,
+    });
+    let committed = false;
+    let reasonerSignal: AbortSignal | undefined;
+    let requestBoundSignal: AbortSignal | undefined;
+    let durableSignal: AbortSignal | undefined;
+    let durableStarted = false;
+    let durableFinished = false;
+    let releaseDurable: () => void = () => {};
+    const durableGate = new Promise<void>((resolve) => {
+      releaseDurable = resolve;
+    });
+    const journal = makeJournal();
+    journal.commitOutcome = async () => {
+      committed = true;
+      return { memoryChangeSetId: null };
+    };
+    const reasoner = makeReasoner();
+    const pipeline = makePipeline(
+      {
+        serializeRequest: reasoner.serializeRequest,
+        async reason(request, context, signal) {
+          if (!signal) return reasoner.reason(request, context);
+          reasonerSignal = signal;
+          await new Promise((_resolve, reject) => {
+            if (signal.aborted) {
+              reject(new TotalityCallerDisconnected());
+              return;
+            }
+            signal.addEventListener("abort", () => reject(new TotalityCallerDisconnected()), {
+              once: true,
+            });
+          });
+          return reasoner.reason(request, context);
+        },
+      },
+      journal,
+      quota,
+    );
+
+    const running = pipeline.run(makeRequest(), {
+      signal: caller.signal,
+      delegations: [
+        {
+          durable: true,
+          async run(signal) {
+            durableStarted = true;
+            durableSignal = signal;
+            await durableGate;
+            durableFinished = true;
+          },
+        },
+        {
+          durable: false,
+          async run(signal) {
+            requestBoundSignal = signal;
+            await new Promise((_resolve, reject) => {
+              signal?.addEventListener("abort", () => reject(new TotalityCallerDisconnected()), {
+                once: true,
+              });
+            });
+          },
+        },
+      ],
+    });
+    await new Promise<void>((resolve, reject) => {
+      let stopped = false;
+      const timer = setTimeout(() => {
+        stopped = true;
+        reject(
+          new Error(
+            `reasoner did not start (reasoner=${Boolean(reasonerSignal)} bound=${Boolean(requestBoundSignal)} durable=${durableStarted})`,
+          ),
+        );
+      }, 1_000);
+      const wait = () => {
+        if (stopped) return;
+        if (reasonerSignal && requestBoundSignal && durableStarted) {
+          stopped = true;
+          clearTimeout(timer);
+          resolve();
+          return;
+        }
+        setTimeout(wait, 10);
+      };
+      wait();
+    });
+
+    caller.abort();
+    await assert.rejects(running, (error: unknown) => error instanceof TotalityCallerDisconnected);
+    assert.equal(committed, false);
+    assert.equal(reasonerSignal?.aborted, true);
+    assert.equal(requestBoundSignal, caller.signal);
+    assert.equal(requestBoundSignal?.aborted, true);
+    assert.equal(durableSignal, undefined);
+    assert.equal(durableFinished, false);
+
+    releaseDurable();
+    await pipeline.detachedDurableWork[0];
+    assert.equal(durableFinished, true);
+
+    const followUp = await pipeline.run(makeRequest());
+    assert.equal(followUp.status, "completed");
+  });
+
+  it("returns the turn without waiting for or cancelling admitted durable work", async () => {
+    let releaseDurable: () => void = () => {};
+    const durableGate = new Promise<void>((resolve) => {
+      releaseDurable = resolve;
+    });
+    let finished = false;
+    const pipeline = makePipeline(makeReasoner(), makeJournal());
+    const response = await pipeline.run(makeRequest(), {
+      delegations: [
+        {
+          durable: true,
+          async run(signal) {
+            assert.equal(signal, undefined);
+            await durableGate;
+            finished = true;
+          },
+        },
+      ],
+    });
+
+    assert.equal(response.status, "completed");
+    assert.equal(finished, false);
+    releaseDurable();
+    await pipeline.detachedDurableWork[0];
+    assert.equal(finished, true);
+  });
+
+  it("keeps a durable failure on the detached job when the turn itself succeeds", async () => {
+    const pipeline = makePipeline(makeReasoner(), makeJournal());
+    const response = await pipeline.run(makeRequest(), {
+      delegations: [
+        {
+          durable: true,
+          async run() {
+            throw new Error("background index failed");
+          },
+        },
+      ],
+    });
+
+    assert.equal(response.status, "completed");
+    await assert.rejects(pipeline.detachedDurableWork[0], /background index failed/);
+  });
+
+  it("finishes a journal commit that has already started after the caller disconnects", async () => {
+    const caller = new AbortController();
+    let releaseCommit: () => void = () => {};
+    let commitStarted: () => void = () => {};
+    const started = new Promise<void>((resolve) => {
+      commitStarted = resolve;
+    });
+    const gate = new Promise<void>((resolve) => {
+      releaseCommit = resolve;
+    });
+    let committed = false;
+    const journal = makeJournal();
+    journal.commitOutcome = async () => {
+      commitStarted();
+      await gate;
+      committed = true;
+      return { memoryChangeSetId: null };
+    };
+    const pipeline = makePipeline(makeReasoner(), journal);
+    const pending = pipeline.run(makeRequest(), { signal: caller.signal });
+    await Promise.race([
+      started,
+      new Promise((_resolve, reject) =>
+        setTimeout(() => reject(new Error("journal commit did not start")), 1_000),
+      ),
+    ]);
+    caller.abort();
+    releaseCommit();
+    const response = await pending;
+
+    assert.equal(response.status, "completed");
+    assert.equal(committed, true);
+    assert.equal(caller.signal.aborted, true);
   });
 });

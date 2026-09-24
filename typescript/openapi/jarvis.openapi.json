@@ -1129,7 +1129,7 @@
       "post": {
         "operationId": "reasonWithTotality",
         "summary": "Run proposal-only Totality reasoning with validation and audit journalling",
-        "description": "Runs proposal-only Totality reasoning against bounded authoritative project context. Admission limits cover both the incoming request and the complete serialized provider request, including project context, system instructions, routing and any output schema. Input tokens are estimated from UTF-8 bytes, not measured by a model tokenizer. Provider responses, including error bodies, are limited to 1048576 bytes. Oversized inputs are rejected before provider dispatch; oversized responses fail without staging memory or recording a successful outcome. Successful typed memory suggestions are validated locally and staged as approval-required project-memory change sets in the same Convex transaction as validation and audit evidence. No memory is approved or applied by this operation.",
+        "description": "Runs proposal-only Totality reasoning against bounded authoritative project context. Admission limits cover both the incoming request and the complete serialized provider request, including project context, system instructions, routing and any output schema. Input tokens are estimated from UTF-8 bytes, not measured by a model tokenizer. Provider responses, including error bodies, are limited to 1048576 bytes. Oversized inputs are rejected before provider dispatch; oversized responses fail without staging memory or recording a successful outcome. Successful typed memory suggestions are validated locally and staged as approval-required project-memory change sets in the same Convex transaction as validation and audit evidence. No memory is approved or applied by this operation. Request-bound provider work is cancelled when the HTTP caller disconnects before the turn finishes. That cancellation does not start or roll back explicitly durable delegated work, and it does not undo a journal commit that has already started. A disconnect that can still receive a response is reported as 499 totality-caller-disconnected.",
         "tags": ["Runtime"],
         "x-mcp-tool": {
           "exposed": false,
@@ -1191,6 +1191,10 @@
           },
           "429": {
             "$ref": "#/components/responses/TooManyRequests"
+          },
+          "499": {
+            "description": "The caller disconnected before request-bound Totality work finished. Explicitly durable delegated work is not cancelled.",
+            "$ref": "#/components/responses/ProblemResponse"
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"

@@ -1,5 +1,37 @@
 # Jarvis TypeScript Roadmap
 
+## Totality caller-disconnect cancellation (2026-09-23)
+
+Request-bound Totality work now stops when the HTTP caller disconnects.
+`POST /api/v1/totality/reason` binds an in-process `AbortSignal` to the Fastify
+response and passes it through `TotalityPipeline.run` into the OpenAI and Gemini
+reasoners and their bounded response readers. A provider timeout stays a
+provider timeout. Disconnect that can still be written is HTTP 499
+`totality-caller-disconnected`.
+
+Explicitly durable delegated jobs are admitted only after authority, project
+resolution and quota admission, and they do not receive the caller signal. A
+disconnect does not cancel them, wait for them, or roll back a journal commit
+that has already started. A caller that is already gone does not admit new
+durable work. Scheduled reminders, background indexing and monitoring are
+unchanged because nothing global listens for `request.close`.
+
+Adapted from OpenClaw's caller-lifetime split. Pinned inspection:
+v2026.9.5 `ec9c1a13db8938e5a3eaa51fca2e981cde2395a9` and v2026.9.6
+`eb377ac59e6c9fd6c7705028034812becf00271b`. The AsyncLocalStorage work scope,
+retry supervisor, gateway and voice runtime were not imported. No live provider
+or deployment proof.
+
+See [acquisition and provenance](architecture/openclaw-acquisition-2026.9.5.md).
+
+Next:
+
+1. Scope durable provider quota accounting across processes.
+2. Keep automatic model retries deferred until per-attempt cost and ambiguity
+   controls exist.
+3. Do not treat this cancellation path as voice, reminder, or monitoring
+   cancellation.
+
 ## Verification failure routes to repair (2026-09-23, #550)
 
 `DEV_TRANSITION_VERIFYING_TO_REPAIR_REQUIRED` now uses the trusted evidence
@@ -171,8 +203,9 @@ The MCP preview's `JarvisApiClient` now aborts every backend call at 30 seconds
 by default, or `JARVIS_MCP_BACKEND_DEADLINE_MS` when set to an integer from 1
 to 120000. An invalid setting fails closed at configuration. Closing the MCP
 HTTP response before it finishes cancels the outbound call. This does not roll
-back a Jarvis HTTP mutation that has already been accepted, and it does not add
-Totality caller-disconnect cancellation or durable cross-process quotas.
+back a Jarvis HTTP mutation that has already been accepted. Totality
+caller-disconnect cancellation is the separate 2026-09-23 section above.
+Durable cross-process quotas are still open.
 
 No live Microsoft Graph request, ChatGPT session, or deployment was run.
 
@@ -197,11 +230,11 @@ components deferred after inspection. Exact candidate verification belongs to
 the draft PR; this entry does not establish live-provider or deployment proof.
 
 Provider-directed Retry-After minimum waits and MCP backend deadlines are
-implemented by the 2026-09-23 follow-up above. Remaining bounded candidates:
-scope durable provider quota accounting, and Totality caller-disconnect
-cancellation. Automatic model retries need per-attempt cost and ambiguity
-controls before adoption. Existing Temporal and deployment PR ownership is
-unchanged.
+implemented by the 2026-09-23 follow-up above. Totality caller-disconnect
+cancellation is the later section at the top of this roadmap. The remaining
+bounded candidate is durable provider quota accounting across processes.
+Automatic model retries need per-attempt cost and ambiguity controls before
+adoption. Existing Temporal and deployment PR ownership is unchanged.
 
 ## Maintenance notification repair (2026-09-16, #548)
 
