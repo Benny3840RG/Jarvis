@@ -179,13 +179,21 @@ export function endOverlapControl(input: {
   context: EndOverlapContext;
   attestedPassing: boolean;
 }): { offered: false; primary: false; allowed: false } {
-  // Client verify, the typed phrase, and context never offer removal.
-  // Server attestation does not offer it either: Credentials does not execute End.
+  // Idle never offers End. A caller-supplied passing value is not attestation,
+  // and Credentials does not execute removal in any posture.
+  if (input.verify === "idle") {
+    return { offered: false, primary: false, allowed: false };
+  }
   void (input.confirmation === END_OVERLAP_PHRASE);
-  void input.verify;
   void input.context;
   void input.attestedPassing;
   return { offered: false, primary: false, allowed: false };
+}
+
+export type DangerCardHref = `/settings/danger#${TokenCardId}`;
+
+export function dangerCardHref(tokenId: TokenCardId): DangerCardHref {
+  return `/settings/danger#${tokenId}`;
 }
 
 export type EndOverlapDecision = {
@@ -196,7 +204,7 @@ export type EndOverlapDecision = {
   executesRemoval: false;
   commands: readonly [];
   posture: EndOverlapPosture;
-  dangerHref: "/settings/danger";
+  dangerHref: DangerCardHref;
 };
 
 export function decideEndOverlap(
@@ -209,9 +217,10 @@ export function decideEndOverlap(
   server: EndOverlapServerAttestation = { attestedPassing: false },
 ): EndOverlapDecision {
   const control = endOverlapControl({ ...input, attestedPassing: server.attestedPassing });
-  // Idle is never attested. A caller-supplied passing value is not attestation.
-  const posture: EndOverlapPosture =
-    server.attestedPassing === true && input.verify !== "idle" ? "guarding" : "not-verified";
+  // Client verify is not a gate. Only this process can attest, and attestation
+  // still does not offer or execute removal.
+  void input.verify;
+  const posture: EndOverlapPosture = server.attestedPassing === true ? "guarding" : "not-verified";
   return {
     offered: control.offered,
     primary: control.primary,
@@ -219,7 +228,7 @@ export function decideEndOverlap(
     executesRemoval: false,
     commands: [],
     posture,
-    dangerHref: "/settings/danger",
+    dangerHref: dangerCardHref(input.tokenId),
   };
 }
 

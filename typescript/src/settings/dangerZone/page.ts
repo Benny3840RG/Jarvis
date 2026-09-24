@@ -33,6 +33,19 @@ function convexLine(card: DangerZoneCard): string {
   return "Convex owner data is untouched. This quarantines local JSON only.";
 }
 
+function credentialFragment(card: DangerZoneCard): "service" | "approval" | "delivery" | null {
+  switch (card.id) {
+    case "end-service-overlap":
+      return "service";
+    case "end-approval-overlap":
+      return "approval";
+    case "end-delivery-overlap":
+      return "delivery";
+    default:
+      return null;
+  }
+}
+
 function cardSection(card: DangerZoneCard, backupPath: string | null): string {
   const disabled = card.enabled ? "" : " disabled";
   const backupGate =
@@ -49,8 +62,10 @@ function cardSection(card: DangerZoneCard, backupPath: string | null): string {
     card.fingerprint === null
       ? ""
       : `<p>Fingerprint <span class="fp-chip">${escapeHtml(card.fingerprint)}</span> (current)</p>`;
+  const fragment = credentialFragment(card);
+  const headingId = fragment === null ? "" : ` id="${fragment}"`;
   return `<section class="card" id="${escapeHtml(card.id)}">
-    <h2>${escapeHtml(card.title)}</h2>
+    <h2${headingId}>${escapeHtml(card.title)}</h2>
     <p class="status">${escapeHtml(statusLine(card))}</p>
     <button type="button" class="danger" data-open="${escapeHtml(card.id)}"${disabled}>${escapeHtml(openLabel(card))}</button>
     <dialog data-action="${escapeHtml(card.id)}" data-confirm="${escapeHtml(card.confirm)}" data-backup-path="${escapeHtml(backupPath ?? "")}">

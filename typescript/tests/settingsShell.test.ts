@@ -22,6 +22,11 @@ describe("settings shell", () => {
     assert.equal(rails.filter((rail) => rail === "settings").length, 1);
     const tabs = [...widget.matchAll(/data-settings-tab="([^"]+)"/g)].map((match) => match[1]);
     assert.deepEqual(tabs, ["general", "credentials", "persistence", "danger"]);
+    assert.match(widget, /<a [^>]*href="#view-general"/);
+    assert.match(widget, /<a [^>]*href="#view-credentials"/);
+    assert.match(widget, /<a [^>]*href="#view-persistence"/);
+    assert.match(widget, /<a [^>]*href="#view-danger"/);
+    assert.doesNotMatch(widget, /<button[^>]*data-settings-tab/);
     assert.match(widget, /id="view-settings"/);
     assert.match(widget, /id="console-motion"/);
     assert.match(widget, /Reduce motion/);
@@ -30,7 +35,12 @@ describe("settings shell", () => {
     assert.match(widget, /font-size:\s*14px;\s*font-weight:\s*600/);
     assert.match(widget, /font-size:\s*16px/);
     assert.match(widget, /fp-chip/);
-    assert.match(widget, /href="\/settings\/danger"/);
+    assert.match(widget, /\.cred-card h3 \{[^}]*font-size:\s*16px/);
+    assert.match(widget, /\.cred-card p, \.cred-card li \{[^}]*font-size:\s*12px/);
+    assert.match(widget, /\.settings-shell \.settings-dl dt \{ font-size: 12px; \}/);
+    assert.match(widget, /href="\/settings\/danger#service"/);
+    assert.match(widget, /href="\/settings\/danger#approval"/);
+    assert.match(widget, /href="\/settings\/danger#delivery"/);
     assert.match(widget, /Open Persistence Backup/);
     assert.match(widget, /data-settings-jump="persistence"/);
     assert.doesNotMatch(widget, /sessionStorage|END OVERLAP|openEnd\(/);
@@ -57,6 +67,9 @@ describe("settings shell", () => {
       }),
     );
     assert.match(html, /Danger zone/);
+    assert.match(html, /id="service"/);
+    assert.match(html, /id="approval"/);
+    assert.match(html, /id="delivery"/);
     assert.match(html, /href="\/settings\/credentials"/);
     assert.match(html, /href="\/settings\/danger"/);
     assert.match(html, /href="\/settings\/persistence#backup"/);

@@ -7,6 +7,7 @@ import {
   captureCredentials,
   decideEndOverlap,
   deliveryDigestCollides,
+  endOverlapControl,
   END_OVERLAP_PHRASE,
   fingerprintSecret,
   parseDeliveryCheckRequest,
@@ -120,6 +121,47 @@ describe("credential fingerprints", () => {
     assert.equal(parseDeliveryCheckRequest({ digestSha256: secretDigest(SERVICE) }).ok, true);
   });
 
+  it("does not offer End on idle and does not trust client verify alone", () => {
+    const idleControl = endOverlapControl({
+      confirmation: END_OVERLAP_PHRASE,
+      verify: "idle",
+      context: "card",
+      attestedPassing: true,
+    });
+    assert.equal(idleControl.offered, false);
+    assert.equal(idleControl.primary, false);
+    assert.equal(idleControl.allowed, false);
+
+    const clientOnly = decideEndOverlap({
+      tokenId: "delivery",
+      confirmation: END_OVERLAP_PHRASE,
+      verify: "passing",
+      context: "wizard",
+    });
+    assert.equal(clientOnly.posture, "not-verified");
+    assert.equal(clientOnly.offered, false);
+    assert.equal(clientOnly.primary, false);
+    assert.equal(clientOnly.allowed, false);
+    assert.equal(clientOnly.executesRemoval, false);
+    assert.deepEqual(clientOnly.commands, []);
+    assert.equal(clientOnly.dangerHref, "/settings/danger#delivery");
+
+    const attestedIdle = decideEndOverlap(
+      {
+        tokenId: "approval",
+        confirmation: END_OVERLAP_PHRASE,
+        verify: "idle",
+        context: "card",
+      },
+      { attestedPassing: true },
+    );
+    assert.equal(attestedIdle.posture, "guarding");
+    assert.equal(attestedIdle.offered, false);
+    assert.equal(attestedIdle.executesRemoval, false);
+    assert.deepEqual(attestedIdle.commands, []);
+    assert.equal(attestedIdle.dangerHref, "/settings/danger#approval");
+  });
+
   it("does not offer End from client verify and never executes removal", () => {
     const idle = decideEndOverlap(
       {
@@ -151,11 +193,23 @@ describe("credential fingerprints", () => {
       assert.equal(decision.allowed, false);
       assert.equal(decision.executesRemoval, false);
       assert.deepEqual(decision.commands, []);
-      assert.equal(decision.dangerHref, "/settings/danger");
+      assert.equal(decision.dangerHref, "/settings/danger#service");
     }
-    assert.equal(idle.posture, "not-verified");
+    assert.equal(idle.posture, "guarding");
     assert.equal(failing.posture, "not-verified");
     assert.equal(passing.posture, "not-verified");
+    assert.equal(
+      decideEndOverlap(
+        {
+          tokenId: "approval",
+          confirmation: END_OVERLAP_PHRASE,
+          verify: "passing",
+          context: "card",
+        },
+        { attestedPassing: false },
+      ).dangerHref,
+      "/settings/danger#approval",
+    );
     const attested = decideEndOverlap(
       {
         tokenId: "service",
@@ -241,14 +295,34 @@ describe("credentials page and MCP surface", () => {
     assertNoSecret(html, [SERVICE, APPROVAL, DELIVERY, PREVIOUS]);
     assert.match(html, /Generate new token/);
     assert.match(html, /connect-src 'none'/);
-    assert.doesNotMatch(html, /serviceDigests|END OVERLAP|openEnd\(|end-dialog|endOverlapCommands/);
+    assert.doesNotMatch(
+      html,
+      /serviceDigests|END OVERLAP|openEnd\(|end-dialog|endOverlapCommands|Smoke passed|<span class="tab">/,
+    );
     assert.doesNotMatch(html, /[0-9a-f]{64}/);
     assert.equal(html.includes(secretDigest(SERVICE)), false);
     assert.equal(html.includes(secretDigest(PREVIOUS)), false);
     assert.match(html, /fp-chip/);
-    assert.match(html, /href="\/settings\/danger"/);
+    assert.match(html, /href="\/settings\/danger#service"/);
+    assert.match(html, /href="\/settings\/danger#approval"/);
+    assert.match(html, /href="\/settings\/danger#delivery"/);
+    assert.match(html, /"\/settings\/danger#" \+ card\.id/);
+    assert.match(html, /"\/settings\/danger#" \+ flowId/);
+    const embedded = html.match(/id="credentials-model">([^<]*)<\/script>/);
+    assert.ok(embedded?.[1]);
+    const pageModel = JSON.parse(embedded[1]) as { status?: unknown; serviceDigests?: unknown };
+    assert.equal("serviceDigests" in pageModel, false);
+    assert.equal(JSON.stringify(pageModel).includes(secretDigest(SERVICE)), false);
+    assert.match(html, /href="#settings-general"/);
+    assert.match(html, /href="#settings-persistence"/);
+    assert.match(html, /id="settings-general"/);
+    assert.match(html, /id="settings-persistence"/);
     assert.match(html, /does not remove the previous token/);
     assert.match(html, /Not verified/);
+    assert.match(html, /Idle has no End button/);
+    assert.match(html, /Guarding is shown only after this server attests/);
+    assert.match(html, /still does not offer End/);
+    assert.doesNotMatch(html, /<button[^>]*>\s*End\b/);
     assert.match(html, /min-height:44px/);
     assert.match(html, /font-size:14px; font-weight:600/);
     assert.match(html, /font-size:16px/);
@@ -272,7 +346,26 @@ describe("credentials page and MCP surface", () => {
     assert.match(widget, /data-view="settings"/);
     assert.doesNotMatch(widget, /data-view="credentials"|data-view="general"/);
     assert.match(credentialsView, /does not generate secrets/);
+    assert.match(credentialsView, /Not verified/);
+    assert.match(credentialsView, /Guarding still has no End button/);
+    assert.doesNotMatch(credentialsView, /<button[^>]*>\s*End\b/);
     assert.match(widget, /does not mint secrets/);
+    assert.match(widget, /href="\/settings\/danger#service"/);
+    assert.match(widget, /href="\/settings\/danger#approval"/);
+    assert.match(widget, /href="\/settings\/danger#delivery"/);
+    const pageSource = readFileSync(
+      new URL("../src/settings/credentialsPage.ts", import.meta.url),
+      "utf8",
+    );
+    const statusSource = readFileSync(
+      new URL("../src/settings/credentialsStatus.ts", import.meta.url),
+      "utf8",
+    );
+    assert.doesNotMatch(
+      pageSource,
+      /function openEnd|id="end-dialog"|endOverlapCommands|openEnd\(/,
+    );
+    assert.doesNotMatch(statusSource, /function endOverlapCommands/);
     assert.doesNotMatch(
       credentialsView,
       /Generate new token|crypto\.getRandomValues|localStorage|sessionStorage|npx convex env set/,
