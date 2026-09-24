@@ -236,7 +236,8 @@ describe("credentials page and MCP surface", () => {
     assert.ok(start !== -1 && end > start, "Credentials view was not found");
     const credentialsView = widget.slice(start, end);
     assert.match(widget, /data-view="credentials"/);
-    assert.match(credentialsView, /does not mint secrets/);
+    assert.match(credentialsView, /does not generate secrets/);
+    assert.match(widget, /does not mint secrets/);
     assert.doesNotMatch(
       credentialsView,
       /Generate new token|crypto\.getRandomValues|localStorage|sessionStorage|npx convex env set/,
