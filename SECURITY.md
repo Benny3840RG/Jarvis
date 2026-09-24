@@ -46,6 +46,7 @@ Expected handling:
 ## Current security gates
 
 - Non-loopback MCP exposure remains blocked. Non-loopback HTTP is fail-closed unless the approved OIDC, TLS termination, origin, request-limit, rate-limit, hosting, and deployment boundary is configured.
+- Credentials settings expose fingerprints and rotation runbooks. A full secret is shown at most once on the loopback page and is not returned by the HTTP read model, MCP tools, or the operator widget. There is no control that enables remote exposure on its own.
 - Development commissioning is guarded by exact confirmation text, repository secrets, loopback binding, Convex deployment identity checks, and smoke tests.
 - Production deployment is not authorised from CI unless the human owner gives an explicit deployment approval gate.
 - GitHub Actions should be pinned to full commit SHAs, and checkout credentials should not persist unless a job explicitly needs to push.

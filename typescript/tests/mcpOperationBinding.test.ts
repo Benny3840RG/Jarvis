@@ -25,6 +25,7 @@ const DASHBOARD_READS = new Set([
   "GET /api/v1/operations/inbox",
   "GET /api/v1/operations/activity",
   "GET /api/v1/development/live-work",
+  "GET /api/v1/settings/credentials",
 ]);
 
 const STATUS: SystemStatus = {

@@ -53,6 +53,22 @@ Next:
 3. Do not treat this cancellation path as voice, reminder, or monitoring
    cancellation.
 
+## Credentials settings, Phase A (2026-09-24)
+
+Settings → Credentials is a status and guided-rotation surface for the service, approval, and
+delivery runtime tokens. `GET /api/v1/settings/credentials` returns SHA-256 fingerprints, overlap
+flags, and loopback versus fail-closed remote posture. The MCP dashboard shows that status and
+runbook links. Generation and the typed End overlap flow live only on the loopback page
+`GET /settings/credentials`. That page does not call `npx convex env set`. A missing service
+token fails closed on the page and on dependent status. A missing approval token warns
+“Approvals unavailable.” A delivery token that matches the service token is refused.
+
+Next:
+
+1. Keep Convex env changes operator-driven. Do not add a widget control that writes deployment env.
+2. If a later Operations surface starts or stops `npm run start:http`, keep it off this page.
+3. Phase B account sign-in stays out of Credentials. OIDC here is remote HTTP identity only.
+
 ## Verification failure routes to repair (2026-09-23, #550)
 
 `DEV_TRANSITION_VERIFYING_TO_REPAIR_REQUIRED` now uses the trusted evidence

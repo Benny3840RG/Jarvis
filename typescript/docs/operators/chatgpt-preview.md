@@ -9,6 +9,12 @@ HTTP API, which remains the validation, authentication and persistence boundary.
 `JARVIS_SERVICE_TOKEN` is injected by the MCP process and is never returned to ChatGPT, the model,
 the widget, or tool arguments.
 
+The dashboard Credentials view is status and runbook links only. It shows fingerprints and the
+“Approvals unavailable.” warning when that token is missing. Generate, rotate, and end-overlap
+stay on the loopback settings page described in
+[credentials-settings.md](credentials-settings.md). The widget does not call `npx convex env set`
+and does not receive token values.
+
 ## Scope
 
 The first preview includes:

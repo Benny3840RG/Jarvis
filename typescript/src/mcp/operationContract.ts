@@ -23,6 +23,7 @@ export type OpenApiOperation = {
 export const MCP_TOOL_OPERATIONS: Readonly<Record<string, readonly OpenApiOperation[]>> = {
   show_jarvis_dashboard: [
     { method: "GET", path: "/api/v1/status" },
+    { method: "GET", path: "/api/v1/settings/credentials" },
     { method: "GET", path: "/api/v1/tasks" },
     { method: "GET", path: "/api/v1/reminders" },
     { method: "GET", path: "/api/v1/brief" },

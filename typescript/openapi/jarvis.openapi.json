@@ -90,6 +90,7 @@
     "dataOperationIds": [
       "getJarvisStatus",
       "getOperatorGeneralSettings",
+      "getCredentialsStatus",
       "listTasks",
       "getTask",
       "createTask",
@@ -105,6 +106,9 @@
     "restOnlyOperationIds": [
       "getHealth",
       "getHelp",
+      "getCredentialsPage",
+      "endCredentialOverlap",
+      "checkDeliveryCredential",
       "executeConversation",
       "exportBackup",
       "verifyBackup",
@@ -296,6 +300,187 @@
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/settings/credentials": {
+      "get": {
+        "operationId": "getCredentialsPage",
+        "summary": "Open the loopback credentials settings page",
+        "description": "Serves the local operator credentials page on a loopback bind only. The page shows fingerprints and rotation runbooks. A generated token is revealed once in the browser and is never returned by this response, sent to MCP, or written into a URL. Non-loopback binds do not serve the page. There is no control that enables remote exposure.",
+        "tags": ["System"],
+        "security": [],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Loopback credentials settings HTML. Contains no raw secrets.",
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/api/v1/settings/credentials": {
+      "get": {
+        "operationId": "getCredentialsStatus",
+        "summary": "Read machine-credential fingerprints and bind posture",
+        "description": "Returns configured/overlap/fingerprint status for the service, approval, and delivery runtime tokens, plus HTTP/MCP bind and remote-gateway posture. Fingerprints are SHA-256 prefixes. Raw tokens are never included. A missing service token fails closed before this handler runs.",
+        "tags": ["System"],
+        "x-mcp-tool": {
+          "exposed": true,
+          "title": "Read Jarvis credential status",
+          "description": "Use this to show whether machine credentials are configured. Never request, repeat, or invent token values.",
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Fingerprint-only credential status.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CredentialsStatusResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/settings/credentials/end-overlap": {
+      "post": {
+        "operationId": "endCredentialOverlap",
+        "summary": "Confirm ending a credential overlap window",
+        "description": "Checks the typed END OVERLAP confirmation and verification state, then returns the runbook commands that remove the previous token. This operation does not change Convex or local env. End overlap is not offered while verification is failing and is never the primary action. The response does not echo the supplied confirmation.",
+        "tags": ["System"],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EndOverlapRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Whether end-overlap is offered and the runbook commands when it is allowed.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EndOverlapResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/settings/credentials/delivery-check": {
+      "post": {
+        "operationId": "checkDeliveryCredential",
+        "summary": "Check a delivery-token digest against the service token",
+        "description": "Compares a SHA-256 hex digest with the service token digest captured at process start. The raw delivery token is not accepted and is not returned. A match must be refused before the delivery token is stored.",
+        "tags": ["System"],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeliveryCheckRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Whether the digest matches the current or previous service token.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryCheckResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
@@ -6892,6 +7077,195 @@
           "mcpExposed": {
             "type": "boolean"
           }
+        }
+      },
+      "CredentialsStatusResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["data"],
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/CredentialsStatus"
+          }
+        }
+      },
+      "CredentialsStatus": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "failClosed",
+          "banner",
+          "approvalsWarning",
+          "generation",
+          "localPage",
+          "tokens",
+          "bind",
+          "exposure",
+          "docs",
+          "parity"
+        ],
+        "properties": {
+          "failClosed": { "type": "boolean" },
+          "banner": {
+            "oneOf": [{ "type": "string", "minLength": 1, "maxLength": 400 }, { "type": "null" }]
+          },
+          "approvalsWarning": {
+            "oneOf": [{ "type": "string", "minLength": 1, "maxLength": 200 }, { "type": "null" }]
+          },
+          "generation": { "type": "string", "enum": ["local-page", "unavailable"] },
+          "localPage": {
+            "oneOf": [{ "type": "string", "minLength": 1, "maxLength": 256 }, { "type": "null" }]
+          },
+          "tokens": {
+            "type": "array",
+            "minItems": 3,
+            "maxItems": 3,
+            "items": { "$ref": "#/components/schemas/CredentialTokenCard" }
+          },
+          "bind": { "$ref": "#/components/schemas/CredentialBindStatus" },
+          "exposure": { "$ref": "#/components/schemas/CredentialExposure" },
+          "docs": { "$ref": "#/components/schemas/CredentialDocLinks" },
+          "parity": {
+            "type": "array",
+            "maxItems": 12,
+            "items": { "$ref": "#/components/schemas/CredentialParityCommand" }
+          }
+        }
+      },
+      "CredentialTokenCard": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "label",
+          "configured",
+          "statusLabel",
+          "fingerprint",
+          "owner",
+          "overlapActive",
+          "overlapLabel",
+          "note",
+          "equalsServiceToken",
+          "warning"
+        ],
+        "properties": {
+          "id": { "type": "string", "enum": ["service", "approval", "delivery"] },
+          "label": { "type": "string", "minLength": 1, "maxLength": 80 },
+          "configured": { "type": "boolean" },
+          "statusLabel": { "type": "string", "minLength": 1, "maxLength": 80 },
+          "fingerprint": {
+            "oneOf": [{ "type": "string", "minLength": 9, "maxLength": 9 }, { "type": "null" }]
+          },
+          "owner": {
+            "oneOf": [{ "type": "string", "minLength": 1, "maxLength": 64 }, { "type": "null" }]
+          },
+          "overlapActive": { "type": "boolean" },
+          "overlapLabel": { "type": "string", "minLength": 1, "maxLength": 80 },
+          "note": { "type": "string", "minLength": 1, "maxLength": 400 },
+          "equalsServiceToken": { "type": "boolean" },
+          "warning": {
+            "oneOf": [{ "type": "string", "minLength": 1, "maxLength": 200 }, { "type": "null" }]
+          }
+        }
+      },
+      "CredentialBindStatus": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "httpHost",
+          "httpPort",
+          "httpAuth",
+          "mcpBind",
+          "mcpToken",
+          "remotePosture",
+          "remoteLabel",
+          "loopbackOnly",
+          "liveness"
+        ],
+        "properties": {
+          "httpHost": { "type": "string", "minLength": 1, "maxLength": 253 },
+          "httpPort": { "type": "integer", "minimum": 1, "maximum": 65535 },
+          "httpAuth": { "type": "string", "enum": ["Bearer service token", "OIDC access token"] },
+          "mcpBind": { "type": "string", "minLength": 1, "maxLength": 280 },
+          "mcpToken": { "type": "string", "enum": ["Injected server-side only"] },
+          "remotePosture": { "type": "string", "enum": ["configured", "blocked"] },
+          "remoteLabel": { "type": "string", "enum": ["Configured", "Blocked (fail closed)"] },
+          "loopbackOnly": { "type": "boolean" },
+          "liveness": { "type": "string", "enum": ["GET /healthz (public)"] }
+        }
+      },
+      "CredentialExposure": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["mode", "remoteHttp", "remoteHttpLabel"],
+        "properties": {
+          "mode": { "type": "string", "enum": ["Loopback (supported default)", "Remote"] },
+          "remoteHttp": { "type": "string", "enum": ["off", "configured"] },
+          "remoteHttpLabel": { "type": "string", "minLength": 1, "maxLength": 120 }
+        }
+      },
+      "CredentialDocLinks": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["httpApi", "mcpPreview", "exposure", "rotation", "credentials", "security"],
+        "properties": {
+          "httpApi": { "type": "string", "format": "uri" },
+          "mcpPreview": { "type": "string", "format": "uri" },
+          "exposure": { "type": "string", "format": "uri" },
+          "rotation": { "type": "string", "format": "uri" },
+          "credentials": { "type": "string", "format": "uri" },
+          "security": { "type": "string", "format": "uri" }
+        }
+      },
+      "CredentialParityCommand": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["ui", "command"],
+        "properties": {
+          "ui": { "type": "string", "minLength": 1, "maxLength": 80 },
+          "command": { "type": "string", "minLength": 1, "maxLength": 200 }
+        }
+      },
+      "EndOverlapRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["tokenId", "confirmation", "verify", "context"],
+        "properties": {
+          "tokenId": { "type": "string", "enum": ["service", "approval", "delivery"] },
+          "confirmation": { "type": "string", "maxLength": 32 },
+          "verify": { "type": "string", "enum": ["idle", "passing", "failing"] },
+          "context": { "type": "string", "enum": ["wizard", "card"] }
+        }
+      },
+      "EndOverlapResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["offered", "primary", "allowed", "commands"],
+        "properties": {
+          "offered": { "type": "boolean" },
+          "primary": { "type": "boolean" },
+          "allowed": { "type": "boolean" },
+          "commands": {
+            "type": "array",
+            "maxItems": 4,
+            "items": { "type": "string", "minLength": 1, "maxLength": 200 }
+          }
+        }
+      },
+      "DeliveryCheckRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["digestSha256"],
+        "properties": {
+          "digestSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+        }
+      },
+      "DeliveryCheckResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["equalsServiceToken"],
+        "properties": {
+          "equalsServiceToken": { "type": "boolean" }
         }
       },
       "SystemStatus": {

@@ -244,6 +244,13 @@
       .chart-wrap { display: grid; place-items: center; min-height: 0; padding: 10px; }
       .chart-wrap svg { width: min(100%,500px); max-height: 390px; }
       .systems-view { display: grid; grid-template-columns: minmax(280px,.88fr) minmax(0,1.12fr); gap: 9px; height: 100%; padding: 9px; }
+      .credentials-view { display: grid; gap: 9px; height: 100%; padding: 9px; overflow: auto; }
+      .cred-card { border: 1px solid var(--line); border-radius: 12px; padding: 10px; background: rgba(5,6,10,.42); }
+      .cred-card h3 { margin: 0 0 6px; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; }
+      .cred-card p, .cred-card li { margin: 4px 0; color: var(--muted); font-size: 11px; }
+      .fp { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+      .cred-warn { color: var(--yellow); }
+      .cred-bad { color: var(--red); }
       .system-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 6px; padding: 8px; }
       .system-item, .matrix-item { padding: 9px; border: 1px solid var(--line); border-radius: 8px; background: rgba(5,6,10,.4); }
       .system-item span, .matrix-item span { display: block; color: var(--muted); font-size: 8px; text-transform: uppercase; }
@@ -435,6 +442,7 @@
                 <button class="rail-button" type="button" data-view="livework"><span class="rail-icon">⛭</span><span><strong>Live Work</strong><small>Mission pipeline</small></span><span class="rail-count" id="nav-livework-count">0</span></button>
                 <button class="rail-button" type="button" data-view="systems"><span class="rail-icon">◇</span><span><strong>Systems</strong><small>Runtime layers</small></span><span class="rail-count" id="nav-system-count">0</span></button>
                 <button class="rail-button" type="button" data-view="general"><span class="rail-icon">⚙</span><span><strong>Settings</strong><small>General</small></span><span class="rail-count" aria-hidden="true">–</span></button>
+                <button class="rail-button" type="button" data-view="credentials"><span class="rail-icon">⌘</span><span><strong>Credentials</strong><small>Status and runbooks</small></span><span class="rail-count" id="nav-credentials-count">0</span></button>
               </div>
             </nav>
             <section class="panel violet left-priorities">
@@ -586,6 +594,21 @@
                   </article>
                 </div>
               </section>
+              <section class="view" id="view-credentials">
+                <div class="credentials-view">
+                  <article class="panel violet">
+                    <div class="panel-header"><h2>Credentials</h2><span>Status only</span></div>
+                    <div class="panel-content" style="padding:10px">
+                      <p id="credentials-intro">Machine credentials are not a sign-in. This console shows fingerprints and runbook links. It does not generate secrets or call Convex.</p>
+                      <p class="cred-bad" id="credentials-banner" hidden></p>
+                      <p class="cred-warn" id="credentials-approvals" hidden></p>
+                      <div id="credentials-cards"></div>
+                      <p class="note" id="credentials-local"></p>
+                      <ul id="credentials-links"></ul>
+                    </div>
+                  </article>
+                </div>
+              </section>
               <section class="view" id="view-systems">
                 <div class="systems-view">
                   <article class="panel violet">
@@ -682,7 +705,7 @@
     <script>
       (() => {
         "use strict";
-        const state = { status: null, generalSettings: null, lastStatusAt: 0, tasks: [], reminders: [], brief: null, quotes: [], quoteRegisterStatus: "unavailable", counts: { activeTasks: 0, completedTasks: 0, reminders: 0 }, captureMode: "task", activities: [], selectedQuoteSummary: null, selectedQuote: null, quoteDetailState: "empty", quoteRequestGeneration: 0, inbox: null, activity: null, liveWork: null };
+        const state = { status: null, generalSettings: null, lastStatusAt: 0, tasks: [], reminders: [], brief: null, quotes: [], quoteRegisterStatus: "unavailable", counts: { activeTasks: 0, completedTasks: 0, reminders: 0 }, captureMode: "task", activities: [], selectedQuoteSummary: null, selectedQuote: null, quoteDetailState: "empty", quoteRequestGeneration: 0, inbox: null, activity: null, liveWork: null, credentials: null };
         const STATUS_STALE_MS = 45000;
         let rpcId = 0;
         let healthCheckInFlight = false;
@@ -811,7 +834,7 @@
             healthCheckInFlight = false;
           }
         }
-        function update(result) { const data = structured(result); if (!data || typeof data !== "object") return; if (data.status && typeof data.status === "object") { state.status = data.status; state.lastStatusAt = Date.now(); } if (data.settings && data.settings.timezone && typeof data.settings.timezone === "object") state.generalSettings = data.settings; if (Array.isArray(data.tasks)) state.tasks = data.tasks; if (Array.isArray(data.reminders)) state.reminders = data.reminders; if (data.brief && typeof data.brief === "object") state.brief = data.brief; if (data.quoteRegister && typeof data.quoteRegister === "object") { state.quoteRegisterStatus = data.quoteRegister.status === "ready" ? "ready" : "unavailable"; state.quotes = Array.isArray(data.quoteRegister.quotes) ? data.quoteRegister.quotes : []; } if ("inbox" in data) state.inbox = data.inbox; if ("activity" in data) state.activity = data.activity; if ("liveWork" in data) state.liveWork = data.liveWork; if (data.counts && typeof data.counts === "object") state.counts = data.counts; else recalc(); render(); }
+        function update(result) { const data = structured(result); if (!data || typeof data !== "object") return; if (data.status && typeof data.status === "object") { state.status = data.status; state.lastStatusAt = Date.now(); } if (data.settings && data.settings.timezone && typeof data.settings.timezone === "object") state.generalSettings = data.settings; if (Array.isArray(data.tasks)) state.tasks = data.tasks; if (Array.isArray(data.reminders)) state.reminders = data.reminders; if (data.brief && typeof data.brief === "object") state.brief = data.brief; if (data.quoteRegister && typeof data.quoteRegister === "object") { state.quoteRegisterStatus = data.quoteRegister.status === "ready" ? "ready" : "unavailable"; state.quotes = Array.isArray(data.quoteRegister.quotes) ? data.quoteRegister.quotes : []; } if ("inbox" in data) state.inbox = data.inbox; if ("activity" in data) state.activity = data.activity; if ("liveWork" in data) state.liveWork = data.liveWork; if ("credentials" in data) state.credentials = data.credentials; if (data.counts && typeof data.counts === "object") state.counts = data.counts; else recalc(); render(); }
         window.addEventListener("message", (event) => { if (event.source !== window.parent) return; const message = event.data; if (!message || message.jsonrpc !== "2.0") return; if (typeof message.id === "number") { const waiting = pending.get(message.id); if (!waiting) return; pending.delete(message.id); if (message.error) waiting.reject(message.error); else waiting.resolve(message.result); return; } if (message.method === "ui/notifications/tool-result") update(message.params); }, { passive: true });
         const bridgeReady = (async () => { await request("ui/initialize", { appInfo: { name: "jarvis-dashboard", version: "0.2.0" }, appCapabilities: {}, protocolVersion: "2026-01-26" }); notify("ui/notifications/initialized", {}); bridgeInitialised = true; void checkConnectionHealth(true); activity("HUD bridge online", "MCP Apps connection initialised"); })();
         async function callTool(name, args = {}) { await bridgeReady; const result = await request("tools/call", { name, arguments: args }); update(result); return result; }
@@ -1117,7 +1140,64 @@
           note.hidden = true;
           text(byId("tz-effective"), timezone.effectiveIana);
         }
-        function render() { renderCounts(); renderFocus(); renderBoard(); renderReminders(); renderSystems(); renderCategories(); renderPriorities(); renderRightReminders(); renderOperations(); renderActivity(); renderInbox(); renderActivityTimeline(); renderLiveWork(); renderGeneral(); }
+        function renderCredentials() {
+          const root = byId("credentials-cards");
+          if (!root) return;
+          const credentials = state.credentials;
+          const banner = byId("credentials-banner");
+          const approvals = byId("credentials-approvals");
+          const local = byId("credentials-local");
+          const links = byId("credentials-links");
+          root.replaceChildren();
+          links.replaceChildren();
+          if (!credentials) {
+            banner.hidden = true;
+            approvals.hidden = false;
+            text(approvals, "Credentials status could not be reached.");
+            text(local, "Generate and rotate on the loopback settings page. This console does not mint secrets.");
+            text(byId("nav-credentials-count"), 0);
+            return;
+          }
+          banner.hidden = !credentials.banner;
+          if (credentials.banner) text(banner, credentials.banner);
+          approvals.hidden = !credentials.approvalsWarning;
+          if (credentials.approvalsWarning) text(approvals, credentials.approvalsWarning);
+          credentials.tokens.forEach((card) => {
+            const section = document.createElement("section");
+            section.className = "cred-card";
+            const title = document.createElement("h3");
+            text(title, card.label);
+            const statusLine = document.createElement("p");
+            text(statusLine, card.statusLabel + " · " + card.overlapLabel);
+            const fingerprint = document.createElement("p");
+            fingerprint.className = "fp";
+            text(fingerprint, card.fingerprint || "—");
+            section.append(title, statusLine, fingerprint);
+            if (card.warning) {
+              const warn = document.createElement("p");
+              warn.className = card.equalsServiceToken ? "cred-bad" : "cred-warn";
+              text(warn, card.warning);
+              section.append(warn);
+            }
+            root.append(section);
+          });
+          text(local, credentials.localPage
+            ? "Generate and rotate on the local host page " + credentials.localPage + ". This console does not mint secrets or call Convex."
+            : "Generate stays on the loopback host. This console does not mint secrets or call Convex.");
+          const docs = credentials.docs || {};
+          [["Open HTTP API docs", docs.httpApi], ["Open MCP preview runbook", docs.mcpPreview], ["Open exposure / remote gateway docs", docs.exposure], ["Open rotation runbook", docs.rotation]].forEach(([label, href]) => {
+            if (!href) return;
+            const item = document.createElement("li");
+            const anchor = document.createElement("a");
+            anchor.href = href;
+            anchor.rel = "noreferrer";
+            text(anchor, label);
+            item.append(anchor);
+            links.append(item);
+          });
+          text(byId("nav-credentials-count"), credentials.failClosed ? "!" : credentials.tokens.filter((card) => card.configured).length);
+        }
+        function render() { renderCounts(); renderFocus(); renderBoard(); renderReminders(); renderSystems(); renderCategories(); renderPriorities(); renderRightReminders(); renderOperations(); renderActivity(); renderInbox(); renderActivityTimeline(); renderLiveWork(); renderGeneral(); renderCredentials(); }
         function setCaptureMode(mode) { state.captureMode = mode; document.querySelectorAll("[data-capture]").forEach((button) => button.classList.toggle("active",button.dataset.capture === mode)); const category = byId("capture-category"); const due = byId("capture-due"); if (mode === "task") { text(byId("capture-title-label"),"Task command"); text(byId("capture-detail-copy"),"Category"); category.hidden = false; due.hidden = true; text(byId("capture-submit"),"ADD TASK"); } else { text(byId("capture-title-label"),"Reminder command"); text(byId("capture-detail-copy"),"When"); category.hidden = true; due.hidden = false; text(byId("capture-submit"),"SET REMINDER"); } }
         document.querySelectorAll("[data-view]").forEach((button) => button.addEventListener("click",() => { document.querySelectorAll("[data-view]").forEach((candidate) => candidate.classList.toggle("active",candidate === button)); document.querySelectorAll(".view").forEach((view) => view.classList.toggle("active",view.id === `view-${button.dataset.view}`)); }));
         document.querySelectorAll("[data-capture]").forEach((button) => button.addEventListener("click",() => setCaptureMode(button.dataset.capture)));
