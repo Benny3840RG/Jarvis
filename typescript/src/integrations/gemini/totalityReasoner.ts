@@ -2,6 +2,11 @@ import { readBoundedResponseText } from "../boundedResponse.js";
 import type { TotalityRequest } from "../../runtime/totalityContracts.js";
 import { assertRequestAuthority } from "../../runtime/totalityContracts.js";
 import { routeTotalityTask } from "../../runtime/totalityPolicy.js";
+import {
+  asCallerDisconnected,
+  linkProviderCancellation,
+  TotalityCallerDisconnected,
+} from "../../totality/callerLifetime.js";
 import type { TotalityReasoningContext } from "../../totality/totalityPipeline.js";
 import {
   DEFAULT_TOTALITY_MAX_OUTPUT_TOKENS,
@@ -219,6 +224,7 @@ export class GeminiTotalityReasoner {
   async reason(
     request: TotalityRequest,
     context: TotalityReasoningContext,
+    caller?: AbortSignal,
   ): Promise<GeminiTotalityResult> {
     const routing = routeTotalityTask({
       taskType: request.taskType,
@@ -228,8 +234,10 @@ export class GeminiTotalityReasoner {
     assertRequestAuthority(request, routing);
     const clientRequestId = cleanClientRequestId(request.requestId);
 
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), this.config.timeoutMs);
+    const cancellation = linkProviderCancellation({
+      timeoutMs: this.config.timeoutMs,
+      caller,
+    });
     try {
       const response = await this.fetchImpl(
         `${GEMINI_ENDPOINT_BASE}/${encodeURIComponent(this.config.model)}:generateContent`,
@@ -244,11 +252,13 @@ export class GeminiTotalityReasoner {
             "X-Client-Request-Id": clientRequestId,
           },
           body: this.serializeRequest(request, context),
-          signal: controller.signal,
+          signal: cancellation.signal,
         },
       );
 
-      const responseText = await readBoundedResponseText(response, { signal: controller.signal });
+      const responseText = await readBoundedResponseText(response, {
+        signal: cancellation.signal,
+      });
       const payload = parseResponsePayload(responseText);
       if (!response.ok) {
         const message =
@@ -266,23 +276,26 @@ export class GeminiTotalityReasoner {
       const outputText = extractOutputText(payload);
       const parsed = parseTotalityDraft(JSON.parse(outputText) as unknown);
       const usage = extractUsage(payload, this.config.model);
+      if (caller?.aborted) throw new TotalityCallerDisconnected();
       return {
         responseId: typeof payload.responseId === "string" ? payload.responseId : null,
         draft: parsed,
         ...(usage ? { modelUsage: usage } : {}),
       };
     } catch (error: unknown) {
-      if (error instanceof GeminiRequestError) throw error;
-      if (error instanceof Error && error.name === "AbortError") {
+      const classified = asCallerDisconnected(caller, error);
+      if (classified instanceof TotalityCallerDisconnected) throw classified;
+      if (classified instanceof GeminiRequestError) throw classified;
+      if (classified instanceof Error && classified.name === "AbortError") {
         throw new GeminiRequestError("Gemini request timed out.", null, true);
       }
-      const message = error instanceof Error ? error.message : String(error);
-      if (error instanceof TypeError) {
+      const message = classified instanceof Error ? classified.message : String(classified);
+      if (classified instanceof TypeError) {
         throw new GeminiRequestError(`Gemini network request failed: ${message}`, null, true);
       }
       throw new GeminiRequestError(`Gemini response processing failed: ${message}`, null, false);
     } finally {
-      clearTimeout(timeout);
+      cancellation.dispose();
     }
   }
 }
