@@ -24,16 +24,16 @@ body {
   margin: 0;
   min-width: 0;
   background:
-    radial-gradient(circle at 50% 20%, rgba(47, 220, 255, 0.08), transparent 32rem),
-    radial-gradient(circle at 10% 0%, rgba(185, 51, 255, 0.16), transparent 30rem),
+    radial-gradient(circle at 50% 20%, rgba(196, 165, 116, 0.08), transparent 32rem),
+    radial-gradient(circle at 10% 0%, rgba(196, 123, 74, 0.16), transparent 30rem),
     #05060a;
 }
 
 .jarvis-shell {
-  --violet: #b933ff;
-  --cyan: #35e4ff;
+  --violet: #c47b4a;
+  --cyan: #c4a574;
   --orange: #ff8a2b;
-  --green: #45ff8a;
+  --green: #d7a15f;
   --steel: #293040;
   --panel: #0b0e15;
   --muted: #9299aa;
@@ -44,12 +44,12 @@ body {
   border: 2px solid #343c50;
   border-radius: 22px;
   background:
-    linear-gradient(rgba(185, 51, 255, 0.025) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(53, 228, 255, 0.025) 1px, transparent 1px),
+    linear-gradient(rgba(196, 123, 74, 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(196, 165, 116, 0.025) 1px, transparent 1px),
     linear-gradient(145deg, #111622, #06080d 66%, #0d1018);
   background-size: 26px 26px, 26px 26px, auto;
   color: #f6f7fb;
-  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.55), inset 0 0 55px rgba(185, 51, 255, 0.035);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.55), inset 0 0 55px rgba(196, 123, 74, 0.035);
 }
 
 .jarvis-shell::before,
@@ -88,7 +88,7 @@ body {
   aspect-ratio: 1;
   border: 3px dashed var(--cyan);
   border-radius: 50%;
-  box-shadow: 0 0 30px rgba(53, 228, 255, 0.22), inset 0 0 22px rgba(185, 51, 255, 0.2);
+  box-shadow: 0 0 30px rgba(196, 165, 116, 0.22), inset 0 0 22px rgba(196, 123, 74, 0.2);
   animation: spin 5s linear infinite;
 }
 
@@ -139,7 +139,7 @@ body {
   flex: 0 0 auto;
   border: 3px solid #05060a;
   background: linear-gradient(180deg, #e4e7ef, #aab0bf);
-  box-shadow: 0 0 0 2px var(--orange), 0 0 18px rgba(53, 228, 255, 0.22);
+  box-shadow: 0 0 0 2px var(--orange), 0 0 18px rgba(196, 165, 116, 0.22);
 }
 
 .mascot-mark {
@@ -270,7 +270,7 @@ body {
   border: 1px solid #343c4d;
   border-radius: 14px;
   background: linear-gradient(145deg, rgba(21, 26, 38, 0.96), rgba(7, 9, 14, 0.97));
-  box-shadow: inset 0 0 28px rgba(53, 228, 255, 0.025);
+  box-shadow: inset 0 0 28px rgba(196, 165, 116, 0.025);
 }
 
 .hud-panel::before {
@@ -288,7 +288,7 @@ body {
   padding: 9px 10px;
   border-bottom: 1px solid #303747;
   color: #f1f3f8;
-  background: linear-gradient(90deg, rgba(255, 138, 43, 0.09), rgba(185, 51, 255, 0.08), rgba(53, 228, 255, 0.06));
+  background: linear-gradient(90deg, rgba(255, 138, 43, 0.09), rgba(196, 123, 74, 0.08), rgba(196, 165, 116, 0.06));
 }
 
 .system-core-panel {
@@ -415,10 +415,10 @@ body {
   grid-template-rows: auto minmax(0, 1fr) auto;
   min-height: 0;
   overflow: hidden;
-  border: 1px solid rgba(185, 51, 255, 0.42);
+  border: 1px solid rgba(196, 123, 74, 0.42);
   border-radius: 16px;
   background:
-    radial-gradient(circle at 50% 48%, rgba(53, 228, 255, 0.08), transparent 35%),
+    radial-gradient(circle at 50% 48%, rgba(196, 165, 116, 0.08), transparent 35%),
     linear-gradient(145deg, rgba(18, 22, 33, 0.98), rgba(6, 8, 13, 0.99));
 }
 
@@ -446,7 +446,7 @@ body {
 .reactor-ring.outer {
   inset: 2%;
   border: 6px dashed var(--cyan);
-  box-shadow: 0 0 24px rgba(53, 228, 255, 0.18);
+  box-shadow: 0 0 24px rgba(196, 165, 116, 0.18);
   animation: spin 18s linear infinite;
 }
 
@@ -460,7 +460,7 @@ body {
 .reactor-ring.inner {
   inset: 29%;
   border: 4px dashed var(--violet);
-  background: radial-gradient(circle, rgba(53, 228, 255, 0.14), rgba(185, 51, 255, 0.08) 60%, transparent 61%);
+  background: radial-gradient(circle, rgba(196, 165, 116, 0.14), rgba(196, 123, 74, 0.08) 60%, transparent 61%);
   animation: spin 8s linear infinite;
 }
 

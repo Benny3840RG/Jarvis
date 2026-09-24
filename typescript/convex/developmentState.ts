@@ -28,6 +28,7 @@ import { findLatestDevelopmentEvidence } from "./developmentEvidence.js";
 import { evaluateOmegaCompletion } from "../src/omega/policy.js";
 import type { OmegaCompletionInput } from "../src/omega/policy.js";
 import { resolveTrustedModelProfile } from "../src/development/modelResourceGovernance.js";
+import { consumeModelInvocationBudget } from "./rateLimits.js";
 import { collectBounded, requireOwner } from "./authHelpers.js";
 import {
   developmentActorRefValidator,
@@ -86,11 +87,11 @@ const CHECKPOINT_SCAN_BOUND = 200;
  * LEASE_REQUIRED_TRANSITIONS), so its recorded headSha is as trustworthy
  * as any other committed transition event in this system.
  */
-async function findLatestVerifyingCheckpointHeadSha(
+async function findLatestVerifyingCheckpoint(
   ctx: MutationCtx,
   ownerId: string,
   subjectId: string,
-): Promise<string | undefined> {
+): Promise<{ headSha?: string; workerFailed: boolean } | undefined> {
   const events = await ctx.db
     .query("developmentEvents")
     .withIndex("by_owner_and_subject_id_and_created_at", (q) =>
@@ -103,14 +104,20 @@ async function findLatestVerifyingCheckpointHeadSha(
       event.eventType === "DEV_TRANSITION_COMMITTED" &&
       event.transitionId === "DEV_TRANSITION_BUILDING_TO_VERIFYING",
   );
-  const effectPayload = checkpoint?.payload.effectPayload;
-  const headSha =
-    effectPayload && typeof effectPayload === "object" && "headSha" in effectPayload
-      ? (effectPayload as Record<string, unknown>).headSha
+  if (!checkpoint) return undefined;
+  const effectPayload = checkpoint.payload.effectPayload;
+  const fields =
+    effectPayload && typeof effectPayload === "object"
+      ? (effectPayload as Record<string, unknown>)
       : undefined;
-  return typeof headSha === "string" && HEAD_SHA_PATTERN.test(headSha)
-    ? headSha.toLowerCase()
-    : undefined;
+  const headSha = fields?.headSha;
+  return {
+    headSha:
+      typeof headSha === "string" && HEAD_SHA_PATTERN.test(headSha)
+        ? headSha.toLowerCase()
+        : undefined,
+    workerFailed: fields?.workerSucceeded === false,
+  };
 }
 
 async function findOrchestrationRun(ctx: QueryCtx | MutationCtx, ownerId: string, runId: string) {
@@ -871,6 +878,8 @@ export const recordModelInvocation = mutation({
       return publicDevelopmentEvent(existing);
     }
 
+    await consumeModelInvocationBudget(ctx, ownerId, provider);
+
     const now = Date.now();
     const occurredAt = new Date(now).toISOString();
     const event: JarvisEvent = {
@@ -1243,22 +1252,27 @@ export const commit = mutation({
             transitionCommitted: false,
           }
         : undefined;
-    // VERIFYING->REVIEW and the two REVIEW exits must prove a genuine
-    // verification/review outcome occurred for the mission's current head,
-    // not merely accept a caller-supplied claim (see
-    // convex/developmentEvidence.ts). The trusted head comes from the
+    // VERIFYING and REVIEW exits must prove a genuine verification/review
+    // outcome for the mission's current head, not a caller-supplied claim
+    // (see convex/developmentEvidence.ts). The trusted head comes from the
     // subject's own most recent BUILDING->VERIFYING checkpoint event, the
     // same durable record a worker's lease was already validated against to
-    // reach VERIFYING in the first place.
+    // reach VERIFYING in the first place. Repair is the conclusive-failure
+    // route: a clean result cannot enter it, and a blocking result cannot
+    // advance to review or merge readiness.
     const evidenceGatedTransition =
       args.transitionId === "DEV_TRANSITION_VERIFYING_TO_REVIEW" ||
+      args.transitionId === "DEV_TRANSITION_VERIFYING_TO_REPAIR_REQUIRED" ||
       args.transitionId === "DEV_TRANSITION_REVIEW_TO_READY_TO_MERGE" ||
       args.transitionId === "DEV_TRANSITION_REVIEW_TO_REPAIR_REQUIRED";
-    const verifiedHeadSha = evidenceGatedTransition
-      ? await findLatestVerifyingCheckpointHeadSha(ctx, ownerId, subjectId)
+    const verifyingCheckpoint = evidenceGatedTransition
+      ? await findLatestVerifyingCheckpoint(ctx, ownerId, subjectId)
       : undefined;
+    const verifiedHeadSha = verifyingCheckpoint?.headSha;
     const trustedVerificationEvidence =
-      args.transitionId === "DEV_TRANSITION_VERIFYING_TO_REVIEW" && verifiedHeadSha
+      (args.transitionId === "DEV_TRANSITION_VERIFYING_TO_REVIEW" ||
+        args.transitionId === "DEV_TRANSITION_VERIFYING_TO_REPAIR_REQUIRED") &&
+      verifiedHeadSha
         ? await findLatestDevelopmentEvidence(
             ctx,
             ownerId,
@@ -1268,15 +1282,30 @@ export const commit = mutation({
           )
         : undefined;
     const trustedVerificationReason =
-      args.transitionId !== "DEV_TRANSITION_VERIFYING_TO_REVIEW"
+      args.transitionId !== "DEV_TRANSITION_VERIFYING_TO_REVIEW" &&
+      args.transitionId !== "DEV_TRANSITION_VERIFYING_TO_REPAIR_REQUIRED"
         ? undefined
-        : !verifiedHeadSha
-          ? "VERIFICATION_HEAD_NOT_ESTABLISHED"
-          : !trustedVerificationEvidence
-            ? "VERIFICATION_EVIDENCE_REQUIRED"
-            : trustedVerificationEvidence.outcome === "clean"
-              ? undefined
-              : "VERIFICATION_EVIDENCE_NOT_CLEAN";
+        : args.transitionId === "DEV_TRANSITION_VERIFYING_TO_REVIEW"
+          ? !verifiedHeadSha
+            ? "VERIFICATION_HEAD_NOT_ESTABLISHED"
+            : !trustedVerificationEvidence
+              ? "VERIFICATION_EVIDENCE_REQUIRED"
+              : trustedVerificationEvidence.outcome === "clean"
+                ? undefined
+                : "VERIFICATION_EVIDENCE_NOT_CLEAN"
+          : !verifyingCheckpoint
+            ? "VERIFICATION_HEAD_NOT_ESTABLISHED"
+            : verifyingCheckpoint.workerFailed && trustedVerificationEvidence?.outcome === "clean"
+              ? "VERIFICATION_EVIDENCE_CONTRADICTED"
+              : verifyingCheckpoint.workerFailed
+                ? undefined
+                : !verifiedHeadSha
+                  ? "VERIFICATION_HEAD_NOT_ESTABLISHED"
+                  : !trustedVerificationEvidence
+                    ? "VERIFICATION_EVIDENCE_REQUIRED"
+                    : trustedVerificationEvidence.outcome === "blocking"
+                      ? undefined
+                      : "VERIFICATION_EVIDENCE_NOT_BLOCKING";
     const trustedReviewEvidence =
       (args.transitionId === "DEV_TRANSITION_REVIEW_TO_READY_TO_MERGE" ||
         args.transitionId === "DEV_TRANSITION_REVIEW_TO_REPAIR_REQUIRED") &&

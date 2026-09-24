@@ -43,25 +43,34 @@
     "import:convex": "tsx src/tools/runConvexImport.ts",
     "test:node": "node --import tsx --test tests/*.test.ts jarvis-console-01/tests/*.test.ts",
     "test:convex": "vitest run --config vitest.config.mts --maxWorkers=1",
+    "test:temporal-pass": "node --import tsx --test tests/pass/*.test.ts",
     "outlook": "node --import tsx src/tools/runOutlookOnboarding.ts"
   },
   "dependencies": {
+    "@convex-dev/rate-limiter": "^0.4.0",
+    "@fastify/rate-limit": "^11.2.0",
     "@modelcontextprotocol/ext-apps": "^1.7.4",
     "@modelcontextprotocol/sdk": "^1.30.0",
-    "@nestjs/common": "^12.0.1",
-    "@nestjs/core": "^12.0.1",
-    "@nestjs/platform-fastify": "^12.0.1",
-    "convex": "^1.45.0",
-    "fastify": "^5.12.4",
+    "@nestjs/common": "^12.0.3",
+    "@nestjs/core": "^12.0.3",
+    "@nestjs/platform-fastify": "^12.0.3",
+    "@temporalio/activity": "^1.24.0",
+    "@temporalio/client": "^1.24.0",
+    "@temporalio/common": "^1.24.0",
+    "@temporalio/worker": "^1.24.0",
+    "@temporalio/workflow": "^1.24.0",
+    "convex": "^1.46.0",
+    "fastify": "^5.12.5",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2",
-    "zod": "^4.6.4"
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@convex-dev/eslint-plugin": "^4.0.0",
     "@edge-runtime/vm": "5.0.0",
     "@eslint/js": "^10.0.1",
     "@redocly/cli": "^2.53.3",
+    "@temporalio/testing": "^1.24.0",
     "@types/node": "^24.13.5",
     "ajv": "^8.20.0",
     "concurrently": "10.0.5",
@@ -77,7 +86,9 @@
   },
   "allowScripts": {
     "esbuild": false,
-    "fsevents": false
+    "fsevents": false,
+    "@swc/core": true,
+    "protobufjs": false
   },
   "overrides": {
     "find-my-way": "^9.7.0",

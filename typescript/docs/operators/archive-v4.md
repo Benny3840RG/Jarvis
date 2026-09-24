@@ -13,10 +13,12 @@ Three of the six required groups are covered, read directly from JSON storage:
 | `businessRecords` | clients, properties, projects, quotes, invoices, enquiries, errands, business settings | `data/jarvis-clients.json`, `data/jarvis-properties.json`, `data/jarvis-projects.json`, `data/jarvis-quotes.json`, `data/jarvis-invoices.json`, `data/jarvis-enquiries.json`, `data/jarvis-errands.json`, `data/jarvis-business-settings.json` |
 
 `notesAndEvidence`, `orchestration` and `quoteAggregate` are **not covered
-yet**, so **every archive written today is `completeness: partial`** and is
-refused by the full-recovery restore path. That is the honest state, not an
-exclusion: the manifest lists the three groups as absent and claims no recovery
-method for them.
+by `export-v4`**, so **every archive written today is `completeness: partial`**
+and is refused by the full-recovery restore path. That is the honest state, not
+an exclusion: the manifest lists the three groups as absent and claims no
+recovery method for them. Separate isolated adapters can restore a fail-closed
+subset of notes/evidence rows and of terminal orchestration history into an
+empty Convex database. Those adapters do not mark the archive groups present.
 
 Coverage is now the _only_ thing standing between an archive and `complete`.
 Every archive `export-v4` writes has already been restored into an isolated
@@ -43,7 +45,10 @@ npm run backup -- restore-v4 <file> <empty-destination-dir> [--allow-partial] [-
 - **`restore-v4`** materialises the archive into a directory it creates itself.
 
 `PERSISTENCE_PROVIDER` must select `json`. Under `convex` the export refuses
-rather than writing an archive that omits the data actually in use.
+rather than writing an archive that omits the data actually in use. Settings →
+Persistence shows that refusal and labels v4 **Partial / JSON-only**. It wraps
+these commands; it does not add another recovery path. See
+[persistence settings](persistence-settings.md).
 
 ## What "strict and lossless" means here
 

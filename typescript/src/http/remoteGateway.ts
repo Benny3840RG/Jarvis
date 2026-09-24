@@ -156,10 +156,20 @@ export function resolveRemoteGatewayConfig(
   };
 }
 
+export type RemoteGatewayEvaluationOptions = {
+  /**
+   * The HTTP adapter passes false. `@fastify/rate-limit` is the only request
+   * counter on that path, including when the remote gateway is enabled.
+   * Direct callers keep these in-memory buckets.
+   */
+  enforceRateLimit?: boolean;
+};
+
 export function evaluateRemoteGatewayRequest(
   policy: RemoteGatewayConfig,
   request: RemoteGatewayRequest,
   now = Date.now(),
+  options: RemoteGatewayEvaluationOptions = {},
 ): RemoteGatewayDecision {
   if (request.forwardedProto?.toLowerCase() !== "https") {
     return { allowed: false, code: "tls-required" };
@@ -173,6 +183,8 @@ export function evaluateRemoteGatewayRequest(
   ) {
     return { allowed: false, code: "request-too-large" };
   }
+
+  if (options.enforceRateLimit === false) return { allowed: true };
 
   if (policy.rateBuckets.size >= MAX_RATE_BUCKETS) {
     for (const [key, candidate] of policy.rateBuckets) {
