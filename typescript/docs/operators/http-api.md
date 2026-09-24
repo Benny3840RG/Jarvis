@@ -41,8 +41,9 @@ JARVIS_SOURCE_VERSION=<build commit or immutable source identifier>
 `PERSISTENCE_PROVIDER` defaults to `json`; `convex` keeps the existing `CONVEX_URL` and service
 token requirements. `JARVIS_SERVICE_TOKEN_PREVIOUS` is accepted only while a current token is
 also configured, preserving the documented rotation overlap and failing closed otherwise.
-The loopback credentials page and `GET /api/v1/settings/credentials` report that overlap as a
-fingerprint, not as the token. See [credentials-settings.md](credentials-settings.md). A missing
+`GET /api/v1/settings/credentials` reports that overlap as a short fingerprint, not as the token.
+The public loopback page also embeds SHA-256 digests of the current and previous service tokens
+for a local collision check. See [credentials-settings.md](credentials-settings.md). A missing
 service token makes dependent status fail closed. A missing approval token warns that approvals
 are unavailable.
 

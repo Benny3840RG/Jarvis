@@ -12,11 +12,18 @@ Three secrets stay separate:
 | `JARVIS_DELIVERY_RUNTIME_TOKEN` | Authorises quote delivery-ledger writes. Must differ from the service token. | `JARVIS_DELIVERY_RUNTIME_TOKEN_PREVIOUS` |
 
 The HTTP read model at `GET /api/v1/settings/credentials` returns fingerprints (a short SHA-256
-prefix), overlap flags, and bind posture. It does not return token values. Fingerprints are
-derived when the process starts. A missing service token fails closed: dependent
-`GET /api/v1/status` returns 503, and the loopback page shows a fail-closed banner. A missing
-approval token warns “Approvals unavailable.” on Credentials and on tool-action approval. It does
-not block the rest of Settings.
+prefix and suffix), overlap flags, and bind posture. It does not return token values or full
+digests. Fingerprints are derived when the process starts. A missing service token fails closed:
+dependent `GET /api/v1/status` returns 503, and the loopback page shows a fail-closed banner. A
+missing approval token warns “Approvals unavailable.” on Credentials and on tool-action approval.
+It does not block the rest of Settings.
+
+`GET /settings/credentials` is a public loopback route. It does not require a Bearer token, so the
+fail-closed banner can render when the service token is missing. The HTML embeds the full SHA-256
+digests of the current and previous service tokens. That is deliberate: the page content-security
+policy blocks network calls, and the browser still needs those digests to reject a delivery token
+that matches the service token. The digests are not the tokens. They are not in the JSON read
+model, the MCP widget, or a non-loopback response. Non-loopback binds do not serve the page.
 
 ## Where generation is allowed
 
@@ -45,9 +52,11 @@ Convex changes stay operator-driven.
 | HTTP status                 | `curl --config - http://127.0.0.1:3000/api/v1/status` with the Bearer value supplied from the environment, not from the page        |
 | Start HTTP / preview        | `npm run start:http` / `npm run start:preview`                                                                                      |
 
-End overlap asks you to type `END OVERLAP`. While verification is failing, that action is hidden
-and it is never the primary button. Confirming it only reveals the `env remove` command. It does
-not change Convex or `.env.local` for you.
+End overlap asks you to type `END OVERLAP`. That reveals the `env remove` command. It does not run
+the command, and it does not change Convex or `.env.local`. Caller-supplied verification state is
+ignored: this page does not observe `npm run smoke:convex`, so idle, passing, and failing do not
+unlock or hide removal. The action is never the primary button. Removing the previous token is an
+operator command. Danger zone is not this page.
 
 If smoke fails, keep the previous token set until the local token is corrected. Do not paste
 tokens into Git, logs, issues, or chat. See [SECURITY.md](../../../SECURITY.md).

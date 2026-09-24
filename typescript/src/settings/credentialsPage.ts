@@ -5,10 +5,13 @@ function embedJson(value: unknown): string {
 }
 
 /**
- * Loopback operator page. The embedded model contains fingerprints and SHA-256
- * digests of the service token, never the token. Generation stays in the page:
- * the content-security policy forbids network calls, so the value cannot be
- * posted to MCP, the API, or anywhere else.
+ * Loopback operator page. GET /settings/credentials is a public route so the
+ * fail-closed banner can render without a Bearer token. The embedded model
+ * contains short fingerprints plus full SHA-256 digests of the current and
+ * previous service tokens. Those digests are not raw tokens. They stay in the
+ * page so a delivery token can be rejected locally: the content-security policy
+ * forbids network calls, so the revealed value cannot be posted to MCP or the
+ * API. The authenticated JSON status response does not include the digests.
  */
 export function renderCredentialsPage(model: CredentialsPageModel): string {
   const data = embedJson(model);
@@ -72,7 +75,7 @@ export function renderCredentialsPage(model: CredentialsPageModel): string {
     <section class="card">
       <h2>CLI / runbook parity</h2>
       <ul class="parity" id="parity"></ul>
-      <p class="note">Convex <code>env set</code> stays operator-driven. This page does not call it. HTTP checks use <code>curl --config -</code> so the Bearer value stays in the environment, not in a shell argument.</p>
+      <p class="note">Convex <code>env set</code> stays operator-driven. This page does not call it and does not remove the previous token. End overlap only shows the CLI command. Danger zone is not this page. HTTP checks use <code>curl --config -</code> so the Bearer value stays in the environment, not in a shell argument. The embedded service digests are SHA-256 values for a local collision check, not the token.</p>
     </section>
   </main>
   <dialog class="dialog" id="wizard">
@@ -111,11 +114,10 @@ export function renderCredentialsPage(model: CredentialsPageModel): string {
     const serviceDigests = Array.isArray(model.serviceDigests) ? model.serviceDigests : [];
     let revealed = "";
     function endOverlapControl(confirmation, verify, context) {
-      const failing = verify === "failing";
-      const offered = context === "card" ? !failing : verify === "passing";
-      const primary = false;
-      const allowed = offered && confirmation === "END OVERLAP";
-      return { offered, primary, allowed };
+      void verify;
+      void context;
+      const allowed = confirmation === "END OVERLAP";
+      return { offered: true, primary: false, allowed: allowed, executesRemoval: false };
     }
     function text(el, value) { el.textContent = value == null ? "" : String(value); }
     function wipe() { revealed = ""; const box = document.getElementById("secret-box"); if (box) box.value = ""; }
@@ -124,7 +126,6 @@ export function renderCredentialsPage(model: CredentialsPageModel): string {
     if (status.banner) { banner.hidden = false; text(banner, status.banner); }
     const approvals = document.getElementById("approvals");
     if (status.approvalsWarning) { approvals.hidden = false; text(approvals, status.approvalsWarning); }
-    const blocked = { service: false, approval: false, delivery: false };
     const cards = document.getElementById("cards");
     status.tokens.forEach((card) => {
       const section = document.createElement("section");
@@ -175,10 +176,7 @@ export function renderCredentialsPage(model: CredentialsPageModel): string {
       end.type = "button";
       end.dataset.end = card.id;
       text(end, "End overlap…");
-      end.addEventListener("click", () => {
-        if (blocked[card.id]) return;
-        openEnd(card.id, "card", "idle");
-      });
+      end.addEventListener("click", () => openEnd(card.id, "card", "idle"));
       actions.append(end);
       section.append(actions);
       cards.append(section);
@@ -331,29 +329,17 @@ export function renderCredentialsPage(model: CredentialsPageModel): string {
         const pass = document.createElement("button");
         pass.type = "button";
         text(pass, flow.verify === "smoke" ? "Smoke passed" : "Verification noted");
-        pass.addEventListener("click", () => {
-          verify = "passing";
-          blocked[flowId] = false;
-          const cardEnd = document.querySelector('[data-end="' + flowId + '"]');
-          if (cardEnd) cardEnd.hidden = false;
-          renderWizard();
-        });
+        pass.addEventListener("click", () => { verify = "passing"; renderWizard(); });
         const fail = document.createElement("button");
         fail.type = "button";
         text(fail, flow.verify === "smoke" ? "Smoke failed" : "Verification failed");
-        fail.addEventListener("click", () => {
-          verify = "failing";
-          blocked[flowId] = true;
-          const cardEnd = document.querySelector('[data-end="' + flowId + '"]');
-          if (cardEnd) cardEnd.hidden = true;
-          renderWizard();
-        });
+        fail.addEventListener("click", () => { verify = "failing"; renderWizard(); });
         const state = document.createElement("p");
         text(state, verify === "failing"
-          ? "Keep overlap. End overlap stays hidden while verification is failing."
+          ? "You marked verification failed. That mark does not hide the CLI command. This page does not run smoke and does not remove the previous token."
           : verify === "passing"
-            ? "Overlap stays on until you end it. End overlap is not the primary action."
-            : "Verification has not been recorded.");
+            ? "You marked verification passed. This page did not run smoke. End overlap only shows the CLI command."
+            : "Smoke is not observed here. End overlap only shows the CLI command. Danger zone is not this page.");
         body.append(copy, pass, fail, state, link(status.docs.credentials, "Open credentials runbook"));
       }
     }
@@ -395,7 +381,7 @@ export function renderCredentialsPage(model: CredentialsPageModel): string {
       document.getElementById("end-phrase").value = "";
       document.getElementById("end-confirm").disabled = true;
       document.getElementById("end-commands").hidden = true;
-      text(document.getElementById("end-copy"), "Revokes the previous " + flows[id].env + " credential. Clients still on the old token will fail closed.");
+      text(document.getElementById("end-copy"), "Shows the CLI command for the previous " + flows[id].env + " credential. This page does not remove it. Clients still on the old token fail closed only after you run that command yourself. Danger zone is not this page.");
       endDialog.showModal();
     }
     document.getElementById("end-phrase").addEventListener("input", (event) => {

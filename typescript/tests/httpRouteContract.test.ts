@@ -32,8 +32,10 @@ const DOCUMENTED_NOT_SERVED = new Set([
 ]);
 
 // Liveness is public. The credentials page is public only so a loopback operator
-// can see the fail-closed banner when the service token is missing. It returns
-// fingerprints, never token values, and is not served off loopback.
+// can see the fail-closed banner when the service token is missing. The HTML
+// embeds SHA-256 service-token digests for a local collision check, never raw
+// token values, and is not served off loopback. The JSON status API stays
+// fingerprint-only.
 const PUBLIC_OPERATIONS = new Set(["GET /healthz", "GET /settings/credentials"]);
 
 function unusedPersistence(): PersistenceProvider {

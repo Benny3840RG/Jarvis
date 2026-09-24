@@ -69,6 +69,12 @@ Next:
 2. If a later Operations surface starts or stops `npm run start:http`, keep it off this page.
 3. Phase B account sign-in stays out of Credentials. OIDC here is remote HTTP identity only.
 
+End overlap does not treat caller `verify` as smoke. Idle does not unlock a hidden control, and
+the response is CLI text with `executesRemoval: false`. Removing the previous token is not this
+page. The public loopback page embeds service-token SHA-256 digests for a local collision check.
+`GET /api/v1/settings/credentials` stays fingerprint-only. Production HTTP and preview select that
+model with `captureCredentialsFromEnv`, not from `HttpAppConfig`, which has no delivery token.
+
 ## Verification failure routes to repair (2026-09-23, #550)
 
 `DEV_TRANSITION_VERIFYING_TO_REPAIR_REQUIRED` now uses the trusted evidence

@@ -1,6 +1,6 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 
-import { isLoopbackHost, resolveHttpListenConfig, type HttpAppConfig } from "../http/config.js";
+import { isLoopbackHost, resolveHttpListenConfig } from "../http/config.js";
 
 export const END_OVERLAP_PHRASE = "END OVERLAP";
 
@@ -189,12 +189,14 @@ export function endOverlapControl(input: {
   verify: VerifyState;
   context: EndOverlapContext;
 }): { offered: boolean; primary: boolean; allowed: boolean } {
-  const failing = input.verify === "failing";
-  const offered = input.context === "card" ? !failing : input.verify === "passing";
+  // verify and context are not a smoke result. Idle must not unlock a hidden
+  // control, and a caller-supplied "passing" must not count as smoke.
+  void input.verify;
+  void input.context;
   return {
-    offered,
+    offered: true,
     primary: false,
-    allowed: offered && input.confirmation === END_OVERLAP_PHRASE,
+    allowed: input.confirmation === END_OVERLAP_PHRASE,
   };
 }
 
@@ -202,6 +204,8 @@ export type EndOverlapDecision = {
   offered: boolean;
   primary: boolean;
   allowed: boolean;
+  /** Always false. This response is CLI text. It does not remove a token. */
+  executesRemoval: false;
   commands: readonly string[];
 };
 
@@ -213,7 +217,10 @@ export function decideEndOverlap(input: {
 }): EndOverlapDecision {
   const control = endOverlapControl(input);
   return {
-    ...control,
+    offered: control.offered,
+    primary: control.primary,
+    allowed: control.allowed,
+    executesRemoval: false,
     commands: control.allowed ? endOverlapCommands(input.tokenId) : [],
   };
 }
@@ -470,21 +477,15 @@ export function captureCredentialsFromEnv(
   });
 }
 
-export function credentialsSourceFromHttpConfig(config: HttpAppConfig): CredentialsSource {
-  const remote = config.authMode === "oidc" || config.remoteGateway !== undefined;
-  return {
-    serviceToken: config.currentToken,
-    serviceTokenPrevious: config.previousToken,
-    approvalToken: config.currentApprovalToken,
-    approvalTokenPrevious: config.previousApprovalToken,
-    httpHost: remote ? "0.0.0.0" : "127.0.0.1",
-    httpPort: 3000,
-    mcpHost: "127.0.0.1",
-    mcpPort: 8787,
-    remoteGatewayEnabled: config.remoteGateway !== undefined,
-    tlsTerminated: config.remoteGateway?.requireForwardedHttps === true,
-    oidcConfigured: config.oidc !== undefined,
-    originsConfigured: (config.remoteGateway?.allowedOrigins.length ?? 0) > 0,
-    persistenceProvider: "json",
-  };
+/**
+ * Live credentials status and the loopback page always come from the process
+ * environment unless a test injects a runtime. `HttpAppConfig` has no delivery
+ * token, so deriving the page from it under-reports delivery.
+ */
+export function selectCredentialsRuntime(
+  injected: CredentialsRuntime | undefined,
+  env: NodeJS.ProcessEnv = process.env,
+): CredentialsRuntime {
+  if (injected !== undefined) return injected;
+  return captureCredentialsFromEnv(env);
 }

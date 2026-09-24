@@ -155,7 +155,7 @@ describe("credentials HTTP boundary", () => {
     assert.equal(leaked.body.includes(SERVICE), false);
   });
 
-  it("rejects end overlap unless the typed phrase matches and verification is not failing", async () => {
+  it("returns CLI remove text for a matching phrase and ignores caller verify state", async () => {
     const credentials = captureCredentials({
       serviceToken: SERVICE,
       httpHost: "127.0.0.1",
@@ -181,12 +181,32 @@ describe("credentials HTTP boundary", () => {
       },
     });
     assert.equal(failing.statusCode, 200);
-    assert.deepEqual(failing.json(), {
-      offered: false,
-      primary: false,
-      allowed: false,
-      commands: [],
+    const failingBody = failing.json() as {
+      allowed: boolean;
+      executesRemoval: boolean;
+      commands: string[];
+    };
+    assert.equal(failingBody.allowed, true);
+    assert.equal(failingBody.executesRemoval, false);
+    assert.match(
+      failingBody.commands[0] ?? "",
+      /npx convex env remove JARVIS_SERVICE_TOKEN_PREVIOUS/,
+    );
+
+    const idle = await server.inject({
+      method: "POST",
+      url: "/api/v1/settings/credentials/end-overlap",
+      headers: { authorization: `Bearer ${SERVICE}` },
+      payload: {
+        tokenId: "service",
+        confirmation: "END OVERLAP",
+        verify: "idle",
+        context: "card",
+      },
     });
+    assert.equal(idle.statusCode, 200);
+    assert.equal((idle.json() as { executesRemoval: boolean }).executesRemoval, false);
+    assert.deepEqual((idle.json() as { commands: string[] }).commands, failingBody.commands);
 
     const pasted = await server.inject({
       method: "POST",
@@ -214,9 +234,15 @@ describe("credentials HTTP boundary", () => {
       },
     });
     assert.equal(allowed.statusCode, 200);
-    const decision = allowed.json() as { allowed: boolean; primary: boolean; commands: string[] };
+    const decision = allowed.json() as {
+      allowed: boolean;
+      primary: boolean;
+      executesRemoval: boolean;
+      commands: string[];
+    };
     assert.equal(decision.allowed, true);
     assert.equal(decision.primary, false);
+    assert.equal(decision.executesRemoval, false);
     assert.match(decision.commands[0] ?? "", /npx convex env remove JARVIS_SERVICE_TOKEN_PREVIOUS/);
     assert.equal(allowed.body.includes(SERVICE), false);
   });
@@ -270,5 +296,56 @@ describe("credentials HTTP boundary", () => {
     assert.equal(page.statusCode, 404);
     assert.equal(page.body.includes(SERVICE), false);
     assert.doesNotMatch(page.body, /Generate new token/);
+  });
+
+  it("serves delivery status from the environment when HttpAppConfig has no delivery token", async () => {
+    const server = await createJarvisHttpApp({
+      persistence: persistence(),
+      providerName: "json",
+      config: config(SERVICE),
+      credentialsEnv: {
+        JARVIS_SERVICE_TOKEN: SERVICE,
+        JARVIS_APPROVAL_TOKEN: APPROVAL,
+        JARVIS_DELIVERY_RUNTIME_TOKEN: DELIVERY,
+        JARVIS_HTTP_HOST: "127.0.0.1",
+        JARVIS_HTTP_PORT: "3000",
+      },
+      logger: false,
+    });
+    openApps.push(server);
+    const status = await server.inject({
+      method: "GET",
+      url: "/api/v1/settings/credentials",
+      headers: { authorization: `Bearer ${SERVICE}` },
+    });
+    assert.equal(status.statusCode, 200);
+    const payload = status.json() as {
+      data: { tokens: Array<{ id: string; configured: boolean; fingerprint: string | null }> };
+    };
+    assert.equal(payload.data.tokens[2]?.id, "delivery");
+    assert.equal(payload.data.tokens[2]?.configured, true);
+    assert.match(payload.data.tokens[2]?.fingerprint ?? "", /^[0-9a-f]{4}\u2026[0-9a-f]{4}$/);
+    assert.equal(status.body.includes(DELIVERY), false);
+    assert.equal(status.body.includes(secretDigest(SERVICE)), false);
+
+    const page = await server.inject({ method: "GET", url: "/settings/credentials" });
+    assert.equal(page.statusCode, 200);
+    assert.match(page.body, new RegExp(secretDigest(SERVICE)));
+    assert.equal(page.body.includes(SERVICE), false);
+    assert.equal(page.body.includes(DELIVERY), false);
+
+    const httpMain = await import("node:fs").then((fs) =>
+      fs.readFileSync(new URL("../src/http/main.ts", import.meta.url), "utf8"),
+    );
+    const previewMain = await import("node:fs").then((fs) =>
+      fs.readFileSync(new URL("../src/preview/main.ts", import.meta.url), "utf8"),
+    );
+    const appSource = await import("node:fs").then((fs) =>
+      fs.readFileSync(new URL("../src/http/app.ts", import.meta.url), "utf8"),
+    );
+    assert.match(appSource, /selectCredentialsRuntime\(/);
+    assert.doesNotMatch(appSource, /credentialsSourceFromHttpConfig/);
+    assert.doesNotMatch(httpMain, /credentialsSourceFromHttpConfig|credentialsRuntime/);
+    assert.doesNotMatch(previewMain, /credentialsSourceFromHttpConfig|credentialsRuntime/);
   });
 });

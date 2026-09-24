@@ -59,6 +59,7 @@ export class CredentialsController {
     offered: boolean;
     primary: boolean;
     allowed: boolean;
+    executesRemoval: false;
     commands: readonly string[];
   } {
     const parsed = parseEndOverlapRequest(body);
@@ -68,6 +69,7 @@ export class CredentialsController {
       offered: decision.offered,
       primary: decision.primary,
       allowed: decision.allowed,
+      executesRemoval: false,
       commands: decision.commands,
     };
   }

@@ -311,7 +311,7 @@
       "get": {
         "operationId": "getCredentialsPage",
         "summary": "Open the loopback credentials settings page",
-        "description": "Serves the local operator credentials page on a loopback bind only. The page shows fingerprints and rotation runbooks. A generated token is revealed once in the browser and is never returned by this response, sent to MCP, or written into a URL. Non-loopback binds do not serve the page. There is no control that enables remote exposure.",
+        "description": "Serves the local operator credentials page on a loopback bind only. This route is public (no Bearer token) so a missing service token can still show the fail-closed banner. The HTML shows short fingerprints and rotation runbooks, and it embeds SHA-256 digests of the current and previous service tokens so the browser can reject a colliding delivery token without a network call. Those digests are not raw tokens and are not included in GET /api/v1/settings/credentials. A generated token is revealed once in the browser and is not sent to MCP or written into a URL. Non-loopback binds do not serve the page. There is no control that enables remote exposure.",
         "tags": ["System"],
         "security": [],
         "x-mcp-tool": {
@@ -325,7 +325,7 @@
         },
         "responses": {
           "200": {
-            "description": "Loopback credentials settings HTML. Contains no raw secrets.",
+            "description": "Loopback credentials settings HTML. Contains no raw secrets. Because the route is public on loopback, the HTML embeds SHA-256 service-token digests for local collision checks. The authenticated JSON status API does not.",
             "content": {
               "text/html": {
                 "schema": {
@@ -386,7 +386,7 @@
       "post": {
         "operationId": "endCredentialOverlap",
         "summary": "Confirm ending a credential overlap window",
-        "description": "Checks the typed END OVERLAP confirmation and verification state, then returns the runbook commands that remove the previous token. This operation does not change Convex or local env. End overlap is not offered while verification is failing and is never the primary action. The response does not echo the supplied confirmation.",
+        "description": "Returns the operator CLI text for removing a previous token after the typed END OVERLAP phrase matches. verify and context are accepted and ignored: this process does not observe npm run smoke:convex, so a caller cannot unlock or hide removal by sending idle, passing, or failing. executesRemoval is always false. The operation does not change Convex or local env. Removing the previous token remains an operator command; Danger zone is not this endpoint. The response does not echo the supplied confirmation and is never the primary action.",
         "tags": ["System"],
         "x-mcp-tool": {
           "exposed": false,
@@ -409,7 +409,7 @@
         },
         "responses": {
           "200": {
-            "description": "Whether end-overlap is offered and the runbook commands when it is allowed.",
+            "description": "CLI remove commands when the typed phrase matches. executesRemoval is false. verify does not change the result.",
             "headers": {
               "X-Request-Id": {
                 "$ref": "#/components/headers/RequestId"
@@ -7233,18 +7233,27 @@
         "properties": {
           "tokenId": { "type": "string", "enum": ["service", "approval", "delivery"] },
           "confirmation": { "type": "string", "maxLength": 32 },
-          "verify": { "type": "string", "enum": ["idle", "passing", "failing"] },
-          "context": { "type": "string", "enum": ["wizard", "card"] }
+          "verify": {
+            "type": "string",
+            "enum": ["idle", "passing", "failing"],
+            "description": "Accepted and ignored. Not evidence that smoke passed or failed."
+          },
+          "context": {
+            "type": "string",
+            "enum": ["wizard", "card"],
+            "description": "Accepted and ignored. Card and idle do not unlock removal."
+          }
         }
       },
       "EndOverlapResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["offered", "primary", "allowed", "commands"],
+        "required": ["offered", "primary", "allowed", "executesRemoval", "commands"],
         "properties": {
           "offered": { "type": "boolean" },
           "primary": { "type": "boolean" },
           "allowed": { "type": "boolean" },
+          "executesRemoval": { "type": "boolean", "const": false },
           "commands": {
             "type": "array",
             "maxItems": 4,
