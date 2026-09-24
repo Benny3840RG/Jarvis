@@ -230,6 +230,17 @@ function sampleBrief() {
 /** Schema-valid mock responses so tool output validation never short-circuits a probe. */
 function mockResponse(method: string, path: string): Response {
   if (path === "/api/v1/status") return Response.json(STATUS);
+  if (path === "/api/v1/settings/general") {
+    return Response.json({
+      timezone: {
+        effectiveIana: "Australia/Melbourne",
+        source: "env",
+        envRaw: "Australia/Melbourne",
+        valid: true,
+        machineIana: "Australia/Melbourne",
+      },
+    });
+  }
   if (path === "/api/v1/development/live-work")
     return Response.json({ data: { status: "available", pipeline: null } });
   if (path === "/api/v1/tasks") {
@@ -365,6 +376,7 @@ function classify(matchers: OpenApiOperation[], request: RecordedRequest): strin
 const TOOL_INVOCATIONS: Record<string, Record<string, unknown>> = {
   show_jarvis_dashboard: {},
   get_jarvis_status: {},
+  get_general_settings: {},
   get_development_live_work: {},
   list_tasks: {},
   get_task: { taskId: "task-1" },

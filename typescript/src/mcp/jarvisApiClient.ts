@@ -18,6 +18,7 @@ import type { QuoteSnapshot } from "../quotes/quoteLifecycle.js";
 import type { QuoteSummary } from "../quotes/quoteRepository.js";
 import type { ToolAction, ToolActionState } from "../actions/toolActions.js";
 import type { SystemStatus } from "../http/contracts.js";
+import type { OperatorGeneralSettings } from "../reminders/due.js";
 import type { Reminder, Task } from "../persistence/persistence.js";
 import type { TaskUpdate } from "../persistence/updates.js";
 import { resolveMcpBackendDeadlineMs, type JarvisApiConfig } from "./config.js";
@@ -246,6 +247,10 @@ export class JarvisApiClient {
 
   async getStatus(): Promise<SystemStatus> {
     return this.request<SystemStatus>("GET", "/api/v1/status");
+  }
+
+  async getOperatorGeneralSettings(): Promise<OperatorGeneralSettings> {
+    return this.request<OperatorGeneralSettings>("GET", "/api/v1/settings/general");
   }
 
   async listTasks(): Promise<Task[]> {

@@ -1,5 +1,23 @@
 # Jarvis TypeScript Roadmap
 
+## Settings → General, timezone A0 (2026-09-24)
+
+Operator console Settings → General shows the effective IANA timezone from
+`inspectReminderTimezone`, the same resolver reminder normalization uses.
+Source is `JARVIS_TIMEZONE` (`.env.local`) or the machine zone. An invalid
+configured zone stays invalid: the read model does not substitute the machine
+zone, and reminder commands still fail closed. In-app timezone write (A1) is
+not implemented. Theme, contrast, and reduce-motion are console-local
+`console.*` keys with an explicit Save. They are not durable preferences and
+do not change CLI output. There is no account profile and no console-home
+control.
+
+Next:
+
+1. A1 timezone write only after a durable preference or env-reload contract exists.
+2. Keep display preferences out of `jarvis-preferences` unless a backup contract names `console.*`.
+3. Persistence and Credentials settings stay on their own pages.
+
 ## Totality caller-disconnect cancellation (2026-09-23)
 
 Request-bound Totality work now stops when the HTTP caller disconnects.

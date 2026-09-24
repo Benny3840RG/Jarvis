@@ -62,16 +62,88 @@ function validateStoredTimezone(timezone: string): string {
   }
 }
 
-export function resolveReminderTimezone(explicit = process.env.JARVIS_TIMEZONE): string {
-  const timezone = explicit?.trim() || Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+export type TimezoneSource = "env" | "machine";
+
+/**
+ * Read model for Settings → General. `effectiveIana` is null when the
+ * configured zone is invalid — the machine zone is reported separately and
+ * is not applied.
+ */
+export type TimezoneStatus = {
+  effectiveIana: string | null;
+  source: TimezoneSource;
+  envRaw: string | null;
+  valid: boolean;
+  validationError?: string;
+  machineIana: string;
+};
+
+export type OperatorGeneralSettings = {
+  timezone: TimezoneStatus;
+};
+
+function machineIanaTimezone(): string {
+  return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+}
+
+function acceptsIanaTimezone(timezone: string): boolean {
   try {
     formatter(timezone).format(new Date(0));
-    return timezone;
+    return true;
   } catch {
-    throw new Error(
-      `Invalid JARVIS_TIMEZONE '${timezone}'. Use an IANA timezone such as Australia/Melbourne.`,
-    );
+    return false;
   }
+}
+
+function hasControlCharacter(value: string): boolean {
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index);
+    if (code <= 31 || code === 127) return true;
+  }
+  return false;
+}
+
+function safeZoneLabel(value: string): string | null {
+  if (value.length === 0 || value.length > 128 || hasControlCharacter(value)) return null;
+  return value;
+}
+
+export function inspectReminderTimezone(explicit?: string): TimezoneStatus {
+  const rawEnv = explicit === undefined ? process.env.JARVIS_TIMEZONE : explicit;
+  const trimmed = rawEnv?.trim() ?? "";
+  const envSet = trimmed.length > 0;
+  const machineIana = machineIanaTimezone();
+  const candidate = envSet ? trimmed : machineIana;
+  const source: TimezoneSource = envSet ? "env" : "machine";
+  const shown = safeZoneLabel(candidate);
+  if (acceptsIanaTimezone(candidate) && shown !== null) {
+    return {
+      effectiveIana: candidate,
+      source,
+      envRaw: source === "env" ? shown : null,
+      valid: true,
+      machineIana,
+    };
+  }
+  return {
+    effectiveIana: null,
+    source,
+    envRaw: source === "env" ? shown : null,
+    valid: false,
+    validationError: shown
+      ? `Invalid JARVIS_TIMEZONE '${shown}'. Use an IANA timezone.`
+      : "JARVIS_TIMEZONE is not a valid IANA timezone.",
+    machineIana: safeZoneLabel(machineIana) ?? "UTC",
+  };
+}
+
+export function resolveReminderTimezone(explicit = process.env.JARVIS_TIMEZONE): string {
+  const timezone = explicit?.trim() || Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  const status = inspectReminderTimezone(explicit);
+  if (status.valid && status.effectiveIana !== null) return status.effectiveIana;
+  throw new Error(
+    `Invalid JARVIS_TIMEZONE '${timezone}'. Use an IANA timezone such as Australia/Melbourne.`,
+  );
 }
 
 function partsAt(timestamp: number, timezone: string): CalendarDateTime {

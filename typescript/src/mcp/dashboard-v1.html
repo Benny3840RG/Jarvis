@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en-AU">
+<html lang="en-AU" data-console-theme="system" data-console-contrast="default" data-console-motion="system">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -153,6 +153,63 @@
       .workspace { min-height: 0; }
       .view { display: none; height: 100%; }
       .view.active { display: block; }
+      #view-general { overflow: auto; }
+      .settings-layout { display: grid; gap: 10px; padding: 10px; }
+      .settings-layout h2 { margin: 0; font-size: 22px; letter-spacing: -.03em; }
+      .settings-layout > p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.45; }
+      .settings-card { display: grid; gap: 8px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel-2); }
+      .settings-card h3 { margin: 0; font-size: 13px; letter-spacing: .08em; text-transform: uppercase; }
+      .settings-card p, .settings-card li { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.45; }
+      .settings-dl { display: grid; grid-template-columns: 110px minmax(0,1fr); gap: 6px 10px; margin: 0; }
+      .settings-dl dt { color: var(--muted); font-size: 11px; font-weight: 800; }
+      .settings-dl dd { margin: 0; font-size: 13px; overflow-wrap: anywhere; }
+      .settings-banner { padding: 10px 12px; border: 2px solid var(--red); border-radius: 10px; background: rgba(255,92,117,.12); color: var(--text); font-size: 12px; line-height: 1.45; }
+      .settings-banner[hidden], .settings-note[hidden] { display: none !important; }
+      .settings-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+      .settings-actions a, .settings-choice { color: var(--text); }
+      .settings-choice { display: flex; flex-wrap: wrap; gap: 12px; }
+      .settings-choice label, .settings-check { display: inline-flex; align-items: center; gap: 6px; color: var(--text); font-size: 13px; }
+      .settings-save { justify-self: start; min-height: 36px; padding: 0 12px; border: 1px solid var(--line-bright); border-radius: 8px; background: var(--panel-3); color: var(--text); font-size: 12px; font-weight: 800; }
+      button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+      html[data-console-contrast="increase"] button:focus-visible,
+      html[data-console-contrast="increase"] input:focus-visible,
+      html[data-console-contrast="increase"] select:focus-visible,
+      html[data-console-contrast="increase"] a:focus-visible { outline-width: 3px; }
+      html[data-console-theme="light"] {
+        color-scheme: light;
+        --bg: #f3f5fb; --panel: #ffffff; --panel-2: #f7f8fc; --panel-3: #e8ebf4;
+        --line: #6d758c; --line-bright: #2c3348; --text: #12141c; --muted: #3c445c;
+      }
+      @media (prefers-color-scheme: light) {
+        html[data-console-theme="system"] {
+          color-scheme: light;
+          --bg: #f3f5fb; --panel: #ffffff; --panel-2: #f7f8fc; --panel-3: #e8ebf4;
+          --line: #6d758c; --line-bright: #2c3348; --text: #12141c; --muted: #3c445c;
+        }
+      }
+      html[data-console-theme="light"] input,
+      html[data-console-theme="light"] select,
+      html[data-console-theme="system"] input,
+      html[data-console-theme="system"] select { background: #fff; }
+      html[data-console-contrast="increase"] {
+        --text: #ffffff; --muted: #f4f5fb; --line: #d5d9ea; --line-bright: #ffffff; --bg: #000000; --panel: #05060a;
+      }
+      html[data-console-theme="light"][data-console-contrast="increase"] {
+        --text: #000000; --muted: #1a1a1a; --line: #000000; --line-bright: #000000; --bg: #ffffff; --panel: #ffffff;
+      }
+      @media (prefers-color-scheme: light) {
+        html[data-console-theme="system"][data-console-contrast="increase"] {
+          --text: #000000; --muted: #1a1a1a; --line: #000000; --line-bright: #000000; --bg: #ffffff; --panel: #ffffff;
+        }
+      }
+      html[data-console-motion="reduce"] *,
+      html[data-console-motion="reduce"] *::before,
+      html[data-console-motion="reduce"] *::after { animation: none !important; transition: none !important; }
+      @media (prefers-reduced-motion: reduce) {
+        html[data-console-motion="system"] *,
+        html[data-console-motion="system"] *::before,
+        html[data-console-motion="system"] *::after { animation: none !important; transition: none !important; }
+      }
       .focus-layout { display: grid; grid-template-columns: minmax(0,1.16fr) minmax(245px,.84fr); gap: 9px; height: 100%; padding: 9px; }
       .mission-panel { display: grid; grid-template-rows: minmax(0,1fr) auto; }
       .mission-core { position: relative; display: grid; grid-template-columns: minmax(0,1fr); align-items: center; gap: 10px; min-height: 0; padding: 14px; }
@@ -377,6 +434,7 @@
                 <button class="rail-button" type="button" data-view="operations"><span class="rail-icon">⌁</span><span><strong>Operations</strong><small>Daily brief</small></span><span class="rail-count" id="nav-operations-count">0</span></button>
                 <button class="rail-button" type="button" data-view="livework"><span class="rail-icon">⛭</span><span><strong>Live Work</strong><small>Mission pipeline</small></span><span class="rail-count" id="nav-livework-count">0</span></button>
                 <button class="rail-button" type="button" data-view="systems"><span class="rail-icon">◇</span><span><strong>Systems</strong><small>Runtime layers</small></span><span class="rail-count" id="nav-system-count">0</span></button>
+                <button class="rail-button" type="button" data-view="general"><span class="rail-icon">⚙</span><span><strong>Settings</strong><small>General</small></span><span class="rail-count" aria-hidden="true">–</span></button>
               </div>
             </nav>
             <section class="panel violet left-priorities">
@@ -551,6 +609,41 @@
                   <article class="panel green"><div class="panel-header"><h2>Layer readiness radar</h2><span>LIVE STATUS</span></div><div class="chart-wrap"><svg viewBox="0 0 400 400" role="img" aria-label="Jarvis runtime layer readiness"><g class="radar-grid" id="radar-grid"></g><g class="radar-axes" id="radar-axes"></g><polygon id="layer-radar-polygon" points="200,200" fill="rgba(185,51,255,.18)" stroke="var(--violet)" stroke-width="3" /><g class="radar-labels" id="radar-labels"></g></svg></div></article>
                 </div>
               </section>
+              <section class="view" id="view-general" aria-labelledby="general-heading">
+                <div class="settings-layout">
+                  <h2 id="general-heading">General</h2>
+                  <p>Preferences for how Jarvis interprets time and how this console looks.</p>
+                  <p>This console projects operator preferences. It does not authorise ToolActions or record ΩΣ completion.</p>
+                  <article class="settings-card" aria-labelledby="timezone-heading">
+                    <h3 id="timezone-heading">Timezone</h3>
+                    <p id="timezone-banner" class="settings-banner" role="alert" hidden>Timezone is invalid. Reminder commands that need local wall-clock time will fail until this is a valid IANA timezone.</p>
+                    <dl class="settings-dl">
+                      <dt>Effective</dt>
+                      <dd id="tz-effective">Loading…</dd>
+                      <dt>Source</dt>
+                      <dd id="tz-source">Loading…</dd>
+                    </dl>
+                    <p id="tz-machine-note" class="settings-note" hidden></p>
+                    <p>Used when normalizing “tomorrow 9am”, weekdays, and local calendar dates into dueAt + dueTimezone. Ambiguous text stays as dueRaw only.</p>
+                    <p>Read-only. Edit in .env.local, then restart Jarvis. In-app timezone editing is not available.</p>
+                    <p class="settings-actions"><a href="https://github.com/Benny3840/Jarvis/blob/main/typescript/docs/architecture/reminder-due-model.md">Reminder due model docs</a></p>
+                  </article>
+                  <article class="settings-card" aria-labelledby="display-heading">
+                    <h3 id="display-heading">Display</h3>
+                    <fieldset class="settings-choice">
+                      <legend>Theme</legend>
+                      <label><input type="radio" name="console-theme" value="system" checked /> System</label>
+                      <label><input type="radio" name="console-theme" value="light" /> Light</label>
+                      <label><input type="radio" name="console-theme" value="dark" /> Dark</label>
+                    </fieldset>
+                    <label class="settings-check"><input id="console-contrast" type="checkbox" /> Increase contrast</label>
+                    <label class="settings-check"><input id="console-motion" type="checkbox" /> Reduce motion</label>
+                    <p>Applies to this console only. Does not change CLI output.</p>
+                    <button class="settings-save" id="save-display-preferences" type="button">Save display preferences</button>
+                    <p id="display-save-status" role="status"></p>
+                  </article>
+                </div>
+              </section>
             </div>
           </section>
           <aside class="right-rail">
@@ -589,7 +682,7 @@
     <script>
       (() => {
         "use strict";
-        const state = { status: null, lastStatusAt: 0, tasks: [], reminders: [], brief: null, quotes: [], quoteRegisterStatus: "unavailable", counts: { activeTasks: 0, completedTasks: 0, reminders: 0 }, captureMode: "task", activities: [], selectedQuoteSummary: null, selectedQuote: null, quoteDetailState: "empty", quoteRequestGeneration: 0, inbox: null, activity: null, liveWork: null };
+        const state = { status: null, generalSettings: null, lastStatusAt: 0, tasks: [], reminders: [], brief: null, quotes: [], quoteRegisterStatus: "unavailable", counts: { activeTasks: 0, completedTasks: 0, reminders: 0 }, captureMode: "task", activities: [], selectedQuoteSummary: null, selectedQuote: null, quoteDetailState: "empty", quoteRequestGeneration: 0, inbox: null, activity: null, liveWork: null };
         const STATUS_STALE_MS = 45000;
         let rpcId = 0;
         let healthCheckInFlight = false;
@@ -597,6 +690,87 @@
         let toastTimer = null;
         const pending = new Map();
         const byId = (id) => document.getElementById(id);
+        // BEGIN console display preferences
+        const CONSOLE_DISPLAY_KEYS = Object.freeze({
+          theme: "console.theme",
+          contrast: "console.contrast",
+          motion: "console.motion",
+        });
+        const CONSOLE_DISPLAY_DEFAULTS = Object.freeze({
+          theme: "system",
+          contrast: "default",
+          motion: "system",
+        });
+        function consoleDisplayChoice(value, allowed, fallback) {
+          return allowed.includes(value) ? value : fallback;
+        }
+        function readConsoleDisplayPreferences(storage) {
+          return {
+            theme: consoleDisplayChoice(storage.getItem(CONSOLE_DISPLAY_KEYS.theme), ["system", "light", "dark"], CONSOLE_DISPLAY_DEFAULTS.theme),
+            contrast: consoleDisplayChoice(storage.getItem(CONSOLE_DISPLAY_KEYS.contrast), ["default", "increase"], CONSOLE_DISPLAY_DEFAULTS.contrast),
+            motion: consoleDisplayChoice(storage.getItem(CONSOLE_DISPLAY_KEYS.motion), ["system", "reduce"], CONSOLE_DISPLAY_DEFAULTS.motion),
+          };
+        }
+        function writeConsoleDisplayPreferences(storage, preferences) {
+          if (!preferences) return false;
+          const theme = preferences.theme;
+          const contrast = preferences.contrast;
+          const motion = preferences.motion;
+          if (!["system", "light", "dark"].includes(theme)) return false;
+          if (!["default", "increase"].includes(contrast)) return false;
+          if (!["system", "reduce"].includes(motion)) return false;
+          storage.setItem(CONSOLE_DISPLAY_KEYS.theme, theme);
+          storage.setItem(CONSOLE_DISPLAY_KEYS.contrast, contrast);
+          storage.setItem(CONSOLE_DISPLAY_KEYS.motion, motion);
+          return true;
+        }
+        function applyConsoleDisplayPreferences(preferences, root) {
+          root.dataset.consoleTheme = preferences.theme;
+          root.dataset.consoleContrast = preferences.contrast;
+          root.dataset.consoleMotion = preferences.motion;
+        }
+        const consoleDisplayPreferences = {
+          keys: CONSOLE_DISPLAY_KEYS,
+          defaults: CONSOLE_DISPLAY_DEFAULTS,
+          read: readConsoleDisplayPreferences,
+          write: writeConsoleDisplayPreferences,
+          apply: applyConsoleDisplayPreferences,
+        };
+        // END console display preferences
+        function loadSavedDisplayPreferences() {
+          try {
+            return readConsoleDisplayPreferences(localStorage);
+          } catch {
+            return { ...CONSOLE_DISPLAY_DEFAULTS };
+          }
+        }
+        function readDisplayForm() {
+          const selected = document.querySelector('input[name="console-theme"]:checked');
+          return {
+            theme: selected ? selected.value : "",
+            contrast: byId("console-contrast").checked ? "increase" : "default",
+            motion: byId("console-motion").checked ? "reduce" : "system",
+          };
+        }
+        function syncDisplayForm(preferences) {
+          document.querySelectorAll('input[name="console-theme"]').forEach((input) => {
+            input.checked = input.value === preferences.theme;
+          });
+          byId("console-contrast").checked = preferences.contrast === "increase";
+          byId("console-motion").checked = preferences.motion === "reduce";
+        }
+        function saveDisplayPreferences() {
+          const status = byId("display-save-status");
+          let saved = false;
+          try {
+            saved = writeConsoleDisplayPreferences(localStorage, readDisplayForm());
+            if (saved) applyConsoleDisplayPreferences(readConsoleDisplayPreferences(localStorage), document.documentElement);
+          } catch {
+            saved = false;
+          }
+          text(status, saved ? "Display preferences saved on this console." : "Display preferences were not saved.");
+          if (saved) toast("Display preferences saved.");
+        }
         const text = (el, value) => { el.textContent = value == null ? "" : String(value); };
         function notify(method, params) { window.parent.postMessage({ jsonrpc: "2.0", method, params }, "*"); }
         function request(method, params, timeoutMs = 0) {
@@ -637,7 +811,7 @@
             healthCheckInFlight = false;
           }
         }
-        function update(result) { const data = structured(result); if (!data || typeof data !== "object") return; if (data.status && typeof data.status === "object") { state.status = data.status; state.lastStatusAt = Date.now(); } if (Array.isArray(data.tasks)) state.tasks = data.tasks; if (Array.isArray(data.reminders)) state.reminders = data.reminders; if (data.brief && typeof data.brief === "object") state.brief = data.brief; if (data.quoteRegister && typeof data.quoteRegister === "object") { state.quoteRegisterStatus = data.quoteRegister.status === "ready" ? "ready" : "unavailable"; state.quotes = Array.isArray(data.quoteRegister.quotes) ? data.quoteRegister.quotes : []; } if ("inbox" in data) state.inbox = data.inbox; if ("activity" in data) state.activity = data.activity; if ("liveWork" in data) state.liveWork = data.liveWork; if (data.counts && typeof data.counts === "object") state.counts = data.counts; else recalc(); render(); }
+        function update(result) { const data = structured(result); if (!data || typeof data !== "object") return; if (data.status && typeof data.status === "object") { state.status = data.status; state.lastStatusAt = Date.now(); } if (data.settings && data.settings.timezone && typeof data.settings.timezone === "object") state.generalSettings = data.settings; if (Array.isArray(data.tasks)) state.tasks = data.tasks; if (Array.isArray(data.reminders)) state.reminders = data.reminders; if (data.brief && typeof data.brief === "object") state.brief = data.brief; if (data.quoteRegister && typeof data.quoteRegister === "object") { state.quoteRegisterStatus = data.quoteRegister.status === "ready" ? "ready" : "unavailable"; state.quotes = Array.isArray(data.quoteRegister.quotes) ? data.quoteRegister.quotes : []; } if ("inbox" in data) state.inbox = data.inbox; if ("activity" in data) state.activity = data.activity; if ("liveWork" in data) state.liveWork = data.liveWork; if (data.counts && typeof data.counts === "object") state.counts = data.counts; else recalc(); render(); }
         window.addEventListener("message", (event) => { if (event.source !== window.parent) return; const message = event.data; if (!message || message.jsonrpc !== "2.0") return; if (typeof message.id === "number") { const waiting = pending.get(message.id); if (!waiting) return; pending.delete(message.id); if (message.error) waiting.reject(message.error); else waiting.resolve(message.result); return; } if (message.method === "ui/notifications/tool-result") update(message.params); }, { passive: true });
         const bridgeReady = (async () => { await request("ui/initialize", { appInfo: { name: "jarvis-dashboard", version: "0.2.0" }, appCapabilities: {}, protocolVersion: "2026-01-26" }); notify("ui/notifications/initialized", {}); bridgeInitialised = true; void checkConnectionHealth(true); activity("HUD bridge online", "MCP Apps connection initialised"); })();
         async function callTool(name, args = {}) { await bridgeReady; const result = await request("tools/call", { name, arguments: args }); update(result); return result; }
@@ -917,13 +1091,44 @@
           fillList(byId("livework-events"), pipeline.events.map((event) => ({ summary: event.summary, occurredAt: event.at, actor: "Development" })), activityEventRow, "No mission events recorded yet.");
           text(byId("nav-livework-count"), pipeline.missionInFlight ? 1 : 0);
         }
-        function render() { renderCounts(); renderFocus(); renderBoard(); renderReminders(); renderSystems(); renderCategories(); renderPriorities(); renderRightReminders(); renderOperations(); renderActivity(); renderInbox(); renderActivityTimeline(); renderLiveWork(); }
+        function renderGeneral() {
+          const settings = state.generalSettings;
+          const banner = byId("timezone-banner");
+          const note = byId("tz-machine-note");
+          const timezone = settings && settings.timezone;
+          if (!timezone) {
+            banner.hidden = true;
+            note.hidden = true;
+            text(byId("tz-effective"), "Unavailable");
+            text(byId("tz-source"), "Unavailable");
+            return;
+          }
+          const sourceLabel = timezone.source === "env" ? "JARVIS_TIMEZONE (.env.local)" : "Machine default";
+          text(byId("tz-source"), sourceLabel);
+          if (!timezone.valid || !timezone.effectiveIana) {
+            banner.hidden = false;
+            text(byId("tz-effective"), "Invalid");
+            const configured = timezone.envRaw ? `Configured (invalid): ${timezone.envRaw}. ` : "Configured value is invalid. ";
+            text(note, `${configured}Machine would be ${timezone.machineIana}. That zone is not applied.`);
+            note.hidden = false;
+            return;
+          }
+          banner.hidden = true;
+          note.hidden = true;
+          text(byId("tz-effective"), timezone.effectiveIana);
+        }
+        function render() { renderCounts(); renderFocus(); renderBoard(); renderReminders(); renderSystems(); renderCategories(); renderPriorities(); renderRightReminders(); renderOperations(); renderActivity(); renderInbox(); renderActivityTimeline(); renderLiveWork(); renderGeneral(); }
         function setCaptureMode(mode) { state.captureMode = mode; document.querySelectorAll("[data-capture]").forEach((button) => button.classList.toggle("active",button.dataset.capture === mode)); const category = byId("capture-category"); const due = byId("capture-due"); if (mode === "task") { text(byId("capture-title-label"),"Task command"); text(byId("capture-detail-copy"),"Category"); category.hidden = false; due.hidden = true; text(byId("capture-submit"),"ADD TASK"); } else { text(byId("capture-title-label"),"Reminder command"); text(byId("capture-detail-copy"),"When"); category.hidden = true; due.hidden = false; text(byId("capture-submit"),"SET REMINDER"); } }
         document.querySelectorAll("[data-view]").forEach((button) => button.addEventListener("click",() => { document.querySelectorAll("[data-view]").forEach((candidate) => candidate.classList.toggle("active",candidate === button)); document.querySelectorAll(".view").forEach((view) => view.classList.toggle("active",view.id === `view-${button.dataset.view}`)); }));
         document.querySelectorAll("[data-capture]").forEach((button) => button.addEventListener("click",() => setCaptureMode(button.dataset.capture)));
-        byId("refresh").addEventListener("click",async () => { const button = byId("refresh"); button.disabled = true; try { await callTool("show_jarvis_dashboard"); activity("Snapshot refreshed","Live dashboard state reloaded"); toast("Jarvis HUD refreshed."); } catch { toast("Jarvis refresh failed.",true); } finally { button.disabled = false; } });
+        byId("refresh").addEventListener("click",async () => { const button = byId("refresh"); button.disabled = true; try { await callTool("show_jarvis_dashboard"); try { update(await request("tools/call", { name: "get_general_settings", arguments: {} }, 10000)); } catch { state.generalSettings = null; renderGeneral(); } activity("Snapshot refreshed","Live dashboard state reloaded"); toast("Jarvis HUD refreshed."); } catch { toast("Jarvis refresh failed.",true); } finally { button.disabled = false; } });
+        byId("save-display-preferences").addEventListener("click", saveDisplayPreferences);
+        const savedDisplay = loadSavedDisplayPreferences();
+        applyConsoleDisplayPreferences(savedDisplay, document.documentElement);
+        syncDisplayForm(savedDisplay);
         byId("capture-form").addEventListener("submit",async (event) => { event.preventDefault(); const input = byId("capture-title"); const title = input.value.trim(); if (!title) return; const button = byId("capture-submit"); button.disabled = true; try { if (state.captureMode === "task") { await callTool("create_task",{ title, category: byId("capture-category").value }); activity("Task captured",title); toast(`Added ${title}`); } else { const due = byId("capture-due").value.trim(); await callTool("create_reminder",{ title, ...(due ? { due: { text: due } } : {}) }); byId("capture-due").value = ""; activity("Reminder captured",title); toast(`Added reminder ${title}`); } input.value = ""; } catch { toast(state.captureMode === "task" ? "Could not add that task." : "Could not add that reminder.",true); } finally { button.disabled = false; } });
         function clock() { text(byId("clock"),new Date().toLocaleTimeString("en-AU",{hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:false})); }
+        bridgeReady.then(async () => { try { update(await request("tools/call", { name: "get_general_settings", arguments: {} }, 10000)); } catch { state.generalSettings = null; renderGeneral(); } }).catch(() => {});
         bridgeReady.catch(() => { activity("HUD bridge failed","ChatGPT Apps bridge did not initialise"); toast("The ChatGPT app bridge did not initialise.",true); });
         document.addEventListener("visibilitychange",() => { if (document.visibilityState !== "visible") return; void checkConnectionHealth(true); });
         setCaptureMode("task"); render(); clock(); window.setInterval(clock,1000); window.setInterval(checkConnectionHealth,15000);

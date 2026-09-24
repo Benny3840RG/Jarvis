@@ -130,6 +130,13 @@ export const IMPLEMENTED_CAPABILITIES: readonly Capability[] = [
     mcpExposed: true,
   },
   {
+    operationId: "getOperatorGeneralSettings",
+    summary: "Read operator general settings",
+    mutating: false,
+    destructive: false,
+    mcpExposed: true,
+  },
+  {
     operationId: "reasonWithTotality",
     summary: "Run proposal-only Totality reasoning with validation and audit journalling",
     mutating: true,
