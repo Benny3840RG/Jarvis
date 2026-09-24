@@ -78,6 +78,15 @@ import type { TotalityPipeline } from "../totality/totalityPipeline.js";
 import { ConvexExternalReconciliationStore } from "../persistence/convexExternalReconciliations.js";
 import type { ExternalReconciliationReadStore } from "../reconciliation/externalReconciliation.js";
 import type { RuntimeReconciliationHealth } from "../reconciliation/runtimeReconciliationHost.js";
+import {
+  selectCredentialsRuntime,
+  type CredentialsRuntime,
+} from "../settings/credentialsStatus.js";
+import {
+  createDangerZoneFromEnv,
+  createInactiveDangerZone,
+  type DangerZoneService,
+} from "../settings/dangerZone/service.js";
 import { resolveHttpAppConfig, type HttpAppConfig } from "./config.js";
 import {
   registerHttpRateLimit,
@@ -137,12 +146,24 @@ export type CreateJarvisHttpAppOptions = (
   noteStore?: NoteStore;
   activityEventReader?: ActivityEventReader | null;
   developmentLiveWorkSource?: DevelopmentLiveWorkSource | null;
+  dangerZone?: DangerZoneService;
   telemetry?: PostHogTelemetry;
   /**
    * Overrides the process-wide HTTP rate limit. Tests use this so a low budget
    * does not depend on environment variables shared with other cases.
    */
   httpRateLimit?: HttpRateLimitConfig;
+  /**
+   * Fingerprint read model captured at process start. Tests inject this so a
+   * fixture token never has to live in `process.env`.
+   */
+  credentialsRuntime?: CredentialsRuntime;
+  /**
+   * Environment for the credentials page when no runtime is injected. Production
+   * omits this and reads `process.env` through `captureCredentialsFromEnv`.
+   * An `HttpAppConfig` is not a credentials source: it has no delivery token.
+   */
+  credentialsEnv?: NodeJS.ProcessEnv;
   /**
    * Invoked once per Fastify route as it is registered. Exposed so contract
    * tests can enumerate the routes the app actually serves without parsing the
@@ -177,6 +198,10 @@ export async function createJarvisHttpApp(
   const providerName = options.providerName ?? resolvePersistenceProviderName();
   const persistence = options.persistence ?? createPersistenceFromEnv();
   const config = options.config ?? resolveHttpAppConfig();
+  const credentials = selectCredentialsRuntime(
+    options.credentialsRuntime,
+    options.credentialsEnv ?? process.env,
+  );
   const oidcVerifier =
     options.oidcVerifier ??
     (config.authMode === "oidc" && config.oidc !== undefined
@@ -409,6 +434,12 @@ export async function createJarvisHttpApp(
       noteStore,
       activityEventReader,
       developmentLiveWorkSource,
+      credentials,
+      dangerZone:
+        options.dangerZone ??
+        (usesEnvironment
+          ? createDangerZoneFromEnv(providerName)
+          : createInactiveDangerZone(providerName)),
     }),
     adapter,
     { logger: options.logger, abortOnError: false },

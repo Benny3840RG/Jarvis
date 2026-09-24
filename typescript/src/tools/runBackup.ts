@@ -1,4 +1,5 @@
 import { loadEnvFile } from "node:process";
+import { pathToFileURL } from "node:url";
 
 import {
   exportBackup,
@@ -21,6 +22,7 @@ import { ConvexAssetStore } from "../assets/convexAssetStore.js";
 import { JsonPreferenceStore } from "../preferences/jsonPreferenceStore.js";
 import { ConvexPreferenceStore } from "../preferences/convexPreferenceStore.js";
 import { redactSecret } from "./convexSmoke.js";
+import { writeBackupVerifyReceipt } from "../settings/dangerZone/backupReceipt.js";
 import { runArchiveV4Command, isArchiveV4Command, archiveV4Usage } from "./runBackupV4.js";
 
 function loadLocalEnvironment(): void {
@@ -38,7 +40,7 @@ function loadLocalEnvironment(): void {
  * invoices, projects, ...) is still outside backup's reach; see the backup
  * module's BackupMemoryStores doc comment and typescript/docs/ROADMAP.md.
  */
-function createMemoryStoresFromEnv(): BackupMemoryStores {
+export function createMemoryStoresFromEnv(): BackupMemoryStores {
   return resolvePersistenceProviderName() === "convex"
     ? {
         builds: new ConvexBuildStore(),
@@ -109,6 +111,7 @@ async function main(): Promise<void> {
   if (command === "verify") {
     if (confirmation !== undefined) usage();
     const result = await verifyBackupRestore(archive);
+    await writeBackupVerifyReceipt(filePath, new Date());
     console.log(
       `Backup verified in isolated storage: ${result.taskCount} task(s), ${result.reminderCount} reminder(s), ` +
         `${result.buildCount} build(s), ${result.buildLogCount} build log(s), ${result.upgradeCount} upgrade(s), ` +
@@ -135,7 +138,9 @@ async function main(): Promise<void> {
   usage();
 }
 
-main().catch((error: unknown) => {
-  console.error("Backup command failed:", redactSecret(error, process.env.JARVIS_SERVICE_TOKEN));
-  process.exitCode = 1;
-});
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((error: unknown) => {
+    console.error("Backup command failed:", redactSecret(error, process.env.JARVIS_SERVICE_TOKEN));
+    process.exitCode = 1;
+  });
+}

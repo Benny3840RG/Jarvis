@@ -31,8 +31,17 @@ const DOCUMENTED_NOT_SERVED = new Set([
   "POST /api/v1/runtime/conversations",
 ]);
 
-// The only route that opts out of the service-token guard.
-const PUBLIC_OPERATIONS = new Set(["GET /healthz"]);
+// Liveness is public. The credentials and danger pages are public only so a
+// loopback operator can see fail-closed status when the service token is
+// missing. Those pages show fingerprint chips or a danger boundary, never raw
+// tokens or SHA-256 digests, and are not served off loopback. The JSON status
+// API stays fingerprint-only.
+const PUBLIC_OPERATIONS = new Set([
+  "GET /healthz",
+  "GET /settings/credentials",
+  "GET /settings/danger",
+  "GET /settings/limits",
+]);
 
 function unusedPersistence(): PersistenceProvider {
   const forbidden = (): never => {
@@ -133,7 +142,7 @@ describe("HTTP route contract", () => {
     }
   });
 
-  it("guards every served operation except the public liveness route", async () => {
+  it("guards every served operation except liveness and the loopback settings pages", async () => {
     const { app, routes } = await makeAppWithRoutes();
     try {
       for (const operation of servedOperations(routes)) {
@@ -148,6 +157,7 @@ describe("HTTP route contract", () => {
             401,
             `${operation} should be public but rejected an unauthenticated request.`,
           );
+          assert.equal(response.body.includes("current-secret"), false);
         } else {
           assert.equal(
             response.statusCode,

@@ -1,5 +1,141 @@
 # Jarvis TypeScript Roadmap
 
+## Settings → Limits, G4 read model (2026-09-24)
+
+Settings shell order for this tip is General, Credentials, Persistence, Limits, Danger zone. Limits is a loopback page at `GET /settings/limits` and a console tab. The durable quota store is not selected, so every provider resource (API/provider rate, concurrency, storage/backup, retention, delivery) is UNKNOWN, hard stops read “No hard stop”, and the reset period is Unknown. The HUD shows one NOW chip, `Limits · UNKNOWN`, linking to `/settings/limits`. It is not editable. Typed confirmation explains blast radius and does not save. There is no seats, billing, paywall, notifications, or sessions tab, and no team-admin path.
+
+Next:
+
+1. Choose the durable quota store before any write or enforcement path.
+2. Keep the NOW chip as one projection of the worst real reading. Do not paint OK from an unread store.
+3. Dual clear of the previous four-tab shell remains owed outside this tip.
+
+## Settings → General, timezone A0 (2026-09-24)
+
+Operator console Settings → General shows the effective IANA timezone from
+`inspectReminderTimezone`, the same resolver reminder normalization uses.
+Source is `JARVIS_TIMEZONE` (`.env.local`) or the machine zone. An invalid
+configured zone stays invalid: the read model does not substitute the machine
+zone, and reminder commands still fail closed. In-app timezone write (A1) is
+not implemented. Theme, contrast, and reduce-motion are console-local
+`console.*` keys with an explicit Save. They are not durable preferences and
+do not change CLI output. There is no account profile and no console-home
+control.
+
+Next:
+
+1. A1 timezone write only after a durable preference or env-reload contract exists.
+2. Keep display preferences out of `jarvis-preferences` unless a backup contract names `console.*`.
+3. Persistence and Credentials settings stay on their own pages.
+
+## Settings → Danger zone, Phase A (2026-09-24)
+
+Settings uses one shell: General, Credentials, Persistence, Danger. Danger is
+the only End path. Confirm strings are `END OVERLAP`, `END APPROVAL OVERLAP`,
+`END DELIVERY OVERLAP`, `RESET JSON`, and `CLEAR LOCAL`. Credentials links to
+`/settings/danger#service`, `#approval`, and `#delivery` on those End cards and
+does not remove a previous token.
+
+Reset quarantines `jarvis-state.json` with the runtime `.corrupt-*` rename and
+does not call Convex. Clear local quarantines the core, memory, and business
+JSON files only, and only after a backup verify receipt from the last 24 hours
+or one explicit skip. Backup on this page is a link to Persistence Backup.
+`npm run backup -- verify` writes `<archive>.jarvis-verify.json` beside the
+archive. The page does not store a Bearer token in sessionStorage. A live lock,
+a symlink that leaves the data directory, and a permission error are named
+refusals. There is no Convex owner wipe.
+
+Next:
+
+1. Keep Convex owner wipe out of Settings until an empty-target design exists.
+2. Serve a loopback Persistence page at `/settings/persistence#backup` if the console tab is not the operator's browser.
+3. Keep display preferences out of danger-zone actions.
+
+## Totality caller-disconnect cancellation (2026-09-23)
+
+Request-bound Totality work now stops when the HTTP caller disconnects.
+`POST /api/v1/totality/reason` binds an in-process `AbortSignal` to the Fastify
+response and passes it through `TotalityPipeline.run` into the OpenAI and Gemini
+reasoners and their bounded response readers. A provider timeout stays a
+provider timeout. Disconnect that can still be written is HTTP 499
+`totality-caller-disconnected`.
+
+Explicitly durable delegated jobs are admitted only after authority, project
+resolution and quota admission, and they do not receive the caller signal. A
+disconnect does not cancel them, wait for them, or roll back a journal commit
+that has already started. Admission re-checks the caller, including after
+quota admission, so a disconnect in that gap does not start new durable work.
+A provider or parse failure keeps its own error when the caller has also
+aborted; HTTP 499 is only the caller-abort failure itself. Scheduled reminders,
+background indexing and monitoring are unchanged because nothing global listens
+for `request.close`.
+
+Adapted from OpenClaw's caller-lifetime split. Pinned inspection:
+v2026.9.5 `ec9c1a13db8938e5a3eaa51fca2e981cde2395a9` and v2026.9.6
+`eb377ac59e6c9fd6c7705028034812becf00271b`. The AsyncLocalStorage work scope,
+retry supervisor, gateway and voice runtime were not imported. No live provider
+or deployment proof.
+
+See [acquisition and provenance](architecture/openclaw-acquisition-2026.9.5.md).
+
+Next:
+
+1. Scope durable provider quota accounting across processes.
+2. Keep automatic model retries deferred until per-attempt cost and ambiguity
+   controls exist.
+3. Do not treat this cancellation path as voice, reminder, or monitoring
+   cancellation.
+
+## Credentials settings, Phase A (2026-09-24)
+
+Settings is one HUD rail with four tabs: General, Credentials, Persistence, and Danger zone.
+`GET /api/v1/settings/credentials` returns SHA-256 fingerprints, overlap flags, and loopback
+versus fail-closed remote posture. The Credentials tab shows collapsed fingerprint chips and
+runbook links. Generation stays on the loopback page `GET /settings/credentials`. That page does
+not call `npx convex env set` and does not embed service-token digests. A missing service token
+fails closed on the page and on dependent status. A missing approval token warns “Approvals
+unavailable.” A delivery token that matches the service token is refused on the status card.
+
+Next:
+
+1. Keep Convex env changes operator-driven. Do not add a widget control that writes deployment env.
+2. If a later Operations surface starts or stops `npm run start:http`, keep it off this page.
+3. Phase B account sign-in stays out of Credentials. OIDC here is remote HTTP identity only.
+
+End overlap does not trust caller `verify`. Credentials has no End dialog and no client gate.
+`decideEndOverlap` returns `offered: false`, `executesRemoval: false`, no commands, and a
+per-token `dangerHref` (`/settings/danger#service`, `#approval`, or `#delivery`). A
+server-attested passing result only moves posture to guarding. The visible posture is Not
+verified until this server attests a passing smoke result, and then it is Guarding. Neither
+posture offers End. Those fragments land on the Danger cards. Removal stays on
+`GET /settings/danger`, the only End path, after the typed confirmation. That page does not
+wipe Convex owner data. Production HTTP and preview select credentials with
+`captureCredentialsFromEnv`, not from `HttpAppConfig`, which has no delivery token.
+
+## Settings → Persistence, phase A (2026-09-24)
+
+Persistence is the third tab on the single Settings rail (General, Credentials, Persistence, Danger zone). It reads `PERSISTENCE_PROVIDER` and a health glance, and wraps `npm run backup` (classic and archive v4). v4 stays labeled Partial / JSON-only. Export warns that archives must not contain service tokens. Convex blocks v4 export. Classic restore requires the empty-target confirmation. v4 restore requires `--allow-partial`. Resume is a separate action. Service tokens are redacted. No provider switch, JSON fallback, merge, or restore-drill button. Credentials end-overlap and digests stay off this tab.
+
+See [persistence settings](operators/persistence-settings.md).
+
+Next:
+
+1. Keep the page a projection of the CLI. Do not add a second restore implementation.
+2. When the three absent v4 groups land, stop forcing the partial label only after the manifest itself is `complete`.
+3. Do not expose Convex schema deploys or ownership changes on this page.
+
+## Verification failure routes to repair (2026-09-23, #550)
+
+`DEV_TRANSITION_VERIFYING_TO_REPAIR_REQUIRED` now uses the trusted evidence
+boundary. Repair admits a worker checkpoint recorded as failed, including one
+with no commit SHA, or blocking verification evidence for the current head. A
+missing checkpoint, a successful worker without blocking evidence, or a clean
+result stays in `VERIFYING`. A clean receipt contradicts a failed checkpoint
+and is refused. A clean review still cannot enter repair.
+The pure kernel does not decide these gates; the Convex commit is the proof.
+This does not clear the automation-blocked label or run a live verification
+provider.
+
 ## Governed external operation boundary (2026-09-23)
 
 `GovernedExternalOperation` is the adapter a later Temporal activity must call
@@ -169,8 +305,9 @@ The MCP preview's `JarvisApiClient` now aborts every backend call at 30 seconds
 by default, or `JARVIS_MCP_BACKEND_DEADLINE_MS` when set to an integer from 1
 to 120000. An invalid setting fails closed at configuration. Closing the MCP
 HTTP response before it finishes cancels the outbound call. This does not roll
-back a Jarvis HTTP mutation that has already been accepted, and it does not add
-Totality caller-disconnect cancellation or durable cross-process quotas.
+back a Jarvis HTTP mutation that has already been accepted. Totality
+caller-disconnect cancellation is the separate 2026-09-23 section above.
+Durable cross-process quotas are still open.
 
 No live Microsoft Graph request, ChatGPT session, or deployment was run.
 
@@ -195,11 +332,11 @@ components deferred after inspection. Exact candidate verification belongs to
 the draft PR; this entry does not establish live-provider or deployment proof.
 
 Provider-directed Retry-After minimum waits and MCP backend deadlines are
-implemented by the 2026-09-23 follow-up above. Remaining bounded candidates:
-scope durable provider quota accounting, and Totality caller-disconnect
-cancellation. Automatic model retries need per-attempt cost and ambiguity
-controls before adoption. Existing Temporal and deployment PR ownership is
-unchanged.
+implemented by the 2026-09-23 follow-up above. Totality caller-disconnect
+cancellation is the later section at the top of this roadmap. The remaining
+bounded candidate is durable provider quota accounting across processes.
+Automatic model retries need per-attempt cost and ambiguity controls before
+adoption. Existing Temporal and deployment PR ownership is unchanged.
 
 ## Maintenance notification repair (2026-09-16, #548)
 

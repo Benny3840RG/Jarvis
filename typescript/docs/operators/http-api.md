@@ -3,14 +3,26 @@
 Jarvis exposes a localhost-first NestJS/Fastify system boundary alongside the maintained CLI.
 This stage implements only the operations whose runtime behaviour is complete:
 
-| Method           | Path                             | Authentication | Purpose                                                     |
-| ---------------- | -------------------------------- | -------------- | ----------------------------------------------------------- |
-| GET              | `/healthz`                       | Public         | Process liveness only; never reads persistence.             |
-| GET              | `/api/v1/help`                   | Bearer token   | Lists only operations implemented by the running adapter.   |
-| GET              | `/api/v1/status`                 | Bearer token   | Checks persistence, timezone, layer readiness, and Z-State. |
-| GET              | `/api/v1/reminders`              | ******         | Lists durable reminders.                                    |
-| POST             | `/api/v1/reminders`              | ******         | Creates a durable reminder.                                 |
-| GET/PATCH/DELETE | `/api/v1/reminders/{reminderId}` | ******         | Reads, updates, or removes one reminder.                    |
+| Method           | Path                             | Authentication | Purpose                                                         |
+| ---------------- | -------------------------------- | -------------- | --------------------------------------------------------------- |
+| GET              | `/healthz`                       | Public         | Process liveness only; never reads persistence.                 |
+| GET              | `/api/v1/help`                   | Bearer token   | Lists only operations implemented by the running adapter.       |
+| GET              | `/api/v1/status`                 | Bearer token   | Checks persistence, timezone, layer readiness, and Z-State.     |
+| GET              | `/api/v1/settings/general`       | Bearer token   | Read-only reminder timezone status. Invalid zones stay invalid. |
+| GET              | `/api/v1/settings/credentials`   | Bearer token   | Fingerprints, overlap, and bind posture. No token values.       |
+| GET              | `/settings/credentials`          | Loopback only  | Guided rotation page. Not served off loopback.                  |
+| GET              | `/settings/limits`               | Loopback only  | Provider-quota read model. Unknown until a store is chosen.     |
+| GET              | `/api/v1/reminders`              | ******         | Lists durable reminders.                                        |
+| POST             | `/api/v1/reminders`              | ******         | Creates a durable reminder.                                     |
+| GET/PATCH/DELETE | `/api/v1/reminders/{reminderId}` | ******         | Reads, updates, or removes one reminder.                        |
+
+`GET /api/v1/settings/general` does not store display preferences. Theme, contrast, and motion stay in the operator console. CLI output is unchanged.
+
+Settings → Danger zone is loopback `GET /settings/danger`, plus `GET /api/v1/settings/danger-zone`,
+`GET /api/v1/settings/danger-zone/page`, and `POST /api/v1/settings/danger-zone/actions/{actionId}`.
+It is the only End overlap path. It wraps the CLI overlap removal and local JSON quarantine
+described in [`danger-zone.md`](danger-zone.md). It does not delete Convex owner data and does not
+store a Bearer token in sessionStorage.
 
 The adapter also implements `/api/v1/tasks` (including completion), `/api/v1/totality/reason`, and
 the project-scoped memory-change-set and tool-action proposal routes. Tool-action approval changes
@@ -36,6 +48,12 @@ JARVIS_SOURCE_VERSION=<build commit or immutable source identifier>
 `PERSISTENCE_PROVIDER` defaults to `json`; `convex` keeps the existing `CONVEX_URL` and service
 token requirements. `JARVIS_SERVICE_TOKEN_PREVIOUS` is accepted only while a current token is
 also configured, preserving the documented rotation overlap and failing closed otherwise.
+`GET /api/v1/settings/credentials` reports that overlap as a short fingerprint, not as the token.
+The public loopback page shows fingerprint chips only and does not embed SHA-256 digests. End
+overlap is a link to `/settings/danger`, not a remove command. See
+[credentials-settings.md](credentials-settings.md). A missing
+service token makes dependent status fail closed. A missing approval token warns that approvals
+are unavailable.
 
 `JARVIS_APPROVAL_TOKEN` (with optional `JARVIS_APPROVAL_TOKEN_PREVIOUS` during rotation) is a
 second, separately held secret required by `POST .../tool-actions/{actionId}/approve` in addition

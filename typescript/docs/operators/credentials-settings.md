@@ -1,0 +1,65 @@
+# Credentials settings
+
+Settings → Credentials is a status and guided-rotation surface for machine secrets. It is not a
+sign-in. The service token is not a password.
+
+Three secrets stay separate:
+
+| Secret                          | Role                                                                         | Overlap variable                         |
+| ------------------------------- | ---------------------------------------------------------------------------- | ---------------------------------------- |
+| `JARVIS_SERVICE_TOKEN`          | Authenticates a trusted Jarvis client to owner `jarvis-cli`                  | `JARVIS_SERVICE_TOKEN_PREVIOUS`          |
+| `JARVIS_APPROVAL_TOKEN`         | Second factor for tool-action approve and revoke                             | `JARVIS_APPROVAL_TOKEN_PREVIOUS`         |
+| `JARVIS_DELIVERY_RUNTIME_TOKEN` | Authorises quote delivery-ledger writes. Must differ from the service token. | `JARVIS_DELIVERY_RUNTIME_TOKEN_PREVIOUS` |
+
+The HTTP read model at `GET /api/v1/settings/credentials` returns fingerprints (a short SHA-256
+prefix and suffix), overlap flags, and bind posture. It does not return token values or full
+digests. Fingerprints are derived when the process starts. A missing service token fails closed:
+dependent `GET /api/v1/status` returns 503, and the loopback page shows a fail-closed banner. A
+missing approval token warns “Approvals unavailable.” on Credentials and on tool-action approval.
+It does not block the rest of Settings.
+
+`GET /settings/credentials` is a public loopback route. It does not require a Bearer token, so the
+fail-closed banner can render when the service token is missing. The HTML shows collapsed
+fingerprint chips only. Full SHA-256 digests are not in the page model or the HTML. Delivery
+collision against the service token stays on the authenticated delivery-check route and on the
+status card after restart. Non-loopback binds do not serve the page.
+
+## Where generation is allowed
+
+The MCP operator console shows status and runbook links. It does not generate tokens, and it does
+not call `npx convex env set`.
+
+Generation is only on the loopback page `GET /settings/credentials` (default
+`http://127.0.0.1:3000/settings/credentials`). The new token is created in the browser, shown
+once, and then discarded. The page content-security policy blocks network calls, so the value
+cannot enter an API body, an MCP tool argument, a URL, or the model. Non-loopback binds do not
+serve that page. There is no control that turns on remote HTTP by itself. Remote HTTP stays
+fail-closed until TLS, OIDC, allowed origins, and limits are configured together.
+
+## CLI / runbook parity
+
+The page guides the same commands as the [README rotation](../../../README.md#service-token-rotation).
+Convex changes stay operator-driven.
+
+| UI                          | Operator action                                                                                                                     |
+| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Generate service token      | `node -e 'console.log(require("node:crypto").randomBytes(32).toString("hex"))'`                                                     |
+| Set Convex current/previous | `printf '%s\n' "$OLD_TOKEN" \| npx convex env set JARVIS_SERVICE_TOKEN_PREVIOUS` and the same for `JARVIS_SERVICE_TOKEN`, via stdin |
+| Remove previous             | Open `/settings/danger`. Credentials does not remove the previous token.                                                            |
+| Local env                   | Edit `.env.local`, then `chmod 600 .env.local`                                                                                      |
+| Verify                      | `npm run smoke:convex` (deployments starting with `dev:` only)                                                                      |
+| HTTP status                 | `curl --config - http://127.0.0.1:3000/api/v1/status` with the Bearer value supplied from the environment, not from the page        |
+| Start HTTP / preview        | `npm run start:http` / `npm run start:preview`                                                                                      |
+
+End overlap is not offered on Credentials. There is no confirmation dialog and no client verify
+gate on that page. Idle verification stays “Not verified”, and a caller-supplied passing value
+is not server attestation. `POST /api/v1/settings/credentials/end-overlap` ignores caller `verify`
+and returns `offered: false`, `executesRemoval: false`, an empty `commands` list, and `dangerHref`
+for that token (`/settings/danger#service`, `#approval`, or `#delivery`). Those links do not
+remove a token. The page shows Not verified. Guarding is the only later posture, and only after
+this server attests a passing smoke result. Idle has no End button, and Guarding does not add
+one. `GET /settings/danger` is the only End path. It removes the previous token after the typed
+confirmation and does not wipe Convex owner data.
+
+If smoke fails, keep the previous token set until the local token is corrected. Do not paste
+tokens into Git, logs, issues, or chat. See [SECURITY.md](../../../SECURITY.md).

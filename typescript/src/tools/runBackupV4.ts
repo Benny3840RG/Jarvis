@@ -10,7 +10,7 @@ import {
   type ArchiveV4,
 } from "../backup/v4/archive.js";
 import { captureJsonGroups, resolveJsonSourceConfig } from "../backup/v4/jsonSource.js";
-import { restoreArchiveV4 } from "../backup/v4/restore.js";
+import { restoreArchiveV4, type RestoreV4Result } from "../backup/v4/restore.js";
 import { StrictBackupError } from "../backup/strictValues.js";
 import type { ArchiveManifest } from "../backup/archiveManifest.js";
 
@@ -115,17 +115,15 @@ async function sealByIsolatedRestore(archive: ArchiveV4): Promise<ArchiveV4> {
   }
 }
 
-async function exportArchive(filePath: string): Promise<void> {
+/** Same capture the `export-v4` CLI runs. Callers print the manifest; this does not. */
+export async function exportArchiveV4File(filePath: string): Promise<ArchiveV4> {
   const paths = resolveJsonSourceConfig();
   const capture = await captureJsonGroups(paths);
   // Written only after it has been proven to restore, so an archive on disk has
   // always survived a real read-back rather than merely having been serialised.
   const archive = await sealByIsolatedRestore(buildArchiveV4(capture, new Date()));
   await writeArchiveV4File(filePath, archive);
-  console.log(
-    `Archive v4 written: ${filePath} — ${describeCoverage(archive.manifest)}; ${describeCounts(archive)}.`,
-  );
-  reportUnresolvedReferences(archive.manifest);
+  return archive;
 }
 
 /**
@@ -134,7 +132,7 @@ async function exportArchive(filePath: string): Promise<void> {
  * directory is removed whether or not verification passed; live storage is never
  * read or written.
  */
-async function verifyArchive(filePath: string): Promise<void> {
+export async function verifyArchiveV4File(filePath: string): Promise<ArchiveV4> {
   const archive = await readArchiveV4File(filePath);
   const scratch = await mkdtemp(path.join(tmpdir(), "jarvis-archive-v4-verify-"));
   try {
@@ -147,18 +145,18 @@ async function verifyArchive(filePath: string): Promise<void> {
   } finally {
     await rm(scratch, { recursive: true, force: true });
   }
-  console.log(
-    `Archive v4 verified in isolated storage: ${filePath} — ${describeCoverage(archive.manifest)}; ${describeCounts(archive)}.`,
-  );
-  reportUnresolvedReferences(archive.manifest);
+  return archive;
 }
 
-async function restoreArchive(
+export type ArchiveV4FileRestore = { archive: ArchiveV4; result: RestoreV4Result };
+
+/** Same destination rules as `restore-v4`. `--resume` is only honoured when the caller passes it. */
+export async function restoreArchiveV4File(
   filePath: string,
   destination: string,
   allowPartial: boolean,
   resume: boolean,
-): Promise<void> {
+): Promise<ArchiveV4FileRestore> {
   const archive = await readArchiveV4File(filePath);
   if (archive.manifest.completeness === "partial" && !allowPartial) {
     throw new StrictBackupError(
@@ -168,16 +166,7 @@ async function restoreArchive(
     );
   }
   const result = await restoreArchiveV4(archive, destination, { allowPartial, resume });
-  console.log(
-    `Archive v4 ${result.resumed ? "restore resumed and completed" : "restored"} into ${result.destination} — ${describeCoverage(result.manifest)}; ${describeCounts(archive)}.`,
-  );
-  console.log(`Completion marker: ${result.markerPath}`);
-  reportUnresolvedReferences(result.manifest);
-  if (result.manifest.completeness === "partial") {
-    console.log(
-      "This restore is NOT a recovery: the archive was partial and was materialised under --allow-partial.",
-    );
-  }
+  return { archive, result };
 }
 
 export async function runArchiveV4Command(
@@ -188,8 +177,19 @@ export async function runArchiveV4Command(
   if (command === "export-v4" || command === "verify-v4") {
     const [filePath, ...extra] = args;
     if (!filePath || extra.length > 0) usage();
-    if (command === "export-v4") await exportArchive(filePath);
-    else await verifyArchive(filePath);
+    if (command === "export-v4") {
+      const archive = await exportArchiveV4File(filePath);
+      console.log(
+        `Archive v4 written: ${filePath} — ${describeCoverage(archive.manifest)}; ${describeCounts(archive)}.`,
+      );
+      reportUnresolvedReferences(archive.manifest);
+    } else {
+      const archive = await verifyArchiveV4File(filePath);
+      console.log(
+        `Archive v4 verified in isolated storage: ${filePath} — ${describeCoverage(archive.manifest)}; ${describeCounts(archive)}.`,
+      );
+      reportUnresolvedReferences(archive.manifest);
+    }
     return;
   }
 
@@ -197,10 +197,20 @@ export async function runArchiveV4Command(
   if (!filePath || !destination) usage();
   const known = new Set(["--allow-partial", "--resume"]);
   if (flags.some((flag) => !known.has(flag)) || new Set(flags).size !== flags.length) usage();
-  await restoreArchive(
+  const { archive, result } = await restoreArchiveV4File(
     filePath,
     destination,
     flags.includes("--allow-partial"),
     flags.includes("--resume"),
   );
+  console.log(
+    `Archive v4 ${result.resumed ? "restore resumed and completed" : "restored"} into ${result.destination} — ${describeCoverage(result.manifest)}; ${describeCounts(archive)}.`,
+  );
+  console.log(`Completion marker: ${result.markerPath}`);
+  reportUnresolvedReferences(result.manifest);
+  if (result.manifest.completeness === "partial") {
+    console.log(
+      "This restore is NOT a recovery: the archive was partial and was materialised under --allow-partial.",
+    );
+  }
 }
