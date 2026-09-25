@@ -394,8 +394,7 @@ describe("clear local", () => {
 
     const archive = path.join(backups, "jarvis-backup.json");
     await fs.writeFile(archive, "{}\n", "utf8");
-    const now = new Date("2026-09-24T03:00:00.000Z");
-    await writeBackupVerifyReceipt(archive, new Date(now.getTime() - 60 * 60 * 1000));
+    await writeBackupVerifyReceipt(archive, new Date(Date.now() - 60 * 60 * 1000));
     const verified = await zone.execute("clear-local", {
       confirmation: "CLEAR LOCAL",
       backup: { mode: "verified", path: archive },

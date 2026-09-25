@@ -95,6 +95,19 @@ jobs:
           cache-dependency-path: typescript/package-lock.json
       - name: Install dependencies
         run: npm ci
+      - name: Assert no dependency install scripts
+        run: |
+          node -e "
+            const lock = JSON.parse(require('fs').readFileSync('package-lock.json', 'utf8'));
+            const hits = Object.entries(lock.packages || {})
+              .filter(([, v]) => v.scripts && Object.keys(v.scripts)
+                .some(s => ['install','postinstall','preinstall'].includes(s)));
+            if (hits.length > 0) {
+              console.error('Packages with install scripts:', hits.map(([k]) => k));
+              process.exit(1);
+            }
+            console.log('No dependency install scripts found.');
+          "
       - name: Audit dependencies
         run: npm audit --audit-level=moderate
       - name: Type-check
