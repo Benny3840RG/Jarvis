@@ -1,5 +1,49 @@
 # Jarvis TypeScript Roadmap
 
+## Acquisition plan, PR B (first slice): immutable Temporal worker build identity (2026-09-25)
+
+PR A merged (#617). Starting PR B with the piece that everything else in it
+hangs off: a worker build identity that is a concrete, immutable git commit and
+never a mutable tag such as `latest`.
+
+Added `src/preview/temporalPass/temporal/buildIdentity.ts`:
+
+- `resolveWorkerBuildIdentity(env)` returns a Temporal `WorkerDeploymentVersion`
+  `{ deploymentName, buildId }`. `buildId` is the full 40-hex git SHA (from
+  `JARVIS_BUILD_SHA`, else `GITHUB_SHA`), prefixed with `JARVIS_BUILD_RELEASE`
+  when set (`release-<sha>`) so one commit released twice yields distinct build
+  ids. It fails closed — `WorkerBuildIdentityError` — on a missing SHA, a
+  mutable ref (`latest`, `HEAD`, `main`, `dev`, …), an abbreviated or non-hex
+  SHA, or a deployment name / release id containing `.`, whitespace or a mutable
+  tag. `.` is barred because Temporal's canonical version string is
+  `deploymentName.buildId`.
+- `resolveWorkerDeploymentOptions(env)` returns `undefined` unless
+  `JARVIS_TEMPORAL_VERSIONING` is truthy, so the existing PASS torture tests and
+  any unversioned single-worker preview are unchanged. When versioning is
+  requested the build identity is mandatory (fail closed, never a silent
+  unversioned fallback) and the behaviour is `PINNED`: a worker only runs
+  workflows started on its exact version, so a redeploy cannot migrate live
+  workflows onto new code without an explicit ramp.
+
+`worker.ts` consumes it and only sets `workerDeploymentOptions` when versioning
+is requested. The module imports only `@temporalio/common` (not
+`@temporalio/worker`), so `tests/temporalWorkerBuildIdentity.test.ts` (11 cases)
+runs in `npm run check`, not just the path-filtered `temporal-pass` job. The
+module sits in the preview import closure, so AUTH-INV-04's scan already covers
+it; no scan change needed.
+
+Next in PR B (not in this slice, needs the Temporal test server):
+
+1. Turn the #572 torture histories into replay fixtures and require
+   old-history + new-code deterministic replay in CI.
+2. Prove v1 → v2 → rollback with worker versioning against a real server.
+3. Turn AUTH-INV-04 from a static scan into a runtime guarantee: the versioned
+   production worker holds no approval credential, and activities reach effects
+   only through the governed boundary. Then move AUTH-INV-04 from `guarded` to
+   `enforced` in the authority contract.
+4. Decide whether the `temporal-pass` job runs on every PR (it gates
+   AUTH-INV-06..09).
+
 ## Authority-first acquisition plan, PR A: authority contract (2026-09-25)
 
 Benny set the direction: acquire proven components (Temporal production

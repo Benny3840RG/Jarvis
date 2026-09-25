@@ -1,0 +1,138 @@
+/**
+ * Immutable Temporal worker build identity for the PASS preview (roadmap PR B).
+ *
+ * Temporal Worker Deployment Versioning pins each running workflow to the exact
+ * worker build that started it. That guarantee is only as good as the build
+ * identity the worker registers: a mutable tag such as `latest` would let a
+ * redeploy silently move existing workflows onto new code, which is exactly the
+ * drift the authority contract's AUTH-INV-04 forbids a Temporal worker from
+ * doing on its own. So this module fails closed — it refuses any identity that
+ * is not a concrete, immutable git commit — rather than defaulting to something
+ * that looks convenient but cannot be reproduced.
+ *
+ * Pure and dependency-light on purpose: it imports only the `VersioningBehavior`
+ * enum and the `WorkerDeploymentVersion` type from `@temporalio/common`, never
+ * `@temporalio/worker`, so `tests/temporalWorkerBuildIdentity.test.ts` can
+ * exercise it in the `npm run check` suite without loading native worker code.
+ */
+import { VersioningBehavior, type WorkerDeploymentVersion } from "@temporalio/common";
+import type { WorkerDeploymentOptions } from "@temporalio/worker";
+
+/** A full 40-character git commit SHA, lower-cased. */
+const FULL_SHA = /^[0-9a-f]{40}$/;
+
+/** Deployment name and release-id charset. `.` is excluded because the canonical
+ * worker version string is `deploymentName.buildId`; a `.` would corrupt parsing. */
+const SAFE_SEGMENT = /^[A-Za-z0-9_-]{1,255}$/;
+
+/**
+ * Values that name something mutable rather than one immutable build. Rejected
+ * for the SHA, the deployment name and the release id alike. Compared
+ * case-insensitively.
+ */
+const MUTABLE_TAGS = new Set(["latest", "head", "main", "master", "dev", "development", "current"]);
+
+export const WORKER_BUILD_SHA_ENV = "JARVIS_BUILD_SHA";
+export const WORKER_BUILD_SHA_FALLBACK_ENV = "GITHUB_SHA";
+export const WORKER_RELEASE_ID_ENV = "JARVIS_BUILD_RELEASE";
+export const WORKER_DEPLOYMENT_NAME_ENV = "JARVIS_TEMPORAL_DEPLOYMENT";
+export const WORKER_VERSIONING_ENABLED_ENV = "JARVIS_TEMPORAL_VERSIONING";
+
+export const DEFAULT_DEPLOYMENT_NAME = "jarvis-temporal-pass";
+
+export class WorkerBuildIdentityError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "WorkerBuildIdentityError";
+  }
+}
+
+/** Environment slice this module reads. Passed in so tests need no real `process.env`. */
+export type BuildIdentityEnv = Readonly<Record<string, string | undefined>>;
+
+function normalizeSha(env: BuildIdentityEnv): string {
+  const raw = (env[WORKER_BUILD_SHA_ENV] ?? env[WORKER_BUILD_SHA_FALLBACK_ENV] ?? "").trim();
+  if (raw === "") {
+    throw new WorkerBuildIdentityError(
+      `No build SHA: set ${WORKER_BUILD_SHA_ENV} (or ${WORKER_BUILD_SHA_FALLBACK_ENV}) to the full git commit.`,
+    );
+  }
+  const sha = raw.toLowerCase();
+  if (MUTABLE_TAGS.has(sha)) {
+    throw new WorkerBuildIdentityError(
+      `Build SHA "${raw}" names a mutable ref, not an immutable commit.`,
+    );
+  }
+  if (!FULL_SHA.test(sha)) {
+    throw new WorkerBuildIdentityError(
+      `Build SHA "${raw}" is not a full 40-character git commit; an abbreviated or non-hex SHA is not immutable enough to pin a worker version.`,
+    );
+  }
+  return sha;
+}
+
+function normalizeSegment(raw: string, field: string): string {
+  const value = raw.trim();
+  if (value === "") throw new WorkerBuildIdentityError(`${field} must not be empty.`);
+  if (MUTABLE_TAGS.has(value.toLowerCase())) {
+    throw new WorkerBuildIdentityError(
+      `${field} "${raw}" names a mutable ref, not an immutable build.`,
+    );
+  }
+  if (!SAFE_SEGMENT.test(value)) {
+    throw new WorkerBuildIdentityError(
+      `${field} "${raw}" must match ${SAFE_SEGMENT} (letters, digits, "-" or "_"; no "." or whitespace).`,
+    );
+  }
+  return value;
+}
+
+/**
+ * Resolve the immutable worker build identity from the environment, or throw
+ * `WorkerBuildIdentityError` if it is missing or mutable. `buildId` is the git
+ * SHA, prefixed with the release id when one is set (`release-<sha>`), so a
+ * given commit released twice still yields distinct, traceable build ids.
+ */
+export function resolveWorkerBuildIdentity(env: BuildIdentityEnv): WorkerDeploymentVersion {
+  const sha = normalizeSha(env);
+  const deploymentName = normalizeSegment(
+    env[WORKER_DEPLOYMENT_NAME_ENV] ?? DEFAULT_DEPLOYMENT_NAME,
+    WORKER_DEPLOYMENT_NAME_ENV,
+  );
+
+  const releaseRaw = env[WORKER_RELEASE_ID_ENV]?.trim();
+  const buildId =
+    releaseRaw && releaseRaw !== ""
+      ? `${normalizeSegment(releaseRaw, WORKER_RELEASE_ID_ENV)}-${sha}`
+      : sha;
+
+  return { deploymentName, buildId };
+}
+
+/** Whether versioning was explicitly requested. Accepts `1`/`true`/`yes`/`on`. */
+export function isVersioningRequested(env: BuildIdentityEnv): boolean {
+  const raw = env[WORKER_VERSIONING_ENABLED_ENV]?.trim().toLowerCase();
+  return raw === "1" || raw === "true" || raw === "yes" || raw === "on";
+}
+
+/**
+ * Build the worker's deployment options.
+ *
+ * Returns `undefined` when versioning is not requested — the existing PASS
+ * torture tests and any unversioned single-worker preview keep working exactly
+ * as before. When versioning *is* requested, the build identity is mandatory
+ * and this throws if it is missing or mutable (fail closed rather than silently
+ * falling back to an unversioned worker). Behaviour is `PINNED`: a worker only
+ * runs workflows started on its exact version, so a redeploy cannot migrate
+ * live workflows onto new code without an explicit ramp.
+ */
+export function resolveWorkerDeploymentOptions(
+  env: BuildIdentityEnv,
+): WorkerDeploymentOptions | undefined {
+  if (!isVersioningRequested(env)) return undefined;
+  return {
+    version: resolveWorkerBuildIdentity(env),
+    useWorkerVersioning: true,
+    defaultVersioningBehavior: VersioningBehavior.PINNED,
+  };
+}
