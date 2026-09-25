@@ -11,6 +11,7 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import { githubMergeArguments } from "../src/development/githubMergeArguments.js";
 import {
   AUTHORITY_INVARIANTS,
+  AUTHORITY_RESPONSIBILITIES,
   LAYER_OWNERSHIP,
   OWNER_ONLY_RESPONSIBILITIES,
   type AuthorityLayer,
@@ -75,9 +76,11 @@ describe("Authority contract", () => {
         ]);
       }
     }
-    for (const [responsibility, layers] of owners) {
-      assert.equal(layers.length, 1, `${responsibility} is owned by ${layers.join(", ")}`);
+    for (const responsibility of AUTHORITY_RESPONSIBILITIES) {
+      const layers = owners.get(responsibility) ?? [];
+      assert.equal(layers.length, 1, `${responsibility} is owned by [${layers.join(", ")}]`);
     }
+    assert.deepEqual([...owners.keys()].sort(), [...AUTHORITY_RESPONSIBILITIES].sort());
   });
 
   it("reserves merge, production deployment and authority-policy change for Benny", () => {

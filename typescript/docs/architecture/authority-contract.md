@@ -39,19 +39,19 @@ candidate evidence.
 A build fails if an `enforced` invariant loses its evidence test, or if a
 `planned` invariant is not listed in the roadmap.
 
-| ID          | Forbids                                               | Status                 |
-| ----------- | ----------------------------------------------------- | ---------------------- |
-| AUTH-INV-01 | an agent can merge                                    | enforced               |
-| AUTH-INV-02 | an agent can deploy                                   | enforced (by absence)  |
-| AUTH-INV-03 | MCP can bypass ΩΣ                                     | enforced (current MCP) |
-| AUTH-INV-04 | a Temporal Workflow can invent authority              | enforced (static scan) |
-| AUTH-INV-05 | an ACP permission response is authoritative by itself | planned, PR G          |
-| AUTH-INV-06 | approval valid against the wrong candidateSha         | enforced               |
-| AUTH-INV-07 | approval reused across approvalCycle                  | enforced               |
-| AUTH-INV-08 | replay causes a second external effect                | enforced               |
-| AUTH-INV-09 | a stale candidate overwrites a newer one              | enforced               |
-| AUTH-INV-10 | an unadvertised MCP tool executes                     | enforced               |
-| AUTH-INV-11 | deployment credentials enter an agent sandbox         | planned, PR M          |
+| ID          | Forbids                                                                     | Status                 |
+| ----------- | --------------------------------------------------------------------------- | ---------------------- |
+| AUTH-INV-01 | an agent can authorise a merge (executing an owner-approved one is allowed) | enforced               |
+| AUTH-INV-02 | an agent can deploy                                                         | enforced (by absence)  |
+| AUTH-INV-03 | MCP can bypass ΩΣ                                                           | enforced (current MCP) |
+| AUTH-INV-04 | a Temporal Workflow can invent authority                                    | enforced (static scan) |
+| AUTH-INV-05 | an ACP permission response is authoritative by itself                       | planned, PR G          |
+| AUTH-INV-06 | approval valid against the wrong candidateSha                               | enforced               |
+| AUTH-INV-07 | approval reused across approvalCycle                                        | enforced               |
+| AUTH-INV-08 | replay causes a second external effect                                      | enforced               |
+| AUTH-INV-09 | a stale candidate overwrites a newer one                                    | enforced               |
+| AUTH-INV-10 | an unadvertised MCP tool executes                                           | enforced               |
+| AUTH-INV-11 | deployment credentials enter an agent sandbox                               | planned, PR M          |
 
 ## Limits of this evidence
 

@@ -18,23 +18,26 @@
 export type AuthorityLayer =
   "development" | "omega" | "temporal" | "acp" | "mcp" | "external-agents" | "benny";
 
-export type AuthorityResponsibility =
-  | "mission-state"
-  | "candidate-sha"
-  | "approval-cycle"
-  | "plans"
-  | "evidence-requirements"
-  | "side-effect-permission"
-  | "durable-execution"
-  | "retries"
-  | "recovery"
-  | "sequencing"
-  | "agent-communication"
-  | "capability-transport"
-  | "proposed-work"
-  | "merge"
-  | "production-deployment"
-  | "authority-policy-change";
+export const AUTHORITY_RESPONSIBILITIES = [
+  "mission-state",
+  "candidate-sha",
+  "approval-cycle",
+  "plans",
+  "evidence-requirements",
+  "side-effect-permission",
+  "durable-execution",
+  "retries",
+  "recovery",
+  "sequencing",
+  "agent-communication",
+  "capability-transport",
+  "proposed-work",
+  "merge",
+  "production-deployment",
+  "authority-policy-change",
+] as const;
+
+export type AuthorityResponsibility = (typeof AUTHORITY_RESPONSIBILITIES)[number];
 
 export const LAYER_OWNERSHIP: Readonly<Record<AuthorityLayer, readonly AuthorityResponsibility[]>> =
   {
@@ -91,7 +94,8 @@ export type AuthorityInvariant = Readonly<{
 export const AUTHORITY_INVARIANTS: readonly AuthorityInvariant[] = [
   {
     id: "AUTH-INV-01",
-    forbids: "An agent can merge a pull request.",
+    forbids:
+      "An agent can authorise a merge. Executing a merge that Benny already approved is permitted.",
     laws: ["JARVIS-002", "JARVIS-007", "JARVIS-013"],
     status: "enforced",
     evidence: [
