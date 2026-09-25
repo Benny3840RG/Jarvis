@@ -44,16 +44,17 @@ function optionalText(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
-function normalizeProperty(value: unknown): Property | null {
-  if (!isRecord(value)) return null;
+function normalizeProperty(value: unknown): Property {
+  if (!isRecord(value)) throw new Error("Property row is not a record");
   if (
     typeof value.id !== "string" ||
     typeof value.clientId !== "string" ||
     typeof value.address !== "string"
   ) {
-    return null;
+    throw new Error("Property row missing required fields");
   }
-  const createdAt = typeof value.createdAt === "number" ? value.createdAt : Date.now();
+  if (!Number.isFinite(value.createdAt)) throw new Error("Property row has non-finite createdAt");
+  const createdAt = value.createdAt as number;
   return {
     id: value.id,
     clientId: requiredString(value.clientId, "Property clientId"),
@@ -106,9 +107,16 @@ export class JsonPropertyStore implements PropertyStore {
     }
     const rows = isRecord(parsed) && Array.isArray(parsed.properties) ? parsed.properties : [];
     const properties: Property[] = [];
-    for (const row of rows) {
-      const property = normalizeProperty(row);
-      if (property) properties.push(property);
+    try {
+      for (const row of rows) {
+        properties.push(normalizeProperty(row));
+      }
+    } catch {
+      if (!lockHeld) {
+        return this.writeLock.run(() => this.readDocument(true), "corruption recovery");
+      }
+      await this.setAside();
+      return { version: DOCUMENT_VERSION, properties: [] };
     }
     return { version: DOCUMENT_VERSION, properties };
   }

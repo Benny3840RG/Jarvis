@@ -33,16 +33,17 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function normalizeBuild(value: unknown): Build | null {
-  if (!isRecord(value)) return null;
+function normalizeBuild(value: unknown): Build {
+  if (!isRecord(value)) throw new Error("Build row is not a record");
   if (
     typeof value.id !== "string" ||
     typeof value.name !== "string" ||
     typeof value.kind !== "string"
   )
-    return null;
+    throw new Error("Build row missing required fields");
   const status: BuildStatus = isBuildStatus(value.status) ? value.status : "planning";
-  const createdAt = typeof value.createdAt === "number" ? value.createdAt : Date.now();
+  if (!Number.isFinite(value.createdAt)) throw new Error("Build row has non-finite createdAt");
+  const createdAt = value.createdAt as number;
   return {
     id: value.id,
     name: value.name,
@@ -93,9 +94,16 @@ export class JsonBuildStore implements BuildStore {
     const buildsValue = isRecord(parsed) ? parsed.builds : undefined;
     const rows = Array.isArray(buildsValue) ? buildsValue : [];
     const builds: Build[] = [];
-    for (const row of rows) {
-      const build = normalizeBuild(row);
-      if (build) builds.push(build);
+    try {
+      for (const row of rows) {
+        builds.push(normalizeBuild(row));
+      }
+    } catch {
+      if (!lockHeld) {
+        return this.writeLock.run(() => this.readDocument(true), "corruption recovery");
+      }
+      await this.setAside();
+      return { version: DOCUMENT_VERSION, builds: [] };
     }
     return { version: DOCUMENT_VERSION, builds };
   }

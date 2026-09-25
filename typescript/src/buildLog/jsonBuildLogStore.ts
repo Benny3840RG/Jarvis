@@ -33,16 +33,19 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function normalizeEntry(value: unknown): BuildLogEntry | null {
-  if (!isRecord(value)) return null;
+function normalizeEntry(value: unknown): BuildLogEntry {
+  if (!isRecord(value)) throw new Error("BuildLogEntry row is not a record");
   if (
     typeof value.id !== "string" ||
     typeof value.buildId !== "string" ||
     typeof value.title !== "string"
   ) {
-    return null;
+    throw new Error("BuildLogEntry row missing required fields");
   }
   const kind: BuildLogKind = isBuildLogKind(value.kind) ? value.kind : "note";
+  if (!Number.isFinite(value.createdAt))
+    throw new Error("BuildLogEntry row has non-finite createdAt");
+  const createdAt = value.createdAt as number;
   return {
     id: value.id,
     buildId: value.buildId,
@@ -52,7 +55,7 @@ function normalizeEntry(value: unknown): BuildLogEntry | null {
     ...(typeof value.occurredAt === "number" && Number.isFinite(value.occurredAt)
       ? { occurredAt: value.occurredAt }
       : {}),
-    createdAt: typeof value.createdAt === "number" ? value.createdAt : Date.now(),
+    createdAt,
     ...(typeof value.updatedAt === "number" ? { updatedAt: value.updatedAt } : {}),
   };
 }
@@ -90,9 +93,16 @@ export class JsonBuildLogStore implements BuildLogStore {
     const entriesValue = isRecord(parsed) ? parsed.entries : undefined;
     const rows = Array.isArray(entriesValue) ? entriesValue : [];
     const entries: BuildLogEntry[] = [];
-    for (const row of rows) {
-      const entry = normalizeEntry(row);
-      if (entry) entries.push(entry);
+    try {
+      for (const row of rows) {
+        entries.push(normalizeEntry(row));
+      }
+    } catch {
+      if (!lockHeld) {
+        return this.writeLock.run(() => this.readDocument(true), "corruption recovery");
+      }
+      await this.setAside();
+      return { version: DOCUMENT_VERSION, entries: [] };
     }
     return { version: DOCUMENT_VERSION, entries };
   }

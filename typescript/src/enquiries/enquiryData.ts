@@ -33,8 +33,9 @@ export function cloneEnquiry(enquiry: Enquiry): Enquiry {
   return { ...enquiry, attachmentRefs: [...enquiry.attachmentRefs] };
 }
 
-export function normalizeEnquiry(value: unknown): Enquiry | null {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
+export function normalizeEnquiry(value: unknown): Enquiry {
+  if (typeof value !== "object" || value === null || Array.isArray(value))
+    throw new Error("Enquiry row is not a record");
   const input = value as Record<string, unknown>;
   if (
     typeof input.id !== "string" ||
@@ -42,9 +43,10 @@ export function normalizeEnquiry(value: unknown): Enquiry | null {
     typeof input.source !== "string" ||
     typeof input.requestedWork !== "string"
   ) {
-    return null;
+    throw new Error("Enquiry row missing required fields");
   }
-  const createdAt = typeof input.createdAt === "number" ? input.createdAt : Date.now();
+  if (!Number.isFinite(input.createdAt)) throw new Error("Enquiry row has non-finite createdAt");
+  const createdAt = input.createdAt as number;
   return {
     id: input.id,
     clientId: requiredText(input.clientId, "Enquiry clientId"),

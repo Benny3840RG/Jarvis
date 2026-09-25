@@ -42,17 +42,18 @@ function optionalText(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
-function normalizeProject(value: unknown): Project | null {
-  if (!isRecord(value)) return null;
+function normalizeProject(value: unknown): Project {
+  if (!isRecord(value)) throw new Error("Project row is not a record");
   if (
     typeof value.id !== "string" ||
     typeof value.clientId !== "string" ||
     typeof value.title !== "string"
   ) {
-    return null;
+    throw new Error("Project row missing required fields");
   }
   const status: ProjectStatus = isProjectStatus(value.status) ? value.status : "lead";
-  const createdAt = typeof value.createdAt === "number" ? value.createdAt : Date.now();
+  if (!Number.isFinite(value.createdAt)) throw new Error("Project row has non-finite createdAt");
+  const createdAt = value.createdAt as number;
   return {
     id: value.id,
     clientId: value.clientId,
@@ -104,9 +105,16 @@ export class JsonProjectStore implements ProjectStore {
     const projectsValue = isRecord(parsed) ? parsed.projects : undefined;
     const rows = Array.isArray(projectsValue) ? projectsValue : [];
     const projects: Project[] = [];
-    for (const row of rows) {
-      const project = normalizeProject(row);
-      if (project) projects.push(project);
+    try {
+      for (const row of rows) {
+        projects.push(normalizeProject(row));
+      }
+    } catch {
+      if (!lockHeld) {
+        return this.writeLock.run(() => this.readDocument(true), "corruption recovery");
+      }
+      await this.setAside();
+      return { version: DOCUMENT_VERSION, projects: [] };
     }
     return { version: DOCUMENT_VERSION, projects };
   }

@@ -31,16 +31,18 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function normalizeEntry(value: unknown): Preference | null {
-  if (!isRecord(value)) return null;
+function normalizeEntry(value: unknown): Preference {
+  if (!isRecord(value)) throw new Error("Preference row is not a record");
   if (
     typeof value.id !== "string" ||
     typeof value.key !== "string" ||
     typeof value.value !== "string"
   ) {
-    return null;
+    throw new Error("Preference row missing required fields");
   }
-  const now = Date.now();
+  if (!Number.isFinite(value.createdAt)) throw new Error("Preference row has non-finite createdAt");
+  const createdAt = value.createdAt as number;
+  const updatedAtValue = Number.isFinite(value.updatedAt) ? (value.updatedAt as number) : createdAt;
   return {
     id: value.id,
     key: value.key,
@@ -48,8 +50,8 @@ function normalizeEntry(value: unknown): Preference | null {
     ...(typeof value.category === "string" && value.category.trim()
       ? { category: value.category }
       : {}),
-    createdAt: typeof value.createdAt === "number" ? value.createdAt : now,
-    updatedAt: typeof value.updatedAt === "number" ? value.updatedAt : now,
+    createdAt,
+    updatedAt: updatedAtValue,
   };
 }
 
@@ -86,9 +88,16 @@ export class JsonPreferenceStore implements PreferenceStore {
     const entriesValue = isRecord(parsed) ? parsed.entries : undefined;
     const rows = Array.isArray(entriesValue) ? entriesValue : [];
     const entries: Preference[] = [];
-    for (const row of rows) {
-      const entry = normalizeEntry(row);
-      if (entry) entries.push(entry);
+    try {
+      for (const row of rows) {
+        entries.push(normalizeEntry(row));
+      }
+    } catch {
+      if (!lockHeld) {
+        return this.writeLock.run(() => this.readDocument(true), "corruption recovery");
+      }
+      await this.setAside();
+      return { version: DOCUMENT_VERSION, entries: [] };
     }
     return { version: DOCUMENT_VERSION, entries };
   }

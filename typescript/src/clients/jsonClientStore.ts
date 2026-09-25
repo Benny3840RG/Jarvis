@@ -45,17 +45,19 @@ function normalizeContacts(value: unknown): ClientContact[] {
   return contacts;
 }
 
-function normalizeClient(value: unknown): Client | null {
-  if (!isRecord(value)) return null;
-  if (typeof value.id !== "string" || typeof value.name !== "string") return null;
-  const createdAt = typeof value.createdAt === "number" ? value.createdAt : Date.now();
+function normalizeClient(value: unknown): Client {
+  if (!isRecord(value)) throw new Error("Client row is not a record");
+  if (typeof value.id !== "string") throw new Error("Client row missing id");
+  if (typeof value.name !== "string") throw new Error("Client row missing name");
+  if (!Number.isFinite(value.createdAt)) throw new Error("Client row has non-finite createdAt");
+  const createdAt = value.createdAt as number;
   return {
     id: value.id,
     name: value.name,
     contacts: normalizeContacts(value.contacts),
     ...(typeof value.notes === "string" && value.notes.trim() ? { notes: value.notes } : {}),
     createdAt,
-    updatedAt: typeof value.updatedAt === "number" ? value.updatedAt : createdAt,
+    updatedAt: Number.isFinite(value.updatedAt) ? (value.updatedAt as number) : createdAt,
   };
 }
 
@@ -99,9 +101,16 @@ export class JsonClientStore implements ClientStore {
     const clientsValue = isRecord(parsed) ? parsed.clients : undefined;
     const rows = Array.isArray(clientsValue) ? clientsValue : [];
     const clients: Client[] = [];
-    for (const row of rows) {
-      const client = normalizeClient(row);
-      if (client) clients.push(client);
+    try {
+      for (const row of rows) {
+        clients.push(normalizeClient(row));
+      }
+    } catch {
+      if (!lockHeld) {
+        return this.writeLock.run(() => this.readDocument(true), "corruption recovery");
+      }
+      await this.setAside();
+      return { version: DOCUMENT_VERSION, clients: [] };
     }
     return { version: DOCUMENT_VERSION, clients };
   }
