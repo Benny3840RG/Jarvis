@@ -40,6 +40,9 @@ export const WORKER_VERSIONING_ENABLED_ENV = "JARVIS_TEMPORAL_VERSIONING";
 
 export const DEFAULT_DEPLOYMENT_NAME = "jarvis-temporal-pass";
 
+/** Temporal's default bound on a worker build id (`limit.workerBuildIdSize`). */
+export const MAX_BUILD_ID_LENGTH = 255;
+
 export class WorkerBuildIdentityError extends Error {
   constructor(message: string) {
     super(message);
@@ -115,6 +118,17 @@ export function resolveWorkerBuildIdentity(env: BuildIdentityEnv): WorkerDeploym
     releaseRaw === undefined
       ? sha
       : `${normalizeSegment(releaseRaw, WORKER_RELEASE_ID_ENV)}-${sha}`;
+
+  // Temporal bounds a worker build id (`limit.workerBuildIdSize`, default 255).
+  // A long release id could push `release-<40-hex sha>` past that and fail only
+  // at worker registration, so reject it here instead. Validate the assembled
+  // buildId rather than the release length alone, so the bound holds however
+  // the build id is composed. (ASCII-only, so char length == byte length.)
+  if (buildId.length > MAX_BUILD_ID_LENGTH) {
+    throw new WorkerBuildIdentityError(
+      `Build id is ${buildId.length} characters; Temporal bounds a worker build id to ${MAX_BUILD_ID_LENGTH}. Shorten ${WORKER_RELEASE_ID_ENV}.`,
+    );
+  }
 
   return { deploymentName, buildId };
 }

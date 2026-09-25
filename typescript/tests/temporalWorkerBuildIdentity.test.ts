@@ -38,6 +38,24 @@ describe("Temporal worker build identity", () => {
     assert.notEqual(first.buildId, second.buildId);
   });
 
+  it("bounds the assembled build id to Temporal's limit", () => {
+    // release + "-" + 40-hex sha must stay <= 255.
+    const maxRelease = "r".repeat(255 - 1 - 40); // 214 -> buildId length 255
+    const okVersion = resolveWorkerBuildIdentity({
+      JARVIS_BUILD_SHA: SHA,
+      JARVIS_BUILD_RELEASE: maxRelease,
+    });
+    assert.equal(okVersion.buildId.length, 255);
+    assert.throws(
+      () =>
+        resolveWorkerBuildIdentity({
+          JARVIS_BUILD_SHA: SHA,
+          JARVIS_BUILD_RELEASE: `${maxRelease}r`,
+        }),
+      WorkerBuildIdentityError,
+    );
+  });
+
   it("honours a custom deployment name", () => {
     const version = resolveWorkerBuildIdentity({
       JARVIS_BUILD_SHA: SHA,
