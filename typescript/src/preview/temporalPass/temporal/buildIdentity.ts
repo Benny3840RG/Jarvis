@@ -94,8 +94,10 @@ function normalizeSegment(raw: string, field: string): string {
 /**
  * Resolve the immutable worker build identity from the environment, or throw
  * `WorkerBuildIdentityError` if it is missing or mutable. `buildId` is the git
- * SHA, prefixed with the release id when one is set (`release-<sha>`), so a
- * given commit released twice still yields distinct, traceable build ids.
+ * SHA, prefixed with the release id when `JARVIS_BUILD_RELEASE` is set
+ * (`release-<sha>`), so a given commit released twice still yields distinct,
+ * traceable build ids. An unset release id means the bare SHA; a defined but
+ * blank or whitespace-only one is rejected, not silently dropped.
  */
 export function resolveWorkerBuildIdentity(env: BuildIdentityEnv): WorkerDeploymentVersion {
   const sha = normalizeSha(env);
@@ -104,14 +106,15 @@ export function resolveWorkerBuildIdentity(env: BuildIdentityEnv): WorkerDeploym
     WORKER_DEPLOYMENT_NAME_ENV,
   );
 
-  // Unset or whitespace-only release id means "no release" (buildId is the bare
-  // SHA). A set value is validated as-is, so a whitespace-padded release id is
-  // rejected rather than trimmed — matching normalizeSegment's fail-closed rule.
+  // Only an unset release id means "no release" (buildId is the bare SHA). A
+  // *defined* value is always validated, so a blank or whitespace-only
+  // JARVIS_BUILD_RELEASE is rejected rather than silently dropped — dropping it
+  // could collapse two distinct releases of the same commit onto one build id.
   const releaseRaw = env[WORKER_RELEASE_ID_ENV];
   const buildId =
-    releaseRaw !== undefined && releaseRaw.trim() !== ""
-      ? `${normalizeSegment(releaseRaw, WORKER_RELEASE_ID_ENV)}-${sha}`
-      : sha;
+    releaseRaw === undefined
+      ? sha
+      : `${normalizeSegment(releaseRaw, WORKER_RELEASE_ID_ENV)}-${sha}`;
 
   return { deploymentName, buildId };
 }

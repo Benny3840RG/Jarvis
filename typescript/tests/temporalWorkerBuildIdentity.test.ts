@@ -83,7 +83,7 @@ describe("Temporal worker build identity", () => {
         `deployment:${name}`,
       );
     }
-    for (const release of ["has.dot", "has space", " leading", "trailing ", "dev"]) {
+    for (const release of ["has.dot", "has space", " leading", "trailing ", "", "   ", "dev"]) {
       assert.throws(
         () => resolveWorkerBuildIdentity({ JARVIS_BUILD_SHA: SHA, JARVIS_BUILD_RELEASE: release }),
         WorkerBuildIdentityError,
