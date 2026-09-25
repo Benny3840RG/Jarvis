@@ -18,9 +18,15 @@ import { resolveOutlookConnections } from "../src/auth/microsoftOutlookConnectio
 // resolve to it, so the IPv6 cases here assert real behaviour that such a host
 // cannot exercise at all. Probe once so those cases narrow to what the platform
 // supports instead of failing on its absence; a host with IPv6 still runs them.
-const ipv6LoopbackAvailable = await new Promise<boolean>((resolve) => {
+const ipv6LoopbackAvailable = await new Promise<boolean>((resolve, reject) => {
   const probe = createProbeServer();
-  probe.once("error", () => resolve(false));
+  probe.once("error", (err: NodeJS.ErrnoException) => {
+    if (err.code === "EAFNOSUPPORT" || err.code === "EADDRNOTAVAIL") {
+      resolve(false);
+    } else {
+      reject(err);
+    }
+  });
   probe.listen({ port: 0, host: "::1" }, () => probe.close(() => resolve(true)));
 });
 
