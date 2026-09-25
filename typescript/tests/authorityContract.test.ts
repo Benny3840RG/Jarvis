@@ -333,11 +333,16 @@ describe("Authority invariants against current code", () => {
     const manifest = JSON.parse(readTypescriptFile("package.json")) as { imports?: unknown };
     assert.equal(manifest.imports, undefined, "package.json subpath imports would alias modules");
     for (const config of ["tsconfig.json", "convex/tsconfig.json"]) {
-      const parsed = ts.parseConfigFileTextToJson(config, readTypescriptFile(config));
-      const options = (parsed.config as { compilerOptions?: Record<string, unknown> })
-        .compilerOptions;
-      assert.equal(options?.paths, undefined, `${config} path aliases would bypass the scan`);
-      assert.equal(options?.baseUrl, undefined, `${config} baseUrl would bypass the scan`);
+      // Resolve `extends`, so options inherited from a parent config are checked too.
+      const parsed = ts.getParsedCommandLineOfConfigFile(join(TYPESCRIPT_ROOT, config), undefined, {
+        ...ts.sys,
+        onUnRecoverableConfigFileDiagnostic: (diagnostic) => {
+          throw new Error(ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n"));
+        },
+      });
+      assert.ok(parsed, `${config} could not be parsed`);
+      assert.equal(parsed.options.paths, undefined, `${config} path aliases would bypass the scan`);
+      assert.equal(parsed.options.baseUrl, undefined, `${config} baseUrl would bypass the scan`);
     }
     const files = typescriptFilesUnder("src/preview/temporalPass");
     assert.ok(files.length > 0);

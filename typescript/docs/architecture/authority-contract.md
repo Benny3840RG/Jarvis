@@ -77,7 +77,7 @@ neither does a skipped test.
   subpath import, or a self-reference to the `jarvis-typescript` package. It
   treats bare specifiers as packages. That holds only while the repository
   defines no import aliases, so the test also fails if `package.json` gains
-  `imports` or either tsconfig gains `paths` or `baseUrl`. The scan fails if a
+  `imports`, or either tsconfig has `paths` or `baseUrl`, including options inherited through `extends`. The scan fails if a
   module the preview reaches:
   - is under `src/http/`;
   - calls `.approve(`;
