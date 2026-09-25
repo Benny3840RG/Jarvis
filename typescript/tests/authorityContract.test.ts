@@ -24,19 +24,32 @@ import { MCP_TOOL_OPERATIONS, mcpExposedOperations } from "../src/mcp/operationC
 
 const TYPESCRIPT_ROOT = fileURLToPath(new URL("..", import.meta.url));
 const HTTP_METHODS = new Set(["get", "post", "put", "patch", "delete"]);
+const SELF_PACKAGE = (
+  JSON.parse(readFileSync(join(TYPESCRIPT_ROOT, "package.json"), "utf8")) as { name: string }
+).name;
 
 function readTypescriptFile(relativePath: string): string {
   return readFileSync(join(TYPESCRIPT_ROOT, relativePath), "utf8");
 }
 
-function openApiOperations(): string[] {
+type OpenApiOperationText = { key: string; text: string };
+
+/**
+ * Each operation as `METHOD /path` plus its operationId, summary and tags. Free-text
+ * descriptions are left out: they name the Convex "deployment" in unrelated contexts.
+ */
+function openApiOperations(): OpenApiOperationText[] {
   const document = JSON.parse(readTypescriptFile("openapi/jarvis.openapi.json")) as {
-    paths: Record<string, Record<string, unknown>>;
+    paths: Record<string, Record<string, Record<string, unknown>>>;
   };
-  const operations: string[] = [];
+  const operations: OpenApiOperationText[] = [];
   for (const [path, item] of Object.entries(document.paths)) {
-    for (const method of Object.keys(item)) {
-      if (HTTP_METHODS.has(method)) operations.push(`${method.toUpperCase()} ${path}`);
+    for (const [method, operation] of Object.entries(item)) {
+      if (!HTTP_METHODS.has(method)) continue;
+      const key = `${method.toUpperCase()} ${path}`;
+      const declared = [operation.operationId, operation.summary];
+      const tags = Array.isArray(operation.tags) ? operation.tags : [];
+      operations.push({ key, text: [key, ...declared, ...tags].join(" ") });
     }
   }
   return operations;
@@ -53,15 +66,40 @@ function typescriptFilesUnder(relativeDir: string): string[] {
 }
 
 /**
- * Every module specifier in a source file: static and side-effect imports, re-exports,
- * `require(...)` and literal `import(...)`. A dynamic import or require whose argument
- * is not a string literal cannot be resolved statically, so it is reported as `null`.
+ * Every module specifier in a source file, read from its syntax tree: static and
+ * side-effect imports, re-exports, `import x = require(...)`, `require(...)`,
+ * `import(...)` and import types. A specifier that is not a plain string literal
+ * (a template with substitutions, a concatenation, a variable) cannot be resolved
+ * statically, so it is reported as `null`. So is any `createRequire(...)` call.
  */
-function moduleSpecifiers(source: string): (string | null)[] {
-  const specifiers: (string | null)[] = ts
-    .preProcessFile(source, true, true)
-    .importedFiles.map((file) => file.fileName);
-  if (/\b(?:import|require)\s*\(\s*(?!["'`])/.test(source)) specifiers.push(null);
+function moduleSpecifiers(fileName: string, text: string): (string | null)[] {
+  const specifiers: (string | null)[] = [];
+  const literal = (node: ts.Node | undefined): string | null =>
+    node && ts.isStringLiteralLike(node) ? node.text : null;
+  const visit = (node: ts.Node): void => {
+    if ((ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) && node.moduleSpecifier) {
+      specifiers.push(literal(node.moduleSpecifier));
+    } else if (ts.isExternalModuleReference(node)) {
+      specifiers.push(literal(node.expression));
+    } else if (ts.isImportTypeNode(node)) {
+      const argument = node.argument;
+      specifiers.push(ts.isLiteralTypeNode(argument) ? literal(argument.literal) : null);
+    } else if (ts.isCallExpression(node)) {
+      const callee = node.expression;
+      const calleeName = ts.isIdentifier(callee)
+        ? callee.text
+        : ts.isPropertyAccessExpression(callee)
+          ? callee.name.text
+          : undefined;
+      if (callee.kind === ts.SyntaxKind.ImportKeyword || calleeName === "require") {
+        specifiers.push(literal(node.arguments[0]));
+      } else if (calleeName === "createRequire") {
+        specifiers.push(null);
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(ts.createSourceFile(fileName, text, ts.ScriptTarget.Latest, true));
   return specifiers;
 }
 
@@ -90,13 +128,24 @@ function relativeImportClosure(roots: readonly string[]): {
     const file = pending.pop()!;
     if (files.has(file)) continue;
     files.add(file);
-    for (const specifier of moduleSpecifiers(readFileSync(file, "utf8"))) {
+    for (const specifier of moduleSpecifiers(file, readFileSync(file, "utf8"))) {
       if (specifier === null) {
-        unresolved.push(`${file}: non-literal dynamic import or require`);
+        unresolved.push(`${file}: non-literal import or require`);
         continue;
       }
       if (!specifier.startsWith(".")) {
-        if (/(^|\/)src\/http(\/|$)/.test(specifier)) unresolved.push(`${file}: ${specifier}`);
+        // Bare specifiers are packages only while the repository defines no import
+        // aliases; the test asserts that. Anything that could name repository code
+        // without a relative path is reported instead of skipped.
+        if (
+          specifier.startsWith("/") ||
+          specifier.startsWith("#") ||
+          specifier === SELF_PACKAGE ||
+          specifier.startsWith(`${SELF_PACKAGE}/`) ||
+          /(^|\/)src\//.test(specifier)
+        ) {
+          unresolved.push(`${file}: ${specifier}`);
+        }
         continue;
       }
       const target = resolveRelativeModule(file, specifier);
@@ -245,8 +294,8 @@ describe("Authority invariants against current code", () => {
 
   it("offers no deployment operation in the operator API or MCP surface", () => {
     const deployment = /deploy|release|promote|rollout/i;
-    for (const operation of openApiOperations()) {
-      assert.doesNotMatch(operation, deployment, `operator API offers ${operation}`);
+    for (const { key, text } of openApiOperations()) {
+      assert.doesNotMatch(text, deployment, `operator API offers ${key}`);
     }
     for (const operation of mcpExposedOperations()) {
       assert.doesNotMatch(operation, deployment, `MCP reaches ${operation}`);
@@ -281,6 +330,15 @@ describe("Authority invariants against current code", () => {
   });
 
   it("keeps the Temporal PASS preview away from approval credentials and approve calls", () => {
+    const manifest = JSON.parse(readTypescriptFile("package.json")) as { imports?: unknown };
+    assert.equal(manifest.imports, undefined, "package.json subpath imports would alias modules");
+    for (const config of ["tsconfig.json", "convex/tsconfig.json"]) {
+      const parsed = ts.parseConfigFileTextToJson(config, readTypescriptFile(config));
+      const options = (parsed.config as { compilerOptions?: Record<string, unknown> })
+        .compilerOptions;
+      assert.equal(options?.paths, undefined, `${config} path aliases would bypass the scan`);
+      assert.equal(options?.baseUrl, undefined, `${config} baseUrl would bypass the scan`);
+    }
     const files = typescriptFilesUnder("src/preview/temporalPass");
     assert.ok(files.length > 0);
     const closure = relativeImportClosure(files);

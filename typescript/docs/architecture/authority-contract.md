@@ -58,17 +58,27 @@ neither does a skipped test.
 
 ## Limits of this evidence
 
-- **AUTH-INV-02 is enforced by absence.** No operator API operation or MCP tool
-  deploys anything. The test fails if one appears. It does not prove that a
-  process holding host credentials cannot deploy outside Jarvis.
+- **AUTH-INV-02 is enforced by absence, checked by name.** The test fails if
+  deploy, release, promote or rollout appears in any of these: an operator API
+  path, operationId, summary or tag; an MCP-reached operation; or an MCP tool
+  name. It reads declared names, not what a handler does. So an operation that
+  deploys under a neutral name would pass, and review of each new operation is
+  still needed. It also does not prove that a process holding host credentials
+  cannot deploy outside Jarvis.
 - **AUTH-INV-03 covers the current MCP adapter only.** The MCP adapter reaches
   only OpenAPI operations and none of the approve, execute or revoke
   operations. The per-session capability guard is PR E.
 - **AUTH-INV-04 is a static scan of `src/preview/temporalPass/`.** It follows
-  every relative import from the preview, direct or transitive, including
-  side-effect imports, re-exports, `require` and `import()` with a literal
-  path. A computed import path cannot be resolved, so it fails the test. The
-  scan fails if a module the preview reaches:
+  every import from the preview, direct or transitive, as parsed from the
+  syntax tree. That includes static and side-effect imports, re-exports,
+  `import x = require()`, `require()`, `import()` and import types. The test
+  fails on any import it cannot resolve: a template with substitutions, a
+  concatenated or variable path, `createRequire`, an absolute path, a `#`
+  subpath import, or a self-reference to the `jarvis-typescript` package. It
+  treats bare specifiers as packages. That holds only while the repository
+  defines no import aliases, so the test also fails if `package.json` gains
+  `imports` or either tsconfig gains `paths` or `baseUrl`. The scan fails if a
+  module the preview reaches:
   - is under `src/http/`;
   - calls `.approve(`;
   - is a preview module that references the approval token;
