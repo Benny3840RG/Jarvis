@@ -107,6 +107,35 @@ function relativeImportClosure(roots: readonly string[]): {
   return { files, unresolved };
 }
 
+/**
+ * Titles of tests actually declared in a file: string-literal first arguments of
+ * `it(...)` or `test(...)` calls in the parsed syntax tree. A title that survives
+ * only in a comment or an unrelated string does not count, and neither does a
+ * skipped (`it.skip`) or todo test.
+ */
+function declaredTestTitles(relativePath: string): Set<string> {
+  const source = ts.createSourceFile(
+    relativePath,
+    readTypescriptFile(relativePath),
+    ts.ScriptTarget.Latest,
+    true,
+  );
+  const titles = new Set<string>();
+  const visit = (node: ts.Node): void => {
+    if (
+      ts.isCallExpression(node) &&
+      ts.isIdentifier(node.expression) &&
+      (node.expression.text === "it" || node.expression.text === "test")
+    ) {
+      const [title] = node.arguments;
+      if (title && ts.isStringLiteralLike(title)) titles.add(title.text);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+  return titles;
+}
+
 async function freePort(): Promise<number> {
   const server = createServer();
   await new Promise<void>((resolve, reject) => {
@@ -172,10 +201,8 @@ describe("Authority contract", () => {
           inPassSuite,
           `${invariant.id}: ${evidence.file} is labelled with the wrong suite`,
         );
-        const source = readTypescriptFile(evidence.file);
         assert.ok(
-          source.includes(`it(${JSON.stringify(evidence.test)}`) ||
-            source.includes(`it(\n    ${JSON.stringify(evidence.test)}`),
+          declaredTestTitles(evidence.file).has(evidence.test),
           `${invariant.id}: ${evidence.file} has no test titled "${evidence.test}"`,
         );
       }
@@ -203,9 +230,13 @@ describe("Authority contract", () => {
 
 describe("Authority invariants against current code", () => {
   it("exposes no approve, execute, revoke, merge or deploy operation through MCP", () => {
-    const forbiddenOperation = /\/(approve|execute|revoke)$/;
+    const forbiddenSegment = /^(approve|execute|revoke|merge|deploy)/i;
     for (const operation of mcpExposedOperations()) {
-      assert.doesNotMatch(operation, forbiddenOperation, `MCP reaches ${operation}`);
+      const segments = operation.split(" ")[1]!.split("/");
+      for (const segment of segments) {
+        assert.doesNotMatch(segment, forbiddenSegment, `MCP reaches ${operation}`);
+      }
+      assert.doesNotMatch(operation, /merge|deploy/i, `MCP reaches ${operation}`);
     }
     for (const tool of Object.keys(MCP_TOOL_OPERATIONS)) {
       assert.doesNotMatch(tool, /merge|deploy|approve|execute|revoke/i, `MCP tool ${tool}`);
@@ -216,6 +247,9 @@ describe("Authority invariants against current code", () => {
     const deployment = /deploy|release|promote|rollout/i;
     for (const operation of openApiOperations()) {
       assert.doesNotMatch(operation, deployment, `operator API offers ${operation}`);
+    }
+    for (const operation of mcpExposedOperations()) {
+      assert.doesNotMatch(operation, deployment, `MCP reaches ${operation}`);
     }
     for (const tool of Object.keys(MCP_TOOL_OPERATIONS)) {
       assert.doesNotMatch(tool, deployment, `MCP tool ${tool}`);
@@ -249,18 +283,40 @@ describe("Authority invariants against current code", () => {
   it("keeps the Temporal PASS preview away from approval credentials and approve calls", () => {
     const files = typescriptFilesUnder("src/preview/temporalPass");
     assert.ok(files.length > 0);
-    for (const file of files) {
-      const source = readFileSync(file, "utf8");
-      assert.doesNotMatch(source, /approvalToken|JARVIS_APPROVAL_TOKEN/, file);
-      assert.doesNotMatch(source, /\.approve\s*\(/, file);
-    }
-    const httpLayer = join(TYPESCRIPT_ROOT, "src", "http") + sep;
     const closure = relativeImportClosure(files);
     assert.deepEqual(closure.unresolved, [], "preview imports that cannot be checked");
-    const reachedHttp = [...closure.files]
-      .filter((file) => file.startsWith(httpLayer))
-      .map((file) => relative(TYPESCRIPT_ROOT, file));
-    assert.deepEqual(reachedHttp, [], "the preview reaches the HTTP layer");
+    const reached = [...closure.files].map((file) => ({
+      path: relative(TYPESCRIPT_ROOT, file).split(sep).join("/"),
+      source: readFileSync(file, "utf8"),
+    }));
+    const approvalToken = /approvalToken|JARVIS_APPROVAL_TOKEN/;
+    assert.deepEqual(
+      reached.filter(({ path }) => path.startsWith("src/http/")).map(({ path }) => path),
+      [],
+      "the preview reaches the HTTP layer",
+    );
+    assert.deepEqual(
+      reached.filter(({ source }) => /\.approve\s*\(/.test(source)).map(({ path }) => path),
+      [],
+      "a module the preview reaches calls .approve(",
+    );
+    assert.deepEqual(
+      reached
+        .filter(({ path, source }) => path.startsWith("src/preview/") && approvalToken.test(source))
+        .map(({ path }) => path),
+      [],
+      "the preview references the approval token",
+    );
+    // The governed approval boundary itself handles the token. The preview reaches it
+    // only to propose and execute. Any other reached module that handles the token fails.
+    assert.deepEqual(
+      reached
+        .filter(({ source }) => approvalToken.test(source))
+        .map(({ path }) => path)
+        .sort(),
+      ["src/actions/toolActions.ts", "src/persistence/convexToolActions.ts"],
+      "approval-token handling outside the reviewed governed approval boundary",
+    );
   });
 
   it("refuses an unadvertised MCP tool without calling the operator API", async () => {

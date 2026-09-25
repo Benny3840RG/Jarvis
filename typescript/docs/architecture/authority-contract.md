@@ -37,7 +37,10 @@ candidate evidence.
 ## Invariants
 
 A build fails if an `enforced` invariant loses its evidence test, or if a
-`planned` invariant is not listed in the roadmap.
+`planned` invariant is not listed in the roadmap. An evidence test counts only
+if the parsed syntax tree of the cited file contains an `it(...)` or `test(...)`
+call with that exact title. A matching comment or string does not count, and
+neither does a skipped test.
 
 | ID          | Forbids                                                                     | Status                 |
 | ----------- | --------------------------------------------------------------------------- | ---------------------- |
@@ -61,15 +64,22 @@ A build fails if an `enforced` invariant loses its evidence test, or if a
 - **AUTH-INV-03 covers the current MCP adapter only.** The MCP adapter reaches
   only OpenAPI operations and none of the approve, execute or revoke
   operations. The per-session capability guard is PR E.
-- **AUTH-INV-04 is a static scan of `src/preview/temporalPass/`.** It checks
-  that the preview does not reference the approval token or call `.approve(`.
-  It also follows every relative import, direct or transitive, and fails if
-  any of them reaches `src/http/`. That covers static and side-effect imports,
-  re-exports, `require`, and `import()` with a literal path. A dynamic import
-  or `require` with a computed path fails the test, because the scan cannot
-  resolve it. The token and `.approve(` checks read the preview files only,
-  not the modules they import. A production Temporal layout (PR B) must be
-  added to the same scan.
+- **AUTH-INV-04 is a static scan of `src/preview/temporalPass/`.** It follows
+  every relative import from the preview, direct or transitive, including
+  side-effect imports, re-exports, `require` and `import()` with a literal
+  path. A computed import path cannot be resolved, so it fails the test. The
+  scan fails if a module the preview reaches:
+  - is under `src/http/`;
+  - calls `.approve(`;
+  - is a preview module that references the approval token;
+  - references the approval token and is not one of the two reviewed modules
+    that already handle it, `src/actions/toolActions.ts` and
+    `src/persistence/convexToolActions.ts`.
+
+  The preview reaches those two modules only to propose and execute. This is a
+  text scan, not a call graph, so it cannot prove what a reached module does at
+  runtime. A production Temporal layout (PR B) must be added to the same scan.
+
 - **Most AUTH-INV-06 to AUTH-INV-09 evidence is `suite: "temporal-pass"`.**
   Those tests run under `npm run test:temporal-pass` and in
   `.github/workflows/temporal-pass.yml`. That job runs only when a pull request
