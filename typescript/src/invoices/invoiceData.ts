@@ -107,12 +107,13 @@ export function applyInvoiceDerivedFields(invoice: Invoice): void {
   if (invoice.status === "paid" && invoice.paymentStatus !== "paid") invoice.status = "issued";
 }
 
-export function normalizeInvoice(value: unknown): Invoice | null {
+export function normalizeInvoice(value: unknown): Invoice {
   if (!isRecord(value) || typeof value.id !== "string" || typeof value.clientId !== "string") {
-    return null;
+    throw new Error("Invoice row missing required fields");
   }
-  if (typeof value.number !== "string") return null;
-  const createdAt = typeof value.createdAt === "number" ? value.createdAt : Date.now();
+  if (typeof value.number !== "string") throw new Error("Invoice row missing number");
+  if (!Number.isFinite(value.createdAt)) throw new Error("Invoice row has non-finite createdAt");
+  const createdAt = value.createdAt as number;
   const taxRate =
     typeof value.taxRate === "number" && value.taxRate >= 0 && value.taxRate <= 1
       ? value.taxRate

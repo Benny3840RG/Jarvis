@@ -38,14 +38,14 @@ function normalizeParts(value: unknown): string[] | undefined {
   return parts.length > 0 ? parts : undefined;
 }
 
-function normalizeEntry(value: unknown): Upgrade | null {
-  if (!isRecord(value)) return null;
+function normalizeEntry(value: unknown): Upgrade {
+  if (!isRecord(value)) throw new Error("Upgrade row is not a record");
   if (
     typeof value.id !== "string" ||
     typeof value.buildId !== "string" ||
     typeof value.title !== "string"
   ) {
-    return null;
+    throw new Error("Upgrade row missing required fields");
   }
   const reason = optionalText(value.reason);
   const beforeState = optionalText(value.beforeState);
@@ -53,6 +53,8 @@ function normalizeEntry(value: unknown): Upgrade | null {
   const outcome = optionalText(value.outcome);
   const version = optionalText(value.version);
   const parts = normalizeParts(value.parts);
+  if (!Number.isFinite(value.createdAt)) throw new Error("Upgrade row has non-finite createdAt");
+  const createdAt = value.createdAt as number;
   return {
     id: value.id,
     buildId: value.buildId,
@@ -66,7 +68,7 @@ function normalizeEntry(value: unknown): Upgrade | null {
     ...(typeof value.occurredAt === "number" && Number.isFinite(value.occurredAt)
       ? { occurredAt: value.occurredAt }
       : {}),
-    createdAt: typeof value.createdAt === "number" ? value.createdAt : Date.now(),
+    createdAt,
     ...(typeof value.updatedAt === "number" ? { updatedAt: value.updatedAt } : {}),
   };
 }
@@ -104,9 +106,16 @@ export class JsonUpgradeStore implements UpgradeStore {
     const entriesValue = isRecord(parsed) ? parsed.entries : undefined;
     const rows = Array.isArray(entriesValue) ? entriesValue : [];
     const entries: Upgrade[] = [];
-    for (const row of rows) {
-      const entry = normalizeEntry(row);
-      if (entry) entries.push(entry);
+    try {
+      for (const row of rows) {
+        entries.push(normalizeEntry(row));
+      }
+    } catch {
+      if (!lockHeld) {
+        return this.writeLock.run(() => this.readDocument(true), "corruption recovery");
+      }
+      await this.setAside();
+      return { version: DOCUMENT_VERSION, entries: [] };
     }
     return { version: DOCUMENT_VERSION, entries };
   }

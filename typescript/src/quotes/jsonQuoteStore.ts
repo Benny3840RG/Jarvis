@@ -38,20 +38,23 @@ function isRecord(value: unknown): value is Record<string, unknown> {
  * Rebuilds a stored quote, re-deriving its totals so persisted numbers can never
  * drift from the line items they are computed from.
  */
-function normalizeQuote(value: unknown): Quote | null {
-  if (!isRecord(value)) return null;
+function normalizeQuote(value: unknown): Quote {
+  if (!isRecord(value)) throw new Error("Quote row is not a record");
   if (
     typeof value.id !== "string" ||
     typeof value.clientId !== "string" ||
     typeof value.number !== "string"
   ) {
-    return null;
+    throw new Error("Quote row missing required fields");
   }
   let lineItems;
   try {
     lineItems = normalizeLineItems(value.lineItems ?? []);
-  } catch {
-    return null;
+  } catch (e: unknown) {
+    throw new Error(
+      `Quote row has invalid lineItems: ${e instanceof Error ? e.message : String(e)}`,
+      { cause: e },
+    );
   }
   const status: QuoteStatus = isQuoteStatus(value.status) ? value.status : "draft";
   const taxRate =
@@ -59,7 +62,8 @@ function normalizeQuote(value: unknown): Quote | null {
       ? value.taxRate
       : undefined;
   const totals = computeQuoteTotals(lineItems, taxRate);
-  const createdAt = typeof value.createdAt === "number" ? value.createdAt : Date.now();
+  if (!Number.isFinite(value.createdAt)) throw new Error("Quote row has non-finite createdAt");
+  const createdAt = value.createdAt as number;
   return {
     id: value.id,
     clientId: value.clientId,
@@ -115,9 +119,16 @@ export class JsonQuoteStore implements QuoteStore {
     const quotesValue = isRecord(parsed) ? parsed.quotes : undefined;
     const rows = Array.isArray(quotesValue) ? quotesValue : [];
     const quotes: Quote[] = [];
-    for (const row of rows) {
-      const quote = normalizeQuote(row);
-      if (quote) quotes.push(quote);
+    try {
+      for (const row of rows) {
+        quotes.push(normalizeQuote(row));
+      }
+    } catch {
+      if (!lockHeld) {
+        return this.writeLock.run(() => this.readDocument(true), "corruption recovery");
+      }
+      await this.setAside();
+      return { version: DOCUMENT_VERSION, quotes: [] };
     }
     return { version: DOCUMENT_VERSION, quotes };
   }

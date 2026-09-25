@@ -75,9 +75,16 @@ export class JsonEnquiryStore implements EnquiryStore {
         ? (parsed as { enquiries: unknown[] }).enquiries
         : [];
     const enquiries: Enquiry[] = [];
-    for (const row of rows) {
-      const enquiry = normalizeEnquiry(row);
-      if (enquiry) enquiries.push(enquiry);
+    try {
+      for (const row of rows) {
+        enquiries.push(normalizeEnquiry(row));
+      }
+    } catch {
+      if (!lockHeld) {
+        return this.writeLock.run(() => this.readDocument(true), "corruption recovery");
+      }
+      await this.setAside();
+      return { version: DOCUMENT_VERSION, enquiries: [] };
     }
     return { version: DOCUMENT_VERSION, enquiries };
   }

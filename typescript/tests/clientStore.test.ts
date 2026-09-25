@@ -92,3 +92,75 @@ describe("JsonClientStore", () => {
     assert.equal((await store.list()).length, 8);
   });
 });
+
+describe("JsonClientStore – corruption quarantine", () => {
+  it("quarantines a file with an invalid row and returns empty instead of silently dropping", async () => {
+    const { readdir, writeFile } = await import("node:fs/promises");
+    const filePath = path.join(dir, "clients.json");
+    await writeFile(
+      filePath,
+      JSON.stringify({
+        version: 1,
+        clients: [
+          { id: "a1", name: "Acme", contacts: [], createdAt: 1000, updatedAt: 1000 },
+          { notAClient: true },
+        ],
+      }),
+    );
+    const warnings: string[] = [];
+    const s = new JsonClientStore(filePath, (msg) => warnings.push(msg));
+    const list = await s.list();
+    assert.deepEqual(list, []);
+    const files = await readdir(dir);
+    assert.ok(!files.includes("clients.json"), "original file should have been renamed away");
+    assert.ok(
+      files.some((f) => f.startsWith("clients.json.corrupt-")),
+      "a .corrupt-* file should exist",
+    );
+  });
+
+  it("never overwrites the corrupt file with a filtered version on add()", async () => {
+    const { readdir, readFile, writeFile } = await import("node:fs/promises");
+    const filePath = path.join(dir, "clients.json");
+    const original = JSON.stringify({
+      version: 1,
+      clients: [
+        { id: "a1", name: "Preserved", contacts: [], createdAt: 1000, updatedAt: 1000 },
+        { notAClient: true },
+      ],
+    });
+    await writeFile(filePath, original);
+    const s = new JsonClientStore(filePath);
+    await s.add({ name: "New Client" });
+    const newDoc = JSON.parse(await readFile(filePath, "utf8")) as {
+      clients: Array<{ name: string }>;
+    };
+    assert.equal(newDoc.clients.length, 1);
+    assert.equal(newDoc.clients[0].name, "New Client");
+    const files = await readdir(dir);
+    const corruptFile = files.find((f) => f.startsWith("clients.json.corrupt-"));
+    assert.ok(corruptFile, "corrupt file should be preserved");
+    const corruptContent = await readFile(path.join(dir, corruptFile!), "utf8");
+    assert.equal(corruptContent, original, "corrupt file content should be unchanged");
+  });
+
+  it("quarantines when createdAt is not a finite number", async () => {
+    const { readdir, writeFile } = await import("node:fs/promises");
+    const filePath = path.join(dir, "clients.json");
+    await writeFile(
+      filePath,
+      JSON.stringify({
+        version: 1,
+        clients: [{ id: "a1", name: "Acme", contacts: [], createdAt: null, updatedAt: 1000 }],
+      }),
+    );
+    const s = new JsonClientStore(filePath);
+    const list = await s.list();
+    assert.deepEqual(list, []);
+    const files = await readdir(dir);
+    assert.ok(
+      files.some((f) => f.startsWith("clients.json.corrupt-")),
+      "should quarantine file with non-finite createdAt",
+    );
+  });
+});

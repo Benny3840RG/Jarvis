@@ -33,9 +33,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function normalizeErrand(value: unknown): Errand | null {
-  if (!isRecord(value)) return null;
-  if (typeof value.id !== "string" || typeof value.title !== "string") return null;
+function normalizeErrand(value: unknown): Errand {
+  if (!isRecord(value)) throw new Error("Errand row is not a record");
+  if (typeof value.id !== "string" || typeof value.title !== "string")
+    throw new Error("Errand row missing required fields");
   const status: ErrandStatus = isErrandStatus(value.status) ? value.status : "open";
   let location;
   if (value.location !== undefined) {
@@ -45,7 +46,8 @@ function normalizeErrand(value: unknown): Errand | null {
       location = undefined;
     }
   }
-  const createdAt = typeof value.createdAt === "number" ? value.createdAt : Date.now();
+  if (!Number.isFinite(value.createdAt)) throw new Error("Errand row has non-finite createdAt");
+  const createdAt = value.createdAt as number;
   return {
     id: value.id,
     title: value.title,
@@ -99,9 +101,16 @@ export class JsonErrandStore implements ErrandStore {
     const errandsValue = isRecord(parsed) ? parsed.errands : undefined;
     const rows = Array.isArray(errandsValue) ? errandsValue : [];
     const errands: Errand[] = [];
-    for (const row of rows) {
-      const errand = normalizeErrand(row);
-      if (errand) errands.push(errand);
+    try {
+      for (const row of rows) {
+        errands.push(normalizeErrand(row));
+      }
+    } catch {
+      if (!lockHeld) {
+        return this.writeLock.run(() => this.readDocument(true), "corruption recovery");
+      }
+      await this.setAside();
+      return { version: DOCUMENT_VERSION, errands: [] };
     }
     return { version: DOCUMENT_VERSION, errands };
   }

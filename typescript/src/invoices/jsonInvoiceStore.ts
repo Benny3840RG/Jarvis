@@ -75,9 +75,16 @@ export class JsonInvoiceStore implements InvoiceStore {
         ? (parsed as { invoices: unknown[] }).invoices
         : [];
     const invoices: Invoice[] = [];
-    for (const row of rows) {
-      const invoice = normalizeInvoice(row);
-      if (invoice) invoices.push(invoice);
+    try {
+      for (const row of rows) {
+        invoices.push(normalizeInvoice(row));
+      }
+    } catch {
+      if (!lockHeld) {
+        return this.writeLock.run(() => this.readDocument(true), "corruption recovery");
+      }
+      await this.setAside();
+      return { version: DOCUMENT_VERSION, invoices: [] };
     }
     return { version: DOCUMENT_VERSION, invoices };
   }

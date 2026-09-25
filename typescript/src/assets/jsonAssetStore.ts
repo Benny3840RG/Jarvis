@@ -30,16 +30,18 @@ function isPositiveInt(value: unknown): value is number {
   return typeof value === "number" && Number.isInteger(value) && value > 0;
 }
 
-function normalizeEntry(value: unknown): Asset | null {
-  if (!isRecord(value)) return null;
+function normalizeEntry(value: unknown): Asset {
+  if (!isRecord(value)) throw new Error("Asset row is not a record");
   if (
     typeof value.id !== "string" ||
     typeof value.name !== "string" ||
     typeof value.kind !== "string"
   ) {
-    return null;
+    throw new Error("Asset row missing required fields");
   }
-  const now = Date.now();
+  if (!Number.isFinite(value.createdAt)) throw new Error("Asset row has non-finite createdAt");
+  const createdAt = value.createdAt as number;
+  const updatedAtValue = Number.isFinite(value.updatedAt) ? (value.updatedAt as number) : createdAt;
   return {
     id: value.id,
     name: value.name,
@@ -51,8 +53,8 @@ function normalizeEntry(value: unknown): Asset | null {
       ? { lastServicedAt: value.lastServicedAt }
       : {}),
     ...(typeof value.notes === "string" && value.notes.trim() ? { notes: value.notes } : {}),
-    createdAt: typeof value.createdAt === "number" ? value.createdAt : now,
-    updatedAt: typeof value.updatedAt === "number" ? value.updatedAt : now,
+    createdAt,
+    updatedAt: updatedAtValue,
   };
 }
 
@@ -89,9 +91,16 @@ export class JsonAssetStore implements AssetStore {
     const entriesValue = isRecord(parsed) ? parsed.entries : undefined;
     const rows = Array.isArray(entriesValue) ? entriesValue : [];
     const entries: Asset[] = [];
-    for (const row of rows) {
-      const entry = normalizeEntry(row);
-      if (entry) entries.push(entry);
+    try {
+      for (const row of rows) {
+        entries.push(normalizeEntry(row));
+      }
+    } catch {
+      if (!lockHeld) {
+        return this.writeLock.run(() => this.readDocument(true), "corruption recovery");
+      }
+      await this.setAside();
+      return { version: DOCUMENT_VERSION, entries: [] };
     }
     return { version: DOCUMENT_VERSION, entries };
   }
