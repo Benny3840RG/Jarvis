@@ -24,7 +24,7 @@ const server = new MCPServer({
   instructions:
     "Use show-jarvis-console to open Console 01. Use the typed task and reminder tools for controlled changes. The service token remains server-side and production deployment is not authorised.",
   favicon: "favicon.ico",
-  websiteUrl: "https://github.com/Benny3840/Jarvis",
+  websiteUrl: "https://github.com/Benny3840RG/Jarvis",
   icons: [{ src: "icon.svg", mimeType: "image/svg+xml", sizes: ["512x512"] }],
 });
 

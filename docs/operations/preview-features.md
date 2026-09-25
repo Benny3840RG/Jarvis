@@ -73,7 +73,7 @@ the commissioned deployment).
 
 | Feature | Branch | PR | CI status | Notes |
 | --- | --- | --- | --- | --- |
-| ChatGPT App / MCP adapter | `feat/chatgpt-preview` (merged) | [#63](https://github.com/Benny3840/Jarvis/pull/63) (merged) | Green | Graduated — all criteria met |
+| ChatGPT App / MCP adapter | `feat/chatgpt-preview` (merged) | [#63](https://github.com/Benny3840RG/Jarvis/pull/63) (merged) | Green | Graduated — all criteria met |
 
 The ChatGPT App / MCP adapter has **graduated** to the supported surface. Its
 graduation criteria are satisfied on `main`:
@@ -86,7 +86,7 @@ graduation criteria are satisfied on `main`:
    (`tests/paddockProbe.test.ts`, run inside `npm run check` and CI) and the
    `smoke:mcp` command, and the MCP tool surface is held to the OpenAPI contract
    by `tests/mcpOperationContract.test.ts`.
-6. PR [#63](https://github.com/Benny3840/Jarvis/pull/63) is merged (no longer a
+6. PR [#63](https://github.com/Benny3840RG/Jarvis/pull/63) is merged (no longer a
    draft) and was reviewed and merged by the owner.
 
 The adapter remains a **separately launched, loopback-only service** (`npm run

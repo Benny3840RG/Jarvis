@@ -5,8 +5,8 @@
 # superseded on main). Excludes claude/jarvis-optimal-build-dfp5je, the
 # active designated development branch.
 #
-# Run from a clone with push access to Benny3840/Jarvis, e.g.:
-#   git clone https://github.com/Benny3840/Jarvis.git && cd Jarvis
+# Run from a clone with push access to Benny3840RG/Jarvis, e.g.:
+#   git clone https://github.com/Benny3840RG/Jarvis.git && cd Jarvis
 #   bash delete-abandoned-branches.sh
 #
 # Safe to re-run: deleting an already-deleted branch just prints a harmless
