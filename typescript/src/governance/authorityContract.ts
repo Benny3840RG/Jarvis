@@ -86,8 +86,20 @@ export type AuthorityInvariant = Readonly<{
   /** `JARVIS_CONSTITUTION.md` laws this invariant serves. */
   laws: readonly string[];
 }> &
+  /** Tests exercise the real enforcement point and fail if it stops refusing. */
   (
     | Readonly<{ status: "enforced"; evidence: readonly InvariantEvidence[] }>
+    /**
+     * A static or name-based tripwire exists, but it cannot prove the invariant: a
+     * determined bypass (aliasing, neutral naming) can pass it. `deliveredBy` names
+     * the roadmap PR that must replace it with real enforcement.
+     */
+    | Readonly<{
+        status: "guarded";
+        evidence: readonly InvariantEvidence[];
+        deliveredBy: RoadmapPr;
+        gap: string;
+      }>
     | Readonly<{ status: "planned"; deliveredBy: RoadmapPr; reason: string }>
   );
 
@@ -120,7 +132,9 @@ export const AUTHORITY_INVARIANTS: readonly AuthorityInvariant[] = [
     id: "AUTH-INV-02",
     forbids: "An agent can deploy to production.",
     laws: ["JARVIS-003", "JARVIS-007"],
-    status: "enforced",
+    status: "guarded",
+    deliveredBy: "M",
+    gap: "Name-based absence check; a deploying operation with a neutral name would pass.",
     evidence: [
       {
         suite: "check",
@@ -133,7 +147,9 @@ export const AUTHORITY_INVARIANTS: readonly AuthorityInvariant[] = [
     id: "AUTH-INV-03",
     forbids: "MCP can bypass ΩΣ.",
     laws: ["JARVIS-003", "JARVIS-018"],
-    status: "enforced",
+    status: "guarded",
+    deliveredBy: "E",
+    gap: "Checks the declared MCP-to-OpenAPI mapping by path name; no per-session capability guard yet.",
     evidence: [
       {
         suite: "check",
@@ -151,7 +167,9 @@ export const AUTHORITY_INVARIANTS: readonly AuthorityInvariant[] = [
     id: "AUTH-INV-04",
     forbids: "A Temporal Workflow can invent authority.",
     laws: ["JARVIS-003", "JARVIS-007", "JARVIS-018"],
-    status: "enforced",
+    status: "guarded",
+    deliveredBy: "B",
+    gap: "Static import and reference scan; aliased references or runtime indirection can pass it.",
     evidence: [
       {
         suite: "check",

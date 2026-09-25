@@ -11,7 +11,14 @@ not change runtime behaviour.
 Added `src/governance/authorityContract.ts`. It declares layer ownership:
 Development, ΩΣ, Temporal, ACP, MCP, external agents, and Benny (merge,
 production deployment, authority-policy change). It also declares eleven
-invariants, AUTH-INV-01 to AUTH-INV-11. `tests/authorityContract.test.ts` fails
+invariants, AUTH-INV-01 to AUTH-INV-11:
+
+- 6 `enforced`: tests exercise the real refusal;
+- 3 `guarded`: a static or name-based tripwire only. AUTH-INV-02 moves to PR M,
+  AUTH-INV-03 to PR E and AUTH-INV-04 to PR B;
+- 2 `planned`: AUTH-INV-05 for PR G and AUTH-INV-11 for PR M.
+
+`tests/authorityContract.test.ts` fails
 the build in any of these cases:
 
 - a responsibility has two owners;
@@ -44,10 +51,10 @@ evidence is in `tests/pass/`. Those tests run only in the path-filtered
 | PR  | Work                                                  | Merge gate                           | Tracks                     |
 | --- | ----------------------------------------------------- | ------------------------------------ | -------------------------- |
 | A   | Authority contract and invariant tests (this entry)   | existing checks green                | AUTH-INV-01 to AUTH-INV-11 |
-| B   | Temporal Worker Versioning, replay fixtures, rollback | replay, restart and rollback proof   |                            |
+| B   | Temporal Worker Versioning, replay fixtures, rollback | replay, restart and rollback proof   | AUTH-INV-04                |
 | C   | Jarvis OTel correlation and redaction contract        | no sensitive leakage                 |                            |
 | D   | MCP SDK v2 behind a Jarvis adapter                    | existing MCP behaviour passes        |                            |
-| E   | `McpCapabilityGuard`                                  | adversarial MCP suite                |                            |
+| E   | `McpCapabilityGuard`                                  | adversarial MCP suite                | AUTH-INV-03                |
 | F   | GitHub MCP read plane                                 | merge and write tools do not exist   |                            |
 | G   | ACP transport abstraction                             | Codex and Claude contract suite      | AUTH-INV-05                |
 | H   | Move Claude and Codex onto ACP                        | shadow parity                        |                            |
@@ -55,7 +62,7 @@ evidence is in `tests/pass/`. Those tests run only in the path-filtered
 | J   | Saga compensation primitive                           | crash-boundary proof                 |                            |
 | K   | Sherpa voice substrate                                | measured latency and accuracy        |                            |
 | L   | Voice → Jarvis authority wiring                       | hardware safety tests                |                            |
-| M   | Isolated sandbox executor                             | escape, network and credential tests | AUTH-INV-11                |
+| M   | Isolated sandbox executor                             | escape, network and credential tests | AUTH-INV-02, AUTH-INV-11   |
 
 The plan names upstream versions and statuses that were not checked in this
 session: MCP TypeScript SDK v2 and its Fastify package; ACP v1 being stable and

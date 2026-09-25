@@ -70,7 +70,8 @@ function typescriptFilesUnder(relativeDir: string): string[] {
  * side-effect imports, re-exports, `import x = require(...)`, `require(...)`,
  * `import(...)` and import types. A specifier that is not a plain string literal
  * (a template with substitutions, a concatenation, a variable) cannot be resolved
- * statically, so it is reported as `null`. So is any `createRequire(...)` call.
+ * statically, so it is reported as `null`. So is any reference to `createRequire`, and any
+ * use of `require` other than a direct call.
  */
 function moduleSpecifiers(fileName: string, text: string): (string | null)[] {
   const specifiers: (string | null)[] = [];
@@ -93,14 +94,50 @@ function moduleSpecifiers(fileName: string, text: string): (string | null)[] {
           : undefined;
       if (callee.kind === ts.SyntaxKind.ImportKeyword || calleeName === "require") {
         specifiers.push(literal(node.arguments[0]));
-      } else if (calleeName === "createRequire") {
-        specifiers.push(null);
       }
+    } else if (
+      ts.isIdentifier(node) &&
+      (node.text === "createRequire" ||
+        (node.text === "require" &&
+          !(ts.isCallExpression(node.parent) && node.parent.expression === node)))
+    ) {
+      // `createRequire`, or `require` used as a value (`const load = require`), hides
+      // the loaded module from static resolution.
+      specifiers.push(null);
     }
     ts.forEachChild(node, visit);
   };
   visit(ts.createSourceFile(fileName, text, ts.ScriptTarget.Latest, true));
   return specifiers;
+}
+
+/** Governed approval-boundary modules that the preview reaches only to propose and execute. */
+const APPROVAL_BOUNDARY = ["src/actions/toolActions.ts", "src/persistence/convexToolActions.ts"];
+
+/**
+ * Whether a file references an `approve` operation: `x.approve`, `x["approve"]`, a bare
+ * `approve(...)` call, or an import binding named `approve`. Method declarations are not
+ * references. Aliasing through a computed key or a renamed variable is not detected.
+ */
+function referencesApprove(fileName: string, text: string): boolean {
+  let found = false;
+  const visit = (node: ts.Node): void => {
+    if (
+      (ts.isPropertyAccessExpression(node) && node.name.text === "approve") ||
+      (ts.isElementAccessExpression(node) &&
+        ts.isStringLiteralLike(node.argumentExpression) &&
+        node.argumentExpression.text === "approve") ||
+      (ts.isCallExpression(node) &&
+        ts.isIdentifier(node.expression) &&
+        node.expression.text === "approve") ||
+      (ts.isImportSpecifier(node) && (node.propertyName ?? node.name).text === "approve")
+    ) {
+      found = true;
+    }
+    if (!found) ts.forEachChild(node, visit);
+  };
+  visit(ts.createSourceFile(fileName, text, ts.ScriptTarget.Latest, true));
+  return found;
 }
 
 function resolveRelativeModule(fromFile: string, specifier: string): string | null {
@@ -199,6 +236,25 @@ async function freePort(): Promise<number> {
   return port;
 }
 
+/**
+ * `freePort` releases its probe before the server binds, so another process can take the
+ * port in between. Retry on EADDRINUSE instead of failing on that race.
+ */
+async function startMcpServerOnFreePort(
+  api: JarvisMcpConfig["api"],
+  fetchImpl: typeof fetch,
+): Promise<Awaited<ReturnType<typeof startJarvisMcpHttpServer>>> {
+  for (let attempt = 1; ; attempt += 1) {
+    const config: JarvisMcpConfig = { host: "127.0.0.1", port: await freePort(), api };
+    try {
+      return await startJarvisMcpHttpServer(config, new JarvisApiClient(api, fetchImpl));
+    } catch (error: unknown) {
+      const inUse = (error as NodeJS.ErrnoException).code === "EADDRINUSE";
+      if (!inUse || attempt >= 5) throw error;
+    }
+  }
+}
+
 describe("Authority contract", () => {
   it("assigns every responsibility to exactly one layer", () => {
     const owners = new Map<string, AuthorityLayer[]>();
@@ -239,9 +295,9 @@ describe("Authority contract", () => {
     }
   });
 
-  it("binds every enforced invariant to a test that still exists under that title", () => {
+  it("binds every enforced or guarded invariant to a test that still exists under that title", () => {
     for (const invariant of AUTHORITY_INVARIANTS) {
-      if (invariant.status !== "enforced") continue;
+      if (invariant.status === "planned") continue;
       assert.ok(invariant.evidence.length > 0, `${invariant.id} has no evidence`);
       for (const evidence of invariant.evidence) {
         const inPassSuite = evidence.file.startsWith("tests/pass/");
@@ -261,7 +317,7 @@ describe("Authority contract", () => {
   it("names a roadmap PR for every invariant that is not yet enforced", () => {
     const rows = readTypescriptFile("docs/ROADMAP.md").split("\n");
     for (const invariant of AUTHORITY_INVARIANTS) {
-      if (invariant.status !== "planned") continue;
+      if (invariant.status === "enforced") continue;
       const row = rows.find((line) =>
         new RegExp(`^\\|\\s*${invariant.deliveredBy}\\s*\\|`).test(line),
       );
@@ -359,9 +415,12 @@ describe("Authority invariants against current code", () => {
       "the preview reaches the HTTP layer",
     );
     assert.deepEqual(
-      reached.filter(({ source }) => /\.approve\s*\(/.test(source)).map(({ path }) => path),
+      reached
+        .filter(({ path }) => !APPROVAL_BOUNDARY.includes(path))
+        .filter(({ path, source }) => referencesApprove(path, source))
+        .map(({ path }) => path),
       [],
-      "a module the preview reaches calls .approve(",
+      "a module the preview reaches references approve outside the approval boundary",
     );
     assert.deepEqual(
       reached
@@ -377,7 +436,7 @@ describe("Authority invariants against current code", () => {
         .filter(({ source }) => approvalToken.test(source))
         .map(({ path }) => path)
         .sort(),
-      ["src/actions/toolActions.ts", "src/persistence/convexToolActions.ts"],
+      APPROVAL_BOUNDARY,
       "approval-token handling outside the reviewed governed approval boundary",
     );
   });
@@ -388,15 +447,11 @@ describe("Authority invariants against current code", () => {
       calls.push(String(input));
       return Response.json({});
     }) as typeof fetch;
-    const config: JarvisMcpConfig = {
-      host: "127.0.0.1",
-      port: await freePort(),
-      api: { baseUrl: new URL("http://127.0.0.1:3000/"), serviceToken: "authority-test-token" },
+    const api = {
+      baseUrl: new URL("http://127.0.0.1:3000/"),
+      serviceToken: "authority-test-token",
     };
-    const running = await startJarvisMcpHttpServer(
-      config,
-      new JarvisApiClient(config.api, fetchImpl),
-    );
+    const running = await startMcpServerOnFreePort(api, fetchImpl);
     const client = new Client({ name: "jarvis-authority-test", version: "0.1.0" });
     try {
       await client.connect(new StreamableHTTPClientTransport(new URL(running.url)));
