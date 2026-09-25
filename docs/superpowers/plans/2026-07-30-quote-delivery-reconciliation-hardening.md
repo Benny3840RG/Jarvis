@@ -1,12 +1,17 @@
 # Quote Delivery Reconciliation Hardening Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **Status: implemented — historical record, not pending work.** This plan's
+> changes shipped and are covered by tests in the repository. Do not re-implement
+> it. The unchecked `- [ ]` boxes below were never ticked off as the work landed,
+> so they record the original task breakdown rather than outstanding tasks; some
+> steps shipped under different file or test names than written here. Verify
+> against the current code before acting on anything in this document.
 
 **Goal:** Prevent caller retries from creating new commercial execution scopes, project terminal Outlook reconciliation into the quote delivery ledger, and make abandoned `observing` records visible through safe escalation.
 
 **Architecture:** The maintained HTTP controller derives a stable execution idempotency key from the approved action ID instead of trusting a caller-generated retry key. Convex remains the transactional source of truth: `resolveClaim` updates the authoritative receipt, reconciliation record and matching quote delivery projection in one mutation. `claimNext` detects `observing` records older than a fixed recovery bound and escalates them rather than attempting an unsafe blind replay without an authoritative receipt.
 
-**Tech Stack:** TypeScript, NestJS/Fastify, Convex 1.41, Node test runner, Vitest, convex-test, GitHub Actions.
+**Tech Stack:** TypeScript, NestJS/Fastify, Convex, Node test runner, Vitest, convex-test, GitHub Actions.
 
 ## Global Constraints
 
@@ -199,7 +204,7 @@ Commit message: `docs(outlook): correct quote delivery activation state`
 
 - [ ] **Step 1: Run static and behavioural gates**
 
-Run from `typescript/`: `npm run build && npm run typecheck && npm run lint && npm run format:check && npm run validate:openapi && npm test && npm run test:convex`
+Run from `typescript/`: `npm run check` (hygiene, `type-check`, lint, format, `openapi:lint`, and both test suites).
 
 Expected: all commands pass with no warnings introduced by this branch.
 
