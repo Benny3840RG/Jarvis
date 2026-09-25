@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 
 import { executeGovernedQuoteSend } from "./activities/governedQuoteSend.js";
 import * as activities from "./activities/mockPassActivities.js";
+import { resolveWorkerDeploymentOptions } from "./buildIdentity.js";
 
 const dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -20,6 +21,11 @@ export async function createPassWorker(options: TemporalPassWorkerOptions = {}):
   // there for why this can't be time-based.
   const taskQueue = options.taskQueue ?? process.env.TEMPORAL_TASK_QUEUE ?? "temporal-pass";
 
+  // Immutable build identity (roadmap PR B). Off unless JARVIS_TEMPORAL_VERSIONING
+  // is set, so the existing torture tests are unchanged; when set it fails closed
+  // on a missing or mutable build SHA rather than registering an unversioned worker.
+  const workerDeploymentOptions = resolveWorkerDeploymentOptions(process.env);
+
   const connection = await NativeConnection.connect({ address });
 
   return Worker.create({
@@ -28,5 +34,6 @@ export async function createPassWorker(options: TemporalPassWorkerOptions = {}):
     taskQueue,
     workflowsPath: path.join(dirname, "workflows", "passWorkflow.ts"),
     activities: { ...activities, executeGovernedQuoteSend },
+    ...(workerDeploymentOptions ? { workerDeploymentOptions } : {}),
   });
 }

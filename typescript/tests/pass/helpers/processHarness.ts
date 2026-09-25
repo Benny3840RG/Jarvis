@@ -35,10 +35,26 @@ async function getFreePort(): Promise<number> {
   });
 }
 
-async function waitForServerReady(address: string, timeoutMs = 20_000): Promise<void> {
+/**
+ * Poll until the Temporal dev server accepts a client connection. The deadline
+ * is generous (60s) because `temporal server start-dev` boot time on a loaded
+ * CI runner varies widely; a tight 20s deadline was a flake source. If the
+ * server process exits before it is ready, fail immediately with its exit code
+ * rather than spinning uselessly until the deadline.
+ */
+async function waitForServerReady(
+  address: string,
+  serverProcess: ChildProcess,
+  timeoutMs = 60_000,
+): Promise<void> {
   const start = Date.now();
   let lastError: unknown;
   while (Date.now() - start < timeoutMs) {
+    if (serverProcess.exitCode !== null || serverProcess.signalCode !== null) {
+      throw new Error(
+        `Temporal dev server at ${address} exited before becoming ready (code ${serverProcess.exitCode}, signal ${serverProcess.signalCode}).`,
+      );
+    }
     try {
       const connection = await Connection.connect({ address });
       await connection.close();
@@ -141,7 +157,7 @@ export class ProcessHarness {
     );
     pipeWithPrefix(proc, "temporal-server");
     this.serverProcess = proc;
-    await waitForServerReady(this.address);
+    await waitForServerReady(this.address, proc);
   }
 
   killServer(): void {
