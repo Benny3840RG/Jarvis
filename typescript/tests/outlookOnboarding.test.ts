@@ -4,12 +4,33 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import dns from "node:dns/promises";
 import { request, Server } from "node:http";
+import { createServer as createProbeServer } from "node:net";
 import { describe, it } from "node:test";
 import {
   authorizeOutlookConnection,
   verifyOutlookConnection,
 } from "../src/auth/outlookOnboarding.js";
 import { resolveOutlookConnections } from "../src/auth/microsoftOutlookConnections.js";
+
+// Some containers expose no IPv6 loopback, so binding `::1` fails with
+// EAFNOSUPPORT before any assertion below can run. `authorizeOutlookConnection`
+// treats an unbindable family as optional only when `localhost` does not
+// resolve to it, so the IPv6 cases here assert real behaviour that such a host
+// cannot exercise at all. Probe once so those cases narrow to what the platform
+// supports instead of failing on its absence; a host with IPv6 still runs them.
+const ipv6LoopbackAvailable = await new Promise<boolean>((resolve, reject) => {
+  const probe = createProbeServer();
+  probe.once("error", (err: NodeJS.ErrnoException) => {
+    if (err.code === "EAFNOSUPPORT" || err.code === "EADDRNOTAVAIL") {
+      resolve(false);
+    } else {
+      reject(err);
+    }
+  });
+  probe.listen({ port: 0, host: "::1" }, () => probe.close(() => resolve(true)));
+});
+
+const CALLBACK_HOSTS = ipv6LoopbackAvailable ? ["127.0.0.1", "[::1]"] : ["127.0.0.1"];
 
 describe("Outlook browser onboarding", () => {
   for (const callbackReceived of [false, true])
@@ -89,6 +110,12 @@ describe("Outlook browser onboarding", () => {
 
   for (const host of ["127.0.0.1", "::1"] as const)
     it(`onboards with only ${host} available when localhost resolves to that family`, async (t) => {
+      if (host === "::1" && !ipv6LoopbackAvailable) {
+        // localhost is mocked to resolve to ::1 only, so the listener must
+        // genuinely bind it — there is no IPv6-free path through this case.
+        t.skip("no IPv6 loopback on this host");
+        return;
+      }
       t.mock.method(dns, "lookup", async () => [{ address: host, family: host === "::1" ? 6 : 4 }]);
       const directory = await mkdtemp(join(tmpdir(), "outlook-single-stack-"));
       const connection = resolveOutlookConnections({
@@ -365,12 +392,13 @@ describe("Outlook browser onboarding", () => {
               assert.equal(malformedStatus, 400);
               callback.searchParams.set("code", "test-code");
               callback.searchParams.set("state", "wrong");
-              for (const host of ["127.0.0.1", "[::1]"]) {
+              for (const host of CALLBACK_HOSTS) {
                 callback.hostname = host;
                 assert.equal((await fetch(callback)).status, 400);
               }
               callback.searchParams.set("state", auth.searchParams.get("state")!);
-              callback.hostname = outcome === "success" ? "127.0.0.1" : "[::1]";
+              callback.hostname =
+                outcome === "success" || !ipv6LoopbackAvailable ? "127.0.0.1" : "[::1]";
               assert.equal((await fetch(callback)).status, 200);
             },
             fetch: async (url, init) => {
