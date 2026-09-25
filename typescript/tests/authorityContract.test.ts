@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { createServer } from "node:net";
-import { join } from "node:path";
+import { dirname, join, relative, resolve, sep } from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import ts from "typescript";
 
 import { githubMergeArguments } from "../src/development/githubMergeArguments.js";
 import {
@@ -49,6 +50,61 @@ function typescriptFilesUnder(relativeDir: string): string[] {
   return entries
     .filter((entry) => entry.isFile() && entry.name.endsWith(".ts"))
     .map((entry) => join(entry.parentPath, entry.name));
+}
+
+/**
+ * Every module specifier in a source file: static and side-effect imports, re-exports,
+ * `require(...)` and literal `import(...)`. A dynamic import or require whose argument
+ * is not a string literal cannot be resolved statically, so it is reported as `null`.
+ */
+function moduleSpecifiers(source: string): (string | null)[] {
+  const specifiers: (string | null)[] = ts
+    .preProcessFile(source, true, true)
+    .importedFiles.map((file) => file.fileName);
+  if (/\b(?:import|require)\s*\(\s*(?!["'`])/.test(source)) specifiers.push(null);
+  return specifiers;
+}
+
+function resolveRelativeModule(fromFile: string, specifier: string): string | null {
+  const base = resolve(dirname(fromFile), specifier);
+  for (const candidate of [
+    base.replace(/\.js$/, ".ts"),
+    base,
+    `${base}.ts`,
+    join(base, "index.ts"),
+  ]) {
+    if (existsSync(candidate) && statSync(candidate).isFile()) return candidate;
+  }
+  return null;
+}
+
+/** Source files reachable from `roots` through relative imports, with any unresolved imports. */
+function relativeImportClosure(roots: readonly string[]): {
+  files: Set<string>;
+  unresolved: string[];
+} {
+  const files = new Set<string>();
+  const unresolved: string[] = [];
+  const pending = [...roots];
+  while (pending.length > 0) {
+    const file = pending.pop()!;
+    if (files.has(file)) continue;
+    files.add(file);
+    for (const specifier of moduleSpecifiers(readFileSync(file, "utf8"))) {
+      if (specifier === null) {
+        unresolved.push(`${file}: non-literal dynamic import or require`);
+        continue;
+      }
+      if (!specifier.startsWith(".")) {
+        if (/(^|\/)src\/http(\/|$)/.test(specifier)) unresolved.push(`${file}: ${specifier}`);
+        continue;
+      }
+      const target = resolveRelativeModule(file, specifier);
+      if (target) pending.push(target);
+      else unresolved.push(`${file}: ${specifier}`);
+    }
+  }
+  return { files, unresolved };
 }
 
 async function freePort(): Promise<number> {
@@ -197,8 +253,14 @@ describe("Authority invariants against current code", () => {
       const source = readFileSync(file, "utf8");
       assert.doesNotMatch(source, /approvalToken|JARVIS_APPROVAL_TOKEN/, file);
       assert.doesNotMatch(source, /\.approve\s*\(/, file);
-      assert.doesNotMatch(source, /from\s+["'][./]*\/http\//, file);
     }
+    const httpLayer = join(TYPESCRIPT_ROOT, "src", "http") + sep;
+    const closure = relativeImportClosure(files);
+    assert.deepEqual(closure.unresolved, [], "preview imports that cannot be checked");
+    const reachedHttp = [...closure.files]
+      .filter((file) => file.startsWith(httpLayer))
+      .map((file) => relative(TYPESCRIPT_ROOT, file));
+    assert.deepEqual(reachedHttp, [], "the preview reaches the HTTP layer");
   });
 
   it("refuses an unadvertised MCP tool without calling the operator API", async () => {

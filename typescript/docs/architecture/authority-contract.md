@@ -62,9 +62,14 @@ A build fails if an `enforced` invariant loses its evidence test, or if a
   only OpenAPI operations and none of the approve, execute or revoke
   operations. The per-session capability guard is PR E.
 - **AUTH-INV-04 is a static scan of `src/preview/temporalPass/`.** It checks
-  that the preview does not reference the approval token, call `.approve(`, or
-  import the HTTP layer. A production Temporal layout (PR B) must be added to
-  the same scan.
+  that the preview does not reference the approval token or call `.approve(`.
+  It also follows every relative import, direct or transitive, and fails if
+  any of them reaches `src/http/`. That covers static and side-effect imports,
+  re-exports, `require`, and `import()` with a literal path. A dynamic import
+  or `require` with a computed path fails the test, because the scan cannot
+  resolve it. The token and `.approve(` checks read the preview files only,
+  not the modules they import. A production Temporal layout (PR B) must be
+  added to the same scan.
 - **Most AUTH-INV-06 to AUTH-INV-09 evidence is `suite: "temporal-pass"`.**
   Those tests run under `npm run test:temporal-pass` and in
   `.github/workflows/temporal-pass.yml`. That job runs only when a pull request
