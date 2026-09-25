@@ -1,5 +1,79 @@
 # Jarvis TypeScript Roadmap
 
+## Authority-first acquisition plan, PR A: authority contract (2026-09-25)
+
+Benny set the direction: acquire proven components (Temporal production
+patterns, OpenTelemetry, MCP v2, GitHub MCP read plane, ACP, speech, sandboxes)
+only underneath Jarvis authority. No acquired component becomes Jarvis
+authority. PR A fixes that rule in code before anything is integrated. It does
+not change runtime behaviour.
+
+Added `src/governance/authorityContract.ts`. It declares layer ownership:
+Development, ΩΣ, Temporal, ACP, MCP, external agents, and Benny (merge,
+production deployment, authority-policy change). It also declares eleven
+invariants, AUTH-INV-01 to AUTH-INV-11. `tests/authorityContract.test.ts` fails
+the build in any of these cases:
+
+- a responsibility has two owners;
+- Benny's three responsibilities move;
+- an invariant cites an unknown `JARVIS-*` law;
+- an enforced invariant's cited test is renamed or removed;
+- a planned invariant is not tracked below.
+
+It also adds five checks against current code:
+
+- MCP reaches no approve, execute or revoke operation and has no merge or
+  deploy tool;
+- no deployment operation exists in the operator API or in MCP;
+- the governed merge requires an exact 40-hex reviewed SHA and risk 4 or higher;
+- the Temporal PASS preview never references the approval token, calls
+  `.approve(` or imports the HTTP layer;
+- an unadvertised MCP tool such as `merge_pull_request` is refused before any
+  operator API call.
+
+Both guards were mutation-checked. The build fails if `.approve(` is added to
+the preview, or if a cited PASS test title changes.
+
+`JARVIS_CONSTITUTION.md` is unchanged, because constitutional changes need
+operator authority (JARVIS-010). See
+[authority contract](architecture/authority-contract.md). That note also lists
+what this evidence does not prove. Most candidate-SHA, approval-cycle and replay
+evidence is in `tests/pass/`. Those tests run only in the path-filtered
+`temporal-pass.yml` job, not in `npm run check`.
+
+| PR  | Work                                                  | Merge gate                           | Tracks                     |
+| --- | ----------------------------------------------------- | ------------------------------------ | -------------------------- |
+| A   | Authority contract and invariant tests (this entry)   | existing checks green                | AUTH-INV-01 to AUTH-INV-11 |
+| B   | Temporal Worker Versioning, replay fixtures, rollback | replay, restart and rollback proof   |                            |
+| C   | Jarvis OTel correlation and redaction contract        | no sensitive leakage                 |                            |
+| D   | MCP SDK v2 behind a Jarvis adapter                    | existing MCP behaviour passes        |                            |
+| E   | `McpCapabilityGuard`                                  | adversarial MCP suite                |                            |
+| F   | GitHub MCP read plane                                 | merge and write tools do not exist   |                            |
+| G   | ACP transport abstraction                             | Codex and Claude contract suite      | AUTH-INV-05                |
+| H   | Move Claude and Codex onto ACP                        | shadow parity                        |                            |
+| I   | Temporal OpenAI Agents bounded pilot                  | replay, restart and effect tests     |                            |
+| J   | Saga compensation primitive                           | crash-boundary proof                 |                            |
+| K   | Sherpa voice substrate                                | measured latency and accuracy        |                            |
+| L   | Voice → Jarvis authority wiring                       | hardware safety tests                |                            |
+| M   | Isolated sandbox executor                             | escape, network and credential tests | AUTH-INV-11                |
+
+The plan names upstream versions and statuses that were not checked in this
+session: MCP TypeScript SDK v2 and its Fastify package; ACP v1 being stable and
+v2 experimental; Temporal OpenAI Agents being experimental; the GitHub MCP
+read-only precedence; and sherpa-onnx Node streaming support. Check each one
+against the upstream source in the PR that adopts it.
+
+Next:
+
+1. PR B: move the PASS torture histories into replay fixtures, bind the worker
+   build ID to the git SHA, and prove v1 → v2 → rollback. Decide whether the
+   `temporal-pass` job runs on every pull request, because AUTH-INV-06 to
+   AUTH-INV-09 depend on it.
+2. When PR B adds a production Temporal tree, extend the AUTH-INV-04 static scan
+   to cover it.
+3. PR C: add the correlation-field and redaction contract before any new
+   integration emits telemetry.
+
 ## Baseline health check and two loose-end fixes (2026-09-24)
 
 Phase 0 orientation session: ran `npm ci` and a full `npm run check` on
