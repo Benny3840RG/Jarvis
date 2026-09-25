@@ -1,6 +1,11 @@
 # Quote Lifecycle Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **Status: implemented — historical record, not pending work.** This plan's
+> changes shipped and are covered by tests in the repository. Do not re-implement
+> it. The unchecked `- [ ]` boxes below were never ticked off as the work landed,
+> so they record the original task breakdown rather than outstanding tasks; some
+> steps shipped under different file or test names than written here. Verify
+> against the current code before acting on anything in this document.
 
 **Goal:** Replace the mutable legacy quote record with owner-scoped quote aggregates, immutable numbered revisions, controlled finalisation, provider-neutral delivery attempts, and development-only reconciliation commissioning without activating real quote sending.
 
