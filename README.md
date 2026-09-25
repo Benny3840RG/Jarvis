@@ -1,7 +1,7 @@
 # Jarvis
 
-[![TypeScript checks](https://github.com/Benny3840/Jarvis/actions/workflows/typescript.yml/badge.svg?branch=main)](https://github.com/Benny3840/Jarvis/actions/workflows/typescript.yml)
-[![Python checks](https://github.com/Benny3840/Jarvis/actions/workflows/python-app.yml/badge.svg?branch=main)](https://github.com/Benny3840/Jarvis/actions/workflows/python-app.yml)
+[![TypeScript checks](https://github.com/Benny3840RG/Jarvis/actions/workflows/typescript.yml/badge.svg?branch=main)](https://github.com/Benny3840RG/Jarvis/actions/workflows/typescript.yml)
+[![Python checks](https://github.com/Benny3840RG/Jarvis/actions/workflows/python-app.yml/badge.svg?branch=main)](https://github.com/Benny3840RG/Jarvis/actions/workflows/python-app.yml)
 
 Jarvis is a local command-line assistant with durable JSON or Convex persistence.
 

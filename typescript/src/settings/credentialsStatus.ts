@@ -5,14 +5,14 @@ import { isLoopbackHost, resolveHttpListenConfig } from "../http/config.js";
 export const END_OVERLAP_PHRASE = "END OVERLAP";
 
 export const CREDENTIAL_DOC_LINKS = {
-  httpApi: "https://github.com/Benny3840/Jarvis/blob/main/typescript/docs/operators/http-api.md",
+  httpApi: "https://github.com/Benny3840RG/Jarvis/blob/main/typescript/docs/operators/http-api.md",
   mcpPreview:
-    "https://github.com/Benny3840/Jarvis/blob/main/typescript/docs/operators/chatgpt-preview.md",
-  exposure: "https://github.com/Benny3840/Jarvis/blob/main/typescript/docs/operators/http-api.md",
-  rotation: "https://github.com/Benny3840/Jarvis/blob/main/README.md",
+    "https://github.com/Benny3840RG/Jarvis/blob/main/typescript/docs/operators/chatgpt-preview.md",
+  exposure: "https://github.com/Benny3840RG/Jarvis/blob/main/typescript/docs/operators/http-api.md",
+  rotation: "https://github.com/Benny3840RG/Jarvis/blob/main/README.md",
   credentials:
-    "https://github.com/Benny3840/Jarvis/blob/main/typescript/docs/operators/credentials-settings.md",
-  security: "https://github.com/Benny3840/Jarvis/blob/main/SECURITY.md",
+    "https://github.com/Benny3840RG/Jarvis/blob/main/typescript/docs/operators/credentials-settings.md",
+  security: "https://github.com/Benny3840RG/Jarvis/blob/main/SECURITY.md",
 } as const;
 
 export type TokenCardId = "service" | "approval" | "delivery";

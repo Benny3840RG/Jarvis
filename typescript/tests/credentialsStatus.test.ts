@@ -5,6 +5,7 @@ import { describe, it } from "node:test";
 import { renderCredentialsPage } from "../src/settings/credentialsPage.js";
 import {
   captureCredentials,
+  CREDENTIAL_DOC_LINKS,
   decideEndOverlap,
   deliveryDigestCollides,
   endOverlapControl,
@@ -384,5 +385,19 @@ describe("credentials page and MCP surface", () => {
       Object.keys(MCP_TOOL_OPERATIONS).some((name) => /generate|rotate|secret/i.test(name)),
       false,
     );
+  });
+
+  it("points every credential doc link at the canonical repository", () => {
+    // These render as clickable links in the operator credentials page, so an
+    // owner that no longer matches the remote leaves operators depending on a
+    // GitHub rename redirect that is not guaranteed to outlive the rename.
+    const links = Object.values(CREDENTIAL_DOC_LINKS);
+    assert.ok(links.length > 0);
+    for (const link of links) {
+      assert.ok(
+        link.startsWith("https://github.com/Benny3840RG/Jarvis/blob/main/"),
+        `${link} does not target Benny3840RG/Jarvis`,
+      );
+    }
   });
 });

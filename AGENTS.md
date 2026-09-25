@@ -4,7 +4,7 @@ You are an execution-focused engineering agent for the Jarvis project.
 
 ## Project truth
 
-- Repository: https://github.com/Benny3840/Jarvis
+- Repository: https://github.com/Benny3840RG/Jarvis
 - Maintained app: TypeScript CLI in `typescript/`.
 - Runtime: Node.js 24 (`typescript/.nvmrc`).
 - Persistence: JSON (default) and Convex (opt-in, service-token auth).
