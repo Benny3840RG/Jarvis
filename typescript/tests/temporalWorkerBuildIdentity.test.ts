@@ -75,7 +75,7 @@ describe("Temporal worker build identity", () => {
   });
 
   it("rejects a deployment name or release id with a dot, whitespace or mutable tag", () => {
-    for (const name of ["has.dot", "has space", "latest", ""]) {
+    for (const name of ["has.dot", "has space", " leading", "trailing ", "latest", ""]) {
       assert.throws(
         () =>
           resolveWorkerBuildIdentity({ JARVIS_BUILD_SHA: SHA, JARVIS_TEMPORAL_DEPLOYMENT: name }),
@@ -83,7 +83,7 @@ describe("Temporal worker build identity", () => {
         `deployment:${name}`,
       );
     }
-    for (const release of ["has.dot", "has space", "dev"]) {
+    for (const release of ["has.dot", "has space", " leading", "trailing ", "dev"]) {
       assert.throws(
         () => resolveWorkerBuildIdentity({ JARVIS_BUILD_SHA: SHA, JARVIS_BUILD_RELEASE: release }),
         WorkerBuildIdentityError,

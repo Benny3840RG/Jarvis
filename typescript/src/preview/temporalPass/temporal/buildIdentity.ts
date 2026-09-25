@@ -72,19 +72,23 @@ function normalizeSha(env: BuildIdentityEnv): string {
 }
 
 function normalizeSegment(raw: string, field: string): string {
-  const value = raw.trim();
-  if (value === "") throw new WorkerBuildIdentityError(`${field} must not be empty.`);
-  if (MUTABLE_TAGS.has(value.toLowerCase())) {
+  // Validate the raw value, never a trimmed copy: surrounding whitespace is a
+  // rejection, not something to silently normalize away (fail closed, per the
+  // module doc). SAFE_SEGMENT already forbids whitespace, so a value with
+  // leading/trailing spaces fails it; the empty check keeps that error legible
+  // for a blank or whitespace-only value.
+  if (raw.trim() === "") throw new WorkerBuildIdentityError(`${field} must not be empty.`);
+  if (MUTABLE_TAGS.has(raw.trim().toLowerCase())) {
     throw new WorkerBuildIdentityError(
       `${field} "${raw}" names a mutable ref, not an immutable build.`,
     );
   }
-  if (!SAFE_SEGMENT.test(value)) {
+  if (!SAFE_SEGMENT.test(raw)) {
     throw new WorkerBuildIdentityError(
       `${field} "${raw}" must match ${SAFE_SEGMENT} (letters, digits, "-" or "_"; no "." or whitespace).`,
     );
   }
-  return value;
+  return raw;
 }
 
 /**
@@ -100,9 +104,12 @@ export function resolveWorkerBuildIdentity(env: BuildIdentityEnv): WorkerDeploym
     WORKER_DEPLOYMENT_NAME_ENV,
   );
 
-  const releaseRaw = env[WORKER_RELEASE_ID_ENV]?.trim();
+  // Unset or whitespace-only release id means "no release" (buildId is the bare
+  // SHA). A set value is validated as-is, so a whitespace-padded release id is
+  // rejected rather than trimmed — matching normalizeSegment's fail-closed rule.
+  const releaseRaw = env[WORKER_RELEASE_ID_ENV];
   const buildId =
-    releaseRaw && releaseRaw !== ""
+    releaseRaw !== undefined && releaseRaw.trim() !== ""
       ? `${normalizeSegment(releaseRaw, WORKER_RELEASE_ID_ENV)}-${sha}`
       : sha;
 
