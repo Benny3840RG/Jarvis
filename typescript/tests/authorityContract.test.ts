@@ -115,6 +115,17 @@ function moduleSpecifiers(fileName: string, text: string): (string | null)[] {
 const APPROVAL_BOUNDARY = ["src/actions/toolActions.ts", "src/persistence/convexToolActions.ts"];
 
 /**
+ * Preview-reachable modules permitted to *name* the approval-token env vars. The two
+ * governed-boundary modules handle the token; `workerAuthority` names them only to assert
+ * a versioned worker holds none (it guards against the token, it never reads a value). No
+ * other reached module may name the token.
+ */
+const APPROVAL_TOKEN_NAMED = [
+  ...APPROVAL_BOUNDARY,
+  "src/preview/temporalPass/temporal/workerAuthority.ts",
+].sort();
+
+/**
  * Whether a file references an `approve` operation: `x.approve`, `x["approve"]`, a bare
  * `approve(...)` call, or an import binding named `approve`. Method declarations are not
  * references. Aliasing through a computed key or a renamed variable is not detected.
@@ -424,20 +435,25 @@ describe("Authority invariants against current code", () => {
     );
     assert.deepEqual(
       reached
-        .filter(({ path, source }) => path.startsWith("src/preview/") && approvalToken.test(source))
+        .filter(
+          ({ path, source }) =>
+            path.startsWith("src/preview/") &&
+            approvalToken.test(source) &&
+            !APPROVAL_TOKEN_NAMED.includes(path),
+        )
         .map(({ path }) => path),
       [],
-      "the preview references the approval token",
+      "a preview module names the approval token outside the allowlist",
     );
-    // The governed approval boundary itself handles the token. The preview reaches it
-    // only to propose and execute. Any other reached module that handles the token fails.
+    // Only the governed boundary (which handles the token) and the worker-authority
+    // guard (which forbids it) may name the approval token. Any other reached module fails.
     assert.deepEqual(
       reached
         .filter(({ source }) => approvalToken.test(source))
         .map(({ path }) => path)
         .sort(),
-      APPROVAL_BOUNDARY,
-      "approval-token handling outside the reviewed governed approval boundary",
+      APPROVAL_TOKEN_NAMED,
+      "approval-token naming outside the reviewed boundary and guard",
     );
   });
 

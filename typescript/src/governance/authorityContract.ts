@@ -169,12 +169,17 @@ export const AUTHORITY_INVARIANTS: readonly AuthorityInvariant[] = [
     laws: ["JARVIS-003", "JARVIS-007", "JARVIS-018"],
     status: "guarded",
     deliveredBy: "B",
-    gap: "Static import and reference scan; aliased references or runtime indirection can pass it.",
+    gap: "Runtime guard covers the no-approval-credential half; the governed-boundary half is still a static reference scan, so aliased references or runtime indirection can pass it.",
     evidence: [
       {
         suite: "check",
         file: "tests/authorityContract.test.ts",
         test: "keeps the Temporal PASS preview away from approval credentials and approve calls",
+      },
+      {
+        suite: "check",
+        file: "tests/temporalWorkerAuthority.test.ts",
+        test: "fails a versioned worker that holds an approval credential",
       },
     ],
   },
