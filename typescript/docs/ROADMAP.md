@@ -1,11 +1,24 @@
 # Jarvis TypeScript Roadmap
 
+## Temporal environment readiness (#621) (2026-09-26)
+
+Benny confirmed that a Temporal environment exists for Jarvis. The PASS client,
+worker and orchestrator now share one resolver, and
+`npm run temporal:readiness` provides a read-only, source-SHA-bound connection
+probe without exposing the endpoint or namespace.
+
+The probe keeps `configured`, `reachable` and `commissioned` separate.
+Reachability never claims commissioning evidence. The deferred replay and
+v1 -> v2 -> rollback gates still require their own live proof.
+
 ## Acquisition plan, PR C (slice 1): telemetry correlation + redaction contract (2026-09-26)
 
 PR B slices 1-3 merged (#618/#619/#620). PR B's remaining pieces (replay
 fixtures, v1->v2->rollback, the governed-boundary half of AUTH-INV-04) need a
-live Temporal dev server absent in this environment, so this session moves to
-PR C, which is server-free and fully testable in `npm run check`.
+live Temporal dev server. Benny has confirmed that a Temporal environment exists
+for Jarvis; #621 adds the readiness boundary needed to verify it without
+inventing commissioning evidence. PR C remains server-free and fully testable in
+`npm run check`.
 
 Added `src/observability/telemetryContract.ts` (contract-first, like PR A;
 not yet wired into `posthog.ts`/`sentry.ts`):
