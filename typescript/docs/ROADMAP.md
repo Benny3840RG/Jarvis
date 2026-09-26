@@ -1,5 +1,27 @@
 # Jarvis TypeScript Roadmap
 
+## Acquisition plan, PR G (slice 1): ACP authority contract (2026-09-26)
+
+Contract-first slice opening PR G (ACP transport abstraction). `src/acp/acpContract.ts`
+declares the ACP permission-response shape and `resolveAcpAuthorization`, the
+gate encoding AUTH-INV-05 ("an ACP permission response becomes authoritative by
+itself"): a peer's ACP `allow` never authorises on its own — an independent
+governed approval is required — and an ACP `deny` is a veto that governed
+approval cannot override. `acpResponseAloneAuthorises` is the always-false
+constant that states the rule outright.
+
+`tests/acpContract.test.ts` proves: no ACP decision authorises alone; an `allow`
+without governed approval is refused; authorisation happens only with governed
+approval present (and the outcome credits the governed boundary, not ACP); a
+`deny` vetoes even with governed approval; `abstain` defers entirely to the
+governed decision.
+
+AUTH-INV-05 stays **planned**, not promoted: no ACP transport exists yet, so
+nothing routes through this gate — promoting it would overclaim. This is the
+rule the transport must obey; wiring Claude/Codex onto ACP (PR H) is the slice
+that makes it live and lets AUTH-INV-05 advance. No network, no transport, no
+external dependency in this slice.
+
 ## Acquisition plan, PR F (slice 1): GitHub read-plane safety contract (2026-09-26)
 
 Contract-first slice delivering PR F's gate ("merge and write tools do not
