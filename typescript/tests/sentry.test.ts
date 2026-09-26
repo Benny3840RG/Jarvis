@@ -7,6 +7,7 @@ import {
   type SentryTransport,
   type SentryDeliveryObservation,
 } from "../src/observability/sentry.js";
+import { REDACTED } from "../src/observability/telemetryContract.js";
 
 function transport(events: SentryEvent[]): SentryTransport {
   return {
@@ -230,6 +231,39 @@ describe("Sentry runtime adapter", () => {
     assert.equal(measurementEvent.tags.route, "/api/v1/status");
     assert.equal(measurementEvent.release, "jarvis-release-123");
     assert.equal(measurementEvent.environment, "development");
+  });
+
+  it("masks sensitively-named tags at the emit boundary while keeping benign ones", async () => {
+    const events: SentryEvent[] = [];
+    const runtime = createSentryRuntime(
+      { enabled: true, release: "jarvis-release-123", environment: "development" },
+      transport(events),
+    );
+
+    await runtime.captureError(new Error("boom"), {
+      operation: "http.request",
+      // `serviceToken` carries a value that would pass the tag charset filter,
+      // so only key-based redaction stops it leaking.
+      tags: { serviceToken: "phc-supersecret", authorization: "Bearer-abc", region: "eu" },
+    });
+    await runtime.recordMeasurement({
+      operation: "mcp.tool",
+      durationMs: 10,
+      success: true,
+      tags: { apiKey: "k-123", shard: "3" },
+    });
+
+    const errorEvent = events[0]!;
+    assert.equal(errorEvent.tags.serviceToken, REDACTED);
+    assert.equal(errorEvent.tags.authorization, REDACTED);
+    assert.equal(errorEvent.tags.region, "eu");
+    assert.equal(errorEvent.tags.operation, "http.request");
+    assert.doesNotMatch(JSON.stringify(errorEvent), /phc-supersecret|Bearer-abc/);
+
+    const measurementEvent = events[1]!;
+    assert.equal(measurementEvent.tags.apiKey, REDACTED);
+    assert.equal(measurementEvent.tags.shard, "3");
+    assert.equal(measurementEvent.tags.outcome, "success");
   });
 
   it("bounds a stalled telemetry transport", async () => {
