@@ -1,5 +1,33 @@
 # Jarvis TypeScript Roadmap
 
+## Acquisition plan, PR C (slice 4): mission-chain reconstruction gate (2026-09-26)
+
+Delivers the plan's "given one missionId, reconstruct the chain" gate as a
+tested contract capability. `telemetryContract.ts` gains `reconstructMissionChain(events, missionId)`,
+which returns the events naming that mission — in recorded order, each paired
+with its `correlationOf` projection — so the
+request→decision→agent→tool→activity→effect spine can be followed by joining on
+the finer ids. An event with no `missionId`, or a different one, is excluded: a
+correlation id is never a free-floating value. `tests/telemetryContract.test.ts`
+proves the join includes only the target mission's events and excludes a
+second mission's and an unattributed event.
+
+The "attach correlationOf to emitted events" half needs no emitter change: the
+correlation fields are guaranteed non-sensitive (`isSensitiveTelemetryKey`
+returns false for each), and slices 2–3 route both emitters (PostHog #623,
+Sentry #628) through key-based redaction that preserves non-sensitive keys — so
+any correlation id present in an event's properties/tags already survives to the
+sent payload intact.
+
+Scope boundary (stated, not hidden): the live boundary emitters
+(`captureHttpBoundary`, `captureMcpBoundary`, reconciliation observer) are
+request/cycle-scoped and carry no `missionId` today, so there is no
+mission-scoped event stream to join yet. Populating one belongs to the
+OTel-wrapped, mission-scoped emitter the contract header describes, threaded
+through the orchestration/activity layers — a later slice, not this one. This
+slice makes the reconstruction semantics real and tested so that emitter can
+rely on them.
+
 ## Acquisition plan, PR C (slice 3): route the Sentry emitter through key-based redaction (2026-09-26)
 
 Mirrors the PostHog wiring (#623) for the second emitter. `sentry.ts`'s
