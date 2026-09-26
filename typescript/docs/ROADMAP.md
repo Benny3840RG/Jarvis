@@ -1,5 +1,28 @@
 # Jarvis TypeScript Roadmap
 
+## Acquisition plan, PR D (slice 1): MCP SDK behind a Jarvis adapter boundary (2026-09-26)
+
+Establishes the adapter boundary PR D calls for. `src/mcp/sdkAdapter.ts` is now
+the single module in the MCP server plane that imports
+`@modelcontextprotocol/sdk` (the `McpServer` and `StreamableHTTPServerTransport`
+surface Jarvis uses); `server.ts`, `httpServer.ts` and `persistenceSettingsTools.ts`
+import those from the adapter instead. `tests/mcpSdkAdapter.test.ts` scans every
+`src/mcp` module's import graph (via the TypeScript AST) and fails if any module
+other than the adapter imports the SDK directly, and also fails if the adapter
+stops importing the SDK (so the guard can't pass vacuously).
+
+Accuracy note: the plan names "MCP SDK v2", but the latest published
+`@modelcontextprotocol/sdk` is still 1.x (1.30.1). This slice is the
+preparation that makes a future SDK major a one-file change; it is **not** a
+version bump, and I did not pretend to adopt a v2 that does not exist. The
+adapter is a pure re-export, so existing MCP behaviour is unchanged — the 91
+MCP + authority tests pass as before. It deliberately leaves
+`@modelcontextprotocol/ext-apps` (a separate acquired package) and the
+client-side smoke tooling under `src/tools/` alone.
+
+Next in PR D / PR E: narrow the adapter surface to a Jarvis-shaped API and build
+`McpCapabilityGuard` (PR E, AUTH-INV-03) on this chokepoint.
+
 ## Acquisition plan, PR C (slice 4): mission-chain reconstruction gate (2026-09-26)
 
 Delivers the plan's "given one missionId, reconstruct the chain" gate as a

@@ -5,7 +5,7 @@ import {
   registerAppTool,
   RESOURCE_MIME_TYPE,
 } from "@modelcontextprotocol/ext-apps/server";
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { McpServer } from "./sdkAdapter.js";
 import { z } from "zod";
 
 import type { Client } from "../clients/client.js";
