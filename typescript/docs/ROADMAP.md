@@ -30,7 +30,7 @@ Next in PR C (later slices):
    `redactTelemetryAttributes`, and attach `correlationOf(...)` to events.
 2. Prove the reconstruct gate: given one missionId, join the full chain.
 
-PR B remainder stays parked on a Temporal dev env:
+PR B remainder uses the available Temporal dev environment once #621 readiness is verified:
 
 1. #572 histories as replay fixtures; deterministic replay in CI.
 2. v1 -> v2 -> rollback proof.
