@@ -169,7 +169,7 @@ export const AUTHORITY_INVARIANTS: readonly AuthorityInvariant[] = [
     laws: ["JARVIS-003", "JARVIS-007", "JARVIS-018"],
     status: "guarded",
     deliveredBy: "B",
-    gap: "Runtime guard covers the no-approval-credential half; the governed-boundary half is still a static reference scan, so aliased references or runtime indirection can pass it.",
+    gap: "Runtime guards now cover two halves: the no-approval-credential half (temporalWorkerAuthority) and the no-silent-code-migration half (PASS-15 proves a real server keeps an in-flight execution PINNED to its start build across a v1->v2->rollback ramp). The governed-boundary half is still a static reference scan, so aliased references or runtime indirection can pass it — this invariant stays guarded until that half has a runtime enforcement point.",
     evidence: [
       {
         suite: "check",
@@ -180,6 +180,11 @@ export const AUTHORITY_INVARIANTS: readonly AuthorityInvariant[] = [
         suite: "check",
         file: "tests/temporalWorkerAuthority.test.ts",
         test: "fails a versioned worker that holds an approval credential",
+      },
+      {
+        suite: "temporal-pass",
+        file: "tests/pass/worker-versioning-ramp.test.ts",
+        test: "pins in-flight executions to their start version across a v1→v2→rollback ramp",
       },
     ],
   },
