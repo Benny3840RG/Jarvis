@@ -9,6 +9,7 @@ import {
   formatWorkerVersionEvidence,
   resolveWorkerDeploymentOptions,
 } from "./buildIdentity.js";
+import { resolveTemporalEnvironment } from "./environment.js";
 import { assertWorkerHoldsNoApprovalCredential } from "./workerAuthority.js";
 
 const dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -20,8 +21,9 @@ export interface TemporalPassWorkerOptions {
 }
 
 export async function createPassWorker(options: TemporalPassWorkerOptions = {}): Promise<Worker> {
-  const address = options.address ?? process.env.TEMPORAL_ADDRESS ?? "localhost:7233";
-  const namespace = options.namespace ?? process.env.TEMPORAL_NAMESPACE ?? "default";
+  const environment = resolveTemporalEnvironment(process.env);
+  const address = options.address ?? environment.address;
+  const namespace = options.namespace ?? environment.namespace;
   // Must match TemporalOrchestrator's default exactly — see the comment
   // there for why this can't be time-based.
   const taskQueue = options.taskQueue ?? process.env.TEMPORAL_TASK_QUEUE ?? "temporal-pass";
