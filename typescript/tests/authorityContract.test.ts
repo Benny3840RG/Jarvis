@@ -325,6 +325,28 @@ describe("Authority contract", () => {
     }
   });
 
+  it("keeps the worker-versioning ramp proof bound to AUTH-INV-04", () => {
+    // The generic binding test above only checks that whatever a guarded
+    // invariant cites still exists. This one guards the specific claim in
+    // AUTH-INV-04's `gap` that the no-silent-code-migration half is
+    // runtime-proven: if the PASS-15 ramp evidence is dropped, that claim
+    // would silently lose its backing.
+    const invariant = AUTHORITY_INVARIANTS.find((candidate) => candidate.id === "AUTH-INV-04");
+    assert.ok(invariant, "AUTH-INV-04 is missing from the contract");
+    assert.notEqual(invariant.status, "planned", "AUTH-INV-04 must carry evidence, not be planned");
+    if (invariant.status === "planned") return; // narrows the union; the assert above is the real gate
+    assert.ok(
+      invariant.evidence.some(
+        (evidence) =>
+          evidence.suite === "temporal-pass" &&
+          evidence.file === "tests/pass/worker-versioning-ramp.test.ts" &&
+          evidence.test ===
+            "pins in-flight executions to their start version across a v1→v2→rollback ramp",
+      ),
+      "AUTH-INV-04 no longer cites the PASS-15 worker-versioning ramp proof",
+    );
+  });
+
   it("names a roadmap PR for every invariant that is not yet enforced", () => {
     const rows = readTypescriptFile("docs/ROADMAP.md").split("\n");
     for (const invariant of AUTHORITY_INVARIANTS) {

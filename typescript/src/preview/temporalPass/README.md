@@ -115,18 +115,29 @@ spin up/kill a real local dev server for the Tier 2 tests below).
 npm run test:temporal-pass
 ```
 
+In an offline or network-restricted environment, the Tier 1 tests would
+otherwise fail because `@temporalio/testing` downloads its dev-server binary
+from `temporal.download`. Set `TEMPORAL_CLI_PATH` to a pre-installed Temporal
+CLI (the same variable the Tier 2 harness reads) and both tiers reuse it
+instead of downloading:
+
+```bash
+TEMPORAL_CLI_PATH=/path/to/temporal npm run test:temporal-pass
+```
+
 Two tiers:
 
 - **Tier 1** (`duplicate-signal`, `side-effect`, `latest-candidate`,
   `bounded-loops`, `rejection`, `sha-race`, `github-veto`,
-  `approval-timeout`, `timeout-race`, `replay-upgrade`): fast, in-process,
-  via `@temporalio/testing`'s `TestWorkflowEnvironment.createLocal()`.
+  `approval-timeout`, `timeout-race`, `replay-upgrade`,
+  `worker-versioning-ramp`): fast, in-process, via `@temporalio/testing`'s
+  `TestWorkflowEnvironment.createLocal()`.
 - **Tier 2** (`worker-kill`, `reboot`, `approval-recovery`,
   `merge-crash-recovery`, `quote-send-crash-recovery`): slower — spawns a
   real `temporal server start-dev` process and a real worker process, and
   `SIGKILL`s them to prove the mission survives.
 
-14 PASS acceptance criteria in total (`tests/pass/*.test.ts`), extending the
+15 PASS acceptance criteria in total (`tests/pass/*.test.ts`), extending the
 original 10-test spec with:
 
 - `approval-timeout` (PASS-11) — `TestWorkflowEnvironment.createLocal()`
@@ -152,6 +163,18 @@ original 10-test spec with:
   deliberately incompatible code change (`tests/pass/fixtures/
 brokenReplayWorkflow.ts`) is correctly rejected rather than silently
   corrupting a mission that a real Jarvis deploy landed underneath.
+- `worker-versioning-ramp` (PASS-15) — the runtime proof for Worker
+  Deployment Versioning behind the authority contract's AUTH-INV-04. Two
+  workers register under distinct immutable build identities produced by the
+  shipped `resolveWorkerDeploymentOptions` (`temporal/buildIdentity.ts`) on
+  one task queue; the deployment's Current Version is ramped v1→v2 and rolled
+  back. The test observes, against a real server, that an execution started
+  under v1 stays PINNED to v1 (and completes on the still-running v1 worker)
+  even after v2 becomes Current, that an execution started after the ramp
+  pins to v2, and that one started after the rollback pins to v1 again — i.e.
+  a redeploy cannot migrate a live workflow onto new code on its own. The
+  build-identity resolution it drives is separately unit-tested (no server)
+  in `tests/temporalWorkerBuildIdentity.test.ts`.
 
 ## Next steps (out of scope here)
 

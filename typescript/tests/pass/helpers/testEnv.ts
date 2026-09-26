@@ -27,6 +27,26 @@ export interface PassTestEnv {
 }
 
 /**
+ * A real ephemeral local Temporal server for Tier-1 tests, honouring
+ * `TEMPORAL_CLI_PATH` (the same variable the Tier-2 `ProcessHarness` reads):
+ * set, it reuses a pre-installed Temporal CLI via the SDK's
+ * `executable: { type: "existing-path", path }` instead of the default
+ * download from `temporal.download`, so the suite runs in offline or
+ * network-restricted environments; unset, behaviour is unchanged.
+ *
+ * Split out from `createPassTestEnv` so tests that need a raw server without
+ * the PASS worker/idempotency wiring (e.g. the worker-versioning ramp, which
+ * runs its own versioned workers) share this one place rather than
+ * re-implementing the CLI-path dance.
+ */
+export async function createLocalTemporalEnv(): Promise<TestWorkflowEnvironment> {
+  const cliPath = process.env.TEMPORAL_CLI_PATH?.trim();
+  return TestWorkflowEnvironment.createLocal(
+    cliPath ? { server: { executable: { type: "existing-path", path: cliPath } } } : {},
+  );
+}
+
+/**
  * Tier 1 setup: a real ephemeral local Temporal server + a real in-process
  * Worker, both torn down at the end of the test. Real wall-clock time (this
  * SDK's `createLocal()` never time-skips) — fine for everything except the
@@ -52,7 +72,7 @@ export async function createPassTestEnv(): Promise<PassTestEnv> {
   const mockPassActivities =
     await import("../../../src/preview/temporalPass/temporal/activities/mockPassActivities.js");
 
-  const testEnv = await TestWorkflowEnvironment.createLocal();
+  const testEnv = await createLocalTemporalEnv();
   const taskQueue = `temporal-pass-test-${runId}`;
 
   const worker = await Worker.create({

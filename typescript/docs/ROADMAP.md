@@ -1,5 +1,163 @@
 # Jarvis TypeScript Roadmap
 
+## Acquisition plan, PR E (slice 1b): make the grantable MCP surface immutable (2026-09-26)
+
+Follow-up to slice 1 (#631). The independent review's medium finding —
+`GRANTABLE_MCP_TOOLS` was an exported `Set` typed `ReadonlySet`, mutable at
+runtime — landed correctly, but #631 merged at the pre-fix commit before the fix
+push was included, so main shipped the mutable export. This re-applies the fix as
+a fresh change: the set is module-private, and membership is exposed only through
+`isGrantableMcpTool()` and `grantableMcpTools()` (a fresh sorted copy), so there
+is no exported handle to `.add()`/`.clear()` the surface.
+`tests/mcpCapabilityGuard.test.ts` adds a runtime-mutation regression test.
+
+## Acquisition plan, PR E (slice 1): McpCapabilityGuard core (2026-09-26)
+
+Adds the per-session capability guard AUTH-INV-03's gap names as missing
+("Checks the declared MCP-to-OpenAPI mapping by path name; no per-session
+capability guard yet"). `src/mcp/capabilityGuard.ts` is a fail-closed decision
+function: a session may invoke only the tools its granted capability set names;
+an unknown tool, a tool outside the grant, and an empty grant all deny.
+
+It cannot widen the MCP surface — the universe of grantable tools is exactly the
+keys of `MCP_TOOL_OPERATIONS` (already proven a strict OpenAPI subset carrying no
+approve/execute/revoke/merge/deploy operation), and constructing a guard with an
+unknown tool name throws rather than silently ignoring it, so a stale grant is a
+loud error, not a quiet hole. `tests/mcpCapabilityGuard.test.ts` is the
+adversarial suite: empty grant denies everything, case/whitespace variants and
+non-surface names deny as unknown, an authority operation can't even be granted,
+and a full grant still denies anything off-surface.
+
+Scope boundary (stated, not hidden): the guard is **not yet wired** into the
+live `callTool` path, so AUTH-INV-03 stays **guarded** and this is not cited as
+its evidence yet. Enforcement needs two things the next slice must decide and
+build — a per-session grant source (the HTTP transport runs with
+`sessionIdGenerator: undefined`, i.e. no session identity today; where a grant
+comes from — config, an auth-token claim — is a real design choice) and
+per-handler interception in `createJarvisMcpServer`. This slice lands the
+reusable, fully-tested decision core first.
+
+## Acquisition plan, PR D (slice 1): MCP SDK behind a Jarvis adapter boundary (2026-09-26)
+
+Establishes the adapter boundary PR D calls for. `src/mcp/sdkAdapter.ts` is now
+the single module in the MCP server plane that imports
+`@modelcontextprotocol/sdk` (the `McpServer` and `StreamableHTTPServerTransport`
+surface Jarvis uses); `server.ts`, `httpServer.ts` and `persistenceSettingsTools.ts`
+import those from the adapter instead. `tests/mcpSdkAdapter.test.ts` scans every
+`src/mcp` module's import graph (via the TypeScript AST) and fails if any module
+other than the adapter imports the SDK directly, and also fails if the adapter
+stops importing the SDK (so the guard can't pass vacuously).
+
+Accuracy note: the plan names "MCP SDK v2", but the latest published
+`@modelcontextprotocol/sdk` is still 1.x (1.30.1). This slice is the
+preparation that makes a future SDK major a one-file change; it is **not** a
+version bump, and I did not pretend to adopt a v2 that does not exist. The
+adapter is a pure re-export, so existing MCP behaviour is unchanged — the 91
+MCP + authority tests pass as before. It deliberately leaves
+`@modelcontextprotocol/ext-apps` (a separate acquired package) and the
+client-side smoke tooling under `src/tools/` alone.
+
+Next in PR D / PR E: narrow the adapter surface to a Jarvis-shaped API and build
+`McpCapabilityGuard` (PR E, AUTH-INV-03) on this chokepoint.
+
+## Acquisition plan, PR C (slice 4): mission-chain reconstruction gate (2026-09-26)
+
+Delivers the plan's "given one missionId, reconstruct the chain" gate as a
+tested contract capability. `telemetryContract.ts` gains `reconstructMissionChain(events, missionId)`,
+which returns the events naming that mission — in recorded order, each paired
+with its `correlationOf` projection — so the
+request→decision→agent→tool→activity→effect spine can be followed by joining on
+the finer ids. An event with no `missionId`, or a different one, is excluded: a
+correlation id is never a free-floating value. `tests/telemetryContract.test.ts`
+proves the join includes only the target mission's events and excludes a
+second mission's and an unattributed event.
+
+The "attach correlationOf to emitted events" half needs no emitter change: the
+correlation fields are guaranteed non-sensitive (`isSensitiveTelemetryKey`
+returns false for each), and slices 2–3 route both emitters (PostHog #623,
+Sentry #628) through key-based redaction that preserves non-sensitive keys — so
+any correlation id present in an event's properties/tags already survives to the
+sent payload intact.
+
+Scope boundary (stated, not hidden): the live boundary emitters
+(`captureHttpBoundary`, `captureMcpBoundary`, reconciliation observer) are
+request/cycle-scoped and carry no `missionId` today, so there is no
+mission-scoped event stream to join yet. Populating one belongs to the
+OTel-wrapped, mission-scoped emitter the contract header describes, threaded
+through the orchestration/activity layers — a later slice, not this one. This
+slice makes the reconstruction semantics real and tested so that emitter can
+rely on them.
+
+## Acquisition plan, PR C (slice 3): route the Sentry emitter through key-based redaction (2026-09-26)
+
+Mirrors the PostHog wiring (#623) for the second emitter. `sentry.ts`'s
+`tagsFor` now masks any sensitively-named tag (`isSensitiveTelemetryKey`) with
+the contract's `REDACTED` marker before the tag charset filter, so a caller's
+`serviceToken`/`authorization`/`apiKey` tag cannot leave under a sensitive name
+even when its value would pass the charset filter. This complements the existing
+value-based secret redaction on error messages (known-secret strings in free
+text); the two are orthogonal. Reserved tags (operation, route, method,
+request_id, outcome) are never sensitive and are unaffected.
+
+Scope note: measurements stay as-is — they are numeric and keyed by a
+charset-validated name, so a number under a sensitive name is not a secret leak.
+`tests/sentry.test.ts` adds a case asserting a `serviceToken` tag whose value
+would pass the charset filter is masked while a benign `region`/`shard` tag
+survives.
+
+Remaining in PR C: attach `correlationOf(...)` to emitted events and prove the
+reconstruct-from-missionId gate (given one missionId, join the full
+request→decision→agent→tool→activity→effect chain).
+
+## Acquisition plan, PR B: bind PASS-15 as AUTH-INV-04 evidence (2026-09-26)
+
+PASS-15 (#626) proved the worker-versioning half of AUTH-INV-04 at runtime but
+the authority contract did not yet record it. This slice adds a
+`suite: "temporal-pass"` evidence entry on AUTH-INV-04 citing
+`tests/pass/worker-versioning-ramp.test.ts`, so `tests/authorityContract.test.ts`
+now fails if that proof is deleted or renamed, and rewrites the invariant's
+`gap` to state precisely what is now runtime-proven (no-approval-credential +
+no-silent-code-migration) versus still static (the governed-boundary reference
+scan).
+
+AUTH-INV-04 stays **guarded**, not enforced: the governed-boundary half is still
+a static scan with no runtime enforcement point, and promoting the status would
+overclaim. That promotion remains PR B's last versioning-related item, gated on a
+runtime guarantee that a Temporal activity's real side effects can only cross the
+governed execution boundary (ΩΣ / ToolAction / claim / receipt / reconciliation).
+
+## Acquisition plan, PR B: worker deployment versioning ramp proof (PASS-15) (2026-09-26)
+
+With local Temporal validation unblocked (#625 let the PASS Tier-1 tests reuse
+a pinned CLI via `TEMPORAL_CLI_PATH`), this slice adds the runtime proof for
+Worker Deployment Versioning that the build-identity machinery (#618) only had
+unit tests for.
+
+`tests/pass/worker-versioning-ramp.test.ts` (PASS-15, Tier-1) drives two real
+workers on one task queue, each registered under a distinct immutable build
+identity built by the _shipped_ `resolveWorkerDeploymentOptions`
+(`temporal/buildIdentity.ts`), against a real dev server. It ramps the
+deployment's Current Version v1→v2→rollback and observes, via
+`DescribeWorkflowExecution.versioningInfo`, that:
+
+- an execution started under v1 stays PINNED to v1 after v2 becomes Current
+  (and completes on the still-running v1 worker — not merely an unchanged
+  label);
+- an execution started after the ramp pins to v2;
+- an execution started after the rollback pins back to v1.
+
+This is the runtime half of AUTH-INV-04 ("a Temporal worker cannot migrate
+live workflows onto new code on its own"): the config's immutability is
+unit-tested in `tests/temporalWorkerBuildIdentity.test.ts`; PASS-15 shows the
+server actually honours it. Validated locally: full PASS suite 29/29 green
+against Temporal CLI v1.9.1; `npm run check` green. `createPassTestEnv`'s
+`TEMPORAL_CLI_PATH` handling was factored into a shared `createLocalTemporalEnv`
+helper the new test reuses.
+
+Still parked in PR B (needs more than this slice): promoting AUTH-INV-04 to
+`enforced` (the governed-boundary runtime guarantee is the other half), and
+deciding whether `temporal-pass` runs on every PR.
+
 ## Temporal environment readiness (#621) (2026-09-26)
 
 Benny confirmed that a Temporal environment exists for Jarvis. The PASS client,

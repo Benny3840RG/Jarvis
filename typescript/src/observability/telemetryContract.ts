@@ -124,3 +124,34 @@ export function correlationOf(
   }
   return correlation;
 }
+
+/** One event in a reconstructed mission chain: the event and its correlation projection. */
+export type MissionChainLink = Readonly<{
+  correlation: Partial<Record<TelemetryCorrelationField, unknown>>;
+  event: Readonly<Record<string, unknown>>;
+}>;
+
+/**
+ * Reconstruct one mission's event chain from a flat list of telemetry events —
+ * the acquisition plan's "given one missionId, reconstruct the chain" gate.
+ * Returns the events whose `missionId` strictly equals `missionId`, in input
+ * order (telemetry is joined in the order it was recorded), each paired with
+ * its `correlationOf` projection so the
+ * request → decision → agent → tool → activity → effect spine can be followed
+ * by joining on the finer ids (workflowId, runId, toolCallId, effectId, …).
+ *
+ * An event with no `missionId`, or a different one, is not part of the chain:
+ * a correlation id is never a free-floating value, so an unattributed event
+ * cannot be swept into a mission it does not name.
+ */
+export function reconstructMissionChain(
+  events: readonly Readonly<Record<string, unknown>>[],
+  missionId: string,
+): MissionChainLink[] {
+  const chain: MissionChainLink[] = [];
+  for (const event of events) {
+    if (event.missionId !== missionId) continue;
+    chain.push({ correlation: correlationOf(event), event });
+  }
+  return chain;
+}
