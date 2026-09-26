@@ -1,4 +1,5 @@
 import type { ReconciliationCycleObservation } from "../reconciliation/reconciliationScheduler.js";
+import { redactTelemetryAttributes } from "./telemetryContract.js";
 
 type PostHogEventName =
   | "jarvis.operator_action"
@@ -355,7 +356,12 @@ class EnabledPostHogTelemetry implements PostHogTelemetry {
           distinct_id: DISTINCT_ID,
           event: event.event,
           properties: {
-            ...event.properties,
+            // Redact at the emit boundary (PR C): even though Jarvis's own
+            // capture helpers only build bounded, non-sensitive properties, a
+            // sensitively-named property from any caller is masked before it
+            // leaves the process. `source_version` is added after and is not
+            // sensitive.
+            ...redactTelemetryAttributes(event.properties),
             source_version: this.sourceVersion,
             $geoip_disable: true,
           },
