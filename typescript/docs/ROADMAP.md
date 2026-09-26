@@ -11,6 +11,31 @@ The probe keeps `configured`, `reachable` and `commissioned` separate.
 Reachability never claims commissioning evidence. The deferred replay and
 v1 -> v2 -> rollback gates still require their own live proof.
 
+## Acquisition plan, PR C (slice 2): route the PostHog emitter through redaction (2026-09-26)
+
+PR C slice 1 (#622, telemetry contract) merged. This slice wires the contract
+into the first emitter. `EnabledPostHogTelemetry.send` now passes
+`event.properties` through `redactTelemetryAttributes` before building the
+request body, so a sensitively-named property from any caller is masked at the
+emit boundary rather than trusted to be absent. `source_version` and
+`$geoip_disable` are added after and are not sensitive.
+
+Jarvis's own capture helpers only build bounded, non-sensitive properties, so
+this is defense-in-depth at the boundary, not a fix for a known leak.
+`tests/posthogRedaction.test.ts` captures an event carrying a `serviceToken`
+property and asserts the sent body masks it while keeping benign fields; the
+existing `tests/posthog.test.ts` still passes. Both run in `npm run check`.
+
+Next in PR C:
+
+1. Route the Sentry emitter's structured fields through the same key-based
+   redaction (it already does value-based secret redaction on messages).
+2. Attach `correlationOf(...)` to emitted events and prove the reconstruct gate:
+   given one missionId, join the full chain.
+
+PR B remainder stays parked on a Temporal dev env (replay fixtures, v1->v2->
+rollback, governed-boundary -> AUTH-INV-04 `enforced`).
+
 ## Acquisition plan, PR C (slice 1): telemetry correlation + redaction contract (2026-09-26)
 
 PR B slices 1-3 merged (#618/#619/#620). PR B's remaining pieces (replay
