@@ -1,5 +1,36 @@
 # Jarvis TypeScript Roadmap
 
+## Acquisition plan, PR F (auth/network hardening): scope the read plane to one repo (2026-09-26)
+
+Follow-up on the owner's review of the merged PR F auth/network slice (#636),
+which merged with three boundary defects. This slice closes all three:
+
+- **Systemd-credential-only key.** `resolveGithubAppReadConfigFromEnv` no longer
+  accepts an inline `JARVIS_GITHUB_READ_PRIVATE_KEY` or an arbitrary key path.
+  The key is read only from `$CREDENTIALS_DIRECTORY/<name>` via the new
+  `JARVIS_GITHUB_READ_PRIVATE_KEY_CREDENTIAL` name (bare file name, path
+  traversal rejected). Missing `$CREDENTIALS_DIRECTORY` → fail-closed null.
+- **Down-scoped, validated token.** `mintInstallationToken` now POSTs
+  `{ repositories:[repo], permissions:{metadata,contents,issues,pull_requests:read} }`
+  and validates the returned scope (`repository_selection` must be `selected`,
+  repositories must match the configured repo, every permission must be `read`);
+  a broader-than-requested token is refused.
+- **Repository-fixed request paths.** New `src/development/githubReadEndpoints.ts`
+  builds every path from the read tool + typed ids (PR/issue number, commit SHA),
+  fixed to the configured `owner/repo` (`JARVIS_GITHUB_READ_REPOSITORY`), with an
+  `assertWithinRepository` backstop. `GithubReadPlaneClient.read` takes
+  `{ tool, params }` — the caller can no longer supply a raw path, so it cannot
+  reach another repository or a non-repo endpoint.
+
+Tests added/updated: `githubReadEndpoints.test.ts` (repo parse, per-tool builders,
+param validation, allowlist↔builder lockstep, repo-scope backstop);
+`githubReadAuth.test.ts` (systemd-credential resolution, inline-key removal,
+down-scope request body + returned-scope validation); `githubReadPlaneSurface.test.ts`
+(typed-params reads, repo-fixed URL, param-validation-before-mint). Still dormant
+and fail-closed until Benny provisions the App + sets the four env vars. Note:
+the bound repository is provisioning config (owner sets the exact slug); the code
+does not hard-code it.
+
 ## Acquisition plan, PR F (auth/network slice): GitHub read-plane boundary (2026-09-26)
 
 Live-boundary slice for PR F, on the owner's auth/network decision. The acquired

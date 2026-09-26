@@ -3,32 +3,51 @@
  *
  * The acquired read plane authenticates as a *dedicated read-only GitHub App*
  * — not the governed merge token (`JARVIS_GITHUB_TOKEN`), which carries
- * owner-only authority and must never be reused here. The App's private key
- * lives in host-controlled credential storage (systemd `LoadCredential` exposes
- * it as a file under `$CREDENTIALS_DIRECTORY`); this module reads it from that
- * path, mints a short-lived installation access token at runtime, and never
- * persists the token. The private key and the token never appear in any error,
- * log line, or return value beyond the token itself.
+ * owner-only authority and must never be reused here. Per the owner's decision
+ * the App's private key lives *only* in host-controlled systemd credential
+ * storage: `LoadCredential=<name>:<source>` exposes it as a file named `<name>`
+ * under `$CREDENTIALS_DIRECTORY`. This module reads it from that directory and
+ * nowhere else — there is no inline-key env var and no arbitrary file path.
  *
- * Provisioning (Benny, outside the repo): create the App installed only on
- * `Benny3840/Jarvis` with read-only Metadata/Contents/PullRequests/Issues and
- * NO write permission; place its private key in systemd credential storage; set
- * `JARVIS_GITHUB_READ_APP_ID`, `JARVIS_GITHUB_READ_INSTALLATION_ID`, and
- * `JARVIS_GITHUB_READ_PRIVATE_KEY_FILE` (or `_PRIVATE_KEY` inline) in the env.
- * Until all are present, {@link resolveGithubAppReadConfigFromEnv} returns null
- * and no read client is constructed (fail-closed).
+ * The token minted from that key is explicitly *down-scoped* to the one
+ * configured repository with read-only permissions, and the minted token's
+ * returned scope is validated before use (fail-closed): a token that came back
+ * with a broader repository selection or any non-read permission is refused, so
+ * the read plane never rides a token wider than the read it needs. The private
+ * key and token never appear in any error, log line, or return value beyond the
+ * token string itself.
+ *
+ * Provisioning (Benny, outside the repo): create the App installed only on the
+ * one repository with read-only Metadata/Contents/PullRequests/Issues and NO
+ * write permission; expose its private key via systemd `LoadCredential`; set
+ * `JARVIS_GITHUB_READ_APP_ID`, `JARVIS_GITHUB_READ_INSTALLATION_ID`,
+ * `JARVIS_GITHUB_READ_PRIVATE_KEY_CREDENTIAL` (the credential name under
+ * `$CREDENTIALS_DIRECTORY`), and `JARVIS_GITHUB_READ_REPOSITORY` (`owner/repo`).
+ * Until all are present and valid, {@link resolveGithubAppReadConfigFromEnv}
+ * returns null and no read client is constructed (fail-closed).
  */
 
 import { createSign } from "node:crypto";
 import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 import { GITHUB_API_ORIGIN, guardedGitHubFetch } from "./githubReadEgress.js";
+import { parseGithubRepository, type GithubRepository } from "./githubReadEndpoints.js";
+
+/** The read-only permissions the down-scoped installation token requests. */
+export const GITHUB_READ_TOKEN_PERMISSIONS = Object.freeze({
+  metadata: "read",
+  contents: "read",
+  issues: "read",
+  pull_requests: "read",
+} as const);
 
 /** Resolved credentials for the dedicated read-only GitHub App. */
 export type GithubAppReadConfig = Readonly<{
   appId: string;
   installationId: string;
   privateKeyPem: string;
+  repository: GithubRepository;
 }>;
 
 /** A minted installation token. Held in memory only; never persisted. */
@@ -36,10 +55,19 @@ export type InstallationToken = Readonly<{ token: string; expiresAt: Date }>;
 
 type Environment = Readonly<Record<string, string | undefined>>;
 
+/** A credential name must be a bare file name inside `$CREDENTIALS_DIRECTORY`. */
+function isSafeCredentialName(name: string): boolean {
+  return (
+    name.length > 0 && !name.includes("/") && !name.includes("\\") && name !== "." && name !== ".."
+  );
+}
+
 /**
  * Resolve the read App's credentials from the environment, fail-closed: returns
- * null unless the App id, installation id, and a private key (inline PEM or a
- * readable credential file) are all present and the key looks like a PEM.
+ * null unless the App id, installation id, a fixed `owner/repo`, and a private
+ * key read from systemd credential storage are all present and valid. The key
+ * is read only from `$CREDENTIALS_DIRECTORY/<name>`; there is no inline key and
+ * no arbitrary path.
  */
 export function resolveGithubAppReadConfigFromEnv(
   environment: Environment = process.env,
@@ -48,22 +76,24 @@ export function resolveGithubAppReadConfigFromEnv(
   const installationId = environment.JARVIS_GITHUB_READ_INSTALLATION_ID?.trim();
   if (!appId || !installationId) return null;
 
-  const keyFile = environment.JARVIS_GITHUB_READ_PRIVATE_KEY_FILE?.trim();
-  const inlineKey = environment.JARVIS_GITHUB_READ_PRIVATE_KEY?.trim();
-  let privateKeyPem: string | undefined;
-  if (keyFile) {
-    try {
-      privateKeyPem = readFileSync(keyFile, "utf8");
-    } catch {
-      // A configured-but-unreadable key must not silently fall back to inline.
-      return null;
-    }
-  } else if (inlineKey) {
-    privateKeyPem = inlineKey;
-  }
-  if (!privateKeyPem?.includes("PRIVATE KEY")) return null;
+  const repository = parseGithubRepository(environment.JARVIS_GITHUB_READ_REPOSITORY);
+  if (!repository) return null;
 
-  return { appId, installationId, privateKeyPem };
+  // Key comes only from systemd credential storage: a bare credential name
+  // resolved against $CREDENTIALS_DIRECTORY. No inline key, no arbitrary path.
+  const credentialsDir = environment.CREDENTIALS_DIRECTORY?.trim();
+  const credentialName = environment.JARVIS_GITHUB_READ_PRIVATE_KEY_CREDENTIAL?.trim();
+  if (!credentialsDir || !credentialName || !isSafeCredentialName(credentialName)) return null;
+
+  let privateKeyPem: string;
+  try {
+    privateKeyPem = readFileSync(join(credentialsDir, credentialName), "utf8");
+  } catch {
+    return null;
+  }
+  if (!privateKeyPem.includes("PRIVATE KEY")) return null;
+
+  return { appId, installationId, privateKeyPem, repository };
 }
 
 export class GithubReadAuthError extends Error {
@@ -98,10 +128,49 @@ function appJwt(config: GithubAppReadConfig, now: Date): string {
 }
 
 /**
+ * Validate that the minted token's returned scope is no broader than requested:
+ * the repository selection must be the explicit `selected` set covering only the
+ * configured repository, and every returned permission must be `read`. Throws a
+ * redacted {@link GithubReadAuthError} otherwise (fail-closed).
+ */
+function assertTokenScope(
+  body: { repository_selection?: unknown; repositories?: unknown; permissions?: unknown },
+  repository: GithubRepository,
+): void {
+  if (body.repository_selection !== undefined && body.repository_selection !== "selected") {
+    throw new GithubReadAuthError("installation token was not scoped to a selected repository");
+  }
+  if (body.repositories !== undefined) {
+    if (!Array.isArray(body.repositories)) {
+      throw new GithubReadAuthError("installation token repositories were malformed");
+    }
+    for (const entry of body.repositories) {
+      const name = (entry as { name?: unknown })?.name;
+      if (name !== repository.repo) {
+        throw new GithubReadAuthError(
+          "installation token was scoped beyond the configured repository",
+        );
+      }
+    }
+  }
+  if (body.permissions !== undefined) {
+    if (typeof body.permissions !== "object" || body.permissions === null) {
+      throw new GithubReadAuthError("installation token permissions were malformed");
+    }
+    for (const level of Object.values(body.permissions as Record<string, unknown>)) {
+      if (level !== "read") {
+        throw new GithubReadAuthError("installation token carried a non-read permission");
+      }
+    }
+  }
+}
+
+/**
  * Mint a short-lived installation access token via the App JWT, over the egress
- * boundary (api.github.com only). The token is returned and never logged or
- * persisted; on failure a redacted {@link GithubReadAuthError} carries only the
- * HTTP status, never the JWT, key, or any returned token.
+ * boundary (api.github.com only), explicitly down-scoped to the configured
+ * repository with read-only permissions. The token is returned and never logged
+ * or persisted; on failure a redacted {@link GithubReadAuthError} carries only
+ * the HTTP status, never the JWT, key, or any returned token.
  */
 export async function mintInstallationToken(input: {
   config: GithubAppReadConfig;
@@ -120,24 +189,37 @@ export async function mintInstallationToken(input: {
       headers: {
         Accept: "application/vnd.github+json",
         Authorization: `Bearer ${jwt}`,
+        "Content-Type": "application/json",
         "X-GitHub-Api-Version": "2022-11-28",
         "User-Agent": "jarvis-github-read-plane",
       },
+      // Down-scope the token: one repository, read-only permissions.
+      body: JSON.stringify({
+        repositories: [input.config.repository.repo],
+        permissions: GITHUB_READ_TOKEN_PERMISSIONS,
+      }),
     },
   );
   if (!response.ok) {
     throw new GithubReadAuthError(`installation token request returned status ${response.status}`);
   }
 
-  let body: { token?: unknown; expires_at?: unknown };
+  let body: {
+    token?: unknown;
+    expires_at?: unknown;
+    repository_selection?: unknown;
+    repositories?: unknown;
+    permissions?: unknown;
+  };
   try {
-    body = (await response.json()) as { token?: unknown; expires_at?: unknown };
+    body = (await response.json()) as typeof body;
   } catch {
     throw new GithubReadAuthError("installation token response was not valid JSON");
   }
   if (typeof body.token !== "string" || !body.token.trim() || typeof body.expires_at !== "string") {
     throw new GithubReadAuthError("installation token response was malformed");
   }
+  assertTokenScope(body, input.config.repository);
   const expiresAt = new Date(body.expires_at);
   if (Number.isNaN(expiresAt.getTime())) {
     throw new GithubReadAuthError("installation token expiry was not a valid date");

@@ -8,7 +8,7 @@ import {
   GitHubWriteForbiddenError,
   isGitHubReadOnlyTool,
 } from "../src/development/githubReadPlane.js";
-import { GitHubEgressForbiddenError } from "../src/development/githubReadEgress.js";
+import { GithubReadEndpointError } from "../src/development/githubReadEndpoints.js";
 import {
   GithubReadPlaneClient,
   GitHubReadRestError,
@@ -17,7 +17,12 @@ import type { InstallationToken } from "../src/development/githubReadAuth.js";
 
 const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
 const PEM = privateKey.export({ type: "pkcs8", format: "pem" }).toString();
-const config = { appId: "1", installationId: "2", privateKeyPem: PEM } as const;
+const config = {
+  appId: "1",
+  installationId: "2",
+  privateKeyPem: PEM,
+  repository: { owner: "Benny3840RG", repo: "Jarvis" },
+} as const;
 
 // Verbs that mutate GitHub state or exercise authority. No client method or
 // exposed tool may carry one — the read plane is reads only.
@@ -82,7 +87,7 @@ describe("GitHub read-plane surface (PR F, auth/network slice)", () => {
         Object.freeze({ token: "ghs_secret_token", expiresAt: new Date("2999-01-01T00:00:00Z") }),
     });
     // Trigger a read so a token is cached in memory.
-    await client.read({ tool: "github_get_issue", path: "/repos/o/r/issues/1" });
+    await client.read({ tool: "github_get_issue", params: { issueNumber: 1 } });
 
     const serialized = JSON.stringify(client);
     const inspected = inspect(client, { depth: null });
@@ -98,7 +103,7 @@ describe("GitHub read-plane surface (PR F, auth/network slice)", () => {
     }
   });
 
-  it("reads an allowlisted tool through a fresh short-lived token and the egress guard", async () => {
+  it("reads an allowlisted tool through a fresh short-lived token, bound to the configured repository", async () => {
     const stub = tokenStub();
     let seenUrl: string | undefined;
     const fakeFetch = (async (input: URL | RequestInfo) => {
@@ -109,10 +114,11 @@ describe("GitHub read-plane surface (PR F, auth/network slice)", () => {
     const client = new GithubReadPlaneClient(config, { fetch: fakeFetch, mint: stub.mint });
     const body = (await client.read({
       tool: "github_get_pull_request",
-      path: "/repos/o/r/pulls/1",
+      params: { pullNumber: 1 },
     })) as { number: number };
     assert.equal(body.number, 1);
-    assert.equal(seenUrl, "https://api.github.com/repos/o/r/pulls/1");
+    // The path is fixed to the configured repository — the caller never supplied it.
+    assert.equal(seenUrl, "https://api.github.com/repos/Benny3840RG/Jarvis/pulls/1");
     assert.equal(stub.calls(), 1);
   });
 
@@ -126,7 +132,7 @@ describe("GitHub read-plane surface (PR F, auth/network slice)", () => {
     const client = new GithubReadPlaneClient(config, { fetch: fakeFetch, mint: stub.mint });
 
     await assert.rejects(
-      () => client.read({ tool: "github_merge_pull_request" as never, path: "/x" }),
+      () => client.read({ tool: "github_merge_pull_request", params: { pullNumber: 1 } }),
       GitHubWriteForbiddenError,
     );
     assert.equal(stub.calls(), 0);
@@ -140,14 +146,11 @@ describe("GitHub read-plane surface (PR F, auth/network slice)", () => {
       mint: stub.mint,
     });
     // "get_repository" is read-verb-shaped but not a declared read-plane tool.
-    await assert.rejects(
-      () => client.read({ tool: "get_repository" as never, path: "/repos/o/r" }),
-      GitHubWriteForbiddenError,
-    );
+    await assert.rejects(() => client.read({ tool: "get_repository" }), GitHubWriteForbiddenError);
     assert.equal(stub.calls(), 0);
   });
 
-  it("cannot be pointed off the approved origin via an absolute path", async () => {
+  it("refuses a request with missing or invalid params before minting a token", async () => {
     const stub = tokenStub();
     let fetched = false;
     const fakeFetch = (async () => {
@@ -156,15 +159,17 @@ describe("GitHub read-plane surface (PR F, auth/network slice)", () => {
     }) as typeof globalThis.fetch;
     const client = new GithubReadPlaneClient(config, { fetch: fakeFetch, mint: stub.mint });
 
+    // A PR read with no pull number, and a commit read with a non-SHA ref, both
+    // fail at path-build time — before any token is minted or request dispatched.
     await assert.rejects(
-      () =>
-        client.read({
-          tool: "github_get_pull_request",
-          path: "https://evil.com/repos/o/r/pulls/1",
-        }),
-      GitHubEgressForbiddenError,
+      () => client.read({ tool: "github_get_pull_request", params: {} }),
+      GithubReadEndpointError,
     );
-    assert.equal(stub.calls(), 0, "no token minted for an off-origin target");
+    await assert.rejects(
+      () => client.read({ tool: "github_get_commit", params: { ref: "../etc/passwd" } }),
+      GithubReadEndpointError,
+    );
+    assert.equal(stub.calls(), 0, "no token minted for an unbuildable request");
     assert.equal(fetched, false);
   });
 
@@ -186,12 +191,12 @@ describe("GitHub read-plane surface (PR F, auth/network slice)", () => {
       now: () => clock,
     });
     // Two reads within validity mint once.
-    await client.read({ tool: "github_get_issue", path: "/repos/o/r/issues/1" });
-    await client.read({ tool: "github_get_issue", path: "/repos/o/r/issues/2" });
+    await client.read({ tool: "github_get_issue", params: { issueNumber: 1 } });
+    await client.read({ tool: "github_get_issue", params: { issueNumber: 2 } });
     assert.equal(mints, 1);
     // After the token lapses, a fresh read must re-mint.
     clock = new Date("2026-01-01T00:20:00Z");
-    await client.read({ tool: "github_get_issue", path: "/repos/o/r/issues/3" });
+    await client.read({ tool: "github_get_issue", params: { issueNumber: 3 } });
     assert.equal(mints, 2);
   });
 
@@ -203,7 +208,7 @@ describe("GitHub read-plane surface (PR F, auth/network slice)", () => {
       })) as typeof globalThis.fetch;
     const client = new GithubReadPlaneClient(config, { fetch: fakeFetch, mint: stub.mint });
     await assert.rejects(
-      () => client.read({ tool: "github_get_pull_request", path: "/repos/o/r/pulls/9" }),
+      () => client.read({ tool: "github_get_pull_request", params: { pullNumber: 9 } }),
       (error: unknown) => {
         assert.ok(error instanceof GitHubReadRestError);
         assert.match(error.message, /404/);
