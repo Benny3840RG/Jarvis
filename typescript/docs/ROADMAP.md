@@ -1,5 +1,34 @@
 # Jarvis TypeScript Roadmap
 
+## Acquisition plan, PR B (slice 3): worker version visible in evidence (2026-09-26)
+
+PR B slices 1 (#618, immutable build identity) and 2 (#619, runtime
+no-approval-credential guard) merged. This slice satisfies the PR-B gate line
+"worker version is visible in evidence" — the server-free part of PR B that is
+fully testable in `npm run check`.
+
+`buildIdentity.ts` adds `describeWorkerVersion(options)` returning
+`WorkerVersionEvidence` (`{ versioned: false }` when versioning is off, else the
+pinned `deploymentName`/`buildId` plus Temporal's canonical
+`deploymentName.buildId` string via `toCanonicalString`) and
+`formatWorkerVersionEvidence(evidence)` for a one-line summary. `worker.ts` logs
+that line at startup — CI and the Tier-2 process harness already capture worker
+stdout, so the exact registered version (or "unversioned") is now recorded.
+`tests/temporalWorkerBuildIdentity.test.ts` covers both branches in the fast
+suite.
+
+Still deferred in PR B because they need a live Temporal dev server (absent in
+this sandbox) or a design decision:
+
+1. #572 torture histories as replay fixtures; deterministic old-history/new-code
+   replay in CI.
+2. v1 -> v2 -> rollback proof with worker versioning.
+3. Runtime governed-boundary guarantee for activities (the second half of
+   AUTH-INV-04), then move AUTH-INV-04 to `enforced`. Needs a design decision on
+   what boundary enforcement looks like inside the worker.
+4. Decide whether the `temporal-pass` job runs on every PR (it gates
+   AUTH-INV-06..09).
+
 ## Acquisition plan, PR B (slice 2): runtime no-approval-credential guard (2026-09-25)
 
 PR B slice 1 (#618, immutable worker build identity) merged. This slice adds

@@ -4,7 +4,11 @@ import { fileURLToPath } from "node:url";
 
 import { executeGovernedQuoteSend } from "./activities/governedQuoteSend.js";
 import * as activities from "./activities/mockPassActivities.js";
-import { resolveWorkerDeploymentOptions } from "./buildIdentity.js";
+import {
+  describeWorkerVersion,
+  formatWorkerVersionEvidence,
+  resolveWorkerDeploymentOptions,
+} from "./buildIdentity.js";
 import { assertWorkerHoldsNoApprovalCredential } from "./workerAuthority.js";
 
 const dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -33,6 +37,12 @@ export async function createPassWorker(options: TemporalPassWorkerOptions = {}):
   if (workerDeploymentOptions) {
     assertWorkerHoldsNoApprovalCredential(process.env);
   }
+
+  // Make the registered version visible in evidence (roadmap PR-B gate): the
+  // worker's stdout — which CI and the process harness already capture —
+  // records the exact pinned version, or "unversioned".
+  const versionEvidence = describeWorkerVersion(workerDeploymentOptions);
+  console.log(`[temporal-pass] worker version: ${formatWorkerVersionEvidence(versionEvidence)}`);
 
   const connection = await NativeConnection.connect({ address });
 
