@@ -95,16 +95,24 @@ neither does a skipped test.
   - references `approve` and is not one of the two approval-boundary modules
     named below. A reference is a property access, `x["approve"]`, a bare
     `approve()` call, or an imported `approve` binding;
-  - is a preview module that references the approval token;
-  - references the approval token and is not one of the two reviewed modules
-    that already handle it, `src/actions/toolActions.ts` and
-    `src/persistence/convexToolActions.ts`.
+  - names the approval token and is not one of the allowlisted modules: the two
+    reviewed modules that already handle it, `src/actions/toolActions.ts` and
+    `src/persistence/convexToolActions.ts`, or the worker-authority guard
+    `src/preview/temporalPass/temporal/workerAuthority.ts`, which names the
+    token only to assert a versioned worker holds none (it guards against the
+    token, it never reads a value).
 
-  The preview reaches those two modules only to propose and execute. This is a
-  syntax scan, not a call graph. A computed property key or other runtime
-  indirection can still pass it, which is why the invariant is `guarded`. PR B
-  must enforce it at runtime: the production worker gets no approval
-  credential, and activities reach effects only through the governed boundary.
+  The preview reaches the two boundary modules only to propose and execute.
+  This is a syntax scan, not a call graph, and a computed property key or other
+  runtime indirection can still pass it.
+
+  **Runtime enforcement so far (PR B slice 2):** `workerAuthority.ts` fails a
+  versioned worker closed at startup if `JARVIS_APPROVAL_TOKEN` (or its
+  `_PREVIOUS`) is set in its environment — the "no approval credential" half of
+  AUTH-INV-04, enforced at runtime rather than only scanned. The invariant
+  stays `guarded` because the other half — activities reach external effects
+  only through the governed boundary — is still a static reference scan; a
+  later PR-B slice makes that runtime too, then AUTH-INV-04 becomes `enforced`.
 
 - **Most AUTH-INV-06 to AUTH-INV-09 evidence is `suite: "temporal-pass"`.**
   Those tests run under `npm run test:temporal-pass` and in

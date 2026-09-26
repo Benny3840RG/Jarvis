@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { executeGovernedQuoteSend } from "./activities/governedQuoteSend.js";
 import * as activities from "./activities/mockPassActivities.js";
 import { resolveWorkerDeploymentOptions } from "./buildIdentity.js";
+import { assertWorkerHoldsNoApprovalCredential } from "./workerAuthority.js";
 
 const dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -25,6 +26,13 @@ export async function createPassWorker(options: TemporalPassWorkerOptions = {}):
   // is set, so the existing torture tests are unchanged; when set it fails closed
   // on a missing or mutable build SHA rather than registering an unversioned worker.
   const workerDeploymentOptions = resolveWorkerDeploymentOptions(process.env);
+
+  // A versioned worker is the production posture (roadmap PR B, toward
+  // AUTH-INV-04): it must hold no approval credential. Fail closed before
+  // connecting. The unversioned torture-test path is unaffected.
+  if (workerDeploymentOptions) {
+    assertWorkerHoldsNoApprovalCredential(process.env);
+  }
 
   const connection = await NativeConnection.connect({ address });
 

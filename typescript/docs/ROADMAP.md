@@ -1,5 +1,41 @@
 # Jarvis TypeScript Roadmap
 
+## Acquisition plan, PR B (slice 2): runtime no-approval-credential guard (2026-09-25)
+
+PR B slice 1 (#618, immutable worker build identity) merged. This slice adds
+the first _runtime_ piece of AUTH-INV-04.
+
+`src/preview/temporalPass/temporal/workerAuthority.ts`:
+`assertWorkerHoldsNoApprovalCredential(env)` throws `WorkerAuthorityError` if
+`JARVIS_APPROVAL_TOKEN` or `JARVIS_APPROVAL_TOKEN_PREVIOUS` is set (blank or
+whitespace counts as unset). `worker.ts` calls it before connecting, but only
+when versioning is on (`resolveWorkerDeploymentOptions` returned options) — the
+production posture — so the unversioned torture tests are unchanged. A versioned
+worker that carries an approval credential now fails closed at startup instead
+of trusting that the token "isn't used" (JARVIS-007).
+
+The guard names the approval-token env vars, so the AUTH-INV-04 preview scan in
+`tests/authorityContract.test.ts` now allowlists it alongside the two governed
+approval-boundary modules, with a narrowness check: any _other_ preview module
+naming the token still fails the scan, and removing the guard from the allowlist
+trips it (both mutation-checked). `tests/temporalWorkerAuthority.test.ts` (4
+cases) runs in `npm run check`; it is added as AUTH-INV-04 evidence.
+
+AUTH-INV-04 stays `guarded` (PR B): this is the "no approval credential" half.
+The other half — activities reach external effects only through the governed
+boundary — is still a static reference scan. Promoting AUTH-INV-04 to `enforced`
+waits on a runtime guarantee for that half.
+
+Next in PR B (needs the Temporal test server):
+
+1. #572 torture histories as replay fixtures; deterministic old-history/new-code
+   replay in CI.
+2. v1 -> v2 -> rollback proof with worker versioning.
+3. Runtime governed-boundary guarantee for activities, then move AUTH-INV-04 to
+   `enforced`.
+4. Decide whether the `temporal-pass` job runs on every PR (it gates
+   AUTH-INV-06..09).
+
 ## Acquisition plan, PR B (first slice): immutable Temporal worker build identity (2026-09-25)
 
 PR A merged (#617). Starting PR B with the piece that everything else in it
