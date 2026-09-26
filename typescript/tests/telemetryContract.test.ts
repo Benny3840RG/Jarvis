@@ -5,6 +5,7 @@ import {
   correlationOf,
   isSensitiveTelemetryKey,
   REDACTED,
+  reconstructMissionChain,
   redactTelemetryAttributes,
   TELEMETRY_CORRELATION_FIELDS,
 } from "../src/observability/telemetryContract.js";
@@ -33,6 +34,39 @@ describe("telemetry correlation fields", () => {
       runId: "r1",
       workerBuildId: "jarvis-temporal-pass.abc",
     });
+  });
+});
+
+describe("mission chain reconstruction", () => {
+  it("joins only the events sharing the given missionId, in order, with their correlation ids", () => {
+    const events = [
+      { missionId: "m1", workflowId: "w1", stage: "request" },
+      { missionId: "m2", workflowId: "w9", stage: "request" },
+      { missionId: "m1", workflowId: "w1", runId: "r1", toolCallId: "t1", stage: "tool" },
+      { stage: "no-mission" },
+      { missionId: "m1", workflowId: "w1", runId: "r1", effectId: "e1", stage: "effect" },
+    ];
+    const chain = reconstructMissionChain(events, "m1");
+    assert.deepEqual(
+      chain.map((link) => link.event.stage),
+      ["request", "tool", "effect"],
+    );
+    assert.deepEqual(chain[0]?.correlation, { missionId: "m1", workflowId: "w1" });
+    assert.deepEqual(chain[2]?.correlation, {
+      missionId: "m1",
+      workflowId: "w1",
+      runId: "r1",
+      effectId: "e1",
+    });
+    // A different mission's events and an unattributed event are never swept in.
+    assert.equal(
+      chain.some((link) => link.event.stage === "no-mission" || link.event.missionId === "m2"),
+      false,
+    );
+  });
+
+  it("returns an empty chain when no event names the mission", () => {
+    assert.deepEqual(reconstructMissionChain([{ missionId: "m1" }, { stage: "x" }], "m2"), []);
   });
 });
 
