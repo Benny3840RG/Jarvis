@@ -1,5 +1,7 @@
 import { Client, Connection } from "@temporalio/client";
 
+import { resolveTemporalEnvironment } from "./environment.js";
+
 export interface TemporalClientOptions {
   address?: string;
   namespace?: string;
@@ -10,8 +12,9 @@ export interface TemporalClientOptions {
  * directly is not a real constructor shape in this SDK version.
  */
 export async function createTemporalClient(options: TemporalClientOptions = {}): Promise<Client> {
-  const address = options.address ?? process.env.TEMPORAL_ADDRESS ?? "localhost:7233";
-  const namespace = options.namespace ?? process.env.TEMPORAL_NAMESPACE ?? "default";
+  const environment = resolveTemporalEnvironment(process.env);
+  const address = options.address ?? environment.address;
+  const namespace = options.namespace ?? environment.namespace;
   const connection = await Connection.connect({ address });
   return new Client({ connection, namespace });
 }
