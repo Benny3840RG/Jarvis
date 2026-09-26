@@ -226,11 +226,12 @@ describe("GitHub read-plane App auth (PR F, auth/network slice)", () => {
         label: "an unrequested read permission",
         overrides: { permissions: { metadata: "read", administration: "read" } },
       },
-      // Unproven scope: fields omitted entirely must fail closed, not pass.
+      // Unproven scope: repository_selection / permissions omitted must fail
+      // closed. (repositories may legitimately be absent — covered separately.)
       { label: "missing repository_selection", overrides: { repository_selection: undefined } },
-      { label: "missing repositories", overrides: { repositories: undefined } },
-      { label: "empty repositories", overrides: { repositories: [] } },
       { label: "missing permissions", overrides: { permissions: undefined } },
+      // A present repositories field must still be well-formed and matching.
+      { label: "empty repositories", overrides: { repositories: [] } },
       {
         // A repositories entry with no full_name proves nothing.
         label: "a repository entry without full_name",
@@ -245,6 +246,16 @@ describe("GitHub read-plane App auth (PR F, auth/network slice)", () => {
         label,
       );
     }
+  });
+
+  it("accepts a valid down-scoped token whose response omits the repositories list", async () => {
+    // GitHub does not guarantee `repositories` on the token response; a
+    // `selected` token with read-only permissions and no repository list must
+    // NOT be rejected (requiring the list would break valid down-scoped tokens).
+    const fakeFetch = (async () =>
+      scopedTokenResponse({ repositories: undefined })) as typeof globalThis.fetch;
+    const token = await mintInstallationToken({ config, fetch: fakeFetch });
+    assert.equal(token.token, "ghs_installation_secret");
   });
 
   it("throws a redacted error on a failed token request — never the key or token", async () => {

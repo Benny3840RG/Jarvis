@@ -129,19 +129,26 @@ function appJwt(config: GithubAppReadConfig, now: Date): string {
 
 /**
  * Validate that the minted token's returned scope is no broader than requested,
- * fail-closed on every field:
+ * fail-closed:
  *
  *   - `repository_selection` must be present and exactly `selected` (never `all`).
- *   - `repositories` must be a non-empty array in which every entry's
- *     `full_name` matches the configured `owner/repo` exactly (case-insensitive)
- *     — the owner is checked, not just the repo name, so a same-named repo under
- *     another owner is refused.
+ *     This alone proves the token is not installation-wide; the token was minted
+ *     from this module's request scoped to the one configured repository, so a
+ *     `selected` token cannot cover a repository we did not request.
+ *   - `repositories`, *when the response includes it*, must be a non-empty array
+ *     in which every entry's `full_name` matches the configured `owner/repo`
+ *     exactly (case-insensitive) — the owner is checked, not just the repo name,
+ *     so a same-named repo under another owner is refused. GitHub does not
+ *     guarantee this list on the token response, so its absence is not itself a
+ *     failure (requiring it would reject otherwise-valid down-scoped tokens); a
+ *     present-but-empty or mismatched list is.
  *   - `permissions` must be present, and every key must be one this module
  *     requested ({@link GITHUB_READ_TOKEN_PERMISSIONS}) with the value `read`.
  *     An unrequested key — even at `read` — is refused.
  *
- * A response that omits any of these fields proves nothing about the token's
- * scope and is refused. Throws a redacted {@link GithubReadAuthError} otherwise.
+ * A response that omits `repository_selection` or `permissions` proves nothing
+ * about the token's scope and is refused. Throws a redacted
+ * {@link GithubReadAuthError} otherwise.
  */
 function assertTokenScope(
   body: { repository_selection?: unknown; repositories?: unknown; permissions?: unknown },
@@ -150,16 +157,21 @@ function assertTokenScope(
   if (body.repository_selection !== "selected") {
     throw new GithubReadAuthError("installation token was not scoped to a selected repository");
   }
-  if (!Array.isArray(body.repositories) || body.repositories.length === 0) {
-    throw new GithubReadAuthError("installation token repositories were missing or malformed");
-  }
-  const wanted = `${repository.owner}/${repository.repo}`.toLowerCase();
-  for (const entry of body.repositories) {
-    const fullName = (entry as { full_name?: unknown })?.full_name;
-    if (typeof fullName !== "string" || fullName.toLowerCase() !== wanted) {
-      throw new GithubReadAuthError(
-        "installation token was scoped beyond the configured repository",
-      );
+  // Validate the repository list when GitHub returns one; do not require it
+  // (the token response does not guarantee it, and `selected` already rules out
+  // an installation-wide token minted from our single-repository request).
+  if (body.repositories !== undefined) {
+    if (!Array.isArray(body.repositories) || body.repositories.length === 0) {
+      throw new GithubReadAuthError("installation token repositories were malformed");
+    }
+    const wanted = `${repository.owner}/${repository.repo}`.toLowerCase();
+    for (const entry of body.repositories) {
+      const fullName = (entry as { full_name?: unknown })?.full_name;
+      if (typeof fullName !== "string" || fullName.toLowerCase() !== wanted) {
+        throw new GithubReadAuthError(
+          "installation token was scoped beyond the configured repository",
+        );
+      }
     }
   }
   if (typeof body.permissions !== "object" || body.permissions === null) {
