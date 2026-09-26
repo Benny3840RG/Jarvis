@@ -31,6 +31,14 @@ function moduleSpecifiers(fileName: string, text: string): string[] {
       const literal = node.argument.literal;
       if (ts.isStringLiteralLike(literal)) specifiers.push(literal.text);
     } else if (
+      // `import sdk = require("@modelcontextprotocol/sdk")` — the CommonJS
+      // import-equals form, whose module reference must also be scanned or it
+      // would bypass this boundary check.
+      ts.isExternalModuleReference(node) &&
+      ts.isStringLiteralLike(node.expression)
+    ) {
+      specifiers.push(node.expression.text);
+    } else if (
       ts.isCallExpression(node) &&
       (node.expression.kind === ts.SyntaxKind.ImportKeyword ||
         (ts.isIdentifier(node.expression) && node.expression.text === "require")) &&
