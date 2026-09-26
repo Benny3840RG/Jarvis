@@ -42,7 +42,7 @@ function scopedTokenResponse(overrides: Record<string, unknown> = {}): Response 
       token: "ghs_installation_secret",
       expires_at: "2999-01-01T00:00:00Z",
       repository_selection: "selected",
-      repositories: [{ name: "Jarvis" }],
+      repositories: [{ full_name: "Benny3840RG/Jarvis" }],
       permissions: { metadata: "read", contents: "read", issues: "read", pull_requests: "read" },
       ...overrides,
     }),
@@ -205,13 +205,36 @@ describe("GitHub read-plane App auth (PR F, auth/network slice)", () => {
     assert.ok((claims.exp as number) - (claims.iat as number) <= 600);
   });
 
-  it("refuses a token whose returned scope is broader than requested", async () => {
+  it("refuses a token whose returned scope is broader than requested or unproven", async () => {
     const cases: Array<{ label: string; overrides: Record<string, unknown> }> = [
       { label: "all-repository selection", overrides: { repository_selection: "all" } },
-      { label: "a different repository", overrides: { repositories: [{ name: "OtherRepo" }] } },
+      {
+        label: "a different repository",
+        overrides: { repositories: [{ full_name: "Benny3840RG/OtherRepo" }] },
+      },
+      {
+        // Same repo NAME under a different owner must be refused (owner checked).
+        label: "a same-named repo under another owner",
+        overrides: { repositories: [{ full_name: "someone-else/Jarvis" }] },
+      },
       {
         label: "a write permission",
         overrides: { permissions: { contents: "read", issues: "write" } },
+      },
+      {
+        // A read permission this module never requested is still broader.
+        label: "an unrequested read permission",
+        overrides: { permissions: { metadata: "read", administration: "read" } },
+      },
+      // Unproven scope: fields omitted entirely must fail closed, not pass.
+      { label: "missing repository_selection", overrides: { repository_selection: undefined } },
+      { label: "missing repositories", overrides: { repositories: undefined } },
+      { label: "empty repositories", overrides: { repositories: [] } },
+      { label: "missing permissions", overrides: { permissions: undefined } },
+      {
+        // A repositories entry with no full_name proves nothing.
+        label: "a repository entry without full_name",
+        overrides: { repositories: [{ name: "Jarvis" }] },
       },
     ];
     for (const { label, overrides } of cases) {

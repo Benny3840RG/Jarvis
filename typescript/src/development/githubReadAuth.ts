@@ -128,39 +128,50 @@ function appJwt(config: GithubAppReadConfig, now: Date): string {
 }
 
 /**
- * Validate that the minted token's returned scope is no broader than requested:
- * the repository selection must be the explicit `selected` set covering only the
- * configured repository, and every returned permission must be `read`. Throws a
- * redacted {@link GithubReadAuthError} otherwise (fail-closed).
+ * Validate that the minted token's returned scope is no broader than requested,
+ * fail-closed on every field:
+ *
+ *   - `repository_selection` must be present and exactly `selected` (never `all`).
+ *   - `repositories` must be a non-empty array in which every entry's
+ *     `full_name` matches the configured `owner/repo` exactly (case-insensitive)
+ *     — the owner is checked, not just the repo name, so a same-named repo under
+ *     another owner is refused.
+ *   - `permissions` must be present, and every key must be one this module
+ *     requested ({@link GITHUB_READ_TOKEN_PERMISSIONS}) with the value `read`.
+ *     An unrequested key — even at `read` — is refused.
+ *
+ * A response that omits any of these fields proves nothing about the token's
+ * scope and is refused. Throws a redacted {@link GithubReadAuthError} otherwise.
  */
 function assertTokenScope(
   body: { repository_selection?: unknown; repositories?: unknown; permissions?: unknown },
   repository: GithubRepository,
 ): void {
-  if (body.repository_selection !== undefined && body.repository_selection !== "selected") {
+  if (body.repository_selection !== "selected") {
     throw new GithubReadAuthError("installation token was not scoped to a selected repository");
   }
-  if (body.repositories !== undefined) {
-    if (!Array.isArray(body.repositories)) {
-      throw new GithubReadAuthError("installation token repositories were malformed");
-    }
-    for (const entry of body.repositories) {
-      const name = (entry as { name?: unknown })?.name;
-      if (name !== repository.repo) {
-        throw new GithubReadAuthError(
-          "installation token was scoped beyond the configured repository",
-        );
-      }
+  if (!Array.isArray(body.repositories) || body.repositories.length === 0) {
+    throw new GithubReadAuthError("installation token repositories were missing or malformed");
+  }
+  const wanted = `${repository.owner}/${repository.repo}`.toLowerCase();
+  for (const entry of body.repositories) {
+    const fullName = (entry as { full_name?: unknown })?.full_name;
+    if (typeof fullName !== "string" || fullName.toLowerCase() !== wanted) {
+      throw new GithubReadAuthError(
+        "installation token was scoped beyond the configured repository",
+      );
     }
   }
-  if (body.permissions !== undefined) {
-    if (typeof body.permissions !== "object" || body.permissions === null) {
-      throw new GithubReadAuthError("installation token permissions were malformed");
+  if (typeof body.permissions !== "object" || body.permissions === null) {
+    throw new GithubReadAuthError("installation token permissions were missing or malformed");
+  }
+  const requested = new Set<string>(Object.keys(GITHUB_READ_TOKEN_PERMISSIONS));
+  for (const [key, level] of Object.entries(body.permissions as Record<string, unknown>)) {
+    if (!requested.has(key)) {
+      throw new GithubReadAuthError("installation token carried an unrequested permission");
     }
-    for (const level of Object.values(body.permissions as Record<string, unknown>)) {
-      if (level !== "read") {
-        throw new GithubReadAuthError("installation token carried a non-read permission");
-      }
+    if (level !== "read") {
+      throw new GithubReadAuthError("installation token carried a non-read permission");
     }
   }
 }
