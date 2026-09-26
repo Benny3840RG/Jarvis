@@ -1,5 +1,41 @@
 # Jarvis TypeScript Roadmap
 
+## Acquisition plan, PR C (slice 1): telemetry correlation + redaction contract (2026-09-26)
+
+PR B slices 1-3 merged (#618/#619/#620). PR B's remaining pieces (replay
+fixtures, v1->v2->rollback, the governed-boundary half of AUTH-INV-04) need a
+live Temporal dev server absent in this environment, so this session moves to
+PR C, which is server-free and fully testable in `npm run check`.
+
+Added `src/observability/telemetryContract.ts` (contract-first, like PR A;
+not yet wired into `posthog.ts`/`sentry.ts`):
+
+- `TELEMETRY_CORRELATION_FIELDS`: the canonical join keys (missionId, workflowId,
+  runId, candidateSha, approvalCycle, effectId, activityId, toolCallId,
+  agentSessionId, workerBuildId), so one mission's request -> decision -> agent
+  -> model -> tool -> activity -> effect chain can be reconstructed.
+- `isSensitiveTelemetryKey` + `redactTelemetryAttributes`: key-based redaction
+  that masks credentials/tokens, secrets, passwords, api keys,
+  authorization/bearer, cookies, prompts, full tool arguments and email/PII by
+  attribute key (recursively; correlation fields exempt; input not mutated).
+  This is complementary to the existing value-based secret redaction, not a
+  replacement.
+- `correlationOf`: extracts the correlation subset as the mission join key.
+
+`tests/telemetryContract.test.ts` (6 cases) runs in `npm run check`.
+
+Next in PR C (later slices):
+
+1. Route `posthog.ts`/`sentry.ts` (and future emitters) through
+   `redactTelemetryAttributes`, and attach `correlationOf(...)` to events.
+2. Prove the reconstruct gate: given one missionId, join the full chain.
+
+PR B remainder stays parked on a Temporal dev env:
+
+1. #572 histories as replay fixtures; deterministic replay in CI.
+2. v1 -> v2 -> rollback proof.
+3. Governed-boundary runtime guarantee -> AUTH-INV-04 `enforced`.
+
 ## Acquisition plan, PR B (slice 3): worker version visible in evidence (2026-09-26)
 
 PR B slices 1 (#618, immutable build identity) and 2 (#619, runtime
