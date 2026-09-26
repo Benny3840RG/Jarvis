@@ -74,6 +74,21 @@ describe("ACP wire framing (PR H, slice 2)", () => {
       JSON.stringify({ v: 1, kind: "permission_request", request: { action: "a" } }), // missing requestId
       JSON.stringify({ v: 1, kind: "permission_request", request: { requestId: "", action: "a" } }), // blank requestId
       JSON.stringify({ v: 1, kind: "permission_request", request: { requestId: "r", action: "" } }), // blank action
+      JSON.stringify({
+        v: 1,
+        kind: "permission_request",
+        request: { requestId: "   ", action: "a" },
+      }), // whitespace-only requestId
+      JSON.stringify({
+        v: 1,
+        kind: "permission_request",
+        request: { requestId: "r", action: "\t\n" },
+      }), // whitespace-only action
+      JSON.stringify({
+        v: 1,
+        kind: "permission_response",
+        response: { requestId: "  ", decision: "allow" },
+      }), // whitespace-only requestId
       JSON.stringify({ v: 1, kind: "permission_response", response: { requestId: "r" } }), // missing decision
       JSON.stringify({
         v: 1,

@@ -45,7 +45,9 @@ export function encodeAcpEnvelope(envelope: AcpWireEnvelope): string {
 }
 
 function nonEmptyString(value: unknown): value is string {
-  return typeof value === "string" && value.length > 0;
+  // Reject blank fields fail-closed: a whitespace-only value is not a usable
+  // requestId or action, so its trimmed length must be non-zero.
+  return typeof value === "string" && value.trim().length > 0;
 }
 
 /** Rebuild an {@link AcpPermissionRequest} from raw, or null if malformed. */
