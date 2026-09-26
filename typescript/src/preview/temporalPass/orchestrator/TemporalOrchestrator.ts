@@ -1,6 +1,7 @@
 import { Client, Connection } from "@temporalio/client";
 
 import type { ApprovalResponse, MissionIntent, MissionState } from "../types.js";
+import { resolveTemporalEnvironment } from "../temporal/environment.js";
 import {
   bennyApprovalSignal,
   getMissionStateQuery,
@@ -20,8 +21,9 @@ export class TemporalOrchestrator implements JarvisOrchestrator {
   private clientPromise: Promise<Client> | undefined;
 
   constructor(options: TemporalOrchestratorOptions = {}) {
-    const address = options.address ?? process.env.TEMPORAL_ADDRESS ?? "localhost:7233";
-    const namespace = options.namespace ?? process.env.TEMPORAL_NAMESPACE ?? "default";
+    const environment = resolveTemporalEnvironment(process.env);
+    const address = options.address ?? environment.address;
+    const namespace = options.namespace ?? environment.namespace;
     // A time-based default (e.g. `temporal-pass-${Date.now()}`) would make an
     // orchestrator and a worker started separately — the normal case outside
     // tests, which always pass an explicit taskQueue — silently disagree on
