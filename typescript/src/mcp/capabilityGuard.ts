@@ -26,8 +26,23 @@
  */
 import { MCP_TOOL_OPERATIONS } from "./operationContract.js";
 
-/** The complete set of tools a capability grant may name: the declared MCP surface. */
-export const GRANTABLE_MCP_TOOLS: ReadonlySet<string> = new Set(Object.keys(MCP_TOOL_OPERATIONS));
+// The complete set of tools a capability grant may name: the declared MCP
+// surface. Kept module-private and never exported — an exported `Set` (even
+// typed `ReadonlySet`) is only read-only to TypeScript and could be mutated at
+// runtime with `.add()`/`.clear()`, which would defeat the invariant that the
+// grantable universe is exactly the declared surface. Membership is exposed
+// through `isGrantableMcpTool` / `grantableMcpTools` instead.
+const GRANTABLE_MCP_TOOLS: ReadonlySet<string> = new Set(Object.keys(MCP_TOOL_OPERATIONS));
+
+/** Whether `tool` is part of the declared, grantable MCP surface. */
+export function isGrantableMcpTool(tool: string): boolean {
+  return GRANTABLE_MCP_TOOLS.has(tool);
+}
+
+/** The grantable MCP tools as a fresh sorted array — never the backing set. */
+export function grantableMcpTools(): string[] {
+  return [...GRANTABLE_MCP_TOOLS].sort();
+}
 
 export type McpCapabilityDecision =
   | Readonly<{ allowed: true }>

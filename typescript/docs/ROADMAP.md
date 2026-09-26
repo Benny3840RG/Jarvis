@@ -1,5 +1,16 @@
 # Jarvis TypeScript Roadmap
 
+## Acquisition plan, PR E (slice 1b): make the grantable MCP surface immutable (2026-09-26)
+
+Follow-up to slice 1 (#631). The independent review's medium finding —
+`GRANTABLE_MCP_TOOLS` was an exported `Set` typed `ReadonlySet`, mutable at
+runtime — landed correctly, but #631 merged at the pre-fix commit before the fix
+push was included, so main shipped the mutable export. This re-applies the fix as
+a fresh change: the set is module-private, and membership is exposed only through
+`isGrantableMcpTool()` and `grantableMcpTools()` (a fresh sorted copy), so there
+is no exported handle to `.add()`/`.clear()` the surface.
+`tests/mcpCapabilityGuard.test.ts` adds a runtime-mutation regression test.
+
 ## Acquisition plan, PR E (slice 1): McpCapabilityGuard core (2026-09-26)
 
 Adds the per-session capability guard AUTH-INV-03's gap names as missing

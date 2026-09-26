@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
-  GRANTABLE_MCP_TOOLS,
+  grantableMcpTools,
+  isGrantableMcpTool,
   McpCapabilityGuard,
   McpCapabilityGuardError,
 } from "../src/mcp/capabilityGuard.js";
@@ -20,9 +21,22 @@ describe("McpCapabilityGuard", () => {
 
   it("denies an empty grant everything (fail closed)", () => {
     const guard = new McpCapabilityGuard([]);
-    for (const tool of GRANTABLE_MCP_TOOLS) {
+    for (const tool of grantableMcpTools()) {
       assert.equal(guard.allows(tool), false, tool);
     }
+  });
+
+  it("does not let the grantable surface be mutated at runtime", () => {
+    // grantableMcpTools returns a copy; mutating it must not change membership,
+    // and there is no exported Set to .add()/.clear() the real surface.
+    const before = grantableMcpTools();
+    const snapshot = [...before];
+    before.push("smuggled_tool");
+    before.length = 0;
+    assert.equal(isGrantableMcpTool("smuggled_tool"), false);
+    assert.deepEqual(grantableMcpTools(), snapshot);
+    // A grant still cannot name the smuggled tool.
+    assert.throws(() => new McpCapabilityGuard(["smuggled_tool"]), McpCapabilityGuardError);
   });
 
   it("denies a tool that is not part of the MCP surface as unknown", () => {
