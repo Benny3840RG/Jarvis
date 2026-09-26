@@ -8,11 +8,14 @@
  *      {@link GITHUB_READ_PLANE_TOOLS} *and* pass {@link assertGitHubReadOnly}.
  *      A write/merge/approve name, or any name not on the allowlist, is refused
  *      before a token is minted or a request is dispatched (fail-closed).
- *   2. Egress — the target resolves against the hard-coded API origin and goes
- *      out through {@link guardedGitHubFetch}; an absolute off-origin path is
- *      refused, again before any token is minted.
- *   3. Auth — a short-lived installation token (dedicated read-only App) is
- *      minted at runtime, cached in memory for its lifetime only, and never
+ *   2. Path — the caller passes a tool and typed resource ids, never a raw path.
+ *      {@link buildGithubReadPath} constructs a path *fixed* to the one
+ *      configured repository; there is no way to point the client at another
+ *      repository or a non-repo endpoint. The built path resolves against the
+ *      hard-coded API origin and goes out through {@link guardedGitHubFetch}.
+ *   3. Auth — a short-lived installation token (dedicated read-only App),
+ *      explicitly down-scoped to the one repository with read-only permissions,
+ *      is minted at runtime, cached in memory for its lifetime only, and never
  *      persisted. It is never logged; rest errors carry only the HTTP status.
  *
  * The App credentials (including the private key) are never stored as a
@@ -41,8 +44,14 @@ import {
   type GithubAppReadConfig,
   type InstallationToken,
 } from "./githubReadAuth.js";
+import {
+  buildGithubReadPath,
+  type GithubReadParams,
+  type GithubRepository,
+} from "./githubReadEndpoints.js";
+import type { GitHubReadPlaneTool } from "./githubReadPlane.js";
 
-export type GithubReadRequest = Readonly<{ tool: string; path: string }>;
+export type GithubReadRequest = Readonly<{ tool: string; params?: GithubReadParams }>;
 
 export type GithubReadPlaneClientDeps = Readonly<{
   fetch?: typeof globalThis.fetch;
@@ -71,6 +80,9 @@ const TOKEN_REFRESH_MARGIN_MS = 60_000;
 export class GithubReadPlaneClient {
   readonly #fetch: typeof globalThis.fetch;
   readonly #now: () => Date;
+  // The bound repository is non-secret configuration; it is needed to build
+  // every request path, so it is held as internal (`#`) state.
+  readonly #repository: GithubRepository;
   // Captures the config (with the private key) in its closure. The config is
   // never a property of this object, so a dump cannot reach the key.
   readonly #tokenSource: () => Promise<InstallationToken>;
@@ -82,6 +94,7 @@ export class GithubReadPlaneClient {
     const mint = deps.mint ?? mintInstallationToken;
     this.#fetch = fetchImpl;
     this.#now = now;
+    this.#repository = config.repository;
     this.#tokenSource = () => mint({ config, fetch: fetchImpl, now });
   }
 
@@ -114,15 +127,23 @@ export class GithubReadPlaneClient {
   }
 
   /**
-   * Read one GitHub resource. `tool` must be an allowlisted read-plane tool and
-   * `path` must resolve to the approved API origin. Both are checked before any
+   * Read one GitHub resource. `tool` must be an allowlisted read-plane tool; the
+   * request path is built by {@link buildGithubReadPath}, fixed to the configured
+   * repository, so a caller cannot reach another repository or a non-repo
+   * endpoint. The tool check, path build, and origin assertion all run before any
    * token is minted or request dispatched. Returns the parsed JSON body.
    */
   async read(request: GithubReadRequest): Promise<unknown> {
     this.#assertReadPlaneTool(request.tool);
-    // Resolve the path against the API origin; an absolute off-origin URL keeps
-    // its own host and is refused by the egress assertion here — before auth.
-    const target = assertGitHubApiUrl(new URL(request.path, GITHUB_API_ORIGIN).toString());
+    // Build a repository-fixed path from the tool + typed params (throws on an
+    // unknown tool or bad params), then re-assert the API origin — all before
+    // auth. The client never accepts a caller-supplied raw path.
+    const path = buildGithubReadPath(
+      this.#repository,
+      request.tool as GitHubReadPlaneTool,
+      request.params,
+    );
+    const target = assertGitHubApiUrl(new URL(path, GITHUB_API_ORIGIN).toString());
 
     const token = await this.#token();
     const response = await guardedGitHubFetch(this.#fetch, target.toString(), {
