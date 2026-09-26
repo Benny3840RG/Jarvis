@@ -1,5 +1,28 @@
 # Jarvis TypeScript Roadmap
 
+## Acquisition plan, PR F (slice 1): GitHub read-plane safety contract (2026-09-26)
+
+Contract-first slice delivering PR F's gate ("merge and write tools do not
+exist") before any live GitHub wiring. `src/development/githubReadPlane.ts`
+declares `GITHUB_READ_PLANE_TOOLS` (the read-only tools the plane may expose)
+and a fail-closed classifier: a tool is read-only only if it starts with a read
+verb (get/list/search/read, after an optional `github` namespace token) and
+carries no mutation/authority token anywhere; `assertGitHubReadOnly` refuses
+everything else. Unrecognised names are treated as writes.
+
+`tests/githubReadPlane.test.ts` proves every declared tool is read-only; that
+merge/create/update/delete/approve/comment/dispatch/push names — including a
+`get_and_merge` name that starts with a read verb but hides a merge token — are
+refused and absent from the allowlist; and that empty/unknown names fail closed.
+
+Scope boundary (stated): no live GitHub API calls, no credentials, no network —
+this freezes the reads-only boundary the future live wiring must obey (expose
+only `GITHUB_READ_PLANE_TOOLS`; route candidate names through
+`assertGitHubReadOnly`). Merging/approving stay owner-only via the governed
+boundary (AUTH-INV-01); acquiring GitHub reads must not open a side door around
+that. The live read wiring — and its GitHub auth/credential + network decision —
+is a later slice, deliberately deferred.
+
 ## Acquisition plan, PR E (slice 2): enforce the capability guard at the callTool boundary (2026-09-26)
 
 Wires McpCapabilityGuard into the live MCP server, per Benny's decision: the
