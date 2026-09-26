@@ -15,11 +15,20 @@
  *      minted at runtime, cached in memory for its lifetime only, and never
  *      persisted. It is never logged; rest errors carry only the HTTP status.
  *
+ * The App credentials (including the private key) are never stored as a
+ * property of this object: they are captured in the token-source closure, so
+ * they are unreachable via inspection, serialization, or config output. A TS
+ * `private` modifier is compile-time only and would not achieve that. Internal
+ * state uses ECMAScript `#` private fields, and `toJSON`/`inspect` are redacted,
+ * so neither the config nor the in-memory token can leak through a dump.
+ *
  * This client exposes reads only — it has, by construction and by test
  * (`tests/githubReadPlaneSurface.test.ts`), no write, merge, or approve method.
  * Typed per-endpoint helpers can be layered on `read()` later; the boundary is
  * what this slice freezes.
  */
+
+import { inspect } from "node:util";
 
 import {
   assertGitHubReadOnly,
@@ -60,21 +69,23 @@ export class GitHubReadRestError extends Error {
 const TOKEN_REFRESH_MARGIN_MS = 60_000;
 
 export class GithubReadPlaneClient {
-  private readonly fetchImpl: typeof globalThis.fetch;
-  private readonly now: () => Date;
-  private readonly mint: NonNullable<GithubReadPlaneClientDeps["mint"]>;
-  private cachedToken: InstallationToken | undefined;
+  readonly #fetch: typeof globalThis.fetch;
+  readonly #now: () => Date;
+  // Captures the config (with the private key) in its closure. The config is
+  // never a property of this object, so a dump cannot reach the key.
+  readonly #tokenSource: () => Promise<InstallationToken>;
+  #cachedToken: InstallationToken | undefined;
 
-  constructor(
-    private readonly config: GithubAppReadConfig,
-    deps: GithubReadPlaneClientDeps = {},
-  ) {
-    this.fetchImpl = deps.fetch ?? globalThis.fetch;
-    this.now = deps.now ?? (() => new Date());
-    this.mint = deps.mint ?? mintInstallationToken;
+  constructor(config: GithubAppReadConfig, deps: GithubReadPlaneClientDeps = {}) {
+    const fetchImpl = deps.fetch ?? globalThis.fetch;
+    const now = deps.now ?? (() => new Date());
+    const mint = deps.mint ?? mintInstallationToken;
+    this.#fetch = fetchImpl;
+    this.#now = now;
+    this.#tokenSource = () => mint({ config, fetch: fetchImpl, now });
   }
 
-  private assertReadPlaneTool(tool: string): void {
+  #assertReadPlaneTool(tool: string): void {
     // Fail-closed: must be a declared read-plane tool AND classify as read-only.
     if (!(GITHUB_READ_PLANE_TOOLS as readonly string[]).includes(tool)) {
       throw new GitHubWriteForbiddenError(tool);
@@ -82,14 +93,24 @@ export class GithubReadPlaneClient {
     assertGitHubReadOnly(tool);
   }
 
-  private async token(): Promise<string> {
-    const current = this.cachedToken;
-    if (current && current.expiresAt.getTime() - this.now().getTime() > TOKEN_REFRESH_MARGIN_MS) {
+  async #token(): Promise<string> {
+    const current = this.#cachedToken;
+    if (current && current.expiresAt.getTime() - this.#now().getTime() > TOKEN_REFRESH_MARGIN_MS) {
       return current.token;
     }
-    const minted = await this.mint({ config: this.config, fetch: this.fetchImpl, now: this.now });
-    this.cachedToken = minted;
+    const minted = await this.#tokenSource();
+    this.#cachedToken = minted;
     return minted.token;
+  }
+
+  /** Redact on serialization — never expose the in-memory token or any credential. */
+  toJSON(): { redacted: true } {
+    return { redacted: true };
+  }
+
+  /** Redact on `util.inspect`/`console.log` for the same reason. */
+  [inspect.custom](): string {
+    return "GithubReadPlaneClient { redacted }";
   }
 
   /**
@@ -98,13 +119,13 @@ export class GithubReadPlaneClient {
    * token is minted or request dispatched. Returns the parsed JSON body.
    */
   async read(request: GithubReadRequest): Promise<unknown> {
-    this.assertReadPlaneTool(request.tool);
+    this.#assertReadPlaneTool(request.tool);
     // Resolve the path against the API origin; an absolute off-origin URL keeps
     // its own host and is refused by the egress assertion here — before auth.
     const target = assertGitHubApiUrl(new URL(request.path, GITHUB_API_ORIGIN).toString());
 
-    const token = await this.token();
-    const response = await guardedGitHubFetch(this.fetchImpl, target.toString(), {
+    const token = await this.#token();
+    const response = await guardedGitHubFetch(this.#fetch, target.toString(), {
       method: "GET",
       headers: {
         Accept: "application/vnd.github+json",

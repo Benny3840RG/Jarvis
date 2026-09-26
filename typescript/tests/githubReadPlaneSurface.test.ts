@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { generateKeyPairSync } from "node:crypto";
 import { describe, it } from "node:test";
+import { inspect } from "node:util";
 
 import {
   GITHUB_READ_PLANE_TOOLS,
@@ -68,6 +69,32 @@ describe("GitHub read-plane surface (PR F, auth/network slice)", () => {
           `client method ${method} must not contain "${verb}"`,
         );
       }
+    }
+  });
+
+  it("never exposes the App private key or a minted token via serialization, inspection, or enumeration", async () => {
+    const fakeFetch = (async () =>
+      new Response(JSON.stringify({ ok: true }), { status: 200 })) as typeof globalThis.fetch;
+    const client = new GithubReadPlaneClient(config, {
+      fetch: fakeFetch,
+      // Mint a recognisable token so we can prove it never surfaces either.
+      mint: async () =>
+        Object.freeze({ token: "ghs_secret_token", expiresAt: new Date("2999-01-01T00:00:00Z") }),
+    });
+    // Trigger a read so a token is cached in memory.
+    await client.read({ tool: "github_get_issue", path: "/repos/o/r/issues/1" });
+
+    const serialized = JSON.stringify(client);
+    const inspected = inspect(client, { depth: null });
+    for (const dump of [serialized, inspected]) {
+      assert.doesNotMatch(dump, /PRIVATE KEY/, dump);
+      assert.doesNotMatch(dump, /ghs_secret_token/, dump);
+    }
+    // No enumerable own property carries the config or token.
+    assert.deepEqual(Object.keys(client), []);
+    for (const name of Object.getOwnPropertyNames(client)) {
+      const value = JSON.stringify((client as unknown as Record<string, unknown>)[name] ?? null);
+      assert.doesNotMatch(value, /PRIVATE KEY/, name);
     }
   });
 
