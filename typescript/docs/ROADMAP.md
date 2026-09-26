@@ -1,5 +1,22 @@
 # Jarvis TypeScript Roadmap
 
+## Acquisition plan, PR B: bind PASS-15 as AUTH-INV-04 evidence (2026-09-26)
+
+PASS-15 (#626) proved the worker-versioning half of AUTH-INV-04 at runtime but
+the authority contract did not yet record it. This slice adds a
+`suite: "temporal-pass"` evidence entry on AUTH-INV-04 citing
+`tests/pass/worker-versioning-ramp.test.ts`, so `tests/authorityContract.test.ts`
+now fails if that proof is deleted or renamed, and rewrites the invariant's
+`gap` to state precisely what is now runtime-proven (no-approval-credential +
+no-silent-code-migration) versus still static (the governed-boundary reference
+scan).
+
+AUTH-INV-04 stays **guarded**, not enforced: the governed-boundary half is still
+a static scan with no runtime enforcement point, and promoting the status would
+overclaim. That promotion remains PR B's last versioning-related item, gated on a
+runtime guarantee that a Temporal activity's real side effects can only cross the
+governed execution boundary (ΩΣ / ToolAction / claim / receipt / reconciliation).
+
 ## Acquisition plan, PR B: worker deployment versioning ramp proof (PASS-15) (2026-09-26)
 
 With local Temporal validation unblocked (#625 let the PASS Tier-1 tests reuse
