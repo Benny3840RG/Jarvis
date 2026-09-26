@@ -6,6 +6,12 @@ import {
   resolveTemporalEnvironment,
   TemporalEnvironmentError,
 } from "../src/preview/temporalPass/temporal/environment.js";
+import {
+  runTemporalReadiness,
+  validateTemporalSourceVersion,
+} from "../src/tools/runTemporalReadiness.js";
+
+const SHA = "a".repeat(40);
 
 describe("Temporal environment readiness", () => {
   it("uses local defaults without claiming an explicit environment exists", () => {
@@ -141,5 +147,29 @@ describe("Temporal environment readiness", () => {
         return true;
       },
     );
+  });
+
+  it("binds a readiness receipt to an exact source SHA without logging endpoint values", async () => {
+    const receipt = await runTemporalReadiness(
+      {
+        TEMPORAL_ADDRESS: "secret-host.internal:7233",
+        TEMPORAL_NAMESPACE: "private-namespace",
+      },
+      SHA.toUpperCase(),
+      async () => ({ close: () => undefined }),
+    );
+
+    assert.equal(receipt.sourceVersion, SHA);
+    assert.equal(receipt.stage, "reachable");
+    assert.equal(receipt.commissioned, false);
+    assert.equal(JSON.stringify(receipt).includes("secret-host"), false);
+    assert.equal(JSON.stringify(receipt).includes("private-namespace"), false);
+  });
+
+  it("requires exact source identity for readiness evidence", () => {
+    assert.equal(validateTemporalSourceVersion(SHA.toUpperCase()), SHA);
+    for (const invalid of ["main", SHA.slice(0, 12), `${SHA}0`, ""]) {
+      assert.throws(() => validateTemporalSourceVersion(invalid));
+    }
   });
 });
