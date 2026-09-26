@@ -44,7 +44,8 @@
     "test:node": "node --import tsx --test tests/*.test.ts jarvis-console-01/tests/*.test.ts",
     "test:convex": "vitest run --config vitest.config.mts --maxWorkers=1",
     "test:temporal-pass": "node --import tsx --test tests/pass/*.test.ts",
-    "outlook": "node --import tsx src/tools/runOutlookOnboarding.ts"
+    "outlook": "node --import tsx src/tools/runOutlookOnboarding.ts",
+    "temporal:readiness": "node --import tsx src/tools/runTemporalReadiness.ts"
   },
   "dependencies": {
     "@convex-dev/rate-limiter": "^0.4.0",
