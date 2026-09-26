@@ -1,5 +1,33 @@
 # Jarvis TypeScript Roadmap
 
+## Acquisition plan, PR H (slice 1): ACP transport seam (2026-09-26)
+
+Opens PR H (ACP transport) on the owner's direction to take the ACP path.
+Contract-first, transport-agnostic, no wire and no network — the concrete
+transport (stdio/HTTP) and its egress decision are a later slice (as with PR F).
+
+`src/acp/acpTransport.ts` adds the seam that carries a peer permission
+request/response and forces the answer through the AUTH-INV-05 gate:
+
+- `AcpTransport` — the interface a transport implements
+  (`requestPermission(request) → AcpPermissionResponse`); holds no authority.
+- `consultAcpPeer({ transport, request, governedApprovalPresent })` — calls the
+  transport, normalises the answer fail-closed, and routes it through
+  `resolveAcpAuthorization`. The raw answer is never returned as authorisation.
+- `InProcessAcpTransport` — a local, no-wire reference implementation for tests
+  and co-located agents.
+
+Fail-closed properties (tested in `tests/acpTransport.test.ts`): a well-formed
+`allow` is inert without governed approval; a `deny` vetoes even with it; a
+malformed/mismatched/thrown response is treated as `abstain`, so a broken or
+hostile transport can never manufacture an `allow` (authority still requires the
+governed approval) and can at most fail to veto.
+
+AUTH-INV-05 stays **planned**: nothing live routes through the seam yet — this is
+the abstraction the wire transport must implement. See
+`docs/architecture/acp-transport-seam.md`. Next H slice: a concrete wire
+transport + its network-egress decision, then wiring Claude/Codex onto ACP.
+
 ## Acquisition plan, PR F (auth/network hardening): scope the read plane to one repo (2026-09-26)
 
 Follow-up on the owner's review of the merged PR F auth/network slice (#636),
