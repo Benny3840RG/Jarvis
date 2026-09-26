@@ -5,6 +5,8 @@ import { toCanonicalString, VersioningBehavior } from "@temporalio/common";
 
 import {
   DEFAULT_DEPLOYMENT_NAME,
+  describeWorkerVersion,
+  formatWorkerVersionEvidence,
   isVersioningRequested,
   resolveWorkerBuildIdentity,
   resolveWorkerDeploymentOptions,
@@ -143,6 +145,30 @@ describe("Temporal worker build identity", () => {
           JARVIS_BUILD_SHA: "latest",
         }),
       WorkerBuildIdentityError,
+    );
+  });
+
+  it("describes an unversioned worker as evidence", () => {
+    const evidence = describeWorkerVersion(undefined);
+    assert.deepEqual(evidence, { versioned: false });
+    assert.equal(formatWorkerVersionEvidence(evidence), "unversioned");
+  });
+
+  it("describes a versioned worker with its canonical version as evidence", () => {
+    const options = resolveWorkerDeploymentOptions({
+      JARVIS_TEMPORAL_VERSIONING: "1",
+      JARVIS_BUILD_SHA: OTHER_SHA,
+    });
+    const evidence = describeWorkerVersion(options);
+    assert.deepEqual(evidence, {
+      versioned: true,
+      deploymentName: DEFAULT_DEPLOYMENT_NAME,
+      buildId: OTHER_SHA,
+      canonical: `${DEFAULT_DEPLOYMENT_NAME}.${OTHER_SHA}`,
+    });
+    assert.equal(
+      formatWorkerVersionEvidence(evidence),
+      `pinned ${DEFAULT_DEPLOYMENT_NAME}.${OTHER_SHA}`,
     );
   });
 });

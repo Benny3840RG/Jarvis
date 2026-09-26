@@ -15,7 +15,11 @@
  * `@temporalio/worker`, so `tests/temporalWorkerBuildIdentity.test.ts` can
  * exercise it in the `npm run check` suite without loading native worker code.
  */
-import { VersioningBehavior, type WorkerDeploymentVersion } from "@temporalio/common";
+import {
+  toCanonicalString,
+  VersioningBehavior,
+  type WorkerDeploymentVersion,
+} from "@temporalio/common";
 import type { WorkerDeploymentOptions } from "@temporalio/worker";
 
 /** A full 40-character git commit SHA, lower-cased. */
@@ -159,4 +163,33 @@ export function resolveWorkerDeploymentOptions(
     useWorkerVersioning: true,
     defaultVersioningBehavior: VersioningBehavior.PINNED,
   };
+}
+
+/**
+ * Evidence describing the version a worker registers under — so the roadmap
+ * PR-B gate "worker version is visible in evidence" is met. `unversioned` when
+ * versioning is off; otherwise the pinned deployment version plus Temporal's
+ * canonical `deploymentName.buildId` string.
+ */
+export type WorkerVersionEvidence =
+  | Readonly<{ versioned: false }>
+  | Readonly<{ versioned: true; deploymentName: string; buildId: string; canonical: string }>;
+
+/** Derive the version evidence from resolved deployment options (see `WorkerVersionEvidence`). */
+export function describeWorkerVersion(
+  options: WorkerDeploymentOptions | undefined,
+): WorkerVersionEvidence {
+  if (!options) return { versioned: false };
+  const { version } = options;
+  return {
+    versioned: true,
+    deploymentName: version.deploymentName,
+    buildId: version.buildId,
+    canonical: toCanonicalString(version),
+  };
+}
+
+/** A single log-line summary of the worker's version, for startup evidence. */
+export function formatWorkerVersionEvidence(evidence: WorkerVersionEvidence): string {
+  return evidence.versioned ? `pinned ${evidence.canonical}` : "unversioned";
 }
