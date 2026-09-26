@@ -1,5 +1,31 @@
 # Jarvis TypeScript Roadmap
 
+## Acquisition plan, PR F (auth/network slice): GitHub read-plane boundary (2026-09-26)
+
+Live-boundary slice for PR F, on the owner's auth/network decision. The acquired
+GitHub read plane authenticates as a **dedicated read-only GitHub App** (never
+the governed merge token `JARVIS_GITHUB_TOKEN`) and can reach exactly one host:
+
+- `src/development/githubReadEgress.ts` — hard-coded `GITHUB_API_ORIGIN`
+  (`https://api.github.com`); `assertGitHubApiUrl` refuses any other host,
+  scheme, port, embedded credential, or cross-host redirect (fail-closed);
+  `guardedGitHubFetch` forces `redirect: "error"` and re-checks the response
+  origin.
+- `src/development/githubReadAuth.ts` — `resolveGithubAppReadConfigFromEnv`
+  (fail-closed: null unless App id, installation id, and a PEM key are all
+  present; systemd credential file or inline); RS256 App-JWT signing;
+  `mintInstallationToken` mints a short-lived token over the egress guard and
+  never logs/persists the key or token (errors carry only the HTTP status).
+- `src/development/githubReadPlaneClient.ts` — binds the three boundaries:
+  allowlist + `assertGitHubReadOnly` tool check, egress-guarded target, and an
+  in-memory-only short-lived token. Reads only; no write/merge/approve method.
+
+Tests (`githubReadEgress`, `githubReadAuth`, `githubReadPlaneSurface`) prove both
+boundaries offline: the surface has no write/merge/approve op, and requests
+cannot escape `api.github.com`. Live use awaits Benny provisioning the App +
+egress allowlist (see `docs/architecture/github-read-plane-boundary.md`). The
+code merges dormant and fail-closed until then.
+
 ## Acquisition plan, PR G (slice 1): ACP authority contract (2026-09-26)
 
 Contract-first slice opening PR G (ACP transport abstraction). `src/acp/acpContract.ts`
