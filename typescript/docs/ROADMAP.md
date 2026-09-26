@@ -1,5 +1,31 @@
 # Jarvis TypeScript Roadmap
 
+## Acquisition plan, PR E (slice 1): McpCapabilityGuard core (2026-09-26)
+
+Adds the per-session capability guard AUTH-INV-03's gap names as missing
+("Checks the declared MCP-to-OpenAPI mapping by path name; no per-session
+capability guard yet"). `src/mcp/capabilityGuard.ts` is a fail-closed decision
+function: a session may invoke only the tools its granted capability set names;
+an unknown tool, a tool outside the grant, and an empty grant all deny.
+
+It cannot widen the MCP surface — the universe of grantable tools is exactly the
+keys of `MCP_TOOL_OPERATIONS` (already proven a strict OpenAPI subset carrying no
+approve/execute/revoke/merge/deploy operation), and constructing a guard with an
+unknown tool name throws rather than silently ignoring it, so a stale grant is a
+loud error, not a quiet hole. `tests/mcpCapabilityGuard.test.ts` is the
+adversarial suite: empty grant denies everything, case/whitespace variants and
+non-surface names deny as unknown, an authority operation can't even be granted,
+and a full grant still denies anything off-surface.
+
+Scope boundary (stated, not hidden): the guard is **not yet wired** into the
+live `callTool` path, so AUTH-INV-03 stays **guarded** and this is not cited as
+its evidence yet. Enforcement needs two things the next slice must decide and
+build — a per-session grant source (the HTTP transport runs with
+`sessionIdGenerator: undefined`, i.e. no session identity today; where a grant
+comes from — config, an auth-token claim — is a real design choice) and
+per-handler interception in `createJarvisMcpServer`. This slice lands the
+reusable, fully-tested decision core first.
+
 ## Acquisition plan, PR D (slice 1): MCP SDK behind a Jarvis adapter boundary (2026-09-26)
 
 Establishes the adapter boundary PR D calls for. `src/mcp/sdkAdapter.ts` is now
