@@ -52,7 +52,15 @@ export async function createPassTestEnv(): Promise<PassTestEnv> {
   const mockPassActivities =
     await import("../../../src/preview/temporalPass/temporal/activities/mockPassActivities.js");
 
-  const testEnv = await TestWorkflowEnvironment.createLocal();
+  // Use a pre-installed Temporal CLI when TEMPORAL_CLI_PATH is set (the same
+  // env var the Tier-2 ProcessHarness reads) instead of the SDK's default
+  // download from temporal.download. This lets the whole PASS suite run in
+  // offline or network-restricted environments; unset, behaviour is unchanged
+  // (the SDK fetches its cached dev-server download as before).
+  const cliPath = process.env.TEMPORAL_CLI_PATH?.trim();
+  const testEnv = await TestWorkflowEnvironment.createLocal(
+    cliPath ? { server: { executable: { type: "existing-path", path: cliPath } } } : {},
+  );
   const taskQueue = `temporal-pass-test-${runId}`;
 
   const worker = await Worker.create({

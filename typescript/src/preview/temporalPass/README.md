@@ -115,6 +115,16 @@ spin up/kill a real local dev server for the Tier 2 tests below).
 npm run test:temporal-pass
 ```
 
+In an offline or network-restricted environment, the Tier 1 tests would
+otherwise fail because `@temporalio/testing` downloads its dev-server binary
+from `temporal.download`. Set `TEMPORAL_CLI_PATH` to a pre-installed Temporal
+CLI (the same variable the Tier 2 harness reads) and both tiers reuse it
+instead of downloading:
+
+```bash
+TEMPORAL_CLI_PATH=/path/to/temporal npm run test:temporal-pass
+```
+
 Two tiers:
 
 - **Tier 1** (`duplicate-signal`, `side-effect`, `latest-candidate`,
