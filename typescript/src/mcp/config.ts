@@ -15,6 +15,13 @@ export type JarvisMcpConfig = {
   host: string;
   port: number;
   allowedOrigins?: readonly string[];
+  /**
+   * The deployment's static MCP capability ceiling: the tools a session may
+   * invoke. Unset means the whole declared surface (behaviour unchanged); a set
+   * value only narrows it. Validated against the declared surface when resolved
+   * into a guard (`resolveMcpCapabilityGrant`).
+   */
+  capabilities?: readonly string[];
   api: JarvisApiConfig;
 };
 
@@ -163,11 +170,31 @@ function resolveApiBaseUrl(env: NodeJS.ProcessEnv): URL {
   return url;
 }
 
+/**
+ * Parse `JARVIS_MCP_CAPABILITIES` (a comma-separated tool allowlist) into a
+ * deduped list, or `undefined` when unset (the whole surface is granted).
+ * Membership against the declared surface is validated later by
+ * `resolveMcpCapabilityGrant`.
+ */
+function parseCapabilities(value: string | undefined): readonly string[] | undefined {
+  const raw = optionalText(value);
+  if (raw === undefined) return undefined;
+  return [
+    ...new Set(
+      raw
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean),
+    ),
+  ];
+}
+
 export function resolveJarvisMcpConfig(env: NodeJS.ProcessEnv = process.env): JarvisMcpConfig {
   return {
     host: resolveHost(env),
     port: parsePort(env.JARVIS_MCP_PORT),
     allowedOrigins: parseAllowedOrigins(env.JARVIS_MCP_ALLOWED_ORIGINS),
+    capabilities: parseCapabilities(env.JARVIS_MCP_CAPABILITIES),
     api: {
       baseUrl: resolveApiBaseUrl(env),
       serviceToken: requiredSecret(env.JARVIS_SERVICE_TOKEN, "JARVIS_SERVICE_TOKEN"),

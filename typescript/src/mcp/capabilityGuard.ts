@@ -87,3 +87,26 @@ export class McpCapabilityGuard {
     return [...this.granted].sort();
   }
 }
+
+/**
+ * Resolve the deployment's static capability ceiling into a concrete grant set
+ * to feed a guard. An unset `capabilities` means the whole declared surface is
+ * granted (behaviour unchanged from before any allowlist), so a deployment only
+ * narrows the surface by opting in. Every configured entry must be a grantable
+ * tool — an unknown one throws rather than being silently ignored.
+ *
+ * This is the static half of the eventual
+ * `effectiveGrant = configuredCeiling ∩ sessionGrant`: a later session-scoped
+ * grant can only ever narrow what this returns, never widen it.
+ */
+export function resolveMcpCapabilityGrant(capabilities?: readonly string[]): string[] {
+  if (capabilities === undefined) return grantableMcpTools();
+  for (const tool of capabilities) {
+    if (!isGrantableMcpTool(tool)) {
+      throw new McpCapabilityGuardError(
+        `Configured MCP capability "${tool}" is not part of the declared MCP surface.`,
+      );
+    }
+  }
+  return [...new Set(capabilities)];
+}

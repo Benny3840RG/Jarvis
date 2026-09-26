@@ -1,5 +1,39 @@
 # Jarvis TypeScript Roadmap
 
+## Acquisition plan, PR E (slice 2): enforce the capability guard at the callTool boundary (2026-09-26)
+
+Wires McpCapabilityGuard into the live MCP server, per Benny's decision: the
+deployment's static config is the hard capability ceiling
+(`configured tools → guard → callTool → allow/deny`), built so the grant source
+is replaceable later (`effectiveGrant = configuredCeiling ∩ sessionGrant` when
+session auth arrives — a token can only narrow, never widen).
+
+- `config.ts`: `JarvisMcpConfig.capabilities` + `JARVIS_MCP_CAPABILITIES` env
+  (comma allowlist). Unset ⇒ whole surface (behaviour unchanged); set ⇒ narrows.
+- `capabilityGuard.ts`: `resolveMcpCapabilityGrant(capabilities?)` resolves the
+  ceiling to a concrete grant (default = whole surface; unknown tool throws).
+- `guardedMcpServer.ts`: `bindCapabilityGuard(server, guard)` wraps
+  `server.registerTool` once, so every tool (all 64 `registerAppTool` calls, no
+  per-tool edits) is guarded; a denied call returns `isError` and never runs the
+  real handler, so it never reaches the operator API. Per Benny's requirement,
+  the guard is **fed a resolved grant** — it does no config lookup — preserving
+  the seam for session-scoped grants.
+- `server.ts` / `httpServer.ts`: `createJarvisMcpServer(client, guard?)`; the
+  HTTP entrypoint resolves the guard once at startup (fail fast on a bad
+  allowlist) and passes it in. Callers without a guard (unit tests) keep the
+  full surface, so the 91 existing MCP tests pass unchanged.
+
+`tests/mcpCapabilityEnforcement.test.ts` proves a denied tool's handler never
+runs and the caller gets an error, a granted tool works, config parsing, and
+grant resolution/validation. AUTH-INV-03 gains this as evidence.
+
+AUTH-INV-03 stays **guarded**, not enforced: the per-session guard is now real
+and enforced, but the MCP-to-OpenAPI subset mapping it also rests on is still a
+name-based static check, so promoting the whole invariant would overclaim.
+Next: the auth-token session grant (`∩ sessionGrant`) is deferred until session
+identity/authentication has its own authority contract — a deliberately
+separate design, not this slice.
+
 ## Acquisition plan, PR E (slice 1b): make the grantable MCP surface immutable (2026-09-26)
 
 Follow-up to slice 1 (#631). The independent review's medium finding —
