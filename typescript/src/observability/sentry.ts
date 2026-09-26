@@ -1,5 +1,7 @@
 import { randomUUID } from "node:crypto";
 
+import { isSensitiveTelemetryKey, REDACTED } from "./telemetryContract.js";
+
 export type SentryEvent = {
   type: "error" | "transaction";
   event_id: string;
@@ -171,11 +173,23 @@ function tagsFor(context: SentryContext): Record<string, string> {
     request_id: context.requestId,
     ...context.tags,
   };
-  return Object.fromEntries(
-    Object.entries(candidates)
-      .map(([key, value]) => [key, safeTag(value)])
-      .filter((entry): entry is [string, string] => entry[1] !== undefined),
-  );
+  const tags: Record<string, string> = {};
+  for (const [key, value] of Object.entries(candidates)) {
+    if (value === undefined) continue;
+    // Key-based redaction (PR C): a sensitively-named tag from any caller is
+    // masked at the emit boundary rather than trusted to be absent — the same
+    // policy the PostHog emitter applies. This complements the value-based
+    // secret redaction on error messages: a value that would pass the tag
+    // charset filter still cannot leave under a sensitive name. The mask is a
+    // deliberate marker, so it bypasses the SAFE_TAG value filter below.
+    if (isSensitiveTelemetryKey(key)) {
+      tags[key] = REDACTED;
+      continue;
+    }
+    const safe = safeTag(value);
+    if (safe !== undefined) tags[key] = safe;
+  }
+  return tags;
 }
 
 function errorDetails(error: unknown, secrets: readonly string[]): { type: string; value: string } {

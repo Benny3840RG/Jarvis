@@ -1,5 +1,26 @@
 # Jarvis TypeScript Roadmap
 
+## Acquisition plan, PR C (slice 3): route the Sentry emitter through key-based redaction (2026-09-26)
+
+Mirrors the PostHog wiring (#623) for the second emitter. `sentry.ts`'s
+`tagsFor` now masks any sensitively-named tag (`isSensitiveTelemetryKey`) with
+the contract's `REDACTED` marker before the tag charset filter, so a caller's
+`serviceToken`/`authorization`/`apiKey` tag cannot leave under a sensitive name
+even when its value would pass the charset filter. This complements the existing
+value-based secret redaction on error messages (known-secret strings in free
+text); the two are orthogonal. Reserved tags (operation, route, method,
+request_id, outcome) are never sensitive and are unaffected.
+
+Scope note: measurements stay as-is — they are numeric and keyed by a
+charset-validated name, so a number under a sensitive name is not a secret leak.
+`tests/sentry.test.ts` adds a case asserting a `serviceToken` tag whose value
+would pass the charset filter is masked while a benign `region`/`shard` tag
+survives.
+
+Remaining in PR C: attach `correlationOf(...)` to emitted events and prove the
+reconstruct-from-missionId gate (given one missionId, join the full
+request→decision→agent→tool→activity→effect chain).
+
 ## Acquisition plan, PR B: bind PASS-15 as AUTH-INV-04 evidence (2026-09-26)
 
 PASS-15 (#626) proved the worker-versioning half of AUTH-INV-04 at runtime but
