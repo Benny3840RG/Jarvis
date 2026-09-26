@@ -1,5 +1,38 @@
 # Jarvis TypeScript Roadmap
 
+## Acquisition plan, PR H (slice 3): ACP stdio transport (2026-09-26)
+
+The first concrete `AcpTransport`, on the owner's decision: consult a locally
+launched worker (Claude/Codex) over its stdin/stdout using the slice-2 framing.
+**Networkless** — no HTTP, listeners, ports, or egress. (The worker's own
+model/API egress is a separate governed concern and is untouched here.)
+
+`src/acp/acpStdioTransport.ts`:
+
+- `StdioAcpTransport` (implements `AcpTransport`) — spawns a fresh child per
+  request, writes the framed `permission_request`, and resolves only with a
+  response it decoded via `decodeAcpEnvelope` whose kind is `permission_response`
+  and whose `requestId` matches. Everything else rejects fail-closed: malformed/
+  non-JSON output, a mismatched id, a flood beyond `maxResponseLines`, a timeout
+  (`DEFAULT_ACP_STDIO_TIMEOUT_MS`, injectable), or the child closing/crashing
+  first. Lifecycle: the child is killed on settle.
+- `spawnAcpChild` — the live adapter over `node:child_process` (stdin/stdout
+  piped for frames, stderr inherited so worker logs can't contaminate framing).
+  Not exercised by the offline tests, like PR F's live wiring.
+
+AUTH-INV-05 preserved exactly: a rejection becomes `abstain` via `consultAcpPeer`,
+so untrusted child output can never manufacture an `allow` (advisory, needs
+governed approval); `deny` stays a veto. `tests/acpStdioTransport.test.ts` proves
+allow+governed authorises, allow-alone does not, deny vetoes, contamination is
+ignored, and mismatched/garbage/flood/crash/timeout all fail closed
+(authorised=false without governed approval). Still **planned**, not promoted:
+wiring real Claude/Codex workers onto this is the step that makes AUTH-INV-05
+live.
+
+Next H: wire the launched workers to this transport (real `spawnAcpChild`
+worker command + lifecycle ownership), which needs owner sign-off on the worker
+launch/config; the transport itself is done and networkless.
+
 ## Acquisition plan, PR H (slice 2): ACP wire framing contract (2026-09-26)
 
 PR H slice 1 (ACP transport seam, #638) merged. This slice adds the
