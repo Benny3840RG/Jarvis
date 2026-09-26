@@ -94,6 +94,31 @@ describe("ACP transport seam (PR H, slice 1)", () => {
     }
   });
 
+  it("fails closed to abstain when a response getter throws (hostile object/Proxy)", async () => {
+    // A returned object whose property access throws must normalise to abstain,
+    // not propagate as a rejection.
+    const hostile = {
+      get requestId(): string {
+        throw new Error("boom");
+      },
+      get decision(): string {
+        throw new Error("boom");
+      },
+    };
+    const withoutGoverned = await consultAcpPeer({
+      transport: fixedTransport(hostile),
+      request: REQUEST,
+      governedApprovalPresent: false,
+    });
+    assert.equal(withoutGoverned.authorised, false);
+    const withGoverned = await consultAcpPeer({
+      transport: fixedTransport(hostile),
+      request: REQUEST,
+      governedApprovalPresent: true,
+    });
+    assert.equal(withGoverned.authorised, true);
+  });
+
   it("never lets the transport response authorise without the governed gate", async () => {
     // Even a well-formed allow is inert on its own — the gate decides.
     const outcome = await consultAcpPeer({

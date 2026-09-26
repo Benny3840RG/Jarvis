@@ -95,14 +95,16 @@ export type ConsultAcpPeerInput = Readonly<{
  * cannot block a governed-approved action nor manufacture one.
  */
 export async function consultAcpPeer(input: ConsultAcpPeerInput): Promise<AcpAuthorizationOutcome> {
-  let raw: unknown;
+  let acp: AcpPermissionResponse;
   try {
-    raw = await input.transport.requestPermission(input.request);
+    // Normalise inside the guard: a transport that throws, OR a returned object
+    // whose `requestId`/`decision`/`reason` getters throw (a hostile Proxy),
+    // both fall through to abstain — never a rejection, never allow/deny.
+    const raw = await input.transport.requestPermission(input.request);
+    acp = normaliseResponse(raw, input.request);
   } catch {
-    // The transport failed; treat the peer as abstaining (never allow/deny).
-    raw = undefined;
+    acp = { requestId: input.request.requestId, decision: "abstain" };
   }
-  const acp = normaliseResponse(raw, input.request);
   return resolveAcpAuthorization({ acp, governedApprovalPresent: input.governedApprovalPresent });
 }
 
