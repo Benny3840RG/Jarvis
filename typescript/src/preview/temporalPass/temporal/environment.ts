@@ -27,9 +27,7 @@ export type TemporalReadinessConnection = Readonly<{
   close(): Promise<void> | void;
 }>;
 
-export type TemporalReadinessConnector = (
-  address: string,
-) => Promise<TemporalReadinessConnection>;
+export type TemporalReadinessConnector = (address: string) => Promise<TemporalReadinessConnection>;
 
 export class TemporalEnvironmentError extends Error {
   override name = "TemporalEnvironmentError";
