@@ -1,5 +1,31 @@
 # Jarvis TypeScript Roadmap
 
+## Acquisition plan, PR H (slice 2): ACP wire framing contract (2026-09-26)
+
+PR H slice 1 (ACP transport seam, #638) merged. This slice adds the
+transport-agnostic wire format a concrete transport (stdio/HTTP, next slice)
+will serialise — still no transport and no network.
+
+`src/acp/acpMessage.ts`:
+
+- `ACP_WIRE_VERSION` and `AcpWireEnvelope` — a versioned, discriminated envelope
+  carrying exactly one of a permission request or a permission response.
+- `encodeAcpEnvelope` / `decodeAcpEnvelope` — decode is **fail-closed**: it never
+  throws and returns `null` for bad JSON, a wrong version, an unknown `kind`, or
+  a missing/blank/mistyped field. Only known fields survive (a frame can't
+  smuggle extra data downstream).
+
+Security fit: a wire transport that receives an undecodable payload gets `null`
+→ no usable response, and `consultAcpPeer` already treats a missing/malformed
+response as `abstain`. The framing layer carries no authority — decoding a
+response frame only yields the typed response, which still passes through
+`resolveAcpAuthorization`. `tests/acpMessage.test.ts` proves round-trips,
+fail-closed rejection of malformed frames, and that unknown fields are dropped.
+
+Next H slice: the concrete wire transport (stdio or HTTP) that uses this
+framing — **owner decision pending** on the transport model and its
+network-egress boundary (mirroring PR F), before anything networked is wired.
+
 ## Acquisition plan, PR H (slice 1): ACP transport seam (2026-09-26)
 
 Opens PR H (ACP transport) on the owner's direction to take the ACP path.
