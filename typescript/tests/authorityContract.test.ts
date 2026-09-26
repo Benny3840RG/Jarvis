@@ -339,7 +339,9 @@ describe("Authority contract", () => {
       invariant.evidence.some(
         (evidence) =>
           evidence.suite === "temporal-pass" &&
-          evidence.file === "tests/pass/worker-versioning-ramp.test.ts",
+          evidence.file === "tests/pass/worker-versioning-ramp.test.ts" &&
+          evidence.test ===
+            "pins in-flight executions to their start version across a v1→v2→rollback ramp",
       ),
       "AUTH-INV-04 no longer cites the PASS-15 worker-versioning ramp proof",
     );
