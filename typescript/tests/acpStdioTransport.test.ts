@@ -6,6 +6,7 @@ import type { AcpPermissionDecision } from "../src/acp/acpContract.js";
 import { encodeAcpEnvelope } from "../src/acp/acpMessage.js";
 import {
   AcpStdioTransportError,
+  createBoundedLineReader,
   StdioAcpTransport,
   type AcpChildProcess,
 } from "../src/acp/acpStdioTransport.js";
@@ -199,5 +200,51 @@ describe("ACP stdio transport (PR H, slice 3)", () => {
   it("surfaces AcpStdioTransportError from requestPermission on crash", async () => {
     const transport = new StdioAcpTransport({ spawn: () => fakeChild(() => ({ close: true })) });
     await assert.rejects(() => transport.requestPermission(REQUEST), AcpStdioTransportError);
+  });
+
+  describe("bounded line reader (stdout memory bound)", () => {
+    it("assembles complete lines across chunks", () => {
+      const lines: string[] = [];
+      let overflows = 0;
+      const reader = createBoundedLineReader({
+        maxLineBytes: 1000,
+        onLine: (l) => lines.push(l),
+        onOverflow: () => (overflows += 1),
+      });
+      reader.push("hel");
+      reader.push("lo\nwor");
+      reader.push("ld\n");
+      assert.deepEqual(lines, ["hello", "world"]);
+      assert.equal(overflows, 0);
+    });
+
+    it("overflows once on an oversized unterminated line, then ignores more input", () => {
+      const lines: string[] = [];
+      let overflows = 0;
+      const reader = createBoundedLineReader({
+        maxLineBytes: 8,
+        onLine: (l) => lines.push(l),
+        onOverflow: () => (overflows += 1),
+      });
+      reader.push("123456789012345"); // 15 bytes, no newline
+      assert.equal(overflows, 1);
+      assert.deepEqual(lines, []);
+      reader.push("more\n"); // ignored after overflow
+      assert.equal(overflows, 1);
+      assert.deepEqual(lines, []);
+    });
+
+    it("overflows on an oversized completed line", () => {
+      const lines: string[] = [];
+      let overflows = 0;
+      const reader = createBoundedLineReader({
+        maxLineBytes: 4,
+        onLine: (l) => lines.push(l),
+        onOverflow: () => (overflows += 1),
+      });
+      reader.push("toolongline\n");
+      assert.equal(overflows, 1);
+      assert.deepEqual(lines, []);
+    });
   });
 });

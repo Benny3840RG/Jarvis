@@ -25,7 +25,6 @@
  */
 
 import { spawn as nodeSpawn } from "node:child_process";
-import { createInterface } from "node:readline";
 
 import type { AcpPermissionResponse } from "./acpContract.js";
 import { decodeAcpEnvelope, encodeAcpEnvelope } from "./acpMessage.js";
@@ -35,6 +34,11 @@ import type { AcpPermissionRequest, AcpTransport } from "./acpTransport.js";
 export const DEFAULT_ACP_STDIO_TIMEOUT_MS = 30_000;
 /** Default cap on stdout lines read before giving up (bounds a noisy/hostile child). */
 export const DEFAULT_ACP_STDIO_MAX_LINES = 1000;
+/**
+ * Default cap on the bytes of a single stdout line (bounds a hostile child that
+ * emits an arbitrarily long unterminated line to exhaust memory).
+ */
+export const DEFAULT_ACP_STDIO_MAX_LINE_BYTES = 65_536;
 
 export class AcpStdioTransportError extends Error {
   constructor(reason: string) {
@@ -148,35 +152,105 @@ export class StdioAcpTransport implements AcpTransport {
 }
 
 /**
+ * A byte-bounded, newline-delimited line reader. Feed it stdout chunks; it emits
+ * complete lines via `onLine`. If a single line (complete or the still-pending
+ * un-terminated tail) exceeds `maxLineBytes`, it calls `onOverflow` exactly once
+ * and stops — so a worker cannot exhaust memory with one arbitrarily long,
+ * newline-less line (which a completed-line count alone would never bound).
+ * Pure and synchronous, so it is unit-tested directly.
+ */
+export function createBoundedLineReader(options: {
+  maxLineBytes: number;
+  onLine: (line: string) => void;
+  onOverflow: () => void;
+}): { push: (chunk: string) => void } {
+  let buffer = "";
+  let overflowed = false;
+  const overflow = (): void => {
+    overflowed = true;
+    buffer = "";
+    options.onOverflow();
+  };
+  return {
+    push(chunk: string): void {
+      if (overflowed) return;
+      buffer += chunk;
+      for (;;) {
+        const newlineIndex = buffer.indexOf("\n");
+        if (newlineIndex === -1) {
+          if (Buffer.byteLength(buffer, "utf8") > options.maxLineBytes) overflow();
+          return;
+        }
+        const line = buffer.slice(0, newlineIndex);
+        if (Buffer.byteLength(line, "utf8") > options.maxLineBytes) {
+          overflow();
+          return;
+        }
+        buffer = buffer.slice(newlineIndex + 1);
+        options.onLine(line);
+        if (overflowed) return;
+      }
+    },
+  };
+}
+
+/**
  * Spawn a real local worker as an {@link AcpChildProcess} over stdio. stdin/stdout
  * are piped for the ACP frames; stderr is inherited so the worker's own logging
- * never contaminates the stdout framing channel. This is the live adapter
+ * never contaminates the stdout framing channel. stdout is read through a
+ * {@link createBoundedLineReader}, so an oversized unterminated line terminates
+ * the child (fail-closed) instead of growing memory. This is the live adapter
  * (like PR F's live wiring): it is not exercised by the offline tests, which
  * drive {@link StdioAcpTransport} through a fake child. No network is opened here.
  */
 export function spawnAcpChild(options: {
   command: string;
   args?: readonly string[];
+  maxLineBytes?: number;
 }): AcpChildProcess {
   const child = nodeSpawn(options.command, options.args ? [...options.args] : [], {
     stdio: ["pipe", "pipe", "inherit"],
   });
-  const stdout = child.stdout;
-  const reader = stdout ? createInterface({ input: stdout }) : undefined;
+  let lineHandler: ((line: string) => void) | undefined;
+  let closeHandler: (() => void) | undefined;
+  let closed = false;
+  const fireClose = (): void => {
+    if (closed) return;
+    closed = true;
+    closeHandler?.();
+  };
+  const reader = createBoundedLineReader({
+    maxLineBytes: options.maxLineBytes ?? DEFAULT_ACP_STDIO_MAX_LINE_BYTES,
+    onLine: (line) => lineHandler?.(line),
+    onOverflow: () => {
+      try {
+        child.kill();
+      } catch {
+        // Best-effort; the close below still fails the request closed.
+      }
+      fireClose();
+    },
+  });
+  child.stdout?.setEncoding("utf8");
+  child.stdout?.on("data", (chunk: string) => reader.push(chunk));
+  child.on("close", fireClose);
+  child.on("error", fireClose);
   return {
     writeLine(line: string): void {
       child.stdin?.write(`${line}\n`);
     },
     onStdoutLine(handler: (line: string) => void): void {
-      reader?.on("line", handler);
+      lineHandler = handler;
     },
     onClose(handler: () => void): void {
-      child.on("close", () => handler());
-      child.on("error", () => handler());
+      closeHandler = handler;
     },
     kill(): void {
-      reader?.close();
-      child.kill();
+      try {
+        child.kill();
+      } catch {
+        // Best-effort teardown.
+      }
     },
   };
 }
