@@ -2,6 +2,7 @@ import { createServer, type Server } from "node:http";
 
 import { StreamableHTTPServerTransport } from "./sdkAdapter.js";
 
+import { McpCapabilityGuard, resolveMcpCapabilityGrant } from "./capabilityGuard.js";
 import type { JarvisMcpConfig } from "./config.js";
 import { JarvisApiClient } from "./jarvisApiClient.js";
 import { runWithMcpRequestSignal } from "./requestSignal.js";
@@ -53,6 +54,11 @@ export async function startJarvisMcpHttpServer(
   client: JarvisApiClient = new JarvisApiClient(config.api),
   telemetry: PostHogTelemetry = createPostHogTelemetryFromEnv(),
 ): Promise<RunningJarvisMcpServer> {
+  // Resolve the deployment's capability ceiling once, at startup, so a
+  // misconfigured allowlist fails fast rather than per request. The guard is
+  // immutable and shared across requests (the grant is static config today).
+  const capabilityGuard = new McpCapabilityGuard(resolveMcpCapabilityGrant(config.capabilities));
+
   const httpServer = createServer(async (request, response) => {
     if (!request.url) {
       response.writeHead(400, { "content-type": "text/plain; charset=utf-8" }).end("Missing URL");
@@ -94,7 +100,7 @@ export async function startJarvisMcpHttpServer(
       response.setHeader("Cache-Control", "no-store");
       response.setHeader("X-Content-Type-Options", "nosniff");
 
-      const server = createJarvisMcpServer(client);
+      const server = createJarvisMcpServer(client, capabilityGuard);
       const transport = new StreamableHTTPServerTransport({
         sessionIdGenerator: undefined,
         enableJsonResponse: true,

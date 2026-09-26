@@ -149,7 +149,7 @@ export const AUTHORITY_INVARIANTS: readonly AuthorityInvariant[] = [
     laws: ["JARVIS-003", "JARVIS-018"],
     status: "guarded",
     deliveredBy: "E",
-    gap: "Checks the declared MCP-to-OpenAPI mapping by path name; no per-session capability guard yet.",
+    gap: "A per-session capability guard now refuses ungranted tools at the callTool boundary (McpCapabilityGuard, fed the deployment's static capability ceiling); a denied call never reaches the operator API. The residual is that the MCP-to-OpenAPI subset mapping is still a name-based static check, so the invariant stays guarded until that mapping is enforced at runtime too.",
     evidence: [
       {
         suite: "check",
@@ -160,6 +160,11 @@ export const AUTHORITY_INVARIANTS: readonly AuthorityInvariant[] = [
         suite: "check",
         file: "tests/authorityContract.test.ts",
         test: "exposes no approve, execute, revoke, merge or deploy operation through MCP",
+      },
+      {
+        suite: "check",
+        file: "tests/mcpCapabilityEnforcement.test.ts",
+        test: "refuses an ungranted tool's call and never runs its handler; allows a granted one",
       },
     ],
   },

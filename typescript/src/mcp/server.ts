@@ -8,6 +8,9 @@ import {
 import { McpServer } from "./sdkAdapter.js";
 import { z } from "zod";
 
+import { type McpCapabilityGuard } from "./capabilityGuard.js";
+import { bindCapabilityGuard } from "./guardedMcpServer.js";
+
 import type { Client } from "../clients/client.js";
 import type { Build } from "../builds/build.js";
 import type { BuildLogEntry } from "../buildLog/buildLogEntry.js";
@@ -742,7 +745,10 @@ async function refreshedDashboard(
   return dashboardResult(await client.dashboard(), message);
 }
 
-export function createJarvisMcpServer(client: JarvisApiClient): McpServer {
+export function createJarvisMcpServer(
+  client: JarvisApiClient,
+  guard?: McpCapabilityGuard,
+): McpServer {
   const server = new McpServer(
     {
       name: "jarvis-private-preview",
@@ -750,6 +756,12 @@ export function createJarvisMcpServer(client: JarvisApiClient): McpServer {
     },
     { instructions: JARVIS_INSTRUCTIONS },
   );
+
+  // Enforce the session's capability grant (roadmap PR E, AUTH-INV-03) before
+  // any tool is registered, so every registration below is guarded. Omitted in
+  // unit tests that exercise the tool surface directly; the HTTP entrypoint
+  // always passes a guard resolved from the deployment's capability ceiling.
+  if (guard) bindCapabilityGuard(server, guard);
 
   // Jarvis's full persona charter, readable on demand. Plain markdown, not a UI
   // resource — it describes how Jarvis should sound, not something to render.
