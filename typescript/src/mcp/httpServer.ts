@@ -1,6 +1,6 @@
 import { createServer, type Server } from "node:http";
 
-import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { StreamableHTTPServerTransport } from "./sdkAdapter.js";
 
 import type { JarvisMcpConfig } from "./config.js";
 import { JarvisApiClient } from "./jarvisApiClient.js";
