@@ -1,5 +1,37 @@
 # Jarvis TypeScript Roadmap
 
+## Acquisition plan, PR B: worker deployment versioning ramp proof (PASS-15) (2026-09-26)
+
+With local Temporal validation unblocked (#625 let the PASS Tier-1 tests reuse
+a pinned CLI via `TEMPORAL_CLI_PATH`), this slice adds the runtime proof for
+Worker Deployment Versioning that the build-identity machinery (#618) only had
+unit tests for.
+
+`tests/pass/worker-versioning-ramp.test.ts` (PASS-15, Tier-1) drives two real
+workers on one task queue, each registered under a distinct immutable build
+identity built by the _shipped_ `resolveWorkerDeploymentOptions`
+(`temporal/buildIdentity.ts`), against a real dev server. It ramps the
+deployment's Current Version v1→v2→rollback and observes, via
+`DescribeWorkflowExecution.versioningInfo`, that:
+
+- an execution started under v1 stays PINNED to v1 after v2 becomes Current
+  (and completes on the still-running v1 worker — not merely an unchanged
+  label);
+- an execution started after the ramp pins to v2;
+- an execution started after the rollback pins back to v1.
+
+This is the runtime half of AUTH-INV-04 ("a Temporal worker cannot migrate
+live workflows onto new code on its own"): the config's immutability is
+unit-tested in `tests/temporalWorkerBuildIdentity.test.ts`; PASS-15 shows the
+server actually honours it. Validated locally: full PASS suite 29/29 green
+against Temporal CLI v1.9.1; `npm run check` green. `createPassTestEnv`'s
+`TEMPORAL_CLI_PATH` handling was factored into a shared `createLocalTemporalEnv`
+helper the new test reuses.
+
+Still parked in PR B (needs more than this slice): promoting AUTH-INV-04 to
+`enforced` (the governed-boundary runtime guarantee is the other half), and
+deciding whether `temporal-pass` runs on every PR.
+
 ## Acquisition plan, PR C (slice 2): route the PostHog emitter through redaction (2026-09-26)
 
 PR C slice 1 (#622, telemetry contract) merged. This slice wires the contract
