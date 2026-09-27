@@ -51,10 +51,22 @@ export const DEFAULT_ACP_STDIO_MAX_LINE_BYTES = 65_536;
  */
 export type AcpWorkerConfig = Readonly<{ command: string; args: readonly string[] }>;
 
+/**
+ * Why a stdio consultation failed. A precise, non-secret classification so the
+ * governed consultation layer can record operational evidence rather than
+ * sniffing the human-readable message. `write_failed` is a transport-internal
+ * fault (we never handed the request to the worker).
+ */
+export type AcpStdioTransportFailureCode =
+  "timeout" | "worker_crash" | "output_limit_exceeded" | "write_failed" | "request_mismatch";
+
 export class AcpStdioTransportError extends Error {
-  constructor(reason: string) {
+  readonly code: AcpStdioTransportFailureCode;
+
+  constructor(code: AcpStdioTransportFailureCode, reason: string) {
     super(`ACP stdio transport failed: ${reason}`);
     this.name = "AcpStdioTransportError";
+    this.code = code;
   }
 }
 
@@ -68,8 +80,14 @@ export interface AcpChildProcess {
   writeLine(line: string): void;
   /** Register the handler for each stdout line. */
   onStdoutLine(handler: (line: string) => void): void;
-  /** Register the handler for the child closing (normal exit or error). */
-  onClose(handler: () => void): void;
+  /**
+   * Register the handler for the child closing (normal exit or error). A
+   * `reason` is supplied when the close was forced for a classifiable cause
+   * (e.g. `output_limit_exceeded` on an oversized line) so the transport can
+   * record accurate evidence instead of a generic crash; a plain close passes
+   * none.
+   */
+  onClose(handler: (reason?: AcpStdioTransportFailureCode) => void): void;
   /** Terminate the child and release resources. */
   kill(): void;
 }
@@ -126,37 +144,52 @@ export class StdioAcpTransport implements AcpTransport {
         }
         finish();
       };
-      const fail = (reason: string): void =>
-        settle(() => reject(new AcpStdioTransportError(reason)));
+      const fail = (code: AcpStdioTransportFailureCode, reason: string): void =>
+        settle(() => reject(new AcpStdioTransportError(code, reason)));
 
       child.onStdoutLine((line) => {
         if (settled) return;
         lines += 1;
         const envelope = decodeAcpEnvelope(line);
-        if (
-          envelope?.kind === "permission_response" &&
-          envelope.response.requestId === request.requestId
-        ) {
-          settle(() => resolve(envelope.response));
+        if (envelope?.kind === "permission_response") {
+          if (envelope.response.requestId === request.requestId) {
+            settle(() => resolve(envelope.response));
+            return;
+          }
+          // A well-formed response for a *different* requestId is a genuine
+          // mismatch, not log contamination: we spawn a fresh child per request
+          // and send exactly one id, so the worker answered the wrong request.
+          // Surface it as request_mismatch rather than ignoring it.
+          fail("request_mismatch", "worker responded with a mismatched requestId");
           return;
         }
-        // Non-matching line: ignore as contamination, but bound how much we read.
+        // A non-frame line (unrelated stdout / a line that does not decode to a
+        // response) is treated as contamination and ignored — stderr is the
+        // worker's log channel — but bounded so a flood cannot stall the request.
+        // (A malformed frame is indistinguishable from stray output here, so it
+        // is not surfaced as malformed_response; that classification comes from
+        // the strict in-process transport. See acpGovernedConsultation.ts.)
         if (lines >= this.#maxResponseLines) {
-          fail("no valid response within the bounded stdout window");
+          fail("output_limit_exceeded", "no valid response within the bounded stdout window");
         }
       });
-      child.onClose(() => {
-        if (!settled) fail("worker closed before returning a valid response");
+      child.onClose((reason) => {
+        if (settled) return;
+        if (reason === "output_limit_exceeded") {
+          fail("output_limit_exceeded", "worker exceeded the stdout byte bound");
+        } else {
+          fail("worker_crash", "worker closed before returning a valid response");
+        }
       });
       cancelTimeout = this.#scheduleTimeout(
-        () => fail("timed out awaiting a worker response"),
+        () => fail("timeout", "timed out awaiting a worker response"),
         this.#timeoutMs,
       );
 
       try {
         child.writeLine(encodeAcpEnvelope({ v: 1, kind: "permission_request", request }));
       } catch {
-        fail("failed to write the request to the worker");
+        fail("write_failed", "failed to write the request to the worker");
       }
     });
   }
@@ -259,12 +292,12 @@ export function spawnAcpChild(options: {
     windowsHide: true,
   });
   let lineHandler: ((line: string) => void) | undefined;
-  let closeHandler: (() => void) | undefined;
+  let closeHandler: ((reason?: AcpStdioTransportFailureCode) => void) | undefined;
   let closed = false;
-  const fireClose = (): void => {
+  const fireClose = (reason?: AcpStdioTransportFailureCode): void => {
     if (closed) return;
     closed = true;
-    closeHandler?.();
+    closeHandler?.(reason);
   };
   const reader = createBoundedLineReader({
     maxLineBytes: options.maxLineBytes ?? DEFAULT_ACP_STDIO_MAX_LINE_BYTES,
@@ -275,13 +308,16 @@ export function spawnAcpChild(options: {
       } catch {
         // Best-effort; the close below still fails the request closed.
       }
-      fireClose();
+      // Classify the forced close as an output-limit breach, not a generic
+      // crash, so the transport records accurate failure evidence.
+      fireClose("output_limit_exceeded");
     },
   });
   child.stdout?.setEncoding("utf8");
   child.stdout?.on("data", (chunk: string) => reader.push(chunk));
-  child.on("close", fireClose);
-  child.on("error", fireClose);
+  // Wrap so Node's close/error arguments are not passed as a (false) reason.
+  child.on("close", () => fireClose());
+  child.on("error", () => fireClose());
   return {
     writeLine(line: string): void {
       child.stdin?.write(`${line}\n`);
@@ -289,7 +325,7 @@ export function spawnAcpChild(options: {
     onStdoutLine(handler: (line: string) => void): void {
       lineHandler = handler;
     },
-    onClose(handler: () => void): void {
+    onClose(handler: (reason?: AcpStdioTransportFailureCode) => void): void {
       closeHandler = handler;
     },
     kill(): void {

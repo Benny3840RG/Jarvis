@@ -53,11 +53,23 @@ not an air gap:
 the **Jarvis** systemd service with `PrivateNetwork=yes`, you also cut off
 Jarvis's own network — wrong. Two correct shapes:
 
-- **Preferred — launch each worker as its own transient unit.** Point the
-  env-configurable worker command at `systemd-run`, wrapping the real worker, so
-  the worker gets its **own** namespaces and sandbox independent of Jarvis. No
-  code change is needed: `resolveAcpWorkerConfigFromEnv` already takes an
-  arbitrary command + argv.
+- **Preferred — launch each worker as its own transient _service_.** Point the
+  env-configurable worker command at `systemd-run --pipe`, wrapping the real
+  worker, so the worker gets its **own** namespaces and sandbox independent of
+  Jarvis. It must be a service, **not** a `--scope`: a scope adopts a process the
+  caller already forked, so systemd never performs the exec and therefore
+  **cannot** apply the namespace/filesystem/privilege sandbox
+  (`PrivateNetwork`, `ProtectSystem`, `ProtectHome`, `RestrictAddressFamilies`,
+  `SystemCallFilter`, …) — those directives are set only when systemd itself
+  spawns the process. Only **cgroup-based** controls take effect for a scope:
+  the resource limits (`MemoryMax`/`TasksMax`) **and** the BPF egress filters
+  (`IPAddressAllow`/`IPAddressDeny`), which act on the cgroup rather than at
+  exec time. The exec-time namespace/filesystem/privilege/seccomp controls do
+  not — which is why a scope is not enough here. `--pipe` runs the worker as a
+  transient service **and**
+  wires its stdin/stdout/stderr to the pipes Jarvis created, so the framing
+  channel still works. No code change is needed: `resolveAcpWorkerConfigFromEnv`
+  already takes an arbitrary command + argv.
 - **Alternative — a template unit** `acp-worker@.service` with the sandbox
   directives baked in, launched via `systemd-run --unit=` or `systemctl start`.
   Cleaner audit surface; slightly more moving parts.
@@ -76,7 +88,7 @@ after `--`:
 ```
 JARVIS_ACP_WORKER_COMMAND=systemd-run
 JARVIS_ACP_WORKER_ARGS=[
-  "--scope","--quiet","--collect",
+  "--pipe","--quiet","--collect",
   "--property=PrivateNetwork=yes",
   "--property=PrivateTmp=yes",
   "--property=ProtectSystem=strict",
@@ -95,30 +107,51 @@ JARVIS_ACP_WORKER_ARGS=[
 ]
 ```
 
-(JSON array on one line in the real env var; expanded here for readability. Note
-`stdin`/`stdout` must remain the pipes Jarvis created — `systemd-run --scope`
-runs in the caller's context and preserves them, which is why `--scope` is used
-rather than a detached service.)
+(JSON array on one line in the real env var; expanded here for readability.
+`--pipe` is what keeps `stdin`/`stdout` connected to the pipes Jarvis created
+while still running the worker as a sandboxed transient **service** — a
+prerequisite for the namespace/filesystem/privilege directives above to take
+effect. Do **not** substitute `--scope`: it would preserve the pipes but silently
+drop that sandbox, since systemd would not be the one exec'ing the worker.
+Verify the resulting unit with `systemd-analyze security` / `systemctl show`.)
+
+> **Incomplete as shown — do not copy-paste and enable.** This block is the
+> isolation *skeleton*, not a runnable config: `PrivateNetwork=yes` gives the
+> worker loopback only, so as written it **cannot reach its model API** and the
+> worker will fail. You must adopt one of the two mutually exclusive egress
+> designs (A: keep `PrivateNetwork` + a reachable proxy; or B: drop
+> `PrivateNetwork` + IP allowlist) from the **egress** section below, and provide
+> the worker's own credential, before it works. It is written this way on
+> purpose: start closed, open only the one path you need.
 
 Key point about **egress**: `PrivateNetwork=yes` gives the worker an isolated
-network namespace with only loopback — i.e. **no** external network at all. If
-the worker needs to reach its model API, you must give it exactly that and
-nothing else. `PrivateNetwork` alone cannot express "only api.anthropic.com," so
-pair it with one of:
+network namespace with **only loopback** — no external interface at all. These
+are two **mutually exclusive** egress designs; pick one, do not combine them:
 
-- **An egress proxy** the worker is forced through: put a filtering
-  forward-proxy (allowlisting only the model API host) on a socket/address the
-  worker's namespace can reach (e.g. via `JoinsNamespaceOf=` a proxy unit, or a
-  slirp/veth bridge to the proxy only), and set the worker's `HTTPS_PROXY` to it.
+- **Design A — `PrivateNetwork=yes` + a reachable filtering proxy (recommended).**
+  Keep the loopback-only namespace and give the worker exactly one way out: a
+  filtering forward-proxy (allowlisting only the model API host) on a
+  socket/address inside the namespace (e.g. via `JoinsNamespaceOf=` a proxy unit,
+  or a veth bridge to the proxy only), with the worker's `HTTPS_PROXY` set to it.
   This is the most robust "only this host" control and mirrors the read plane's
-  hard-coded origin. **Recommended.**
-- **IP allowlisting** with `IPAddressDeny=any` +
-  `IPAddressAllow=<model-API CIDRs>` (systemd ≥235, cgroup v2 / BPF). Honest
-  limitation: this is **IP/CIDR**-based, not hostname-based, so it depends on the
-  provider's published egress ranges and drifts as they change — treat it as
-  coarse defense-in-depth, not a precise host allowlist. **Do not** hard-code
-  CIDRs from memory; take them from the provider's current published ranges and
-  re-verify on a schedule.
+  hard-coded origin. Note: `IPAddressAllow` is **useless here** — with only
+  loopback there is no external interface for a BPF filter to permit; the proxy
+  is what provides (and constrains) connectivity.
+- **Design B — no `PrivateNetwork` + IP allowlisting.** Do **not** set
+  `PrivateNetwork=yes`; let the worker use the host network namespace and
+  constrain its egress with `IPAddressDeny=any` + `IPAddressAllow=<model-API
+  CIDRs>` (systemd ≥235, cgroup v2 / BPF). A BPF egress filter can only *restrict*
+  an existing interface — it cannot create connectivity into a loopback-only
+  namespace, which is why it is an alternative to Design A, not an addition to it.
+  Honest limitation: this is **IP/CIDR**-based, not hostname-based, so it depends
+  on the provider's published egress ranges and drifts as they change — coarse
+  defense-in-depth, not a precise host allowlist. **Do not** hard-code CIDRs from
+  memory; take them from the provider's current published ranges and re-verify on
+  a schedule.
+
+The example block above is a **Design A** skeleton (it sets `PrivateNetwork=yes`),
+so it needs the proxy; for **Design B**, drop the `PrivateNetwork=yes` property
+and add the `IPAddress*` properties instead.
 
 Do **not** grant the worker Jarvis's API tokens. Pass only the worker's own key
 explicitly, e.g. add `"--setenv=ANTHROPIC_API_KEY=..."` sourced from the worker's
@@ -127,12 +160,42 @@ so it isn't visible in the process args or the unit's environment dump). Never
 pass Jarvis's `JARVIS_GITHUB_TOKEN`, `JARVIS_SERVICE_TOKEN`, read-plane App key,
 or `$CREDENTIALS_DIRECTORY` through.
 
+## Worker lifecycle (avoid orphaned services) — verify, don't assume
+
+The transport spawns a fresh child **per request** and calls `kill()` on it when
+the request settles (response, timeout, flood, or crash). With `systemd-run
+--pipe` the process the transport spawns and kills is the `systemd-run`
+**client**, not the transient **service** it launched. Killing the client does
+**not** necessarily stop the service, so without a lifecycle tie repeated
+consultations could orphan worker services until `RuntimeMaxSec` — defeating
+per-request cleanup and the resource bounds.
+
+Do not assume any particular kill-propagation; establish and **verify** the
+lifecycle on the host. Two backstops, layered:
+
+1. **Worker exits on EOF / after one response.** `nolan-acp-worker`'s loop ends
+   when its stdin closes, and per request it needs to emit at most one response.
+   When the client is killed its stdio pipes close, so the service's stdin should
+   reach EOF and the worker should exit on its own. Confirm this actually happens
+   for your worker binary (a worker that ignores stdin EOF will linger).
+2. **`RuntimeMaxSec` is the hard cap.** Set it (the example uses `120`) so even a
+   worker that ignores EOF is reaped by the manager. Treat it as the ceiling, not
+   the normal path.
+
+If neither reliably stops the service promptly, prefer a lifecycle-tied launcher
+(e.g. verify whether `systemd-run --pipe` on your systemd version stops the unit
+when the client dies, or wrap so the unit is `systemctl stop`ped on client exit)
+before enabling live worker launches. Add this to the verification checklist:
+after several consultations — including a forced mid-request kill — confirm **no
+orphaned worker unit or process remains** (e.g. `systemctl list-units 'run-*.service'`
+and a process scan for the worker command) beyond the moment the request settled.
+
 ## Directive reference (what each does, and the caveats)
 
 | Directive                              | Effect                                                        | Caveat / verify                                                                 |
 | -------------------------------------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| `PrivateNetwork=yes`                   | Worker gets an isolated netns (loopback only) — no host/LAN.  | Blocks the model API too; must pair with a reachable filtering proxy (above).   |
-| `IPAddressDeny=any` + `IPAddressAllow` | Deny-by-default egress; allow named CIDRs.                    | systemd ≥235 + cgroup v2/BPF; **IP/CIDR only**, not hostnames; ranges drift.     |
+| `PrivateNetwork=yes`                   | Worker gets an isolated netns (loopback only) — no host/LAN.  | Blocks the model API too; Design A only — pair with a reachable filtering proxy. `IPAddressAllow` cannot help here (no external interface). |
+| `IPAddressDeny=any` + `IPAddressAllow` | Deny-by-default egress; allow named CIDRs (filters an existing interface). | Design B only — requires the host netns, so **not** with `PrivateNetwork=yes`. systemd ≥235 + cgroup v2/BPF; **IP/CIDR only**, not hostnames; ranges drift. |
 | `PrivateTmp=yes`                       | Private `/tmp`, `/var/tmp`.                                    | —                                                                               |
 | `ProtectSystem=strict`                 | Whole filesystem read-only except explicit `ReadWritePaths`.  | Give a small `ReadWritePaths=` scratch only if the worker needs one.            |
 | `ProtectHome=yes`                      | `/home`, `/root`, `/run/user` inaccessible.                   | —                                                                               |
@@ -166,7 +229,7 @@ Before enabling live worker launches, confirm on the target host:
 
 1. **No broad egress.** From inside the sandbox, a connection to a
    non-allowlisted host fails. E.g. wrap a probe as the worker command once:
-   `systemd-run --scope --property=PrivateNetwork=yes … -- curl -sS --max-time 5 https://example.com` → must fail; the model API host → must succeed only through the intended proxy/allowlist.
+   `systemd-run --pipe --property=PrivateNetwork=yes … -- curl -sS --max-time 5 https://example.com` → must fail; the model API host → must succeed only through the intended proxy/allowlist. (Use `--pipe`, not `--scope`, or the `PrivateNetwork` sandbox will not actually apply and the probe would falsely "pass.")
 2. **No cloud metadata.** `curl -sS --max-time 3 http://169.254.169.254/` from
    inside the sandbox must fail.
 3. **No Jarvis credentials.** Dump the worker's environment from inside the
@@ -176,8 +239,8 @@ Before enabling live worker launches, confirm on the target host:
 4. **Filesystem confinement.** Confirm the worker cannot read the Jarvis working
    tree or secrets (attempt a read; expect failure).
 5. **Bounds active.** `systemd-analyze security <unit>` (for a named unit) and a
-   review of `systemctl show` for the transient scope; confirm MemoryMax/TasksMax/
-   RuntimeMaxSec are set.
+   review of `systemctl show` for the transient **service** (the `--pipe` unit);
+   confirm MemoryMax/TasksMax/RuntimeMaxSec are set.
 6. **Jarvis unaffected.** Jarvis's own network still works (e.g. the GitHub read
    plane can still reach api.github.com) — proving isolation is scoped to the
    worker, not the service.
@@ -197,11 +260,32 @@ Record the results; a launch config that has not passed 1–4 must not be enable
 - **Shared kernel.** systemd sandboxing is not a VM boundary. For hostile-tenant
   threat models, prefer a VM/microVM per worker.
 
+## Enabling the consultation (operating mode)
+
+The worker launch config above is *how* a worker is sandboxed and launched; it is
+still inert until an operating mode is set. `JARVIS_ACP_MODE` selects it:
+
+- unset / `disabled` (default) — ACP is never consulted; no worker launches.
+- `advisory` — the peer is consulted for evidence only; it can never grant
+  authority or remove valid governed authority.
+- `required` — the peer becomes an additional veto/availability gate; a `deny` or
+  any classified failure blocks a governed-approved action (it still cannot grant
+  authority).
+
+Commission progressively: apply and **verify** this sandbox (Gate C) and
+provision the worker credential + dry-run (Gate D) before setting a mode above
+`disabled`, and start any live use at `advisory` on a low-consequence operation
+(Gate E) — never `required` globally, and never merge/deploy authority. Rollback
+is config-level: set `JARVIS_ACP_MODE=disabled` (or unset the worker command).
+
 ## Related
 
 - Code side: `typescript/src/acp/acpStdioTransport.ts` (`buildAcpChildEnv`,
   `spawnAcpChild`), `typescript/src/acp/acpWorkerConfig.ts`
-  (`resolveAcpWorkerConfigFromEnv`).
-- Architecture: `typescript/docs/architecture/acp-transport-seam.md`.
+  (`resolveAcpWorkerConfigFromEnv`), `typescript/src/acp/acpOperatingMode.ts`
+  (mode policy), `typescript/src/acp/acpGovernedConsultation.ts`.
+- Architecture: `typescript/docs/architecture/acp-transport-seam.md`,
+  `typescript/docs/architecture/acp-governed-consultation.md`.
+- Evidence + gate status: `docs/operations/acp-commissioning-evidence.md`.
 - Precedent: PR F's deny-by-default egress boundary
   (`typescript/docs/architecture/github-read-plane-boundary.md`).

@@ -1652,3 +1652,40 @@ The #482 maintained review found that a stalled URL-display callback could preve
 The pinned `actions/download-artifact` revision flattens one matched artifact into the destination even when `merge-multiple` is false. This blocked #540 after its sole reviewer returned valid evidence. The existing publisher now accepts that exact flat `result.json` layout only when its trusted manifest expects segment zero alone, while retaining named-directory loading for multiple artifacts. File/manifest byte bounds, regular-file checks, exact indices, run/attempt directory names and downstream manifest/prompt digest verification remain enforced. A failure-first test executes the actual workflow loader; negative fixtures cover mixed layouts, wrong indices/identities, oversized files, invalid JSON and symlinks. Local proof does not override the blocked provider result; fresh Claude review, maintained PASS and Benny merge remain required.
 
 Implementation and proving coverage: `.github/workflows/jarvis-pr-maintenance.yml` and `.github/automation/pr-maintenance-workflow.test.mjs`. These exact changed files supply the flat/named artifact loader and its negative fixtures; review them together with these documentation claims.
+
+### ACP governed consultation — dormant-first (PR H, commissioning slice)
+
+ACP is wired into one real governed decision site — `GovernedExternalOperation.execute()`,
+the external-effect choke point — under an explicit operating-mode policy, still
+dormant-first. `src/acp/acpOperatingMode.ts` is the pure policy above the strict
+`consultAcpPeer` primitive (which is unchanged): `disabled` never consults or
+launches a worker; `advisory` consults for evidence only (proceeds even on a
+`deny` or failure when governed authority is present, recording the disagreement/
+failure) and can never grant authority or remove valid governed authority;
+`required` adds a veto/availability gate (a `deny` or any classified failure
+blocks a governed-approved action) but still cannot create authority. Failure
+taxonomy (timeout/worker_crash/malformed_response/request_mismatch/
+output_limit_exceeded/unavailable/internal_transport_error) is evidence, never
+authority; unclassifiable → conservative `internal_transport_error`.
+
+The governed-approval signal fed to the consultation is the ToolAction's
+server-computed approval state (`state==="approved" && !isApprovalExpired`), a
+non-consuming read — NOT the caller's `ToolAuthority`. It sits in front of the
+existing atomic claim/eligibility gate in `ToolExecutionService`, which still
+re-validates immediately before the effect, so ACP cannot manufacture authority,
+a `required` block never invokes the provider or consumes a single-use approval,
+and the final boundary stays race-safe. `src/acp/nolanAcpWorker.ts` is the minimal
+worker reviewer adapter core (allow/deny/abstain only; no live model). Default
+`JARVIS_ACP_MODE` unset ⇒ `disabled` ⇒ behaviour byte-identical to before;
+rollback is config-level. `npm run check` green (2055 pass, 0 fail, 1 skipped).
+
+Host commissioning (sandbox application, hostile egress probes, real worker
+credential, dry-run, live canary) is NOT done — it requires the J-arvis host and
+owner action, and is tracked UNVERIFIED/BLOCKED in
+`docs/operations/acp-commissioning-evidence.md`. AUTH-INV-05 stays `planned`
+(dormant, not live) — promoting it here would overclaim.
+
+Next: owner review of the draft PR + commissioning evidence; if commissioning on
+the host, apply the sandbox and provision a worker credential (Gate C/D) before
+any narrow advisory canary (Gate E). Do not merge, deploy, or enable the canary
+without Benny's explicit decision.
