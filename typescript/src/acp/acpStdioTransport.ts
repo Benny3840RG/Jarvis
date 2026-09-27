@@ -40,6 +40,14 @@ export const DEFAULT_ACP_STDIO_MAX_LINES = 1000;
  */
 export const DEFAULT_ACP_STDIO_MAX_LINE_BYTES = 65_536;
 
+/**
+ * How to launch a local ACP worker: the executable and its literal argv. Args
+ * are passed to `child_process.spawn` with no shell, so each element is one
+ * argument (no shell interpretation). Resolved fail-closed from the environment
+ * by `resolveAcpWorkerConfigFromEnv`.
+ */
+export type AcpWorkerConfig = Readonly<{ command: string; args: readonly string[] }>;
+
 export class AcpStdioTransportError extends Error {
   constructor(reason: string) {
     super(`ACP stdio transport failed: ${reason}`);

@@ -1,5 +1,35 @@
 # Jarvis TypeScript Roadmap
 
+## Acquisition plan, PR H (slice 4): ACP worker config resolver (2026-09-27)
+
+Owner-approved, env-configurable worker launch config — the fail-closed resolver
+that feeds `spawnAcpChild`, delivered before any live launch (like PR F's
+credential resolver). Launches no process, opens no network, returns `null`
+until provisioned; the worker's own model/API egress is a separate governed
+concern and is untouched.
+
+`src/acp/acpWorkerConfig.ts`:
+
+- `resolveAcpWorkerConfigFromEnv(env, { prefix })` — reads `${prefix}_COMMAND`
+  (required, trimmed, non-blank; default prefix `JARVIS_ACP_WORKER`) and
+  `${prefix}_ARGS` (optional JSON array of strings; absent → `[]`). Returns
+  `null` unless the command is present and non-blank and any args are a valid
+  JSON array of strings. The `prefix` lets several workers (Claude, Codex) be
+  configured independently.
+- `AcpWorkerConfig` (exported from `acpStdioTransport.ts`) — `{ command, args }`,
+  passed to `child_process.spawn` as literal argv with **no shell**, so an arg
+  with spaces/metacharacters is one argument: no shell-injection surface.
+
+`tests/acpWorkerConfig.test.ts` proves command+args resolution, empty-args
+default, custom prefix, literal-argv (no shell splitting), blank-command
+rejection, and fail-closed on missing command / malformed (non-JSON, non-array,
+non-string-element) args.
+
+Next H (owner go-ahead required): the live launch slice — wire
+`resolveAcpWorkerConfigFromEnv` + `spawnAcpChild` + `StdioAcpTransport` into a
+real consultation path, dormant until the env is set. No worker is launched
+until Benny signs off.
+
 ## Acquisition plan, PR H (slice 3): ACP stdio transport (2026-09-26)
 
 The first concrete `AcpTransport`, on the owner's decision: consult a locally
