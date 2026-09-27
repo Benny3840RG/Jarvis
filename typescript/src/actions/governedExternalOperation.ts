@@ -208,7 +208,16 @@ export class GovernedExternalOperation {
       },
       governedApprovalPresent,
     );
-    this.ports.onAcpConsultation?.(evidence);
+    // The observer is a best-effort telemetry/audit seam; isolate its
+    // exceptions so a throwing observer cannot change the authority decision
+    // (e.g. abort a would-be-proceeding operation before its effect).
+    if (this.ports.onAcpConsultation) {
+      try {
+        this.ports.onAcpConsultation(evidence);
+      } catch {
+        // Swallow: evidence is advisory observability, not the authority record.
+      }
+    }
     if (!evidence.proceed) {
       throw new AcpConsultationBlockedError(evidence);
     }

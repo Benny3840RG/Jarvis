@@ -4,11 +4,14 @@
  * The smallest possible ACP *reviewer*: it receives a validated
  * {@link AcpPermissionRequest} envelope on stdin, produces exactly one of
  * `allow` / `deny` / `abstain`, and emits a {@link AcpPermissionResponse}
- * envelope on stdout. It is **not** a second Nolan and has no executor surface:
- * it cannot approve ToolActions, merge, deploy, call MCP tools, or perform any
- * external effect — its only output is one advisory decision. Those authority
- * restrictions are structural (this is all the code there is) and are reinforced
- * at runtime by the host sandbox (see `docs/operations/acp-worker-sandbox.md`).
+ * envelope on stdout. It is **not** a second Nolan. Its *authority* limits are
+ * structural (this is all the code there is): its only output is one advisory
+ * decision, so it cannot approve ToolActions, merge, deploy, call MCP tools, or
+ * manufacture ACP authority — the governed gate treats its `allow` as
+ * non-authoritative regardless. Its *process* limits (no repo/credential reads,
+ * no shell, no network, no external effect) are NOT provided by this code — they
+ * depend on the host sandbox (see `docs/operations/acp-worker-sandbox.md`); do
+ * not treat them as guaranteed until that sandbox is verified.
  *
  * Fail-safe by construction: on a malformed request, or if the decider throws or
  * returns an invalid value, the worker emits **nothing**. It never fabricates an
@@ -21,6 +24,8 @@
  * as the `decide` function. This module ships only the protocol shell plus a
  * deterministic decider for offline/fake-worker commissioning (Gate B).
  */
+
+import { StringDecoder } from "node:string_decoder";
 
 import type { AcpPermissionDecision, AcpPermissionResponse } from "./acpContract.js";
 import { decodeAcpEnvelope, encodeAcpEnvelope } from "./acpMessage.js";
@@ -89,8 +94,12 @@ export async function runAcpWorker(options: RunAcpWorkerOptions): Promise<void> 
       overflowed = true;
     },
   });
+  // Incremental UTF-8 decoder: a multibyte character split across two byte
+  // chunks is buffered and completed on the next write, rather than being
+  // decoded (and corrupted) per chunk. String chunks pass straight through.
+  const decoder = new StringDecoder("utf8");
   for await (const chunk of options.input) {
-    reader.push(typeof chunk === "string" ? chunk : Buffer.from(chunk).toString("utf8"));
+    reader.push(typeof chunk === "string" ? chunk : decoder.write(Buffer.from(chunk)));
     while (pending.length > 0) {
       const line = pending.shift()!;
       const response = await handleAcpRequestLine(line, options.decide);

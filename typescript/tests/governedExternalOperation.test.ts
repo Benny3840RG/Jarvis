@@ -873,4 +873,26 @@ describe("governed external operation — ACP consultation wiring", () => {
     assert.equal(evidences[0]?.classification, "deny");
     assert.equal(evidences[0]?.disagreement, true);
   });
+
+  it("a throwing observer does not abort a proceeding operation", async () => {
+    const s = setup();
+    const { consultation } = stubConsultation("advisory", {
+      proceed: true,
+      classification: "allow",
+    });
+    const boundary = acpBoundaryFor({
+      ...s,
+      acp: consultation,
+      onAcpConsultation: () => {
+        throw new Error("telemetry sink down");
+      },
+    });
+    const receipt = await boundary.execute({
+      projectId: "project-1",
+      actionId: "action-1",
+      authority: "T3",
+    });
+    assert.equal(receipt.status, "succeeded");
+    assert.deepEqual(s.effects, ["effect"]);
+  });
 });

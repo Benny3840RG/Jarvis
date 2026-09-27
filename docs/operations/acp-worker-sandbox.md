@@ -53,11 +53,19 @@ not an air gap:
 the **Jarvis** systemd service with `PrivateNetwork=yes`, you also cut off
 Jarvis's own network — wrong. Two correct shapes:
 
-- **Preferred — launch each worker as its own transient unit.** Point the
-  env-configurable worker command at `systemd-run`, wrapping the real worker, so
-  the worker gets its **own** namespaces and sandbox independent of Jarvis. No
-  code change is needed: `resolveAcpWorkerConfigFromEnv` already takes an
-  arbitrary command + argv.
+- **Preferred — launch each worker as its own transient _service_.** Point the
+  env-configurable worker command at `systemd-run --pipe`, wrapping the real
+  worker, so the worker gets its **own** namespaces and sandbox independent of
+  Jarvis. It must be a service, **not** a `--scope`: a scope adopts a process the
+  caller already forked, so systemd never performs the exec and therefore
+  **cannot** apply the namespace/filesystem/privilege sandbox
+  (`PrivateNetwork`, `ProtectSystem`, `ProtectHome`, `RestrictAddressFamilies`,
+  `SystemCallFilter`, …) — those directives are set only when systemd itself
+  spawns the process. Only cgroup resource limits (`MemoryMax`/`TasksMax`) take
+  effect for a scope. `--pipe` runs the worker as a transient service **and**
+  wires its stdin/stdout/stderr to the pipes Jarvis created, so the framing
+  channel still works. No code change is needed: `resolveAcpWorkerConfigFromEnv`
+  already takes an arbitrary command + argv.
 - **Alternative — a template unit** `acp-worker@.service` with the sandbox
   directives baked in, launched via `systemd-run --unit=` or `systemctl start`.
   Cleaner audit surface; slightly more moving parts.
@@ -76,7 +84,7 @@ after `--`:
 ```
 JARVIS_ACP_WORKER_COMMAND=systemd-run
 JARVIS_ACP_WORKER_ARGS=[
-  "--scope","--quiet","--collect",
+  "--pipe","--quiet","--collect",
   "--property=PrivateNetwork=yes",
   "--property=PrivateTmp=yes",
   "--property=ProtectSystem=strict",
@@ -95,10 +103,13 @@ JARVIS_ACP_WORKER_ARGS=[
 ]
 ```
 
-(JSON array on one line in the real env var; expanded here for readability. Note
-`stdin`/`stdout` must remain the pipes Jarvis created — `systemd-run --scope`
-runs in the caller's context and preserves them, which is why `--scope` is used
-rather than a detached service.)
+(JSON array on one line in the real env var; expanded here for readability.
+`--pipe` is what keeps `stdin`/`stdout` connected to the pipes Jarvis created
+while still running the worker as a sandboxed transient **service** — a
+prerequisite for the namespace/filesystem/privilege directives above to take
+effect. Do **not** substitute `--scope`: it would preserve the pipes but silently
+drop that sandbox, since systemd would not be the one exec'ing the worker.
+Verify the resulting unit with `systemd-analyze security` / `systemctl show`.)
 
 Key point about **egress**: `PrivateNetwork=yes` gives the worker an isolated
 network namespace with only loopback — i.e. **no** external network at all. If
@@ -166,7 +177,7 @@ Before enabling live worker launches, confirm on the target host:
 
 1. **No broad egress.** From inside the sandbox, a connection to a
    non-allowlisted host fails. E.g. wrap a probe as the worker command once:
-   `systemd-run --scope --property=PrivateNetwork=yes … -- curl -sS --max-time 5 https://example.com` → must fail; the model API host → must succeed only through the intended proxy/allowlist.
+   `systemd-run --pipe --property=PrivateNetwork=yes … -- curl -sS --max-time 5 https://example.com` → must fail; the model API host → must succeed only through the intended proxy/allowlist. (Use `--pipe`, not `--scope`, or the `PrivateNetwork` sandbox will not actually apply and the probe would falsely "pass.")
 2. **No cloud metadata.** `curl -sS --max-time 3 http://169.254.169.254/` from
    inside the sandbox must fail.
 3. **No Jarvis credentials.** Dump the worker's environment from inside the

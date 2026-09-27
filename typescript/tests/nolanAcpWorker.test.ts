@@ -90,6 +90,29 @@ describe("runAcpWorker", () => {
     });
     assert.deepEqual(written, []);
   });
+
+  it("preserves a multibyte character split across input byte chunks", async () => {
+    const request: AcpPermissionRequest = { requestId: "req-1", action: "café:announce–now" };
+    const line = `${requestLine(request)}\n`;
+    const bytes = Buffer.from(line, "utf8");
+    // Split at a byte index that lands inside a multibyte sequence (é / – are
+    // multibyte); decoding each half independently would corrupt it.
+    const cut = 6;
+    const chunks = [bytes.subarray(0, cut), bytes.subarray(cut)];
+    async function* input(): AsyncIterable<Uint8Array> {
+      for (const c of chunks) yield c;
+    }
+    let seen: string | undefined;
+    await runAcpWorker({
+      input: input(),
+      write: () => {},
+      decide: (req) => {
+        seen = req.action;
+        return "abstain";
+      },
+    });
+    assert.equal(seen, "café:announce–now");
+  });
 });
 
 describe("nolan-acp-worker as a real subprocess (Gate-B live stdio path)", () => {

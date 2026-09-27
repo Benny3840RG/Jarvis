@@ -95,10 +95,22 @@ Production deployment performed:  NO
 2. **What can Nolan now do that it couldn't?** Nothing yet, at runtime — the path
    is dormant. Once an owner enables it, Nolan can consult a peer reviewer for
    evidence (advisory) or as an extra veto/availability gate (required).
-3. **What can the ACP worker definitely not do?** Approve, merge, deploy, change
-   authority/policy, read Jarvis credentials/repo, call MCP tools, run shell, or
-   perform any external effect. It returns only allow/deny/abstain. (Structural in
-   code; reinforced by the host sandbox once applied.)
+3. **What can the ACP worker definitely not do?** Two different kinds of limit —
+   do not conflate them:
+   - **By protocol/authority (structural in code, holds now):** its only output
+     is one advisory `allow`/`deny`/`abstain`, so it cannot approve a ToolAction,
+     merge, deploy, change authority/policy, or manufacture ACP authority — the
+     governed gate treats its `allow` as non-authoritative regardless. This is
+     enforced by the consultation code and the AUTH-INV-05 primitive, independent
+     of the host.
+   - **By process isolation (host sandbox, currently UNVERIFIED):** reading the
+     repo/credentials, running arbitrary shell, reaching the network, or causing
+     any external effect are prevented **only** by the host sandbox
+     (filesystem/network/privilege confinement). The code allowlists just the
+     child's *environment*; it does not, and from Node cannot, confine the worker
+     process. Until Gate C is verified on the host, treat these as **not**
+     guaranteed — do not enable a mode above `disabled` on the strength of the
+     code alone.
 4. **What was verified on the J-arvis host?** Nothing — see Host evidence.
 5. **Is ACP disabled, advisory, or required?** Disabled (default).
 6. **Has a real model consultation succeeded?** No.

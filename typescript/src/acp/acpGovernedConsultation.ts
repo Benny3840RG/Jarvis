@@ -128,9 +128,12 @@ function classifyError(error: unknown): AcpConsultationClassification {
         return "internal_transport_error";
     }
   }
-  // A synchronous spawn/launch failure (or any other throw) means the peer could
-  // not be reached at all: conservatively `unavailable`.
-  return "unavailable";
+  // Any other throw is unclassifiable: per the declared taxonomy, conservatively
+  // `internal_transport_error` (NOT `unavailable`, which is reserved for a peer
+  // that could not be reached at all — e.g. no worker configured, synthesised by
+  // the caller). Both fail closed identically in required mode; the distinction
+  // is for accurate operational evidence.
+  return "internal_transport_error";
 }
 
 /**

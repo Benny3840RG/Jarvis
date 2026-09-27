@@ -123,14 +123,14 @@ describe("classifyAcpConsultation", () => {
     }
   });
 
-  it("classifies a spawn/other throw as unavailable", async () => {
+  it("classifies an unclassifiable throw as internal_transport_error (per the taxonomy)", async () => {
     const c = await classifyAcpConsultation(
       fixedTransport(async () => {
-        throw new Error("spawn ENOENT");
+        throw new Error("unexpected");
       }),
       REQUEST,
     );
-    assert.equal(c, "unavailable");
+    assert.equal(c, "internal_transport_error");
   });
 });
 
