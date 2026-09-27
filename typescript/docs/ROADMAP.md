@@ -1,5 +1,40 @@
 # Jarvis TypeScript Roadmap
 
+## Acquisition plan, PR H (slice 5): fail-closed consultation + child isolation (2026-09-27)
+
+Security repair on the owner's review of merged #640 (ACP stdio transport). Two
+high findings, both fixed:
+
+- **Failed consultation no longer suppresses a veto.** `consultAcpPeer`
+  previously mapped a transport throw / malformed / mismatched answer to
+  `abstain`, which — with `governedApprovalPresent` — authorised. A crash,
+  timeout, flood, or bad answer could therefore erase a veto. Now a failed or
+  invalid consultation is **indeterminate**: it resolves to _not authorised even
+  with governed approval_. Only an **explicit** `abstain` from a reachable peer
+  defers to the governed decision (`normaliseResponse` returns `null` on
+  failure; `consultAcpPeer` blocks on `null`). A hostile transport still can
+  never manufacture an `allow`.
+- **Child no longer inherits Jarvis's environment.** `spawnAcpChild` passed no
+  `env`, so the worker inherited all of `process.env` (credentials included),
+  cwd, and ambient network. New `buildAcpChildEnv` builds a minimal allowlisted
+  env (PATH + explicit overrides only — no Jarvis credentials); `spawnAcpChild`
+  takes `env`/`cwd` and sets `windowsHide`. The docstrings no longer overclaim
+  "networkless child": the transport opens no network, but kernel-level egress
+  isolation for the child is a host/provisioning concern (systemd sandbox /
+  network namespaces, like PR F's egress policy) this Node adapter cannot
+  enforce.
+
+Tests: hostile-path stdio cases (timeout, crash, malformed, flood, mismatched
+id) now assert not-authorised **with `governedApprovalPresent: true`** (the
+veto-suppression regression guard); `acpTransport` proves failure/malformed/
+hostile-getter block even with governed approval while an explicit `abstain`
+still defers; `buildAcpChildEnv` proves ambient credentials are dropped and
+overrides/PATH handled. `npm run check` green.
+
+Live wiring stays gated: no worker is launched, and the live launch slice will
+not proceed until the repaired exact head passes maintenance review and the
+owner signs off.
+
 ## Acquisition plan, PR H (slice 4): ACP worker config resolver (2026-09-27)
 
 Owner-approved, env-configurable worker launch config — the fail-closed resolver

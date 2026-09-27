@@ -51,52 +51,45 @@ describe("ACP transport seam (PR H, slice 1)", () => {
     assert.equal(outcome.authorised, false);
   });
 
-  it("fails closed to abstain when the transport throws — never manufactures authority", async () => {
+  it("blocks (indeterminate) when the transport throws — even with governed approval, so a veto cannot be suppressed", async () => {
     const transport: AcpTransport = {
       requestPermission: async () => {
         throw new Error("peer unreachable");
       },
     };
-    // A broken transport can never authorise on its own...
-    const withoutGoverned = await consultAcpPeer({
-      transport,
-      request: REQUEST,
-      governedApprovalPresent: false,
-    });
-    assert.equal(withoutGoverned.authorised, false);
-    // ...and never vetoes a governed-approved action (it is advisory, not a gate).
-    const withGoverned = await consultAcpPeer({
-      transport,
-      request: REQUEST,
-      governedApprovalPresent: true,
-    });
-    assert.equal(withGoverned.authorised, true);
-    assert.match(withGoverned.reason, /abstain|advisory|governed/i);
+    for (const governedApprovalPresent of [false, true]) {
+      const outcome = await consultAcpPeer({
+        transport,
+        request: REQUEST,
+        governedApprovalPresent,
+      });
+      assert.equal(outcome.authorised, false, `governed=${governedApprovalPresent}`);
+      assert.match(outcome.reason, /indeterminate|failed|no valid/i);
+    }
   });
 
-  it("treats a malformed or mismatched response as abstain (fail-closed), never allow", async () => {
+  it("blocks a malformed or mismatched response even with governed approval present", async () => {
     const malformed: unknown[] = [
       { requestId: "req-1", decision: "yes-please" }, // invalid decision
-      { requestId: "WRONG", decision: "allow" }, // requestId mismatch
+      { requestId: "WRONG", decision: "allow" }, // requestId mismatch (a forged allow)
       { decision: "allow" }, // missing requestId
       "allow", // not an object
       null,
       { requestId: "req-1" }, // missing decision
     ];
     for (const response of malformed) {
-      // Without governed approval, a forged "allow" must not authorise.
+      // Governed approval present: the failure must STILL block (a would-be veto
+      // must not be suppressible by feeding garbage).
       const outcome = await consultAcpPeer({
         transport: fixedTransport(response),
         request: REQUEST,
-        governedApprovalPresent: false,
+        governedApprovalPresent: true,
       });
       assert.equal(outcome.authorised, false, JSON.stringify(response));
     }
   });
 
-  it("fails closed to abstain when a response getter throws (hostile object/Proxy)", async () => {
-    // A returned object whose property access throws must normalise to abstain,
-    // not propagate as a rejection.
+  it("blocks when a response getter throws (hostile object/Proxy), even with governed approval", async () => {
     const hostile = {
       get requestId(): string {
         throw new Error("boom");
@@ -105,18 +98,30 @@ describe("ACP transport seam (PR H, slice 1)", () => {
         throw new Error("boom");
       },
     };
-    const withoutGoverned = await consultAcpPeer({
-      transport: fixedTransport(hostile),
-      request: REQUEST,
-      governedApprovalPresent: false,
-    });
-    assert.equal(withoutGoverned.authorised, false);
-    const withGoverned = await consultAcpPeer({
-      transport: fixedTransport(hostile),
-      request: REQUEST,
-      governedApprovalPresent: true,
-    });
-    assert.equal(withGoverned.authorised, true);
+    for (const governedApprovalPresent of [false, true]) {
+      const outcome = await consultAcpPeer({
+        transport: fixedTransport(hostile),
+        request: REQUEST,
+        governedApprovalPresent,
+      });
+      assert.equal(outcome.authorised, false, `governed=${governedApprovalPresent}`);
+    }
+  });
+
+  it("defers an EXPLICIT abstain to the governed decision (a reachable peer with no opinion)", async () => {
+    // A well-formed abstain is distinct from a failed consultation: with governed
+    // approval it authorises; without, it does not.
+    const transport = fixedTransport({ requestId: "req-1", decision: "abstain" });
+    assert.equal(
+      (await consultAcpPeer({ transport, request: REQUEST, governedApprovalPresent: true }))
+        .authorised,
+      true,
+    );
+    assert.equal(
+      (await consultAcpPeer({ transport, request: REQUEST, governedApprovalPresent: false }))
+        .authorised,
+      false,
+    );
   });
 
   it("never lets the transport response authorise without the governed gate", async () => {

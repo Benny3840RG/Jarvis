@@ -30,20 +30,27 @@ its network-egress decision (as with PR F), is a later slice.
 
 Two fail-closed properties, enforced and tested:
 
-1. **Every response passes through the AUTH-INV-05 gate.** A well-formed `allow`
-   is inert on its own — authority still requires `governedApprovalPresent`.
-2. **Malformed / mismatched / thrown → `abstain`.** A response that is missing,
-   not an object, carries the wrong `requestId`, or has an unknown decision is
-   treated as advisory-neutral. A broken or hostile transport therefore can
-   never manufacture an `allow`, and can at most fail to cast a veto (a forged
-   `deny` only blocks — fail-safe — it never authorises). It cannot inject
-   authority.
+1. **Every valid response passes through the AUTH-INV-05 gate.** A well-formed
+   `allow` is inert on its own — authority still requires `governedApprovalPresent`.
+2. **A failed/invalid consultation is indeterminate (blocked), not an abstention.**
+   If the transport throws, or returns something missing, not an object, with the
+   wrong `requestId`, or an unknown decision, `consultAcpPeer` resolves to _not
+   authorised even when a governed approval is present_. This is deliberate:
+   mapping a failure to `abstain` would let a crash, timeout, flood, or
+   malformed/mismatched answer **suppress a veto** the peer would have cast once
+   governed approval exists. Only an **explicit** `abstain` from a reachable peer
+   defers to the governed decision. A broken or hostile transport can neither
+   manufacture an `allow` nor erase a veto.
+
+   > History: slice 1 originally mapped failures to `abstain`; the review of the
+   > live stdio transport (PR #640) flagged that this suppressed a veto under a
+   > present governed approval. The failure→blocked semantics above are the fix.
 
 Tests: `tests/acpTransport.test.ts` — allow+governed authorises; allow without
-governed does not; deny vetoes even with governed; a throwing transport abstains
-(never authorises alone, never blocks a governed-approved action); malformed and
-mismatched responses are abstained; a well-formed allow is inert without the
-governed gate. All offline, no network.
+governed does not; deny vetoes even with governed; a throwing/malformed/mismatched
+consultation is **blocked even with governed approval present** (no veto
+suppression); an explicit `abstain` defers to the governed decision; a well-formed
+allow is inert without the governed gate. All offline, no network.
 
 ## Status
 

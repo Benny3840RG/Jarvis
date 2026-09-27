@@ -3,10 +3,12 @@
  *
  * The first concrete {@link AcpTransport}: it carries an ACP permission
  * request/response to a locally launched worker (Claude/Codex) over the
- * worker's stdin/stdout, using the wire framing from {@link acpMessage}. It is
- * **networkless** — no HTTP, no listeners, no ports, no egress path. (The
- * worker's own model/API access is a separate governed-egress concern and is
- * deliberately untouched here; this slice neither grants nor broadens it.)
+ * worker's stdin/stdout, using the wire framing from {@link acpMessage}. The
+ * transport itself opens no network — no HTTP, no listeners, no ports. It does
+ * *not* by itself make the child networkless: keeping the worker off the
+ * network, and governing its own model/API egress, is a host/provisioning
+ * concern (see {@link spawnAcpChild}); this slice neither grants nor broadens
+ * that egress, and passes the child a minimal, credential-free environment.
  *
  * AUTH-INV-05 is preserved exactly, and the transport is fail-closed by
  * construction: `requestPermission` only ever resolves with a response it
@@ -14,10 +16,11 @@
  * *and* whose `requestId` matches the request. Anything else — malformed or
  * non-JSON output, a mismatched id, a flood of noise beyond the line bound, a
  * timeout, or the child crashing/closing before a valid response — rejects. A
- * rejection (or any thrown error) is turned into `abstain` by
- * {@link consultAcpPeer}, so untrusted child output can never manufacture an
- * `allow`: on its own a peer `allow` is advisory and still requires an
- * independent governed approval, and `deny` remains a veto.
+ * rejection is treated by {@link consultAcpPeer} as an **indeterminate**
+ * consultation and resolves to *not authorised even with a governed approval*,
+ * so untrusted child output can neither manufacture an `allow` nor suppress a
+ * veto. Only an explicit `abstain` from a reachable peer defers to the governed
+ * decision.
  *
  * stdout is the framing channel; the real spawner keeps the child's stderr
  * separate so ordinary logging cannot contaminate the frames. Even so, every
@@ -203,21 +206,57 @@ export function createBoundedLineReader(options: {
 }
 
 /**
+ * Build a **minimal, allowlisted** environment for a worker child. Jarvis's own
+ * `process.env` (which may hold credentials/tokens) is deliberately *not*
+ * inherited: the child starts from only `PATH` (so the command resolves) plus
+ * the caller's explicit `overrides`. This keeps Jarvis credentials out of the
+ * worker. Pure and testable.
+ */
+export function buildAcpChildEnv(
+  overrides: Readonly<Record<string, string>> = {},
+  sourceEnv: Readonly<Record<string, string | undefined>> = process.env,
+): Record<string, string> {
+  const env: Record<string, string> = {};
+  // PATH under its usual name (and Windows' capitalisation) so the command is
+  // findable; nothing else from the ambient environment is passed through.
+  const path = sourceEnv.PATH ?? sourceEnv.Path;
+  if (typeof path === "string") env.PATH = path;
+  for (const [key, value] of Object.entries(overrides)) env[key] = value;
+  return env;
+}
+
+/**
  * Spawn a real local worker as an {@link AcpChildProcess} over stdio. stdin/stdout
  * are piped for the ACP frames; stderr is inherited so the worker's own logging
  * never contaminates the stdout framing channel. stdout is read through a
  * {@link createBoundedLineReader}, so an oversized unterminated line terminates
- * the child (fail-closed) instead of growing memory. This is the live adapter
- * (like PR F's live wiring): it is not exercised by the offline tests, which
- * drive {@link StdioAcpTransport} through a fake child. No network is opened here.
+ * the child (fail-closed) instead of growing memory.
+ *
+ * Isolation: the child gets a **minimal allowlisted environment** (via
+ * {@link buildAcpChildEnv} — no inherited Jarvis credentials) and an explicit
+ * `cwd`. It does **not**, and from Node cannot, enforce kernel-level *network*
+ * egress isolation for the child; keeping the worker off the network (and
+ * governing its own model/API access) is a host/provisioning concern — e.g.
+ * systemd sandboxing or network namespaces, analogous to PR F's environment
+ * egress policy. Do not rely on this adapter alone to keep the worker
+ * networkless. This is the live adapter (like PR F's live wiring): it is not
+ * exercised by the offline tests, which drive {@link StdioAcpTransport} through
+ * a fake child.
  */
 export function spawnAcpChild(options: {
   command: string;
   args?: readonly string[];
   maxLineBytes?: number;
+  /** Minimal env for the child; defaults to {@link buildAcpChildEnv} (PATH only). */
+  env?: Readonly<Record<string, string>>;
+  /** Working directory for the child; defaults to the current directory. */
+  cwd?: string;
 }): AcpChildProcess {
   const child = nodeSpawn(options.command, options.args ? [...options.args] : [], {
     stdio: ["pipe", "pipe", "inherit"],
+    env: options.env ? { ...options.env } : buildAcpChildEnv(),
+    cwd: options.cwd,
+    windowsHide: true,
   });
   let lineHandler: ((line: string) => void) | undefined;
   let closeHandler: (() => void) | undefined;
