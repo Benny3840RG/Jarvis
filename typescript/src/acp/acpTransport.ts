@@ -11,12 +11,17 @@
  *
  * Two properties are enforced here, both fail-closed:
  *
- *   1. Every peer response passes through {@link resolveAcpAuthorization}. The
- *      transport's raw answer is never returned as an authorisation.
- *   2. A response that is missing, malformed, mismatched, or thrown is treated
- *      as `abstain` — advisory-neutral. A broken or hostile transport therefore
- *      can never manufacture an `allow` (authority still requires the governed
- *      approval) and can at most fail to cast a veto. It cannot inject authority.
+ *   1. Every valid peer response passes through {@link resolveAcpAuthorization}.
+ *      The transport's raw answer is never returned as an authorisation.
+ *   2. A consultation that fails — the transport throws, or returns something
+ *      missing, malformed, or with a mismatched `requestId` — is **indeterminate**,
+ *      not an abstention: it resolves to *not authorised* even when a governed
+ *      approval is present. This is deliberate. Mapping a failure to `abstain`
+ *      would let a crash, timeout, flood, or malformed/mismatched answer
+ *      *suppress a veto* the peer would have cast, once governed approval exists.
+ *      Only an **explicit** `abstain` from a reachable peer defers to the
+ *      governed decision. A broken or hostile transport still can never
+ *      manufacture an `allow`.
  *
  * Deliberately not in this slice: any wire transport (stdio/HTTP) or network.
  * The concrete transport — and its network-egress decision, like PR F's — is a
@@ -51,16 +56,17 @@ const VALID_DECISIONS: ReadonlySet<AcpPermissionDecision> = new Set(["allow", "d
 
 /**
  * Validate a raw transport answer against the request, fail-closed. Returns a
- * well-formed {@link AcpPermissionResponse}, or an `abstain` response when the
- * answer is missing, not an object, has the wrong `requestId`, or carries a
- * decision that is not one of the three known values. An `abstain` is
- * advisory-neutral: it can never authorise, so a malformed answer cannot be
- * turned into authority.
+ * well-formed {@link AcpPermissionResponse}, or `null` when the answer is
+ * missing, not an object, has the wrong `requestId`, or carries a decision that
+ * is not one of the three known values. `null` means "no valid response" —
+ * {@link consultAcpPeer} treats it as indeterminate (blocked), never as an
+ * abstention, so a malformed/mismatched answer cannot silently pass a veto.
  */
-function normaliseResponse(raw: unknown, request: AcpPermissionRequest): AcpPermissionResponse {
-  if (typeof raw !== "object" || raw === null) {
-    return { requestId: request.requestId, decision: "abstain" };
-  }
+function normaliseResponse(
+  raw: unknown,
+  request: AcpPermissionRequest,
+): AcpPermissionResponse | null {
+  if (typeof raw !== "object" || raw === null) return null;
   const candidate = raw as { requestId?: unknown; decision?: unknown; reason?: unknown };
   const decision = candidate.decision;
   if (
@@ -68,7 +74,7 @@ function normaliseResponse(raw: unknown, request: AcpPermissionRequest): AcpPerm
     typeof decision !== "string" ||
     !VALID_DECISIONS.has(decision as AcpPermissionDecision)
   ) {
-    return { requestId: request.requestId, decision: "abstain" };
+    return null;
   }
   return {
     requestId: request.requestId,
@@ -88,22 +94,32 @@ export type ConsultAcpPeerInput = Readonly<{
 }>;
 
 /**
- * Consult a peer over ACP and resolve authorisation. The peer's answer is
- * normalised fail-closed and then routed through {@link resolveAcpAuthorization}
- * — the transport can never authorise directly. A transport that throws is
- * treated as `abstain` (advisory-neutral), so an unreachable or hostile peer
- * cannot block a governed-approved action nor manufacture one.
+ * Consult a peer over ACP and resolve authorisation. A *valid* peer answer is
+ * routed through {@link resolveAcpAuthorization} — the transport can never
+ * authorise directly. A *failed* consultation (the transport throws, or returns
+ * a missing/malformed/mismatched answer, including a hostile object whose
+ * getters throw) is **indeterminate**: it resolves to not authorised regardless
+ * of `governedApprovalPresent`, so a crash, timeout, flood, or bad answer can
+ * never suppress a veto. Only an explicit `abstain` from a reachable peer defers
+ * to the governed decision.
  */
 export async function consultAcpPeer(input: ConsultAcpPeerInput): Promise<AcpAuthorizationOutcome> {
-  let acp: AcpPermissionResponse;
+  let acp: AcpPermissionResponse | null;
   try {
-    // Normalise inside the guard: a transport that throws, OR a returned object
-    // whose `requestId`/`decision`/`reason` getters throw (a hostile Proxy),
-    // both fall through to abstain — never a rejection, never allow/deny.
     const raw = await input.transport.requestPermission(input.request);
     acp = normaliseResponse(raw, input.request);
   } catch {
-    acp = { requestId: input.request.requestId, decision: "abstain" };
+    acp = null;
+  }
+  if (acp === null) {
+    // Fail-closed (AUTH-INV-05): a failed/invalid consultation is not an
+    // abstention. It must not authorise even with governed approval — otherwise
+    // an unreachable, crashing, flooding, or malformed peer could erase a veto.
+    return {
+      authorised: false,
+      reason:
+        "ACP consultation failed or returned no valid response; treated as indeterminate (fail-closed): the action cannot proceed without a valid peer response, even with a governed approval.",
+    };
   }
   return resolveAcpAuthorization({ acp, governedApprovalPresent: input.governedApprovalPresent });
 }

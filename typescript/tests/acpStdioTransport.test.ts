@@ -6,6 +6,7 @@ import type { AcpPermissionDecision } from "../src/acp/acpContract.js";
 import { encodeAcpEnvelope } from "../src/acp/acpMessage.js";
 import {
   AcpStdioTransportError,
+  buildAcpChildEnv,
   createBoundedLineReader,
   StdioAcpTransport,
   type AcpChildProcess,
@@ -142,10 +143,12 @@ describe("ACP stdio transport (PR H, slice 3)", () => {
     assert.equal(child.killed(), true); // lifecycle: child is torn down after settling
   });
 
-  describe("untrusted worker output cannot manufacture authority", () => {
-    // In every case the worker "says allow" (or floods/crashes/hangs) but there
-    // is NO governed approval, so authorisation must be false — the child alone
-    // can never authorise.
+  describe("untrusted worker output cannot manufacture authority or suppress a veto", () => {
+    // In every case the worker "says allow" (or floods/crashes/hangs) AND a
+    // governed approval IS present. The result must still be not-authorised: a
+    // failed/invalid consultation is indeterminate (blocked), so it can neither
+    // manufacture authority nor erase a veto the peer would have cast. Running
+    // these with governedApprovalPresent:true is the key regression guard.
     const expectNotAuthorised = async (deps: {
       spawn: () => AcpChildProcess;
       scheduleTimeout?: (h: () => void, ms: number) => () => void;
@@ -159,7 +162,7 @@ describe("ACP stdio transport (PR H, slice 3)", () => {
       const pending = consultAcpPeer({
         transport,
         request: REQUEST,
-        governedApprovalPresent: false,
+        governedApprovalPresent: true,
       });
       deps.fire?.();
       assert.equal((await pending).authorised, false);
@@ -245,6 +248,38 @@ describe("ACP stdio transport (PR H, slice 3)", () => {
       reader.push("toolongline\n");
       assert.equal(overflows, 1);
       assert.deepEqual(lines, []);
+    });
+  });
+
+  describe("minimal child environment", () => {
+    it("does not inherit Jarvis's ambient env (no credential leakage), keeps PATH", () => {
+      const env = buildAcpChildEnv(
+        {},
+        {
+          PATH: "/usr/bin:/bin",
+          JARVIS_GITHUB_TOKEN: "secret",
+          JARVIS_SERVICE_TOKEN: "secret2",
+          HOME: "/home/jarvis",
+        },
+      );
+      assert.deepEqual(env, { PATH: "/usr/bin:/bin" });
+      assert.equal("JARVIS_GITHUB_TOKEN" in env, false);
+      assert.equal("JARVIS_SERVICE_TOKEN" in env, false);
+      assert.equal("HOME" in env, false);
+    });
+
+    it("merges explicit overrides on top of the minimal base", () => {
+      const env = buildAcpChildEnv({ ACP_MODE: "stdio" }, { PATH: "/bin", SECRET: "nope" });
+      assert.deepEqual(env, { PATH: "/bin", ACP_MODE: "stdio" });
+    });
+
+    it("tolerates a source env without PATH", () => {
+      assert.deepEqual(buildAcpChildEnv({}, {}), {});
+      assert.deepEqual(buildAcpChildEnv({ X: "1" }, {}), { X: "1" });
+    });
+
+    it("accepts Windows-cased Path as PATH", () => {
+      assert.deepEqual(buildAcpChildEnv({}, { Path: "C:\\bin" }), { PATH: "C:\\bin" });
     });
   });
 });
