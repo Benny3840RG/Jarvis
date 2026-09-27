@@ -316,3 +316,24 @@ describe("StdioAcpTransport — close-reason classification", () => {
     );
   });
 });
+
+describe("StdioAcpTransport — request_mismatch classification", () => {
+  it("surfaces a well-formed response with a wrong requestId as request_mismatch", async () => {
+    const transport = new StdioAcpTransport({
+      spawn: () => fakeChild(() => ({ lines: [responseLine("allow", "OTHER")] })),
+    });
+    await assert.rejects(
+      () => transport.requestPermission(REQUEST),
+      (error: unknown) =>
+        error instanceof AcpStdioTransportError && error.code === "request_mismatch",
+    );
+  });
+
+  it("still ignores non-frame stdout contamination and resolves the real response", async () => {
+    const transport = new StdioAcpTransport({
+      spawn: () => fakeChild(() => ({ lines: ["log noise", "{ not json", responseLine("allow")] })),
+    });
+    const response = await transport.requestPermission(REQUEST);
+    assert.equal(response.decision, "allow");
+  });
+});

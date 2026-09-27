@@ -124,6 +124,8 @@ function classifyError(error: unknown): AcpConsultationClassification {
         return "worker_crash";
       case "output_limit_exceeded":
         return "output_limit_exceeded";
+      case "request_mismatch":
+        return "request_mismatch";
       case "write_failed":
         return "internal_transport_error";
     }

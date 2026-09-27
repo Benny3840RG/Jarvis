@@ -160,6 +160,36 @@ so it isn't visible in the process args or the unit's environment dump). Never
 pass Jarvis's `JARVIS_GITHUB_TOKEN`, `JARVIS_SERVICE_TOKEN`, read-plane App key,
 or `$CREDENTIALS_DIRECTORY` through.
 
+## Worker lifecycle (avoid orphaned services) — verify, don't assume
+
+The transport spawns a fresh child **per request** and calls `kill()` on it when
+the request settles (response, timeout, flood, or crash). With `systemd-run
+--pipe` the process the transport spawns and kills is the `systemd-run`
+**client**, not the transient **service** it launched. Killing the client does
+**not** necessarily stop the service, so without a lifecycle tie repeated
+consultations could orphan worker services until `RuntimeMaxSec` — defeating
+per-request cleanup and the resource bounds.
+
+Do not assume any particular kill-propagation; establish and **verify** the
+lifecycle on the host. Two backstops, layered:
+
+1. **Worker exits on EOF / after one response.** `nolan-acp-worker`'s loop ends
+   when its stdin closes, and per request it needs to emit at most one response.
+   When the client is killed its stdio pipes close, so the service's stdin should
+   reach EOF and the worker should exit on its own. Confirm this actually happens
+   for your worker binary (a worker that ignores stdin EOF will linger).
+2. **`RuntimeMaxSec` is the hard cap.** Set it (the example uses `120`) so even a
+   worker that ignores EOF is reaped by the manager. Treat it as the ceiling, not
+   the normal path.
+
+If neither reliably stops the service promptly, prefer a lifecycle-tied launcher
+(e.g. verify whether `systemd-run --pipe` on your systemd version stops the unit
+when the client dies, or wrap so the unit is `systemctl stop`ped on client exit)
+before enabling live worker launches. Add this to the verification checklist:
+after several consultations — including a forced mid-request kill — confirm **no
+orphaned worker unit or process remains** (e.g. `systemctl list-units 'run-*.service'`
+and a process scan for the worker command) beyond the moment the request settled.
+
 ## Directive reference (what each does, and the caveats)
 
 | Directive                              | Effect                                                        | Caveat / verify                                                                 |

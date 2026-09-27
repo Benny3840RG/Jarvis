@@ -223,8 +223,8 @@ describe("createGovernedAcpConsultationFromEnv — advisory (evidence only)", ()
       close: true,
     })).consult(REQUEST, true);
     assert.equal(mismatch.proceed, true);
-    // A mismatched line is ignored as contamination; the close then yields worker_crash.
-    assert.equal(mismatch.classification, "worker_crash");
+    // A well-formed response with a wrong requestId is surfaced as request_mismatch.
+    assert.equal(mismatch.classification, "request_mismatch");
   });
 });
 

@@ -58,7 +58,7 @@ export type AcpWorkerConfig = Readonly<{ command: string; args: readonly string[
  * fault (we never handed the request to the worker).
  */
 export type AcpStdioTransportFailureCode =
-  "timeout" | "worker_crash" | "output_limit_exceeded" | "write_failed";
+  "timeout" | "worker_crash" | "output_limit_exceeded" | "write_failed" | "request_mismatch";
 
 export class AcpStdioTransportError extends Error {
   readonly code: AcpStdioTransportFailureCode;
@@ -151,14 +151,24 @@ export class StdioAcpTransport implements AcpTransport {
         if (settled) return;
         lines += 1;
         const envelope = decodeAcpEnvelope(line);
-        if (
-          envelope?.kind === "permission_response" &&
-          envelope.response.requestId === request.requestId
-        ) {
-          settle(() => resolve(envelope.response));
+        if (envelope?.kind === "permission_response") {
+          if (envelope.response.requestId === request.requestId) {
+            settle(() => resolve(envelope.response));
+            return;
+          }
+          // A well-formed response for a *different* requestId is a genuine
+          // mismatch, not log contamination: we spawn a fresh child per request
+          // and send exactly one id, so the worker answered the wrong request.
+          // Surface it as request_mismatch rather than ignoring it.
+          fail("request_mismatch", "worker responded with a mismatched requestId");
           return;
         }
-        // Non-matching line: ignore as contamination, but bound how much we read.
+        // A non-frame line (unrelated stdout / a line that does not decode to a
+        // response) is treated as contamination and ignored — stderr is the
+        // worker's log channel — but bounded so a flood cannot stall the request.
+        // (A malformed frame is indistinguishable from stray output here, so it
+        // is not surfaced as malformed_response; that classification comes from
+        // the strict in-process transport. See acpGovernedConsultation.ts.)
         if (lines >= this.#maxResponseLines) {
           fail("output_limit_exceeded", "no valid response within the bounded stdout window");
         }
