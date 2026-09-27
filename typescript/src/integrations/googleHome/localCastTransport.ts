@@ -37,6 +37,7 @@ type CastClient = {
   on(event: "error", listener: (error: Error) => void): void;
   removeListener(event: "error", listener: (error: Error) => void): void;
   launch(receiver: unknown, callback: (error: Error | null, player: CastPlayer) => void): void;
+  stop(player: CastPlayer, callback: (error: Error | null) => void): void;
   getVolume(callback: (error: Error | null, volume?: CastVolume) => void): void;
   setVolume(
     volume: Readonly<{ level?: number; muted?: boolean }>,
@@ -109,7 +110,11 @@ async function hostAudioForCast(audio: Uint8Array, remoteAddress: string): Promi
   });
 
   const server = createServer((request, response) => {
-    if (request.url !== path || (request.method !== "GET" && request.method !== "HEAD")) {
+    if (
+      request.socket.remoteAddress !== remoteAddress ||
+      request.url !== path ||
+      (request.method !== "GET" && request.method !== "HEAD")
+    ) {
       response.writeHead(404).end();
       return;
     }
@@ -121,12 +126,12 @@ async function hostAudioForCast(audio: Uint8Array, remoteAddress: string): Promi
       return;
     }
     response.writeHead(200);
-    response.end(Buffer.from(audio));
     response.once("finish", resolveServed);
+    response.end(Buffer.from(audio));
   });
 
-  const port = await listenEphemeral(server);
   const localAddress = await routeLocalAddress(remoteAddress);
+  const port = await listenEphemeral(server, localAddress);
   return {
     url: `http://${localAddress}:${port}${path}`,
     served,
@@ -134,10 +139,10 @@ async function hostAudioForCast(audio: Uint8Array, remoteAddress: string): Promi
   };
 }
 
-function listenEphemeral(server: Server): Promise<number> {
+function listenEphemeral(server: Server, address: string): Promise<number> {
   return new Promise((resolve, reject) => {
     server.once("error", reject);
-    server.listen(0, "0.0.0.0", () => {
+    server.listen(0, address, () => {
       const address = server.address();
       if (!address || typeof address === "string") {
         reject(new LocalCastTransportError("cast-audio-server-address-unavailable"));
@@ -154,69 +159,76 @@ function closeServer(server: Server): Promise<void> {
       return;
     }
     server.close(() => resolve());
+    server.closeAllConnections();
   });
 }
 
 function callbackPromise<T>(
   register: (callback: (error: Error | null, value?: T) => void) => void,
+  signal: AbortSignal,
+  timeoutMs = 5_000,
 ): Promise<T | undefined> {
   return new Promise((resolve, reject) => {
-    register((error, value) => {
-      if (error) {
-        reject(error);
-        return;
-      }
-      resolve(value);
-    });
-  });
-}
-
-function waitForPlaybackToFinish(
-  player: CastPlayer,
-  signal: AbortSignal,
-  timeoutMs = 45_000,
-): Promise<void> {
-  return new Promise((resolve, reject) => {
-    let started = false;
-    const timeout = setTimeout(() => finish(new Error("cast-playback-timeout")), timeoutMs);
+    if (signal.aborted) {
+      reject(signal.reason);
+      return;
+    }
+    let settled = false;
+    const finish = (error: unknown, value?: T) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      signal.removeEventListener("abort", onAbort);
+      if (error) reject(error);
+      else resolve(value);
+    };
     const onAbort = () => finish(signal.reason ?? new Error("announcement-aborted"));
-    const onStatus = (status: CastStatus) => {
-      if (status.playerState === "PLAYING" || status.playerState === "BUFFERING") {
-        started = true;
-      }
-      if (started && status.playerState === "IDLE") finish();
-    };
-    const finish = (error?: unknown) => {
-      clearTimeout(timeout);
-      signal.removeEventListener("abort", onAbort);
-      player.removeListener("status", onStatus);
-      if (error) {
-        reject(error);
-        return;
-      }
-      resolve();
-    };
+    const timer = setTimeout(() => finish(new Error("cast-request-timeout")), timeoutMs);
     signal.addEventListener("abort", onAbort, { once: true });
-    player.on("status", onStatus);
+    try {
+      register((error, value) => finish(error, value));
+    } catch (error) {
+      finish(error);
+    }
   });
 }
 
-async function connectClient(address: string, signal: AbortSignal): Promise<CastClient> {
-  const client = new castv2.Client();
-  await new Promise<void>((resolve, reject) => {
-    const onError = (error: Error) => reject(error);
-    const onAbort = () => {
-      client.close();
-      reject(signal.reason ?? new Error("announcement-aborted"));
-    };
-    signal.addEventListener("abort", onAbort, { once: true });
-    client.on("error", onError);
-    client.connect(address, () => {
-      signal.removeEventListener("abort", onAbort);
-      resolve();
-    });
-  });
-  return client;
+function observePlayback(player: CastPlayer, signal: AbortSignal) {
+  let started = false;
+  let observe: (status: CastStatus) => void = () => undefined;
+  const stopped = new AbortController();
+  const combined = AbortSignal.any([signal, stopped.signal]);
+  const promise = callbackPromise<void>(
+    (finish) => {
+      observe = (status) => {
+        if (!status || typeof status !== "object") {
+          finish(new Error("cast-invalid-status"));
+          return;
+        }
+        if (status.playerState === "PLAYING") started = true;
+        if (status.playerState !== "IDLE") return;
+        if (!started && status.idleReason === undefined) return;
+        if (status.idleReason !== "FINISHED") {
+          finish(new Error("cast-playback-not-finished"));
+        } else if (started) {
+          finish(null);
+        }
+      };
+      player.on("status", observe);
+    },
+    combined,
+    45_000,
+  );
+  // Observe early rejection even if LOAD itself fails before we await playback.
+  void promise.catch(() => undefined);
+  return {
+    promise,
+    observe,
+    dispose() {
+      player.removeListener("status", observe);
+      stopped.abort(new Error("cast-playback-observer-closed"));
+    },
+  };
 }
 
 export async function synthesizeAnnouncement(
@@ -241,66 +253,116 @@ export async function castAnnouncement(
   signal: AbortSignal,
   voice = "en-au",
 ): Promise<void> {
-  if (signal.aborted) throw signal.reason ?? new Error("announcement-aborted");
-  const audio = await synthesizeAnnouncement(message, voice);
-  const hosted = await hostAudioForCast(audio, address);
-  const client = await connectClient(address, signal);
-  const abortClient = () => client.close();
-  signal.addEventListener("abort", abortClient, { once: true });
+  signal.throwIfAborted();
+  const lifetime = new AbortController();
+  const deadline = setTimeout(() => lifetime.abort(new Error("cast-announcement-timeout")), 60_000);
+  const activeSignal = AbortSignal.any([signal, lifetime.signal]);
+  let hosted: HostedAudio | undefined;
+  let client: CastClient | undefined;
+  let player: CastPlayer | undefined;
+  let playback: ReturnType<typeof observePlayback> | undefined;
   let originalVolume: CastVolume | undefined;
-
+  let succeeded = false;
+  let restorationFailed = false;
   try {
-    originalVolume = await callbackPromise<CastVolume>((callback) => client.getVolume(callback));
-    await callbackPromise((callback) =>
-      client.setVolume({ level: volume, muted: false }, callback),
+    const audio = await synthesizeAnnouncement(message, voice);
+    activeSignal.throwIfAborted();
+    hosted = await hostAudioForCast(audio, address);
+    activeSignal.throwIfAborted();
+    const current = new castv2.Client();
+    client = current;
+    current.on("error", (error) => lifetime.abort(error));
+    await callbackPromise<void>((done) => current.connect(address, () => done(null)), activeSignal);
+    originalVolume = await callbackPromise<CastVolume>(
+      (done) => current.getVolume(done),
+      activeSignal,
     );
-    const player = await callbackPromise<CastPlayer>((callback) =>
-      client.launch(castv2.DefaultMediaReceiver, callback),
+    if (
+      !originalVolume ||
+      typeof originalVolume.level !== "number" ||
+      !Number.isFinite(originalVolume.level) ||
+      typeof originalVolume.muted !== "boolean"
+    ) {
+      throw new Error("cast-original-volume-unavailable");
+    }
+    await callbackPromise(
+      (done) => current.setVolume({ level: volume, muted: false }, done),
+      activeSignal,
     );
-    if (!player) throw new LocalCastTransportError("cast-player-unavailable");
-
-    const finished = waitForPlaybackToFinish(player, signal);
-    await callbackPromise((callback) =>
-      player.load(
-        {
-          contentId: hosted.url,
-          contentType: "audio/wav",
-          streamType: "BUFFERED",
-          metadata: {
-            metadataType: 3,
-            title: "NOLAN",
-            artist: "Local announcement",
+    player = await callbackPromise<CastPlayer>(
+      (done) => current.launch(castv2.DefaultMediaReceiver, done),
+      activeSignal,
+    );
+    if (!player) throw new Error("cast-player-unavailable");
+    const currentPlayer = player;
+    playback = observePlayback(currentPlayer, activeSignal);
+    const mediaUrl = hosted.url;
+    const status = await callbackPromise<CastStatus>(
+      (done) =>
+        currentPlayer.load(
+          {
+            contentId: mediaUrl,
+            contentType: "audio/wav",
+            streamType: "BUFFERED",
+            metadata: { metadataType: 3, title: "NOLAN", artist: "Local announcement" },
           },
-        },
-        { autoplay: true },
-        callback,
-      ),
+          { autoplay: true },
+          done,
+        ),
+      activeSignal,
     );
-
-    await Promise.race([
-      hosted.served,
-      new Promise<void>((_, reject) =>
-        setTimeout(() => reject(new Error("cast-audio-fetch-timeout")), 10_000),
+    if (status) playback.observe(status);
+    const audioServed = hosted.served;
+    await Promise.all([
+      callbackPromise<void>(
+        (done) => {
+          void audioServed.then(() => done(null));
+        },
+        activeSignal,
+        10_000,
       ),
+      playback.promise,
     ]);
-    await finished;
+    activeSignal.throwIfAborted();
+    succeeded = true;
   } catch (error) {
     throw new LocalCastTransportError("cast-announcement-failed", { cause: error });
   } finally {
-    const volumeToRestore = originalVolume;
-    if (volumeToRestore) {
-      await callbackPromise((callback) =>
-        client.setVolume(
-          {
-            ...(volumeToRestore.level === undefined ? {} : { level: volumeToRestore.level }),
-            ...(volumeToRestore.muted === undefined ? {} : { muted: volumeToRestore.muted }),
-          },
-          callback,
-        ),
-      ).catch(() => undefined);
+    lifetime.abort(new Error("cast-announcement-ended"));
+    clearTimeout(deadline);
+    playback?.dispose();
+    try {
+      if (client) {
+        const current = client;
+        const cleanupSignal = new AbortController().signal;
+        // Stop only the receiver session this call owns. Loss of connectivity
+        // makes a physical stop unconfirmed; it never proves that nothing played.
+        if (!succeeded && player) {
+          const currentPlayer = player;
+          await callbackPromise<void>(
+            (done) => current.stop(currentPlayer, done),
+            cleanupSignal,
+            500,
+          ).catch(() => undefined);
+        }
+        const restore = originalVolume;
+        if (restore) {
+          try {
+            await callbackPromise((done) => current.setVolume(restore, done), cleanupSignal, 500);
+          } catch {
+            restorationFailed = true;
+          }
+        }
+      }
+    } finally {
+      try {
+        client?.close();
+      } finally {
+        await hosted?.close();
+      }
     }
-    signal.removeEventListener("abort", abortClient);
-    client.close();
-    await hosted.close();
+  }
+  if (restorationFailed) {
+    throw new LocalCastTransportError("cast-played-volume-restore-unconfirmed");
   }
 }
