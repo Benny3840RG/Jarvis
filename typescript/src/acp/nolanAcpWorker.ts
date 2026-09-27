@@ -96,10 +96,15 @@ export async function runAcpWorker(options: RunAcpWorkerOptions): Promise<void> 
   });
   // Incremental UTF-8 decoder: a multibyte character split across two byte
   // chunks is buffered and completed on the next write, rather than being
-  // decoded (and corrupted) per chunk. String chunks pass straight through.
+  // decoded (and corrupted) per chunk. EVERY chunk goes through the one decoder
+  // — a string chunk is re-encoded to UTF-8 bytes first — so a byte chunk that
+  // ends mid-code-point still combines correctly with a following string chunk,
+  // rather than the buffered bytes being stranded.
   const decoder = new StringDecoder("utf8");
   for await (const chunk of options.input) {
-    reader.push(typeof chunk === "string" ? chunk : decoder.write(Buffer.from(chunk)));
+    reader.push(
+      decoder.write(typeof chunk === "string" ? Buffer.from(chunk, "utf8") : Buffer.from(chunk)),
+    );
     while (pending.length > 0) {
       const line = pending.shift()!;
       const response = await handleAcpRequestLine(line, options.decide);

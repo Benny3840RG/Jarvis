@@ -111,6 +111,14 @@ effect. Do **not** substitute `--scope`: it would preserve the pipes but silentl
 drop that sandbox, since systemd would not be the one exec'ing the worker.
 Verify the resulting unit with `systemd-analyze security` / `systemctl show`.)
 
+> **Incomplete as shown — do not copy-paste and enable.** This block is the
+> isolation *skeleton*, not a runnable config: `PrivateNetwork=yes` gives the
+> worker loopback only, so as written it **cannot reach its model API** and the
+> worker will fail. You must add exactly one egress path — the filtering proxy
+> (recommended) or the IP allowlist — from the **egress** section below, and
+> provide the worker's own credential, before it works. It is written this way on
+> purpose: start closed, open only the one path you need.
+
 Key point about **egress**: `PrivateNetwork=yes` gives the worker an isolated
 network namespace with only loopback — i.e. **no** external network at all. If
 the worker needs to reach its model API, you must give it exactly that and
@@ -187,8 +195,8 @@ Before enabling live worker launches, confirm on the target host:
 4. **Filesystem confinement.** Confirm the worker cannot read the Jarvis working
    tree or secrets (attempt a read; expect failure).
 5. **Bounds active.** `systemd-analyze security <unit>` (for a named unit) and a
-   review of `systemctl show` for the transient scope; confirm MemoryMax/TasksMax/
-   RuntimeMaxSec are set.
+   review of `systemctl show` for the transient **service** (the `--pipe` unit);
+   confirm MemoryMax/TasksMax/RuntimeMaxSec are set.
 6. **Jarvis unaffected.** Jarvis's own network still works (e.g. the GitHub read
    plane can still reach api.github.com) — proving isolation is scoped to the
    worker, not the service.

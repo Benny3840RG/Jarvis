@@ -95,9 +95,12 @@ describe("runAcpWorker", () => {
     const request: AcpPermissionRequest = { requestId: "req-1", action: "café:announce–now" };
     const line = `${requestLine(request)}\n`;
     const bytes = Buffer.from(line, "utf8");
-    // Split at a byte index that lands inside a multibyte sequence (é / – are
-    // multibyte); decoding each half independently would corrupt it.
-    const cut = 6;
+    // Split *inside* the first multibyte sequence (é = 0xC3 0xA9): cut one byte
+    // into it, so decoding each half independently would corrupt it. Locating
+    // the first non-ASCII byte keeps this correct regardless of prefix length.
+    const firstMultibyte = bytes.findIndex((b) => b >= 0x80);
+    assert.equal(firstMultibyte > 0, true, "expected a multibyte byte in the line");
+    const cut = firstMultibyte + 1;
     const chunks = [bytes.subarray(0, cut), bytes.subarray(cut)];
     async function* input(): AsyncIterable<Uint8Array> {
       for (const c of chunks) yield c;
