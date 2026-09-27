@@ -1,5 +1,37 @@
 # Jarvis TypeScript Roadmap
 
+## Acquisition plan, PR H (slice 6): live consultation path, dormant-first (2026-09-27)
+
+Owner-approved live launch slice, built dormant-first. `src/acp/acpConsultation.ts`
+composes the earlier pieces into one entry point:
+
+- `createAcpConsultationFromEnv(deps)` resolves the worker config
+  (`resolveAcpWorkerConfigFromEnv`) and returns `{ enabled, consult() }`.
+  **Dormant:** construction launches nothing; a worker is spawned (via
+  `spawnAcpChild` behind a `StdioAcpTransport`) only inside `consult()` and only
+  when a peer is configured. Nothing in the governed execution path calls it yet
+  — this delivers the ready path, not a change to live authority.
+- **Unconfigured** (advisory overlay off): the governed approval alone decides,
+  so ACP's absence doesn't block normal work. `requireConfiguredPeer: true` makes
+  ACP mandatory — an unconfigured consult then fails closed (blocked).
+- **Configured**: consults the peer and routes through the fail-closed
+  AUTH-INV-05 gate — a valid `allow` still needs governed approval, `deny`
+  vetoes, and a failed/invalid consultation (crash, timeout, flood, malformed,
+  mismatched) blocks even with governed approval. The worker launches with the
+  minimal credential-free env (`buildAcpChildEnv`); its own model/API egress is a
+  separate governed concern (see `docs/operations/acp-worker-sandbox.md`), not
+  broadened here.
+
+`tests/acpConsultation.test.ts` proves: unconfigured → governed decides and
+nothing spawns; `requireConfiguredPeer` → blocked when absent; **dormant** (no
+spawn until `consult()`); resolved config reaches the spawner; allow needs
+governed; deny vetoes; crash and malformed/mismatched block even with governed
+approval. `npm run check` green.
+
+Before enabling live in production: provision the worker env AND apply the
+sandbox runbook, then wire `consult()` into the specific decision site — a
+further, owner-gated step. Nothing launches a real worker until the env is set.
+
 ## Acquisition plan, PR H (slice 5): fail-closed consultation + child isolation (2026-09-27)
 
 Security repair on the owner's review of merged #640 (ACP stdio transport). Two
