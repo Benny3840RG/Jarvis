@@ -11,6 +11,8 @@ import type { ExternalReconciliationStore } from "../reconciliation/externalReco
 import type { ToolAuthority } from "../runtime/totalityPolicy.js";
 import type { GitHubDevelopmentClient } from "../development/githubDevelopment.js";
 import { createGitHubDevelopmentClientFromEnv } from "../development/githubDevelopment.js";
+import type { GoogleHomeAnnouncementProvider } from "../integrations/googleHome/googleHomeAnnouncementProvider.js";
+import { createGoogleHomeAnnouncementProviderFromEnv } from "../integrations/googleHome/googleHomeAnnouncementProvider.js";
 import type { ToolAction, ToolActionService } from "./toolActions.js";
 import { createToolExecutionServiceFromEnv } from "./toolExecutionFactory.js";
 import {
@@ -244,8 +246,13 @@ export class GovernedExternalOperation {
 export function createGovernedExternalOperationFromEnv(
   quoteEmailProvider: QuoteEmailProvider | null = createQuoteEmailProviderFromEnv(),
   githubDevelopmentClient: GitHubDevelopmentClient | null = createGitHubDevelopmentClientFromEnv(),
+  googleHomeAnnouncementProvider: GoogleHomeAnnouncementProvider | null = createGoogleHomeAnnouncementProviderFromEnv(),
 ): GovernedExternalOperation | null {
-  const execution = createToolExecutionServiceFromEnv(quoteEmailProvider, githubDevelopmentClient);
+  const execution = createToolExecutionServiceFromEnv(
+    quoteEmailProvider,
+    githubDevelopmentClient,
+    googleHomeAnnouncementProvider,
+  );
   if (!execution) return null;
   return new GovernedExternalOperation({
     actions: new ConvexToolActionService(),
