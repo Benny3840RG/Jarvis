@@ -61,6 +61,30 @@ describe("tool execution stage", () => {
     assert.equal(executions, 0);
   });
 
+  it("enforces a definition minimum authority when an action under-declares it", async () => {
+    let executions = 0;
+    const executor = new ToolExecutionService([
+      {
+        tool: "clock",
+        operation: "read",
+        minimumAuthority: "T1",
+        schema: z.object({ zone: z.string() }),
+        async execute() {
+          executions += 1;
+          return { now: "2026-07-18T00:00:00.000Z" };
+        },
+      },
+    ]);
+    const result = await executor.execute({
+      action: { ...action, requiredAuthority: "T0" },
+      authority: "T1",
+      idempotencyKey: "minimum-authority",
+    });
+    assert.equal(result.status, "blocked");
+    assert.equal(result.errorCode, "not-authorized");
+    assert.equal(executions, 0);
+  });
+
   it("blocks credential-like arguments before provider invocation", async () => {
     let executions = 0;
     const executor = new ToolExecutionService([

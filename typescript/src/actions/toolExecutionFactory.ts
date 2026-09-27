@@ -30,6 +30,11 @@ import {
   type GitHubDevelopmentClient,
 } from "../development/githubDevelopment.js";
 import { createQuoteFinalizeToolDefinition } from "./quoteFinalizeTool.js";
+import { createHomeAnnouncementToolDefinition } from "./homeAnnouncementTool.js";
+import {
+  createGoogleHomeAnnouncementProviderFromEnv,
+  type GoogleHomeAnnouncementProvider,
+} from "../integrations/googleHome/googleHomeAnnouncementProvider.js";
 import { createQuoteSendToolDefinition } from "./quoteSendTool.js";
 import { createTaskReminderToolDefinitions } from "./taskReminderTools.js";
 import { ToolExecutionService, type ToolExecutionDefinition } from "./toolExecution.js";
@@ -43,6 +48,7 @@ export function createToolExecutionDefinitions(
   quoteDeliveryRepository?: QuoteDeliveryRepository,
   quotePdfArtifactRepository?: QuotePdfArtifactRepository,
   githubDevelopmentClient?: GitHubDevelopmentClient,
+  googleHomeAnnouncementProvider?: GoogleHomeAnnouncementProvider,
 ): ToolExecutionDefinition[] {
   if ((taskStore === undefined) !== (reminderStore === undefined)) {
     throw new Error("Task and reminder tool stores must be registered together.");
@@ -70,6 +76,9 @@ export function createToolExecutionDefinitions(
     ...(githubDevelopmentClient === undefined
       ? []
       : [createGitHubMergeToolDefinition(githubDevelopmentClient)]),
+    ...(googleHomeAnnouncementProvider === undefined
+      ? []
+      : [createHomeAnnouncementToolDefinition(googleHomeAnnouncementProvider)]),
   ];
 }
 
@@ -84,6 +93,7 @@ export function createToolExecutionDefinitions(
 export function createToolExecutionServiceFromEnv(
   quoteEmailProvider: QuoteEmailProvider | null = createQuoteEmailProviderFromEnv(),
   githubDevelopmentClient: GitHubDevelopmentClient | null = createGitHubDevelopmentClientFromEnv(),
+  googleHomeAnnouncementProvider: GoogleHomeAnnouncementProvider | null = createGoogleHomeAnnouncementProviderFromEnv(),
 ): ToolExecutionService | null {
   if (resolvePersistenceProviderName() !== "convex") return null;
   return new ToolExecutionService(
@@ -96,6 +106,7 @@ export function createToolExecutionServiceFromEnv(
       createQuoteDeliveryRepositoryFromEnv() ?? undefined,
       createQuotePdfArtifactRepositoryFromEnv() ?? undefined,
       githubDevelopmentClient ?? undefined,
+      googleHomeAnnouncementProvider ?? undefined,
     ),
     new ConvexToolExecutionReceiptStore(),
     new ConvexExternalReconciliationStore(),
