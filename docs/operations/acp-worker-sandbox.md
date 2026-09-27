@@ -61,8 +61,12 @@ Jarvis's own network — wrong. Two correct shapes:
   **cannot** apply the namespace/filesystem/privilege sandbox
   (`PrivateNetwork`, `ProtectSystem`, `ProtectHome`, `RestrictAddressFamilies`,
   `SystemCallFilter`, …) — those directives are set only when systemd itself
-  spawns the process. Only cgroup resource limits (`MemoryMax`/`TasksMax`) take
-  effect for a scope. `--pipe` runs the worker as a transient service **and**
+  spawns the process. Only **cgroup-based** controls take effect for a scope:
+  the resource limits (`MemoryMax`/`TasksMax`) **and** the BPF egress filters
+  (`IPAddressAllow`/`IPAddressDeny`), which act on the cgroup rather than at
+  exec time. The exec-time namespace/filesystem/privilege/seccomp controls do
+  not — which is why a scope is not enough here. `--pipe` runs the worker as a
+  transient service **and**
   wires its stdin/stdout/stderr to the pipes Jarvis created, so the framing
   channel still works. No code change is needed: `resolveAcpWorkerConfigFromEnv`
   already takes an arbitrary command + argv.

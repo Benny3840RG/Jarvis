@@ -283,3 +283,36 @@ describe("ACP stdio transport (PR H, slice 3)", () => {
     });
   });
 });
+
+describe("StdioAcpTransport — close-reason classification", () => {
+  function closingChild(reason?: "output_limit_exceeded"): AcpChildProcess {
+    let onClose: ((r?: "output_limit_exceeded") => void) | undefined;
+    return {
+      writeLine(): void {
+        queueMicrotask(() => onClose?.(reason));
+      },
+      onStdoutLine(): void {},
+      onClose(handler: (r?: "output_limit_exceeded") => void): void {
+        onClose = handler;
+      },
+      kill(): void {},
+    };
+  }
+
+  it("classifies an output-limit close as output_limit_exceeded, not worker_crash", async () => {
+    const transport = new StdioAcpTransport({ spawn: () => closingChild("output_limit_exceeded") });
+    await assert.rejects(
+      () => transport.requestPermission(REQUEST),
+      (error: unknown) =>
+        error instanceof AcpStdioTransportError && error.code === "output_limit_exceeded",
+    );
+  });
+
+  it("classifies a plain close as worker_crash", async () => {
+    const transport = new StdioAcpTransport({ spawn: () => closingChild() });
+    await assert.rejects(
+      () => transport.requestPermission(REQUEST),
+      (error: unknown) => error instanceof AcpStdioTransportError && error.code === "worker_crash",
+    );
+  });
+});

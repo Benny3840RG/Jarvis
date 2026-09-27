@@ -248,6 +248,35 @@ export class GovernedExternalOperation {
 }
 
 /**
+ * Default consultation observer: a bounded, non-secret structured audit line on
+ * stderr so an advisory disagreement or a consultation failure is never silently
+ * dropped in production (the governance contract: "a valid advisory deny must not
+ * disappear unnoticed"). Every field is already non-secret — mode, action,
+ * request/correlation ids, classification, decision, and the boundary's own
+ * bounded reason (never worker-supplied text). It fires only when a mode is
+ * active (in `disabled` mode the boundary never consults), so a dormant
+ * deployment emits nothing. Richer/queryable persistence is a production
+ * observability concern; this is the always-on minimal sink.
+ */
+export function defaultAcpConsultationObserver(evidence: AcpConsultationEvidence): void {
+  const record = {
+    event: "acp-consultation",
+    mode: evidence.mode,
+    action: evidence.action,
+    requestId: evidence.requestId,
+    ...(evidence.correlationId === undefined ? {} : { correlationId: evidence.correlationId }),
+    governedApprovalPresent: evidence.governedApprovalPresent,
+    consulted: evidence.consulted,
+    ...(evidence.classification === undefined ? {} : { classification: evidence.classification }),
+    proceed: evidence.proceed,
+    disagreement: evidence.disagreement,
+    reason: evidence.reason,
+    ...(evidence.latencyMs === undefined ? {} : { latencyMs: evidence.latencyMs }),
+  };
+  console.error(JSON.stringify(record));
+}
+
+/**
  * Production wiring. Returns null unless Convex persistence is selected, in
  * which case the existing Convex ToolAction, receipt, and reconciliation
  * stores are the only gates. This does not register a new external effect.
@@ -270,5 +299,8 @@ export function createGovernedExternalOperationFromEnv(
     // Dormant-first: resolves to `disabled` (no consult, no worker) unless an
     // owner sets JARVIS_ACP_MODE and a JARVIS_ACP_WORKER_* command.
     acp: createGovernedAcpConsultationFromEnv(),
+    // Always-on audit sink so advisory disagreements/failures are recorded
+    // rather than silently dropped once a mode is enabled.
+    onAcpConsultation: defaultAcpConsultationObserver,
   });
 }

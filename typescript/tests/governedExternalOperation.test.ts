@@ -9,6 +9,7 @@ import {
   GovernedExternalOperationRefused,
   PolicyEngineNotAuthorityError,
   createGovernedExternalOperationFromEnv,
+  defaultAcpConsultationObserver,
 } from "../src/actions/governedExternalOperation.js";
 import {
   createGovernedAcpConsultationFromEnv,
@@ -894,5 +895,37 @@ describe("governed external operation — ACP consultation wiring", () => {
     });
     assert.equal(receipt.status, "succeeded");
     assert.deepEqual(s.effects, ["effect"]);
+  });
+
+  it("defaultAcpConsultationObserver records a bounded structured audit line", () => {
+    const original = console.error;
+    const lines: string[] = [];
+    console.error = (...args: unknown[]) => {
+      lines.push(String(args[0]));
+    };
+    try {
+      defaultAcpConsultationObserver({
+        mode: "advisory",
+        action: "github:merge-pull-request",
+        requestId: "request-1",
+        correlationId: "corr-9",
+        governedApprovalPresent: true,
+        consulted: true,
+        classification: "deny",
+        proceed: true,
+        disagreement: true,
+        reason: "advisory deny recorded",
+        latencyMs: 12,
+      });
+    } finally {
+      console.error = original;
+    }
+    assert.equal(lines.length, 1);
+    const record = JSON.parse(lines[0]!) as Record<string, unknown>;
+    assert.equal(record.event, "acp-consultation");
+    assert.equal(record.classification, "deny");
+    assert.equal(record.disagreement, true);
+    assert.equal(record.proceed, true);
+    assert.equal(record.reason, "advisory deny recorded");
   });
 });
