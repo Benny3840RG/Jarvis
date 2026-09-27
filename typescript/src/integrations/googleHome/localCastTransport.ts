@@ -203,10 +203,8 @@ async function listenEphemeral(
 }
 function closeServer(server: Server): Promise<void> {
   return new Promise((resolve) => {
-    if (!server.listening) {
-      resolve();
-      return;
-    }
+    // Abort may already have closed the listener while accepted sockets survive.
+    // Always destroy accepted connections, including when listening is false.
     server.close(() => resolve());
     server.closeAllConnections();
   });
