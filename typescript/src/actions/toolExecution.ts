@@ -79,6 +79,7 @@ export type ToolExecutionDefinition = {
   operation: string;
   schema: z.ZodType<Record<string, unknown>>;
   externalProvider?: string;
+  minimumAuthority?: ToolAuthority;
   /**
    * Read-only deterministic/provider observation gates that must pass before
    * the durable execution intent is claimed. A rejection here therefore does
@@ -678,9 +679,15 @@ export class ToolExecutionService {
   ): Promise<ToolExecutionReceipt> {
     const startedAt = new Date().toISOString();
 
+    const minimumAuthority = definition?.minimumAuthority;
+    const minimumAuthoritySatisfied =
+      minimumAuthority === undefined ||
+      (AUTHORITY_LEVEL[input.authority] >= AUTHORITY_LEVEL[minimumAuthority] &&
+        AUTHORITY_LEVEL[input.action.requiredAuthority] >= AUTHORITY_LEVEL[minimumAuthority]);
     if (
       input.action.state !== "approved" ||
-      AUTHORITY_LEVEL[input.authority] < AUTHORITY_LEVEL[input.action.requiredAuthority]
+      AUTHORITY_LEVEL[input.authority] < AUTHORITY_LEVEL[input.action.requiredAuthority] ||
+      !minimumAuthoritySatisfied
     ) {
       return this.persistDecision(
         key,

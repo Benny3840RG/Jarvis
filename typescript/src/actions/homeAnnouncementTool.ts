@@ -9,7 +9,7 @@ export const HOME_ANNOUNCEMENT_OPERATION = "announce";
 export const homeAnnouncementArgumentsSchema = z
   .object({
     target: z.string().trim().min(1).max(120),
-    message: z.string().trim().min(1).max(500),
+    message: z.string().trim().min(1).max(200),
     volume: z.number().min(0.05).max(0.8).optional(),
   })
   .strict();
@@ -21,6 +21,7 @@ export function createHomeAnnouncementToolDefinition(
     tool: HOME_ANNOUNCEMENT_TOOL,
     operation: HOME_ANNOUNCEMENT_OPERATION,
     externalProvider: provider.name,
+    minimumAuthority: "T1",
     schema: homeAnnouncementArgumentsSchema,
     async preflight(argumentsValue): Promise<void> {
       const parsed = homeAnnouncementArgumentsSchema.parse(argumentsValue);

@@ -5,10 +5,11 @@ import {
   createHomeAnnouncementToolDefinition,
   homeAnnouncementArgumentsSchema,
 } from "../src/actions/homeAnnouncementTool.js";
-import type {
-  GoogleHomeAnnouncementAttempt,
-  GoogleHomeAnnouncementInput,
-  GoogleHomeAnnouncementProvider,
+import {
+  createGoogleHomeAnnouncementProviderFromEnv,
+  type GoogleHomeAnnouncementAttempt,
+  type GoogleHomeAnnouncementInput,
+  type GoogleHomeAnnouncementProvider,
 } from "../src/integrations/googleHome/googleHomeAnnouncementProvider.js";
 import type { ToolExecutionContext } from "../src/actions/toolExecution.js";
 
@@ -83,6 +84,7 @@ describe("home announcement tool", () => {
     );
 
     assert.deepEqual(order, ["prepare", "register", "send"]);
+    assert.equal(definition.minimumAuthority, "T1");
     assert.deepEqual(registrations, [
       {
         provider: "google-home-notifier-v1",
@@ -96,7 +98,7 @@ describe("home announcement tool", () => {
     assert.equal(
       homeAnnouncementArgumentsSchema.safeParse({
         target: "Kitchen display",
-        message: "x".repeat(501),
+        message: "x".repeat(201),
       }).success,
       false,
     );
@@ -107,6 +109,16 @@ describe("home announcement tool", () => {
         volume: 1,
       }).success,
       false,
+    );
+  });
+
+  it("rejects invalid pinned target addresses", () => {
+    assert.throws(
+      () =>
+        createGoogleHomeAnnouncementProviderFromEnv({
+          JARVIS_GOOGLE_HOME_TARGETS_JSON: '{"Kitchen Display":"999.1.1.1"}',
+        }),
+      /target-map-invalid/,
     );
   });
 
