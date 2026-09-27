@@ -9,6 +9,8 @@ type Callback = (error: Error | null, value?: unknown) => void;
 class FakeClient extends EventEmitter {
   calls: string[] = [];
   mode = "success";
+  abortLaunch?: AbortController;
+  lateLaunch?: () => void;
   player = new EventEmitter();
   connect(_address: string, callback: () => void): void {
     callback();
@@ -34,18 +36,30 @@ class FakeClient extends EventEmitter {
   launch(_receiver: unknown, callback: Callback): void {
     this.calls.push("launch");
     const player = Object.assign(this.player, {
+      media: {
+        request: (request: { type: string; mediaSessionId: number }, done: Callback) => {
+          this.calls.push(`media-${request.type}:${request.mediaSessionId}`);
+          done(null);
+        },
+      },
       load: (media: { contentId: string }, _options: unknown, done: Callback) => {
         this.calls.push("load");
         if (this.mode === "initial-idle") player.emit("status", { playerState: "IDLE" });
         void fetch(media.contentId)
           .then(async (response) => {
             await response.arrayBuffer();
-            done(null, { playerState: "PLAYING" });
-            player.emit("status", { playerState: "PLAYING" });
+            done(null, {
+              playerState: "BUFFERING",
+              mediaSessionId: 51,
+              media: { contentId: media.contentId },
+            });
+            const mediaSessionId = this.mode === "foreign-finish" ? 99 : 51;
+            player.emit("status", { playerState: "PLAYING", mediaSessionId });
             setTimeout(
               () =>
                 player.emit("status", {
                   playerState: "IDLE",
+                  mediaSessionId,
                   idleReason: this.mode === "playback-error" ? "ERROR" : "FINISHED",
                 }),
               5,
@@ -54,7 +68,10 @@ class FakeClient extends EventEmitter {
           .catch((error: Error) => done(error));
       },
     });
-    callback(null, player);
+    if (this.mode === "late-launch") {
+      this.lateLaunch = () => callback(null, player);
+      this.abortLaunch?.abort(new Error("launch-cancelled"));
+    } else callback(null, player);
   }
 }
 function fixture(t: TestContext, mode: string) {
@@ -138,4 +155,29 @@ test("Cast success requires fetched audio and finished playback, then closes res
 test("Cast ignores an initial IDLE without an idle reason", async (t) => {
   fixture(t, "initial-idle");
   await castAnnouncement("127.0.0.1", "Test.", 0.12, AbortSignal.timeout(2500));
+});
+
+test("Cast cannot use another media session's completion as announcement success", async (t) => {
+  fixture(t, "foreign-finish");
+  await assert.rejects(castAnnouncement("127.0.0.1", "Test.", 0.12, AbortSignal.timeout(750)));
+});
+
+test("Cast failure stops only its exact media, never the whole receiver app", async (t) => {
+  const { client } = fixture(t, "playback-error");
+  await assert.rejects(castAnnouncement("127.0.0.1", "Test.", 0.12, AbortSignal.timeout(2500)));
+  assert.ok(!client.calls.includes("stop"), "whole application stop is not authorised");
+  assert.ok(client.calls.includes("media-STOP:51"));
+});
+
+test("late LAUNCH acknowledgment after cancellation never starts LOAD or stops a shared app", async (t) => {
+  const { client, servers } = fixture(t, "late-launch");
+  client.abortLaunch = new AbortController();
+  await assert.rejects(castAnnouncement("127.0.0.1", "Test.", 0.12, client.abortLaunch.signal));
+  assert.ok(client.lateLaunch, "test must reach LAUNCH");
+  client.lateLaunch();
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.ok(!client.calls.includes("load"));
+  assert.ok(!client.calls.includes("stop"));
+  assert.ok(client.calls.includes("close"));
+  assert.ok(servers.every((server) => !server.listening));
 });

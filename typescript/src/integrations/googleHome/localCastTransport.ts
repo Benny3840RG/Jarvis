@@ -2,10 +2,10 @@ import { randomUUID } from "node:crypto";
 import dgram from "node:dgram";
 import { createServer, type Server } from "node:http";
 import { isIP } from "node:net";
+import workerThreads from "node:worker_threads";
 
 import Bonjour from "bonjour-service";
 import castv2Client from "castv2-client";
-import text2wav from "text2wav";
 
 const castv2 = castv2Client as {
   Client: new () => CastClient;
@@ -20,8 +20,19 @@ export type LocalCastDevice = Readonly<{
 }>;
 
 type CastVolume = Readonly<{ level?: number; muted?: boolean }>;
-type CastStatus = Readonly<{ playerState?: string; idleReason?: string }>;
+type CastStatus = Readonly<{
+  playerState?: string;
+  idleReason?: string;
+  mediaSessionId?: number;
+  media?: Readonly<{ contentId?: string }>;
+}>;
 type CastPlayer = {
+  media: {
+    request(
+      data: { type: "STOP"; mediaSessionId: number },
+      callback: (error: Error | null) => void,
+    ): void;
+  };
   on(event: "status", listener: (status: CastStatus) => void): void;
   removeListener(event: "status", listener: (status: CastStatus) => void): void;
   load(
@@ -37,7 +48,6 @@ type CastClient = {
   on(event: "error", listener: (error: Error) => void): void;
   removeListener(event: "error", listener: (error: Error) => void): void;
   launch(receiver: unknown, callback: (error: Error | null, player: CastPlayer) => void): void;
-  stop(player: CastPlayer, callback: (error: Error | null) => void): void;
   getVolume(callback: (error: Error | null, volume?: CastVolume) => void): void;
   setVolume(
     volume: Readonly<{ level?: number; muted?: boolean }>,
@@ -81,16 +91,28 @@ export async function discoverLocalCastDevices(
   return [...found.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 
-async function routeLocalAddress(remoteAddress: string): Promise<string> {
+async function routeLocalAddress(remoteAddress: string, signal: AbortSignal): Promise<string> {
+  signal.throwIfAborted();
   const socket = dgram.createSocket("udp4");
   try {
-    return await new Promise<string>((resolve, reject) => {
-      socket.once("error", reject);
-      socket.connect(9, remoteAddress, () => {
-        const address = socket.address();
-        resolve(typeof address === "string" ? address : address.address);
-      });
-    });
+    const result = await callbackPromise<string>(
+      (done) => {
+        socket.once("error", (error) => done(error));
+        socket.connect(9, remoteAddress, () => {
+          if (signal.aborted) return;
+          try {
+            const address = socket.address();
+            done(null, typeof address === "string" ? address : address.address);
+          } catch {
+            done(new Error("cast-route-unavailable"));
+          }
+        });
+      },
+      signal,
+      2_000,
+    );
+    if (!result) throw new Error("cast-route-unavailable");
+    return result;
   } finally {
     socket.close();
   }
@@ -101,7 +123,11 @@ type HostedAudio = Readonly<{
   close(): Promise<void>;
 }>;
 
-async function hostAudioForCast(audio: Uint8Array, remoteAddress: string): Promise<HostedAudio> {
+async function hostAudioForCast(
+  audio: Uint8Array,
+  remoteAddress: string,
+  signal: AbortSignal,
+): Promise<HostedAudio> {
   const token = randomUUID();
   const path = `/nolan-announcement-${token}.wav`;
   let resolveServed!: () => void;
@@ -130,27 +156,50 @@ async function hostAudioForCast(audio: Uint8Array, remoteAddress: string): Promi
     response.end(Buffer.from(audio));
   });
 
-  const localAddress = await routeLocalAddress(remoteAddress);
-  const port = await listenEphemeral(server, localAddress);
-  return {
-    url: `http://${localAddress}:${port}${path}`,
-    served,
-    close: () => closeServer(server),
-  };
+  const serving = new AbortController();
+  const servingSignal = AbortSignal.any([signal, serving.signal]);
+  try {
+    const localAddress = await routeLocalAddress(remoteAddress, servingSignal);
+    const port = await listenEphemeral(server, localAddress, servingSignal);
+    servingSignal.throwIfAborted();
+    return {
+      url: `http://${localAddress}:${port}${path}`,
+      served,
+      async close() {
+        serving.abort();
+        await closeServer(server);
+      },
+    };
+  } catch (error) {
+    serving.abort();
+    await closeServer(server);
+    throw error;
+  }
 }
 
-function listenEphemeral(server: Server, address: string): Promise<number> {
-  return new Promise((resolve, reject) => {
-    server.once("error", reject);
-    server.listen(0, address, () => {
-      const address = server.address();
-      if (!address || typeof address === "string") {
-        reject(new LocalCastTransportError("cast-audio-server-address-unavailable"));
-        return;
-      }
-      resolve(address.port);
-    });
-  });
+async function listenEphemeral(
+  server: Server,
+  address: string,
+  signal: AbortSignal,
+): Promise<number> {
+  const port = await callbackPromise<number>(
+    (done) => {
+      server.on("error", (error) => done(error));
+      server.listen({ port: 0, host: address, signal }, () => {
+        if (signal.aborted) return;
+        const bound = server.address();
+        if (!bound || typeof bound === "string") {
+          done(new LocalCastTransportError("cast-audio-server-address-unavailable"));
+          return;
+        }
+        done(null, bound.port);
+      });
+    },
+    signal,
+    2_000,
+  );
+  if (port === undefined) throw new Error("cast-audio-server-address-unavailable");
+  return port;
 }
 function closeServer(server: Server): Promise<void> {
   return new Promise((resolve) => {
@@ -193,8 +242,10 @@ function callbackPromise<T>(
   });
 }
 
-function observePlayback(player: CastPlayer, signal: AbortSignal) {
+function observePlayback(player: CastPlayer, signal: AbortSignal, contentUrl: string) {
   let started = false;
+  let boundSessionId: number | undefined;
+  const pending: CastStatus[] = [];
   let observe: (status: CastStatus) => void = () => undefined;
   const stopped = new AbortController();
   const combined = AbortSignal.any([signal, stopped.signal]);
@@ -205,27 +256,52 @@ function observePlayback(player: CastPlayer, signal: AbortSignal) {
           finish(new Error("cast-invalid-status"));
           return;
         }
+        if (boundSessionId === undefined) {
+          if (pending.length >= 32) {
+            finish(new Error("cast-status-buffer-full"));
+            return;
+          }
+          pending.push(status);
+          return;
+        }
+        if (status.mediaSessionId !== boundSessionId) return;
+        if (status.media?.contentId !== undefined && status.media.contentId !== contentUrl) {
+          finish(new Error("cast-content-changed"));
+          return;
+        }
         if (status.playerState === "PLAYING") started = true;
         if (status.playerState !== "IDLE") return;
         if (!started && status.idleReason === undefined) return;
-        if (status.idleReason !== "FINISHED") {
-          finish(new Error("cast-playback-not-finished"));
-        } else if (started) {
-          finish(null);
-        }
+        if (status.idleReason !== "FINISHED") finish(new Error("cast-playback-not-finished"));
+        else if (started) finish(null);
       };
       player.on("status", observe);
     },
     combined,
     45_000,
   );
-  // Observe early rejection even if LOAD itself fails before we await playback.
   void promise.catch(() => undefined);
   return {
     promise,
-    observe,
+    bind(status: CastStatus | undefined) {
+      if (
+        !status ||
+        !Number.isSafeInteger(status.mediaSessionId) ||
+        (status.mediaSessionId ?? -1) < 0 ||
+        status.media?.contentId !== contentUrl
+      ) {
+        throw new Error("cast-load-identity-unconfirmed");
+      }
+      boundSessionId = status.mediaSessionId;
+      observe(status);
+      for (const early of pending.splice(0)) observe(early);
+    },
+    get mediaSessionId() {
+      return boundSessionId;
+    },
     dispose() {
       player.removeListener("status", observe);
+      pending.length = 0;
       stopped.abort(new Error("cast-playback-observer-closed"));
     },
   };
@@ -234,18 +310,49 @@ function observePlayback(player: CastPlayer, signal: AbortSignal) {
 export async function synthesizeAnnouncement(
   message: string,
   voice = "en-au",
+  signal: AbortSignal = new AbortController().signal,
 ): Promise<Uint8Array> {
+  signal.throwIfAborted();
+  const worker = new workerThreads.Worker(new URL("./localTtsWorker.mjs", import.meta.url), {
+    workerData: { message, voice },
+    env: {},
+    execArgv: [],
+    stdout: true,
+    stderr: true,
+  });
+  // Drain library diagnostics locally; never forward raw library output or text.
+  worker.stdout.resume();
+  worker.stderr.resume();
   try {
-    return await text2wav(message, {
-      voice,
-      speed: 165,
-      amplitude: 110,
-      noFinalPause: true,
-    });
+    const audio = await callbackPromise<Uint8Array>(
+      (done) => {
+        worker.once("message", (value: unknown) => {
+          if (
+            !(value instanceof Uint8Array) ||
+            value.byteLength < 44 ||
+            value.byteLength > 4 * 1024 * 1024
+          ) {
+            done(new Error("local-tts-invalid-audio"));
+            return;
+          }
+          done(null, value);
+        });
+        worker.once("error", () => done(new Error("local-tts-worker-failed")));
+        worker.once("exit", () => done(new Error("local-tts-worker-exited")));
+      },
+      signal,
+      10_000,
+    );
+    if (!audio) throw new Error("local-tts-no-audio");
+    return audio;
   } catch (error) {
     throw new LocalCastTransportError("local-tts-failed", { cause: error });
+  } finally {
+    await worker.terminate();
+    worker.removeAllListeners();
   }
 }
+
 export async function castAnnouncement(
   address: string,
   message: string,
@@ -265,9 +372,9 @@ export async function castAnnouncement(
   let succeeded = false;
   let restorationFailed = false;
   try {
-    const audio = await synthesizeAnnouncement(message, voice);
+    const audio = await synthesizeAnnouncement(message, voice, activeSignal);
     activeSignal.throwIfAborted();
-    hosted = await hostAudioForCast(audio, address);
+    hosted = await hostAudioForCast(audio, address, activeSignal);
     activeSignal.throwIfAborted();
     const current = new castv2.Client();
     client = current;
@@ -295,8 +402,8 @@ export async function castAnnouncement(
     );
     if (!player) throw new Error("cast-player-unavailable");
     const currentPlayer = player;
-    playback = observePlayback(currentPlayer, activeSignal);
     const mediaUrl = hosted.url;
+    playback = observePlayback(currentPlayer, activeSignal, mediaUrl);
     const status = await callbackPromise<CastStatus>(
       (done) =>
         currentPlayer.load(
@@ -311,7 +418,7 @@ export async function castAnnouncement(
         ),
       activeSignal,
     );
-    if (status) playback.observe(status);
+    playback.bind(status);
     const audioServed = hosted.served;
     await Promise.all([
       callbackPromise<void>(
@@ -335,12 +442,13 @@ export async function castAnnouncement(
       if (client) {
         const current = client;
         const cleanupSignal = new AbortController().signal;
-        // Stop only the receiver session this call owns. Loss of connectivity
-        // makes a physical stop unconfirmed; it never proves that nothing played.
-        if (!succeeded && player) {
+        // A LAUNCH can return an existing app. Never STOP that whole app.
+        // Stop only a media session positively bound to this announcement URL.
+        const mediaSessionId = playback?.mediaSessionId;
+        if (!succeeded && player && mediaSessionId !== undefined) {
           const currentPlayer = player;
           await callbackPromise<void>(
-            (done) => current.stop(currentPlayer, done),
+            (done) => currentPlayer.media.request({ type: "STOP", mediaSessionId }, done),
             cleanupSignal,
             500,
           ).catch(() => undefined);
