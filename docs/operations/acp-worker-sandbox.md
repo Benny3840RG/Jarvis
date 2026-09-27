@@ -118,30 +118,40 @@ Verify the resulting unit with `systemd-analyze security` / `systemctl show`.)
 > **Incomplete as shown — do not copy-paste and enable.** This block is the
 > isolation *skeleton*, not a runnable config: `PrivateNetwork=yes` gives the
 > worker loopback only, so as written it **cannot reach its model API** and the
-> worker will fail. You must add exactly one egress path — the filtering proxy
-> (recommended) or the IP allowlist — from the **egress** section below, and
-> provide the worker's own credential, before it works. It is written this way on
+> worker will fail. You must adopt one of the two mutually exclusive egress
+> designs (A: keep `PrivateNetwork` + a reachable proxy; or B: drop
+> `PrivateNetwork` + IP allowlist) from the **egress** section below, and provide
+> the worker's own credential, before it works. It is written this way on
 > purpose: start closed, open only the one path you need.
 
 Key point about **egress**: `PrivateNetwork=yes` gives the worker an isolated
-network namespace with only loopback — i.e. **no** external network at all. If
-the worker needs to reach its model API, you must give it exactly that and
-nothing else. `PrivateNetwork` alone cannot express "only api.anthropic.com," so
-pair it with one of:
+network namespace with **only loopback** — no external interface at all. These
+are two **mutually exclusive** egress designs; pick one, do not combine them:
 
-- **An egress proxy** the worker is forced through: put a filtering
-  forward-proxy (allowlisting only the model API host) on a socket/address the
-  worker's namespace can reach (e.g. via `JoinsNamespaceOf=` a proxy unit, or a
-  slirp/veth bridge to the proxy only), and set the worker's `HTTPS_PROXY` to it.
+- **Design A — `PrivateNetwork=yes` + a reachable filtering proxy (recommended).**
+  Keep the loopback-only namespace and give the worker exactly one way out: a
+  filtering forward-proxy (allowlisting only the model API host) on a
+  socket/address inside the namespace (e.g. via `JoinsNamespaceOf=` a proxy unit,
+  or a veth bridge to the proxy only), with the worker's `HTTPS_PROXY` set to it.
   This is the most robust "only this host" control and mirrors the read plane's
-  hard-coded origin. **Recommended.**
-- **IP allowlisting** with `IPAddressDeny=any` +
-  `IPAddressAllow=<model-API CIDRs>` (systemd ≥235, cgroup v2 / BPF). Honest
-  limitation: this is **IP/CIDR**-based, not hostname-based, so it depends on the
-  provider's published egress ranges and drifts as they change — treat it as
-  coarse defense-in-depth, not a precise host allowlist. **Do not** hard-code
-  CIDRs from memory; take them from the provider's current published ranges and
-  re-verify on a schedule.
+  hard-coded origin. Note: `IPAddressAllow` is **useless here** — with only
+  loopback there is no external interface for a BPF filter to permit; the proxy
+  is what provides (and constrains) connectivity.
+- **Design B — no `PrivateNetwork` + IP allowlisting.** Do **not** set
+  `PrivateNetwork=yes`; let the worker use the host network namespace and
+  constrain its egress with `IPAddressDeny=any` + `IPAddressAllow=<model-API
+  CIDRs>` (systemd ≥235, cgroup v2 / BPF). A BPF egress filter can only *restrict*
+  an existing interface — it cannot create connectivity into a loopback-only
+  namespace, which is why it is an alternative to Design A, not an addition to it.
+  Honest limitation: this is **IP/CIDR**-based, not hostname-based, so it depends
+  on the provider's published egress ranges and drifts as they change — coarse
+  defense-in-depth, not a precise host allowlist. **Do not** hard-code CIDRs from
+  memory; take them from the provider's current published ranges and re-verify on
+  a schedule.
+
+The example block above is a **Design A** skeleton (it sets `PrivateNetwork=yes`),
+so it needs the proxy; for **Design B**, drop the `PrivateNetwork=yes` property
+and add the `IPAddress*` properties instead.
 
 Do **not** grant the worker Jarvis's API tokens. Pass only the worker's own key
 explicitly, e.g. add `"--setenv=ANTHROPIC_API_KEY=..."` sourced from the worker's
@@ -154,8 +164,8 @@ or `$CREDENTIALS_DIRECTORY` through.
 
 | Directive                              | Effect                                                        | Caveat / verify                                                                 |
 | -------------------------------------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| `PrivateNetwork=yes`                   | Worker gets an isolated netns (loopback only) — no host/LAN.  | Blocks the model API too; must pair with a reachable filtering proxy (above).   |
-| `IPAddressDeny=any` + `IPAddressAllow` | Deny-by-default egress; allow named CIDRs.                    | systemd ≥235 + cgroup v2/BPF; **IP/CIDR only**, not hostnames; ranges drift.     |
+| `PrivateNetwork=yes`                   | Worker gets an isolated netns (loopback only) — no host/LAN.  | Blocks the model API too; Design A only — pair with a reachable filtering proxy. `IPAddressAllow` cannot help here (no external interface). |
+| `IPAddressDeny=any` + `IPAddressAllow` | Deny-by-default egress; allow named CIDRs (filters an existing interface). | Design B only — requires the host netns, so **not** with `PrivateNetwork=yes`. systemd ≥235 + cgroup v2/BPF; **IP/CIDR only**, not hostnames; ranges drift. |
 | `PrivateTmp=yes`                       | Private `/tmp`, `/var/tmp`.                                    | —                                                                               |
 | `ProtectSystem=strict`                 | Whole filesystem read-only except explicit `ReadWritePaths`.  | Give a small `ReadWritePaths=` scratch only if the worker needs one.            |
 | `ProtectHome=yes`                      | `/home`, `/root`, `/run/user` inaccessible.                   | —                                                                               |
