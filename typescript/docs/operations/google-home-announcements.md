@@ -1,35 +1,52 @@
-# Google Home / Nest announcements
+# Governed Google Home / Nest announcements
 
-NOLAN exposes Google Cast speech as a governed external effect. The implementation deliberately does not expose a general Cast remote-control surface.
+NOLAN can emit a short spoken announcement to an explicitly pinned Google Cast device on the local LAN.
+
+The capability is registered as the external operation `home:announce`. It does not expose a general Cast remote-control surface and does not bypass the existing ToolAction / ΩΣ claim, receipt, and reconciliation boundary.
+
+## Transport
+
+- mDNS discovery is read-only and uses `_googlecast._tcp`.
+- Speech is synthesized locally on J-arvis with `text2wav`.
+- J-arvis serves one random, short-lived WAV URL on its LAN IP.
+- The pinned Cast device fetches that URL and plays it with the Default Media Receiver.
+- The original Cast volume and mute state are restored after playback.
 
 ## Configuration
 
-Set an explicit target-to-IP map on the host:
+No announcement provider is registered unless at least one exact IPv4 target is pinned.
 
-```bash
-JARVIS_GOOGLE_HOME_TARGETS_JSON='{"Kitchen Display":"192.168.4.25"}'
+```text
+JARVIS_GOOGLE_HOME_TARGETS_JSON={"Kitchen Display":"192.168.1.20","Bedroom Hub":"192.168.1.21"}
 ```
 
-Use DHCP reservations/static leases so the configured address cannot silently move to another device.
+Do not commit real household device addresses to Git. Use DHCP reservations/static leases for pinned devices.
 
-The target name is part of the approved ToolAction arguments and must exactly match a configured key. Message length is limited to 200 characters, matching the upstream TTS provider's single-request limit. Announcement volume defaults to 0.45 and is capped at 0.80.
+Optional TTS voice:
 
-Announcement text is sent to Google's Translate TTS service by `google-home-notifier`, so do not use this channel for secrets or sensitive client information.
+```text
+JARVIS_GOOGLE_HOME_TTS_VOICE=en-au
+```
+
+The default announcement volume is 0.45. The governed schema accepts 0.05 through 0.8.
 
 ## Discovery
+
+Discovery emits no audio:
 
 ```bash
 npm run home:discover
 ```
 
-Discovery uses mDNS. If multicast discovery is unavailable, identify the Cast device on the LAN and configure its fixed IP explicitly.
+Pin only intended speakers/displays. Avoid Cast groups or TVs unless deliberately required.
 
 ## Authority and recovery
 
-The operation is `home:announce`.
-
-It is registered as an external provider and therefore must pass the existing ToolAction / ΩΣ claim, receipt, and reconciliation boundary. The provider attempt identity is registered before audio emission.
-
-Announcements are not safely repeatable. If execution becomes indeterminate after the provider attempt is registered, do not blindly retry. Reconcile/escalate instead.
-
-No merge, deployment, authority-policy, or general Google account capability is granted by this integration.
+- `home:announce` is an external T1 operation.
+- The target must be in the pinned map.
+- Messages are limited to 200 characters.
+- A provider attempt is durably registered before audio is emitted.
+- Timeout/abort closes the Cast client.
+- Announcements are not blindly retried after an indeterminate outcome.
+- There is no direct announcement CLI that bypasses governance.
+- This bridge has no merge, deployment, shell, or broader smart-home authority.

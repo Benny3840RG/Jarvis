@@ -49,7 +49,7 @@ describe("home announcement tool", () => {
   it("registers the provider attempt before emitting audio", async () => {
     const order: string[] = [];
     const provider: GoogleHomeAnnouncementProvider = {
-      name: "google-home-notifier-v1",
+      name: "google-cast-local-v1",
       async discover() {
         return [{ name: "Kitchen display", address: "192.0.2.1", port: 8009 }];
       },
@@ -87,7 +87,7 @@ describe("home announcement tool", () => {
     assert.equal(definition.minimumAuthority, "T1");
     assert.deepEqual(registrations, [
       {
-        provider: "google-home-notifier-v1",
+        provider: "google-cast-local-v1",
         providerRequestId: "attempt-1",
         providerCorrelationId: "corr-1",
       },
@@ -125,7 +125,7 @@ describe("home announcement tool", () => {
   it("does not send when provider preparation fails", async () => {
     let sent = false;
     const provider: GoogleHomeAnnouncementProvider = {
-      name: "google-home-notifier-v1",
+      name: "google-cast-local-v1",
       async discover() {
         return [];
       },
