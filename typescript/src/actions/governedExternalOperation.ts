@@ -1,3 +1,8 @@
+import {
+  createGovernedAcpConsultationFromEnv,
+  type AcpConsultationEvidence,
+  type GovernedAcpConsultation,
+} from "../acp/acpGovernedConsultation.js";
 import type { QuoteEmailProvider } from "../quotes/quoteEmailProvider.js";
 import { createQuoteEmailProviderFromEnv } from "../quotes/quoteEmailProvider.js";
 import { ConvexExternalReconciliationStore } from "../persistence/convexExternalReconciliations.js";
@@ -37,6 +42,24 @@ export class GovernedExternalOperationRefused extends Error {
 }
 
 /**
+ * Raised when an ACP consultation blocks the operation *before* the external
+ * effect (a `required`-mode `deny`/failure, or a mode that blocks an
+ * unauthorised action). A subclass of {@link GovernedExternalOperationRefused},
+ * so callers that already catch that base type handle it unchanged. It is thrown
+ * before `ToolExecutionService.execute`, so the external provider is never
+ * invoked and no single-use claim is consumed. Carries the consultation evidence.
+ */
+export class AcpConsultationBlockedError extends GovernedExternalOperationRefused {
+  readonly evidence: AcpConsultationEvidence;
+
+  constructor(evidence: AcpConsultationEvidence) {
+    super(`ACP consultation blocked the operation (${evidence.mode}): ${evidence.reason}`);
+    this.name = "AcpConsultationBlockedError";
+    this.evidence = evidence;
+  }
+}
+
+/**
  * Fail closed unless the caller omitted an authority decision or named this
  * boundary. Any PolicyEngine allowlist, boolean allow, or other object is
  * refused before a claim or an external effect.
@@ -50,6 +73,19 @@ export type GovernedExternalOperationPorts = {
   readonly actions: Pick<ToolActionService, "stage" | "get">;
   readonly execution: ToolExecutionService;
   readonly reconciliations: ExternalReconciliationStore;
+  /**
+   * Optional ACP governed consultation. Absent, or in `disabled` mode (the
+   * default), the boundary behaves exactly as before — no worker launches and no
+   * consultation runs. `advisory`/`required` change behaviour only when an owner
+   * has provisioned the mode and a worker.
+   */
+  readonly acp?: GovernedAcpConsultation;
+  /**
+   * Optional observer for consultation evidence — the telemetry/audit seam. Runs
+   * on every consultation (including advisory disagreements and failures), so
+   * evidence is never silently discarded.
+   */
+  readonly onAcpConsultation?: (evidence: AcpConsultationEvidence) => void;
 };
 
 export type GovernedExternalExecuteInput = {
@@ -107,6 +143,11 @@ export class GovernedExternalOperation {
       );
     }
 
+    // ACP consultation runs BEFORE the effect (and before any single-use claim),
+    // so a required-mode block never invokes the provider and never consumes an
+    // approval. Dormant unless an owner enabled a mode and a worker.
+    await this.consultAcpBeforeExecution(action, input);
+
     const dryRun = input.dryRun === true;
     const receipt = await this.ports.execution.execute({
       action,
@@ -133,6 +174,42 @@ export class GovernedExternalOperation {
       await this.requireScheduledReconciliation(action, receipt);
     }
     return receipt;
+  }
+
+  /**
+   * Consult ACP under the configured operating mode, if any. Blocks by throwing
+   * {@link AcpConsultationBlockedError} before the effect when the mode policy
+   * refuses; otherwise records evidence and returns so execution proceeds.
+   *
+   * The governed-approval signal is derived from the ToolAction's own
+   * server-computed approval state — NOT from the caller's `ToolAuthority`, and
+   * NOT by consuming the single-use claim. This is a *non-consuming* eligibility
+   * read placed in front of the authoritative execution-time gate; that gate
+   * (the atomic claim / eligibility re-check inside `ToolExecutionService`) still
+   * re-validates the same fact immediately before the effect, so this earlier
+   * read never becomes the authority and the final boundary stays race-safe.
+   */
+  private async consultAcpBeforeExecution(
+    action: ToolAction,
+    input: GovernedExternalExecuteInput,
+  ): Promise<void> {
+    const acp = this.ports.acp;
+    if (!acp || acp.mode === "disabled") return;
+    const governedApprovalPresent =
+      action.state === "approved" && action.isApprovalExpired !== true;
+    const correlationId = input.correlationId ?? action.requestId;
+    const evidence = await acp.consult(
+      {
+        requestId: action.requestId,
+        action: `${action.tool}:${action.operation}`,
+        detail: correlationId,
+      },
+      governedApprovalPresent,
+    );
+    this.ports.onAcpConsultation?.(evidence);
+    if (!evidence.proceed) {
+      throw new AcpConsultationBlockedError(evidence);
+    }
   }
 
   private async requireScheduledReconciliation(
@@ -174,5 +251,8 @@ export function createGovernedExternalOperationFromEnv(
     actions: new ConvexToolActionService(),
     execution,
     reconciliations: new ConvexExternalReconciliationStore(),
+    // Dormant-first: resolves to `disabled` (no consult, no worker) unless an
+    // owner sets JARVIS_ACP_MODE and a JARVIS_ACP_WORKER_* command.
+    acp: createGovernedAcpConsultationFromEnv(),
   });
 }

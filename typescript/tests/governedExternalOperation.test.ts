@@ -4,11 +4,22 @@ import { describe, it } from "node:test";
 import { z } from "zod";
 
 import {
+  AcpConsultationBlockedError,
   GovernedExternalOperation,
   GovernedExternalOperationRefused,
   PolicyEngineNotAuthorityError,
   createGovernedExternalOperationFromEnv,
 } from "../src/actions/governedExternalOperation.js";
+import {
+  createGovernedAcpConsultationFromEnv,
+  type AcpConsultationEvidence,
+  type GovernedAcpConsultation,
+} from "../src/acp/acpGovernedConsultation.js";
+import type { AcpConsultationClassification } from "../src/acp/acpOperatingMode.js";
+import type { AcpPermissionDecision } from "../src/acp/acpContract.js";
+import { encodeAcpEnvelope } from "../src/acp/acpMessage.js";
+import type { AcpChildProcess } from "../src/acp/acpStdioTransport.js";
+import type { AcpPermissionRequest } from "../src/acp/acpTransport.js";
 import type { ToolAction, ToolActionService } from "../src/actions/toolActions.js";
 import {
   InMemoryToolExecutionReceiptStore,
@@ -597,5 +608,269 @@ describe("governed external operation boundary", () => {
       if (previous === undefined) delete process.env.PERSISTENCE_PROVIDER;
       else process.env.PERSISTENCE_PROVIDER = previous;
     }
+  });
+});
+
+// --- ACP governed consultation wiring (PR H — governed commissioning) ---
+
+function stubConsultation(
+  mode: GovernedAcpConsultation["mode"],
+  result: {
+    proceed: boolean;
+    classification?: AcpConsultationClassification;
+    disagreement?: boolean;
+  },
+): { consultation: GovernedAcpConsultation } {
+  const consultation: GovernedAcpConsultation = {
+    mode,
+    async consult(request, governedApprovalPresent): Promise<AcpConsultationEvidence> {
+      return {
+        mode,
+        action: request.action,
+        requestId: request.requestId,
+        governedApprovalPresent,
+        consulted: mode !== "disabled",
+        proceed: result.proceed,
+        disagreement: result.disagreement ?? false,
+        reason: "stub",
+        ...(result.classification ? { classification: result.classification } : {}),
+      };
+    },
+  };
+  return { consultation };
+}
+
+function responseLine(decision: AcpPermissionDecision, requestId: string): string {
+  return encodeAcpEnvelope({
+    v: 1,
+    kind: "permission_response",
+    response: { requestId, decision },
+  });
+}
+
+function fakeChild(
+  script: (line: string) => { lines?: string[]; close?: boolean },
+): AcpChildProcess {
+  let onLine: ((line: string) => void) | undefined;
+  let onClose: (() => void) | undefined;
+  return {
+    writeLine(line: string): void {
+      queueMicrotask(() => {
+        const { lines = [], close = false } = script(line);
+        for (const l of lines) onLine?.(l);
+        if (close) onClose?.();
+      });
+    },
+    onStdoutLine(handler: (line: string) => void): void {
+      onLine = handler;
+    },
+    onClose(handler: () => void): void {
+      onClose = handler;
+    },
+    kill(): void {},
+  };
+}
+
+const CONFIGURED_WORKER = {
+  JARVIS_ACP_WORKER_COMMAND: "claude",
+  JARVIS_ACP_WORKER_ARGS: '["acp","--stdio"]',
+} as const;
+
+function acpBoundaryFor(input: {
+  actions: MemoryActions;
+  effects: string[];
+  claims: RecordingClaims;
+  eligibility: RecordingEligibility;
+  reconciliations: RecordingReconciliations;
+  acp?: GovernedAcpConsultation;
+  onAcpConsultation?: (evidence: AcpConsultationEvidence) => void;
+}): GovernedExternalOperation {
+  const execution = new ToolExecutionService(
+    [externalDefinition(input.effects)],
+    new RecordingReceipts(),
+    input.reconciliations,
+    input.claims,
+    input.eligibility,
+  );
+  return new GovernedExternalOperation({
+    actions: input.actions,
+    execution,
+    reconciliations: input.reconciliations,
+    ...(input.acp ? { acp: input.acp } : {}),
+    ...(input.onAcpConsultation ? { onAcpConsultation: input.onAcpConsultation } : {}),
+  });
+}
+
+describe("governed external operation — ACP consultation wiring", () => {
+  const setup = (): {
+    actions: MemoryActions;
+    effects: string[];
+    claims: RecordingClaims;
+    eligibility: RecordingEligibility;
+    reconciliations: RecordingReconciliations;
+  } => {
+    const actions = new MemoryActions();
+    actions.rows.set("action-1", approvedAction());
+    return {
+      actions,
+      effects: [],
+      claims: new RecordingClaims(),
+      eligibility: new RecordingEligibility(),
+      reconciliations: new RecordingReconciliations(),
+    };
+  };
+
+  it("with no ACP port, behaves exactly as before (effect happens, claim taken)", async () => {
+    const s = setup();
+    const boundary = acpBoundaryFor(s);
+    const receipt = await boundary.execute({
+      projectId: "project-1",
+      actionId: "action-1",
+      authority: "T3",
+    });
+    assert.equal(receipt.status, "succeeded");
+    assert.deepEqual(s.effects, ["effect"]);
+    assert.equal(s.claims.calls.length, 1);
+  });
+
+  it("required-mode block: throws, never invokes the provider, never consumes the single-use claim", async () => {
+    const s = setup();
+    const evidences: AcpConsultationEvidence[] = [];
+    const { consultation } = stubConsultation("required", {
+      proceed: false,
+      classification: "deny",
+    });
+    const boundary = acpBoundaryFor({
+      ...s,
+      acp: consultation,
+      onAcpConsultation: (e) => evidences.push(e),
+    });
+    await assert.rejects(
+      () => boundary.execute({ projectId: "project-1", actionId: "action-1", authority: "T3" }),
+      AcpConsultationBlockedError,
+    );
+    assert.deepEqual(s.effects, [], "provider must not be invoked");
+    assert.deepEqual(s.claims.calls, [], "single-use claim must not be consumed on an ACP block");
+    assert.equal(evidences.length, 1, "evidence is observed even on a block");
+    assert.equal(evidences[0]?.classification, "deny");
+  });
+
+  it("required-mode block on a reusable action never calls eligibility.verify", async () => {
+    const actions = new MemoryActions();
+    actions.rows.set(
+      "action-1",
+      approvedAction({
+        consumptionPolicy: "reusable",
+        destructive: false,
+        requiredAuthority: "T2",
+      }),
+    );
+    const eligibility = new RecordingEligibility();
+    const { consultation } = stubConsultation("required", {
+      proceed: false,
+      classification: "timeout",
+    });
+    const boundary = acpBoundaryFor({
+      actions,
+      effects: [],
+      claims: new RecordingClaims(),
+      eligibility,
+      reconciliations: new RecordingReconciliations(),
+      acp: consultation,
+    });
+    await assert.rejects(
+      () => boundary.execute({ projectId: "project-1", actionId: "action-1", authority: "T2" }),
+      AcpConsultationBlockedError,
+    );
+    assert.equal(eligibility.calls, 0, "eligibility re-check must not run when ACP blocks first");
+  });
+
+  it("advisory proceed: effect happens, claim taken, disagreement recorded to the observer", async () => {
+    const s = setup();
+    const evidences: AcpConsultationEvidence[] = [];
+    const { consultation } = stubConsultation("advisory", {
+      proceed: true,
+      classification: "deny",
+      disagreement: true,
+    });
+    const boundary = acpBoundaryFor({
+      ...s,
+      acp: consultation,
+      onAcpConsultation: (e) => evidences.push(e),
+    });
+    const receipt = await boundary.execute({
+      projectId: "project-1",
+      actionId: "action-1",
+      authority: "T3",
+    });
+    assert.equal(receipt.status, "succeeded");
+    assert.deepEqual(s.effects, ["effect"]);
+    assert.equal(s.claims.calls.length, 1);
+    assert.equal(evidences[0]?.disagreement, true);
+  });
+
+  it("disabled ACP port: never consults and never spawns; effect happens", async () => {
+    const s = setup();
+    let spawned = 0;
+    const acp = createGovernedAcpConsultationFromEnv({
+      environment: CONFIGURED_WORKER, // configured worker, but mode defaults to disabled
+      spawnChild: () => {
+        spawned += 1;
+        return fakeChild(() => ({ lines: [responseLine("deny", "request-1")] }));
+      },
+    });
+    const boundary = acpBoundaryFor({ ...s, acp });
+    const receipt = await boundary.execute({
+      projectId: "project-1",
+      actionId: "action-1",
+      authority: "T3",
+    });
+    assert.equal(receipt.status, "succeeded");
+    assert.deepEqual(s.effects, ["effect"]);
+    assert.equal(spawned, 0);
+  });
+
+  it("integration: a real required-mode worker deny blocks and never invokes the provider", async () => {
+    const s = setup();
+    const acp = createGovernedAcpConsultationFromEnv({
+      mode: "required",
+      environment: CONFIGURED_WORKER,
+      spawnChild: () =>
+        fakeChild((line: string) => {
+          const req = JSON.parse(line) as { request: AcpPermissionRequest };
+          return { lines: [responseLine("deny", req.request.requestId)] };
+        }),
+    });
+    const boundary = acpBoundaryFor({ ...s, acp });
+    await assert.rejects(
+      () => boundary.execute({ projectId: "project-1", actionId: "action-1", authority: "T3" }),
+      AcpConsultationBlockedError,
+    );
+    assert.deepEqual(s.effects, []);
+    assert.deepEqual(s.claims.calls, []);
+  });
+
+  it("integration: a real advisory-mode worker deny proceeds and records the disagreement", async () => {
+    const s = setup();
+    const evidences: AcpConsultationEvidence[] = [];
+    const acp = createGovernedAcpConsultationFromEnv({
+      mode: "advisory",
+      environment: CONFIGURED_WORKER,
+      spawnChild: () =>
+        fakeChild((line: string) => {
+          const req = JSON.parse(line) as { request: AcpPermissionRequest };
+          return { lines: [responseLine("deny", req.request.requestId)] };
+        }),
+    });
+    const boundary = acpBoundaryFor({ ...s, acp, onAcpConsultation: (e) => evidences.push(e) });
+    const receipt = await boundary.execute({
+      projectId: "project-1",
+      actionId: "action-1",
+      authority: "T3",
+    });
+    assert.equal(receipt.status, "succeeded");
+    assert.deepEqual(s.effects, ["effect"]);
+    assert.equal(evidences[0]?.classification, "deny");
+    assert.equal(evidences[0]?.disagreement, true);
   });
 });

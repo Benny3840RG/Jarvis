@@ -197,11 +197,32 @@ Record the results; a launch config that has not passed 1–4 must not be enable
 - **Shared kernel.** systemd sandboxing is not a VM boundary. For hostile-tenant
   threat models, prefer a VM/microVM per worker.
 
+## Enabling the consultation (operating mode)
+
+The worker launch config above is *how* a worker is sandboxed and launched; it is
+still inert until an operating mode is set. `JARVIS_ACP_MODE` selects it:
+
+- unset / `disabled` (default) — ACP is never consulted; no worker launches.
+- `advisory` — the peer is consulted for evidence only; it can never grant
+  authority or remove valid governed authority.
+- `required` — the peer becomes an additional veto/availability gate; a `deny` or
+  any classified failure blocks a governed-approved action (it still cannot grant
+  authority).
+
+Commission progressively: apply and **verify** this sandbox (Gate C) and
+provision the worker credential + dry-run (Gate D) before setting a mode above
+`disabled`, and start any live use at `advisory` on a low-consequence operation
+(Gate E) — never `required` globally, and never merge/deploy authority. Rollback
+is config-level: set `JARVIS_ACP_MODE=disabled` (or unset the worker command).
+
 ## Related
 
 - Code side: `typescript/src/acp/acpStdioTransport.ts` (`buildAcpChildEnv`,
   `spawnAcpChild`), `typescript/src/acp/acpWorkerConfig.ts`
-  (`resolveAcpWorkerConfigFromEnv`).
-- Architecture: `typescript/docs/architecture/acp-transport-seam.md`.
+  (`resolveAcpWorkerConfigFromEnv`), `typescript/src/acp/acpOperatingMode.ts`
+  (mode policy), `typescript/src/acp/acpGovernedConsultation.ts`.
+- Architecture: `typescript/docs/architecture/acp-transport-seam.md`,
+  `typescript/docs/architecture/acp-governed-consultation.md`.
+- Evidence + gate status: `docs/operations/acp-commissioning-evidence.md`.
 - Precedent: PR F's deny-by-default egress boundary
   (`typescript/docs/architecture/github-read-plane-boundary.md`).

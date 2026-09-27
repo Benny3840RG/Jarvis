@@ -51,10 +51,22 @@ export const DEFAULT_ACP_STDIO_MAX_LINE_BYTES = 65_536;
  */
 export type AcpWorkerConfig = Readonly<{ command: string; args: readonly string[] }>;
 
+/**
+ * Why a stdio consultation failed. A precise, non-secret classification so the
+ * governed consultation layer can record operational evidence rather than
+ * sniffing the human-readable message. `write_failed` is a transport-internal
+ * fault (we never handed the request to the worker).
+ */
+export type AcpStdioTransportFailureCode =
+  "timeout" | "worker_crash" | "output_limit_exceeded" | "write_failed";
+
 export class AcpStdioTransportError extends Error {
-  constructor(reason: string) {
+  readonly code: AcpStdioTransportFailureCode;
+
+  constructor(code: AcpStdioTransportFailureCode, reason: string) {
     super(`ACP stdio transport failed: ${reason}`);
     this.name = "AcpStdioTransportError";
+    this.code = code;
   }
 }
 
@@ -126,8 +138,8 @@ export class StdioAcpTransport implements AcpTransport {
         }
         finish();
       };
-      const fail = (reason: string): void =>
-        settle(() => reject(new AcpStdioTransportError(reason)));
+      const fail = (code: AcpStdioTransportFailureCode, reason: string): void =>
+        settle(() => reject(new AcpStdioTransportError(code, reason)));
 
       child.onStdoutLine((line) => {
         if (settled) return;
@@ -142,21 +154,21 @@ export class StdioAcpTransport implements AcpTransport {
         }
         // Non-matching line: ignore as contamination, but bound how much we read.
         if (lines >= this.#maxResponseLines) {
-          fail("no valid response within the bounded stdout window");
+          fail("output_limit_exceeded", "no valid response within the bounded stdout window");
         }
       });
       child.onClose(() => {
-        if (!settled) fail("worker closed before returning a valid response");
+        if (!settled) fail("worker_crash", "worker closed before returning a valid response");
       });
       cancelTimeout = this.#scheduleTimeout(
-        () => fail("timed out awaiting a worker response"),
+        () => fail("timeout", "timed out awaiting a worker response"),
         this.#timeoutMs,
       );
 
       try {
         child.writeLine(encodeAcpEnvelope({ v: 1, kind: "permission_request", request }));
       } catch {
-        fail("failed to write the request to the worker");
+        fail("write_failed", "failed to write the request to the worker");
       }
     });
   }
