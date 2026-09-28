@@ -13,6 +13,7 @@
     "start:preview": "node --import tsx src/preview/main.ts",
     "paddock": "node --import tsx src/tools/runPaddock.ts",
     "monitor": "node --import tsx src/tools/runLiveWorkMonitor.ts",
+    "owner:approve": "node --import tsx src/tools/runOwnerApproveToolAction.ts",
     "dev:live-work": "node --import tsx src/tools/runLiveWorkDev.ts",
     "quote:demo": "node --import tsx src/tools/runQuoteDemo.ts",
     "quote:create": "node --import tsx src/tools/runQuoteCreate.ts",
