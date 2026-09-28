@@ -4,7 +4,9 @@
  *
  *   npm run owner:approve -- --project <projectId> --action <actionId> --expect-file <expected.json>
  *
- * `expected.json` holds the payload you expect ({ tool, operation, arguments }).
+ * `expected.json` holds the complete envelope you expect: { tool, operation,
+ * arguments, requiredAuthority, destructive }, all mandatory. Only `home:announce`
+ * actions are supported.
  * The action is fetched, compared to it, shown to you, and only approved after
  * you type the confirmation phrase and then the owner approval token at a
  * hidden prompt. The token is never accepted from arguments, the environment
