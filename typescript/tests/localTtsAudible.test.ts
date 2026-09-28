@@ -86,6 +86,16 @@ describe("assessWav", () => {
     unaligned.writeUInt32LE(unaligned.length - 46, 40);
     assert.equal(assessWav(new Uint8Array(unaligned)).status, "invalid");
   });
+
+  it("rejects RIFF extents that do not match the supplied file", () => {
+    const tooShort = Buffer.from(tone());
+    tooShort.writeUInt32LE(tooShort.length - 9, 4);
+    assert.equal(assessWav(new Uint8Array(tooShort)).status, "invalid");
+
+    const tooLong = Buffer.from(tone());
+    tooLong.writeUInt32LE(tooLong.length - 7, 4);
+    assert.equal(assessWav(new Uint8Array(tooLong)).status, "invalid");
+  });
 });
 
 describe("assertAudibleWav", () => {
