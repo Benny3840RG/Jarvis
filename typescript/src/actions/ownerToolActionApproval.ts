@@ -18,6 +18,7 @@ import type { ToolAction } from "./toolActions.js";
 export type OwnerApprovalErrorCode =
   | "payload-mismatch"
   | "payload-changed"
+  | "unsupported-action"
   | "not-approvable"
   | "cancelled"
   | "not-interactive"
@@ -34,14 +35,28 @@ export class OwnerApprovalError extends Error {
   }
 }
 
-/** The exact payload the owner expects to approve; anything else is refused. */
+/**
+ * The complete envelope the owner expects to approve. Every field is mandatory
+ * and bound into the payload digest; anything else is refused.
+ */
 export type OwnerApprovalExpectation = {
   tool: string;
   operation: string;
   arguments: Record<string, unknown>;
-  requiredAuthority?: string;
-  destructive?: boolean;
+  requiredAuthority: string;
+  destructive: boolean;
 };
+
+/** The only operation this client can approve; its review text is specific to it. */
+export const OWNER_APPROVAL_SUPPORTED_TOOL = "home";
+export const OWNER_APPROVAL_SUPPORTED_OPERATION = "announce";
+
+function isSupportedOperation(payload: { tool: string; operation: string }): boolean {
+  return (
+    payload.tool === OWNER_APPROVAL_SUPPORTED_TOOL &&
+    payload.operation === OWNER_APPROVAL_SUPPORTED_OPERATION
+  );
+}
 
 export type OwnerApprovalTransport = {
   getAction(projectId: string, actionId: string): Promise<ToolAction>;
@@ -87,6 +102,8 @@ export function canonicalPayloadDigest(payload: {
   tool: string;
   operation: string;
   arguments: Record<string, unknown>;
+  requiredAuthority: string;
+  destructive: boolean;
 }): string {
   return createHash("sha256")
     .update(
@@ -94,23 +111,15 @@ export function canonicalPayloadDigest(payload: {
         tool: payload.tool,
         operation: payload.operation,
         arguments: payload.arguments,
+        requiredAuthority: payload.requiredAuthority,
+        destructive: payload.destructive,
       }),
     )
     .digest("hex");
 }
 
 function matchesExpectation(action: ToolAction, expectation: OwnerApprovalExpectation): boolean {
-  if (canonicalPayloadDigest(action) !== canonicalPayloadDigest(expectation)) return false;
-  if (
-    expectation.requiredAuthority !== undefined &&
-    action.requiredAuthority !== expectation.requiredAuthority
-  ) {
-    return false;
-  }
-  if (expectation.destructive !== undefined && action.destructive !== expectation.destructive) {
-    return false;
-  }
-  return true;
+  return canonicalPayloadDigest(action) === canonicalPayloadDigest(expectation);
 }
 
 function redact(text: string, secrets: readonly string[]): string {
@@ -136,23 +145,19 @@ function renderReview(
     `Operation: ${action.tool}:${action.operation} (authority ${action.requiredAuthority}, destructive: ${action.destructive})`,
   ];
   const args = action.arguments;
-  if (action.tool === "home" && action.operation === "announce") {
-    const target = typeof args.target === "string" ? args.target : "";
-    const address = pinnedAddress?.(target);
-    lines.push(
-      `Speaker:   ${target}`,
-      address
-        ? `Pinned address: ${address}`
-        : "Pinned address: not available to this client (verify the host target map)",
-      `Volume:    ${String(args.volume)}`,
-      "Text:",
-      String(args.message),
-    );
-  } else {
-    lines.push("Arguments:", JSON.stringify(args, null, 2));
-  }
+  const target = typeof args.target === "string" ? args.target : "";
+  const address = pinnedAddress?.(target);
   lines.push(
-    `Payload digest (sha256): ${digest}`,
+    `Speaker:   ${target}`,
+    address
+      ? `Pinned address: ${address}`
+      : "Pinned address: not available to this client (verify the host target map)",
+    `Volume:    ${String(args.volume)}`,
+    "Text:",
+    String(args.message),
+  );
+  lines.push(
+    `Envelope digest (sha256): ${digest}`,
     "",
     "Approving authorises this announcement, which plays now on that speaker once executed.",
     "It may interrupt any media already playing and does not automatically resume it.",
@@ -169,6 +174,12 @@ export async function runOwnerApproval(input: {
   io: OwnerApprovalIo;
 }): Promise<OwnerApprovalResult> {
   const { projectId, actionId, expectation, transport, io } = input;
+  if (!isSupportedOperation(expectation)) {
+    throw new OwnerApprovalError(
+      "unsupported-action",
+      `This client approves only ${OWNER_APPROVAL_SUPPORTED_TOOL}:${OWNER_APPROVAL_SUPPORTED_OPERATION} actions. Nothing was sent.`,
+    );
+  }
   const digest = canonicalPayloadDigest(expectation);
 
   const reviewed = await transport.getAction(projectId, actionId);
@@ -441,22 +452,25 @@ export function parseOwnerApprovalExpectation(text: string): OwnerApprovalExpect
   };
   const tool = text_("tool");
   const operation = text_("operation");
+  if (!isSupportedOperation({ tool, operation })) {
+    throw new Error(
+      `This client approves only ${OWNER_APPROVAL_SUPPORTED_TOOL}:${OWNER_APPROVAL_SUPPORTED_OPERATION} actions.`,
+    );
+  }
   const args = record.arguments;
   if (!args || typeof args !== "object" || Array.isArray(args)) {
     throw new Error("expectation.arguments must be a JSON object.");
+  }
+  const requiredAuthority = text_("requiredAuthority");
+  if (typeof record.destructive !== "boolean") {
+    throw new Error("expectation.destructive must be a boolean.");
   }
   const expectation: OwnerApprovalExpectation = {
     tool,
     operation,
     arguments: args as Record<string, unknown>,
+    requiredAuthority,
+    destructive: record.destructive,
   };
-  if (record.requiredAuthority !== undefined)
-    expectation.requiredAuthority = text_("requiredAuthority");
-  if (record.destructive !== undefined) {
-    if (typeof record.destructive !== "boolean") {
-      throw new Error("expectation.destructive must be a boolean.");
-    }
-    expectation.destructive = record.destructive;
-  }
   return expectation;
 }

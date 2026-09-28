@@ -27,6 +27,8 @@ const expectation: OwnerApprovalExpectation = {
   tool: "home",
   operation: "announce",
   arguments: { target: "Queen’s bedside", message: MESSAGE, volume: 0.2 },
+  requiredAuthority: "T1",
+  destructive: false,
 };
 
 function action(overrides: Partial<ToolAction> = {}): ToolAction {
@@ -263,6 +265,63 @@ describe("runOwnerApproval: approval", () => {
   });
 });
 
+describe("runOwnerApproval: authority envelope binding", () => {
+  it("binds requiredAuthority and destructive into the payload digest", () => {
+    const base = canonicalPayloadDigest(expectation);
+    assert.notEqual(base, canonicalPayloadDigest({ ...expectation, requiredAuthority: "T2" }));
+    assert.notEqual(base, canonicalPayloadDigest({ ...expectation, destructive: true }));
+  });
+
+  it("shows the digest of the complete envelope, including authority and destructive", async () => {
+    const h = harness({});
+    await run(h);
+    const text = h.output.join("\n");
+    assert.ok(text.includes(canonicalPayloadDigest(expectation)));
+    assert.match(text, /authority T1/);
+    assert.match(text, /destructive: false/);
+  });
+
+  it("rejects a different authority or destructive flag before any prompt or approval", async () => {
+    for (const variant of [{ requiredAuthority: "T2" as const }, { destructive: true }]) {
+      const h = harness({ gets: [action(variant)] });
+      await rejectsWith(run(h), "payload-mismatch");
+      assert.equal(h.prompts.confirm + h.prompts.secret, 0);
+      assert.equal(h.calls.approve.length, 0);
+    }
+  });
+
+  it("aborts without approval when authority or destructive change after review", async () => {
+    for (const variant of [{ requiredAuthority: "T3" as const }, { destructive: true }]) {
+      const h = harness({ gets: [action(), action(variant)] });
+      await rejectsWith(run(h), "payload-changed");
+      assert.equal(h.calls.approve.length, 0);
+    }
+  });
+
+  it("reports an unconfirmed outcome when authority or destructive drift in the readback", async () => {
+    for (const variant of [{ requiredAuthority: "T3" as const }, { destructive: true }]) {
+      const h = harness({ gets: [action(), action(), action({ state: "approved", ...variant })] });
+      await rejectsWith(run(h), "approval-unconfirmed");
+      assert.equal(h.calls.approve.length, 1);
+    }
+  });
+});
+
+describe("runOwnerApproval: supported operation", () => {
+  it("refuses any expectation other than home:announce before contacting the API", async () => {
+    for (const other of [
+      { tool: "notes", operation: "create" },
+      { tool: "home", operation: "lights" },
+    ]) {
+      const h = harness({});
+      await rejectsWith(run(h, { ...expectation, ...other }), "unsupported-action");
+      assert.equal(h.calls.get, 0);
+      assert.equal(h.prompts.confirm + h.prompts.secret, 0);
+      assert.equal(h.calls.approve.length, 0);
+    }
+  });
+});
+
 describe("createHttpOwnerApprovalTransport", () => {
   function fakeFetch(responses: Array<Response | Error>) {
     const requests: Array<{ url: string; init: RequestInit }> = [];
@@ -484,6 +543,33 @@ describe("parseOwnerApprovalArgs / parseOwnerApprovalExpectation", () => {
           JSON.stringify({ tool: "home", operation: "announce", arguments: [] }),
         ),
       /arguments/,
+    );
+  });
+
+  it("requires requiredAuthority and destructive", () => {
+    const { requiredAuthority: _authority, ...withoutAuthority } = expectation;
+    const { destructive: _destructive, ...withoutDestructive } = expectation;
+    assert.throws(
+      () => parseOwnerApprovalExpectation(JSON.stringify(withoutAuthority)),
+      /requiredAuthority/,
+    );
+    assert.throws(
+      () => parseOwnerApprovalExpectation(JSON.stringify(withoutDestructive)),
+      /destructive/,
+    );
+    assert.throws(
+      () => parseOwnerApprovalExpectation(JSON.stringify({ ...expectation, destructive: "no" })),
+      /destructive/,
+    );
+  });
+
+  it("accepts only the home:announce operation", () => {
+    assert.throws(
+      () =>
+        parseOwnerApprovalExpectation(
+          JSON.stringify({ ...expectation, tool: "notes", operation: "create" }),
+        ),
+      /home:announce/,
     );
   });
 });

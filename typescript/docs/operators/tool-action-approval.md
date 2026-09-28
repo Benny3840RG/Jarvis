@@ -191,14 +191,16 @@ or bypass.
 npm run owner:approve -- --project <projectId> --action <actionId> --expect-file <expected.json>
 ```
 
-`expected.json` is `{ "tool": ..., "operation": ..., "arguments": { ... } }`, the exact payload you
-expect to approve (optionally `requiredAuthority` and `destructive`). The client:
+`expected.json` is `{ "tool": ..., "operation": ..., "arguments": { ... }, "requiredAuthority": ...,
+"destructive": ... }`, the complete envelope you expect to approve. Every field is mandatory and bound
+into the displayed envelope digest. The client supports only `home:announce` actions and refuses any
+other operation before contacting the API. The client:
 
 1. fetches the stored action and refuses anything that is not `proposed`, is expired, or differs from
    the expectation, before prompting;
-2. shows the action (for `home:announce`: speaker, pinned address when
-   `JARVIS_GOOGLE_HOME_TARGETS_JSON` is in `.env.local`, full text, volume, payload digest) and warns
-   that the announcement plays now, may interrupt existing media, and does not resume it;
+2. shows the action (speaker, pinned address when `JARVIS_GOOGLE_HOME_TARGETS_JSON` is in
+   `.env.local`, full text, volume, authority, destructive flag, envelope digest) and warns that the
+   announcement plays now, may interrupt existing media, and does not resume it;
 3. requires you to type `APPROVE <actionId>`, then the owner approval token at a hidden prompt;
 4. re-fetches immediately before sending and aborts if the payload, state or revision changed;
 5. sends one approval request, never retries it, and reads the action back to confirm it is
