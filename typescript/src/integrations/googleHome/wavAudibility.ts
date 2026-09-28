@@ -35,18 +35,20 @@ export function assessWav(bytes: Uint8Array): WavAssessment {
       view.getUint8(offset + 3),
     );
   if (tag(0) !== "RIFF" || tag(8) !== "WAVE") return INVALID;
+  const riffEnd = 8 + view.getUint32(4, true);
+  if (riffEnd !== bytes.byteLength) return INVALID;
 
   let channels = 0;
   let sampleRate = 0;
   let dataStart = -1;
   let dataLength = 0;
   let offset = 12;
-  while (offset + 8 <= bytes.byteLength) {
+  while (offset + 8 <= riffEnd) {
     const id = tag(offset);
     const size = view.getUint32(offset + 4, true);
     const body = offset + 8;
     if (id === "fmt ") {
-      if (size < 16 || body + 16 > bytes.byteLength) return INVALID;
+      if (size < 16 || body + 16 > riffEnd) return INVALID;
       const format = view.getUint16(body, true);
       channels = view.getUint16(body + 2, true);
       sampleRate = view.getUint32(body + 4, true);
@@ -54,7 +56,7 @@ export function assessWav(bytes: Uint8Array): WavAssessment {
       if (format !== 1 || bits !== 16 || channels < 1 || sampleRate < 1) return INVALID;
     } else if (id === "data") {
       dataStart = body;
-      if (body + size > bytes.byteLength) return INVALID;
+      if (body + size > riffEnd) return INVALID;
       dataLength = size;
       break;
     }
