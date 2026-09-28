@@ -8,6 +8,7 @@ The capability is registered as the external operation `home:announce`. It does 
 
 - mDNS discovery is read-only and uses `_googlecast._tcp`.
 - Speech is synthesized locally on J-arvis with `text2wav` in a cancellable worker thread. The worker receives only the message and voice, not runtime environment credentials. It is terminated on cancellation, failure or its 10-second synthesis deadline.
+- The synthesized clip is checked for audibility before it is hosted or sent. A silent or malformed clip fails closed (`local-tts-failed`, cause `local-tts-silent-audio` or `local-tts-invalid-audio`) because a Cast receiver reports a silent clip as successfully played. Do not pass `amplitude` to `text2wav` (0.0.14): any value produces silent audio; loudness is set by the Cast volume.
 - J-arvis serves one random, short-lived WAV URL, bound only to the routed interface. Only the pinned speaker IP may fetch it.
 - The pinned Cast device fetches that URL and plays it with the Default Media Receiver.
 - The original Cast volume and mute state are restored after playback.
