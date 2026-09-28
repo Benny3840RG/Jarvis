@@ -52,8 +52,14 @@ export function assessWav(bytes: Uint8Array): WavAssessment {
       const format = view.getUint16(body, true);
       channels = view.getUint16(body + 2, true);
       sampleRate = view.getUint32(body + 4, true);
+      const byteRate = view.getUint32(body + 8, true);
+      const blockAlign = view.getUint16(body + 12, true);
       const bits = view.getUint16(body + 14, true);
       if (format !== 1 || bits !== 16 || channels < 1 || sampleRate < 1) return INVALID;
+      const expectedBlockAlign = channels * 2;
+      if (blockAlign !== expectedBlockAlign || byteRate !== sampleRate * expectedBlockAlign) {
+        return INVALID;
+      }
     } else if (id === "data") {
       dataStart = body;
       if (body + size > riffEnd) return INVALID;
