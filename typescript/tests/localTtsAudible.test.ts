@@ -97,6 +97,12 @@ describe("assessWav", () => {
     assert.equal(assessWav(new Uint8Array(tooLong)).status, "invalid");
   });
 
+  it("rejects bytes after the supported PCM data chunk", () => {
+    const trailing = Buffer.concat([Buffer.from(tone()), Buffer.from("trailing")]);
+    trailing.writeUInt32LE(trailing.length - 8, 4);
+    assert.equal(assessWav(new Uint8Array(trailing)).status, "invalid");
+  });
+
   it("rejects PCM headers with inconsistent frame and byte rates", () => {
     const badBlockAlign = Buffer.from(tone());
     badBlockAlign.writeUInt16LE(1, 32);
