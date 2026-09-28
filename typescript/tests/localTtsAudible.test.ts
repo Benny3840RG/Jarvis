@@ -96,6 +96,16 @@ describe("assessWav", () => {
     tooLong.writeUInt32LE(tooLong.length - 7, 4);
     assert.equal(assessWav(new Uint8Array(tooLong)).status, "invalid");
   });
+
+  it("rejects PCM headers with inconsistent frame and byte rates", () => {
+    const badBlockAlign = Buffer.from(tone());
+    badBlockAlign.writeUInt16LE(1, 32);
+    assert.equal(assessWav(new Uint8Array(badBlockAlign)).status, "invalid");
+
+    const badByteRate = Buffer.from(tone());
+    badByteRate.writeUInt32LE(22050, 28);
+    assert.equal(assessWav(new Uint8Array(badByteRate)).status, "invalid");
+  });
 });
 
 describe("assertAudibleWav", () => {
