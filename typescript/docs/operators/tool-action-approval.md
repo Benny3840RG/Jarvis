@@ -187,9 +187,23 @@ such conflict: it remains revocable after any number of completed receipts, stop
 authority issuer: it calls `GET` and `POST .../approve` on the loopback API and adds no route, token
 or bypass.
 
+Run it from a checkout that contains the client (for a pinned release deployment, the deployed
+release's `typescript/` directory) in your own interactive terminal. The runtime `.env.local` may live
+in a different directory from that checkout. The client reads `.env.local` from the current directory
+if one is there; otherwise pass the runtime file explicitly:
+
 ```bash
+# `.env.local` is in the current directory
 npm run owner:approve -- --project <projectId> --action <actionId> --expect-file <expected.json>
+
+# `.env.local` lives elsewhere (for example the runtime working directory of a pinned release)
+node --env-file=<path/to/runtime/.env.local> --import tsx src/tools/runOwnerApproveToolAction.ts \
+  --project <projectId> --action <actionId> --expect-file <expected.json>
 ```
+
+Either way the client needs only `JARVIS_API_BASE_URL` (loopback) and `JARVIS_SERVICE_TOKEN` from that
+file. It never reads `JARVIS_APPROVAL_TOKEN` from the environment, even though loading the file makes
+it present in the process.
 
 `expected.json` is `{ "tool": ..., "operation": ..., "arguments": { ... }, "requiredAuthority": ...,
 "destructive": ... }`, the complete envelope you expect to approve. Every field is mandatory and bound
