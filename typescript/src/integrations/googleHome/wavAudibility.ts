@@ -63,6 +63,7 @@ export function assessWav(bytes: Uint8Array): WavAssessment {
     } else if (id === "data") {
       dataStart = body;
       if (body + size > riffEnd) return INVALID;
+      if (body + size !== riffEnd) return INVALID;
       dataLength = size;
       break;
     }
