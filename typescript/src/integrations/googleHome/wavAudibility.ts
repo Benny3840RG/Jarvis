@@ -54,16 +54,17 @@ export function assessWav(bytes: Uint8Array): WavAssessment {
       if (format !== 1 || bits !== 16 || channels < 1 || sampleRate < 1) return INVALID;
     } else if (id === "data") {
       dataStart = body;
-      // Never trust a declared length that overruns the buffer.
-      dataLength = Math.min(size, bytes.byteLength - body);
+      if (body + size > bytes.byteLength) return INVALID;
+      dataLength = size;
       break;
     }
     offset = body + size + (size % 2);
   }
   if (channels === 0 || dataStart < 0) return INVALID;
 
-  const sampleCount = Math.floor(dataLength / 2);
-  if (sampleCount === 0) return INVALID;
+  const bytesPerFrame = channels * 2;
+  if (dataLength === 0 || dataLength % bytesPerFrame !== 0) return INVALID;
+  const sampleCount = dataLength / 2;
   let peak = 0;
   let signal = 0;
   for (let index = 0; index < sampleCount; index += 1) {
