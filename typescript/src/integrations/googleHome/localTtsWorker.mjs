@@ -5,7 +5,8 @@ if (parentPort) {
   const audio = await text2wav(workerData.message, {
     voice: workerData.voice,
     speed: 165,
-    amplitude: 110,
+    // Do not pass `amplitude`: with text2wav 0.0.14 any amplitude value yields
+    // all-zero (silent) audio. Loudness is set by the Cast volume instead.
     noFinalPause: true,
   });
   parentPort.postMessage(audio);
