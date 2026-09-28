@@ -69,7 +69,22 @@ describe("assessWav", () => {
   it("does not trust a data length that overruns the buffer", () => {
     const lying = Buffer.from(tone());
     lying.writeUInt32LE(0x7fffffff, 40);
-    assert.equal(assessWav(new Uint8Array(lying)).status, "audible");
+    assert.equal(assessWav(new Uint8Array(lying)).status, "invalid");
+  });
+
+  it("rejects 16-bit data with an incomplete sample", () => {
+    const unaligned = Buffer.from(tone());
+    unaligned.writeUInt32LE(unaligned.length - 45, 40);
+    assert.equal(assessWav(new Uint8Array(unaligned)).status, "invalid");
+  });
+
+  it("rejects data without a complete frame for every channel", () => {
+    const unaligned = Buffer.from(tone());
+    unaligned.writeUInt16LE(2, 22);
+    unaligned.writeUInt32LE(22050 * 4, 28);
+    unaligned.writeUInt16LE(4, 32);
+    unaligned.writeUInt32LE(unaligned.length - 46, 40);
+    assert.equal(assessWav(new Uint8Array(unaligned)).status, "invalid");
   });
 });
 
