@@ -181,6 +181,34 @@ once a completed execution receipt already exists, with a state-conflict respons
 external effect may already have happened and revocation cannot retract it. A **reusable** action carries no
 such conflict: it remains revocable after any number of completed receipts, stopping only future attempts.
 
+## Owner approval client
+
+`npm run owner:approve` is a small client of the routes above for the human operator. It is not an
+authority issuer: it calls `GET` and `POST .../approve` on the loopback API and adds no route, token
+or bypass.
+
+```bash
+npm run owner:approve -- --project <projectId> --action <actionId> --expect-file <expected.json>
+```
+
+`expected.json` is `{ "tool": ..., "operation": ..., "arguments": { ... } }`, the exact payload you
+expect to approve (optionally `requiredAuthority` and `destructive`). The client:
+
+1. fetches the stored action and refuses anything that is not `proposed`, is expired, or differs from
+   the expectation, before prompting;
+2. shows the action (for `home:announce`: speaker, pinned address when
+   `JARVIS_GOOGLE_HOME_TARGETS_JSON` is in `.env.local`, full text, volume, payload digest) and warns
+   that the announcement plays now, may interrupt existing media, and does not resume it;
+3. requires you to type `APPROVE <actionId>`, then the owner approval token at a hidden prompt;
+4. re-fetches immediately before sending and aborts if the payload, state or revision changed;
+5. sends one approval request, never retries it, and reads the action back to confirm it is
+   approved, unexpired and unchanged.
+
+The token is accepted only from an interactive terminal. It is never read from arguments, the
+environment, files or a pipe, is never printed, and is redacted from errors. Cancelling (Ctrl-C,
+empty input, end of input) sends nothing. The client never executes an action; execution stays a
+separate, service-authenticated step.
+
 ## Execution
 
 `ToolExecutionService` (`src/actions/toolExecution.ts`) is the executor referenced above as a future
