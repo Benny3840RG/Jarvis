@@ -103,7 +103,7 @@ JARVIS_ACP_WORKER_ARGS=[
   "--property=MemoryMax=1G",
   "--property=TasksMax=64",
   "--property=RuntimeMaxSec=120",
-  "--property=LoadCredential=jarvis-acp-anthropic-key:/home/<user>/.config/jarvis/credentials/anthropic-acp-worker-key.cred",
+  "--property=LoadCredentialEncrypted=jarvis-acp-anthropic-key:/home/<user>/.config/jarvis/credentials/anthropic-acp-worker-key.cred",
   "--setenv=PATH=/usr/bin:/bin",
   "--setenv=JARVIS_ACP_ANTHROPIC_API_KEY_CREDENTIAL=jarvis-acp-anthropic-key",
   "--setenv=JARVIS_ACP_ANTHROPIC_PROXY_URI=http://127.0.0.1:<egress-proxy-port>",
@@ -211,9 +211,46 @@ top of (never instead of) its hostname-exact CONNECT check. As with any
 CIDR-based control: do not hard-code ranges from memory, and own the drift.
 
 Do **not** grant the worker or the proxy Jarvis's API tokens. Pass only the
-worker's own Anthropic key, via `LoadCredential=` as shown above — never
+worker's own Anthropic key, via `LoadCredentialEncrypted=` as shown above — never
 `JARVIS_GITHUB_TOKEN`, `JARVIS_SERVICE_TOKEN`, the read-plane App key, or
 `$CREDENTIALS_DIRECTORY` from Jarvis's own service.
+
+### Provisioning the worker's own credential
+
+Run this yourself, in your own terminal — never paste the plaintext key into a
+chat, a commit, or any tool call; `systemd-ask-password` reads it without
+terminal echo, and it goes straight into `systemd-creds encrypt`, never touching
+a shell variable, argv, or a file on disk unencrypted:
+
+```bash
+mkdir -p ~/.config/jarvis/credentials
+chmod 700 ~/.config/jarvis/credentials
+systemd-ask-password "Anthropic ACP worker API key: " | \
+  systemd-creds encrypt --name=jarvis-acp-anthropic-key - \
+  ~/.config/jarvis/credentials/anthropic-acp-worker-key.cred
+chmod 600 ~/.config/jarvis/credentials/anthropic-acp-worker-key.cred
+```
+
+`--name=` is not cosmetic: systemd embeds it in the ciphertext and checks it
+against the unit's `LoadCredentialEncrypted=<name>:<path>` at load time
+specifically so an encrypted credential can't be silently renamed and reused
+for a different purpose — it must read exactly `jarvis-acp-anthropic-key` to
+match the worker unit above.
+
+This targets **system-level** decryption (no `--user`/`--uid=`), matching the
+worker's launch as a system-scope transient unit (`sudo systemd-run`, no
+`--user` — the same shape Gate C's probes were run and verified under, since
+`IPAddressAllow`/`ProtectHome`/`CapabilityBoundingSet=` were confirmed silently
+ignored under a rootless `systemd-run --user` on this host). This is a
+different scope than `jarvis-github-minter.service`'s credential, which is a
+`--user` unit — the two are unrelated and do not need to match.
+
+Verify without ever printing the key: confirm it decrypts and check the byte
+count looks like a real key, not its contents.
+
+```bash
+systemd-creds decrypt ~/.config/jarvis/credentials/anthropic-acp-worker-key.cred | wc -c
+```
 
 ## Worker lifecycle (avoid orphaned services) — verify, don't assume
 
@@ -260,7 +297,7 @@ and a process scan for the worker command) beyond the moment the request settled
 | `SystemCallFilter=@system-service`                                                                                                    | Allowlist syscall set; denies the rest (with `EPERM`).                                                     | Test the worker actually runs under it; add groups only as needed.                                                                                                                                                                                                         |
 | `SystemCallArchitectures=native`                                                                                                      | Blocks non-native ABIs (defeats some sandbox escapes).                                                     | —                                                                                                                                                                                                                                                                          |
 | `MemoryMax` / `TasksMax` / `RuntimeMaxSec`                                                                                            | Resource + wall-clock bounds.                                                                              | `RuntimeMaxSec` kills long calls; set above the transport's response timeout.                                                                                                                                                                                              |
-| `LoadCredential=` / `--setenv`                                                                                                        | Provide the worker's own API key out of band.                                                              | Prefer `LoadCredential` so keys aren't in argv/`systemctl show` env.                                                                                                                                                                                                       |
+| `LoadCredentialEncrypted=` / `--setenv`                                                                                               | Provide the worker's own API key out of band.                                                              | Prefer `LoadCredentialEncrypted=` (an encrypted-at-rest file, via `systemd-creds encrypt`) so keys aren't in argv/`systemctl show` env.                                                                                                                                    |
 | `ProtectProc=invisible`, `ProtectKernelTunables=yes`, `ProtectControlGroups=yes`, `LockPersonality=yes`, `MemoryDenyWriteExecute=yes` | Further hardening.                                                                                         | Optional; some may break specific runtimes — test.                                                                                                                                                                                                                         |
 
 ## Fallback without systemd
