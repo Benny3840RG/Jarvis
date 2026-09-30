@@ -55,6 +55,10 @@ describe("jarvis-anthropic-egress-proxy entrypoint (real subprocess)", () => {
         socket.once("error", () => resolve(false));
       });
       assert.equal(connected, true);
+      // The socket is created group-rw (0660) so a worker in a shared group can
+      // connect despite a restrictive service umask; not owner-only (0700).
+      const { statSync } = await import("node:fs");
+      assert.equal(statSync(socketPath).mode & 0o777, 0o660);
     } finally {
       child.kill();
       rmSync(dir, { recursive: true, force: true });

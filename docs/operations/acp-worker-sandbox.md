@@ -219,8 +219,14 @@ PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=yes
 UMask=0077
-# RuntimeDirectory owns the socket dir under /run; grant the worker's account
-# access via a shared group so it — and nothing else — can connect.
+# RuntimeDirectory owns the socket dir under /run; RuntimeDirectoryMode=0750
+# gives the shared group traverse (x) access to the dir. `Group=` sets the
+# socket's group; proxyMain.ts then chmods the socket itself to 0660 so the
+# worker's account — in that shared group — can connect (an AF_UNIX connect
+# needs *write* on the socket), and nothing outside owner+group can. Do NOT
+# rely on UMask for the socket mode: under UMask=0077 a Node-created socket is
+# 0700 and the worker could not connect — the explicit 0660 chmod is what makes
+# the shared-group design work.
 RuntimeDirectory=jarvis-acp
 RuntimeDirectoryMode=0750
 Group=<group shared with the worker's account>
@@ -238,10 +244,13 @@ sudo systemctl enable --now jarvis-anthropic-egress-proxy.service
 (`src/acp/proxyMain.ts` binds `createAnthropicEgressProxyServer()` to
 `JARVIS_ACP_ANTHROPIC_EGRESS_SOCKET` when set — removing any stale socket first —
 and otherwise to `127.0.0.1:JARVIS_ACP_ANTHROPIC_EGRESS_PORT`; it refuses to
-start with neither set. Socket **reachability and permissions are a host concern
-to verify**, not something the code enforces: confirm the worker's account can
-`connect()` the socket and that no other account can. Covered by
-`tests/nolanAnthropicEgressProxyMain.test.ts` and `tests/acpUnixSocketEgress.test.ts`.)
+start with neither set. It chmods the socket to **0660** (owner + group rw) so
+the worker's shared group can connect despite a restrictive service umask; the
+socket's *group* comes from the unit's `Group=`. Still **verify on the host**
+that the worker's account can `connect()` the socket and that no other account
+can — the code sets the mode, but the group membership and directory traversal
+are the unit's job. Covered by `tests/nolanAnthropicEgressProxyMain.test.ts`
+(asserts the socket is created group-rw) and `tests/acpUnixSocketEgress.test.ts`.)
 
 For the **alternative** loopback design, run the proxy on TCP loopback instead —
 `Environment=JARVIS_ACP_ANTHROPIC_EGRESS_PORT=<port>` (a rootless `--user` unit is
