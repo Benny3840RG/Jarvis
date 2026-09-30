@@ -90,14 +90,14 @@ JARVIS_ACP_WORKER_COMMAND=systemd-run
 JARVIS_ACP_WORKER_ARGS=[
   "--pipe","--quiet","--collect",
   "--property=User=<the account Jarvis runs as>",
+  "--property=PrivateNetwork=yes",
   "--property=IPAddressDeny=any",
-  "--property=IPAddressAllow=127.0.0.1/32 ::1/128",
+  "--property=RestrictAddressFamilies=AF_UNIX",
   "--property=PrivateTmp=yes",
   "--property=ProtectSystem=strict",
   "--property=ProtectHome=yes",
   "--property=NoNewPrivileges=yes",
   "--property=CapabilityBoundingSet=",
-  "--property=RestrictAddressFamilies=AF_INET AF_INET6",
   "--property=SystemCallFilter=@system-service",
   "--property=SystemCallArchitectures=native",
   "--property=MemoryMax=1G",
@@ -106,73 +106,103 @@ JARVIS_ACP_WORKER_ARGS=[
   "--property=LoadCredentialEncrypted=jarvis-acp-anthropic-key:/home/<user>/.config/jarvis/credentials/anthropic-acp-worker-key.cred",
   "--setenv=PATH=/usr/bin:/bin",
   "--setenv=JARVIS_ACP_ANTHROPIC_API_KEY_CREDENTIAL=jarvis-acp-anthropic-key",
-  "--setenv=JARVIS_ACP_ANTHROPIC_PROXY_URI=http://127.0.0.1:<egress-proxy-port>",
+  "--setenv=JARVIS_ACP_ANTHROPIC_PROXY_SOCKET=/run/jarvis-acp/egress.sock",
   "--",
   "/usr/bin/node","--import","tsx","/path/to/pinned/release/typescript/src/acp/main.ts"
 ]
 ```
 
 (JSON array on one line in the real env var; expanded here for readability.
-`--pipe` is what keeps `stdin`/`stdout` connected to the pipes Jarvis created
-while still running the worker as a sandboxed transient **service** — a
-prerequisite for the namespace/filesystem/privilege directives above to take
-effect. Do **not** substitute `--scope`: it would preserve the pipes but silently
-drop that sandbox, since systemd would not be the one exec'ing the worker.
-Verify the resulting unit with `systemd-analyze security` / `systemctl show`.)
+`--pipe` keeps `stdin`/`stdout` connected to the pipes Jarvis created while still
+running the worker as a sandboxed transient **service** — a prerequisite for the
+namespace/filesystem/privilege directives above to take effect. Do **not**
+substitute `--scope`: it would preserve the pipes but silently drop that sandbox,
+since systemd would not be the one exec'ing the worker. Verify the resulting unit
+with `systemd-analyze security` / `systemctl show`.)
 
-> **Verify before enabling.** `IPAddressAllow=127.0.0.1/32 ::1/128` +
-> `IPAddressDeny=any` needs root to take effect (confirmed on this host: it is
-> silently ignored under a rootless `systemd-run --user`, so `sudo`/a system
-> unit is not optional here). It restricts the worker's egress to loopback —
-> where the egress proxy below listens — and nothing else. Provision the
-> worker's own credential and the egress proxy (next section) before enabling
-> a mode above `disabled`.
+**This is the recommended, gap-closing design (see Egress below):**
+`PrivateNetwork=yes` gives the worker its **own empty network namespace** — only
+a private loopback, no host loopback, no LAN, no internet — so it cannot reach
+*any* host TCP service, including sibling localhost services. Its sole egress is
+one **unix-domain socket** (`JARVIS_ACP_ANTHROPIC_PROXY_SOCKET`), a filesystem
+object the worker connects to (`AF_UNIX` is the only address family it needs); the
+worker never resolves DNS or opens a TCP socket itself. `IPAddressDeny=any` is
+belt-and-suspenders under `PrivateNetwork`.
 
-## Egress: one designated proxy on loopback, nothing else
+> **Verify before enabling.** Confirm on the host: (a) `PrivateNetwork=yes` took
+> effect (`systemctl show <unit> -p PrivateNetwork`; it needs a system manager /
+> `sudo`, not a rootless `--user` unit); (b) the worker can connect to the proxy
+> socket but to **no other** localhost port (the probe in Verification below);
+> and provision the worker's own credential and the egress proxy (next section)
+> before enabling a mode above `disabled`.
 
-**Correction to an earlier draft of this runbook.** An earlier version of this
-document proposed `PrivateNetwork=yes` + a proxy reachable via
-`JoinsNamespaceOf=` ("Design A"). Building the actual proxy surfaced that this
-does not work: `JoinsNamespaceOf=` makes the referencing unit join the
-_referenced_ unit's namespace — so if the proxy also sets `PrivateNetwork=yes`
-to create a namespace for the worker to join, the proxy is trapped inside that
-same loopback-only namespace and **also** loses real internet access, which
-defeats the point. Sharing a network namespace this way can only work with a
-real bridge (a veth pair + routing), which is materially more host-networking
-work than this deserves. **Do not use `PrivateNetwork=yes` for the worker.**
+## Egress: one designated proxy, and nothing else the worker can reach
 
-The design that actually works — and is what `JARVIS_ACP_WORKER_ARGS` above
-sets up — has one designated egress path with zero drift risk:
+The worker's only job is to reach exactly one destination, `api.anthropic.com:443`,
+and nothing else — not the LAN, not the internet, and **not sibling services on
+the host's loopback**. That last clause is the one an earlier draft got wrong;
+two designs, recommended first.
 
-1. **The worker never touches the real network directly.** `IPAddressDeny=any`
-   - `IPAddressAllow=127.0.0.1/32 ::1/128` on the worker's own unit restricts it
-     to the host's real loopback — nothing else, not the LAN, not the internet.
-     Unlike a model-API CIDR allowlist, loopback never changes, so there is no
-     drift to own or re-verify on a schedule.
-2. **A single-purpose CONNECT proxy listens on that loopback**
+### Recommended — `PrivateNetwork=yes` worker + unix-socket proxy (closes the sibling-localhost gap)
+
+This is what `JARVIS_ACP_WORKER_ARGS` above sets up.
+
+1. **The worker has its own empty network namespace.** `PrivateNetwork=yes`
+   gives it a private loopback and no other interface at all — so it cannot open
+   a TCP connection to any host address, including `127.0.0.1:<anything>`. There
+   is therefore no way for it to reach a sibling localhost service (a local
+   Convex, an admin/debug port, a database), which IP-level allowlisting cannot
+   prevent (see the alternative below).
+2. **Its sole egress is one unix-domain socket.** A single-purpose CONNECT proxy
    (`src/acp/nolanAnthropicEgressProxy.ts`, run via
-   `jarvis-anthropic-egress-proxy.service` below). It tunnels — never
-   TLS-terminates — to exactly one hard-coded destination,
-   `api.anthropic.com:443`, and refuses every other CONNECT target before ever
-   opening an outbound connection (see the module's own tests for the exact
-   allow/deny behaviour: `tests/nolanAnthropicEgressProxy.test.ts`). The
-   worker's own TLS client still negotiates end-to-end with the real Anthropic
-   server through the tunnel, so the proxy never sees plaintext, headers, or
-   the API key.
-3. **The worker reaches the proxy via `undici`'s `ProxyAgent`**
-   (`JARVIS_ACP_ANTHROPIC_PROXY_URI`, wired in
-   `nolanAnthropicDecider.ts`) — a stable, documented API (verified against the
-   installed package's own type definitions), not a hand-rolled transport.
+   `jarvis-anthropic-egress-proxy.service` below) listens on
+   `/run/jarvis-acp/egress.sock` (`JARVIS_ACP_ANTHROPIC_EGRESS_SOCKET`). A unix
+   socket is a filesystem object, not a network path, so it crosses the worker's
+   network-namespace boundary; the worker connects to it with `AF_UNIX` (the only
+   address family it needs) and never resolves DNS or opens a TCP socket. Gate the
+   socket with its directory's ownership/permissions (a systemd `RuntimeDirectory`
+   owned by the proxy, with the worker's user or a shared group granted access) —
+   verify the worker can connect to it and to nothing else (Verification below).
+3. **The proxy tunnels — never TLS-terminates — to exactly `api.anthropic.com:443`**
+   and refuses every other CONNECT target before opening any outbound connection
+   (`tests/nolanAnthropicEgressProxy.test.ts`). The worker's TLS client negotiates
+   end-to-end with the real Anthropic server through the tunnel, so the proxy
+   never sees plaintext, headers, or the API key.
+4. **The worker reaches the proxy via `undici`'s `ProxyAgent`**
+   (`JARVIS_ACP_ANTHROPIC_PROXY_SOCKET`, wired in `nolanAnthropicDecider.ts`
+   through `proxyTls.socketPath` — a documented `buildConnector` option, verified
+   against the installed undici by a runtime test:
+   `tests/acpUnixSocketEgress.test.ts`). The CONNECT tunnel is dialed over the
+   unix socket; TLS to the API still terminates end-to-end.
+
+### Alternative — host-netns worker + loopback IP allowlist (has a known residual)
+
+If a unix-socket proxy is not workable, the worker can instead run **without**
+`PrivateNetwork` on the host network namespace, with `IPAddressDeny=any` +
+`IPAddressAllow=127.0.0.1/32 ::1/128` and the proxy on TCP loopback
+(`JARVIS_ACP_ANTHROPIC_EGRESS_PORT`, `JARVIS_ACP_ANTHROPIC_PROXY_URI=http://127.0.0.1:<port>`).
+
+**Known residual — do not describe this as "only the proxy".** `IPAddressAllow`
+filters by remote **IP, not port**, and it is the host's **shared** loopback, so
+the worker can open **any** `127.0.0.1:<port>` — every sibling localhost service,
+not just the proxy. This is acceptable only when the host runs no sensitive
+loopback services the worker must not reach, or when it is paired with a
+per-port egress firewall scoped to the worker's cgroup (nftables `socket cgroupv2`
+or an eBPF filter allowing only the proxy's port) — `IPAddressAllow` alone cannot
+express a port. `IPAddressAllow`/`IPAddressDeny` also need a system manager /
+`sudo` to take effect (silently ignored under a rootless `--user` unit). Prefer
+the recommended design; if you use this one, verify the residual with the
+sibling-port probe in Verification and record the decision.
 
 ### The egress proxy unit
 
-Unlike the per-request worker, this is a normal **persistent** unit — start it
-once, no `sudo` required (it needs no `IPAddressAllow`/`ProtectHome`/etc. of its
-own beyond ordinary hardening, so a rootless `--user` unit is fine, mirroring
-`jarvis-github-egress.service`):
+Unlike the per-request worker, this is a normal **persistent** unit. For the
+recommended unix-socket design, run it as a **system** unit so the socket sits at
+a stable host path both it and the (system, `PrivateNetwork`) worker can see, and
+let systemd own the socket directory:
 
 ```ini
-# ~/.config/systemd/user/jarvis-anthropic-egress-proxy.service
+# /etc/systemd/system/jarvis-anthropic-egress-proxy.service
 [Unit]
 Description=Nolan ACP worker egress proxy (CONNECT-tunnels to api.anthropic.com:443 only)
 After=network-online.target
@@ -180,30 +210,44 @@ Wants=network-online.target
 
 [Service]
 Type=simple
+User=<a dedicated proxy account>
 ExecStart=/usr/bin/node --import tsx /path/to/pinned/release/typescript/src/acp/proxyMain.ts
 Restart=on-failure
 RestartSec=2
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
-ProtectHome=read-only
+ProtectHome=yes
 UMask=0077
-Environment=JARVIS_ACP_ANTHROPIC_EGRESS_PORT=<egress-proxy-port>
+# RuntimeDirectory owns the socket dir under /run; grant the worker's account
+# access via a shared group so it — and nothing else — can connect.
+RuntimeDirectory=jarvis-acp
+RuntimeDirectoryMode=0750
+Group=<group shared with the worker's account>
+Environment=JARVIS_ACP_ANTHROPIC_EGRESS_SOCKET=/run/jarvis-acp/egress.sock
 
 [Install]
-WantedBy=default.target
+WantedBy=multi-user.target
 ```
 
 ```bash
-systemctl --user daemon-reload
-systemctl --user enable --now jarvis-anthropic-egress-proxy.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now jarvis-anthropic-egress-proxy.service
 ```
 
-(`src/acp/proxyMain.ts` reads `JARVIS_ACP_ANTHROPIC_EGRESS_PORT`, refuses to
-start without a valid fixed port — `0`/ephemeral is rejected on purpose, since
-other units need a known port to reference — and binds
-`createAnthropicEgressProxyServer()` to `127.0.0.1` only. Covered by
-`tests/nolanAnthropicEgressProxyMain.test.ts` as a real subprocess.)
+(`src/acp/proxyMain.ts` binds `createAnthropicEgressProxyServer()` to
+`JARVIS_ACP_ANTHROPIC_EGRESS_SOCKET` when set — removing any stale socket first —
+and otherwise to `127.0.0.1:JARVIS_ACP_ANTHROPIC_EGRESS_PORT`; it refuses to
+start with neither set. Socket **reachability and permissions are a host concern
+to verify**, not something the code enforces: confirm the worker's account can
+`connect()` the socket and that no other account can. Covered by
+`tests/nolanAnthropicEgressProxyMain.test.ts` and `tests/acpUnixSocketEgress.test.ts`.)
+
+For the **alternative** loopback design, run the proxy on TCP loopback instead —
+`Environment=JARVIS_ACP_ANTHROPIC_EGRESS_PORT=<port>` (a rootless `--user` unit is
+fine there, mirroring `jarvis-github-egress.service`) — and set the worker's
+`JARVIS_ACP_ANTHROPIC_PROXY_URI=http://127.0.0.1:<port>`. Remember that design's
+residual (the worker can reach every loopback service, not just the proxy).
 
 Optional additional hardening: `IPAddressDeny=any` + `IPAddressAllow=<Anthropic's
 current published CIDRs>` on the proxy's own unit, as coarse defense-in-depth on
@@ -286,8 +330,8 @@ and a process scan for the worker command) beyond the moment the request settled
 
 | Directive                                                                                                                             | Effect                                                                                                     | Caveat / verify                                                                                                                                                                                                                                                            |
 | ------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `PrivateNetwork=yes`                                                                                                                  | Worker gets an isolated netns (loopback only) — no host/LAN.                                               | **Do not use for the worker** (see "Egress" above): sharing this with a proxy via `JoinsNamespaceOf=` traps the proxy in the same loopback-only namespace too, so it also loses real internet access. Needs a real veth bridge to work, which this runbook does not build. |
-| `IPAddressDeny=any` + `IPAddressAllow=127.0.0.1/32 ::1/128`                                                                           | Deny-by-default egress; allow only the host's real loopback (filters the existing, non-private interface). | **The recommended worker egress control.** No drift risk (unlike a model-API CIDR allowlist — loopback never changes). Root-only: confirmed silently ignored under a rootless `systemd-run --user` on this host. systemd ≥235 + cgroup v2/BPF.                             |
+| `PrivateNetwork=yes`                                                                                                                  | Worker gets its own empty netns (private loopback only) — no host loopback, LAN, or internet.             | **The recommended worker egress control** (Egress → Recommended). The worker cannot reach any host TCP service, including sibling localhost services; its sole egress is a unix socket. Pair with a unix-socket proxy — **not** `JoinsNamespaceOf=` (that traps the proxy without internet; a veth bridge would be needed, which this runbook does not build). Needs a system manager / `sudo`. |
+| `IPAddressDeny=any` + `IPAddressAllow=127.0.0.1/32 ::1/128`                                                                           | Deny-by-default egress; allow the host's **shared** loopback (all ports).                                 | Alternative only (Egress → Alternative). **Not "only the proxy"**: filters by IP not port, so the worker can reach every `127.0.0.1:<port>` sibling service — pair with a per-port cgroup/nftables filter or accept the residual. No CIDR drift (loopback never changes). Root-only: silently ignored under a rootless `--user` unit. systemd ≥235 + cgroup v2/BPF. |
 | `PrivateTmp=yes`                                                                                                                      | Private `/tmp`, `/var/tmp`.                                                                                | —                                                                                                                                                                                                                                                                          |
 | `ProtectSystem=strict`                                                                                                                | Whole filesystem read-only except explicit `ReadWritePaths`.                                               | Give a small `ReadWritePaths=` scratch only if the worker needs one.                                                                                                                                                                                                       |
 | `ProtectHome=yes`                                                                                                                     | `/home`, `/root`, `/run/user` inaccessible.                                                                | —                                                                                                                                                                                                                                                                          |
@@ -321,17 +365,24 @@ The exact wrapper is again just the env-configurable `JARVIS_ACP_WORKER_COMMAND`
 Before enabling live worker launches, confirm on the target host:
 
 1. **No broad egress, and only the proxy path reaches Anthropic.** From inside
-   the worker's `IPAddressAllow=127.0.0.1/32 ::1/128` sandbox: a direct
-   connection to any non-loopback host must fail (`systemd-run --pipe
---property=User=<jarvis-user> --property=IPAddressDeny=any
---property=IPAddressAllow=127.0.0.1/32 ::1/128 … -- curl -sS --max-time 5
-https://example.com` → must fail); a CONNECT through the egress proxy to
-   `api.anthropic.com:443` must succeed; a CONNECT through the same proxy to any
-   other host must be refused (403) without the proxy ever dialing out — this
-   is exactly what `tests/nolanAnthropicEgressProxy.test.ts` already proves
-   offline, so this step is confirming the _deployed_ proxy + sandbox combo
-   behaves the same way, not re-deriving new evidence. (Use `--pipe`, not
-   `--scope` — see the note above on why a scope silently drops the sandbox.)
+   the recommended `PrivateNetwork=yes` worker sandbox (use `--pipe`, not
+   `--scope`): a direct connection to any non-loopback host must fail
+   (`systemd-run --pipe --property=User=<jarvis-user> --property=PrivateNetwork=yes
+   … -- curl -sS --max-time 5 https://example.com` → must fail); a request through
+   the egress proxy (its unix socket) to `api.anthropic.com:443` must succeed; a
+   CONNECT through the same proxy to any other host must be refused (403) without
+   the proxy ever dialing out — exactly what `tests/nolanAnthropicEgressProxy.test.ts`
+   and `tests/acpUnixSocketEgress.test.ts` prove offline, so this step confirms
+   the _deployed_ proxy + sandbox behave the same, not new evidence.
+1a. **No sibling localhost service is reachable (the gap this design closes).**
+   From inside the same sandbox, a connection to another loopback port — pick a
+   real one on the host, e.g. Jarvis's own local HTTP/MCP port — **must fail**:
+   `systemd-run --pipe --property=User=<jarvis-user> --property=PrivateNetwork=yes
+   … -- curl -sS --max-time 3 http://127.0.0.1:<some-other-local-port>/` → must
+   fail (no host loopback in the worker's netns). Under the **alternative**
+   loopback design this probe would instead **succeed** — that is the documented
+   residual; if you run the alternative, record that you accept it (or that a
+   per-port cgroup/nftables filter blocks it).
 2. **No cloud metadata.** `curl -sS --max-time 3 http://169.254.169.254/` from
    inside the sandbox must fail.
 3. **No Jarvis credentials.** Dump the worker's environment from inside the
@@ -347,21 +398,33 @@ https://example.com` → must fail); a CONNECT through the egress proxy to
    plane can still reach api.github.com) — proving isolation is scoped to the
    worker, not the service.
 
-Record the results; a launch config that has not passed 1–4 must not be enabled.
+Record the results; a launch config that has not passed 1, 1a, and 2–4 must not
+be enabled.
 
 ## Residual risks / what still needs a decision
 
+- **Sibling localhost services (closed by the recommended design, open in the
+  alternative).** `PrivateNetwork=yes` removes the host loopback from the worker
+  entirely, so it cannot reach any `127.0.0.1:<port>` sibling service — this is
+  why it is recommended. The `IPAddressAllow=127.0.0.1/32` alternative does **not**
+  close this (IP, not port granularity); use it only where no sensitive loopback
+  service exists or a per-port cgroup/nftables filter is added, and record the
+  decision. Probe 1a is the check.
 - **Hostname-precise egress** is not achievable with `IPAddressAllow` alone; the
-  proxy approach is the only robust "only this host" control. If you accept
-  CIDR-based allowlisting, own the drift (scheduled re-verification).
+  CONNECT proxy's hard-coded `api.anthropic.com:443` target is the robust "only
+  this host" control. Any CIDR allowlist you add as defense-in-depth carries
+  drift — own the re-verification.
 - **The model API key is a real secret in the worker.** Its blast radius is the
   worker's model access; keep it distinct from Jarvis's tokens and rotate
   independently.
-- **DNS — resolved by this design, not just mitigated.** The worker only ever
-  dials the literal IP `127.0.0.1`; it never resolves `api.anthropic.com`
-  itself, and `IPAddressAllow=127.0.0.1/32 ::1/128` blocks outbound DNS queries
-  (UDP/TCP 53 to any configured nameserver) along with everything else. Only
-  the egress proxy resolves the real hostname.
+- **DNS — resolved by this design, not just mitigated.** The worker never
+  resolves `api.anthropic.com`: it sends the hostname literally to the proxy over
+  the unix socket, and the proxy resolves and dials it. Under `PrivateNetwork=yes`
+  the worker has no route for outbound DNS at all; under the loopback alternative,
+  `IPAddressDeny=any` blocks it too. Only the egress proxy resolves the hostname.
+- **Socket reachability/permissions are host-verified, not code-enforced.** The
+  code creates the socket; whether exactly the worker's account (and no other)
+  can `connect()` it depends on the `RuntimeDirectory`/group setup — confirm it.
 - **Shared kernel.** systemd sandboxing is not a VM boundary. For hostile-tenant
   threat models, prefer a VM/microVM per worker.
 

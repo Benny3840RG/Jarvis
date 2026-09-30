@@ -23,11 +23,13 @@
  * already have full network reachability (a plain `fetch`) OR none at all
  * (RestrictAddressFamilies) OR only a local forward-proxy — that distinction
  * is a host/sandbox concern (see `docs/operations/acp-worker-sandbox.md`).
- * The one hook this module gives the sandbox is `proxyUri`: when set, every
- * request is tunnelled through it via `undici`'s `ProxyAgent` (a stable,
- * documented API — CONNECT-tunnelled for the HTTPS target, so TLS is still
+ * The hooks this module gives the sandbox are `proxyUri` (a local TCP proxy)
+ * and `proxySocketPath` (a local unix-socket proxy, preferred — it lets the
+ * worker run with `PrivateNetwork=yes` and no host loopback at all): when
+ * either is set, every request is tunnelled through it via `undici`'s
+ * `ProxyAgent` — CONNECT-tunnelled for the HTTPS target, so TLS is still
  * terminated end-to-end against the real API host; the proxy never sees
- * plaintext or terminates TLS itself).
+ * plaintext or terminates TLS itself.
  *
  * Credentials follow the PR F convention exactly: only from
  * `$CREDENTIALS_DIRECTORY/<name>`, a bare filename, never inline, never an
@@ -63,8 +65,16 @@ export type AnthropicWorkerConfig = Readonly<{
   apiKey: string;
   model: string;
   timeoutMs: number;
-  /** Local forward-proxy the sandbox routes egress through; undefined = no proxy (direct fetch). */
+  /** Local TCP forward-proxy the sandbox routes egress through; undefined = no TCP proxy. */
   proxyUri?: string;
+  /**
+   * Unix-socket path of the local CONNECT proxy. Preferred over `proxyUri`: it
+   * lets the worker run under `PrivateNetwork=yes` (its own empty network
+   * namespace — no host loopback at all), so it cannot reach any sibling
+   * localhost service, only this one socket (bind-mounted in). Set from
+   * `JARVIS_ACP_ANTHROPIC_PROXY_SOCKET`. See `docs/operations/acp-worker-sandbox.md`.
+   */
+  proxySocketPath?: string;
 }>;
 
 /**
@@ -106,8 +116,45 @@ export function resolveAnthropicWorkerConfigFromEnv(
   }
 
   const proxyUri = environment.JARVIS_ACP_ANTHROPIC_PROXY_URI?.trim();
+  const proxySocketPath = environment.JARVIS_ACP_ANTHROPIC_PROXY_SOCKET?.trim();
 
-  return { apiKey, model, timeoutMs, ...(proxyUri ? { proxyUri } : {}) };
+  return {
+    apiKey,
+    model,
+    timeoutMs,
+    ...(proxyUri ? { proxyUri } : {}),
+    ...(proxySocketPath ? { proxySocketPath } : {}),
+  };
+}
+
+/**
+ * Build the undici {@link Dispatcher} that routes the worker's Anthropic egress
+ * through the local CONNECT proxy, or `undefined` for a direct (unproxied)
+ * fetch. Exported so the wiring is unit-testable without a real model call.
+ *
+ * A unix-socket proxy (`proxySocketPath`) takes precedence over a TCP one
+ * (`proxyUri`): it is dialed via `undici`'s documented `proxyTls.socketPath`
+ * (a `buildConnector` option — verified against the installed undici), so the
+ * CONNECT tunnel reaches the proxy over a filesystem socket rather than any
+ * TCP address. That lets the worker run with `PrivateNetwork=yes` and no host
+ * loopback, closing the "worker can reach any sibling localhost service" gap.
+ * TLS to the real API still terminates end-to-end through the tunnel; the proxy
+ * never sees plaintext or the key either way.
+ */
+export function buildAnthropicProxyDispatcher(
+  config: AnthropicWorkerConfig,
+): Dispatcher | undefined {
+  if (config.proxySocketPath) {
+    // `uri` host/port is nominal — the socketPath connector overrides the dial.
+    return new ProxyAgent({
+      uri: "http://localhost",
+      proxyTls: { socketPath: config.proxySocketPath },
+    });
+  }
+  if (config.proxyUri) {
+    return new ProxyAgent({ uri: config.proxyUri });
+  }
+  return undefined;
 }
 
 /** The schema the model's answer must satisfy. `reason` is bounded and never echoed as fact. */
@@ -208,9 +255,10 @@ export function createAnthropicDecider(
  */
 function defaultAnthropicClient(config: AnthropicWorkerConfig): AnthropicMessagesLike {
   let dispatcher: Dispatcher | undefined;
-  const fetchImpl: typeof globalThis.fetch = config.proxyUri
+  const proxied = config.proxySocketPath !== undefined || config.proxyUri !== undefined;
+  const fetchImpl: typeof globalThis.fetch = proxied
     ? (input, init) => {
-        dispatcher ??= new ProxyAgent({ uri: config.proxyUri! });
+        dispatcher ??= buildAnthropicProxyDispatcher(config);
         return undiciFetch(input as never, {
           ...(init as object),
           dispatcher,
