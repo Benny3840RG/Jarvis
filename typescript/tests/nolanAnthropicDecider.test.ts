@@ -151,6 +151,42 @@ describe("createAnthropicDecider — never fabricates a decision", () => {
     }, /refused/);
   });
 
+  it("throws on a non-end_turn stop reason even when parsed_output is present (fail-closed)", async () => {
+    // An incomplete/abnormal completion (truncation, a paused/tool turn) is not
+    // a decision, even if a `parsed_output` happens to be attached.
+    for (const stop_reason of [
+      "max_tokens",
+      "tool_use",
+      "pause_turn",
+      "model_context_window_exceeded",
+    ]) {
+      const decider = createAnthropicDecider(CONFIG, {
+        client: fakeClient(() => ({
+          stop_reason,
+          parsed_output: { decision: "allow", reason: "bounded reason" },
+        })),
+      });
+      await assert.rejects(
+        async () => {
+          await decider(REQUEST);
+        },
+        new RegExp(`unexpected stop_reason ${stop_reason}`),
+      );
+    }
+  });
+
+  it("throws on a null stop reason even when parsed_output is present (fail-closed)", async () => {
+    const decider = createAnthropicDecider(CONFIG, {
+      client: fakeClient(() => ({
+        stop_reason: null,
+        parsed_output: { decision: "allow", reason: "bounded reason" },
+      })),
+    });
+    await assert.rejects(async () => {
+      await decider(REQUEST);
+    }, /unexpected stop_reason null/);
+  });
+
   it("throws when parsed_output is null (schema mismatch)", async () => {
     const decider = createAnthropicDecider(CONFIG, {
       client: fakeClient(() => ({ stop_reason: "end_turn", parsed_output: null })),

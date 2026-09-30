@@ -37,6 +37,7 @@ export const ANTHROPIC_API_PORT = 443;
 
 const DEFAULT_MAX_HEADER_BYTES = 8_192;
 const DEFAULT_CONNECT_TIMEOUT_MS = 10_000;
+const DEFAULT_HEADER_TIMEOUT_MS = 10_000;
 
 export type ConnectTarget = Readonly<{ host: string; port: number }>;
 
@@ -83,6 +84,12 @@ export type AnthropicEgressProxyDeps = Readonly<{
   connectUpstream?: (target: ConnectTarget, timeoutMs: number) => Promise<Socket>;
   maxHeaderBytes?: number;
   connectTimeoutMs?: number;
+  /**
+   * How long to wait for the full CONNECT header (up to the blank line) before
+   * tearing the connection down. Bounds slow-loris clients that trickle bytes
+   * to hold the proxy — and the worker's only egress path — open.
+   */
+  headerTimeoutMs?: number;
 }>;
 
 function realConnectUpstream(target: ConnectTarget, timeoutMs: number): Promise<Socket> {
@@ -114,14 +121,24 @@ export function createAnthropicEgressProxyServer(deps: AnthropicEgressProxyDeps 
   const connectUpstream = deps.connectUpstream ?? realConnectUpstream;
   const maxHeaderBytes = deps.maxHeaderBytes ?? DEFAULT_MAX_HEADER_BYTES;
   const connectTimeoutMs = deps.connectTimeoutMs ?? DEFAULT_CONNECT_TIMEOUT_MS;
+  const headerTimeoutMs = deps.headerTimeoutMs ?? DEFAULT_HEADER_TIMEOUT_MS;
 
   return createServer((client: Socket) => {
     let buffer = "";
     let settled = false;
+    let headerTimer: ReturnType<typeof setTimeout> | undefined;
+
+    const clearHeaderTimer = (): void => {
+      if (headerTimer !== undefined) {
+        clearTimeout(headerTimer);
+        headerTimer = undefined;
+      }
+    };
 
     const refuse = (status: string): void => {
       if (settled) return;
       settled = true;
+      clearHeaderTimer();
       client.removeAllListeners("data");
       try {
         client.end(`HTTP/1.1 ${status}\r\n\r\n`);
@@ -130,21 +147,41 @@ export function createAnthropicEgressProxyServer(deps: AnthropicEgressProxyDeps 
       }
     };
 
+    // Slow-loris guard: the full CONNECT header must arrive within this window,
+    // or the connection is torn down. Without it a peer can trickle bytes
+    // indefinitely and pin the proxy's (and the worker's) only egress path open.
+    headerTimer = setTimeout(() => refuse("408 Request Timeout"), headerTimeoutMs);
+    if (typeof headerTimer.unref === "function") headerTimer.unref();
+
     client.on("data", (chunk: Buffer) => {
       if (settled) return;
       buffer += chunk.toString("latin1"); // header bytes are always ASCII; latin1 is a safe 1:1 byte mapping
-      if (buffer.length > maxHeaderBytes) {
+      const headerEnd = buffer.indexOf("\r\n\r\n");
+      if (headerEnd === -1) {
+        // No terminator yet. Bound only the still-unterminated header bytes so a
+        // client cannot force unbounded buffering with a headerless byte stream.
+        if (buffer.length > maxHeaderBytes) {
+          refuse("400 Bad Request");
+        }
+        return; // still waiting for the end of headers
+      }
+
+      // Bound the header portion itself — the bytes up to the blank line — NOT
+      // any pipelined tunnel payload after it. A large TLS ClientHello sent in
+      // the same initial chunk is legitimate and must be forwarded, not counted
+      // against the header limit.
+      if (headerEnd > maxHeaderBytes) {
         refuse("400 Bad Request");
         return;
       }
-      const headerEnd = buffer.indexOf("\r\n\r\n");
-      if (headerEnd === -1) return; // still waiting for the end of headers
 
       // Decided one way or another for this connection: stop listening for
-      // more request bytes. Do NOT set `settled` here — that flag guards
-      // `refuse()` against being invoked twice, and the decision of whether
-      // to refuse or proceed is made below.
+      // more request bytes, and cancel the header timer (the header is in). Do
+      // NOT set `settled` here — that flag guards `refuse()` against being
+      // invoked twice, and the decision of whether to refuse or proceed is
+      // made below.
       client.removeAllListeners("data");
+      clearHeaderTimer();
       const headerBlock = buffer.slice(0, headerEnd);
       // Any bytes the client already sent past the blank line (e.g. a
       // pipelined TLS ClientHello) belong to the tunnel payload, not the
@@ -187,6 +224,11 @@ export function createAnthropicEgressProxyServer(deps: AnthropicEgressProxyDeps 
 
     client.on("error", () => {
       // Best-effort teardown; a client-side error must not crash the server.
+      clearHeaderTimer();
+    });
+    client.on("close", () => {
+      // If the peer vanished before the header arrived, drop the pending timer.
+      clearHeaderTimer();
     });
   });
 }

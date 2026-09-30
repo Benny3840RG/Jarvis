@@ -224,9 +224,18 @@ export function createAnthropicDecider(
       { timeout: config.timeoutMs },
     );
 
-    // A safety refusal or any other non-normal stop is not a decision.
+    // Fail-closed on stop_reason: only a normal completion (`end_turn`) is a
+    // decision. A safety refusal, or any other stop (`max_tokens` truncation,
+    // `pause_turn`, `tool_use`, or a null stop_reason), is an anomaly — even if a
+    // `parsed_output` happens to be present, an incomplete/non-final response
+    // must not be treated as a judgement. Reject everything but `end_turn`.
     if (response.stop_reason === "refusal") {
       throw new Error("Anthropic decider: request was refused.");
+    }
+    if (response.stop_reason !== "end_turn") {
+      throw new Error(
+        `Anthropic decider: unexpected stop_reason ${response.stop_reason ?? "null"} (expected end_turn).`,
+      );
     }
     const parsed = response.parsed_output;
     if (!parsed) {

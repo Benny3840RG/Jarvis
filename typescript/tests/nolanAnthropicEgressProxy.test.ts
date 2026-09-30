@@ -215,6 +215,50 @@ describe("createAnthropicEgressProxyServer — end to end over real sockets", ()
     }
   });
 
+  it("does NOT count pipelined tunnel payload against the header-size limit", async () => {
+    // A valid CONNECT whose header is well under the limit, followed by a large
+    // pipelined payload (a big TLS ClientHello) that alone exceeds the limit,
+    // must tunnel — the limit bounds the header, not the forwarded payload.
+    const upstream = await startFakeUpstream();
+    const proxy = await startProxy({
+      approved: { host: "127.0.0.1", port: upstream.port },
+      maxHeaderBytes: 64,
+    });
+    try {
+      const client = rawConnect(proxy.port);
+      const bigPayload = "z".repeat(4_096); // >> maxHeaderBytes (64)
+      client.write(`CONNECT 127.0.0.1:${upstream.port} HTTP/1.1\r\n\r\n${bigPayload}`);
+      const all = await readUntil(client, (buf) => buf.includes("echo:"));
+      assert.match(all, /^HTTP\/1\.1 200/);
+      assert.equal(all.includes(`echo:${bigPayload}`), true);
+      client.destroy();
+    } finally {
+      proxy.server.close();
+      upstream.server.close();
+    }
+  });
+
+  it("tears down a slow-loris client that never completes the CONNECT header (408)", async () => {
+    let dialed = false;
+    const proxy = await startProxy({
+      headerTimeoutMs: 100,
+      connectUpstream: async () => {
+        dialed = true;
+        throw new Error("must never be called");
+      },
+    });
+    try {
+      const client = rawConnect(proxy.port);
+      // Send a partial header and then nothing — no blank-line terminator ever.
+      client.write("CONNECT api.anthropic.com:443 HTTP/1.1\r\n");
+      const response = await readUntil(client, (buf) => buf.includes("\r\n\r\n"), 2_000);
+      assert.match(response, /^HTTP\/1\.1 408/);
+      assert.equal(dialed, false);
+    } finally {
+      proxy.server.close();
+    }
+  });
+
   it("responds 502 when the upstream connection fails, without leaking a tunnel", async () => {
     const proxy = await startProxy({
       approved: { host: "api.anthropic.com", port: 443 },
