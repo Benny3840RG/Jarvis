@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import type { Project, ProjectInput, ProjectStore, ProjectUpdate } from "./project.js";
+import { parseProjectScheduledDate, type Project, type ProjectInput, type ProjectStore, type ProjectUpdate } from "./project.js";
 
 function requiredText(value: string, field: string): string {
   const cleaned = value.trim();
@@ -43,9 +43,7 @@ export class InMemoryProjectStore implements ProjectStore {
         title: requiredText(input.title, "Project title"),
         status: input.status ?? "lead",
         ...(input.notes && input.notes.trim() ? { notes: input.notes.trim() } : {}),
-        ...(input.scheduledFor && input.scheduledFor.trim()
-          ? { scheduledFor: input.scheduledFor.trim() }
-          : {}),
+        ...(input.scheduledFor === undefined ? {} : { scheduledFor: parseProjectScheduledDate(input.scheduledFor) }),
         createdAt: now,
         updatedAt: now,
       };
@@ -87,7 +85,7 @@ export class InMemoryProjectStore implements ProjectStore {
         else delete project.notes;
       }
       if (update.scheduledFor !== undefined) {
-        const cleaned = update.scheduledFor === null ? "" : update.scheduledFor.trim();
+        const cleaned = update.scheduledFor === null ? "" : parseProjectScheduledDate(update.scheduledFor);
         if (cleaned) project.scheduledFor = cleaned;
         else delete project.scheduledFor;
       }
