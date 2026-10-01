@@ -1,5 +1,37 @@
 # Jarvis TypeScript Roadmap
 
+## S4 closed denial-decision receipts (2026-09-23)
+
+The unregistered S4 adapter now restores the executor's blocked
+`not-authorized` decision receipts for rejected `notes.create` actions, on top
+of the projects, notes, four-kind memory history, empty-attribute components,
+and integer-scored risks it already admitted. Receipt keys and ids stay
+verbatim, so `UuidRemapper` is not used. The decision key is not the primary
+execution key: restore does not install a replay hit, renew an approval, or
+schedule omega reconciliation. A later execute of the rejected action still
+blocks and runs no tool. Verification returns `completeness: partial` and
+`verifiedGroups: []`. `export-v4` does not seal `notesAndEvidence`.
+
+Joint S4/S6 restore accepts these receipts only when the S6 copy matches the
+classified S4 rows byte for byte.
+
+Still refused: primary-key effect receipts, reconciliations (including live
+leases), non-empty component attributes, constraint values, tasks, events,
+development bindings, omega rows, and every live approval. No producer
+classification exists for component `attributes` or constraint `value`, so
+this slice does not invent an allowlist for those `v.any()` fields. See
+[the S4 restore slice](architecture/backup-v4-s4-restore-slice.md).
+
+Next:
+
+1. Classify primary-key effect receipts together with an inert reconciliation
+   representation that cannot renew a lease or authorise execution.
+2. A producer-specific component-attribute or constraint-value subset, once a
+   writer actually classifies one.
+3. Keep development and omega edges out until they can be restored without
+   minting completion authority. Development bindings also need the closed
+   terminal orchestration subset in the same empty target.
+
 ## Business MCP tools: properties, enquiries, invoice drafts (2026-10-01, #658)
 
 Benny's direction (1 Oct): Jarvis runs everything in Beez Treez except the physical
