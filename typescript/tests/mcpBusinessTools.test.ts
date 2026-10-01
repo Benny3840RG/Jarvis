@@ -331,6 +331,15 @@ describe("business MCP tools: invoice drafts", () => {
     assert.equal(invoice.total, invoice.subtotal + invoice.tax);
     assert.ok(invoice.tax > 0, "tax is computed by the server, not the caller");
 
+    const replay = await ok<{ invoice: InvoiceShape }>(client, "create_invoice_draft", {
+      clientId: "client-1",
+      number: "INV-1001",
+      lineItems: [{ description: "Hedge trim", quantity: 2, unitPrice: 150 }],
+      taxRate: 0.1,
+      duplicateKey: "inv-1001",
+    });
+    assert.equal(replay.invoice.id, invoice.id, "a retried draft does not duplicate");
+
     const updated = await ok<{ invoice: InvoiceShape }>(client, "update_invoice_draft", {
       invoiceId: invoice.id,
       notes: "Payment within 14 days",
