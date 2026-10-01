@@ -354,6 +354,13 @@ const briefSchema = z.object({
       unpaid: z.array(invoiceSchema),
     })
     .optional(),
+  errands: z
+    .object({
+      openCount: z.number().int().nonnegative(),
+      locationCount: z.number().int().nonnegative(),
+      open: z.array(errandSchema),
+    })
+    .optional(),
 });
 
 // Read-only. Mirrors OperationsInbox exactly; no schema here ever represents

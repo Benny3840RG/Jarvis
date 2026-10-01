@@ -395,7 +395,7 @@ describe("business MCP tools: daily brief", () => {
     assert.equal(brief.enquiries.open[0]?.urgency, "emergency");
     assert.equal(brief.invoices.draftCount, 1);
     assert.equal(brief.invoices.unpaidCount, 0);
-    assert.match(brief.headline, /1 open enquiry, 0 invoices unpaid\.$/);
+    assert.match(brief.headline, /1 open enquiry, 0 invoices unpaid, 0 errands to run\.$/);
   });
 });
 

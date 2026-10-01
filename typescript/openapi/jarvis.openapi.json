@@ -10491,7 +10491,8 @@
           "quotes",
           "maintenance",
           "enquiries",
-          "invoices"
+          "invoices",
+          "errands"
         ],
         "properties": {
           "generatedAt": {
@@ -10695,6 +10696,30 @@
                 "maxItems": 5,
                 "items": {
                   "$ref": "#/components/schemas/Invoice"
+                }
+              }
+            }
+          },
+          "errands": {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "Open errands (things to pick up), located ones first grouped by place, then oldest first. Mirrors the \"I'm at the shop, what do I need?\" pull.",
+            "required": ["openCount", "locationCount", "open"],
+            "properties": {
+              "openCount": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "locationCount": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Distinct place labels across the open errands."
+              },
+              "open": {
+                "type": "array",
+                "maxItems": 5,
+                "items": {
+                  "$ref": "#/components/schemas/Errand"
                 }
               }
             }

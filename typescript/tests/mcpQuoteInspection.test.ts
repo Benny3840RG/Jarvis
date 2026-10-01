@@ -80,6 +80,7 @@ const BRIEF: DailyBrief = {
   maintenance: { dueCount: 0, dueSoonCount: 0, due: [], dueSoon: [] },
   enquiries: { openCount: 0, countsByUrgency: { standard: 0, urgent: 0, emergency: 0 }, open: [] },
   invoices: { draftCount: 0, unpaidCount: 0, unpaidTotal: 0, unpaid: [] },
+  errands: { openCount: 0, locationCount: 0, open: [] },
 };
 
 const SNAPSHOT: QuoteSnapshot = {

@@ -1,6 +1,7 @@
 import type { Asset } from "../assets/asset.js";
 import { deriveAssetView, type AssetView } from "../assets/assetView.js";
 import { ENQUIRY_URGENCIES, type Enquiry, type EnquiryUrgency } from "../enquiries/enquiry.js";
+import type { Errand } from "../errands/errand.js";
 import type { Invoice } from "../invoices/invoice.js";
 import type { Reminder, Task } from "../persistence/types.js";
 import { PROJECT_STATUSES, type Project, type ProjectStatus } from "../projects/project.js";
@@ -80,6 +81,18 @@ export interface BriefInvoices {
   unpaid: Invoice[];
 }
 
+export interface BriefErrands {
+  openCount: number;
+  /** Distinct places (location labels) across the open errands. */
+  locationCount: number;
+  /**
+   * Open errands, located ones first grouped by place label, then oldest first,
+   * capped. Mirrors the "I'm at the shop, what do I need?" pull: things to grab,
+   * ordered so one stop's items sit together.
+   */
+  open: Errand[];
+}
+
 export interface DailyBrief {
   generatedAt: string;
   timezone: string;
@@ -91,6 +104,7 @@ export interface DailyBrief {
   maintenance: BriefMaintenance;
   enquiries: BriefEnquiries;
   invoices: BriefInvoices;
+  errands: BriefErrands;
 }
 
 export interface BriefInputs {
@@ -103,6 +117,7 @@ export interface BriefInputs {
   assets: Asset[];
   enquiries: Enquiry[];
   invoices: Invoice[];
+  errands: Errand[];
 }
 
 function countLabel(count: number, singular: string, plural = `${singular}s`): string {
@@ -183,6 +198,23 @@ export function composeDailyBrief(inputs: BriefInputs): DailyBrief {
     .sort((a, b) => (a.issuedAt ?? a.createdAt) - (b.issuedAt ?? b.createdAt));
   const draftInvoiceCount = inputs.invoices.filter((invoice) => invoice.status === "draft").length;
 
+  // Located errands first, grouped by place label (so one stop's items sit
+  // together), then the oldest within each place; unlocated errands trail.
+  const openErrands = inputs.errands
+    .filter((errand) => errand.status === "open")
+    .sort((a, b) => {
+      const labelA = a.location?.label ?? "";
+      const labelB = b.location?.label ?? "";
+      if ((labelA === "") !== (labelB === "")) return labelA === "" ? 1 : -1;
+      if (labelA !== labelB) return labelA < labelB ? -1 : 1;
+      return a.createdAt - b.createdAt;
+    });
+  const errandLocationCount = new Set(
+    openErrands
+      .map((errand) => errand.location?.label)
+      .filter((label): label is string => label !== undefined),
+  ).size;
+
   const headline = [
     countLabel(openTasks.length, "open task"),
     countLabel(due.length, "reminder due", "reminders due"),
@@ -190,6 +222,7 @@ export function composeDailyBrief(inputs: BriefInputs): DailyBrief {
     countLabel(awaitingResponse.length, "quote awaiting response", "quotes awaiting response"),
     countLabel(openEnquiries.length, "open enquiry", "open enquiries"),
     countLabel(unpaidInvoices.length, "invoice unpaid", "invoices unpaid"),
+    countLabel(openErrands.length, "errand to run", "errands to run"),
   ].join(", ");
 
   return {
@@ -236,6 +269,11 @@ export function composeDailyBrief(inputs: BriefInputs): DailyBrief {
       unpaidCount: unpaidInvoices.length,
       unpaidTotal: roundMoney(unpaidInvoices.reduce((sum, invoice) => sum + invoice.balanceDue, 0)),
       unpaid: cap(unpaidInvoices),
+    },
+    errands: {
+      openCount: openErrands.length,
+      locationCount: errandLocationCount,
+      open: cap(openErrands),
     },
   };
 }
