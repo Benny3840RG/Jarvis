@@ -8,6 +8,7 @@ import { JsonFileLock } from "../persistence/jsonFileLock.js";
 import type { PersistenceWarning } from "../persistence/types.js";
 import {
   isProjectStatus,
+  parseProjectScheduledDate,
   type Project,
   type ProjectInput,
   type ProjectStatus,
@@ -63,9 +64,7 @@ function normalizeProject(value: unknown): Project {
     title: value.title,
     status,
     ...(typeof value.notes === "string" && value.notes.trim() ? { notes: value.notes } : {}),
-    ...(optionalText(value.scheduledFor) === undefined
-      ? {}
-      : { scheduledFor: optionalText(value.scheduledFor) }),
+    ...(value.scheduledFor === undefined ? {} : { scheduledFor: parseProjectScheduledDate(value.scheduledFor) }),
     createdAt,
     updatedAt: typeof value.updatedAt === "number" ? value.updatedAt : createdAt,
   };
@@ -158,9 +157,7 @@ export class JsonProjectStore implements ProjectStore {
         title: requiredText(input.title, "Project title"),
         status: input.status ?? "lead",
         ...(input.notes && input.notes.trim() ? { notes: input.notes.trim() } : {}),
-        ...(input.scheduledFor && input.scheduledFor.trim()
-          ? { scheduledFor: input.scheduledFor.trim() }
-          : {}),
+        ...(input.scheduledFor === undefined ? {} : { scheduledFor: parseProjectScheduledDate(input.scheduledFor) }),
         createdAt: now,
         updatedAt: now,
       };
@@ -202,7 +199,7 @@ export class JsonProjectStore implements ProjectStore {
         else delete project.notes;
       }
       if (update.scheduledFor !== undefined) {
-        const cleaned = update.scheduledFor === null ? "" : update.scheduledFor.trim();
+        const cleaned = update.scheduledFor === null ? "" : parseProjectScheduledDate(update.scheduledFor);
         if (cleaned) project.scheduledFor = cleaned;
         else delete project.scheduledFor;
       }
