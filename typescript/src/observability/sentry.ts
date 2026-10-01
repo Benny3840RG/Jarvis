@@ -97,6 +97,11 @@ const ROUTE_SEGMENTS = new Set([
   "clients",
   "projects",
   "quotes",
+  "revisions",
+  "properties",
+  "enquiries",
+  "invoices",
+  "payments",
   "errands",
   "builds",
   "build-logs",
@@ -117,6 +122,14 @@ const ROUTE_SEGMENTS = new Set([
   "reject",
   "revoke",
   "execute",
+  "close",
+  "convert-project",
+  "issue",
+  "void",
+  "review",
+  "reopen",
+  "finalize",
+  "fork",
 ]);
 
 function requiredIdentifier(value: string, field: string, maximum: number): string {
