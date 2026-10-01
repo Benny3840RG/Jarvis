@@ -15,6 +15,8 @@ export interface Project {
   title: string;
   status: ProjectStatus;
   notes?: string;
+  /** The day the job is booked for, as an ISO `YYYY-MM-DD` date. Optional. */
+  scheduledFor?: string;
   createdAt: number;
   updatedAt: number;
 }
@@ -25,6 +27,7 @@ export interface ProjectInput {
   title: string;
   status?: ProjectStatus;
   notes?: string;
+  scheduledFor?: string;
 }
 
 export interface ProjectUpdate {
@@ -35,6 +38,8 @@ export interface ProjectUpdate {
   status?: ProjectStatus;
   /** `string` sets notes, `null` clears them, `undefined` leaves them unchanged. */
   notes?: string | null;
+  /** `string` sets the scheduled date, `null` clears it, `undefined` leaves it unchanged. */
+  scheduledFor?: string | null;
 }
 
 /** Durable store for business projects (jobs), a separate store like clients. */
@@ -44,6 +49,28 @@ export interface ProjectStore {
   add(input: ProjectInput): Promise<Project>;
   update(id: string, update: ProjectUpdate): Promise<Project | null>;
   remove(id: string): Promise<Project | null>;
+}
+
+export function parseProjectScheduledDate(value: unknown): string {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value.trim())) {
+    throw new Error("Project scheduledFor must be an ISO date (YYYY-MM-DD).");
+  }
+  const text = value.trim();
+  const [year, month, day] = text.split("-").map(Number);
+  if (year < 1) {
+    throw new Error("Project scheduledFor is not a valid calendar date.");
+  }
+  // setUTCFullYear preserves years 0001-0099 instead of mapping them to 1901-1999.
+  const date = new Date(0);
+  date.setUTCFullYear(year, month - 1, day);
+  if (
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() !== month - 1 ||
+    date.getUTCDate() !== day
+  ) {
+    throw new Error("Project scheduledFor is not a valid calendar date.");
+  }
+  return text;
 }
 
 export function isProjectStatus(value: unknown): value is ProjectStatus {

@@ -1,6 +1,12 @@
 import { randomUUID } from "node:crypto";
 
-import type { Project, ProjectInput, ProjectStore, ProjectUpdate } from "./project.js";
+import {
+  parseProjectScheduledDate,
+  type Project,
+  type ProjectInput,
+  type ProjectStore,
+  type ProjectUpdate,
+} from "./project.js";
 
 function requiredText(value: string, field: string): string {
   const cleaned = value.trim();
@@ -43,6 +49,9 @@ export class InMemoryProjectStore implements ProjectStore {
         title: requiredText(input.title, "Project title"),
         status: input.status ?? "lead",
         ...(input.notes && input.notes.trim() ? { notes: input.notes.trim() } : {}),
+        ...(input.scheduledFor === undefined
+          ? {}
+          : { scheduledFor: parseProjectScheduledDate(input.scheduledFor) }),
         createdAt: now,
         updatedAt: now,
       };
@@ -60,14 +69,16 @@ export class InMemoryProjectStore implements ProjectStore {
         update.propertyId === undefined &&
         update.title === undefined &&
         update.status === undefined &&
-        update.notes === undefined
+        update.notes === undefined &&
+        update.scheduledFor === undefined
       ) {
         throw new Error(
-          "Project update requires a clientId, propertyId, title, status, or notes change.",
+          "Project update requires a clientId, propertyId, title, status, notes, or scheduledFor change.",
         );
       }
-      const project = this.projects.get(id);
-      if (!project) return Promise.resolve(null);
+      const existing = this.projects.get(id);
+      if (!existing) return Promise.resolve(null);
+      const project = cloneProject(existing);
       if (update.clientId !== undefined)
         project.clientId = requiredText(update.clientId, "Project clientId");
       if (update.propertyId !== undefined) {
@@ -82,7 +93,14 @@ export class InMemoryProjectStore implements ProjectStore {
         if (cleaned) project.notes = cleaned;
         else delete project.notes;
       }
+      if (update.scheduledFor !== undefined) {
+        const cleaned =
+          update.scheduledFor === null ? "" : parseProjectScheduledDate(update.scheduledFor);
+        if (cleaned) project.scheduledFor = cleaned;
+        else delete project.scheduledFor;
+      }
       project.updatedAt = Date.now();
+      this.projects.set(id, project);
       return Promise.resolve(cloneProject(project));
     } catch (error: unknown) {
       return Promise.reject(error instanceof Error ? error : new Error(String(error)));

@@ -76,6 +76,20 @@ for (const { name, make } of stores()) {
       );
     });
 
+    it("sets, reschedules and clears the scheduledFor date", async () => {
+      const store = make();
+      const project = await store.add({
+        clientId: "c1",
+        title: "Crown reduction",
+        scheduledFor: "2026-10-09",
+      });
+      assert.equal(project.scheduledFor, "2026-10-09");
+      const rescheduled = await store.update(project.id, { scheduledFor: "2026-10-10" });
+      assert.equal(rescheduled?.scheduledFor, "2026-10-10");
+      const cleared = await store.update(project.id, { scheduledFor: null });
+      assert.equal(cleared?.scheduledFor, undefined);
+    });
+
     it("returns null for unknown ids and removes a project", async () => {
       const store = make();
       assert.equal(await store.get("nope"), null);
@@ -96,6 +110,7 @@ describe("JsonProjectStore durability", () => {
       propertyId: "p1",
       title: "Retaining wall",
       status: "quoted",
+      scheduledFor: "2026-11-02",
     });
     const reopened = new JsonProjectStore(path.join(dir, "projects.json"));
     const list = await reopened.list();
@@ -103,5 +118,6 @@ describe("JsonProjectStore durability", () => {
     assert.equal(list[0].id, added.id);
     assert.equal(list[0].propertyId, "p1");
     assert.equal(list[0].status, "quoted");
+    assert.equal(list[0].scheduledFor, "2026-11-02");
   });
 });

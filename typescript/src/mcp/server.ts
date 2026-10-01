@@ -18,7 +18,7 @@ import type { Upgrade } from "../upgrades/upgrade.js";
 import type { AssetView } from "../assets/assetView.js";
 import type { Preference } from "../preferences/preference.js";
 import type { Errand } from "../errands/errand.js";
-import type { Project } from "../projects/project.js";
+import { parseProjectScheduledDate, type Project } from "../projects/project.js";
 import type { QuoteSnapshot } from "../quotes/quoteLifecycle.js";
 import type { ToolAction } from "../actions/toolActions.js";
 import type { Reminder, Task } from "../persistence/persistence.js";
@@ -67,12 +67,27 @@ const clientSchema = z.object({
   updatedAt: z.number(),
 });
 
+const isoDate = z
+  .string()
+  .trim()
+  .superRefine((value, ctx) => {
+    try {
+      parseProjectScheduledDate(value);
+    } catch (error: unknown) {
+      ctx.addIssue({
+        code: "custom",
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+  });
+
 const projectSchema = z.object({
   id: z.string(),
   clientId: z.string(),
   title: z.string(),
   status: z.enum(["lead", "quoted", "active", "on_hold", "done"]),
   notes: z.string().optional(),
+  scheduledFor: z.string().optional(),
   createdAt: z.number(),
   updatedAt: z.number(),
 });
@@ -1407,24 +1422,27 @@ export function createJarvisMcpServer(
     "create_project",
     {
       title: "Create a business project",
-      description: "Use this when the user explicitly asks to add a project (job) for a client.",
+      description:
+        "Use this when the user explicitly asks to add a project (job) for a client. Pass scheduledFor as an ISO date (YYYY-MM-DD) to book the day the job is scheduled.",
       inputSchema: {
         clientId: z.string().trim().min(1).max(200),
         title: z.string().trim().min(1).max(200),
         status: z.enum(["lead", "quoted", "active", "on_hold", "done"]).optional(),
         notes: z.string().trim().min(1).max(2000).optional(),
+        scheduledFor: isoDate.optional(),
       },
       outputSchema: { project: projectSchema },
       annotations: createAnnotations,
       _meta: { ui: { visibility: ["model"] } },
     },
-    async ({ clientId, title, status, notes }) => {
+    async ({ clientId, title, status, notes, scheduledFor }) => {
       try {
         const created = await client.createProject({
           clientId,
           title,
           ...(status === undefined ? {} : { status }),
           ...(notes === undefined ? {} : { notes }),
+          ...(scheduledFor === undefined ? {} : { scheduledFor }),
         });
         return projectResult(created, `Created project "${created.title}".`);
       } catch (error: unknown) {
@@ -1439,32 +1457,34 @@ export function createJarvisMcpServer(
     {
       title: "Update a business project",
       description:
-        "Use this when the user explicitly asks to change a project's client, title, status, or notes.",
+        "Use this when the user explicitly asks to change a project's client, title, status, notes, or scheduled date. Pass scheduledFor as an ISO date (YYYY-MM-DD), or null to clear the booking.",
       inputSchema: {
         projectId: z.string().min(1),
         clientId: z.string().trim().min(1).max(200).optional(),
         title: z.string().trim().min(1).max(200).optional(),
         status: z.enum(["lead", "quoted", "active", "on_hold", "done"]).optional(),
         notes: z.string().trim().min(1).max(2000).nullable().optional(),
+        scheduledFor: isoDate.nullable().optional(),
       },
       outputSchema: { project: projectSchema },
       annotations: writeAnnotations,
       _meta: { ui: { visibility: ["model"] } },
     },
-    async ({ projectId, clientId, title, status, notes }) => {
+    async ({ projectId, clientId, title, status, notes, scheduledFor }) => {
       try {
         if (
           clientId === undefined &&
           title === undefined &&
           status === undefined &&
-          notes === undefined
+          notes === undefined &&
+          scheduledFor === undefined
         ) {
           return {
             isError: true,
             content: [
               {
                 type: "text" as const,
-                text: "Project update requires a client, title, status, or notes.",
+                text: "Project update requires a client, title, status, notes, or scheduled date.",
               },
             ],
           };
@@ -1474,6 +1494,7 @@ export function createJarvisMcpServer(
           ...(title === undefined ? {} : { title }),
           ...(status === undefined ? {} : { status }),
           ...(notes === undefined ? {} : { notes }),
+          ...(scheduledFor === undefined ? {} : { scheduledFor }),
         });
         return projectResult(updated, `Updated project "${updated.title}".`);
       } catch (error: unknown) {
@@ -1776,7 +1797,7 @@ export function createJarvisMcpServer(
     {
       title: "Get the operations inbox",
       description:
-        "Use this when Benny asks what needs his attention right now, or what's urgent. Read-only, owner-scoped digest of overdue reminders and overdue/due-soon maintenance, each backed by real records. Cannot dismiss, acknowledge, resolve, approve, revoke, or execute anything — inspection only. Sources not yet wired (governed tool-action approvals, reconciliation escalations, quote-delivery problems) are reported as unsupported, never silently empty.",
+        "Use this when Benny asks what needs his attention right now, or what's urgent. Read-only, owner-scoped digest of overdue reminders and overdue/due-soon maintenance, each backed by real records. Cannot dismiss, acknowledge, resolve, approve, revoke, reject, or execute anything — inspection only. Sources not yet wired (governed tool-action approvals, reconciliation escalations, quote-delivery problems) are reported as unsupported, never silently empty.",
       inputSchema: {},
       outputSchema: { inbox: operationsInboxSchema },
       annotations: readAnnotations,

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, describe, it } from "node:test";
@@ -89,6 +89,7 @@ const PROJECT = {
   title: "Re-roof rear extension",
   status: "active",
   notes: "Two-stage handover",
+  scheduledFor: "2026-11-02",
   createdAt: 1_700_000_200_001,
   updatedAt: 1_700_000_200_002,
 };
@@ -330,6 +331,11 @@ describe("archive v4 — business records strictness", () => {
       { clients: { version: 1, clients: [{ ...CLIENT, name: "  Marlow  " }] } },
       /leading or trailing whitespace/,
     ],
+    [
+      "a project scheduled date that is not a real calendar date",
+      { projects: { version: 1, projects: [{ ...PROJECT, scheduledFor: "2026-02-30" }] } },
+      /scheduledFor must be a valid ISO calendar date/,
+    ],
   ];
 
   for (const [label, override, message] of cases) {
@@ -379,6 +385,27 @@ describe("archive v4 — business records strictness", () => {
     await writeFile(pathsIn(dir).invoices, "{ broken", "utf8");
     await assert.rejects(captureJsonGroups(pathsIn(dir)), StrictBackupError);
     assert.equal(await readFile(pathsIn(dir).invoices, "utf8"), "{ broken");
+  });
+
+  it("rejects an invalid persisted scheduled date without touching or quarantining the source", async () => {
+    const dir = await scratch();
+    await writeSource(dir, {
+      projects: { version: 1, projects: [{ ...PROJECT, scheduledFor: "2026-02-30" }] },
+    });
+    const before = await readFile(pathsIn(dir).projects, "utf8");
+    await assert.rejects(captureJsonGroups(pathsIn(dir)), (error: unknown) => {
+      assert.ok(error instanceof StrictBackupError, "expected a field-specific StrictBackupError");
+      assert.match(error.message, /scheduledFor must be a valid ISO calendar date/);
+      return true;
+    });
+    // Source bytes are untouched and no `.corrupt-*` sibling was written: the capture
+    // rejects the bad date itself, rather than falling through to the store's quarantine.
+    assert.equal(await readFile(pathsIn(dir).projects, "utf8"), before);
+    const siblings = await readdir(dir);
+    assert.deepEqual(
+      siblings.filter((name) => name.includes("jarvis-projects.json.corrupt-")),
+      [],
+    );
   });
 });
 

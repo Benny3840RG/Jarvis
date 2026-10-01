@@ -1,5 +1,6 @@
 import {
   isProjectStatus,
+  parseProjectScheduledDate,
   type ProjectInput,
   type ProjectStatus,
   type ProjectUpdate,
@@ -35,7 +36,7 @@ function rejectUnknownKeys(body: Record<string, unknown>, allowed: readonly stri
   }
 }
 
-const ALLOWED = ["clientId", "propertyId", "title", "status", "notes"] as const;
+const ALLOWED = ["clientId", "propertyId", "title", "status", "notes", "scheduledFor"] as const;
 
 export function parseCreateProject(body: unknown): ProjectInput {
   if (!isRecord(body)) throw new Error("Request body must be a JSON object.");
@@ -50,6 +51,9 @@ export function parseCreateProject(body: unknown): ProjectInput {
     ...(body.notes === undefined
       ? {}
       : { notes: requiredString(body.notes, "Project notes", MAX_NOTES_LENGTH) }),
+    ...(body.scheduledFor === undefined
+      ? {}
+      : { scheduledFor: parseProjectScheduledDate(body.scheduledFor) }),
   };
 }
 
@@ -61,10 +65,11 @@ export function parseUpdateProject(body: unknown): ProjectUpdate {
     body.propertyId === undefined &&
     body.title === undefined &&
     body.status === undefined &&
-    body.notes === undefined
+    body.notes === undefined &&
+    body.scheduledFor === undefined
   ) {
     throw new Error(
-      "Project update requires a clientId, propertyId, title, status, or notes change.",
+      "Project update requires a clientId, propertyId, title, status, notes, or scheduledFor change.",
     );
   }
   const update: ProjectUpdate = {};
@@ -82,6 +87,10 @@ export function parseUpdateProject(body: unknown): ProjectUpdate {
   if (body.notes !== undefined) {
     update.notes =
       body.notes === null ? null : requiredString(body.notes, "Project notes", MAX_NOTES_LENGTH);
+  }
+  if (body.scheduledFor !== undefined) {
+    update.scheduledFor =
+      body.scheduledFor === null ? null : parseProjectScheduledDate(body.scheduledFor);
   }
   return update;
 }

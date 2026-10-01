@@ -24,7 +24,11 @@ import {
 } from "../../invoices/invoice.js";
 import { businessDataFiles } from "../../persistence/jarvisDataPaths.js";
 import { JsonProjectStore } from "../../projects/jsonProjectStore.js";
-import { PROJECT_STATUSES, type Project } from "../../projects/project.js";
+import {
+  parseProjectScheduledDate,
+  PROJECT_STATUSES,
+  type Project,
+} from "../../projects/project.js";
 import { JsonPropertyStore } from "../../properties/jsonPropertyStore.js";
 import type { Property } from "../../properties/property.js";
 import { JsonQuoteStore } from "../../quotes/jsonQuoteStore.js";
@@ -111,6 +115,7 @@ const PROJECT_KEYS = [
   "title",
   "status",
   "notes",
+  "scheduledFor",
   "createdAt",
   "updatedAt",
 ] as const;
@@ -296,6 +301,20 @@ function parseProject(value: unknown, at: string): Project {
     title: strictText(row.title, `${at}.title`),
     status: strictEnumValue(row.status, PROJECT_STATUSES, `${at}.status`),
     ...present("notes", optional(row.notes, `${at}.notes`, strictText)),
+    ...present(
+      "scheduledFor",
+      optional(row.scheduledFor, `${at}.scheduledFor`, (date, fieldAt) => {
+        const text = strictText(date, fieldAt);
+        try {
+          return parseProjectScheduledDate(text);
+        } catch {
+          // Surface an invalid persisted date as a field-specific StrictBackupError
+          // (not the plain Error the validator throws), so capture rejects cleanly
+          // with the source path and never falls through to the store-quarantine path.
+          return fail(fieldAt, "must be a valid ISO calendar date (YYYY-MM-DD).");
+        }
+      }),
+    ),
     createdAt: strictTimestamp(row.createdAt, `${at}.createdAt`),
     updatedAt: strictTimestamp(row.updatedAt, `${at}.updatedAt`),
   };
