@@ -735,6 +735,55 @@ describe("JSONPersistence", () => {
       false,
     );
   });
+
+  it("elects only one concurrent reclaimer for a stale lock generation", async (t) => {
+    const file = path.join(tempDir, "stale-race.json");
+    const lockPath = `${file}.lock`;
+    const child = spawn(process.execPath, ["-e", "process.exit(0)"], { stdio: "ignore" });
+    if (child.pid === undefined) throw new Error("Failed to start stale-lock race process.");
+    const childPid = child.pid;
+    await once(child, "exit");
+
+    await fs.writeFile(
+      lockPath,
+      `${JSON.stringify({ pid: childPid, acquiredAt: Date.now(), token: "stale-race-lock" })}\n`,
+      { mode: 0o600 },
+    );
+
+    const realRm = fs.rm.bind(fs);
+    let staleRemovalAttempts = 0;
+    t.mock.method(fs, "rm", async (...args: Parameters<typeof fs.rm>) => {
+      if (args[0] === lockPath) {
+        try {
+          const record = JSON.parse(await fs.readFile(lockPath, "utf8")) as { token?: string };
+          if (record.token === "stale-race-lock") {
+            staleRemovalAttempts += 1;
+            await new Promise((resolve) => setTimeout(resolve, 75));
+          }
+        } catch {
+          // The winning reclaimer may have removed the stale generation already.
+        }
+      }
+      return realRm(...args);
+    });
+
+    const first = new JSONPersistence(file, () => undefined, 1_000);
+    const second = new JSONPersistence(file, () => undefined, 1_000);
+    await Promise.all([
+      first.addTask("First concurrent recovery", "personal"),
+      second.addTask("Second concurrent recovery", "personal"),
+    ]);
+
+    assert.equal(staleRemovalAttempts, 1);
+    assert.deepEqual(
+      (await new JSONPersistence(file).listTasks()).map((task) => task.title).sort(),
+      ["First concurrent recovery", "Second concurrent recovery"],
+    );
+    assert.equal(
+      (await fs.readdir(tempDir)).some((name) => name.includes(".reclaim-")),
+      false,
+    );
+  });
 });
 
 describe("createPersistenceFromEnv", () => {
