@@ -174,6 +174,119 @@ describe("Jarvis preview widget", () => {
     assert.equal(elements.get("operations-quote-total")?.textContent, "UNAVAILABLE");
   });
 
+  it("renders open enquiries and unpaid invoices in the operations snapshot", () => {
+    assert.match(widget, /Open enquiries/);
+    assert.match(widget, /Unpaid invoices/);
+    assert.match(widget, /Owed to you/);
+
+    const audSource = widget.match(/const aud = new Intl\.NumberFormat[^;]+;/)?.[0];
+    const renderSource = widget.match(
+      /(function renderOperations\(\) \{[\s\S]*?\})\n\s+function renderActivity/,
+    )?.[1];
+    assert.ok(audSource, "AUD formatter was not found");
+    assert.ok(renderSource, "operations renderer was not found");
+
+    const elements = new Map<string, { id: string; textContent: string }>();
+    const lists = new Map<string, unknown[]>();
+    const byId = (id: string) => {
+      const existing = elements.get(id);
+      if (existing) return existing;
+      const element = { id, textContent: "" };
+      elements.set(id, element);
+      return element;
+    };
+    const text = (element: { textContent: string }, value: unknown) => {
+      element.textContent = value == null ? "" : String(value);
+    };
+    const fillList = (
+      element: { id: string },
+      items: unknown[],
+      _renderer: (item: unknown) => unknown,
+      _message: string,
+    ) => lists.set(element.id, items);
+
+    const emergency = {
+      id: "enq-1",
+      requestedWork: "Storm-damaged tree on the roof",
+      urgency: "emergency",
+      source: "phone",
+      status: "open",
+    };
+    const standard = {
+      id: "enq-2",
+      requestedWork: "Quarterly lawn maintenance",
+      urgency: "standard",
+      source: "website",
+      status: "open",
+    };
+    const unpaidInvoice = {
+      id: "inv-2",
+      number: "INV-2",
+      clientId: "client-1",
+      status: "issued",
+      balanceDue: 650,
+    };
+    const state = {
+      quotes: [],
+      quoteRegisterStatus: "ready",
+      brief: {
+        generatedAt: "2026-07-30T00:00:00.000Z",
+        headline: "Enquiries and invoices fixture.",
+        reminders: { dueCount: 0, upcomingCount: 0 },
+        projects: { activeCount: 0, active: [] },
+        quotes: {
+          pipelineTotal: 0,
+          acceptedTotal: 0,
+          countsByStatus: { draft: 0, sent: 0, accepted: 0, declined: 0 },
+          awaitingResponse: [],
+          drafts: [],
+        },
+        maintenance: { dueCount: 0, dueSoonCount: 0, due: [], dueSoon: [] },
+        enquiries: {
+          openCount: 2,
+          countsByUrgency: { standard: 1, urgent: 0, emergency: 1 },
+          open: [emergency, standard],
+        },
+        invoices: {
+          draftCount: 1,
+          unpaidCount: 1,
+          unpaidTotal: 650,
+          unpaid: [unpaidInvoice],
+        },
+      },
+    };
+    const run = new Function(
+      "state",
+      "byId",
+      "text",
+      "fillList",
+      "operationsRow",
+      "quotePipelineRow",
+      "renderQuoteDetail",
+      "empty",
+      `"use strict"; ${audSource} ${renderSource}; renderOperations();`,
+    );
+    run(
+      state,
+      byId,
+      text,
+      fillList,
+      () => ({}),
+      () => ({}),
+      () => {},
+      () => ({}),
+    );
+
+    assert.equal(elements.get("brief-enquiry-count")?.textContent, "2");
+    assert.equal(elements.get("brief-unpaid-total")?.textContent, "$650.00");
+    assert.equal(elements.get("operations-enquiry-count")?.textContent, "2 OPEN");
+    assert.equal(elements.get("operations-invoice-count")?.textContent, "1 UNPAID");
+    assert.deepEqual(lists.get("operations-enquiry-list"), [emergency, standard]);
+    assert.deepEqual(lists.get("operations-invoice-list"), [unpaidInvoice]);
+    // The nav badge counts enquiries and unpaid invoices as items needing attention.
+    assert.equal(elements.get("nav-operations-count")?.textContent, "3");
+  });
+
   it("opens a register quote in the read-only inspector", async () => {
     const openSource = widget.match(
       /(async function openQuote\(summary\) \{[\s\S]*?\})\n\s+function renderQuoteDetail/,
