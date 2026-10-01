@@ -18,7 +18,7 @@ import type { Upgrade } from "../upgrades/upgrade.js";
 import type { AssetView } from "../assets/assetView.js";
 import type { Preference } from "../preferences/preference.js";
 import type { Errand } from "../errands/errand.js";
-import type { Project } from "../projects/project.js";
+import { parseProjectScheduledDate, type Project } from "../projects/project.js";
 import type { QuoteSnapshot } from "../quotes/quoteLifecycle.js";
 import type { ToolAction } from "../actions/toolActions.js";
 import type { Reminder, Task } from "../persistence/persistence.js";
@@ -67,10 +67,13 @@ const clientSchema = z.object({
   updatedAt: z.number(),
 });
 
-const isoDate = z
-  .string()
-  .trim()
-  .regex(/^\d{4}-\d{2}-\d{2}$/, "scheduledFor must be an ISO date (YYYY-MM-DD).");
+const isoDate = z.string().trim().superRefine((value, ctx) => {
+  try {
+    parseProjectScheduledDate(value);
+  } catch (error: unknown) {
+    ctx.addIssue({ code: "custom", message: error instanceof Error ? error.message : String(error) });
+  }
+});
 
 const projectSchema = z.object({
   id: z.string(),
