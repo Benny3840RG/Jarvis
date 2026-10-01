@@ -1,5 +1,14 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import fs, {
+  type FileHandle,
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, it } from "node:test";
@@ -52,6 +61,29 @@ describe("writePrivateJsonFile", () => {
     if (process.platform === "win32") return;
     assert.equal((await stat(file)).mode & 0o777, 0o600);
     assert.match(await readFile(file, "utf8"), /"stale": false/);
+  });
+
+  it("syncs the containing directory after publishing the renamed file", async (t) => {
+    const file = path.join(dir, "record.json");
+    const originalOpen = fs.open.bind(fs);
+    let directorySyncs = 0;
+
+    t.mock.method(fs, "open", async (...args: Parameters<typeof fs.open>) => {
+      if (args[0] === dir && args[1] === "r") {
+        return {
+          sync: async () => {
+            directorySyncs += 1;
+          },
+          close: async () => undefined,
+        } as FileHandle;
+      }
+      return originalOpen(...args);
+    });
+
+    await writePrivateJsonFile(file, { ok: true });
+
+    assert.equal(directorySyncs, 1);
+    assert.deepEqual(JSON.parse(await readFile(file, "utf8")), { ok: true });
   });
 
   it("does not leave temp files when the final rename fails", async () => {
