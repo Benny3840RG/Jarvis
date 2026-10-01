@@ -31,17 +31,18 @@ const CONFIG: HttpAppConfig = {
 
 function unusedPersistence(): PersistenceProvider {
   const forbidden = (): never => {
-    throw new Error("task/reminder persistence must not be reached by business tools");
+    throw new Error("task/reminder writes must not be reached by business tools");
   };
   return {
     loadState: forbidden,
     saveState: forbidden,
-    listTasks: forbidden,
+    // The daily brief reads tasks and reminders; business writes never touch them.
+    listTasks: () => Promise.resolve([]),
     addTask: forbidden,
     updateTask: forbidden,
     completeTask: forbidden,
     removeTask: forbidden,
-    listReminders: forbidden,
+    listReminders: () => Promise.resolve([]),
     addReminder: forbidden,
     updateReminder: forbidden,
     removeReminder: forbidden,
@@ -369,6 +370,32 @@ describe("business MCP tools: invoice drafts", () => {
     await refused(client, "get_invoice", { invoiceId: "missing" }, /not found/i);
     const { count } = await ok<{ count: number }>(client, "list_invoices");
     assert.equal(count, 0);
+  });
+});
+
+describe("business MCP tools: daily brief", () => {
+  it("shows open enquiries and unpaid invoices in get_daily_brief", async () => {
+    const { client } = await startHarness();
+    await ok(client, "create_enquiry", {
+      clientId: "client-1",
+      source: "phone",
+      requestedWork: "Storm-damaged tree on the roof",
+      urgency: "emergency",
+    });
+    await ok(client, "create_invoice_draft", { clientId: "client-1", number: "INV-1" });
+
+    const { brief } = await ok<{
+      brief: {
+        headline: string;
+        enquiries: { openCount: number; open: Array<{ urgency: string }> };
+        invoices: { draftCount: number; unpaidCount: number; unpaidTotal: number };
+      };
+    }>(client, "get_daily_brief");
+    assert.equal(brief.enquiries.openCount, 1);
+    assert.equal(brief.enquiries.open[0]?.urgency, "emergency");
+    assert.equal(brief.invoices.draftCount, 1);
+    assert.equal(brief.invoices.unpaidCount, 0);
+    assert.match(brief.headline, /1 open enquiry, 0 invoices unpaid\.$/);
   });
 });
 

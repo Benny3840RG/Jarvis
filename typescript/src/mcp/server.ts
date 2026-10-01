@@ -28,7 +28,7 @@ import {
   type DashboardSnapshot,
   type ReminderRequestUpdate,
 } from "./jarvisApiClient.js";
-import { registerBusinessTools } from "./businessTools.js";
+import { enquirySchema, invoiceSchema, registerBusinessTools } from "./businessTools.js";
 import { registerPersistenceSettingsTools } from "./persistenceSettingsTools.js";
 import { JARVIS_INSTRUCTIONS, JARVIS_PERSONA_MARKDOWN, JARVIS_PERSONA_URI } from "./persona.js";
 
@@ -328,6 +328,26 @@ const briefSchema = z.object({
     due: z.array(assetSchema),
     dueSoon: z.array(assetSchema),
   }),
+  // Optional so this adapter still accepts a brief from an API that predates them (#670).
+  enquiries: z
+    .object({
+      openCount: z.number().int().nonnegative(),
+      countsByUrgency: z.object({
+        standard: z.number().int().nonnegative(),
+        urgent: z.number().int().nonnegative(),
+        emergency: z.number().int().nonnegative(),
+      }),
+      open: z.array(enquirySchema),
+    })
+    .optional(),
+  invoices: z
+    .object({
+      draftCount: z.number().int().nonnegative(),
+      unpaidCount: z.number().int().nonnegative(),
+      unpaidTotal: z.number().nonnegative(),
+      unpaid: z.array(invoiceSchema),
+    })
+    .optional(),
 });
 
 // Read-only. Mirrors OperationsInbox exactly; no schema here ever represents

@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import Ajv2020 from "ajv/dist/2020.js";
 import { afterEach, describe, it } from "node:test";
 
 import type { NestFastifyApplication } from "@nestjs/platform-fastify";
@@ -6,6 +8,8 @@ import type { NestFastifyApplication } from "@nestjs/platform-fastify";
 import type { DailyBrief } from "../src/briefs/brief.js";
 import { createJarvisHttpApp } from "../src/http/app.js";
 import type { HttpAppConfig } from "../src/http/config.js";
+import { InMemoryEnquiryStore } from "../src/enquiries/inMemoryEnquiryStore.js";
+import { InMemoryInvoiceStore } from "../src/invoices/inMemoryInvoiceStore.js";
 import type { PersistenceProvider } from "../src/persistence/persistence.js";
 import type { Reminder, Task } from "../src/persistence/types.js";
 import { InMemoryProjectStore } from "../src/projects/inMemoryProjectStore.js";
@@ -75,6 +79,31 @@ describe("brief HTTP boundary", () => {
     });
     await quoteStore.add({ clientId: "c1", number: "Q-2" });
 
+    const enquiryStore = new InMemoryEnquiryStore();
+    await enquiryStore.add({ clientId: "c1", source: "phone", requestedWork: "Lop a branch" });
+    await enquiryStore.add({
+      clientId: "c2",
+      source: "website",
+      requestedWork: "Storm-damaged tree on the roof",
+      urgency: "emergency",
+    });
+    const closed = await enquiryStore.add({ clientId: "c3", source: "phone", requestedWork: "x" });
+    await enquiryStore.close(closed.id, "Out of area");
+
+    const invoiceStore = new InMemoryInvoiceStore();
+    await invoiceStore.add({
+      clientId: "c1",
+      number: "INV-1",
+      lineItems: [{ description: "Hedge trim", quantity: 1, unitPrice: 400 }],
+    });
+    const issued = await invoiceStore.add({
+      clientId: "c1",
+      number: "INV-2",
+      lineItems: [{ description: "Tree removal", quantity: 1, unitPrice: 900 }],
+    });
+    await invoiceStore.issue(issued.id);
+    await invoiceStore.recordPayment(issued.id, { amount: 250 });
+
     const now = Date.now();
     const tasks: Task[] = [
       { id: "t1", title: "Order timber", completed: false, category: "builds", createdAt: 1 },
@@ -99,6 +128,8 @@ describe("brief HTTP boundary", () => {
       logger: false,
       projectStore,
       quoteStore,
+      enquiryStore,
+      invoiceStore,
     });
     openApps.push(app);
 
@@ -117,10 +148,26 @@ describe("brief HTTP boundary", () => {
     assert.equal(brief.quotes.countsByStatus.draft, 1);
     // 2 x 100 with 10% tax, derived by the store, surfaced by the brief.
     assert.equal(brief.quotes.pipelineTotal, 220);
+    assert.equal(brief.enquiries.openCount, 2);
+    assert.equal(brief.enquiries.open[0].urgency, "emergency", "most urgent first");
+    assert.equal(brief.invoices.draftCount, 1);
+    assert.equal(brief.invoices.unpaidCount, 1);
+    assert.equal(brief.invoices.unpaid[0].number, "INV-2");
+    assert.equal(brief.invoices.unpaidTotal, 650, "900 issued less 250 received");
     assert.equal(
       brief.headline,
-      "1 open task, 1 reminder due, 1 active project, 1 quote awaiting response.",
+      "1 open task, 1 reminder due, 1 active project, 1 quote awaiting response, 2 open enquiries, 1 invoice unpaid.",
     );
+
+    // The live response must satisfy the published contract exactly.
+    const contract = JSON.parse(
+      readFileSync(new URL("../openapi/jarvis.openapi.json", import.meta.url), "utf8"),
+    ) as { components: Record<string, unknown> };
+    const validate = new Ajv2020.default({ strict: false, validateFormats: false }).compile({
+      $ref: "#/components/schemas/BriefResponse",
+      components: contract.components,
+    });
+    assert.equal(validate(response.json()), true, JSON.stringify(validate.errors));
   });
 
   it("returns 503 when a backing store cannot be read", async () => {

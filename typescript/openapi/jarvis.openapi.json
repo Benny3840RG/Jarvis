@@ -10487,7 +10487,9 @@
           "reminders",
           "projects",
           "quotes",
-          "maintenance"
+          "maintenance",
+          "enquiries",
+          "invoices"
         ],
         "properties": {
           "generatedAt": {
@@ -10644,6 +10646,75 @@
                 }
               }
             }
+          },
+          "enquiries": {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "Open enquiries, most urgent first (emergency, urgent, standard), then longest waiting.",
+            "required": ["openCount", "countsByUrgency", "open"],
+            "properties": {
+              "openCount": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "countsByUrgency": {
+                "$ref": "#/components/schemas/BriefEnquiryUrgencyCounts"
+              },
+              "open": {
+                "type": "array",
+                "maxItems": 5,
+                "items": {
+                  "$ref": "#/components/schemas/Enquiry"
+                }
+              }
+            }
+          },
+          "invoices": {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "Draft invoices, and issued invoices with a balance still due, oldest issue first. No overdue status is derived because dueDate is free text.",
+            "required": ["draftCount", "unpaidCount", "unpaidTotal", "unpaid"],
+            "properties": {
+              "draftCount": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "unpaidCount": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "unpaidTotal": {
+                "type": "number",
+                "minimum": 0,
+                "description": "Sum of balanceDue across unpaid issued invoices, rounded to cents."
+              },
+              "unpaid": {
+                "type": "array",
+                "maxItems": 5,
+                "items": {
+                  "$ref": "#/components/schemas/Invoice"
+                }
+              }
+            }
+          }
+        }
+      },
+      "BriefEnquiryUrgencyCounts": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["standard", "urgent", "emergency"],
+        "properties": {
+          "standard": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "urgent": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "emergency": {
+            "type": "integer",
+            "minimum": 0
           }
         }
       },
