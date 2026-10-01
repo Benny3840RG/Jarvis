@@ -24,7 +24,7 @@ import {
 } from "../../invoices/invoice.js";
 import { businessDataFiles } from "../../persistence/jarvisDataPaths.js";
 import { JsonProjectStore } from "../../projects/jsonProjectStore.js";
-import { PROJECT_STATUSES, type Project } from "../../projects/project.js";
+import { parseProjectScheduledDate, PROJECT_STATUSES, type Project } from "../../projects/project.js";
 import { JsonPropertyStore } from "../../properties/jsonPropertyStore.js";
 import type { Property } from "../../properties/property.js";
 import { JsonQuoteStore } from "../../quotes/jsonQuoteStore.js";
@@ -297,7 +297,7 @@ function parseProject(value: unknown, at: string): Project {
     title: strictText(row.title, `${at}.title`),
     status: strictEnumValue(row.status, PROJECT_STATUSES, `${at}.status`),
     ...present("notes", optional(row.notes, `${at}.notes`, strictText)),
-    ...present("scheduledFor", optional(row.scheduledFor, `${at}.scheduledFor`, strictText)),
+    ...present("scheduledFor", optional(row.scheduledFor, `${at}.scheduledFor`, parseProjectScheduledDate)),
     createdAt: strictTimestamp(row.createdAt, `${at}.createdAt`),
     updatedAt: strictTimestamp(row.updatedAt, `${at}.updatedAt`),
   };
