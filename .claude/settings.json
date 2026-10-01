@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run check)",
+      "mcp__github__pull_request_read",
+      "mcp__github__get_job_logs",
+      "mcp__github__actions_list",
+      "mcp__github__actions_get",
+      "mcp__github__get_commit",
+      "mcp__github__list_pull_requests",
+      "mcp__Claude_Code_Remote__list_triggers"
+    ]
+  }
+}
