@@ -1,5 +1,24 @@
 # Jarvis TypeScript Roadmap
 
+## Phase 0 baseline (2026-10-01)
+
+Baseline taken on `main` at `fe84fd4a` after a clean `npm ci` (Node v24.20.0):
+
+- `npm run check` passes: hygiene, `tsc`, ESLint, Prettier, OpenAPI lint, 2189 Node
+  tests and 455 Convex/vitest tests (46 files), 0 failures.
+- `npm run openapi:lint` passes with zero warnings.
+- `npm run smoke:convex` was not run: it needs a `dev:` deployment and no Convex
+  behaviour changed. Run it before any Convex-touching change.
+- No fixes were needed. Older entries below cite smaller counts (for example 1174
+  Node tests on 2026-09-08); this entry supersedes them.
+
+Next (Phase 1, core data model and invariants):
+
+1. Audit task/reminder/assistant-state invariants (duplicate IDs, re-completion,
+   due normalisation) and confirm the JSON and Convex stores enforce the same ones.
+2. Close any gap with failing tests first, then the minimal fix.
+3. Add a shared invariant suite that both providers must pass.
+
 ## S4 closed denial-decision receipts (2026-09-23)
 
 The unregistered S4 adapter now restores the executor's blocked
