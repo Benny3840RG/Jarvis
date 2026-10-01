@@ -1,5 +1,27 @@
 # Jarvis TypeScript Roadmap
 
+## Daily brief: open enquiries and unpaid invoices (2026-10-01, #670)
+
+The brief now opens each day with who is waiting on Benny and who owes him money.
+
+Completed:
+
+- `GET /api/v1/brief` gains two sections, OpenAPI first: `enquiries` (open count, counts by
+  urgency, open list ordered emergency, urgent, standard, then longest waiting) and `invoices`
+  (draft count, unpaid count, unpaid total, unpaid list oldest issue first). Lists are capped at 5.
+- The headline adds "N open enquiries" and "N invoices unpaid" after its existing clauses.
+- `get_daily_brief` advertises the new sections in its MCP output schema (optional there, so the
+  adapter still accepts an older API).
+- `tests/briefHttp.test.ts` now validates the live response against the OpenAPI `BriefResponse`
+  schema, so contract and implementation can't drift apart silently.
+
+Decisions:
+
+- "Unpaid" means issued with `balanceDue > 0`. Drafts are counted separately; paid and void are excluded.
+- No overdue flag: invoice `dueDate` is free text, so the brief does not guess at dates.
+
+Next: owner decision on quote drafting through MCP (#658); pinned contract drift (#658).
+
 ## S4 closed denial-decision receipts (2026-09-23)
 
 The unregistered S4 adapter now restores the executor's blocked
