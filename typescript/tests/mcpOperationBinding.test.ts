@@ -229,9 +229,81 @@ function sampleBrief() {
   };
 }
 
+function sampleProperty(id = "property-1") {
+  return {
+    id,
+    clientId: "client-1",
+    address: "12 Example St",
+    hazards: [],
+    createdAt: 1,
+    updatedAt: 1,
+  };
+}
+
+function sampleEnquiry(id = "enquiry-1") {
+  return {
+    id,
+    clientId: "client-1",
+    source: "phone",
+    requestedWork: "Prune trees",
+    urgency: "standard",
+    attachmentRefs: [],
+    status: "open",
+    createdAt: 1,
+    updatedAt: 1,
+  };
+}
+
+function sampleInvoice(id = "invoice-1") {
+  return {
+    id,
+    clientId: "client-1",
+    number: "INV-1",
+    status: "draft",
+    lineItems: [{ description: "Recorded item", quantity: 1, unitPrice: 100 }],
+    subtotal: 100,
+    tax: 0,
+    total: 100,
+    amountPaid: 0,
+    balanceDue: 100,
+    paymentStatus: "unpaid",
+    payments: [],
+    createdAt: 1,
+    updatedAt: 1,
+  };
+}
+
 /** Schema-valid mock responses so tool output validation never short-circuits a probe. */
 function mockResponse(method: string, path: string): Response {
   if (path === "/api/v1/status") return Response.json(STATUS);
+  if (path === "/api/v1/properties") {
+    return method === "POST"
+      ? Response.json({ data: sampleProperty() })
+      : Response.json({ data: [sampleProperty()], count: 1 });
+  }
+  if (/^\/api\/v1\/properties\/[^/]+$/.test(path)) return Response.json({ data: sampleProperty() });
+  if (path === "/api/v1/enquiries") {
+    return method === "POST"
+      ? Response.json({ data: sampleEnquiry() })
+      : Response.json({ data: [sampleEnquiry()], count: 1 });
+  }
+  if (/^\/api\/v1\/enquiries\/[^/]+\/convert-project$/.test(path)) {
+    return Response.json({
+      data: {
+        enquiry: { ...sampleEnquiry(), status: "converted", convertedProjectId: "project-1" },
+        project: sampleProject(),
+        replayed: false,
+      },
+    });
+  }
+  if (/^\/api\/v1\/enquiries\/[^/]+(\/close)?$/.test(path))
+    return Response.json({ data: sampleEnquiry() });
+  if (path === "/api/v1/invoices") {
+    return method === "POST"
+      ? Response.json({ data: sampleInvoice() })
+      : Response.json({ data: [sampleInvoice()], count: 1 });
+  }
+  if (/^\/api\/v1\/invoices\/[^/]+$/.test(path)) return Response.json({ data: sampleInvoice() });
   if (path === "/api/v1/settings/general") {
     return Response.json({
       timezone: {
@@ -442,6 +514,21 @@ const TOOL_INVOCATIONS: Record<string, Record<string, unknown>> = {
   delete_project: { projectId: "project-1" },
   list_quotes: {},
   get_quote: { quoteId: "quote-1" },
+  list_properties: { clientId: "client-1" },
+  get_property: { propertyId: "property-1" },
+  create_property: { clientId: "client-1", address: "12 Example St" },
+  update_property: { propertyId: "property-1", serviceNotes: "Side gate" },
+  delete_property: { propertyId: "property-1" },
+  list_enquiries: { status: "open" },
+  get_enquiry: { enquiryId: "enquiry-1" },
+  create_enquiry: { clientId: "client-1", source: "phone", requestedWork: "Prune trees" },
+  update_enquiry: { enquiryId: "enquiry-1", urgency: "urgent" },
+  close_enquiry: { enquiryId: "enquiry-1", reason: "Not going ahead" },
+  convert_enquiry_to_project: { enquiryId: "enquiry-1" },
+  list_invoices: { status: "draft" },
+  get_invoice: { invoiceId: "invoice-1" },
+  create_invoice_draft: { clientId: "client-1", number: "INV-1" },
+  update_invoice_draft: { invoiceId: "invoice-1", notes: "14 days" },
   get_daily_brief: {},
   list_errands: {},
   get_errand: { errandId: "errand-1" },
@@ -511,7 +598,6 @@ describe("MCP tool operation bindings", () => {
         Object.keys(MCP_TOOL_OPERATIONS).sort(),
         "The invocation table drifted from the registered MCP tool surface.",
       );
-
       // Every declared tool must be probed here unless a dedicated suite proves its
       // binding, so a new tool cannot pass this test without ever being called.
       for (const tool of Object.keys(MCP_TOOL_OPERATIONS)) {
