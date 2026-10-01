@@ -27,7 +27,7 @@ type LockState =
 
 type ReclaimClaimState =
   | { kind: "valid"; generation: number; record: LockRecord }
-  | { kind: "malformed"; generation: number; modifiedAt: number };
+  | { kind: "malformed"; generation: number };
 
 type ReclaimClaim = {
   path: string;
@@ -173,10 +173,8 @@ export class JsonFileLock {
     for (const candidate of candidates) {
       const claimPath = path.join(directory, candidate.name);
       let raw: string;
-      let stat: Awaited<ReturnType<typeof fs.stat>>;
       try {
         raw = await fs.readFile(claimPath, "utf8");
-        stat = await fs.stat(claimPath);
       } catch (error: unknown) {
         if (isNodeError(error) && error.code === "ENOENT") continue;
         throw error;
@@ -194,7 +192,6 @@ export class JsonFileLock {
       return {
         kind: "malformed",
         generation: candidate.generation,
-        modifiedAt: stat.mtimeMs,
       };
     }
 
@@ -206,12 +203,11 @@ export class JsonFileLock {
   ): Promise<ReclaimClaim | null> {
     const identity = stateIdentity(state);
     const latest = await this.readLatestReclaimClaim(identity);
-    const malformedGraceMs = Math.max(100, this.timeoutMs);
 
     if (latest?.kind === "valid" && isProcessAlive(latest.record.pid)) return null;
-    if (latest?.kind === "malformed" && Date.now() - latest.modifiedAt < malformedGraceMs) {
-      return null;
-    }
+    // Age cannot prove that an unknown claim owner is dead. A paused live
+    // writer and a crashed writer are indistinguishable here.
+    if (latest?.kind === "malformed") return null;
 
     const generation = (latest?.generation ?? -1) + 1;
     const claimPath = path.join(
@@ -224,19 +220,25 @@ export class JsonFileLock {
       token: randomUUID(),
     };
 
+    const tempPath = `${claimPath}.tmp-${process.pid}-${record.token}`;
     let handle: FileHandle | undefined;
     try {
-      handle = await fs.open(claimPath, "wx", 0o600);
+      handle = await fs.open(tempPath, "wx", 0o600);
       await handle.writeFile(`${JSON.stringify(record)}\n`, "utf8");
       await handle.sync();
       await handle.close();
       handle = undefined;
-      return { path: claimPath, identity };
-    } catch (error: unknown) {
+      try {
+        // Election sees either no claim or the complete immutable owner record.
+        await fs.link(tempPath, claimPath);
+        return { path: claimPath, identity };
+      } catch (error: unknown) {
+        if (isNodeError(error) && error.code === "EEXIST") return null;
+        throw error;
+      }
+    } finally {
       await handle?.close().catch(() => undefined);
-      if (isNodeError(error) && error.code === "EEXIST") return null;
-      await fs.rm(claimPath, { force: true }).catch(() => undefined);
-      throw error;
+      await fs.rm(tempPath, { force: true }).catch(() => undefined);
     }
   }
 
@@ -254,10 +256,17 @@ export class JsonFileLock {
     const claim = await this.claimReclamation(state);
     if (!claim) return false;
 
+    let releaseClaim = false;
     try {
       const confirmed = await this.readState();
-      if (confirmed.kind === "missing") return true;
-      if (stateIdentity(confirmed) !== claim.identity) return false;
+      if (confirmed.kind === "missing") {
+        releaseClaim = true;
+        return true;
+      }
+      if (stateIdentity(confirmed) !== claim.identity) {
+        releaseClaim = true;
+        return false;
+      }
 
       if (confirmed.kind === "valid") {
         if (isProcessAlive(confirmed.record.pid)) return false;
@@ -267,8 +276,12 @@ export class JsonFileLock {
 
       try {
         await fs.rm(this.lockPath);
+        releaseClaim = true;
       } catch (error: unknown) {
-        if (isNodeError(error) && error.code === "ENOENT") return true;
+        if (isNodeError(error) && error.code === "ENOENT") {
+          releaseClaim = true;
+          return true;
+        }
         throw error;
       }
 
@@ -281,7 +294,9 @@ export class JsonFileLock {
       }
       return true;
     } finally {
-      await fs.rm(claim.path, { force: true }).catch(() => undefined);
+      // If unlink failed, retain this generation: dropping it could let a
+      // delayed reader elect another owner from a recycled claim pathname.
+      if (releaseClaim) await fs.rm(claim.path, { force: true }).catch(() => undefined);
     }
   }
 
