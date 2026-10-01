@@ -303,7 +303,9 @@ function parseProject(value: unknown, at: string): Project {
     ...present("notes", optional(row.notes, `${at}.notes`, strictText)),
     ...present(
       "scheduledFor",
-      optional(row.scheduledFor, `${at}.scheduledFor`, parseProjectScheduledDate),
+      optional(row.scheduledFor, `${at}.scheduledFor`, (date, fieldAt) =>
+        parseProjectScheduledDate(strictText(date, fieldAt)),
+      ),
     ),
     createdAt: strictTimestamp(row.createdAt, `${at}.createdAt`),
     updatedAt: strictTimestamp(row.updatedAt, `${at}.updatedAt`),
