@@ -7,6 +7,8 @@ import {
   composeDailyBrief,
 } from "../src/briefs/brief.js";
 import type { Asset } from "../src/assets/asset.js";
+import type { Enquiry, EnquiryStatus, EnquiryUrgency } from "../src/enquiries/enquiry.js";
+import type { Invoice, InvoiceStatus } from "../src/invoices/invoice.js";
 import type { Reminder, Task } from "../src/persistence/types.js";
 import type { Project } from "../src/projects/project.js";
 import type { Quote, QuoteStatus } from "../src/quotes/quote.js";
@@ -60,6 +62,52 @@ function quote(id: string, status: QuoteStatus, total: number, updatedAt = 1): Q
   };
 }
 
+function enquiry(
+  id: string,
+  urgency: EnquiryUrgency,
+  createdAt: number,
+  status: EnquiryStatus = "open",
+): Enquiry {
+  return {
+    id,
+    clientId: "c1",
+    source: "phone",
+    requestedWork: `Work ${id}`,
+    urgency,
+    attachmentRefs: [],
+    status,
+    createdAt,
+    updatedAt: createdAt,
+  };
+}
+
+function invoice(
+  id: string,
+  status: InvoiceStatus,
+  total: number,
+  amountPaid: number,
+  issuedAt?: number,
+): Invoice {
+  const balanceDue = total - amountPaid;
+  return {
+    id,
+    clientId: "c1",
+    number: `INV-${id}`,
+    status,
+    lineItems: [{ description: "Work", quantity: 1, unitPrice: total }],
+    subtotal: total,
+    tax: 0,
+    total,
+    amountPaid,
+    balanceDue,
+    paymentStatus: amountPaid === 0 ? "unpaid" : balanceDue > 0 ? "partial" : "paid",
+    payments: [],
+    ...(issuedAt === undefined ? {} : { issuedAt }),
+    createdAt: 1,
+    updatedAt: 1,
+  };
+}
+
 function baseInputs() {
   return {
     now: NOW,
@@ -69,6 +117,8 @@ function baseInputs() {
     projects: [] as Project[],
     quotes: [] as Quote[],
     assets: [] as Asset[],
+    enquiries: [] as Enquiry[],
+    invoices: [] as Invoice[],
   };
 }
 
@@ -161,7 +211,7 @@ describe("composeDailyBrief", () => {
     });
     assert.equal(
       brief.headline,
-      "1 open task, 1 reminder due, 1 active project, 1 quote awaiting response.",
+      "1 open task, 1 reminder due, 1 active project, 1 quote awaiting response, 0 open enquiries, 0 invoices unpaid.",
     );
     assert.equal(brief.generatedAt, new Date(NOW).toISOString());
     assert.equal(brief.timezone, "Australia/Melbourne");
@@ -171,9 +221,12 @@ describe("composeDailyBrief", () => {
     const brief = composeDailyBrief(baseInputs());
     assert.equal(
       brief.headline,
-      "0 open tasks, 0 reminders due, 0 active projects, 0 quotes awaiting response.",
+      "0 open tasks, 0 reminders due, 0 active projects, 0 quotes awaiting response, 0 open enquiries, 0 invoices unpaid.",
     );
     assert.deepEqual(brief.tasks.open, []);
+    assert.deepEqual(brief.enquiries.open, []);
+    assert.deepEqual(brief.invoices.unpaid, []);
+    assert.equal(brief.invoices.unpaidTotal, 0);
     assert.equal(brief.quotes.pipelineTotal, 0);
     assert.equal(brief.maintenance.dueCount, 0);
     assert.equal(brief.maintenance.dueSoonCount, 0);
@@ -199,5 +252,61 @@ describe("composeDailyBrief", () => {
     assert.equal(brief.maintenance.dueSoonCount, 1);
     assert.equal(brief.maintenance.dueSoon[0].id, "soon");
     assert.equal(brief.maintenance.dueSoon[0].due, false);
+  });
+
+  it("lists open enquiries most urgent first, then longest waiting, and caps them", () => {
+    const brief = composeDailyBrief({
+      ...baseInputs(),
+      enquiries: [
+        enquiry("std-old", "standard", 10),
+        enquiry("std-new", "standard", 50),
+        enquiry("urgent", "urgent", 40),
+        enquiry("emergency", "emergency", 60),
+        enquiry("closed", "emergency", 1, "closed"),
+        enquiry("converted", "urgent", 1, "converted"),
+        ...Array.from({ length: 4 }, (_, index) =>
+          enquiry(`extra-${index}`, "standard", 100 + index),
+        ),
+      ],
+    });
+    assert.equal(brief.enquiries.openCount, 8);
+    assert.deepEqual(brief.enquiries.countsByUrgency, { standard: 6, urgent: 1, emergency: 1 });
+    assert.equal(brief.enquiries.open.length, BRIEF_HIGHLIGHT_LIMIT);
+    assert.deepEqual(
+      brief.enquiries.open.map((item) => item.id),
+      ["emergency", "urgent", "std-old", "std-new", "extra-0"],
+    );
+    assert.match(brief.headline, /8 open enquiries/);
+  });
+
+  it("totals unpaid issued invoices, oldest issue first, and counts drafts separately", () => {
+    const brief = composeDailyBrief({
+      ...baseInputs(),
+      invoices: [
+        invoice("draft", "draft", 500, 0),
+        invoice("recent", "issued", 300, 0, 900),
+        invoice("partial", "issued", 1000.1, 400.05, 100),
+        invoice("paid", "paid", 200, 200, 50),
+        invoice("void", "void", 700, 0, 20),
+        invoice("issued-settled", "issued", 100, 100, 30),
+      ],
+    });
+    assert.equal(brief.invoices.draftCount, 1);
+    assert.equal(brief.invoices.unpaidCount, 2);
+    assert.deepEqual(
+      brief.invoices.unpaid.map((item) => item.id),
+      ["partial", "recent"],
+    );
+    assert.equal(brief.invoices.unpaidTotal, 900.05, "sums balanceDue, rounded to cents");
+    assert.match(brief.headline, /2 invoices unpaid\.$/);
+  });
+
+  it("uses singular wording for one enquiry and one unpaid invoice", () => {
+    const brief = composeDailyBrief({
+      ...baseInputs(),
+      enquiries: [enquiry("e1", "standard", 1)],
+      invoices: [invoice("i1", "issued", 50, 0, 1)],
+    });
+    assert.match(brief.headline, /1 open enquiry, 1 invoice unpaid\.$/);
   });
 });

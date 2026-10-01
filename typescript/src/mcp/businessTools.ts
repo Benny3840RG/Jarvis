@@ -83,7 +83,7 @@ const propertySchema = z.object({
 const enquiryStatus = z.enum(["open", "converted", "closed"]);
 const enquiryUrgency = z.enum(["standard", "urgent", "emergency"]);
 
-const enquirySchema = z.object({
+export const enquirySchema = z.object({
   id: z.string(),
   clientId: z.string(),
   propertyId: z.string().optional(),
@@ -114,7 +114,7 @@ const conversionProjectSchema = z.object({
 
 const invoiceStatus = z.enum(["draft", "issued", "paid", "void"]);
 
-const invoiceSchema = z.object({
+export const invoiceSchema = z.object({
   id: z.string(),
   clientId: z.string(),
   projectId: z.string().optional(),

@@ -1,5 +1,7 @@
 import type { Asset } from "../assets/asset.js";
 import { deriveAssetView, type AssetView } from "../assets/assetView.js";
+import { ENQUIRY_URGENCIES, type Enquiry, type EnquiryUrgency } from "../enquiries/enquiry.js";
+import type { Invoice } from "../invoices/invoice.js";
 import type { Reminder, Task } from "../persistence/types.js";
 import { PROJECT_STATUSES, type Project, type ProjectStatus } from "../projects/project.js";
 import { QUOTE_STATUSES, roundMoney, type Quote, type QuoteStatus } from "../quotes/quote.js";
@@ -58,6 +60,26 @@ export interface BriefMaintenance {
   dueSoon: AssetView[];
 }
 
+export interface BriefEnquiries {
+  openCount: number;
+  countsByUrgency: Record<EnquiryUrgency, number>;
+  /** Open enquiries, most urgent first, then longest waiting, capped. */
+  open: Enquiry[];
+}
+
+export interface BriefInvoices {
+  draftCount: number;
+  /** Issued invoices with a balance still due. */
+  unpaidCount: number;
+  /** Sum of `balanceDue` across unpaid invoices, rounded to cents. */
+  unpaidTotal: number;
+  /**
+   * Unpaid invoices, oldest issue first, capped. No overdue status is derived:
+   * `dueDate` is free text, so the brief does not guess at dates.
+   */
+  unpaid: Invoice[];
+}
+
 export interface DailyBrief {
   generatedAt: string;
   timezone: string;
@@ -67,6 +89,8 @@ export interface DailyBrief {
   projects: BriefProjects;
   quotes: BriefQuotes;
   maintenance: BriefMaintenance;
+  enquiries: BriefEnquiries;
+  invoices: BriefInvoices;
 }
 
 export interface BriefInputs {
@@ -77,6 +101,8 @@ export interface BriefInputs {
   projects: Project[];
   quotes: Quote[];
   assets: Asset[];
+  enquiries: Enquiry[];
+  invoices: Invoice[];
 }
 
 function countLabel(count: number, singular: string, plural = `${singular}s`): string {
@@ -141,11 +167,29 @@ export function composeDailyBrief(inputs: BriefInputs): DailyBrief {
     )
     .sort(byNextDue);
 
+  // Most urgent first; within one urgency, the enquiry waiting longest first.
+  const urgencyRank = (urgency: EnquiryUrgency) =>
+    ENQUIRY_URGENCIES.length - 1 - ENQUIRY_URGENCIES.indexOf(urgency);
+  const openEnquiries = inputs.enquiries
+    .filter((enquiry) => enquiry.status === "open")
+    .sort((a, b) => urgencyRank(a.urgency) - urgencyRank(b.urgency) || a.createdAt - b.createdAt);
+  const enquiryUrgencyCounts = Object.fromEntries(
+    ENQUIRY_URGENCIES.map((urgency) => [urgency, 0]),
+  ) as Record<EnquiryUrgency, number>;
+  for (const enquiry of openEnquiries) enquiryUrgencyCounts[enquiry.urgency] += 1;
+
+  const unpaidInvoices = inputs.invoices
+    .filter((invoice) => invoice.status === "issued" && invoice.balanceDue > 0)
+    .sort((a, b) => (a.issuedAt ?? a.createdAt) - (b.issuedAt ?? b.createdAt));
+  const draftInvoiceCount = inputs.invoices.filter((invoice) => invoice.status === "draft").length;
+
   const headline = [
     countLabel(openTasks.length, "open task"),
     countLabel(due.length, "reminder due", "reminders due"),
     countLabel(activeProjects.length, "active project"),
     countLabel(awaitingResponse.length, "quote awaiting response", "quotes awaiting response"),
+    countLabel(openEnquiries.length, "open enquiry", "open enquiries"),
+    countLabel(unpaidInvoices.length, "invoice unpaid", "invoices unpaid"),
   ].join(", ");
 
   return {
@@ -181,6 +225,17 @@ export function composeDailyBrief(inputs: BriefInputs): DailyBrief {
       dueSoonCount: dueSoonAssets.length,
       due: cap(dueAssets),
       dueSoon: cap(dueSoonAssets),
+    },
+    enquiries: {
+      openCount: openEnquiries.length,
+      countsByUrgency: enquiryUrgencyCounts,
+      open: cap(openEnquiries),
+    },
+    invoices: {
+      draftCount: draftInvoiceCount,
+      unpaidCount: unpaidInvoices.length,
+      unpaidTotal: roundMoney(unpaidInvoices.reduce((sum, invoice) => sum + invoice.balanceDue, 0)),
+      unpaid: cap(unpaidInvoices),
     },
   };
 }

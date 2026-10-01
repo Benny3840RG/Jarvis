@@ -6,6 +6,8 @@ import { resolveReminderTimezone } from "../reminders/due.js";
 import type { ProjectStore } from "../projects/project.js";
 import type { QuoteStore } from "../quotes/quote.js";
 import type { AssetStore } from "../assets/asset.js";
+import type { EnquiryStore } from "../enquiries/enquiry.js";
+import type { InvoiceStore } from "../invoices/invoice.js";
 import type { HttpAppConfig } from "./config.js";
 import { JarvisProblem } from "./problemDetails.js";
 import {
@@ -14,6 +16,8 @@ import {
   HTTP_PROJECT_STORE,
   HTTP_QUOTE_STORE,
   HTTP_ASSET_STORE,
+  HTTP_ENQUIRY_STORE,
+  HTTP_INVOICE_STORE,
 } from "./tokens.js";
 
 function briefUnavailable(): JarvisProblem {
@@ -28,7 +32,8 @@ function briefUnavailable(): JarvisProblem {
 /**
  * Read-only daily digest composed from the authoritative stores. The brief has
  * no storage of its own: every number is derived on request, so it can never
- * drift from the tasks, reminders, projects, and quotes it summarises.
+ * drift from the tasks, reminders, projects, quotes, enquiries and invoices it
+ * summarises.
  */
 @Controller("api/v1/brief")
 export class BriefController {
@@ -38,6 +43,8 @@ export class BriefController {
     @Inject(HTTP_PROJECT_STORE) private readonly projects: ProjectStore,
     @Inject(HTTP_QUOTE_STORE) private readonly quotes: QuoteStore,
     @Inject(HTTP_ASSET_STORE) private readonly assets: AssetStore,
+    @Inject(HTTP_ENQUIRY_STORE) private readonly enquiries: EnquiryStore,
+    @Inject(HTTP_INVOICE_STORE) private readonly invoices: InvoiceStore,
   ) {}
 
   @Get()
@@ -55,12 +62,14 @@ export class BriefController {
       );
     }
     try {
-      const [tasks, reminders, projects, quotes, assets] = await Promise.all([
+      const [tasks, reminders, projects, quotes, assets, enquiries, invoices] = await Promise.all([
         this.persistence.listTasks(),
         this.persistence.listReminders(),
         this.projects.list(),
         this.quotes.list(),
         this.assets.list(),
+        this.enquiries.list({ status: "open" }),
+        this.invoices.list(),
       ]);
       return {
         data: composeDailyBrief({
@@ -71,6 +80,8 @@ export class BriefController {
           projects,
           quotes,
           assets,
+          enquiries,
+          invoices,
         }),
       };
     } catch {
