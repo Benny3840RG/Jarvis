@@ -25,7 +25,11 @@ import type {
 } from "../enquiries/enquiry.js";
 import type { Invoice, InvoiceInput, InvoiceStatus, InvoiceUpdate } from "../invoices/invoice.js";
 import type { QuoteSnapshot } from "../quotes/quoteLifecycle.js";
-import type { QuoteSummary } from "../quotes/quoteRepository.js";
+import type {
+  CreateQuoteInput,
+  QuoteSummary,
+  UpdateQuoteDraftInput,
+} from "../quotes/quoteRepository.js";
 import type { ToolAction, ToolActionState } from "../actions/toolActions.js";
 import type { SystemStatus } from "../http/contracts.js";
 import type { OperatorGeneralSettings } from "../reminders/due.js";
@@ -820,6 +824,33 @@ export class JarvisApiClient {
       await this.request<DataResponse<QuoteSnapshot>>(
         "GET",
         `/api/v1/quotes/${encodeURIComponent(quoteId)}`,
+      )
+    ).data;
+  }
+
+  /**
+   * Creates a new quote as revision 1 in draft. The server computes totals and
+   * owns the lifecycle; this is draft-only (it cannot finalise or send).
+   * Requires the Convex quote lifecycle provider.
+   */
+  async createQuoteDraft(input: CreateQuoteInput): Promise<QuoteSnapshot> {
+    return (
+      await this.request<DataResponse<QuoteSnapshot>>("POST", "/api/v1/quotes", { body: input })
+    ).data;
+  }
+
+  /**
+   * Edits a draft quote revision under optimistic concurrency. The server
+   * refuses edits to reviewed or finalised revisions and recomputes totals.
+   * Requires the Convex quote lifecycle provider.
+   */
+  async updateQuoteDraft(input: UpdateQuoteDraftInput): Promise<QuoteSnapshot> {
+    const { quoteId, revision, ...body } = input;
+    return (
+      await this.request<DataResponse<QuoteSnapshot>>(
+        "PATCH",
+        `/api/v1/quotes/${encodeURIComponent(quoteId)}/revisions/${revision}`,
+        { body },
       )
     ).data;
   }
