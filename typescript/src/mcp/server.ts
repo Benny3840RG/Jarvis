@@ -376,6 +376,16 @@ const briefSchema = z.object({
       open: z.array(errandSchema),
     })
     .optional(),
+  scheduled: z
+    .object({
+      todayCount: z.number().int().nonnegative(),
+      thisWeekCount: z.number().int().nonnegative(),
+      unscheduledCount: z.number().int().nonnegative(),
+      today: z.array(projectSchema),
+      thisWeek: z.array(projectSchema),
+      unscheduled: z.array(projectSchema),
+    })
+    .optional(),
 });
 
 // Read-only. Mirrors OperationsInbox exactly; no schema here ever represents

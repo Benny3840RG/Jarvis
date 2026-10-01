@@ -5,6 +5,8 @@ import {
   BRIEF_HIGHLIGHT_LIMIT,
   BRIEF_UPCOMING_WINDOW_MS,
   composeDailyBrief,
+  isoWeekRange,
+  operatorLocalDate,
 } from "../src/briefs/brief.js";
 import type { Asset } from "../src/assets/asset.js";
 import type { Enquiry, EnquiryStatus, EnquiryUrgency } from "../src/enquiries/enquiry.js";
@@ -195,6 +197,121 @@ describe("composeDailyBrief", () => {
       brief.projects.active.map((entry) => entry.id),
       ["p2", "p1"],
     );
+  });
+
+  it("buckets booked jobs into today, later this week, and unscheduled active", () => {
+    // NOW is 2026-07-21 18:00 in Melbourne (Tuesday); its Mon–Sun week ends 2026-07-26.
+    const booked = (
+      id: string,
+      status: Project["status"],
+      scheduledFor: string,
+      updatedAt = 1,
+    ) => ({
+      ...project(id, status, updatedAt),
+      scheduledFor,
+    });
+    const projects = [
+      booked("today-active", "active", "2026-07-21", 10),
+      booked("today-quoted", "quoted", "2026-07-21", 20),
+      booked("week-wed", "active", "2026-07-22", 5),
+      booked("week-sun", "lead", "2026-07-26", 5), // Sunday boundary is in the week
+      booked("next-mon", "active", "2026-07-27", 5), // next week is excluded
+      booked("past", "active", "2026-07-20", 5), // earlier today-week day, already gone
+      booked("done-today", "done", "2026-07-21", 5), // done jobs are not surfaced
+      project("unsched-active", "active", 30), // active, no date -> unscheduled
+      project("unsched-lead", "lead", 40), // only active counts as unscheduled
+    ];
+    const brief = composeDailyBrief({ ...baseInputs(), projects });
+    assert.equal(brief.scheduled.todayCount, 2);
+    // Same day: most recently updated first.
+    assert.deepEqual(
+      brief.scheduled.today.map((entry) => entry.id),
+      ["today-quoted", "today-active"],
+    );
+    assert.equal(brief.scheduled.thisWeekCount, 2);
+    // Soonest booked day first.
+    assert.deepEqual(
+      brief.scheduled.thisWeek.map((entry) => entry.id),
+      ["week-wed", "week-sun"],
+    );
+    assert.equal(brief.scheduled.unscheduledCount, 1);
+    assert.deepEqual(
+      brief.scheduled.unscheduled.map((entry) => entry.id),
+      ["unsched-active"],
+    );
+  });
+
+  it("derives the local booking day from the timezone, not UTC", () => {
+    // 2026-07-21 20:00 UTC is already 2026-07-22 06:00 in Melbourne (+10).
+    const now = Date.UTC(2026, 6, 21, 20, 0, 0);
+    const booked = (id: string, scheduledFor: string) => ({
+      ...project(id, "active", 1),
+      scheduledFor,
+    });
+    const brief = composeDailyBrief({
+      ...baseInputs(),
+      now,
+      projects: [booked("tomorrow-utc", "2026-07-22"), booked("today-utc", "2026-07-21")],
+    });
+    assert.equal(brief.scheduled.todayCount, 1);
+    assert.deepEqual(
+      brief.scheduled.today.map((entry) => entry.id),
+      ["tomorrow-utc"],
+    );
+  });
+
+  it("applies the operator timezone's DST offset when resolving the local date", () => {
+    // Same 13:30 UTC wall time, six months apart: Melbourne is AEDT (+11) in
+    // January and AEST (+10) in July, so the local calendar date differs.
+    assert.equal(
+      operatorLocalDate(Date.UTC(2026, 0, 14, 13, 30, 0), "Australia/Melbourne"),
+      "2026-01-15",
+    );
+    assert.equal(
+      operatorLocalDate(Date.UTC(2026, 6, 14, 13, 30, 0), "Australia/Melbourne"),
+      "2026-07-14",
+    );
+    // UTC itself has no DST: both resolve to the UTC calendar day.
+    assert.equal(operatorLocalDate(Date.UTC(2026, 0, 14, 13, 30, 0), "UTC"), "2026-01-14");
+  });
+
+  it("computes the Monday–Sunday week, including across a year boundary", () => {
+    assert.deepEqual(isoWeekRange("2026-07-21"), { start: "2026-07-20", end: "2026-07-26" });
+    assert.deepEqual(isoWeekRange("2026-07-20"), { start: "2026-07-20", end: "2026-07-26" }); // Monday
+    assert.deepEqual(isoWeekRange("2026-07-26"), { start: "2026-07-20", end: "2026-07-26" }); // Sunday
+    assert.deepEqual(isoWeekRange("2027-01-01"), { start: "2026-12-28", end: "2027-01-03" }); // Friday
+  });
+
+  it("treats a Sunday with nothing left this week as an empty week bucket", () => {
+    // 2026-07-26 12:00 Melbourne is a Sunday; the week has no days after today.
+    const now = Date.UTC(2026, 6, 26, 2, 0, 0);
+    const booked = (id: string, scheduledFor: string) => ({
+      ...project(id, "active", 1),
+      scheduledFor,
+    });
+    const brief = composeDailyBrief({
+      ...baseInputs(),
+      now,
+      projects: [booked("sunday", "2026-07-26"), booked("next-mon", "2026-07-27")],
+    });
+    assert.equal(brief.scheduled.todayCount, 1);
+    assert.equal(brief.scheduled.thisWeekCount, 0);
+  });
+
+  it("caps booked-today highlights and stays empty with no projects", () => {
+    const booked = Array.from({ length: 7 }, (_, index) => ({
+      ...project(`b-${index}`, "active", index),
+      scheduledFor: "2026-07-21",
+    }));
+    const brief = composeDailyBrief({ ...baseInputs(), projects: booked });
+    assert.equal(brief.scheduled.todayCount, 7);
+    assert.equal(brief.scheduled.today.length, BRIEF_HIGHLIGHT_LIMIT);
+
+    const empty = composeDailyBrief({ ...baseInputs() });
+    assert.equal(empty.scheduled.todayCount, 0);
+    assert.equal(empty.scheduled.thisWeekCount, 0);
+    assert.equal(empty.scheduled.unscheduledCount, 0);
+    assert.deepEqual(empty.scheduled.today, []);
   });
 
   it("derives quote pipeline and accepted totals from real quote totals", () => {

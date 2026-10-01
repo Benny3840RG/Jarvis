@@ -10510,7 +10510,8 @@
           "maintenance",
           "enquiries",
           "invoices",
-          "errands"
+          "errands",
+          "scheduled"
         ],
         "properties": {
           "generatedAt": {
@@ -10738,6 +10739,56 @@
                 "maxItems": 5,
                 "items": {
                   "$ref": "#/components/schemas/Errand"
+                }
+              }
+            }
+          },
+          "scheduled": {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "Jobs (projects) booked to a calendar day, derived from each project's scheduledFor against the operator-local date for generatedAt. today = booked for the operator-local today; thisWeek = booked later in the current Mon–Sun week (after today, through Sunday); unscheduled = active-status jobs with no booked date. Done jobs are excluded from today and thisWeek. Lists are soonest-booked first (ties most-recently-updated first) and capped; unscheduled is most-recently-updated first.",
+            "required": [
+              "todayCount",
+              "thisWeekCount",
+              "unscheduledCount",
+              "today",
+              "thisWeek",
+              "unscheduled"
+            ],
+            "properties": {
+              "todayCount": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "thisWeekCount": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Jobs booked after today through the end of the current Mon–Sun week."
+              },
+              "unscheduledCount": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Active-status jobs with no booked date."
+              },
+              "today": {
+                "type": "array",
+                "maxItems": 5,
+                "items": {
+                  "$ref": "#/components/schemas/Project"
+                }
+              },
+              "thisWeek": {
+                "type": "array",
+                "maxItems": 5,
+                "items": {
+                  "$ref": "#/components/schemas/Project"
+                }
+              },
+              "unscheduled": {
+                "type": "array",
+                "maxItems": 5,
+                "items": {
+                  "$ref": "#/components/schemas/Project"
                 }
               }
             }

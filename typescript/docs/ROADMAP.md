@@ -1,5 +1,40 @@
 # Jarvis TypeScript Roadmap
 
+## Daily brief + dashboard: scheduled jobs (2026-10-01)
+
+Nolan can now answer "what's booked today, what's on this week, and what still needs a date"
+— surfacing the `scheduledFor` primitive from the projects-scheduling slice (#679). Mission #680.
+
+Completed:
+
+- `composeDailyBrief` gains a `scheduled` section: `today` (jobs booked for the operator-local
+  today), `thisWeek` (booked later in the current Mon–Sun week, after today through Sunday), and
+  `unscheduled` (active-status jobs with no booked date), each with a count and a capped list.
+  Done jobs are excluded from today/thisWeek.
+- Deterministic, timezone-correct dates: the local "today" is derived from the brief's `now` +
+  IANA `timezone` via `Intl` (exported `operatorLocalDate`), and the week from the calendar date
+  itself (exported `isoWeekRange`). All date comparisons are lexicographic on `YYYY-MM-DD`. No
+  dates are guessed.
+- OpenAPI first: `DailyBrief` gains a required `scheduled` object; the MCP `get_daily_brief`
+  output schema carries it (optional there, so the adapter still accepts an older API's brief).
+- Dashboard: a "Booked today" stat and a "Scheduled jobs" panel (TODAY / THIS WEEK rows) in the
+  operations view, null-guarded like the other optional sections.
+- Tests: `brief.test.ts` (bucketing, timezone-vs-UTC day, DST offset, Mon–Sun week incl. a
+  year boundary, Sunday empty-week, cap/empty), `briefHttp.test.ts` (live `scheduled`, still
+  Ajv-validated against the OpenAPI `BriefResponse`), and the widget scheduled-panel render.
+
+Decisions:
+
+- "This week" is the current Monday–Sunday calendar week (AU/ISO convention), not a rolling
+  7-day window, so the boundary is well-defined and testable; today sits in its own bucket and
+  `thisWeek` is strictly the days after today through Sunday.
+- The headline sentence is left unchanged (its ordered items are contract-anchored in tests);
+  scheduling is surfaced as its own section and dashboard panel instead.
+- Past-dated still-active jobs ("booked but not done") are out of scope for this slice; an
+  overdue-unstarted view can build on the same field next.
+
+Next: an overdue-unstarted ("was booked, still open") view; optionally a headline mention.
+
 ## Projects: scheduled date (job booking) (2026-10-01)
 
 Jobs (projects) can now carry the day they're booked for — the foundation for a scheduling
@@ -68,8 +103,8 @@ Decisions:
 
 - Grouped by place, not by due date: errands have no due date. The order mirrors the
   conversational pull ("I'm at Bunnings, what do I need?").
-- No dashboard-widget panel yet; this is the brief/digest layer. A widget panel can follow
-  the #674 pattern if wanted.
+- Originally the brief/digest layer only; the errands dashboard panel followed in #678 (and
+  the scheduled-jobs panel in #680), so the operations view now mirrors the brief sections.
 
 ## Quote drafting through chat (MCP), draft-only (2026-10-01)
 

@@ -301,6 +301,99 @@ describe("Jarvis preview widget", () => {
     assert.equal(elements.get("nav-operations-count")?.textContent, "4");
   });
 
+  it("renders booked jobs in the scheduled-jobs panel", () => {
+    assert.match(widget, /Scheduled jobs/);
+    assert.match(widget, /Booked today/);
+    assert.match(widget, /id="operations-scheduled-list"/);
+
+    const renderSource = widget.match(
+      /(function renderOperations\(\) \{[\s\S]*?\})\n\s+function renderActivity/,
+    )?.[1];
+    const audSource = widget.match(/const aud = new Intl\.NumberFormat[^;]+;/)?.[0];
+    assert.ok(renderSource, "operations renderer was not found");
+    assert.ok(audSource, "AUD formatter was not found");
+
+    const elements = new Map<string, { id: string; textContent: string }>();
+    const lists = new Map<string, unknown[]>();
+    const byId = (id: string) => {
+      const existing = elements.get(id);
+      if (existing) return existing;
+      const element = { id, textContent: "" };
+      elements.set(id, element);
+      return element;
+    };
+    const text = (element: { textContent: string }, value: unknown) => {
+      element.textContent = value == null ? "" : String(value);
+    };
+    const fillList = (
+      element: { id: string },
+      items: unknown[],
+      _renderer: (item: unknown) => unknown,
+      _message: string,
+    ) => lists.set(element.id, items);
+
+    const todayJob = { id: "p-today", title: "Deck rebuild", status: "active" };
+    const weekJob = { id: "p-week", title: "Fence line", status: "quoted" };
+    const state = {
+      quotes: [],
+      quoteRegisterStatus: "ready",
+      brief: {
+        generatedAt: "2026-07-30T00:00:00.000Z",
+        headline: "Scheduled jobs fixture.",
+        reminders: { dueCount: 0, upcomingCount: 0 },
+        projects: { activeCount: 0, active: [] },
+        quotes: {
+          pipelineTotal: 0,
+          acceptedTotal: 0,
+          countsByStatus: { draft: 0, sent: 0, accepted: 0, declined: 0 },
+          awaitingResponse: [],
+          drafts: [],
+        },
+        maintenance: { dueCount: 0, dueSoonCount: 0, due: [], dueSoon: [] },
+        scheduled: {
+          todayCount: 1,
+          thisWeekCount: 1,
+          unscheduledCount: 2,
+          today: [todayJob],
+          thisWeek: [weekJob],
+          unscheduled: [],
+        },
+      },
+    };
+    const run = new Function(
+      "state",
+      "byId",
+      "text",
+      "fillList",
+      "operationsRow",
+      "quotePipelineRow",
+      "renderQuoteDetail",
+      "empty",
+      `"use strict"; ${audSource} ${renderSource}; renderOperations();`,
+    );
+    run(
+      state,
+      byId,
+      text,
+      fillList,
+      () => ({}),
+      () => ({}),
+      () => {},
+      () => ({}),
+    );
+
+    assert.equal(elements.get("brief-scheduled-today")?.textContent, "1");
+    assert.equal(
+      elements.get("operations-scheduled-count")?.textContent,
+      "1 TODAY · 1 THIS WEEK",
+    );
+    // Today's jobs lead, then later-this-week jobs, each tagged with when they fall.
+    assert.deepEqual(lists.get("operations-scheduled-list"), [
+      { ...todayJob, whenLabel: "TODAY" },
+      { ...weekJob, whenLabel: "THIS WEEK" },
+    ]);
+  });
+
   it("opens a register quote in the read-only inspector", async () => {
     const openSource = widget.match(
       /(async function openQuote\(summary\) \{[\s\S]*?\})\n\s+function renderQuoteDetail/,
