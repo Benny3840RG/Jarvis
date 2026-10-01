@@ -209,10 +209,7 @@ export class JsonFileLock {
     const malformedGraceMs = Math.max(100, this.timeoutMs);
 
     if (latest?.kind === "valid" && isProcessAlive(latest.record.pid)) return null;
-    if (
-      latest?.kind === "malformed" &&
-      Date.now() - latest.modifiedAt < malformedGraceMs
-    ) {
+    if (latest?.kind === "malformed" && Date.now() - latest.modifiedAt < malformedGraceMs) {
       return null;
     }
 
