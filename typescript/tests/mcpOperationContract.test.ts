@@ -43,29 +43,26 @@ function openApiExposedOperations(): Set<string> {
 }
 
 /**
- * Pre-existing drift, recorded rather than silently fixed (issue #658): these
- * operations were wired to MCP tools (list_quotes, get_quote,
- * run_persistence_settings_action) while their OpenAPI flag stayed false.
- * Correcting their flags is an owner contract decision, so they are pinned
- * here and the test fails if either side changes, forcing the list to shrink.
+ * Operations the MCP adapter reaches but deliberately does NOT mark
+ * `x-mcp-tool.exposed`, because the tool driving them is app-scoped
+ * (`visibility: ["app"]`), not offered to the model.
+ *
+ * `run_persistence_settings_action` runs destructive backup actions (restore)
+ * and is a Settings-widget tool only; exposing it to the model would create an
+ * unintended model-triggerable destructive surface. It stays unexposed by
+ * design — this is a permanent exemption, not drift. (The #658-era read
+ * stragglers list_quotes/get_quote were genuinely model-visible and are now
+ * correctly marked exposed.)
  */
-const LEGACY_UNMARKED = new Set([
-  "GET /api/v1/quotes",
-  "GET /api/v1/quotes/{quoteId}",
-  "POST /api/v1/settings/persistence/actions",
-]);
+const LEGACY_UNMARKED = new Set<string>(["POST /api/v1/settings/persistence/actions"]);
 
 /**
- * Pre-existing idempotentHint drift between these tools and their OpenAPI
- * x-mcp-tool annotations (issue #658). Pinned, not fixed here: which side is
- * right is a contract decision, and the test fails once either side changes.
+ * Tools whose annotations still disagree with their OpenAPI `x-mcp-tool`
+ * annotations. Empty: the task/reminder idempotentHint drift was corrected in
+ * the #670 follow-up by aligning the spec to the shipped tools (create is not
+ * idempotent, delete is). Kept as the exemption hook for any future drift.
  */
-const LEGACY_ANNOTATION_DRIFT = new Set([
-  "create_task",
-  "delete_task",
-  "create_reminder",
-  "delete_reminder",
-]);
+const LEGACY_ANNOTATION_DRIFT = new Set<string>([]);
 
 function openApiAnnotations(method: string, path: string): Record<string, boolean> {
   const raw = readFileSync(new URL("../openapi/jarvis.openapi.json", import.meta.url), "utf8");

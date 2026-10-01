@@ -105,7 +105,9 @@
       "getReminder",
       "createReminder",
       "updateReminder",
-      "deleteReminder"
+      "deleteReminder",
+      "listQuotes",
+      "getQuote"
     ],
     "restOnlyOperationIds": [
       "getHealth",
@@ -772,7 +774,7 @@
             "readOnlyHint": false,
             "destructiveHint": false,
             "openWorldHint": false,
-            "idempotentHint": true
+            "idempotentHint": false
           }
         },
         "requestBody": {
@@ -959,7 +961,7 @@
             "readOnlyHint": false,
             "destructiveHint": true,
             "openWorldHint": false,
-            "idempotentHint": false
+            "idempotentHint": true
           }
         },
         "responses": {
@@ -1108,7 +1110,7 @@
             "readOnlyHint": false,
             "destructiveHint": false,
             "openWorldHint": false,
-            "idempotentHint": true
+            "idempotentHint": false
           }
         },
         "requestBody": {
@@ -1295,7 +1297,7 @@
             "readOnlyHint": false,
             "destructiveHint": true,
             "openWorldHint": false,
-            "idempotentHint": false
+            "idempotentHint": true
           }
         },
         "responses": {
@@ -3309,7 +3311,7 @@
         "description": "Returns the authoritative list of quote aggregate/revision snapshots. Requires the Convex persistence provider.",
         "tags": ["Quotes"],
         "x-mcp-tool": {
-          "exposed": false,
+          "exposed": true,
           "annotations": {
             "readOnlyHint": true,
             "destructiveHint": false,
@@ -3450,7 +3452,7 @@
         "description": "Returns the current aggregate and current revision for one quote. Requires the Convex persistence provider.",
         "tags": ["Quotes"],
         "x-mcp-tool": {
-          "exposed": false,
+          "exposed": true,
           "annotations": {
             "readOnlyHint": true,
             "destructiveHint": false,
