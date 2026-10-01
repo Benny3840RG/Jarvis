@@ -27,6 +27,23 @@ Decisions:
 
 Next: surface scheduled jobs in the daily brief and dashboard (this week / overdue-unstarted).
 
+## Dashboard: errands panel in the operations view (2026-10-01)
+
+The errands the brief now carries also show on the operator console, so the home sector
+is visible where Benny already watches business operations (the #674 pattern).
+
+- `src/mcp/dashboard-v1.html`: an "Errands to run" snapshot tile (`brief-errand-count`) and a
+  list panel (`operations-errand-list` / `operations-errand-count`), each open errand showing
+  its place (or "NO SET PLACE"). The Operations nav badge now adds open errands to its
+  attention count alongside projects, finalised-open quotes, overdue maintenance, open
+  enquiries and unpaid invoices.
+- The renderer reads `brief.errands` only when present, and resets the tile/panel/count in the
+  no-brief branch, so it still renders against a brief from an older API.
+- `tests/mcpWidget.test.ts`: the operations-snapshot case now drives an errand through
+  `renderOperations` and asserts the tile, count, list and nav badge (now 4).
+
+Read-only widget change: no server, API, schema or MCP-tool change.
+
 ## Daily brief: errands (home / on-the-way sector) (2026-10-01)
 
 The daily brief now carries the home sector. It already digested tasks, reminders, projects,
