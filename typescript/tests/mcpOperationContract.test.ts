@@ -25,6 +25,59 @@ function openApiOperations(): Set<string> {
   return operations;
 }
 
+/** Operations whose `x-mcp-tool.exposed` flag is true in the OpenAPI contract. */
+function openApiExposedOperations(): Set<string> {
+  const raw = readFileSync(new URL("../openapi/jarvis.openapi.json", import.meta.url), "utf8");
+  const document = JSON.parse(raw) as {
+    paths: Record<string, Record<string, { "x-mcp-tool"?: { exposed?: boolean } }>>;
+  };
+  const operations = new Set<string>();
+  for (const [path, item] of Object.entries(document.paths)) {
+    for (const [method, operation] of Object.entries(item)) {
+      if (HTTP_METHODS.has(method) && operation["x-mcp-tool"]?.exposed === true) {
+        operations.add(`${method.toUpperCase()} ${path}`);
+      }
+    }
+  }
+  return operations;
+}
+
+/**
+ * Pre-existing drift, recorded rather than silently fixed (issue #658): these
+ * operations were wired to MCP tools (list_quotes, get_quote,
+ * run_persistence_settings_action) while their OpenAPI flag stayed false.
+ * Correcting their flags is an owner contract decision, so they are pinned
+ * here and the test fails if either side changes, forcing the list to shrink.
+ */
+const LEGACY_UNMARKED = new Set([
+  "GET /api/v1/quotes",
+  "GET /api/v1/quotes/{quoteId}",
+  "POST /api/v1/settings/persistence/actions",
+]);
+
+/**
+ * Pre-existing idempotentHint drift between these tools and their OpenAPI
+ * x-mcp-tool annotations (issue #658). Pinned, not fixed here: which side is
+ * right is a contract decision, and the test fails once either side changes.
+ */
+const LEGACY_ANNOTATION_DRIFT = new Set([
+  "create_task",
+  "delete_task",
+  "create_reminder",
+  "delete_reminder",
+]);
+
+function openApiAnnotations(method: string, path: string): Record<string, boolean> {
+  const raw = readFileSync(new URL("../openapi/jarvis.openapi.json", import.meta.url), "utf8");
+  const document = JSON.parse(raw) as {
+    paths: Record<
+      string,
+      Record<string, { "x-mcp-tool": { annotations: Record<string, boolean> } }>
+    >;
+  };
+  return document.paths[path][method.toLowerCase()]["x-mcp-tool"].annotations;
+}
+
 async function freePort(): Promise<number> {
   const server = createServer();
   await new Promise<void>((resolve, reject) => {
@@ -40,6 +93,10 @@ async function freePort(): Promise<number> {
 }
 
 async function registeredToolNames(): Promise<string[]> {
+  return (await registeredTools()).map((tool) => tool.name).sort();
+}
+
+async function registeredTools() {
   const config: JarvisMcpConfig = {
     host: "127.0.0.1",
     port: await freePort(),
@@ -49,8 +106,7 @@ async function registeredToolNames(): Promise<string[]> {
   const client = new Client({ name: "jarvis-contract-test", version: "0.1.0" });
   try {
     await client.connect(new StreamableHTTPClientTransport(new URL(running.url)));
-    const toolList = await client.listTools();
-    return toolList.tools.map((tool) => tool.name).sort();
+    return (await client.listTools()).tools;
   } finally {
     await client.close();
     await running.close();
@@ -76,6 +132,48 @@ describe("MCP operation contract", () => {
       [],
       `MCP adapter references operations absent from openapi/jarvis.openapi.json: ${missing.join(", ")}`,
     );
+  });
+
+  it("marks exactly the MCP-reached operations as x-mcp-tool exposed in OpenAPI", () => {
+    const exposedInSpec = openApiExposedOperations();
+    const reached = mcpExposedOperations();
+    const unmarked = [...reached].filter(
+      (operation) => !exposedInSpec.has(operation) && !LEGACY_UNMARKED.has(operation),
+    );
+    assert.deepEqual(
+      unmarked,
+      [],
+      `MCP reaches operations the OpenAPI contract marks x-mcp-tool.exposed=false: ${unmarked.join(", ")}`,
+    );
+    const unreached = [...exposedInSpec].filter((operation) => !reached.has(operation));
+    assert.deepEqual(
+      unreached,
+      [],
+      `OpenAPI marks operations as MCP-exposed that no MCP tool reaches: ${unreached.join(", ")}`,
+    );
+    for (const operation of LEGACY_UNMARKED) {
+      assert.ok(reached.has(operation), `${operation} is no longer reached; drop its exemption.`);
+      assert.ok(!exposedInSpec.has(operation), `${operation} is now marked; drop its exemption.`);
+    }
+  });
+
+  it("gives each single-operation tool the annotations its OpenAPI operation declares", async () => {
+    const tools = await registeredTools();
+    const mismatched: string[] = [];
+    for (const tool of tools) {
+      const operations = MCP_TOOL_OPERATIONS[tool.name];
+      if (!operations || operations.length !== 1) continue;
+      const declared = openApiAnnotations(operations[0].method, operations[0].path);
+      const differs = Object.entries(declared).some(
+        ([hint, value]) =>
+          (tool.annotations as Record<string, unknown> | undefined)?.[hint] !== value,
+      );
+      if (differs && !LEGACY_ANNOTATION_DRIFT.has(tool.name)) mismatched.push(tool.name);
+      if (!differs && LEGACY_ANNOTATION_DRIFT.has(tool.name)) {
+        assert.fail(`${tool.name} now matches the contract; drop its drift exemption.`);
+      }
+    }
+    assert.deepEqual(mismatched, [], `MCP tool annotations differ from OpenAPI: ${mismatched}`);
   });
 
   it("remains a strict subset of the documented operator API", () => {

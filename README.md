@@ -78,7 +78,7 @@ npm run quotes:show -- <quoteNumber>
 
 `quotes:list` prints the 20 most recently saved quotes (number, client, project, total inc GST, issue date). `quotes:show -- <quoteNumber>` prints one saved quote's full rendered text, or a not-found message if that number doesn't exist.
 
-Quotes are JSON-only for now: these three commands always use `typescript/data/jarvis-quotes.json` regardless of `PERSISTENCE_PROVIDER` — there is no Convex-backed quote store yet, and quotes are not yet included in `npm run backup` (see **Not yet covered** below).
+Quotes are JSON-only for now: these three commands always use `typescript/data/jarvis-quotes.json` regardless of `PERSISTENCE_PROVIDER` — there is no Convex-backed quote store yet. The classic `npm run backup -- export` archive does not include quotes; archive v4 (`npm run backup -- export-v4`) does (see **Business records and archive v4** below).
 
 ### Search (Perplexity)
 
@@ -274,7 +274,24 @@ npm run backup -- restore "$BACKUP_FILE" --confirm-empty-target
 
 Restore refuses any provider or memory store that already contains data. It rolls back records created during a failed restore of assistant state, tasks, and reminders (that portion is one atomic operation); builds, build logs, upgrades, assets, and preferences are restored afterward with one `add()` call per record and are not covered by that same rollback — see the `BackupMemoryStores` doc comment in `typescript/src/backup/backup.ts`. Because JSON and Convex issue their own record IDs and timestamps, a portable restore recreates those values; known and nested record-ID references inside assistant state and build logs/upgrades' `buildId` are remapped automatically. The archive retains the original IDs and timestamps for audit purposes.
 
-**Not yet covered:** clients, quotes, invoices, projects, properties, enquiries, and errands are separate JSON-backed domains that are _not_ included in the backup archive yet. Unlike builds/build logs/upgrades/assets/preferences, these domains are densely cross-referenced by id (a quote holds a `clientId`, an invoice holds a `quoteId`, etc.), so restoring them safely needs one consistent id-remap applied across every domain at once, not a per-domain copy. See `typescript/docs/ROADMAP.md` for the plan.
+**Business records and archive v4:** the classic archive above (`export`/`verify`/`restore`) covers assistant state, tasks, reminders, builds, build logs, upgrades, assets and preferences only. It does _not_ include clients, properties, projects, quotes, invoices, enquiries, errands or business settings.
+
+Those business records are covered by archive v4, a separate, additive format:
+
+```bash
+npm run backup -- export-v4 <file>
+npm run backup -- verify-v4 <file>
+npm run backup -- restore-v4 <file> <empty-destination-dir> [--allow-partial] [--resume]
+```
+
+Its `businessRecords` group captures clients, properties, projects, quotes, invoices, enquiries, errands and business settings, alongside the `core` and `memory` groups. Ids, timestamps and order are kept verbatim, and cross-record references the source can't resolve are recorded in the manifest, not repaired.
+
+Archive v4 has real limits:
+
+- **JSON only.** It reads the JSON stores directly. With `PERSISTENCE_PROVIDER=convex`, `export-v4` refuses rather than write an archive that omits the data in use.
+- **Always partial today.** The `notesAndEvidence`, `orchestration` and `quoteAggregate` groups (including the Convex quote lifecycle) are not covered. Every archive is marked `completeness: partial`, and the full-recovery restore path refuses it. `restore-v4 --allow-partial` restores the covered groups into a new, empty directory; it never merges into live data.
+
+See [`typescript/docs/operators/archive-v4.md`](typescript/docs/operators/archive-v4.md) for the format, restore semantics and the interrupted-restore drill.
 
 ### Agent orchestration prototype (standalone, legacy)
 
