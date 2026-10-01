@@ -50,6 +50,7 @@
     "home:discover": "node --import tsx src/tools/runGoogleHomeDiscovery.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.129.0",
     "@convex-dev/rate-limiter": "^0.4.0",
     "@fastify/rate-limit": "^11.2.0",
     "@modelcontextprotocol/ext-apps": "^1.7.4",
@@ -69,6 +70,7 @@
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2",
     "text2wav": "^0.0.14",
+    "undici": "^8.11.2",
     "zod": "^4.6.5"
   },
   "devDependencies": {
