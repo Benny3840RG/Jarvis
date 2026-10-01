@@ -81,6 +81,14 @@ const BRIEF: DailyBrief = {
   enquiries: { openCount: 0, countsByUrgency: { standard: 0, urgent: 0, emergency: 0 }, open: [] },
   invoices: { draftCount: 0, unpaidCount: 0, unpaidTotal: 0, unpaid: [] },
   errands: { openCount: 0, locationCount: 0, open: [] },
+  scheduled: {
+    todayCount: 0,
+    thisWeekCount: 0,
+    unscheduledCount: 0,
+    today: [],
+    thisWeek: [],
+    unscheduled: [],
+  },
 };
 
 const SNAPSHOT: QuoteSnapshot = {

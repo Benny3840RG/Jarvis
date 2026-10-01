@@ -93,6 +93,21 @@ export interface BriefErrands {
   open: Errand[];
 }
 
+export interface BriefScheduled {
+  /** Jobs booked for the operator-local today. */
+  todayCount: number;
+  /** Jobs booked after today through the end of the current Mon–Sun week. */
+  thisWeekCount: number;
+  /** Active-status jobs with no booked date. */
+  unscheduledCount: number;
+  /** Jobs booked for today, soonest-updated first, capped. */
+  today: Project[];
+  /** Jobs booked later this week, soonest-booked first then most-recently-updated, capped. */
+  thisWeek: Project[];
+  /** Active jobs with no booked date, most recently touched first, capped. */
+  unscheduled: Project[];
+}
+
 export interface DailyBrief {
   generatedAt: string;
   timezone: string;
@@ -105,6 +120,7 @@ export interface DailyBrief {
   enquiries: BriefEnquiries;
   invoices: BriefInvoices;
   errands: BriefErrands;
+  scheduled: BriefScheduled;
 }
 
 export interface BriefInputs {
@@ -138,6 +154,41 @@ function statusCounts<S extends string>(
 }
 
 /**
+ * The operator-local calendar date for an instant, as `YYYY-MM-DD`. Intl with
+ * the IANA `timezone` returns the wall-clock date, so DST transitions and the
+ * zone offset are handled by the platform, not by us. `en-CA` formats as
+ * ISO `YYYY-MM-DD`. Requires a valid IANA timezone (the one the brief already
+ * carries); an invalid zone throws, the same contract as the rest of the brief.
+ */
+export function operatorLocalDate(now: number, timezone: string): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date(now));
+}
+
+/**
+ * The Monday–Sunday week containing an ISO `YYYY-MM-DD` date, as `{ start, end }`
+ * ISO dates. Week arithmetic is done on the calendar date itself (anchored at
+ * UTC midnight), so it never depends on any zone or DST: the input already names
+ * a calendar day. Lexicographic `YYYY-MM-DD` comparison equals chronological
+ * order, so callers can range-compare the returned bounds as plain strings.
+ */
+export function isoWeekRange(isoDate: string): { start: string; end: string } {
+  const [year, month, day] = isoDate.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  // getUTCDay: 0=Sun..6=Sat. Days back to Monday, and forward to Sunday.
+  const daysFromMonday = (date.getUTCDay() + 6) % 7;
+  const monday = new Date(date);
+  monday.setUTCDate(date.getUTCDate() - daysFromMonday);
+  const sunday = new Date(monday);
+  sunday.setUTCDate(monday.getUTCDate() + 6);
+  return { start: monday.toISOString().slice(0, 10), end: sunday.toISOString().slice(0, 10) };
+}
+
+/**
  * Composes the daily brief from the authoritative store contents. Pure and
  * deterministic for a given `now`: every number and highlight is derived from
  * the supplied data, never invented.
@@ -161,6 +212,35 @@ export function composeDailyBrief(inputs: BriefInputs): DailyBrief {
   const projectCounts = statusCounts(PROJECT_STATUSES, inputs.projects);
   const activeProjects = inputs.projects
     .filter((project) => project.status === "active")
+    .sort((a, b) => b.updatedAt - a.updatedAt);
+
+  // Scheduled jobs: compare each project's booked calendar day (scheduledFor,
+  // a bare YYYY-MM-DD) against the operator-local today and this week. All date
+  // comparisons are lexicographic on YYYY-MM-DD, which equals chronological
+  // order, so no instant/zone maths is involved beyond deriving "today".
+  const localToday = operatorLocalDate(inputs.now, inputs.timezone);
+  const weekEnd = isoWeekRange(localToday).end;
+  const bookedLiveJobs = inputs.projects.filter(
+    (project): project is Project & { scheduledFor: string } =>
+      project.status !== "done" && typeof project.scheduledFor === "string",
+  );
+  const bySchedule = (
+    a: Project & { scheduledFor: string },
+    b: Project & { scheduledFor: string },
+  ) =>
+    a.scheduledFor < b.scheduledFor
+      ? -1
+      : a.scheduledFor > b.scheduledFor
+        ? 1
+        : b.updatedAt - a.updatedAt;
+  const scheduledToday = bookedLiveJobs
+    .filter((project) => project.scheduledFor === localToday)
+    .sort(bySchedule);
+  const scheduledThisWeek = bookedLiveJobs
+    .filter((project) => project.scheduledFor > localToday && project.scheduledFor <= weekEnd)
+    .sort(bySchedule);
+  const unscheduledActive = inputs.projects
+    .filter((project) => project.status === "active" && project.scheduledFor === undefined)
     .sort((a, b) => b.updatedAt - a.updatedAt);
 
   const quoteCounts = statusCounts(QUOTE_STATUSES, inputs.quotes);
@@ -274,6 +354,14 @@ export function composeDailyBrief(inputs: BriefInputs): DailyBrief {
       openCount: openErrands.length,
       locationCount: errandLocationCount,
       open: cap(openErrands),
+    },
+    scheduled: {
+      todayCount: scheduledToday.length,
+      thisWeekCount: scheduledThisWeek.length,
+      unscheduledCount: unscheduledActive.length,
+      today: cap(scheduledToday),
+      thisWeek: cap(scheduledThisWeek),
+      unscheduled: cap(unscheduledActive),
     },
   };
 }
