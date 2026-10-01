@@ -475,6 +475,19 @@ const TOOL_INVOCATIONS: Record<string, Record<string, unknown>> = {
   delete_preference: { preferenceId: "pref-1" },
 };
 
+/**
+ * Tools whose HTTP binding is proven by a dedicated suite instead of the table above:
+ * tool actions (tests/mcpToolActionInspection.test.ts), the operations inbox
+ * (tests/mcpOperationsInbox.test.ts) and the activity timeline
+ * (tests/mcpActivityTimeline.test.ts).
+ */
+const BOUND_ELSEWHERE = new Set([
+  "list_tool_actions",
+  "get_tool_action",
+  "get_operations_inbox",
+  "list_activity",
+]);
+
 describe("MCP tool operation bindings", () => {
   it("proves each tool calls exactly its declared operation (plus the dashboard refresh)", async () => {
     const matchers = openApiMatchers();
@@ -498,6 +511,15 @@ describe("MCP tool operation bindings", () => {
         Object.keys(MCP_TOOL_OPERATIONS).sort(),
         "The invocation table drifted from the registered MCP tool surface.",
       );
+
+      // Every declared tool must be probed here unless a dedicated suite proves its
+      // binding, so a new tool cannot pass this test without ever being called.
+      for (const tool of Object.keys(MCP_TOOL_OPERATIONS)) {
+        assert.ok(
+          tool in TOOL_INVOCATIONS || BOUND_ELSEWHERE.has(tool),
+          `${tool} has no binding probe; add it to TOOL_INVOCATIONS.`,
+        );
+      }
 
       for (const [tool, args] of Object.entries(TOOL_INVOCATIONS)) {
         records.length = 0;
