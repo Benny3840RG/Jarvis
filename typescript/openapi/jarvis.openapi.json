@@ -2811,7 +2811,7 @@
           }
         ],
         "x-mcp-tool": {
-          "exposed": false,
+          "exposed": true,
           "annotations": {
             "readOnlyHint": true,
             "destructiveHint": false,
@@ -2852,7 +2852,7 @@
         "description": "Creates one client-owned service property with address, access notes, service notes, and site hazards.",
         "tags": ["Properties"],
         "x-mcp-tool": {
-          "exposed": false,
+          "exposed": true,
           "annotations": {
             "readOnlyHint": false,
             "destructiveHint": false,
@@ -2913,7 +2913,7 @@
         "description": "Returns one property by its opaque identifier.",
         "tags": ["Properties"],
         "x-mcp-tool": {
-          "exposed": false,
+          "exposed": true,
           "annotations": {
             "readOnlyHint": true,
             "destructiveHint": false,
@@ -2957,7 +2957,7 @@
         "description": "Updates the client link, address, hazards, access notes, or service notes of one property.",
         "tags": ["Properties"],
         "x-mcp-tool": {
-          "exposed": false,
+          "exposed": true,
           "annotations": {
             "readOnlyHint": false,
             "destructiveHint": false,
@@ -3014,7 +3014,7 @@
         "description": "Permanently removes one property by its identifier.",
         "tags": ["Properties"],
         "x-mcp-tool": {
-          "exposed": false,
+          "exposed": true,
           "annotations": {
             "readOnlyHint": false,
             "destructiveHint": true,
@@ -6105,7 +6105,7 @@
         "description": "Returns durable business enquiries, optionally filtered by status or client.",
         "tags": ["Enquiries"],
         "x-mcp-tool": {
-          "exposed": false,
+          "exposed": true,
           "annotations": {
             "readOnlyHint": true,
             "destructiveHint": false,
@@ -6167,7 +6167,7 @@
         "description": "Captures a new lead/intake record with duplicate-key replay protection.",
         "tags": ["Enquiries"],
         "x-mcp-tool": {
-          "exposed": false,
+          "exposed": true,
           "annotations": {
             "readOnlyHint": false,
             "destructiveHint": false,
@@ -6222,7 +6222,7 @@
         "summary": "Get one business enquiry",
         "tags": ["Enquiries"],
         "x-mcp-tool": {
-          "exposed": false,
+          "exposed": true,
           "annotations": {
             "readOnlyHint": true,
             "destructiveHint": false,
@@ -6275,7 +6275,7 @@
         "summary": "Update one business enquiry",
         "tags": ["Enquiries"],
         "x-mcp-tool": {
-          "exposed": false,
+          "exposed": true,
           "annotations": {
             "readOnlyHint": false,
             "destructiveHint": false,
@@ -6343,7 +6343,7 @@
         "summary": "Close one business enquiry",
         "tags": ["Enquiries"],
         "x-mcp-tool": {
-          "exposed": false,
+          "exposed": true,
           "annotations": {
             "readOnlyHint": false,
             "destructiveHint": false,
@@ -6412,7 +6412,7 @@
         "description": "Creates one existing project/job record from an open enquiry and records the conversion link for replay safety.",
         "tags": ["Enquiries"],
         "x-mcp-tool": {
-          "exposed": false,
+          "exposed": true,
           "annotations": {
             "readOnlyHint": false,
             "destructiveHint": false,
@@ -6481,7 +6481,7 @@
         "description": "Returns durable business invoices, optionally filtered by status or client.",
         "tags": ["Invoices"],
         "x-mcp-tool": {
-          "exposed": false,
+          "exposed": true,
           "annotations": {
             "readOnlyHint": true,
             "destructiveHint": false,
@@ -6546,7 +6546,7 @@
         "description": "Creates a durable draft invoice with duplicate-key replay protection and server-derived totals.",
         "tags": ["Invoices"],
         "x-mcp-tool": {
-          "exposed": false,
+          "exposed": true,
           "annotations": {
             "readOnlyHint": false,
             "destructiveHint": false,
@@ -6601,7 +6601,7 @@
         "summary": "Get one business invoice",
         "tags": ["Invoices"],
         "x-mcp-tool": {
-          "exposed": false,
+          "exposed": true,
           "annotations": {
             "readOnlyHint": true,
             "destructiveHint": false,
@@ -6657,7 +6657,7 @@
         "summary": "Update one draft business invoice",
         "tags": ["Invoices"],
         "x-mcp-tool": {
-          "exposed": false,
+          "exposed": true,
           "annotations": {
             "readOnlyHint": false,
             "destructiveHint": false,

@@ -14,6 +14,16 @@ import type { AssetInput, AssetUpdate } from "../assets/asset.js";
 import type { AssetView } from "../assets/assetView.js";
 import type { Preference, PreferenceInput, PreferenceUpdate } from "../preferences/preference.js";
 import type { Project, ProjectInput, ProjectUpdate } from "../projects/project.js";
+import type { Property, PropertyInput, PropertyUpdate } from "../properties/property.js";
+import type {
+  Enquiry,
+  EnquiryConversionInput,
+  EnquiryConversionResult,
+  EnquiryInput,
+  EnquiryStatus,
+  EnquiryUpdate,
+} from "../enquiries/enquiry.js";
+import type { Invoice, InvoiceInput, InvoiceStatus, InvoiceUpdate } from "../invoices/invoice.js";
 import type { QuoteSnapshot } from "../quotes/quoteLifecycle.js";
 import type { QuoteSummary } from "../quotes/quoteRepository.js";
 import type { ToolAction, ToolActionState } from "../actions/toolActions.js";
@@ -95,6 +105,16 @@ function safeProblem(payload: unknown): ProblemDetails | null {
 
 function textField(value: unknown): string | null {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+
+/** Appends only the defined filter values as an encoded query string. */
+function withQuery(path: string, filter: Record<string, string | undefined>): string {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(filter)) {
+    if (value !== undefined) params.set(key, value);
+  }
+  const query = params.toString();
+  return query.length > 0 ? `${path}?${query}` : path;
 }
 
 function parseJson(text: string): unknown {
@@ -658,6 +678,135 @@ export class JarvisApiClient {
       await this.request<DataResponse<Preference>>(
         "DELETE",
         `/api/v1/preferences/${encodeURIComponent(preferenceId)}`,
+      )
+    ).data;
+  }
+
+  async listProperties(filter: { clientId?: string } = {}): Promise<Property[]> {
+    return (
+      await this.request<ListResponse<Property>>("GET", withQuery("/api/v1/properties", filter))
+    ).data;
+  }
+
+  async getProperty(propertyId: string): Promise<Property> {
+    return (
+      await this.request<DataResponse<Property>>(
+        "GET",
+        `/api/v1/properties/${encodeURIComponent(propertyId)}`,
+      )
+    ).data;
+  }
+
+  async createProperty(input: PropertyInput): Promise<Property> {
+    return (
+      await this.request<DataResponse<Property>>("POST", "/api/v1/properties", { body: input })
+    ).data;
+  }
+
+  async updateProperty(propertyId: string, update: PropertyUpdate): Promise<Property> {
+    return (
+      await this.request<DataResponse<Property>>(
+        "PATCH",
+        `/api/v1/properties/${encodeURIComponent(propertyId)}`,
+        { body: update },
+      )
+    ).data;
+  }
+
+  async deleteProperty(propertyId: string): Promise<Property> {
+    return (
+      await this.request<DataResponse<Property>>(
+        "DELETE",
+        `/api/v1/properties/${encodeURIComponent(propertyId)}`,
+      )
+    ).data;
+  }
+
+  async listEnquiries(
+    filter: { status?: EnquiryStatus; clientId?: string } = {},
+  ): Promise<Enquiry[]> {
+    return (
+      await this.request<ListResponse<Enquiry>>("GET", withQuery("/api/v1/enquiries", filter))
+    ).data;
+  }
+
+  async getEnquiry(enquiryId: string): Promise<Enquiry> {
+    return (
+      await this.request<DataResponse<Enquiry>>(
+        "GET",
+        `/api/v1/enquiries/${encodeURIComponent(enquiryId)}`,
+      )
+    ).data;
+  }
+
+  async createEnquiry(input: EnquiryInput): Promise<Enquiry> {
+    return (await this.request<DataResponse<Enquiry>>("POST", "/api/v1/enquiries", { body: input }))
+      .data;
+  }
+
+  async updateEnquiry(enquiryId: string, update: EnquiryUpdate): Promise<Enquiry> {
+    return (
+      await this.request<DataResponse<Enquiry>>(
+        "PATCH",
+        `/api/v1/enquiries/${encodeURIComponent(enquiryId)}`,
+        { body: update },
+      )
+    ).data;
+  }
+
+  async closeEnquiry(enquiryId: string, reason: string): Promise<Enquiry> {
+    return (
+      await this.request<DataResponse<Enquiry>>(
+        "POST",
+        `/api/v1/enquiries/${encodeURIComponent(enquiryId)}/close`,
+        { body: { reason } },
+      )
+    ).data;
+  }
+
+  async convertEnquiryToProject(
+    enquiryId: string,
+    input: EnquiryConversionInput,
+  ): Promise<EnquiryConversionResult> {
+    return (
+      await this.request<DataResponse<EnquiryConversionResult>>(
+        "POST",
+        `/api/v1/enquiries/${encodeURIComponent(enquiryId)}/convert-project`,
+        { body: input },
+      )
+    ).data;
+  }
+
+  /** Read-only invoice register. MCP never issues, voids or records payments. */
+  async listInvoices(
+    filter: { status?: InvoiceStatus; clientId?: string } = {},
+  ): Promise<Invoice[]> {
+    return (await this.request<ListResponse<Invoice>>("GET", withQuery("/api/v1/invoices", filter)))
+      .data;
+  }
+
+  async getInvoice(invoiceId: string): Promise<Invoice> {
+    return (
+      await this.request<DataResponse<Invoice>>(
+        "GET",
+        `/api/v1/invoices/${encodeURIComponent(invoiceId)}`,
+      )
+    ).data;
+  }
+
+  /** Creates a draft invoice only; the HTTP route never issues on create. */
+  async createInvoiceDraft(input: InvoiceInput): Promise<Invoice> {
+    return (await this.request<DataResponse<Invoice>>("POST", "/api/v1/invoices", { body: input }))
+      .data;
+  }
+
+  /** Edits a draft invoice; the store refuses edits to issued, paid or void invoices. */
+  async updateInvoiceDraft(invoiceId: string, update: InvoiceUpdate): Promise<Invoice> {
+    return (
+      await this.request<DataResponse<Invoice>>(
+        "PATCH",
+        `/api/v1/invoices/${encodeURIComponent(invoiceId)}`,
+        { body: update },
       )
     ).data;
   }

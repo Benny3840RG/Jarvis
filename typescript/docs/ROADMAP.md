@@ -1,5 +1,40 @@
 # Jarvis TypeScript Roadmap
 
+## Business MCP tools: properties, enquiries, invoice drafts (2026-10-01, #658)
+
+Benny's direction (1 Oct): Jarvis runs everything in Beez Treez except the physical
+client work. The workshop (builds, build logs, upgrades, assets) and home
+(tasks, reminders, errands, preferences) areas were already reachable through MCP.
+Business was the gap: tested HTTP routes that no chat client could reach.
+
+Completed:
+
+- 15 MCP tools in `src/mcp/businessTools.ts`, each over an existing route: properties
+  (CRUD), enquiries (list, get, create, update, close, convert to project), and
+  invoices as drafts only (list, get, create, update).
+- OpenAPI first: those 15 operations are now `x-mcp-tool.exposed: true`. No route,
+  schema, store, persisted state or backup change.
+- New guards: every declared tool needs a binding probe; OpenAPI exposed flags and
+  annotations must match the registered MCP surface.
+- `tests/mcpBusinessTools.test.ts` drives real MCP calls through the real HTTP app.
+
+Decisions and trade-offs:
+
+- Invoice issue, void and payments stay off MCP; they create official financial records.
+- Quote lifecycle writes stay off MCP. The quote lifecycle contract keeps them
+  unexposed, so changing that is Benny's call, not this mission's.
+- Pre-existing drift is pinned, not silently fixed: `GET /api/v1/quotes`,
+  `GET /api/v1/quotes/{quoteId}` and `POST /api/v1/settings/persistence/actions` are
+  reached by MCP but unmarked; create/delete task and reminder tools disagree with
+  the spec on `idempotentHint`.
+
+Next:
+
+1. Owner decision: allow quote drafting (create, patch draft) through MCP.
+2. Add enquiries, unpaid invoices and quotes awaiting reply to the daily brief
+   (contract first: `/api/v1/brief`).
+3. Resolve the pinned annotation and exposed-flag drift.
+
 ## Acquisition plan, PR H (slice 6): live consultation path, dormant-first (2026-09-27)
 
 Owner-approved live launch slice, built dormant-first. `src/acp/acpConsultation.ts`
