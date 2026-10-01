@@ -226,6 +226,12 @@ describe("Jarvis preview widget", () => {
       status: "issued",
       balanceDue: 650,
     };
+    const errand = {
+      id: "err-1",
+      title: "Silicone x2 for the deck job",
+      status: "open",
+      location: { label: "Bunnings Frankston" },
+    };
     const state = {
       quotes: [],
       quoteRegisterStatus: "ready",
@@ -252,6 +258,11 @@ describe("Jarvis preview widget", () => {
           unpaidCount: 1,
           unpaidTotal: 650,
           unpaid: [unpaidInvoice],
+        },
+        errands: {
+          openCount: 1,
+          locationCount: 1,
+          open: [errand],
         },
       },
     };
@@ -283,8 +294,11 @@ describe("Jarvis preview widget", () => {
     assert.equal(elements.get("operations-invoice-count")?.textContent, "1 UNPAID");
     assert.deepEqual(lists.get("operations-enquiry-list"), [emergency, standard]);
     assert.deepEqual(lists.get("operations-invoice-list"), [unpaidInvoice]);
-    // The nav badge counts enquiries and unpaid invoices as items needing attention.
-    assert.equal(elements.get("nav-operations-count")?.textContent, "3");
+    assert.equal(elements.get("brief-errand-count")?.textContent, "1");
+    assert.equal(elements.get("operations-errand-count")?.textContent, "1 TO RUN");
+    assert.deepEqual(lists.get("operations-errand-list"), [errand]);
+    // The nav badge counts enquiries, unpaid invoices and open errands as items needing attention.
+    assert.equal(elements.get("nav-operations-count")?.textContent, "4");
   });
 
   it("opens a register quote in the read-only inspector", async () => {
