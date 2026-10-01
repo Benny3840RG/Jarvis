@@ -1,5 +1,21 @@
 # Jarvis TypeScript Roadmap
 
+## Dashboard: enquiries and unpaid invoices in the operations view (2026-10-01, #674)
+
+The #670 brief carries open enquiries and unpaid invoices; the operator dashboard
+widget now shows them.
+
+- Two snapshot tiles: open-enquiry count and total owed (sum of unpaid `balanceDue`).
+- Two list panels: open enquiries (most urgent first) and unpaid invoices (amount owed).
+- The Operations nav badge counts open enquiries and unpaid invoices alongside projects,
+  finalised-open quotes and overdue maintenance.
+- Defensive: the renderer reads the sections only when present, so it still renders against
+  a brief from an older API.
+
+Read-only widget change: no server, API, schema or MCP-tool change. `tests/mcpWidget.test.ts`
+drives `renderOperations` with an enquiries/invoices fixture and asserts the tiles, counts,
+lists and nav badge.
+
 ## Daily brief: open enquiries and unpaid invoices (2026-10-01, #670)
 
 The brief now opens each day with who is waiting on Benny and who owes him money.
