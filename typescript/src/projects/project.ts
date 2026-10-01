@@ -52,14 +52,22 @@ export interface ProjectStore {
 }
 
 export function parseProjectScheduledDate(value: unknown): string {
-  if (typeof value !== "string" || !/^\\d{4}-\\d{2}-\\d{2}$/.test(value.trim())) {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value.trim())) {
     throw new Error("Project scheduledFor must be an ISO date (YYYY-MM-DD).");
   }
   const text = value.trim();
   const [year, month, day] = text.split("-").map(Number);
-  if (year < 1) throw new Error("Project scheduledFor is not a valid calendar date.");
-  const date = new Date(Date.UTC(year, month - 1, day));
-  if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) {
+  if (year < 1) {
+    throw new Error("Project scheduledFor is not a valid calendar date.");
+  }
+  // setUTCFullYear preserves years 0001-0099 instead of mapping them to 1901-1999.
+  const date = new Date(0);
+  date.setUTCFullYear(year, month - 1, day);
+  if (
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() !== month - 1 ||
+    date.getUTCDate() !== day
+  ) {
     throw new Error("Project scheduledFor is not a valid calendar date.");
   }
   return text;
