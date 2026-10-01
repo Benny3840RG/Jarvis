@@ -15,6 +15,8 @@ export interface Project {
   title: string;
   status: ProjectStatus;
   notes?: string;
+  /** The day the job is booked for, as an ISO `YYYY-MM-DD` date. Optional. */
+  scheduledFor?: string;
   createdAt: number;
   updatedAt: number;
 }
@@ -25,6 +27,7 @@ export interface ProjectInput {
   title: string;
   status?: ProjectStatus;
   notes?: string;
+  scheduledFor?: string;
 }
 
 export interface ProjectUpdate {
@@ -35,6 +38,8 @@ export interface ProjectUpdate {
   status?: ProjectStatus;
   /** `string` sets notes, `null` clears them, `undefined` leaves them unchanged. */
   notes?: string | null;
+  /** `string` sets the scheduled date, `null` clears it, `undefined` leaves it unchanged. */
+  scheduledFor?: string | null;
 }
 
 /** Durable store for business projects (jobs), a separate store like clients. */

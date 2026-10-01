@@ -89,6 +89,7 @@ const PROJECT = {
   title: "Re-roof rear extension",
   status: "active",
   notes: "Two-stage handover",
+  scheduledFor: "2026-11-02",
   createdAt: 1_700_000_200_001,
   updatedAt: 1_700_000_200_002,
 };

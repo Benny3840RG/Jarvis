@@ -1,5 +1,32 @@
 # Jarvis TypeScript Roadmap
 
+## Projects: scheduled date (job booking) (2026-10-01)
+
+Jobs (projects) can now carry the day they're booked for — the foundation for a scheduling
+view. Settable and clearable from chat; nothing is surfaced in the brief yet (that follows).
+
+Completed:
+
+- `Project` gains an optional `scheduledFor` ISO `YYYY-MM-DD` date, threaded through the
+  JSON and in-memory stores (set on add, set/reschedule/clear-with-null on update), the HTTP
+  create/update validators (strict ISO + real-calendar-date validation), and the
+  `create_project`/`update_project` MCP tools.
+- OpenAPI first: `Project`, `CreateProjectRequest` and `UpdateProjectRequest` gain
+  `scheduledFor` (date-format, `YYYY-MM-DD` pattern; nullable on update).
+- Backup: the v4 business source carries `scheduledFor` (added to `PROJECT_KEYS` and
+  `parseProject` as an optional field, so **older archives without it still restore**).
+- Tests: store set/reschedule/clear and durability; HTTP validator accepts valid ISO and
+  rejects bad shapes and impossible calendar dates; the backup round-trip fixture carries it.
+
+Decisions:
+
+- Projects are JSON/in-memory only (no Convex project store), so there was no Convex layer to
+  change. The field is optional and additive — no migration, old backups remain readable.
+- ISO `YYYY-MM-DD` (date-only), not free text: it is forward-compatible with a future
+  datetime and lets a later brief/dashboard view sort and window "what's booked this week".
+
+Next: surface scheduled jobs in the daily brief and dashboard (this week / overdue-unstarted).
+
 ## Daily brief: errands (home / on-the-way sector) (2026-10-01)
 
 The daily brief now carries the home sector. It already digested tasks, reminders, projects,

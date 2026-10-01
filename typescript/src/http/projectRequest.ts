@@ -29,13 +29,34 @@ function parseStatus(value: unknown): ProjectStatus {
   return value;
 }
 
+/** Validates an ISO `YYYY-MM-DD` calendar date (the day a job is booked for). */
+function parseScheduledFor(value: unknown): string {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    throw new Error("Project scheduledFor must be a non-empty string.");
+  }
+  const text = value.trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) {
+    throw new Error("Project scheduledFor must be an ISO date (YYYY-MM-DD).");
+  }
+  const [year, month, day] = text.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() !== month - 1 ||
+    date.getUTCDate() !== day
+  ) {
+    throw new Error("Project scheduledFor is not a valid calendar date.");
+  }
+  return text;
+}
+
 function rejectUnknownKeys(body: Record<string, unknown>, allowed: readonly string[]): void {
   if (Object.keys(body).some((key) => !allowed.includes(key))) {
     throw new Error("Request contains unsupported fields.");
   }
 }
 
-const ALLOWED = ["clientId", "propertyId", "title", "status", "notes"] as const;
+const ALLOWED = ["clientId", "propertyId", "title", "status", "notes", "scheduledFor"] as const;
 
 export function parseCreateProject(body: unknown): ProjectInput {
   if (!isRecord(body)) throw new Error("Request body must be a JSON object.");
@@ -50,6 +71,9 @@ export function parseCreateProject(body: unknown): ProjectInput {
     ...(body.notes === undefined
       ? {}
       : { notes: requiredString(body.notes, "Project notes", MAX_NOTES_LENGTH) }),
+    ...(body.scheduledFor === undefined
+      ? {}
+      : { scheduledFor: parseScheduledFor(body.scheduledFor) }),
   };
 }
 
@@ -61,10 +85,11 @@ export function parseUpdateProject(body: unknown): ProjectUpdate {
     body.propertyId === undefined &&
     body.title === undefined &&
     body.status === undefined &&
-    body.notes === undefined
+    body.notes === undefined &&
+    body.scheduledFor === undefined
   ) {
     throw new Error(
-      "Project update requires a clientId, propertyId, title, status, or notes change.",
+      "Project update requires a clientId, propertyId, title, status, notes, or scheduledFor change.",
     );
   }
   const update: ProjectUpdate = {};
@@ -82,6 +107,9 @@ export function parseUpdateProject(body: unknown): ProjectUpdate {
   if (body.notes !== undefined) {
     update.notes =
       body.notes === null ? null : requiredString(body.notes, "Project notes", MAX_NOTES_LENGTH);
+  }
+  if (body.scheduledFor !== undefined) {
+    update.scheduledFor = body.scheduledFor === null ? null : parseScheduledFor(body.scheduledFor);
   }
   return update;
 }

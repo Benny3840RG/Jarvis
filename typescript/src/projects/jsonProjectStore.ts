@@ -63,6 +63,9 @@ function normalizeProject(value: unknown): Project {
     title: value.title,
     status,
     ...(typeof value.notes === "string" && value.notes.trim() ? { notes: value.notes } : {}),
+    ...(optionalText(value.scheduledFor) === undefined
+      ? {}
+      : { scheduledFor: optionalText(value.scheduledFor) }),
     createdAt,
     updatedAt: typeof value.updatedAt === "number" ? value.updatedAt : createdAt,
   };
@@ -155,6 +158,9 @@ export class JsonProjectStore implements ProjectStore {
         title: requiredText(input.title, "Project title"),
         status: input.status ?? "lead",
         ...(input.notes && input.notes.trim() ? { notes: input.notes.trim() } : {}),
+        ...(input.scheduledFor && input.scheduledFor.trim()
+          ? { scheduledFor: input.scheduledFor.trim() }
+          : {}),
         createdAt: now,
         updatedAt: now,
       };
@@ -170,10 +176,11 @@ export class JsonProjectStore implements ProjectStore {
       update.propertyId === undefined &&
       update.title === undefined &&
       update.status === undefined &&
-      update.notes === undefined
+      update.notes === undefined &&
+      update.scheduledFor === undefined
     ) {
       throw new Error(
-        "Project update requires a clientId, propertyId, title, status, or notes change.",
+        "Project update requires a clientId, propertyId, title, status, notes, or scheduledFor change.",
       );
     }
     return this.writeLock.run(async () => {
@@ -193,6 +200,11 @@ export class JsonProjectStore implements ProjectStore {
         const cleaned = update.notes === null ? "" : update.notes.trim();
         if (cleaned) project.notes = cleaned;
         else delete project.notes;
+      }
+      if (update.scheduledFor !== undefined) {
+        const cleaned = update.scheduledFor === null ? "" : update.scheduledFor.trim();
+        if (cleaned) project.scheduledFor = cleaned;
+        else delete project.scheduledFor;
       }
       project.updatedAt = Date.now();
       await this.writeDocument(document);

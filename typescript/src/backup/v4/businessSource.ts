@@ -111,6 +111,7 @@ const PROJECT_KEYS = [
   "title",
   "status",
   "notes",
+  "scheduledFor",
   "createdAt",
   "updatedAt",
 ] as const;
@@ -296,6 +297,7 @@ function parseProject(value: unknown, at: string): Project {
     title: strictText(row.title, `${at}.title`),
     status: strictEnumValue(row.status, PROJECT_STATUSES, `${at}.status`),
     ...present("notes", optional(row.notes, `${at}.notes`, strictText)),
+    ...present("scheduledFor", optional(row.scheduledFor, `${at}.scheduledFor`, strictText)),
     createdAt: strictTimestamp(row.createdAt, `${at}.createdAt`),
     updatedAt: strictTimestamp(row.updatedAt, `${at}.updatedAt`),
   };

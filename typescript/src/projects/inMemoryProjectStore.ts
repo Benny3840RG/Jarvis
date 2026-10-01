@@ -43,6 +43,9 @@ export class InMemoryProjectStore implements ProjectStore {
         title: requiredText(input.title, "Project title"),
         status: input.status ?? "lead",
         ...(input.notes && input.notes.trim() ? { notes: input.notes.trim() } : {}),
+        ...(input.scheduledFor && input.scheduledFor.trim()
+          ? { scheduledFor: input.scheduledFor.trim() }
+          : {}),
         createdAt: now,
         updatedAt: now,
       };
@@ -60,10 +63,11 @@ export class InMemoryProjectStore implements ProjectStore {
         update.propertyId === undefined &&
         update.title === undefined &&
         update.status === undefined &&
-        update.notes === undefined
+        update.notes === undefined &&
+        update.scheduledFor === undefined
       ) {
         throw new Error(
-          "Project update requires a clientId, propertyId, title, status, or notes change.",
+          "Project update requires a clientId, propertyId, title, status, notes, or scheduledFor change.",
         );
       }
       const project = this.projects.get(id);
@@ -81,6 +85,11 @@ export class InMemoryProjectStore implements ProjectStore {
         const cleaned = update.notes === null ? "" : update.notes.trim();
         if (cleaned) project.notes = cleaned;
         else delete project.notes;
+      }
+      if (update.scheduledFor !== undefined) {
+        const cleaned = update.scheduledFor === null ? "" : update.scheduledFor.trim();
+        if (cleaned) project.scheduledFor = cleaned;
+        else delete project.scheduledFor;
       }
       project.updatedAt = Date.now();
       return Promise.resolve(cloneProject(project));
