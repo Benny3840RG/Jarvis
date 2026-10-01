@@ -17,8 +17,10 @@ by `export-v4`**, so **every archive written today is `completeness: partial`**
 and is refused by the full-recovery restore path. That is the honest state, not
 an exclusion: the manifest lists the three groups as absent and claims no
 recovery method for them. Separate isolated adapters can restore a fail-closed
-subset of notes/evidence rows and of terminal orchestration history into an
-empty Convex database. Those adapters do not mark the archive groups present.
+subset of notes/evidence rows (including blocked denial-decision receipts) and
+of terminal orchestration history into an empty Convex database. Those adapters
+do not mark the archive groups present. Restoring a denial-decision receipt does
+not renew an approval, reactivate a lease, or authorise execution.
 
 Coverage is now the _only_ thing standing between an archive and `complete`.
 Every archive `export-v4` writes has already been restored into an isolated

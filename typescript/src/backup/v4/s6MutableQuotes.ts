@@ -119,6 +119,12 @@ export function readS6MutableQuotes(
           encodeS4Payload(shared.toolActions).payloadJson
         )
           throw new Error("S4/S6 shared action inventory mismatch.");
+      } else if (table === "toolExecutionReceipts" && shared) {
+        if (
+          encodeS4Payload(entry.documents).payloadJson !==
+          encodeS4Payload(shared.toolExecutionReceipts).payloadJson
+        )
+          throw new Error("S4/S6 shared receipt inventory mismatch.");
       } else if (entry.documents.length)
         throw new Error(`Unsupported nonempty S6 dependency: ${table}.`);
       continue;

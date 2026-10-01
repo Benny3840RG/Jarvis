@@ -262,8 +262,13 @@ is not applied, because this restore does not mint logical ids.
 
 Only components with an empty `attributes` object and a closed same-project
 parent graph are admitted. Only risks with canonical text and integer scores
-from 1 to 5 are admitted. Non-empty attributes, constraints, tasks, events,
-receipts, reconciliations, development bindings, and omega rows stay refused.
+from 1 to 5 are admitted. The same helper also admits the executor's blocked
+`not-authorized` decision receipt for those rejected `notes.create` actions.
+The receipt key and receipt id stay verbatim. `UuidRemapper` is not applied.
+The decision key is not the primary execution key, so this restore does not
+install a replay hit, renew an approval, or schedule omega reconciliation.
+Non-empty attributes, constraints, tasks, events, primary-key effect receipts,
+reconciliations, development bindings, and omega rows stay refused.
 Verification remains `completeness: partial` with no verified group, and
 `export-v4` still does not mark `notesAndEvidence` present. See
 [the S4 restore slice](backup-v4-s4-restore-slice.md).
