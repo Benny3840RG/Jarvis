@@ -6,6 +6,7 @@ import {
   type SentryEvent,
   type SentryTransport,
   type SentryDeliveryObservation,
+  stableRoute,
 } from "../src/observability/sentry.js";
 import { REDACTED } from "../src/observability/telemetryContract.js";
 
@@ -315,5 +316,30 @@ describe("Sentry runtime adapter", () => {
         }),
       /SENTRY_DSN/,
     );
+  });
+
+  it("keeps business route literals in stable route labels", () => {
+    const cases: Array<[string, string]> = [
+      ["/api/v1/enquiries", "/api/v1/enquiries"],
+      ["/api/v1/enquiries/abc/close", "/api/v1/enquiries/:param/close"],
+      ["/api/v1/enquiries/abc/convert-project", "/api/v1/enquiries/:param/convert-project"],
+      ["/api/v1/properties", "/api/v1/properties"],
+      ["/api/v1/properties/abc", "/api/v1/properties/:param"],
+      ["/api/v1/invoices?status=draft", "/api/v1/invoices"],
+      ["/api/v1/invoices/abc/issue", "/api/v1/invoices/:param/issue"],
+      ["/api/v1/invoices/abc/void", "/api/v1/invoices/:param/void"],
+      ["/api/v1/invoices/abc/payments", "/api/v1/invoices/:param/payments"],
+      ["/api/v1/quotes/abc/revisions/2", "/api/v1/quotes/:param/revisions/:param"],
+      ["/api/v1/quotes/abc/revisions/2/review", "/api/v1/quotes/:param/revisions/:param/review"],
+      ["/api/v1/quotes/abc/revisions/2/reopen", "/api/v1/quotes/:param/revisions/:param/reopen"],
+      [
+        "/api/v1/quotes/abc/revisions/2/finalize",
+        "/api/v1/quotes/:param/revisions/:param/finalize",
+      ],
+      ["/api/v1/quotes/abc/revisions/2/fork", "/api/v1/quotes/:param/revisions/:param/fork"],
+    ];
+    for (const [path, expected] of cases) {
+      assert.equal(stableRoute(path), expected, path);
+    }
   });
 });
