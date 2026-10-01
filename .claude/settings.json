@@ -2,7 +2,6 @@
   "permissions": {
     "allow": [
       "Bash(npm run check)",
-      "Bash(git fetch *)",
       "mcp__github__pull_request_read",
       "mcp__github__get_job_logs",
       "mcp__github__actions_list",
