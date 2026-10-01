@@ -28,6 +28,26 @@ The first preview includes:
 Totality reasoning, memory changes, tool-action approvals, backups and broad conversation execution
 remain REST-only. They are not exposed as preview MCP tools.
 
+### Business tools (drafting only)
+
+These tools wrap existing HTTP routes. The HTTP API still validates every request, computes
+totals and enforces lifecycle rules.
+
+| Area       | Tools                                                                                                              |
+| ---------- | ------------------------------------------------------------------------------------------------------------------ |
+| Properties | `list_properties`, `get_property`, `create_property`, `update_property`, `delete_property`                         |
+| Enquiries  | `list_enquiries`, `get_enquiry`, `create_enquiry`, `update_enquiry`, `close_enquiry`, `convert_enquiry_to_project` |
+| Invoices   | `list_invoices`, `get_invoice`, `create_invoice_draft`, `update_invoice_draft`                                     |
+
+- Pass `duplicateKey` to `create_enquiry` or `create_invoice_draft` so a retried call returns the
+  first record instead of creating a second one.
+- Invoices can only be drafted here. Issuing, voiding and recording payments stay on the REST API,
+  because they create official financial records.
+- Quotes are read-only here (`list_quotes`, `get_quote`). The quote lifecycle contract keeps
+  quote writes off MCP.
+- A deployment that sets `JARVIS_MCP_CAPABILITIES` must list these tools to grant them. Leaving it
+  unset grants the whole declared surface, including these tools.
+
 ## Development configuration
 
 Configure the existing development values in `typescript/.env.local`, including:

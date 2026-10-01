@@ -28,6 +28,7 @@ import {
   type DashboardSnapshot,
   type ReminderRequestUpdate,
 } from "./jarvisApiClient.js";
+import { registerBusinessTools } from "./businessTools.js";
 import { registerPersistenceSettingsTools } from "./persistenceSettingsTools.js";
 import { JARVIS_INSTRUCTIONS, JARVIS_PERSONA_MARKDOWN, JARVIS_PERSONA_URI } from "./persona.js";
 
@@ -2684,6 +2685,7 @@ export function createJarvisMcpServer(
   );
 
   registerPersistenceSettingsTools(server, client);
+  registerBusinessTools(server, client);
 
   return server;
 }
