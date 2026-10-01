@@ -8,6 +8,7 @@ import {
 } from "../src/briefs/brief.js";
 import type { Asset } from "../src/assets/asset.js";
 import type { Enquiry, EnquiryStatus, EnquiryUrgency } from "../src/enquiries/enquiry.js";
+import type { Errand, ErrandStatus } from "../src/errands/errand.js";
 import type { Invoice, InvoiceStatus } from "../src/invoices/invoice.js";
 import type { Reminder, Task } from "../src/persistence/types.js";
 import type { Project } from "../src/projects/project.js";
@@ -108,6 +109,22 @@ function invoice(
   };
 }
 
+function errand(
+  id: string,
+  status: ErrandStatus,
+  createdAt: number,
+  locationLabel?: string,
+): Errand {
+  return {
+    id,
+    title: `Errand ${id}`,
+    status,
+    ...(locationLabel === undefined ? {} : { location: { label: locationLabel } }),
+    createdAt,
+    updatedAt: createdAt,
+  };
+}
+
 function baseInputs() {
   return {
     now: NOW,
@@ -119,6 +136,7 @@ function baseInputs() {
     assets: [] as Asset[],
     enquiries: [] as Enquiry[],
     invoices: [] as Invoice[],
+    errands: [] as Errand[],
   };
 }
 
@@ -211,7 +229,7 @@ describe("composeDailyBrief", () => {
     });
     assert.equal(
       brief.headline,
-      "1 open task, 1 reminder due, 1 active project, 1 quote awaiting response, 0 open enquiries, 0 invoices unpaid.",
+      "1 open task, 1 reminder due, 1 active project, 1 quote awaiting response, 0 open enquiries, 0 invoices unpaid, 0 errands to run.",
     );
     assert.equal(brief.generatedAt, new Date(NOW).toISOString());
     assert.equal(brief.timezone, "Australia/Melbourne");
@@ -221,7 +239,7 @@ describe("composeDailyBrief", () => {
     const brief = composeDailyBrief(baseInputs());
     assert.equal(
       brief.headline,
-      "0 open tasks, 0 reminders due, 0 active projects, 0 quotes awaiting response, 0 open enquiries, 0 invoices unpaid.",
+      "0 open tasks, 0 reminders due, 0 active projects, 0 quotes awaiting response, 0 open enquiries, 0 invoices unpaid, 0 errands to run.",
     );
     assert.deepEqual(brief.tasks.open, []);
     assert.deepEqual(brief.enquiries.open, []);
@@ -298,15 +316,48 @@ describe("composeDailyBrief", () => {
       ["partial", "recent"],
     );
     assert.equal(brief.invoices.unpaidTotal, 900.05, "sums balanceDue, rounded to cents");
-    assert.match(brief.headline, /2 invoices unpaid\.$/);
+    assert.match(brief.headline, /2 invoices unpaid, 0 errands to run\.$/);
   });
 
-  it("uses singular wording for one enquiry and one unpaid invoice", () => {
+  it("lists open errands located first by place then oldest, and counts distinct places", () => {
+    const brief = composeDailyBrief({
+      ...baseInputs(),
+      errands: [
+        errand("done", "done", 1, "Bunnings Frankston"),
+        errand("bunnings-late", "open", 5, "Bunnings Frankston"),
+        errand("bunnings-early", "open", 3, "Bunnings Frankston"),
+        errand("mitre", "open", 2, "Mitre 10"),
+        errand("no-place", "open", 4),
+      ],
+    });
+    assert.equal(brief.errands.openCount, 4);
+    assert.equal(brief.errands.locationCount, 2, "Bunnings Frankston and Mitre 10");
+    assert.deepEqual(
+      brief.errands.open.map((item) => item.id),
+      ["bunnings-early", "bunnings-late", "mitre", "no-place"],
+      "located grouped by place, oldest first within a place, unlocated last",
+    );
+    assert.match(brief.headline, /4 errands to run\.$/);
+  });
+
+  it("caps the open errands list at the highlight limit", () => {
+    const brief = composeDailyBrief({
+      ...baseInputs(),
+      errands: Array.from({ length: BRIEF_HIGHLIGHT_LIMIT + 3 }, (_, index) =>
+        errand(`e-${index}`, "open", index + 1),
+      ),
+    });
+    assert.equal(brief.errands.openCount, BRIEF_HIGHLIGHT_LIMIT + 3);
+    assert.equal(brief.errands.open.length, BRIEF_HIGHLIGHT_LIMIT);
+  });
+
+  it("uses singular wording for one enquiry, one unpaid invoice, and one errand", () => {
     const brief = composeDailyBrief({
       ...baseInputs(),
       enquiries: [enquiry("e1", "standard", 1)],
       invoices: [invoice("i1", "issued", 50, 0, 1)],
+      errands: [errand("x1", "open", 1, "Bunnings Frankston")],
     });
-    assert.match(brief.headline, /1 open enquiry, 1 invoice unpaid\.$/);
+    assert.match(brief.headline, /1 open enquiry, 1 invoice unpaid, 1 errand to run\.$/);
   });
 });

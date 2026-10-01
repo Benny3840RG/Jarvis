@@ -7,6 +7,7 @@ import type { ProjectStore } from "../projects/project.js";
 import type { QuoteStore } from "../quotes/quote.js";
 import type { AssetStore } from "../assets/asset.js";
 import type { EnquiryStore } from "../enquiries/enquiry.js";
+import type { ErrandStore } from "../errands/errand.js";
 import type { InvoiceStore } from "../invoices/invoice.js";
 import type { HttpAppConfig } from "./config.js";
 import { JarvisProblem } from "./problemDetails.js";
@@ -18,6 +19,7 @@ import {
   HTTP_ASSET_STORE,
   HTTP_ENQUIRY_STORE,
   HTTP_INVOICE_STORE,
+  HTTP_ERRAND_STORE,
 } from "./tokens.js";
 
 function briefUnavailable(): JarvisProblem {
@@ -32,8 +34,8 @@ function briefUnavailable(): JarvisProblem {
 /**
  * Read-only daily digest composed from the authoritative stores. The brief has
  * no storage of its own: every number is derived on request, so it can never
- * drift from the tasks, reminders, projects, quotes, enquiries and invoices it
- * summarises.
+ * drift from the tasks, reminders, projects, quotes, enquiries, invoices and
+ * errands it summarises.
  */
 @Controller("api/v1/brief")
 export class BriefController {
@@ -45,6 +47,7 @@ export class BriefController {
     @Inject(HTTP_ASSET_STORE) private readonly assets: AssetStore,
     @Inject(HTTP_ENQUIRY_STORE) private readonly enquiries: EnquiryStore,
     @Inject(HTTP_INVOICE_STORE) private readonly invoices: InvoiceStore,
+    @Inject(HTTP_ERRAND_STORE) private readonly errands: ErrandStore,
   ) {}
 
   @Get()
@@ -62,15 +65,17 @@ export class BriefController {
       );
     }
     try {
-      const [tasks, reminders, projects, quotes, assets, enquiries, invoices] = await Promise.all([
-        this.persistence.listTasks(),
-        this.persistence.listReminders(),
-        this.projects.list(),
-        this.quotes.list(),
-        this.assets.list(),
-        this.enquiries.list({ status: "open" }),
-        this.invoices.list(),
-      ]);
+      const [tasks, reminders, projects, quotes, assets, enquiries, invoices, errands] =
+        await Promise.all([
+          this.persistence.listTasks(),
+          this.persistence.listReminders(),
+          this.projects.list(),
+          this.quotes.list(),
+          this.assets.list(),
+          this.enquiries.list({ status: "open" }),
+          this.invoices.list(),
+          this.errands.list(),
+        ]);
       return {
         data: composeDailyBrief({
           now: Date.now(),
@@ -82,6 +87,7 @@ export class BriefController {
           assets,
           enquiries,
           invoices,
+          errands,
         }),
       };
     } catch {

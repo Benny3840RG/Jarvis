@@ -156,7 +156,7 @@ describe("brief HTTP boundary", () => {
     assert.equal(brief.invoices.unpaidTotal, 650, "900 issued less 250 received");
     assert.equal(
       brief.headline,
-      "1 open task, 1 reminder due, 1 active project, 1 quote awaiting response, 2 open enquiries, 1 invoice unpaid.",
+      "1 open task, 1 reminder due, 1 active project, 1 quote awaiting response, 2 open enquiries, 1 invoice unpaid, 0 errands to run.",
     );
 
     // The live response must satisfy the published contract exactly.

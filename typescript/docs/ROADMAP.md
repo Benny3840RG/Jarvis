@@ -1,5 +1,32 @@
 # Jarvis TypeScript Roadmap
 
+## Daily brief: errands (home / on-the-way sector) (2026-10-01)
+
+The daily brief now carries the home sector. It already digested tasks, reminders, projects,
+quotes, asset maintenance, enquiries and invoices (all business); errands — "things to grab" —
+were the missing home/on-the-way piece.
+
+Completed:
+
+- `GET /api/v1/brief` gains an `errands` section (OpenAPI first): `openCount`, `locationCount`
+  (distinct place labels), and `open` — open errands ordered located-first grouped by place,
+  then oldest first within a place, so one stop's items sit together. List capped at 5.
+- The headline appends "N errands to run".
+- `BriefController` reads the errand store alongside the other stores; `composeDailyBrief` stays
+  pure (errands derived from the supplied list, never invented).
+- `get_daily_brief` advertises the section in its MCP output schema (optional there, so the
+  adapter still accepts a brief from an older API).
+- Tests: `brief.test.ts` (ordering, distinct-place count, cap, singular/plural headline),
+  `briefHttp.test.ts` (live headline incl. errands, still Ajv-validated against the OpenAPI
+  `BriefResponse`), and the MCP e2e headline assertion.
+
+Decisions:
+
+- Grouped by place, not by due date: errands have no due date. The order mirrors the
+  conversational pull ("I'm at Bunnings, what do I need?").
+- No dashboard-widget panel yet; this is the brief/digest layer. A widget panel can follow
+  the #674 pattern if wanted.
+
 ## Quote drafting through chat (MCP), draft-only (2026-10-01)
 
 Benny can now draft and edit quotes from a chat client, not only inspect them. Two MCP
