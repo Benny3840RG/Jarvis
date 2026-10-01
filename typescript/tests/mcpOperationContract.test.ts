@@ -43,12 +43,18 @@ function openApiExposedOperations(): Set<string> {
 }
 
 /**
- * Operations the MCP adapter reaches whose OpenAPI `x-mcp-tool.exposed` flag is
- * still false. Empty: the three #658-era stragglers (list_quotes, get_quote,
- * run_persistence_settings_action) were corrected in the #670 follow-up. Kept as
- * the exemption hook so any future straggler is recorded here, not hidden.
+ * Operations the MCP adapter reaches but deliberately does NOT mark
+ * `x-mcp-tool.exposed`, because the tool driving them is app-scoped
+ * (`visibility: ["app"]`), not offered to the model.
+ *
+ * `run_persistence_settings_action` runs destructive backup actions (restore)
+ * and is a Settings-widget tool only; exposing it to the model would create an
+ * unintended model-triggerable destructive surface. It stays unexposed by
+ * design — this is a permanent exemption, not drift. (The #658-era read
+ * stragglers list_quotes/get_quote were genuinely model-visible and are now
+ * correctly marked exposed.)
  */
-const LEGACY_UNMARKED = new Set<string>([]);
+const LEGACY_UNMARKED = new Set<string>(["POST /api/v1/settings/persistence/actions"]);
 
 /**
  * Tools whose annotations still disagree with their OpenAPI `x-mcp-tool`

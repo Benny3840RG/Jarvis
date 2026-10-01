@@ -105,7 +105,9 @@
       "getReminder",
       "createReminder",
       "updateReminder",
-      "deleteReminder"
+      "deleteReminder",
+      "listQuotes",
+      "getQuote"
     ],
     "restOnlyOperationIds": [
       "getHealth",
@@ -604,7 +606,7 @@
         "description": "Runs one existing backup command (classic export, verify, or empty-target restore, or archive v4 export, verify, restore, or explicit resume). Refusals are returned in the body. This does not merge archives, mark a partial archive complete, or resume unless the action is resume-v4.",
         "tags": ["System"],
         "x-mcp-tool": {
-          "exposed": true,
+          "exposed": false,
           "title": "Run a Persistence settings action",
           "description": "Operator Settings only. Wraps npm run backup. Not offered as a model tool.",
           "annotations": {
