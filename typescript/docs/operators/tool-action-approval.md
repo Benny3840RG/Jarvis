@@ -181,6 +181,50 @@ once a completed execution receipt already exists, with a state-conflict respons
 external effect may already have happened and revocation cannot retract it. A **reusable** action carries no
 such conflict: it remains revocable after any number of completed receipts, stopping only future attempts.
 
+## Owner approval client
+
+`npm run owner:approve` is a small client of the routes above for the human operator. It is not an
+authority issuer: it calls `GET` and `POST .../approve` on the loopback API and adds no route, token
+or bypass.
+
+Run it from a checkout that contains the client (for a pinned release deployment, the deployed
+release's `typescript/` directory) in your own interactive terminal. The runtime `.env.local` may live
+in a different directory from that checkout. The client reads `.env.local` from the current directory
+if one is there; otherwise pass the runtime file explicitly:
+
+```bash
+# `.env.local` is in the current directory
+npm run owner:approve -- --project <projectId> --action <actionId> --expect-file <expected.json>
+
+# `.env.local` lives elsewhere (for example the runtime working directory of a pinned release)
+node --env-file=<path/to/runtime/.env.local> --import tsx src/tools/runOwnerApproveToolAction.ts \
+  --project <projectId> --action <actionId> --expect-file <expected.json>
+```
+
+Either way the client needs only `JARVIS_API_BASE_URL` (loopback) and `JARVIS_SERVICE_TOKEN` from that
+file. It never reads `JARVIS_APPROVAL_TOKEN` from the environment, even though loading the file makes
+it present in the process.
+
+`expected.json` is `{ "tool": ..., "operation": ..., "arguments": { ... }, "requiredAuthority": ...,
+"destructive": ... }`, the complete envelope you expect to approve. Every field is mandatory and bound
+into the displayed envelope digest. The client supports only `home:announce` actions and refuses any
+other operation before contacting the API. The client:
+
+1. fetches the stored action and refuses anything that is not `proposed`, is expired, or differs from
+   the expectation, before prompting;
+2. shows the action (speaker, pinned address when `JARVIS_GOOGLE_HOME_TARGETS_JSON` is in
+   `.env.local`, full text, volume, authority, destructive flag, envelope digest) and warns that the
+   announcement plays now, may interrupt existing media, and does not resume it;
+3. requires you to type `APPROVE <actionId>`, then the owner approval token at a hidden prompt;
+4. re-fetches immediately before sending and aborts if the payload, state or revision changed;
+5. sends one approval request, never retries it, and reads the action back to confirm it is
+   approved, unexpired and unchanged.
+
+The token is accepted only from an interactive terminal. It is never read from arguments, the
+environment, files or a pipe, is never printed, and is redacted from errors. Cancelling (Ctrl-C,
+empty input, end of input) sends nothing. The client never executes an action; execution stays a
+separate, service-authenticated step.
+
 ## Execution
 
 `ToolExecutionService` (`src/actions/toolExecution.ts`) is the executor referenced above as a future

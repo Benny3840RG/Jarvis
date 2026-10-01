@@ -7,6 +7,8 @@ import workerThreads from "node:worker_threads";
 import Bonjour from "bonjour-service";
 import castv2Client from "castv2-client";
 
+import { assertAudibleWav } from "./wavAudibility.js";
+
 const castv2 = castv2Client as {
   Client: new () => CastClient;
   DefaultMediaReceiver: unknown;
@@ -331,6 +333,13 @@ export async function synthesizeAnnouncement(
             value.byteLength > 4 * 1024 * 1024
           ) {
             done(new Error("local-tts-invalid-audio"));
+            return;
+          }
+          try {
+            // A silent clip still "plays" successfully on the receiver, so refuse it here.
+            assertAudibleWav(value);
+          } catch (error) {
+            done(error instanceof Error ? error : new Error("local-tts-invalid-audio"));
             return;
           }
           done(null, value);

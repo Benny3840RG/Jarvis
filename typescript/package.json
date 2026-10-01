@@ -13,6 +13,7 @@
     "start:preview": "node --import tsx src/preview/main.ts",
     "paddock": "node --import tsx src/tools/runPaddock.ts",
     "monitor": "node --import tsx src/tools/runLiveWorkMonitor.ts",
+    "owner:approve": "node --import tsx src/tools/runOwnerApproveToolAction.ts",
     "dev:live-work": "node --import tsx src/tools/runLiveWorkDev.ts",
     "quote:demo": "node --import tsx src/tools/runQuoteDemo.ts",
     "quote:create": "node --import tsx src/tools/runQuoteCreate.ts",
@@ -98,10 +99,10 @@
   "overrides": {
     "find-my-way": "^9.7.0",
     "@hono/node-server": "^2.0.11",
-    "brace-expansion": "^5.0.9",
-    "fast-uri": "^4.1.4",
+    "brace-expansion": "^5.0.12",
+    "fast-uri": "^4.2.1",
     "hono": "^4.12.34",
-    "ip-address": "^10.3.1",
+    "ip-address": "^10.7.2",
     "js-yaml": "^4.3.2",
     "nanoid": "^3.3.18",
     "castv2": {
