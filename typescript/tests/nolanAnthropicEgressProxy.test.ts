@@ -259,6 +259,38 @@ describe("createAnthropicEgressProxyServer — end to end over real sockets", ()
     }
   });
 
+  it("forwards bytes that arrive during the async upstream dial (no drop after the header)", async () => {
+    // The window: between removing the header 'data' listener and piping to the
+    // upstream, the client socket must be paused so bytes arriving mid-dial are
+    // buffered, not read-and-discarded. A deliberately slow dial widens it.
+    const upstream = await startFakeUpstream();
+    const proxy = await startProxy({
+      approved: { host: "127.0.0.1", port: upstream.port },
+      connectUpstream: (target) =>
+        new Promise((resolve, reject) => {
+          setTimeout(() => {
+            const sock = netConnect({ host: target.host, port: target.port });
+            sock.once("connect", () => resolve(sock));
+            sock.once("error", reject);
+          }, 80);
+        }),
+    });
+    try {
+      const client = rawConnect(proxy.port);
+      // CONNECT header first, with NO pipelined payload…
+      client.write(`CONNECT 127.0.0.1:${upstream.port} HTTP/1.1\r\n\r\n`);
+      // …then the "ClientHello" in a separate write, during the ~80ms dial window.
+      setTimeout(() => client.write("delayed-hello"), 20);
+      const all = await readUntil(client, (buf) => buf.includes("echo:"));
+      assert.match(all, /^HTTP\/1\.1 200/);
+      assert.equal(all.includes("echo:delayed-hello"), true);
+      client.destroy();
+    } finally {
+      proxy.server.close();
+      upstream.server.close();
+    }
+  });
+
   it("responds 502 when the upstream connection fails, without leaking a tunnel", async () => {
     const proxy = await startProxy({
       approved: { host: "api.anthropic.com", port: 443 },

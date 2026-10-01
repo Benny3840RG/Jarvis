@@ -96,8 +96,7 @@ JARVIS_ACP_WORKER_ARGS=[
   "--property=PrivateTmp=yes",
   "--property=ProtectSystem=strict",
   "--property=ProtectHome=yes",
-  "--property=TemporaryFileSystem=/run:ro",
-  "--property=BindPaths=/run/jarvis-acp/egress.sock",
+  "--property=InaccessiblePaths=-/run/dbus -/run/systemd -/run/user",
   "--property=NoNewPrivileges=yes",
   "--property=CapabilityBoundingSet=",
   "--property=SystemCallFilter=@system-service",
@@ -139,27 +138,53 @@ neither `PrivateNetwork` (network layer) nor `ProtectSystem=strict` (a read-only
 mount exempts sockets from `EROFS`) prevents a `connect()` to another pathname
 socket the worker can traverse to — e.g. `/run/dbus/system_bus_socket`,
 `/run/systemd/private`, or any other service's socket. `RestrictAddressFamilies=AF_UNIX`
-allows the family the worker needs but does not name *which* socket. The mount
-namespace must therefore be confined so the egress socket is the only pathname
-socket the worker can see: `TemporaryFileSystem=/run:ro` replaces `/run` with a
-fresh empty tmpfs in the worker's mount namespace (so the host's `/run` sockets
-simply do not exist there), and `BindPaths=/run/jarvis-acp/egress.sock` mounts back
-**only** the egress socket (read-write — an `AF_UNIX` connect needs write). Audit
-`/dev` (e.g. `/dev/log`) and any app-specific socket directories outside `/run` and
-`InaccessiblePaths=` any others. Ordering: the proxy (next section) must have
-created the socket **before** the worker starts, or the `BindPaths=` mount fails and
-the worker refuses to launch (fail-closed — order the proxy `Before=`/the worker
-`After=` it). Verify with probe 1b in Verification: a `connect()` to any pathname
-socket other than the egress socket must fail from inside the sandbox.
+allows the family the worker needs but does not name *which* socket. So the mount
+namespace must also be confined. Two approaches, with a **hard constraint** that
+decides between them:
+
+> **The confinement must not mask `$CREDENTIALS_DIRECTORY`.** `LoadCredentialEncrypted=`
+> delivers the worker's Anthropic key at `$CREDENTIALS_DIRECTORY`, which for a system
+> unit is `/run/credentials/<unit>` — **under `/run`**. A blanket
+> `TemporaryFileSystem=/run:ro` (replacing all of `/run` with an empty tmpfs) wipes
+> that directory in the worker's mount namespace, so the decider cannot read its key
+> and the worker exits fail-closed — defeating it entirely. Whether systemd re-mounts
+> the credential directory *after* the tmpfs is version-dependent and **must not be
+> assumed**.
+
+- **Recommended — targeted `InaccessiblePaths=` (credential-safe).** Mask only the
+  known host socket directories: `InaccessiblePaths=-/run/dbus -/run/systemd -/run/user`
+  (the `-` prefix tolerates absent paths). `/run` is left intact, so `/run/credentials/<unit>`
+  and the egress socket at `/run/jarvis-acp/egress.sock` both remain reachable with no
+  extra binds. This is what `JARVIS_ACP_WORKER_ARGS` above sets. It is a **denylist**:
+  you must audit the host for any *other* pathname socket the worker could reach
+  (app-specific sockets under `/run`, a local DB/Convex socket, `/dev/log`, sockets
+  under `/var/run` → `/run`) and add each to `InaccessiblePaths=`. Probe 1b verifies
+  the result.
+- **Stricter — `TemporaryFileSystem=/run:ro` allowlist (only if credentials are
+  preserved and verified).** `TemporaryFileSystem=/run:ro` + `BindPaths=/run/jarvis-acp/egress.sock`
+  gives the strongest "only this socket" property by construction, but you **must**
+  also keep the credential directory: give the transient unit a known name
+  (`--unit=nolan-acp-worker-<id>.service`) so `$CREDENTIALS_DIRECTORY` is deterministic,
+  and **verify on the host** (probe 1c) that the worker can still read its key under the
+  confinement — rebinding the credential path if your systemd version does not preserve
+  it. Do not ship this variant without that verification; a silent credential mask fails
+  the worker closed. Ordering for the bind: the proxy must have created the socket
+  **before** the worker starts (order the proxy `Before=`/the worker `After=` it), or the
+  `BindPaths=` mount fails.
+
+Either way, verify with probes 1b (no other pathname socket reachable) **and** 1c (the
+worker can read its credential) in Verification.
 
 > **Verify before enabling.** Confirm on the host: (a) `PrivateNetwork=yes` took
 > effect (`systemctl show <unit> -p PrivateNetwork`; it needs a system manager /
 > `sudo`, not a rootless `--user` unit); (b) the worker can connect to the proxy
 > socket but to **no other** localhost port and **no other pathname unix socket**
 > (probes 1a and 1b in Verification below — the mount-namespace confinement,
-> `TemporaryFileSystem=/run:ro` + `BindPaths=`, is what makes 1b hold); and
-> provision the worker's own credential and the egress proxy (next section)
-> before enabling a mode above `disabled`.
+> `InaccessiblePaths=` on the host socket dirs, is what makes 1b hold); (c) the
+> worker can still read its credential under that confinement (probe 1c — the
+> confinement must not mask `$CREDENTIALS_DIRECTORY`); and provision the worker's
+> own credential and the egress proxy (next section) before enabling a mode above
+> `disabled`.
 
 ## Egress: one designated proxy, and nothing else the worker can reach
 
@@ -189,12 +214,14 @@ This is what `JARVIS_ACP_WORKER_ARGS` above sets up.
    socket with its directory's ownership/permissions (a systemd `RuntimeDirectory`
    owned by the proxy, with the worker's user or a shared group granted access) so
    only the worker's account can `connect()` it; and **(b)** confine the worker's
-   **mount namespace** so this is the *only* pathname unix socket it can see at all
-   — `TemporaryFileSystem=/run:ro` + `BindPaths=/run/jarvis-acp/egress.sock` (set in
-   `JARVIS_ACP_WORKER_ARGS` above). Without (b), `AF_UNIX` + `PrivateNetwork` still
-   leaves every other pathname socket on the shared filesystem reachable (see the
-   note under the worker args). Verify the worker can connect to the egress socket
-   **and to no other socket** (probes 1 and 1b, Verification below).
+   **mount namespace** so other pathname sockets are not reachable — `InaccessiblePaths=`
+   on the host socket directories (credential-safe), or the stricter
+   `TemporaryFileSystem=/run:ro` allowlist *with the credential directory preserved*
+   (see the two-approaches note under the worker args — the confinement must not mask
+   `$CREDENTIALS_DIRECTORY`). Without (b), `AF_UNIX` + `PrivateNetwork` still leaves
+   other pathname sockets on the shared filesystem reachable. Verify the worker can
+   connect to the egress socket, **to no other socket**, **and** can still read its
+   credential (probes 1, 1b, 1c, Verification below).
 3. **The proxy tunnels — never TLS-terminates — to exactly `api.anthropic.com:443`**
    and refuses every other CONNECT target before opening any outbound connection
    (`tests/nolanAnthropicEgressProxy.test.ts`). The worker's TLS client negotiates
@@ -274,10 +301,11 @@ sudo systemctl enable --now jarvis-anthropic-egress-proxy.service
 ```
 
 Start this proxy (so `/run/jarvis-acp/egress.sock` exists) **before** any worker
-launches: the recommended worker bind-mounts that socket into its own mount
-namespace (`BindPaths=`), and a `systemd-run` worker whose bind source is missing
-fails to start. Operationally this means enabling the proxy before setting
-`JARVIS_ACP_MODE` above `disabled`; there is no static `After=` on a transient
+launches: the worker needs that socket present to reach Anthropic at all, and under
+the stricter `TemporaryFileSystem`+`BindPaths` confinement a `systemd-run` worker
+whose bind source is missing fails to start outright. Operationally this means
+enabling the proxy before setting `JARVIS_ACP_MODE` above `disabled`; there is no
+static `After=` on a transient
 per-request worker to enforce it.
 
 (`src/acp/proxyMain.ts` binds `createAnthropicEgressProxyServer()` to
@@ -385,8 +413,9 @@ and a process scan for the worker command) beyond the moment the request settled
 | `ProtectHome=yes`                                                                                                                     | `/home`, `/root`, `/run/user` inaccessible.                                                                | —                                                                                                                                                                                                                                                                          |
 | `NoNewPrivileges=yes`                                                                                                                 | No setuid/gain-privilege via exec.                                                                         | —                                                                                                                                                                                                                                                                          |
 | `CapabilityBoundingSet=` (empty)                                                                                                      | Drops all capabilities.                                                                                    | Empty value = none; verify the worker needs none.                                                                                                                                                                                                                          |
-| `RestrictAddressFamilies=AF_UNIX`                                                                                                     | Only UNIX-domain sockets; blocks AF_INET/AF_INET6/AF_NETLINK/etc.                                          | Recommended design: the worker needs only `AF_UNIX` (proxy over a unix socket). **Allows the family, not a specific socket** — it does not confine the worker to the one egress socket; pair with the mount-namespace confinement below (`TemporaryFileSystem=/run:ro` + `BindPaths=`). Use `AF_INET AF_INET6` instead only for the TCP-loopback alternative.                                                       |
-| `TemporaryFileSystem=/run:ro` + `BindPaths=/run/jarvis-acp/egress.sock`                                                               | Replaces `/run` with an empty tmpfs in the worker's mount ns, then mounts back **only** the egress socket. | **Required for the "sole egress" property** (Egress → Recommended). Without it, `AF_UNIX` + `PrivateNetwork` still leaves other pathname sockets reachable. The socket must exist first (order the proxy `Before=` the worker) or the bind fails (fail-closed). Audit `/dev` + other socket dirs; `InaccessiblePaths=` any others. Probe 1b verifies it.                                                          |
+| `RestrictAddressFamilies=AF_UNIX`                                                                                                     | Only UNIX-domain sockets; blocks AF_INET/AF_INET6/AF_NETLINK/etc.                                          | Recommended design: the worker needs only `AF_UNIX` (proxy over a unix socket). **Allows the family, not a specific socket** — it does not confine the worker to the one egress socket; pair with the mount-namespace confinement below. Use `AF_INET AF_INET6` instead only for the TCP-loopback alternative.                                                       |
+| `InaccessiblePaths=-/run/dbus -/run/systemd -/run/user`                                                                               | Masks the named host socket dirs in the worker's mount ns; leaves the rest of `/run` intact.              | **Recommended, credential-safe confinement** (Egress → Recommended). Preserves `$CREDENTIALS_DIRECTORY` (`/run/credentials/<unit>`) and the egress socket, unlike a blanket `/run` tmpfs. **Denylist** — audit the host and add every other reachable pathname socket (app/DB sockets under `/run`, `/dev/log`). Probe 1b verifies it. |
+| `TemporaryFileSystem=/run:ro` + `BindPaths=/run/jarvis-acp/egress.sock`                                                               | Replaces `/run` with an empty tmpfs, then mounts back only the egress socket (allowlist).                  | Stricter alternative — strongest "only this socket" property, but **masks `$CREDENTIALS_DIRECTORY`** and so breaks `LoadCredentialEncrypted=` unless the credential dir is preserved and **host-verified** (probe 1c); name the unit (`--unit=`) for a deterministic path. The socket must exist first (order the proxy `Before=` the worker) or the bind fails. Do not ship unverified. |
 | `SystemCallFilter=@system-service`                                                                                                    | Allowlist syscall set; denies the rest (with `EPERM`).                                                     | Test the worker actually runs under it; add groups only as needed.                                                                                                                                                                                                         |
 | `SystemCallArchitectures=native`                                                                                                      | Blocks non-native ABIs (defeats some sandbox escapes).                                                     | —                                                                                                                                                                                                                                                                          |
 | `MemoryMax` / `TasksMax` / `RuntimeMaxSec`                                                                                            | Resource + wall-clock bounds.                                                                              | `RuntimeMaxSec` kills long calls; set above the transport's response timeout.                                                                                                                                                                                              |
@@ -434,14 +463,24 @@ Before enabling live worker launches, confirm on the target host:
    per-port cgroup/nftables filter blocks it).
 1b. **No other pathname unix socket is reachable (mount-namespace confinement).**
    `PrivateNetwork` does not gate pathname unix sockets (they are on the shared
-   filesystem, not the network) — `TemporaryFileSystem=/run:ro` + `BindPaths=` do.
-   From inside the sandbox, confirm the egress socket is present and another host
-   socket is **absent/unreachable**: listing `/run` should show only
-   `jarvis-acp/egress.sock` (`systemd-run --pipe … -- ls -R /run` → just the socket),
-   and a `connect()` to a known host socket must fail (`systemd-run --pipe … --
-   curl -sS --max-time 3 --unix-socket /run/dbus/system_bus_socket http://localhost/`
-   → must fail: no such path in the worker's mount namespace). If either shows a
-   foreign socket, the confinement is not in place — do not enable.
+   filesystem, not the network) — the mount-namespace confinement does. From inside
+   the sandbox, confirm the egress socket is present but a known host socket is
+   **unreachable**: a `connect()` to it must fail (`systemd-run --pipe … -- curl -sS
+   --max-time 3 --unix-socket /run/dbus/system_bus_socket http://localhost/` → must
+   fail — masked by `InaccessiblePaths=`, or absent under the `TemporaryFileSystem`
+   allowlist). Under the recommended `InaccessiblePaths=` denylist, also `ls -R /run`
+   and confirm **no** pathname socket other than `jarvis-acp/egress.sock` and the
+   credential dir is left reachable; add any you find to `InaccessiblePaths=`. If a
+   foreign socket is reachable, the confinement is not in place — do not enable.
+1c. **The worker can still read its credential under the confinement.** The
+   confinement must not mask `$CREDENTIALS_DIRECTORY` (`/run/credentials/<unit>`) — a
+   blanket `TemporaryFileSystem=/run` would, breaking `LoadCredentialEncrypted=` and
+   failing the worker closed. From inside the sandbox confirm the key is readable:
+   `systemd-run --pipe … -- sh -c 'cat "$CREDENTIALS_DIRECTORY/jarvis-acp-anthropic-key" >/dev/null && echo OK'`
+   → must print `OK` (without printing the key). If it fails, the confinement is
+   masking the credential — switch to the `InaccessiblePaths=` form or rebind the
+   credential directory. The recommended `InaccessiblePaths=` form preserves it by
+   construction; run this probe anyway whenever the confinement changes.
 2. **No cloud metadata.** `curl -sS --max-time 3 http://169.254.169.254/` from
    inside the sandbox must fail.
 3. **No Jarvis credentials.** Dump the worker's environment from inside the
@@ -457,8 +496,8 @@ Before enabling live worker launches, confirm on the target host:
    plane can still reach api.github.com) — proving isolation is scoped to the
    worker, not the service.
 
-Record the results; a launch config that has not passed 1, 1a, 1b, and 2–4 must
-not be enabled.
+Record the results; a launch config that has not passed 1, 1a, 1b, 1c, and 2–4
+must not be enabled.
 
 ## Residual risks / what still needs a decision
 
@@ -489,10 +528,14 @@ not be enabled.
   abstract unix sockets; it does **not** stop the worker from `connect()`-ing
   other **pathname** unix sockets on the shared filesystem (dbus, `systemd/private`,
   other services), and `ProtectSystem=strict` does not either (a read-only mount
-  exempts sockets). The `TemporaryFileSystem=/run:ro` + `BindPaths=` confinement is
-  what makes the egress socket the sole reachable pathname socket — audit `/dev` and
-  any socket dirs outside `/run`, `InaccessiblePaths=` any others, and confirm with
-  probe 1b. Without it, "the proxy is the worker's only egress" is **not** true.
+  exempts sockets). A mount-namespace confinement is what restricts the reachable
+  pathname sockets — and it **must not mask `$CREDENTIALS_DIRECTORY`** (`/run/credentials/<unit>`),
+  or the worker loses its key and fails closed (probe 1c). The recommended
+  `InaccessiblePaths=` denylist is credential-safe but must be audited for every host
+  socket dir (`/dev/log` and any under `/run`); the stricter `TemporaryFileSystem=/run`
+  allowlist is comprehensive but only safe with the credential dir preserved and
+  host-verified. Confirm with probes 1b and 1c. Without a working confinement, "the
+  proxy is the worker's only egress" is **not** true.
 - **Shared kernel.** systemd sandboxing is not a VM boundary. For hostile-tenant
   threat models, prefer a VM/microVM per worker.
 

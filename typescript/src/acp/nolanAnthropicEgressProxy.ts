@@ -181,6 +181,14 @@ export function createAnthropicEgressProxyServer(deps: AnthropicEgressProxyDeps 
       // invoked twice, and the decision of whether to refuse or proceed is
       // made below.
       client.removeAllListeners("data");
+      // Pause the socket before the async upstream dial. Removing the `data`
+      // listener alone leaves the socket in flowing mode, so any bytes that
+      // arrive before `connectUpstream` resolves (e.g. a TLS ClientHello sent
+      // in a *separate* packet from the CONNECT line) would be read and
+      // discarded with no consumer attached. Paused, those bytes stay buffered
+      // in the socket and are flushed in order once `client.pipe(upstream)`
+      // resumes it — after the already-buffered `leftover` is written.
+      client.pause();
       clearHeaderTimer();
       const headerBlock = buffer.slice(0, headerEnd);
       // Any bytes the client already sent past the blank line (e.g. a
