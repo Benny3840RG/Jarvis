@@ -44,4 +44,5 @@ bounded Windows fallback.
 These tests verify ordering and injected failures. They do not prove a physical
 power-loss recovery drill, storage-device behaviour, production readiness or
 full archive-v4 recovery. Filesystem and storage support still bound durability.
-Stale-lock reclamation remains a separate repair under issue #548 and PR #668.
+Stale-lock claim safety is covered separately in
+[JSON recovery claims](json-lock-claims.md), under the same issue #548.
