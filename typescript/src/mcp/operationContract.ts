@@ -80,6 +80,11 @@ export const MCP_TOOL_OPERATIONS: Readonly<Record<string, readonly OpenApiOperat
   update_invoice_draft: [{ method: "PATCH", path: "/api/v1/invoices/{invoiceId}" }],
   list_quotes: [{ method: "GET", path: "/api/v1/quotes" }],
   get_quote: [{ method: "GET", path: "/api/v1/quotes/{quoteId}" }],
+  // Quotes are exposed as drafts only. Review, finalize, fork, send and
+  // commercial-outcome create or dispatch official records and stay owner-driven
+  // outside MCP (issue #658).
+  create_quote_draft: [{ method: "POST", path: "/api/v1/quotes" }],
+  update_quote_draft: [{ method: "PATCH", path: "/api/v1/quotes/{quoteId}/revisions/{revision}" }],
   list_tool_actions: [{ method: "GET", path: "/api/v1/projects/{projectId}/tool-actions" }],
   get_tool_action: [
     { method: "GET", path: "/api/v1/projects/{projectId}/tool-actions/{actionId}" },

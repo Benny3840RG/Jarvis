@@ -400,7 +400,7 @@ describe("business MCP tools: daily brief", () => {
 });
 
 describe("business MCP tools: authority boundary", () => {
-  it("exposes drafting only: no invoice issue, void or payment, and no quote writes", async () => {
+  it("exposes drafting only: no invoice issue/void/payment, quotes limited to draft create/edit", async () => {
     const { client } = await startHarness();
     const names = (await client.listTools()).tools.map((tool) => tool.name);
     for (const name of names) {
@@ -409,8 +409,14 @@ describe("business MCP tools: authority boundary", () => {
         /issue|void|payment|review|finali[sz]e|reopen|fork|outcome|deliver|send/i,
         `MCP tool ${name} reaches beyond drafting`,
       );
-      // The quote lifecycle contract keeps quote writes off MCP; only list/get remain.
-      if (/quote/.test(name)) assert.ok(["list_quotes", "get_quote"].includes(name), name);
+      // Quote writes are draft-only: create and edit a draft revision, plus read.
+      // The non-draft lifecycle (review/finalize/reopen/fork/outcome/send) is caught above.
+      if (/quote/.test(name)) {
+        assert.ok(
+          ["list_quotes", "get_quote", "create_quote_draft", "update_quote_draft"].includes(name),
+          name,
+        );
+      }
     }
   });
 

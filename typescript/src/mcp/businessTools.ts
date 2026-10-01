@@ -13,10 +13,12 @@ import { JarvisApiError, type JarvisApiClient } from "./jarvisApiClient.js";
  *
  * Deliberately drafting-only. Nothing here issues, voids or takes payment on an
  * invoice: those steps create official financial records, so they stay
- * owner-driven outside MCP. Quote lifecycle writes are not exposed either; the
- * quote lifecycle contract keeps them off MCP until Benny decides otherwise. Every write goes through the
- * HTTP validators, so the server computes totals and enforces lifecycle rules;
- * the inputs below only pre-check shape and length to fail fast.
+ * owner-driven outside MCP. Quote drafting (create and edit a draft revision) is
+ * exposed by `create_quote_draft`/`update_quote_draft` in `server.ts`; the rest of
+ * the quote lifecycle (review, finalize, fork, send, commercial outcome) dispatches
+ * or freezes official records and stays owner-driven off MCP. Every write goes
+ * through the HTTP validators, so the server computes totals and enforces lifecycle
+ * rules; the inputs below only pre-check shape and length to fail fast.
  */
 
 const readAnnotations = {

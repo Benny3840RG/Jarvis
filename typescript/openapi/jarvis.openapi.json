@@ -3391,7 +3391,7 @@
         "description": "Creates one quote aggregate and its draft revision 1; totals are derived server-side from the line items. Requires the Convex persistence provider.",
         "tags": ["Quotes"],
         "x-mcp-tool": {
-          "exposed": false,
+          "exposed": true,
           "annotations": {
             "readOnlyHint": false,
             "destructiveHint": false,
@@ -3506,7 +3506,7 @@
         "description": "Applies a partial patch to a draft revision after checking the expected aggregate and revision versions. Requires the Convex persistence provider.",
         "tags": ["Quotes"],
         "x-mcp-tool": {
-          "exposed": false,
+          "exposed": true,
           "annotations": {
             "readOnlyHint": false,
             "destructiveHint": false,

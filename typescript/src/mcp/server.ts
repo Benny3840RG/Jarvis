@@ -77,6 +77,12 @@ const projectSchema = z.object({
   updatedAt: z.number(),
 });
 
+const quoteDraftLineItemInput = z.object({
+  description: z.string().trim().min(1).max(500),
+  quantity: z.number().finite().nonnegative(),
+  unitPrice: z.number().finite().nonnegative(),
+});
+
 const quoteLineItemSchema = z.object({
   description: z.string(),
   quantity: z.number(),
@@ -1542,6 +1548,122 @@ export function createJarvisMcpServer(
             {
               type: "text" as const,
               text: `Quote #${quote.aggregate.number}, revision ${quote.revision.revision}.`,
+            },
+          ],
+          structuredContent: { quote },
+        };
+      } catch (error: unknown) {
+        return safeError(error);
+      }
+    },
+  );
+
+  registerAppTool(
+    server,
+    "create_quote_draft",
+    {
+      title: "Draft a quote",
+      description:
+        "Use this when Benny asks to prepare a quote for a client. Creates revision 1 as a DRAFT only; Jarvis computes the totals. Reviewing, finalising, sending and recording an outcome are not available here and stay owner-driven. Requires the Convex quote provider.",
+      inputSchema: {
+        clientId: z.string().trim().min(1).max(200),
+        number: z.string().trim().min(1).max(100),
+        lineItems: z.array(quoteDraftLineItemInput).min(1).max(200),
+        termsIncluded: z.boolean(),
+        projectId: z.string().trim().min(1).max(200).optional(),
+        taxRate: z.number().finite().min(0).max(1).optional(),
+        validUntil: z.string().trim().min(1).max(100).optional(),
+        notes: z.string().trim().min(1).max(2000).optional(),
+      },
+      outputSchema: { quote: quoteSnapshotSchema },
+      annotations: createAnnotations,
+      _meta: { ui: { visibility: ["model"] } },
+    },
+    async ({
+      clientId,
+      number,
+      lineItems,
+      termsIncluded,
+      projectId,
+      taxRate,
+      validUntil,
+      notes,
+    }) => {
+      try {
+        const quote = await client.createQuoteDraft({
+          clientId,
+          number,
+          lineItems,
+          termsIncluded,
+          ...(projectId === undefined ? {} : { projectId }),
+          ...(taxRate === undefined ? {} : { taxRate }),
+          ...(validUntil === undefined ? {} : { validUntil }),
+          ...(notes === undefined ? {} : { notes }),
+        });
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: `Drafted quote #${quote.aggregate.number}, revision ${quote.revision.revision}, total ${quote.revision.total} ${quote.revision.currency}.`,
+            },
+          ],
+          structuredContent: { quote },
+        };
+      } catch (error: unknown) {
+        return safeError(error);
+      }
+    },
+  );
+
+  registerAppTool(
+    server,
+    "update_quote_draft",
+    {
+      title: "Edit a draft quote",
+      description:
+        "Use this when Benny asks to change a draft quote revision. Only draft revisions can be edited; reviewed or finalised quotes are refused. Pass the quote's current aggregate and revision versions (from get_quote) so a stale edit is rejected rather than clobbering a newer change. Pass null to clear taxRate, validUntil or notes. Requires the Convex quote provider.",
+      inputSchema: {
+        quoteId: z.string().trim().min(1).max(200),
+        revision: z.number().int().positive(),
+        expectedAggregateVersion: z.number().int().nonnegative(),
+        expectedRevisionVersion: z.number().int().nonnegative(),
+        patch: z.object({
+          lineItems: z.array(quoteDraftLineItemInput).min(1).max(200).optional(),
+          taxRate: z.number().finite().min(0).max(1).nullable().optional(),
+          validUntil: z.string().trim().min(1).max(100).nullable().optional(),
+          notes: z.string().trim().min(1).max(2000).nullable().optional(),
+          termsIncluded: z.boolean().optional(),
+        }),
+      },
+      outputSchema: { quote: quoteSnapshotSchema },
+      annotations: createAnnotations,
+      _meta: { ui: { visibility: ["model"] } },
+    },
+    async ({ quoteId, revision, expectedAggregateVersion, expectedRevisionVersion, patch }) => {
+      try {
+        if (Object.values(patch).every((value) => value === undefined)) {
+          return {
+            isError: true,
+            content: [
+              {
+                type: "text" as const,
+                text: "Quote draft update requires at least one changed field in patch.",
+              },
+            ],
+          };
+        }
+        const quote = await client.updateQuoteDraft({
+          quoteId,
+          revision,
+          expectedAggregateVersion,
+          expectedRevisionVersion,
+          patch,
+        });
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: `Updated draft quote #${quote.aggregate.number}, revision ${quote.revision.revision}, total ${quote.revision.total} ${quote.revision.currency}.`,
             },
           ],
           structuredContent: { quote },

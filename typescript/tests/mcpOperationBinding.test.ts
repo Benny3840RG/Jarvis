@@ -381,7 +381,12 @@ function mockResponse(method: string, path: string): Response {
   }
   if (/^\/api\/v1\/projects\/[^/]+$/.test(path)) return Response.json({ data: sampleProject() });
   if (path === "/api/v1/quotes") {
-    return Response.json({ data: [sampleQuoteSummary()], count: 1 });
+    return method === "POST"
+      ? Response.json({ data: sampleQuoteSnapshot() }, { status: 201 })
+      : Response.json({ data: [sampleQuoteSummary()], count: 1 });
+  }
+  if (/^\/api\/v1\/quotes\/[^/]+\/revisions\/[^/]+$/.test(path)) {
+    return Response.json({ data: sampleQuoteSnapshot() });
   }
   if (/^\/api\/v1\/quotes\/[^/]+$/.test(path)) {
     return Response.json({ data: sampleQuoteSnapshot() });
@@ -514,6 +519,19 @@ const TOOL_INVOCATIONS: Record<string, Record<string, unknown>> = {
   delete_project: { projectId: "project-1" },
   list_quotes: {},
   get_quote: { quoteId: "quote-1" },
+  create_quote_draft: {
+    clientId: "client-1",
+    number: "Q-1001",
+    termsIncluded: true,
+    lineItems: [{ description: "Recorded item", quantity: 1, unitPrice: 100 }],
+  },
+  update_quote_draft: {
+    quoteId: "quote-1",
+    revision: 1,
+    expectedAggregateVersion: 0,
+    expectedRevisionVersion: 0,
+    patch: { notes: "Access via rear lane." },
+  },
   list_properties: { clientId: "client-1" },
   get_property: { propertyId: "property-1" },
   create_property: { clientId: "client-1", address: "12 Example St" },

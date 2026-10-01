@@ -1,5 +1,34 @@
 # Jarvis TypeScript Roadmap
 
+## Quote drafting through chat (MCP), draft-only (2026-10-01)
+
+Benny can now draft and edit quotes from a chat client, not only inspect them. Two MCP
+tools wrap the existing documented quote-lifecycle routes.
+
+Completed:
+
+- `create_quote_draft` → `POST /api/v1/quotes`: creates revision 1 as a draft; the server
+  derives totals. `update_quote_draft` → `PATCH /api/v1/quotes/{quoteId}/revisions/{revision}`:
+  edits a draft under optimistic concurrency (caller passes the expected aggregate/revision
+  versions from `get_quote`), refusing a stale or non-draft edit.
+- OpenAPI first: `x-mcp-tool.exposed` flipped false → true for those two operations (annotations
+  already matched `create`-shaped writes); `operationContract.ts` maps the two new tools. Exactly
+  two scalar flips in the spec.
+- `tests/mcpQuoteDrafting.test.ts`: tool registration/annotations, create and edit happy paths over
+  stubbed HTTP, empty-patch refusal, and the Convex-unavailable 503 path. The MCP operation-contract
+  test now enforces the new tools end to end.
+
+Decisions:
+
+- Draft-only. Review, finalize, fork, send and commercial-outcome dispatch or freeze official
+  records and stay owner-driven off MCP (issue #658), alongside invoice issue/void/payment.
+- The quote lifecycle is Convex-only. On the default JSON provider these tools (and the quote reads)
+  return `503 Quote Lifecycle Unavailable`; the tools surface that as a tool error rather than
+  fabricating a result.
+
+Next: owner commissioning of a Convex deployment to make the quote surface live; pinned contract
+drift follow-ups (#658).
+
 ## Dashboard: enquiries and unpaid invoices in the operations view (2026-10-01, #674)
 
 The #670 brief carries open enquiries and unpaid invoices; the operator dashboard
