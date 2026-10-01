@@ -74,7 +74,10 @@ const isoDate = z
     try {
       parseProjectScheduledDate(value);
     } catch (error: unknown) {
-      ctx.addIssue({ code: "custom", message: error instanceof Error ? error.message : String(error) });
+      ctx.addIssue({
+        code: "custom",
+        message: error instanceof Error ? error.message : String(error),
+      });
     }
   });
 

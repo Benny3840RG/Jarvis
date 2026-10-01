@@ -9785,6 +9785,7 @@
           },
           "scheduledFor": {
             "type": ["string", "null"],
+            "format": "date",
             "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
             "description": "The day the job is booked for, as an ISO YYYY-MM-DD date; null clears it."
           }
