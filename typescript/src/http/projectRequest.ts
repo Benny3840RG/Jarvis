@@ -89,7 +89,8 @@ export function parseUpdateProject(body: unknown): ProjectUpdate {
       body.notes === null ? null : requiredString(body.notes, "Project notes", MAX_NOTES_LENGTH);
   }
   if (body.scheduledFor !== undefined) {
-    update.scheduledFor = body.scheduledFor === null ? null : parseProjectScheduledDate(body.scheduledFor);
+    update.scheduledFor =
+      body.scheduledFor === null ? null : parseProjectScheduledDate(body.scheduledFor);
   }
   return update;
 }

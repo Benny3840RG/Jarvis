@@ -67,13 +67,16 @@ const clientSchema = z.object({
   updatedAt: z.number(),
 });
 
-const isoDate = z.string().trim().superRefine((value, ctx) => {
-  try {
-    parseProjectScheduledDate(value);
-  } catch (error: unknown) {
-    ctx.addIssue({ code: "custom", message: error instanceof Error ? error.message : String(error) });
-  }
-});
+const isoDate = z
+  .string()
+  .trim()
+  .superRefine((value, ctx) => {
+    try {
+      parseProjectScheduledDate(value);
+    } catch (error: unknown) {
+      ctx.addIssue({ code: "custom", message: error instanceof Error ? error.message : String(error) });
+    }
+  });
 
 const projectSchema = z.object({
   id: z.string(),
@@ -1791,7 +1794,7 @@ export function createJarvisMcpServer(
     {
       title: "Get the operations inbox",
       description:
-        "Use this when Benny asks what needs his attention right now, or what's urgent. Read-only, owner-scoped digest of overdue reminders and overdue/due-soon maintenance, each backed by real records. Cannot dismiss, acknowledge, resolve, approve, revoke, or execute anything — inspection only. Sources not yet wired (governed tool-action approvals, reconciliation escalations, quote-delivery problems) are reported as unsupported, never silently empty.",
+        "Use this when Benny asks what needs his attention right now, or what's urgent. Read-only, owner-scoped digest of overdue reminders and overdue/due-soon maintenance, each backed by real records. Cannot dismiss, acknowledge, resolve, approve, revoke, reject, or execute anything — inspection only. Sources not yet wired (governed tool-action approvals, reconciliation escalations, quote-delivery problems) are reported as unsupported, never silently empty.",
       inputSchema: {},
       outputSchema: { inbox: operationsInboxSchema },
       annotations: readAnnotations,
