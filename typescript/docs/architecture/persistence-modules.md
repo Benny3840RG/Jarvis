@@ -49,6 +49,10 @@ runtime behaviour belongs in the focused modules below.
   numbers (such as `1e400`) trigger the existing corrupt-file quarantine, which
   preserves the original bytes for recovery.
 - JSON mutations reread the latest document after acquiring the cross-process lock.
+- Stale-lock reclamation elects a single reclaimer per observed lock generation
+  before unlinking it. The elected process re-reads and fingerprints the exact
+  generation immediately before removal; concurrent contenders cannot delete a
+  successor lock after another process has recovered the stale one.
 - Corrupt reads acquire that same lock and re-read before moving a file aside.
   Core and domain stores pass `true` for the internal `lockHeld` parameter when the caller already
   owns the lock, avoiding nested acquisition. Healthy reads stay lock-free,

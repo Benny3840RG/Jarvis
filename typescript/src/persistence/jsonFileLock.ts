@@ -1,6 +1,6 @@
+import { createHash, randomUUID } from "node:crypto";
 import fs, { type FileHandle } from "node:fs/promises";
 import path from "node:path";
-import { randomUUID } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
 
 import type { PersistenceWarning } from "./types.js";
@@ -22,7 +22,17 @@ type LockState =
       size: number;
       device: number;
       inode: number;
+      rawDigest: string;
     };
+
+type ReclaimClaimState =
+  | { kind: "valid"; generation: number; record: LockRecord }
+  | { kind: "malformed"; generation: number; modifiedAt: number };
+
+type ReclaimClaim = {
+  path: string;
+  identity: string;
+};
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -54,6 +64,26 @@ function isProcessAlive(pid: number): boolean {
     if (isNodeError(error) && error.code === "ESRCH") return false;
     return true;
   }
+}
+
+function stateIdentity(state: Exclude<LockState, { kind: "missing" }>): string {
+  const hash = createHash("sha256");
+  if (state.kind === "valid") {
+    hash.update("valid\0");
+    hash.update(state.record.token);
+  } else {
+    hash.update("malformed\0");
+    hash.update(String(state.device));
+    hash.update("\0");
+    hash.update(String(state.inode));
+    hash.update("\0");
+    hash.update(String(state.modifiedAt));
+    hash.update("\0");
+    hash.update(String(state.size));
+    hash.update("\0");
+    hash.update(state.rawDigest);
+  }
+  return hash.digest("hex");
 }
 
 export class JsonFileLock {
@@ -97,6 +127,7 @@ export class JsonFileLock {
       size: stat.size,
       device: stat.dev,
       inode: stat.ino,
+      rawDigest: createHash("sha256").update(raw).digest("hex"),
     };
   }
 
@@ -113,38 +144,144 @@ export class JsonFileLock {
     }
   }
 
+  private reclaimClaimPrefix(identity: string): string {
+    return `${path.basename(this.lockPath)}.reclaim-${identity}-`;
+  }
+
+  private async readLatestReclaimClaim(identity: string): Promise<ReclaimClaimState | null> {
+    const directory = path.dirname(this.lockPath);
+    const prefix = this.reclaimClaimPrefix(identity);
+    let names: string[];
+    try {
+      names = await fs.readdir(directory);
+    } catch (error: unknown) {
+      if (isNodeError(error) && error.code === "ENOENT") return null;
+      throw error;
+    }
+
+    const candidates = names
+      .filter((name) => name.startsWith(prefix))
+      .map((name) => ({ name, generation: Number(name.slice(prefix.length)) }))
+      .filter(
+        (entry) =>
+          Number.isSafeInteger(entry.generation) &&
+          entry.generation >= 0 &&
+          String(entry.generation) === entry.name.slice(prefix.length),
+      )
+      .sort((a, b) => b.generation - a.generation);
+
+    for (const candidate of candidates) {
+      const claimPath = path.join(directory, candidate.name);
+      let raw: string;
+      let stat: Awaited<ReturnType<typeof fs.stat>>;
+      try {
+        raw = await fs.readFile(claimPath, "utf8");
+        stat = await fs.stat(claimPath);
+      } catch (error: unknown) {
+        if (isNodeError(error) && error.code === "ENOENT") continue;
+        throw error;
+      }
+
+      try {
+        const record = normalizeLockRecord(JSON.parse(raw) as unknown);
+        if (record) {
+          return { kind: "valid", generation: candidate.generation, record };
+        }
+      } catch (error: unknown) {
+        if (!(error instanceof SyntaxError)) throw error;
+      }
+
+      return {
+        kind: "malformed",
+        generation: candidate.generation,
+        modifiedAt: stat.mtimeMs,
+      };
+    }
+
+    return null;
+  }
+
+  private async claimReclamation(
+    state: Exclude<LockState, { kind: "missing" }>,
+  ): Promise<ReclaimClaim | null> {
+    const identity = stateIdentity(state);
+    const latest = await this.readLatestReclaimClaim(identity);
+    const malformedGraceMs = Math.max(100, this.timeoutMs);
+
+    if (latest?.kind === "valid" && isProcessAlive(latest.record.pid)) return null;
+    if (latest?.kind === "malformed" && Date.now() - latest.modifiedAt < malformedGraceMs) {
+      return null;
+    }
+
+    const generation = (latest?.generation ?? -1) + 1;
+    const claimPath = path.join(
+      path.dirname(this.lockPath),
+      `${this.reclaimClaimPrefix(identity)}${generation}`,
+    );
+    const record: LockRecord = {
+      pid: process.pid,
+      acquiredAt: Date.now(),
+      token: randomUUID(),
+    };
+
+    let handle: FileHandle | undefined;
+    try {
+      handle = await fs.open(claimPath, "wx", 0o600);
+      await handle.writeFile(`${JSON.stringify(record)}\n`, "utf8");
+      await handle.sync();
+      await handle.close();
+      handle = undefined;
+      return { path: claimPath, identity };
+    } catch (error: unknown) {
+      await handle?.close().catch(() => undefined);
+      if (isNodeError(error) && error.code === "EEXIST") return null;
+      await fs.rm(claimPath, { force: true }).catch(() => undefined);
+      throw error;
+    }
+  }
+
   private async reclaimStale(): Promise<boolean> {
     const state = await this.readState();
     if (state.kind === "missing") return true;
 
+    const malformedGraceMs = Math.max(100, this.timeoutMs);
     if (state.kind === "valid") {
       if (isProcessAlive(state.record.pid)) return false;
-      if (!(await this.removeOwned(state.record.token))) return false;
-      this.warn(`Jarvis reclaimed a stale JSON state lock left by process ${state.record.pid}.`);
-      return true;
+    } else if (Date.now() - state.modifiedAt < malformedGraceMs) {
+      return false;
     }
 
-    const malformedGraceMs = Math.max(100, this.timeoutMs);
-    if (Date.now() - state.modifiedAt < malformedGraceMs) return false;
-
-    const confirmed = await this.readState();
-    if (
-      confirmed.kind !== "malformed" ||
-      confirmed.modifiedAt !== state.modifiedAt ||
-      confirmed.size !== state.size ||
-      confirmed.device !== state.device ||
-      confirmed.inode !== state.inode
-    ) {
-      return confirmed.kind === "missing";
-    }
+    const claim = await this.claimReclamation(state);
+    if (!claim) return false;
 
     try {
-      await fs.rm(this.lockPath);
-      this.warn("Jarvis reclaimed a stale malformed JSON state lock.");
+      const confirmed = await this.readState();
+      if (confirmed.kind === "missing") return true;
+      if (stateIdentity(confirmed) !== claim.identity) return false;
+
+      if (confirmed.kind === "valid") {
+        if (isProcessAlive(confirmed.record.pid)) return false;
+      } else if (Date.now() - confirmed.modifiedAt < malformedGraceMs) {
+        return false;
+      }
+
+      try {
+        await fs.rm(this.lockPath);
+      } catch (error: unknown) {
+        if (isNodeError(error) && error.code === "ENOENT") return true;
+        throw error;
+      }
+
+      if (confirmed.kind === "valid") {
+        this.warn(
+          `Jarvis reclaimed a stale JSON state lock left by process ${confirmed.record.pid}.`,
+        );
+      } else {
+        this.warn("Jarvis reclaimed a stale malformed JSON state lock.");
+      }
       return true;
-    } catch (error: unknown) {
-      if (isNodeError(error) && error.code === "ENOENT") return true;
-      throw error;
+    } finally {
+      await fs.rm(claim.path, { force: true }).catch(() => undefined);
     }
   }
 
