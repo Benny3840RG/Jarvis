@@ -21,8 +21,10 @@ sub-plate reads `OPTIMIZED TOTALITY STATE`. The live reading under it is
 `status.status`, or `UNKNOWN` until status arrives. Smoked glass with amber
 corner brackets sits over a photographic dusk coast
 (`src/mcp/assets/coast-dusk.jpg`, inlined so the widget stays one file).
-Empty meters still draw their chrome: ring ticks, chart grids, parked dial
-needles, and an unlabelled tactical node sketch. The reading stays `UNKNOWN`.
+Empty meters still draw their chrome: thick segmented ring dials, a large
+bee-and-tree medallion, chart grids, parked dial needles, vertical Core
+Analyzer channels, and an unlabelled tactical node sketch. The reading stays
+`UNKNOWN`.
 On a 1920×1080 desktop the brand sits inside the left of the frame, the chips
 sit inside the right, and the nav is one row under the title so it does not
 cover either. Desktop, tablet, and phone collapse the same regions; they do

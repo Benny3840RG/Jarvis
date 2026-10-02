@@ -4,8 +4,8 @@
 
 The same operator widget is now the JARVIS TOTALITY Console 02 frame: a
 dark weathered bronze bezel with shaded rivets, a photographic dusk coast under
-smoked glass, a square bee-and-tree medallion, and cream-dial load gauges
-flanking the Core Analyzer. Gauges without a Jarvis meter stay UNKNOWN with the
+smoked glass, a large bee-and-tree medallion with segmented rings, and
+cream-dial load gauges flanking a vertical Core Analyzer. Gauges without a Jarvis meter stay UNKNOWN with the
 needle parked. Instrument chrome (grids, low-opacity tick tracks, parked
 needles, an unlabelled tactical map) is drawn even when the reading is UNKNOWN. `GET /hud` and `GET /api/v1/hud/snapshot`
 are loopback-only and read-only. Screenshots: `docs/screenshots/`.
