@@ -1,5 +1,21 @@
 # Jarvis TypeScript Roadmap
 
+## Team Board HUD (2026-10-01)
+
+The operator widget is the 55-inch Team Board: riveted Totality frame, frosted
+cards, one NOW action, the Next 3, and a canvas instrument behind the glass.
+Motion follows real severity (STOPPED / WARN / OK / UNKNOWN), pauses in a
+hidden tab, and holds still under reduced motion. Unread crew, load, next, and
+approvals stay UNKNOWN. No sample roster and no new write path.
+
+- Presence and the approval-lifecycle display map are ported from the Codex HUD
+  snapshot (`src/hud/`). The widget does not approve, reject, or execute.
+- Claude's older `dashboard-v1.html` had nothing main lacks, so it was not copied.
+- Contributor notes: `docs/operators/hud.md`.
+
+Next: a proposal list on the dashboard snapshot so Approvals can show stages
+without a per-project fan-out; overdue-unstarted jobs on the board.
+
 ## Daily brief + dashboard: scheduled jobs (2026-10-01)
 
 Nolan can now answer "what's booked today, what's on this week, and what still needs a date"
