@@ -460,6 +460,7 @@
         pointer-events: none;
       }
       .bezel-lip {
+        display: none;
         position: fixed;
         inset: 92px;
         z-index: 8;
@@ -474,11 +475,11 @@
       .rivets { position: fixed; inset: 0; z-index: 9; pointer-events: none; }
       .rivet {
         position: absolute;
-        width: 22px;
-        height: 22px;
+        width: 18px;
+        height: 18px;
         border-radius: 50%;
-        background: radial-gradient(circle at 32% 28%, #fff6e0 0%, #e7c98a 22%, #8a6234 55%, #2a2014 78%, #0c0b09 100%);
-        box-shadow: inset 0 2px 2px rgba(255, 255, 255, 0.75), 0 2px 3px rgba(0, 0, 0, 0.7);
+        background: radial-gradient(circle at 35% 30%, #c4a574 0%, #6a5030 28%, #2a1c12 62%, #0c0a08 100%);
+        box-shadow: inset 0 1px 1px rgba(255, 230, 190, 0.45), inset 0 -2px 3px rgba(0, 0, 0, 0.65), 0 1px 2px rgba(0, 0, 0, 0.6);
       }
       .rivet:nth-child(1) { top: 34px; left: 64px; }
       .rivet:nth-child(2) { top: 34px; left: 16%; }
@@ -488,7 +489,7 @@
       .rivet:nth-child(6) { top: 34px; right: 64px; }
       .rivet:nth-child(7) { bottom: 34px; left: 64px; }
       .rivet:nth-child(8) { bottom: 34px; left: 22%; }
-      .rivet:nth-child(9) { bottom: 34px; left: 50%; }
+      .rivet:nth-child(9) { bottom: 28px; left: 38%; }
       .rivet:nth-child(10) { bottom: 34px; right: 22%; }
       .rivet:nth-child(11) { bottom: 34px; right: 64px; }
       .rivet:nth-child(12) { top: 18%; left: 34px; }
@@ -620,16 +621,23 @@
       .footer { font-size: 12px; min-height: 40px; }
       @media (min-width: 1400px) {
         html, body { height: 100%; overflow: hidden; }
-        .shell { width: 100%; height: 100vh; box-sizing: border-box; display: flex; flex-direction: column; padding: 128px 104px 96px; }
+        .shell { width: 100%; height: 100vh; box-sizing: border-box; display: flex; flex-direction: column; padding: 176px 96px 86px; }
         .hud-frame { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
-        .topbar { flex: 0 0 auto; display: flex; justify-content: center; padding: 0 0 6px; }
-        .brand { position: fixed; z-index: 12; top: 86px; left: 108px; max-width: 250px; }
-        .top-actions { position: fixed; z-index: 12; top: 100px; right: 112px; width: 360px; max-width: 360px; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 3px 5px; max-height: 70px; overflow: hidden; }
-        .title-plate { position: fixed; top: 8px; left: 50%; transform: translateX(-50%); z-index: 13; }
-        .team-nav { width: min(900px, 48vw); }
-        .team-nav .nav-stack { flex-wrap: nowrap; }
-        .team-nav .rail-button, .team-chip, a.limits-now, .icon-button { min-height: 26px; }
-        .icon-button { width: 26px; }
+        .topbar { flex: 0 0 auto; display: flex; justify-content: center; padding: 0; min-height: 0; }
+        .brand { position: fixed; z-index: 14; top: 98px; left: 108px; width: 300px; max-width: 300px; overflow: visible; }
+        .brand .plaque { min-width: 0; }
+        .brand-kicker, .brand .plaque p { white-space: nowrap; line-height: 1.25; }
+        .mark { width: 34px; height: 34px; flex: 0 0 34px; }
+        .mark::before, .mark::after { display: none; }
+        .top-actions { position: fixed; z-index: 14; top: 96px; right: 108px; width: 470px; max-width: 470px; display: flex; flex-wrap: wrap; justify-content: flex-end; align-content: flex-start; gap: 4px 6px; max-height: none; overflow: visible; }
+        .title-plate { position: fixed; top: 6px; left: 50%; transform: translateX(-50%); z-index: 15; width: min(640px, 42vw); }
+        .team-nav { position: fixed; z-index: 14; top: 102px; left: 420px; width: 980px; overflow: visible; background: transparent; }
+        .team-nav .panel-content, .team-nav .nav-stack { overflow: visible; height: auto; }
+        .team-nav .nav-stack { flex-wrap: nowrap; justify-content: center; gap: 6px; }
+        .team-nav .rail-button { flex: 0 0 auto; width: auto; overflow: visible; padding: 0 10px; }
+        .team-nav .rail-button strong { white-space: nowrap; overflow: visible; text-overflow: clip; }
+        .team-nav .rail-button, .team-chip, a.limits-now, .icon-button { min-height: 28px; }
+        .icon-button { width: 28px; }
         .hud-grid { flex: 1 1 auto; min-height: 0; height: auto; }
         .workspace { min-height: 0; }
         .workspace > .panel-content { height: 100%; min-height: 0; display: flex; flex-direction: column; }
@@ -641,7 +649,9 @@
         #current-actions { margin-top: 4px; }
         #current-actions .primary-button { min-height: 26px; font-size: 12px; }
         .rail-button strong, .team-chip { font-size: 11px; }
-        .now-strip { max-height: 64px; overflow: hidden; }
+        .now-strip { max-height: none; overflow: visible; }
+        .now-strip .panel, .now-strip .panel-header, .now-strip .panel-content { overflow: visible; }
+        .now-strip .panel-header span, .now-strip .next-caption { white-space: nowrap; }
         .console-lower { margin-top: 6px; }
       }
       @media (max-width: 1120px) {
@@ -667,15 +677,15 @@
       }
       .title-plate {
         position: fixed;
-        top: 8px;
+        top: 6px;
         left: 50%;
         transform: translateX(-50%);
-        z-index: 13;
+        z-index: 15;
         margin: 0;
-        width: min(760px, 68vw);
+        width: min(640px, 42vw);
         padding: 8px 28px 7px;
         border-radius: 16px 16px 12px 12px;
-        background: linear-gradient(180deg, #f3e6c4 0%, #c4a36a 12%, #6e5428 40%, #2a2014 52%, #8d6c36 78%, #e7d3a4 100%);
+        background: linear-gradient(180deg, #6e542c 0%, #3a2918 22%, #1c140e 48%, #5a4224 76%, #2a1c12 100%);
         border: 2px solid #1a140e;
         box-shadow: inset 0 2px 0 rgba(255, 248, 226, 0.95), inset 0 -8px 12px rgba(0, 0, 0, 0.35), 0 5px 0 #120e0a, 0 12px 20px rgba(0, 0, 0, 0.55);
       }
@@ -683,9 +693,9 @@
       .wordmark { font-size: clamp(20px, 2vw, 32px); font-weight: 800; letter-spacing: 0.1em; color: #fff6e4; text-shadow: 0 0 12px rgba(255, 214, 150, 0.95), 0 1px 0 #5a4320, 0 2px 3px rgba(0, 0, 0, 0.55); white-space: nowrap; }
       .console-no { font-size: clamp(12px, 1vw, 16px); font-weight: 800; letter-spacing: 0.12em; color: #ff8a1e; text-shadow: 0 0 8px rgba(255, 140, 40, 0.95); white-space: nowrap; }
       .sub-plate { margin: 2px 0 0; letter-spacing: 0.22em; font-size: 11px; color: var(--brass); }
-      .title-plate .sub-plate { text-align: center; color: #2a1c0c; font-size: 10px; font-weight: 800; letter-spacing: 0.26em; text-shadow: none; }
+      .title-plate .sub-plate { text-align: center; color: #f0e2c0; font-size: 10px; font-weight: 800; letter-spacing: 0.22em; text-shadow: none; }
       .live-state { margin: 0; font-size: 12px; font-weight: 800; letter-spacing: 0.18em; color: var(--cream); }
-      .title-plate .live-state { text-align: center; font-size: 11px; letter-spacing: 0.22em; color: #1c140c; text-shadow: none; }
+      .title-plate .live-state { text-align: center; font-size: 11px; letter-spacing: 0.22em; color: #ffb15a; text-shadow: none; }
       .tree-mark { width: 42px; height: 42px; }
       body[data-console-view="focus"] .left-rail,
       body[data-console-view="focus"] .right-rail,
@@ -695,7 +705,7 @@
         display: grid;
         grid-template-columns: minmax(210px, 0.78fr) minmax(0, 1.22fr) minmax(230px, 0.86fr);
         grid-template-rows: minmax(0, 1fr) minmax(112px, 0.32fr);
-        grid-template-areas: "left center right" "left tac tac";
+        grid-template-areas: "left center right" "left tac right";
         gap: 8px;
         align-items: stretch;
         min-height: 0;
@@ -709,7 +719,8 @@
       .console-lower { display: grid; grid-template-columns: minmax(220px, 268px) minmax(0, 1fr) minmax(220px, 268px); gap: 8px; margin-top: 8px; align-items: stretch; }
       .plate {
         position: relative;
-        background-color: rgba(6, 10, 16, 0.5);
+        overflow: hidden;
+        background-color: rgba(12, 16, 22, 0.46);
         background-image:
           linear-gradient(#ff7a18, #ff7a18), linear-gradient(#ff7a18, #ff7a18),
           linear-gradient(#ff7a18, #ff7a18), linear-gradient(#ff7a18, #ff7a18),
@@ -721,7 +732,7 @@
         border: 1px solid rgba(255, 122, 24, 0.8);
         border-radius: 16px;
         padding: 8px 10px 8px;
-        box-shadow: inset 0 0 22px rgba(255, 122, 24, 0.16), 0 0 12px rgba(217, 137, 56, 0.22);
+        box-shadow: inset 0 0 32px rgba(255, 150, 50, 0.18), inset 0 1px 0 rgba(255, 214, 160, 0.22), 0 0 16px rgba(217, 137, 56, 0.16);
       }
       .plate h2, .plate h3 { margin: 0 0 4px; font-size: 11px; letter-spacing: 0.16em; font-variant: small-caps; color: #ff7a18; text-shadow: 0 0 8px rgba(255, 122, 24, 0.75); }
       .plate p, .plate small { margin: 4px 0 0; color: #ffb15a; font-size: 12px; text-shadow: 0 0 6px rgba(255, 122, 24, 0.35); }
@@ -733,11 +744,12 @@
       .now-strip { margin-top: 8px; }
       .now-strip .mission-panel, .now-strip .queue-panel { min-height: 0; }
       .workspace.panel { background: transparent; border-color: transparent; box-shadow: none; }
-      .overview-plate { display: flex; flex-direction: column; align-items: center; justify-content: space-between; height: 100%; min-height: 0; }
-      .core-stage { position: relative; display: grid; place-items: center; width: min(248px, 100%); max-height: 100%; aspect-ratio: 1; margin: 0 auto; flex: 0 0 auto; height: auto; }
+      .overview-plate { display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto; align-items: center; justify-items: center; height: 100%; min-height: 0; overflow: hidden; }
+      .core-stage { position: relative; display: grid; place-items: center; width: auto; height: 100%; max-width: 100%; max-height: 100%; aspect-ratio: 1; margin: 0 auto; }
       .chart { width: 100%; flex: 1 1 auto; min-height: 64px; }
       .core-rings { position: absolute; inset: 0; width: 100%; height: 100%; filter: drop-shadow(0 0 10px rgba(255, 122, 24, 0.65)); }
-      .core-emblem { position: relative; z-index: 1; width: 84%; height: auto; filter: drop-shadow(0 0 18px rgba(255, 160, 40, 0.95)); }
+      .core-emblem { position: relative; z-index: 1; width: 54%; height: auto; filter: drop-shadow(0 0 10px rgba(255, 170, 70, 0.8)); }
+      .core-status-label { position: relative; z-index: 2; margin: 2px 0 0; }
       .overview-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-bottom: 2px; }
       .ring-gauge { display: grid; justify-items: center; text-align: center; }
       .ring-gauge span { font-size: 10px; letter-spacing: 0.14em; color: #ff7a18; text-shadow: 0 0 6px rgba(255, 122, 24, 0.65); }
@@ -750,16 +762,17 @@
       .data-row { display: grid; grid-template-columns: minmax(0, 1fr) 48px minmax(0, 72px); gap: 6px; align-items: center; min-height: 22px; font-size: 11px; }
       .data-row span, .data-row b { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       .data-row i { display: block; height: 6px; border-radius: 99px; background: var(--brass); min-width: 0; }
-      .data-chrome { display: grid; gap: 5px; margin: 4px 0; }
-      .data-chrome i { display: block; height: 7px; border-radius: 99px; background: linear-gradient(90deg, rgba(255,122,24,0.85) 0 12%, rgba(255,255,255,0.08) 12%); box-shadow: 0 0 6px rgba(255,122,24,0.3); }
+      .data-chrome { display: grid; gap: 7px; margin: 6px 0 2px; }
+      .data-chrome i, .hex-ticks i, .dev-bars i { display: block; height: 5px; border-radius: 2px; background: repeating-linear-gradient(90deg, rgba(255,122,24,0.42) 0 1px, transparent 1px 7px); box-shadow: none; opacity: 0.8; }
       .plate:has(#data-list .data-row) .data-chrome { display: none; }
       .tile-row { display: grid; grid-template-columns: 1fr; gap: 4px; }
       .tile { min-width: 0; overflow: hidden; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; gap: 8px; background: rgba(8, 10, 14, 0.4); border: 1px solid rgba(255, 186, 120, 0.22); border-radius: 8px; padding: 4px 8px; text-align: left; }
       .tile b { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       .tile span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 9px; letter-spacing: 0.1em; color: #ffb15a; }
-      .network-plate { display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: 8px; align-items: center; }
-      .network-plate .mission-mascot { position: relative; inset: auto; width: 72px; height: 72px; }
-      .mission-mascot svg { width: 72px; height: 72px; }
+      .network-plate { display: grid; grid-template-columns: 52px minmax(0, 1fr); gap: 8px; align-items: center; }
+      .network-plate .mission-mascot { position: relative; inset: auto; width: 52px; height: 52px; }
+      .network-plate h2, .network-plate p, .network-plate small { position: relative; }
+      .mission-mascot svg { width: 52px; height: 52px; }
       .tac-map { display: flex; flex-wrap: wrap; gap: 8px; min-height: 72px; }
       .tac-node { border: 1px solid var(--brass); border-radius: 999px; padding: 4px 8px; font-size: 12px; }
       .analyzer { display: grid; gap: 6px; }
@@ -774,12 +787,12 @@
       .gauge-face svg { width: min(198px, 100%); height: auto; filter: drop-shadow(0 10px 10px rgba(0, 0, 0, 0.55)); }
       .gauge-face span { letter-spacing: 0.12em; font-size: 11px; color: #ff7a18; }
       .analyzer-plate { background-color: #2a2116; background-image: linear-gradient(180deg, #8a6840 0%, #3a2c18 28%, #16120e 70%, #4a3a24 100%); border: 3px solid #e7d3a4; box-shadow: inset 0 1px 0 #fff1d0, 0 8px 16px rgba(0, 0, 0, 0.4); }
-      .hex-ticks { display: grid; gap: 5px; }
-      .hex-ticks i, .dev-bars i { display: block; height: 7px; border-radius: 99px; background: linear-gradient(90deg, #ff7a18 0 10%, rgba(255, 255, 255, 0.08) 10%); box-shadow: 0 0 6px rgba(255, 122, 24, 0.35); }
-      .tac-plate { background-color: rgba(6, 10, 16, 0.28); }
-      .tac-chart { width: 100%; height: 100%; min-height: 78px; display: block; }
-      .tac-map { min-height: 0; }
-      .level { height: 10px; border-radius: 99px; background: rgba(255,255,255,0.08); overflow: hidden; margin-top: 8px; }
+      .hex-ticks, .dev-bars { display: grid; gap: 6px; margin-top: 4px; }
+      .tac-plate { background-color: rgba(8, 12, 18, 0.34); min-height: 0; }
+      .tac-chart { position: absolute; left: 10px; right: 10px; top: 26px; bottom: 22px; width: auto; height: auto; min-height: 0; }
+      .tac-map { position: relative; z-index: 1; min-height: 0; }
+      .tac-plate > p { position: relative; z-index: 1; }
+      .level { display: none; }
       .level i { display: block; height: 100%; width: 0; background: #ff7a18; }
       @media (max-width: 1399px) {
         .brand, .top-actions { position: static; width: auto; max-width: none; max-height: none; }
@@ -789,6 +802,61 @@
         .console-deck, .console-lower { grid-template-columns: 1fr; }
         .console-deck { grid-template-areas: "left" "center" "right" "tac"; grid-template-rows: auto; }
       }
+      @media (min-width: 1400px) {
+        .shell { padding: 168px 92px 96px; }
+        .topbar { flex: 0 0 0px; height: 0; min-height: 0; overflow: visible; padding: 0; margin: 0; border: 0; }
+        body[data-console-view="focus"] .hud-grid {
+          flex: 1 1 auto; min-height: 0; height: 100%;
+          grid-template-columns: minmax(0, 1fr);
+          grid-template-rows: minmax(0, 1fr);
+        }
+        body[data-console-view="focus"] .workspace { min-height: 0; height: 100%; display: flex; flex-direction: column; }
+        .workspace > .panel-content { flex: 1 1 auto; height: 100%; min-height: 0; }
+        #view-focus.active { flex: 1 1 auto; min-height: 0; height: 100%; gap: 8px; }
+        .console-deck {
+          flex: 1 1 auto; min-height: 0;
+          grid-template-rows: minmax(0, 1.2fr) minmax(120px, 0.78fr);
+        }
+        .console-col > .plate { flex: 1 1 0; min-height: 0; overflow: hidden; }
+        .col-right > .plate:first-child { flex: 1.65 1 0; }
+        .chart { min-height: 0; flex: 1 1 auto; height: auto; max-height: none; }
+        .now-strip { flex: 0 0 auto; margin: 0; max-height: 112px; }
+        .now-strip .mission-panel, .now-strip .queue-panel { max-height: 112px; overflow: hidden; }
+        .console-lower { flex: 0 0 auto; margin: 0; }
+        .gauge-face { padding: 0; }
+        .gauge-face svg { width: min(156px, 100%); }
+        .analyzer { gap: 4px; }
+        .analyzer-row { gap: 6px; }
+        .overview-plate { align-content: center; }
+        .core-stage { width: auto; height: 100%; max-width: 100%; max-height: 100%; aspect-ratio: 1; justify-self: center; align-self: center; }
+        .col-left .chart { width: 100%; height: 84px; }
+        .plate h2 { margin: 0 0 2px; font-size: 12px; line-height: 1.15; }
+        .tile { padding: 2px 8px; }
+        .tile-row { gap: 2px; }
+        .plate { box-shadow: inset 0 0 36px rgba(255, 150, 50, 0.16), inset 0 0 0 1px rgba(255, 196, 130, 0.28), 0 0 18px rgba(217, 137, 56, 0.12); }
+        .core-status-label { display: block; margin: 6px 0 0; letter-spacing: 0.16em; }
+        .core-emblem { width: 68%; }
+        .toast:empty { display: none; }
+        .col-right > .plate:nth-child(2) { flex: 1.25 1 0; }
+        .tile b, .tile span { font-size: 12px; line-height: 1.15; }
+        .brand { top: 100px; left: 96px; width: 320px; max-width: 320px; display: flex; align-items: center; gap: 8px; overflow: visible; }
+        .brand .plaque { flex: 1 1 auto; width: auto; min-width: 0; overflow: visible; }
+        .brand-kicker, .brand .plaque p { overflow: visible; text-overflow: clip; font-size: 11px; letter-spacing: 0.06em; }
+        .team-nav { top: 102px; left: 428px; width: 860px; }
+        .team-nav .rail-count { display: none; }
+        .team-nav .nav-stack { gap: 4px; }
+        .team-nav .rail-button { min-height: 30px; padding: 0 8px; }
+        .top-actions { top: 98px; right: 96px; width: 500px; max-width: 500px; max-height: 70px; gap: 4px 6px; }
+        .top-actions .pill, .top-actions .team-chip, .top-actions .source-pill, .top-actions a.limits-now { font-size: 10px; padding: 0 8px; min-height: 26px; white-space: nowrap; }
+        .data-chrome { gap: 3px; margin: 2px 0 0; }
+        .data-chrome i { height: 3px; }
+        .hex-ticks i, .dev-bars i { height: 4px; }
+        .col-right > .plate { padding-top: 6px; padding-bottom: 6px; }
+        .tile { padding: 3px 8px; }
+        .network-plate .mission-mascot, .mission-mascot svg { width: 44px; height: 44px; }
+        .tac-chart { top: 22px; bottom: 28px; left: 8px; right: 8px; }
+        .tac-plate > p { margin: 0; }
+      }
     </style>
   </head>
   <body data-backdrop-severity="UNKNOWN" data-console-view="focus"><!-- JARVIS // OPERATOR CONSOLE · LANDSCAPE COMMAND CENTRE -->
@@ -797,21 +865,17 @@
     <div class="bezel" aria-hidden="true"></div>
     <svg class="bezel-art" viewBox="0 0 1920 1080" preserveAspectRatio="none" aria-hidden="true">
       <defs>
-        <linearGradient id="frame-brass" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stop-color="#2a2014"/>
-          <stop offset="0.12" stop-color="#f0e2c0"/>
-          <stop offset="0.28" stop-color="#8a6234"/>
-          <stop offset="0.5" stop-color="#e7d3a4"/>
-          <stop offset="0.72" stop-color="#5c4324"/>
-          <stop offset="0.88" stop-color="#f3e6c4"/>
-          <stop offset="1" stop-color="#1a140e"/>
+        <linearGradient id="frame-brass" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#3a2c1c"/>
+          <stop offset="0.18" stop-color="#1c140e"/>
+          <stop offset="0.55" stop-color="#2e2116"/>
+          <stop offset="0.82" stop-color="#120e0a"/>
+          <stop offset="1" stop-color="#241a12"/>
         </linearGradient>
       </defs>
-      <rect x="4" y="4" width="1912" height="1072" rx="72" fill="none" stroke="#070605" stroke-width="18"/>
-      <rect x="18" y="18" width="1884" height="1044" rx="60" fill="none" stroke="url(#frame-brass)" stroke-width="56"/>
-      <rect x="52" y="52" width="1816" height="976" rx="44" fill="none" stroke="#120e0a" stroke-width="16"/>
-      <rect x="66" y="66" width="1788" height="948" rx="34" fill="none" stroke="#f0e2c0" stroke-width="3"/>
-      <rect x="76" y="76" width="1768" height="928" rx="28" fill="none" stroke="#6a5430" stroke-width="10"/>
+      <path fill="url(#frame-brass)" fill-rule="evenodd" d="M46 0 H1874 A46 46 0 0 1 1920 46 V1034 A46 46 0 0 1 1874 1080 H46 A46 46 0 0 1 0 1034 V46 A46 46 0 0 1 46 0 Z M96 78 H1824 A22 22 0 0 1 1846 100 V980 A22 22 0 0 1 1824 1002 H96 A22 22 0 0 1 74 980 V100 A22 22 0 0 1 96 78 Z"/>
+      <path fill="none" stroke="#9a7848" stroke-width="2" d="M70 4 H1850"/>
+      <path fill="none" stroke="#0c0a08" stroke-width="14" d="M96 78 H1824 A22 22 0 0 1 1846 100 V980 A22 22 0 0 1 1824 1002 H96 A22 22 0 0 1 74 980 V100 A22 22 0 0 1 96 78 Z"/>
     </svg>
     <div class="bezel-lip" aria-hidden="true"></div>
     <div class="hud-photo" aria-hidden="true"></div>
@@ -826,7 +890,7 @@
         <div class="top-glow"></div>
         <header class="topbar">
           <div class="brand">
-            <svg class="mark tree-mark" viewBox="0 0 64 64" aria-hidden="true"><path d="M32 58 V34" stroke="#d7a15f" stroke-width="3"/><path d="M32 36 C18 30 10 18 16 8 C26 14 30 22 32 28 C34 22 38 14 48 8 C54 18 46 30 32 36Z" fill="#e8dfd0"/><ellipse cx="42" cy="18" rx="6" ry="4" fill="#c47b4a"/></svg>
+            <svg class="mark tree-mark" viewBox="0 0 64 64" aria-hidden="true"><path d="M30 54 C30 42 29 36 32 28 C35 36 34 42 34 54 Z" fill="#6b4424"/><path d="M32 30 C22 26 12 20 12 10 C22 12 28 20 32 28 Z" fill="#c4a574"/><path d="M32 30 C42 24 54 16 52 8 C42 12 36 20 32 28 Z" fill="#e7d3a4"/><ellipse cx="46" cy="18" rx="6" ry="3.2" fill="#1a140e" transform="rotate(-16 46 18)"/><path d="M42 17 h4 M45 19 h4" stroke="#ff7a18" stroke-width="1.4" stroke-linecap="round"/></svg>
             <div class="plaque">
               <p class="brand-kicker">THE BEEZ TREEZ</p>
               <p><b>Beez Treez</b> Property Solutions</p>
@@ -942,26 +1006,28 @@
                           <circle class="spin reverse" cx="120" cy="120" r="76" fill="none" stroke="#d98938" stroke-width="8" stroke-dasharray="18 8 4 8"/>
                           <circle cx="120" cy="120" r="62" fill="none" stroke="#ff7a18" stroke-width="3" stroke-dasharray="2 4"/>
                         </svg>
-                        <svg class="core-emblem" viewBox="0 0 160 160" aria-hidden="true"><circle cx="80" cy="80" r="62" fill="rgba(255,150,40,0.38)" stroke="#ff7a18" stroke-width="3"/><g transform="translate(16 4) scale(1.12)">
-                          <path d="M56 132 C56 104 54 90 60 74 C66 90 64 104 64 132 Z" fill="#6b4424"/>
-                          <path d="M60 80 C38 70 14 54 20 26 C42 34 54 54 60 72 Z" fill="#f4ead8"/>
-                          <path d="M60 80 C82 68 108 48 100 22 C78 32 66 54 60 72 Z" fill="#efe2cc"/>
-                          <path d="M60 78 C44 66 30 50 36 38" fill="none" stroke="#c4b498" stroke-width="1.2"/>
-                          <ellipse cx="86" cy="34" rx="11" ry="5" fill="rgba(255,255,255,0.8)" transform="rotate(-28 86 34)"/>
-                          <ellipse cx="70" cy="36" rx="10" ry="4.5" fill="rgba(255,255,255,0.72)" transform="rotate(-50 70 36)"/>
-                          <ellipse cx="78" cy="48" rx="16" ry="9" fill="#1a140e" transform="rotate(-18 78 48)"/>
-                          <path d="M66 46 h8 M74 50 h9 M70 44 h7" stroke="#f0a020" stroke-width="3" stroke-linecap="round" transform="rotate(-18 78 48)"/>
-                          <circle cx="62" cy="42" r="5.5" fill="#1a140e"/>
-                          <circle cx="60" cy="41" r="1.2" fill="#f0a020"/>
-                        </g></svg>
+                        <svg class="core-emblem" viewBox="0 0 120 120" aria-hidden="true">
+                          <circle cx="60" cy="60" r="46" fill="rgba(255,140,40,0.16)" stroke="#d98938" stroke-width="1.5"/>
+                          <path d="M57 98 C56 78 55 68 60 54 C65 68 64 78 63 98 Z" fill="#5c3a1e"/>
+                          <path d="M60 58 C44 50 24 40 22 22 C40 26 52 40 60 54 Z" fill="#c4a574"/>
+                          <path d="M60 58 C76 48 98 36 96 18 C78 24 68 40 60 54 Z" fill="#e7d3a4"/>
+                          <path d="M60 56 C48 46 36 36 34 26" fill="none" stroke="#8a6840" stroke-width="1"/>
+                          <path d="M60 56 C74 44 86 34 90 24" fill="none" stroke="#8a6840" stroke-width="1"/>
+                          <ellipse cx="88" cy="36" rx="11" ry="6" fill="#1a140e" transform="rotate(-18 88 36)"/>
+                          <path d="M80 34 h6 M86 37 h7 M83 32 h5" stroke="#ff7a18" stroke-width="2" stroke-linecap="round" transform="rotate(-18 88 36)"/>
+                          <ellipse cx="96" cy="30" rx="7" ry="3.2" fill="rgba(255,255,255,0.72)" transform="rotate(-30 96 30)"/>
+                          <ellipse cx="80" cy="30" rx="6" ry="2.8" fill="rgba(255,255,255,0.55)" transform="rotate(20 80 30)"/>
+                          <circle cx="76" cy="34" r="4" fill="#1a140e"/>
+                          <circle cx="75" cy="33" r="1" fill="#ffb15a"/>
+                        </svg>
                       </div>
-                      <p class="sub-plate">CORE STATUS</p>
+                      <p class="sub-plate core-status-label">CORE STATUS</p>
                     </section>
                   </div>
                   <div class="console-col col-right">
                     <section class="plate">
                       <h2>DATA LIST</h2>
-                      <div class="data-chrome" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
+                      <div class="data-chrome" aria-hidden="true"><i></i><i></i><i></i></div>
                       <div id="data-list"></div>
                     </section>
                     <section class="plate">
@@ -1004,7 +1070,7 @@
 
                     <section class="plate tac-plate col-tac">
                       <h2>TACTICAL OVERLAY</h2>
-                      <svg class="tac-chart" viewBox="0 0 280 100" aria-hidden="true"><path d="M24 72 L78 40 L132 64 L186 28 L246 58" fill="none" stroke="#ff7a18" stroke-width="1.6"/><path d="M78 40 L110 82 L186 28" fill="none" stroke="#d98938" stroke-width="1.2"/><circle cx="24" cy="72" r="4" fill="#ff7a18"/><circle cx="78" cy="40" r="5" fill="#ffb15a"/><circle cx="132" cy="64" r="4" fill="#ff7a18"/><circle cx="186" cy="28" r="5" fill="#fff6e4"/><circle cx="246" cy="58" r="4" fill="#ff7a18"/><circle cx="110" cy="82" r="3.5" fill="#d98938"/></svg>
+                      <svg class="tac-chart" viewBox="0 0 640 150" preserveAspectRatio="xMidYMid meet" aria-hidden="true"><path d="M30 110 L120 70 L210 96 L300 40 L400 88 L500 52 L610 100" fill="none" stroke="#ff7a18" stroke-width="1.4" opacity="0.85"/><path d="M120 70 L180 120 L300 40 L360 110 L500 52" fill="none" stroke="#d98938" stroke-width="1.1" opacity="0.7"/><path d="M210 96 L260 130 L400 88" fill="none" stroke="rgba(255,177,90,0.7)" stroke-width="1"/><circle cx="30" cy="110" r="5" fill="#ff7a18"/><circle cx="120" cy="70" r="6" fill="#ffb15a"/><circle cx="210" cy="96" r="5" fill="#ff7a18"/><circle cx="300" cy="40" r="7" fill="#fff1dc"/><circle cx="400" cy="88" r="5" fill="#d98938"/><circle cx="500" cy="52" r="6" fill="#ffb15a"/><circle cx="610" cy="100" r="5" fill="#ff7a18"/><circle cx="180" cy="120" r="4" fill="#d98938"/><circle cx="260" cy="130" r="4" fill="#ff7a18"/><circle cx="360" cy="110" r="4.5" fill="#ffb15a"/></svg>
                       <div class="tac-map" id="tactical-map"></div>
                       <p>Nodes are inbox items. Facility names are not invented.</p>
                     </section>
@@ -2329,7 +2395,7 @@
             });
             ctx.fillStyle = ink(pal.trace, 0.75);
             ctx.font = Math.max(12, Math.floor(w / 120)) + "px sans-serif";
-            ctx.fillText(still ? "INSTRUMENT STILL" : "INSTRUMENT LIVE", w * 0.71, h * 0.6);
+            ctx.fillText(still ? "INSTRUMENT STILL" : "INSTRUMENT LIVE", 36, h - 14);
           }
           function loop(time) {
             if (document.hidden) { raf = 0; return; }

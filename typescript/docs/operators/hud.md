@@ -14,8 +14,8 @@ does not inject a sample snapshot.
 
 ## Layout
 
-Console 02 is the 55-inch landscape frame: a chamfered brass bezel drawn as
-an SVG stroke (so the coast stays visible), heavy rivets, and a domed title
+Console 02 is the 55-inch landscape frame: a dark weathered bronze bezel drawn as
+a filled SVG ring (so the coast stays visible through the opening), shaded rivets, and a domed title
 plate `JARVIS TOTALITY` / `CONSOLE 02` that breaks the top edge. The engraved
 sub-plate reads `OPTIMIZED TOTALITY STATE`. The live reading under it is
 `status.status`, or `UNKNOWN` until status arrives. Smoked glass with amber

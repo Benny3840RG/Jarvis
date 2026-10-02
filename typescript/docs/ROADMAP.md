@@ -3,11 +3,11 @@
 ## Console 02 HUD (2026-10-02)
 
 The same operator widget is now the JARVIS TOTALITY Console 02 frame: a
-chamfered riveted brass bezel, a photographic dusk coast under smoked glass,
-a square core medallion, and cream-dial load gauges flanking the Core Analyzer.
-Gauges without a Jarvis meter stay UNKNOWN with the needle parked. Instrument
-chrome (grids, ticks, parked needles, an unlabelled tactical sketch) is drawn
-even when the reading is UNKNOWN. `GET /hud` and `GET /api/v1/hud/snapshot`
+dark weathered bronze bezel with shaded rivets, a photographic dusk coast under
+smoked glass, a square bee-and-tree medallion, and cream-dial load gauges
+flanking the Core Analyzer. Gauges without a Jarvis meter stay UNKNOWN with the
+needle parked. Instrument chrome (grids, low-opacity tick tracks, parked
+needles, an unlabelled tactical map) is drawn even when the reading is UNKNOWN. `GET /hud` and `GET /api/v1/hud/snapshot`
 are loopback-only and read-only. Screenshots: `docs/screenshots/`.
 
 ## Team Board HUD (2026-10-01)
