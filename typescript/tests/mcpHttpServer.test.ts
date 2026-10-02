@@ -95,4 +95,30 @@ describe("Jarvis MCP HTTP boundary", () => {
       await running.close();
     }
   });
+
+  it("rejects an over-large request body with 413 before handling it", async () => {
+    const config: JarvisMcpConfig = {
+      host: "127.0.0.1",
+      port: await freePort(),
+      api: {
+        baseUrl: new URL("http://127.0.0.1:3000/"),
+        serviceToken: "never-print-this-token",
+      },
+    };
+    const client = new JarvisApiClient(config.api, (async () => {
+      throw new Error("An over-large body must be rejected before reaching Jarvis HTTP.");
+    }) as typeof fetch);
+    const running = await startJarvisMcpHttpServer(config, client);
+    try {
+      // Comfortably over the 1 MiB cap; the body never reaches the MCP handler.
+      const response = await fetch(running.url, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: "x".repeat(2 * 1024 * 1024),
+      });
+      assert.equal(response.status, 413);
+    } finally {
+      await running.close();
+    }
+  });
 });

@@ -3,8 +3,7 @@ import { readFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { describe, it } from "node:test";
 
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 
 import type { JarvisMcpConfig } from "../src/mcp/config.js";
 import { startJarvisMcpHttpServer } from "../src/mcp/httpServer.js";

@@ -2,8 +2,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { loadEnvFile } from "node:process";
 import { setTimeout as delay } from "node:timers/promises";
 
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 
 import { JarvisApiClient } from "../mcp/jarvisApiClient.js";
 import { JARVIS_DASHBOARD_URI } from "../mcp/server.js";

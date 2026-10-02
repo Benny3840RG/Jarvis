@@ -1,5 +1,5 @@
 import { RESOURCE_MIME_TYPE } from "@modelcontextprotocol/ext-apps/server";
-import type { CallToolResult, ReadResourceResult } from "@modelcontextprotocol/sdk/types.js";
+import type { CallToolResult, ReadResourceResult } from "@modelcontextprotocol/client";
 
 import type { SystemStatus } from "../http/contracts.js";
 import type { DashboardSnapshot } from "../mcp/jarvisApiClient.js";

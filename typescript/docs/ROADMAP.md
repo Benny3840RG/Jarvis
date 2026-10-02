@@ -1,5 +1,44 @@
 # Jarvis TypeScript Roadmap
 
+## MCP SDK 2.x migration: ext-apps 2.0 + split core/client/server (2026-10-02)
+
+Mission #562. Adopted `@modelcontextprotocol/ext-apps` 2.0, which replaces the monolithic
+`@modelcontextprotocol/sdk` 1.x with the split `@modelcontextprotocol/core` + `/client` +
+`/server` 2.x packages. No observable change to the operator/MCP contract — the tool and
+resource surface, OpenAPI and dashboard are unchanged.
+
+Completed:
+
+- Dependency swap: removed `@modelcontextprotocol/sdk`; added `core`/`client`/`server` ^2 and
+  bumped `ext-apps` to ^2.0.0. Zod was already v4 (ext-apps 2.0's peer), so no schema churn.
+- `sdkAdapter.ts` (the single SDK boundary) now re-exports `McpServer` + `createMcpHandler`
+  from `@modelcontextprotocol/server`. The removed `StreamableHTTPServerTransport` is replaced
+  by `createMcpHandler`'s fetch-shaped handler.
+- `httpServer.ts`: rewired from the Node `http`-based `StreamableHTTPServerTransport` to a
+  `createMcpHandler` fetch handler, with a small Node↔web-standard bridge (IncomingMessage →
+  `Request`, `Response` → ServerResponse) that preserves CORS/origin/cache handling, telemetry,
+  and client-disconnect cancellation via the request `AbortSignal`. The buffered body read is
+  bounded (1 MiB cap → `413`, replacing the pre-2.x transport's implicit limit) and aborts on
+  disconnect.
+- Client tools and tests moved off the old `@modelcontextprotocol/sdk/*` sub-paths to
+  `@modelcontextprotocol/client` (+ `/validators/ajv`). `registerAppTool` handler typing needed
+  no `any`: the existing raw-shape schemas still infer under the 2.x overloads.
+- The `sdkAdapter` boundary test now guards `@modelcontextprotocol/server`.
+
+Decisions:
+
+- Kept the stateless per-request serving model (`createMcpHandler`'s default), matching the
+  pre-2.x per-request transport — one fresh server instance per request, no shared session.
+- The server plane still touches the SDK only through `sdkAdapter.ts`; `ext-apps` remains a
+  separate acquired package used directly by the tool-registration modules.
+
+Verification: full `npm run check` green, including the live-HTTP protocol, cancellation and
+boundary tests exercising the new transport end to end.
+
+Follow-up (owner): if a Dependabot `@dependabot ignore` was set on #559 for ext-apps 2.x (it is
+not in `dependabot.yml`), clear it with `@dependabot unignore @modelcontextprotocol/ext-apps` on
+a Dependabot PR so routine updates resume.
+
 ## Dashboard: booked jobs in the operations nav badge (2026-10-02)
 
 The operations nav badge now counts booked jobs that need attention, deduped against active
