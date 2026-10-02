@@ -239,6 +239,12 @@ describe("composeDailyBrief", () => {
       brief.scheduled.unscheduled.map((entry) => entry.id),
       ["unsched-active"],
     );
+    // "past" is booked before today and not done -> overdue; "done-today" is excluded.
+    assert.equal(brief.scheduled.overdueCount, 1);
+    assert.deepEqual(
+      brief.scheduled.overdue.map((entry) => entry.id),
+      ["past"],
+    );
   });
 
   it("derives the local booking day from the timezone, not UTC", () => {
@@ -308,10 +314,40 @@ describe("composeDailyBrief", () => {
     assert.equal(brief.scheduled.today.length, BRIEF_HIGHLIGHT_LIMIT);
 
     const empty = composeDailyBrief({ ...baseInputs() });
+    assert.equal(empty.scheduled.overdueCount, 0);
     assert.equal(empty.scheduled.todayCount, 0);
     assert.equal(empty.scheduled.thisWeekCount, 0);
     assert.equal(empty.scheduled.unscheduledCount, 0);
+    assert.deepEqual(empty.scheduled.overdue, []);
     assert.deepEqual(empty.scheduled.today, []);
+  });
+
+  it("surfaces booked-but-not-done jobs as overdue, most overdue first", () => {
+    // NOW is local 2026-07-21; anything booked before today that is not done is overdue.
+    const booked = (
+      id: string,
+      status: Project["status"],
+      scheduledFor: string,
+      updatedAt = 1,
+    ) => ({
+      ...project(id, status, updatedAt),
+      scheduledFor,
+    });
+    const projects = [
+      booked("yesterday", "active", "2026-07-20", 5),
+      booked("last-week", "quoted", "2026-07-14", 9),
+      booked("on-hold-past", "on_hold", "2026-07-01", 3),
+      booked("today", "active", "2026-07-21", 7), // today is not overdue
+      booked("done-past", "done", "2026-07-10", 2), // done is never overdue
+    ];
+    const brief = composeDailyBrief({ ...baseInputs(), projects });
+    assert.equal(brief.scheduled.overdueCount, 3);
+    // Earliest booked day first = most overdue first.
+    assert.deepEqual(
+      brief.scheduled.overdue.map((entry) => entry.id),
+      ["on-hold-past", "last-week", "yesterday"],
+    );
+    assert.equal(brief.scheduled.todayCount, 1);
   });
 
   it("derives quote pipeline and accepted totals from real quote totals", () => {

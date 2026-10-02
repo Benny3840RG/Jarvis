@@ -94,12 +94,16 @@ export interface BriefErrands {
 }
 
 export interface BriefScheduled {
+  /** Jobs booked for a past day that are still not done ("booked but not done"). */
+  overdueCount: number;
   /** Jobs booked for the operator-local today. */
   todayCount: number;
   /** Jobs booked after today through the end of the current Mon–Sun week. */
   thisWeekCount: number;
   /** Active-status jobs with no booked date. */
   unscheduledCount: number;
+  /** Overdue booked jobs, most overdue (earliest booked day) first, capped. */
+  overdue: Project[];
   /** Jobs booked for today, soonest-updated first, capped. */
   today: Project[];
   /** Jobs booked later this week, soonest-booked first then most-recently-updated, capped. */
@@ -233,6 +237,9 @@ export function composeDailyBrief(inputs: BriefInputs): DailyBrief {
       : a.scheduledFor > b.scheduledFor
         ? 1
         : b.updatedAt - a.updatedAt;
+  const overdueScheduled = bookedLiveJobs
+    .filter((project) => project.scheduledFor < localToday)
+    .sort(bySchedule);
   const scheduledToday = bookedLiveJobs
     .filter((project) => project.scheduledFor === localToday)
     .sort(bySchedule);
@@ -356,9 +363,11 @@ export function composeDailyBrief(inputs: BriefInputs): DailyBrief {
       open: cap(openErrands),
     },
     scheduled: {
+      overdueCount: overdueScheduled.length,
       todayCount: scheduledToday.length,
       thisWeekCount: scheduledThisWeek.length,
       unscheduledCount: unscheduledActive.length,
+      overdue: cap(overdueScheduled),
       today: cap(scheduledToday),
       thisWeek: cap(scheduledThisWeek),
       unscheduled: cap(unscheduledActive),

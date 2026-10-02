@@ -1,5 +1,31 @@
 # Jarvis TypeScript Roadmap
 
+## Daily brief + dashboard: overdue booked jobs (2026-10-02)
+
+Follow-up to the scheduled-jobs slice (#680/#682): the brief and dashboard now also surface
+jobs that were booked for a past day and are still not done — "booked but not done".
+
+Completed:
+
+- `composeDailyBrief`'s `scheduled` section gains `overdue` (count + capped list): non-done
+  jobs whose `scheduledFor` is before the operator-local today, most overdue (earliest booked
+  day) first. Reuses the same `bookedLiveJobs` set and lexicographic `YYYY-MM-DD` comparison as
+  today/thisWeek, so it is timezone/DST-correct and guesses no dates.
+- OpenAPI first: the `DailyBrief.scheduled` object gains required `overdueCount` + `overdue`;
+  the MCP `get_daily_brief` output schema carries them (optional there for older APIs).
+- Dashboard: the "Scheduled jobs" panel now leads with OVERDUE rows and its badge reads
+  `N OVERDUE · N TODAY · N THIS WEEK`.
+- Tests: brief overdue bucketing + ordering + done-exclusion + today-boundary; the widget
+  panel renders overdue-first; the live HTTP brief still Ajv-validates against `BriefResponse`.
+
+Decisions:
+
+- Overdue uses the same non-done rule as the other booked buckets (lead/quoted/active/on_hold
+  with a past date); a job only leaves overdue when it is marked done or rebooked. Status is not
+  changed automatically — the brief only reports.
+
+Next: optionally fold bookings into the dashboard nav badge with active∩scheduled dedup.
+
 ## Console 02 HUD (2026-10-02)
 
 The same operator widget is now the JARVIS TOTALITY Console 02 frame: a

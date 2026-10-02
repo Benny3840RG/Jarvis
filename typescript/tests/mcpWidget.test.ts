@@ -332,6 +332,7 @@ describe("Jarvis preview widget", () => {
       _message: string,
     ) => lists.set(element.id, items);
 
+    const overdueJob = { id: "p-overdue", title: "Stump grind", status: "active" };
     const todayJob = { id: "p-today", title: "Deck rebuild", status: "active" };
     const weekJob = { id: "p-week", title: "Fence line", status: "quoted" };
     const state = {
@@ -351,9 +352,11 @@ describe("Jarvis preview widget", () => {
         },
         maintenance: { dueCount: 0, dueSoonCount: 0, due: [], dueSoon: [] },
         scheduled: {
+          overdueCount: 1,
           todayCount: 1,
           thisWeekCount: 1,
           unscheduledCount: 2,
+          overdue: [overdueJob],
           today: [todayJob],
           thisWeek: [weekJob],
           unscheduled: [],
@@ -385,10 +388,11 @@ describe("Jarvis preview widget", () => {
     assert.equal(elements.get("brief-scheduled-today")?.textContent, "1");
     assert.equal(
       elements.get("operations-scheduled-count")?.textContent,
-      "1 TODAY · 1 THIS WEEK",
+      "1 OVERDUE · 1 TODAY · 1 THIS WEEK",
     );
-    // Today's jobs lead, then later-this-week jobs, each tagged with when they fall.
+    // Overdue jobs lead, then today's, then later this week, each tagged with when they fall.
     assert.deepEqual(lists.get("operations-scheduled-list"), [
+      { ...overdueJob, whenLabel: "OVERDUE" },
       { ...todayJob, whenLabel: "TODAY" },
       { ...weekJob, whenLabel: "THIS WEEK" },
     ]);

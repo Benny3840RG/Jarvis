@@ -378,9 +378,11 @@ const briefSchema = z.object({
     .optional(),
   scheduled: z
     .object({
+      overdueCount: z.number().int().nonnegative(),
       todayCount: z.number().int().nonnegative(),
       thisWeekCount: z.number().int().nonnegative(),
       unscheduledCount: z.number().int().nonnegative(),
+      overdue: z.array(projectSchema),
       today: z.array(projectSchema),
       thisWeek: z.array(projectSchema),
       unscheduled: z.array(projectSchema),
