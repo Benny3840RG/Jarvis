@@ -82,9 +82,11 @@ const BRIEF: DailyBrief = {
   invoices: { draftCount: 0, unpaidCount: 0, unpaidTotal: 0, unpaid: [] },
   errands: { openCount: 0, locationCount: 0, open: [] },
   scheduled: {
+    overdueCount: 0,
     todayCount: 0,
     thisWeekCount: 0,
     unscheduledCount: 0,
+    overdue: [],
     today: [],
     thisWeek: [],
     unscheduled: [],

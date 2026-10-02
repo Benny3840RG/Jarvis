@@ -10812,16 +10812,23 @@
           "scheduled": {
             "type": "object",
             "additionalProperties": false,
-            "description": "Jobs (projects) booked to a calendar day, derived from each project's scheduledFor against the operator-local date for generatedAt. today = booked for the operator-local today; thisWeek = booked later in the current Mon–Sun week (after today, through Sunday); unscheduled = active-status jobs with no booked date. Done jobs are excluded from today and thisWeek. Lists are soonest-booked first (ties most-recently-updated first) and capped; unscheduled is most-recently-updated first.",
+            "description": "Jobs (projects) booked to a calendar day, derived from each project's scheduledFor against the operator-local date for generatedAt. overdue = booked for a past day and still not done; today = booked for the operator-local today; thisWeek = booked later in the current Mon–Sun week (after today, through Sunday); unscheduled = active-status jobs with no booked date. Done jobs are excluded from overdue, today and thisWeek. Lists are soonest-booked first (ties most-recently-updated first) and capped, so overdue leads with the most overdue; unscheduled is most-recently-updated first.",
             "required": [
+              "overdueCount",
               "todayCount",
               "thisWeekCount",
               "unscheduledCount",
+              "overdue",
               "today",
               "thisWeek",
               "unscheduled"
             ],
             "properties": {
+              "overdueCount": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Jobs booked for a past day that are still not done."
+              },
               "todayCount": {
                 "type": "integer",
                 "minimum": 0
@@ -10835,6 +10842,13 @@
                 "type": "integer",
                 "minimum": 0,
                 "description": "Active-status jobs with no booked date."
+              },
+              "overdue": {
+                "type": "array",
+                "maxItems": 5,
+                "items": {
+                  "$ref": "#/components/schemas/Project"
+                }
               },
               "today": {
                 "type": "array",

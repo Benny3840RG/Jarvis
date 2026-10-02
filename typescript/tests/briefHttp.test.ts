@@ -155,6 +155,7 @@ describe("brief HTTP boundary", () => {
     assert.equal(brief.invoices.unpaid[0].number, "INV-2");
     assert.equal(brief.invoices.unpaidTotal, 650, "900 issued less 250 received");
     // Deck rebuild is active with no booked date; Old fence is done. No dates were set.
+    assert.equal(brief.scheduled.overdueCount, 0);
     assert.equal(brief.scheduled.todayCount, 0);
     assert.equal(brief.scheduled.thisWeekCount, 0);
     assert.equal(brief.scheduled.unscheduledCount, 1);
