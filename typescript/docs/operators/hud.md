@@ -180,3 +180,54 @@ Loopback binding, credential-free widget output, and no delete controls stay as
 they are. See [chatgpt-preview.md](chatgpt-preview.md),
 [operations-inbox.md](operations-inbox.md), and
 [limits-settings.md](limits-settings.md).
+
+## Run this branch locally
+
+Node.js 24 (`typescript/.nvmrc`). There is no separate HUD build: `npm run start:http`
+runs `src/http/main.ts` through `tsx`. The page is `GET /hud` on the loopback bind
+only. It does not send `JARVIS_SERVICE_TOKEN`.
+
+From the repository root:
+
+```bash
+git checkout cursor/team-board-hud-4cb7
+cd typescript
+nvm use
+npm ci
+```
+
+Put the local env in `typescript/.env.local` (untracked). The HTTP server reads it
+before listen. Defaults are enough for the HUD:
+
+```text
+JARVIS_SERVICE_TOKEN=<existing strong service token>
+JARVIS_TIMEZONE=Australia/Melbourne
+PERSISTENCE_PROVIDER=json
+```
+
+Leave `JARVIS_HTTP_HOST` unset or set it to `127.0.0.1`. A non-loopback host is
+refused, and `/hud` is 404 off loopback. `JARVIS_HTTP_PORT` defaults to `3000`.
+`PERSISTENCE_PROVIDER` defaults to `json`. Convex is opt-in and needs
+`CONVEX_URL` plus the same service token.
+
+```bash
+npm run start:http
+```
+
+Open http://127.0.0.1:3000/hud. Liveness, which does not need the token, is
+`curl --silent --show-error http://127.0.0.1:3000/healthz`.
+
+To return to the release line, stop the server with Ctrl-C. The shell is still
+in `typescript/`:
+
+```bash
+cd ..
+git checkout main
+cd typescript
+nvm use
+npm ci
+npm run start:http
+```
+
+If the machine was on a pinned release tag rather than `main`, check that tag
+out instead of `main`.
