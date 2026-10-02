@@ -26,7 +26,18 @@ describe("Team Board HUD", () => {
     assert.match(widget, /active\.slice\(1, 4\)/);
     assert.match(widget, /registerHudPanel/);
     assert.match(widget, /JARVIS TOTALITY/);
-    assert.match(widget, /Team Board/);
+    assert.match(widget, /CONSOLE 02/);
+    assert.match(widget, /OPTIMIZED TOTALITY STATE/);
+    assert.match(widget, /PREDICTOR CORE/);
+    assert.match(widget, /WAVEFORM ANALYSIS/);
+    assert.match(widget, /STABILITY MONITOR/);
+    assert.match(widget, /SYSTEM OVERVIEW/);
+    assert.match(widget, /CORE ANALYZER/);
+    assert.match(widget, /SYSTEM LOAD/);
+    assert.match(widget, /SYSTEM EFFICIENCY/);
+    assert.match(widget, /TACTICAL OVERLAY/);
+    assert.match(widget, /No waveform signal/);
+    assert.doesNotMatch(widget, /\b447\b|\b99\.7%|\b0\.999\b|SEAFORD POLICE|SYI 7/);
   });
 
   it("does not add widget write paths for delete or approval", () => {

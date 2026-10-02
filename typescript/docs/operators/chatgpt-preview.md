@@ -9,9 +9,10 @@ HTTP API, which remains the validation, authentication and persistence boundary.
 `JARVIS_SERVICE_TOKEN` is injected by the MCP process and is never returned to ChatGPT, the model,
 the widget, or tool arguments.
 
-The dashboard is the 55-inch Team Board: one NOW zone, the Next 3, and quiet side
-rails over a live instrument backdrop. How to add a panel, the Warm Instrument
-tokens, and the fail-closed data contract are in [hud.md](hud.md).
+The dashboard is Console 02: brass bezel, one NOW zone, the Next 3, and parked
+instruments over a live dusk coast. On a loopback bind open `GET /hud` in a
+browser; the page is read-only and contains no token. How to add a panel and
+the fail-closed data contract are in [hud.md](hud.md).
 
 The dashboard has one Settings rail with General, Credentials, Persistence, Limits, and Danger zone. Limits is a read model and is not enforced.
 Credentials shows collapsed fingerprint chips and the “Approvals unavailable.” warning when that

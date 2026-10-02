@@ -165,6 +165,20 @@ export const IMPLEMENTED_CAPABILITIES: readonly Capability[] = [
     mcpExposed: false,
   },
   {
+    operationId: "getHudPage",
+    summary: "Open the loopback Console 02 HUD",
+    mutating: false,
+    destructive: false,
+    mcpExposed: false,
+  },
+  {
+    operationId: "getHudSnapshot",
+    summary: "Read the loopback Console 02 HUD snapshot",
+    mutating: false,
+    destructive: false,
+    mcpExposed: false,
+  },
+  {
     operationId: "endCredentialOverlap",
     summary: "Report that credential overlap removal is not offered",
     mutating: true,

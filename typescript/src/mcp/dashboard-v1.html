@@ -416,8 +416,8 @@
         --brass: #d98938;
         --sage: #a8c58b;
         --danger: #ff5c75;
-        --glass: rgba(22, 18, 15, 0.34);
-        --glass-strong: rgba(16, 13, 11, 0.22);
+        --glass: rgba(10, 14, 20, 0.30);
+        --glass-strong: rgba(8, 12, 18, 0.18);
         --glass-edge: rgba(232, 223, 208, 0.16);
         --touch: 56px;
       }
@@ -437,16 +437,16 @@
         inset: 0;
         z-index: 1;
         pointer-events: none;
-        background: radial-gradient(ellipse 70% 60% at 50% 42%, rgba(12, 10, 8, 0.05), rgba(8, 6, 5, 0.45) 78%);
+        background: radial-gradient(ellipse 70% 60% at 50% 42%, rgba(12, 10, 8, 0.02), rgba(8, 6, 5, 0.22) 78%);
       }
       .bezel {
         position: fixed;
         inset: 0;
         z-index: 6;
         pointer-events: none;
-        border: 16px solid #2a2622;
-        border-radius: 28px;
-        box-shadow: inset 0 0 0 2px #5a534a, inset 0 0 40px rgba(0, 0, 0, 0.45);
+        border: 22px solid #6a542c;
+        border-radius: 26px;
+        box-shadow: inset 0 0 0 3px #d7a15f, inset 0 0 0 8px #2c2418, inset 0 0 48px rgba(0, 0, 0, 0.55);
       }
       .rivets { position: fixed; inset: 0; z-index: 7; pointer-events: none; }
       .rivet {
@@ -469,7 +469,7 @@
       .rivet:nth-child(10) { top: 62%; left: 10px; }
       .rivet:nth-child(11) { top: 28%; right: 10px; }
       .rivet:nth-child(12) { top: 62%; right: 10px; }
-      .shell { position: relative; z-index: 2; width: min(100%, 1920px); max-width: none; padding: 28px 32px; }
+      .shell { position: relative; z-index: 2; width: 100%; max-width: none; margin: 0; padding: 18px 22px 14px; }
       .hud-frame {
         background: transparent;
         border: 0;
@@ -481,10 +481,11 @@
       .topbar {
         display: grid;
         grid-template-columns: auto minmax(0, 1fr) auto;
-        gap: 16px;
+        grid-template-areas: "brand title chips" "nav nav nav";
+        gap: 8px 16px;
         align-items: center;
-        min-height: var(--touch);
-        padding: 8px 4px 14px;
+        min-height: 0;
+        padding: 0 4px 8px;
         border: 0;
         background: transparent;
       }
@@ -497,7 +498,10 @@
         text-transform: uppercase;
       }
       .brand h1 { font-size: 22px; letter-spacing: 0.02em; text-transform: none; }
-      .team-nav { border: 0; background: transparent; box-shadow: none; }
+      .brand { grid-area: brand; }
+      .totality-title { grid-area: title; text-align: center; }
+      .top-actions { grid-area: chips; justify-self: end; }
+      .team-nav { grid-area: nav; border: 0; background: transparent; box-shadow: none; }
       .team-nav::before, .team-nav::after { display: none; }
       .team-nav .panel-content { height: auto; }
       .team-nav .nav-stack { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; padding: 0; }
@@ -583,15 +587,15 @@
       #approvals-source { padding: 0 12px 12px; }
       .footer { font-size: 12px; min-height: 40px; }
       @media (min-width: 1400px) {
-        .shell { width: 100%; padding: 36px 48px 28px; }
+        .shell { width: 100%; padding: 8px 28px 10px; }
         .team-nav .rail-button, .team-chip, a.limits-now, .icon-button { min-height: 56px; }
         .icon-button { width: 56px; }
-        .focus-layout .mission-copy h2 { font-size: clamp(44px, 3.4vw, 76px); }
+        .focus-layout .mission-copy h2 { font-size: clamp(28px, 2.2vw, 48px); }
         #current-actions .primary-button { min-height: 72px; font-size: 22px; }
         .rail-button strong, .team-chip { font-size: 16px; }
       }
       @media (max-width: 1120px) {
-        .topbar { grid-template-columns: 1fr; }
+        .topbar { grid-template-columns: 1fr; grid-template-areas: "brand" "title" "chips" "nav"; }
         .hud-grid { grid-template-columns: 1fr; }
         .right-rail { grid-column: auto; grid-row: auto; grid-template-columns: 1fr; }
       }
@@ -611,9 +615,61 @@
       @media (prefers-reduced-motion: reduce) {
         .hud-backdrop { filter: none; }
       }
+      .totality-title h1 { margin: 0; font-size: clamp(22px, 2vw, 34px); letter-spacing: 0.16em; }
+      .sub-plate { margin: 2px 0 0; letter-spacing: 0.22em; font-size: 11px; color: var(--brass); }
+      .live-state { margin: 0; font-size: clamp(18px, 1.6vw, 28px); font-weight: 700; letter-spacing: 0.12em; color: var(--cream); }
+      .tree-mark { width: 42px; height: 42px; }
+      body[data-console-view="focus"] .left-rail,
+      body[data-console-view="focus"] .right-rail,
+      body[data-console-view="focus"] .bottom-band { display: none; }
+      body[data-console-view="focus"] .workspace { grid-column: 1 / -1; }
+      .console-deck { display: grid; grid-template-columns: minmax(210px, 270px) minmax(0, 1fr) minmax(230px, 300px); gap: 10px; }
+      .console-lower { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(320px, 0.9fr); gap: 10px; margin-top: 10px; }
+      .plate { background: var(--glass); border: 1px solid var(--glass-edge); border-radius: 16px; padding: 8px 10px 10px; }
+      .plate h2, .plate h3 { margin: 0 0 6px; font-size: 12px; letter-spacing: 0.14em; color: var(--brass); }
+      .plate p, .plate small { margin: 4px 0 0; color: var(--muted); font-size: 12px; }
+      body[data-console-view="focus"] .telemetry { display: none; }
+      body[data-console-view="focus"] .hud-grid { min-height: 0; grid-template-rows: auto; }
+      body[data-console-view="focus"] .footer { display: none; }
+      .focus-layout { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(200px, 0.75fr); gap: 8px; height: auto; }
+      .core-stage { position: relative; display: grid; place-items: center; min-height: 112px; }
+      .console-col .plate > svg { max-height: 70px; }
+      .core-rings { position: absolute; inset: 8px; border-radius: 50%; border: 2px solid rgba(255, 122, 24, 0.75); box-shadow: 0 0 0 10px rgba(255, 255, 255, 0.08), 0 0 0 18px rgba(255, 122, 24, 0.35); }
+      .core-emblem { width: 92px; height: 110px; position: relative; }
+      .overview-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 8px; }
+      .ring-gauge { text-align: center; }
+      .ring-gauge b { display: block; font-size: 14px; }
+      .ring-gauge svg { width: 72px; height: 72px; }
+      .dial-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; }
+      .dial { text-align: center; font-size: 10px; letter-spacing: 0.04em; }
+      .dial svg { width: 100%; height: 46px; }
+      .dial b { display: block; color: var(--muted); }
+      .data-row { display: grid; grid-template-columns: minmax(0, 1fr) 72px auto; gap: 6px; align-items: center; min-height: 28px; font-size: 12px; }
+      .data-row i { display: block; height: 6px; border-radius: 99px; background: var(--brass); }
+      .tile-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+      .tile { background: rgba(8, 10, 14, 0.35); border-radius: 12px; padding: 8px; text-align: center; }
+      .tile b { display: block; font-size: 22px; }
+      .tile span { font-size: 10px; letter-spacing: 0.08em; color: var(--muted); }
+      .network-plate { display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: 8px; align-items: center; }
+      .network-plate .mission-mascot { position: relative; inset: auto; width: 72px; height: 72px; }
+      .mission-mascot svg { width: 72px; height: 72px; }
+      .tac-map { display: flex; flex-wrap: wrap; gap: 8px; min-height: 72px; }
+      .tac-node { border: 1px solid var(--brass); border-radius: 999px; padding: 4px 8px; font-size: 12px; }
+      .analyzer { display: grid; gap: 6px; }
+      .analyzer-row { display: grid; grid-template-columns: 110px minmax(0, 1fr) auto; gap: 8px; align-items: center; font-size: 11px; letter-spacing: 0.06em; }
+      .slider { display: block; height: 8px; border-radius: 99px; background: rgba(255,255,255,0.12); position: relative; }
+      .slider::after { content: ""; position: absolute; left: 8%; top: -3px; width: 14px; height: 14px; border-radius: 50%; background: #8a8176; }
+      .gauge-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+      .gauge-face { text-align: center; }
+      .gauge-face svg { width: 100%; height: 78px; }
+      .level { height: 10px; border-radius: 99px; background: rgba(255,255,255,0.08); overflow: hidden; margin-top: 8px; }
+      .level i { display: block; height: 100%; width: 0; background: #ff7a18; }
+      @media (max-width: 1120px) {
+        .console-deck, .console-lower { grid-template-columns: 1fr; }
+      }
     </style>
   </head>
-  <body data-backdrop-severity="UNKNOWN"><!-- JARVIS // OPERATOR CONSOLE · LANDSCAPE COMMAND CENTRE -->
+  <body data-backdrop-severity="UNKNOWN" data-console-view="focus"><!-- JARVIS // OPERATOR CONSOLE · LANDSCAPE COMMAND CENTRE -->
     <canvas id="hud-backdrop" class="hud-backdrop" aria-hidden="true"></canvas>
     <div class="hud-vignette" aria-hidden="true"></div>
     <div class="bezel" aria-hidden="true"></div>
@@ -623,12 +679,17 @@
         <div class="top-glow"></div>
         <header class="topbar">
           <div class="brand">
-            <div class="mark">J</div>
+            <svg class="mark tree-mark" viewBox="0 0 64 64" aria-hidden="true"><path d="M32 58 V34" stroke="#d7a15f" stroke-width="3"/><path d="M32 36 C18 30 10 18 16 8 C26 14 30 22 32 28 C34 22 38 14 48 8 C54 18 46 30 32 36Z" fill="#e8dfd0"/><ellipse cx="42" cy="18" rx="6" ry="4" fill="#c47b4a"/></svg>
             <div class="plaque">
-              <p class="brand-kicker">JARVIS TOTALITY</p>
-              <h1>Team Board</h1>
-              <p><b>Beez Treez</b> Property Solutions · LANDSCAPE COMMAND CENTRE</p>
+              <p class="brand-kicker">THE BEEZ TREEZ</p>
+              <p><b>Beez Treez</b> Property Solutions</p>
             </div>
+          </div>
+          <div class="totality-title">
+            <p class="brand-kicker">JARVIS TOTALITY</p>
+            <h1>CONSOLE 02</h1>
+            <p class="sub-plate">OPTIMIZED TOTALITY STATE</p>
+            <p class="live-state" id="totality-state-value">UNKNOWN</p>
           </div>
             <nav class="panel green team-nav" aria-label="Command centre sections">
               <div class="panel-content nav-stack">
@@ -701,21 +762,46 @@
           <section class="panel violet workspace">
             <div class="panel-content">
               <section class="view active" id="view-focus">
+                <div class="console-deck">
+                  <div class="console-col">
+                    <section class="plate">
+                      <h2>PREDICTOR CORE</h2>
+                      <svg viewBox="0 0 300 120" role="img" aria-label="Predictor Core"><polyline id="predictor-line" points="" fill="none" stroke="#ff7a18" stroke-width="2"/></svg>
+                      <p id="predictor-state">UNKNOWN</p>
+                    </section>
+                    <section class="plate">
+                      <h2>WAVEFORM ANALYSIS</h2>
+                      <svg viewBox="0 0 300 56" aria-hidden="true"><path d="M8 28 H292" stroke="#c47b4a" fill="none" stroke-width="2"/></svg>
+                      <p id="waveform-state">No waveform signal.</p>
+                    </section>
+                    <section class="plate">
+                      <h2>STABILITY MONITOR</h2>
+                      <div class="dial-row">
+                        <div class="dial"><svg viewBox="0 0 60 36" aria-hidden="true"><path d="M6 30 A24 24 0 0 1 54 30" fill="none" stroke="#8a8176" stroke-width="3"/><path d="M30 30 L14 22" stroke="#8a8176" stroke-width="2"/></svg><span>HOST</span><b id="dial-host">UNKNOWN</b></div>
+                        <div class="dial"><svg viewBox="0 0 60 36" aria-hidden="true"><path d="M6 30 A24 24 0 0 1 54 30" fill="none" stroke="#8a8176" stroke-width="3"/><path d="M30 30 L14 22" stroke="#8a8176" stroke-width="2"/></svg><span>MEM</span><b id="dial-mem">UNKNOWN</b></div>
+                        <div class="dial"><svg viewBox="0 0 60 36" aria-hidden="true"><path d="M6 30 A24 24 0 0 1 54 30" fill="none" stroke="#8a8176" stroke-width="3"/><path d="M30 30 L14 22" stroke="#8a8176" stroke-width="2"/></svg><span>STORE</span><b id="dial-store">UNKNOWN</b></div>
+                        <div class="dial"><svg viewBox="0 0 60 36" aria-hidden="true"><path d="M6 30 A24 24 0 0 1 54 30" fill="none" stroke="#8a8176" stroke-width="3"/><path d="M30 30 L14 22" stroke="#8a8176" stroke-width="2"/></svg><span>LINK</span><b id="dial-link">UNKNOWN</b></div>
+                      </div>
+                      <p>Host meters are not exposed. Needles stay parked.</p>
+                    </section>
+                  </div>
+                  <div class="console-col">
+                    <section class="plate">
+                      <h2>SYSTEM OVERVIEW</h2>
+                      <div class="overview-row">
+                        <div class="ring-gauge"><svg viewBox="0 0 72 72" aria-hidden="true"><circle cx="36" cy="36" r="28" fill="none" stroke="rgba(255,255,255,0.15)" stroke-width="4"/><circle id="ring-layers-arc" cx="36" cy="36" r="28" fill="none" stroke="#ff7a18" stroke-width="4" pathLength="100" stroke-dasharray="0 100" transform="rotate(-90 36 36)"/></svg><span>LAYERS</span><b id="ring-layers">UNKNOWN</b></div>
+                        <div class="ring-gauge"><svg viewBox="0 0 72 72" aria-hidden="true"><circle cx="36" cy="36" r="28" fill="none" stroke="rgba(255,255,255,0.15)" stroke-width="4"/></svg><span>PERSISTENCE</span><b id="ring-persistence">UNKNOWN</b></div>
+                        <div class="ring-gauge"><svg viewBox="0 0 72 72" aria-hidden="true"><circle cx="36" cy="36" r="28" fill="none" stroke="rgba(255,255,255,0.15)" stroke-width="4"/></svg><span>Z-STATE</span><b id="ring-z">UNKNOWN</b></div>
+                      </div>
+                      <div class="core-stage">
+                        <div class="core-rings" aria-hidden="true"></div>
+                        <svg class="core-emblem" viewBox="0 0 120 140" aria-hidden="true"><path d="M60 128 V78" stroke="#d7a15f" stroke-width="4"/><path d="M60 84 C36 74 18 48 28 24 C46 34 54 52 60 66 C66 52 74 34 92 24 C102 48 84 74 60 84Z" fill="#e8dfd0"/><ellipse cx="78" cy="46" rx="12" ry="7" fill="#c47b4a"/><ellipse cx="74" cy="44" rx="4" ry="2" fill="#1a140e"/></svg>
+                      </div>
+                      <p class="sub-plate">CORE STATUS</p>
+                    </section>
                 <div class="focus-layout">
                   <article class="panel mission-panel green" data-hud-panel="now">
                     <div class="mission-core">
-                      <div class="mission-mascot" aria-hidden="true">
-      <svg viewBox="0 0 180 180" focusable="false">
-        <path d="M57 42h66l14 30v45c0 25-21 44-47 44s-47-19-47-44V72z" fill="#d8dde8" stroke="#06070c" stroke-width="8"/>
-        <path d="M60 45l12-25h36l12 25" fill="none" stroke="#ff9a35" stroke-width="10" stroke-linecap="round"/>
-        <path d="M71 22h38" stroke="#c4a574" stroke-width="5" stroke-linecap="round"/>
-        <ellipse cx="73" cy="91" rx="14" ry="22" fill="#070912"/><ellipse cx="108" cy="91" rx="14" ry="22" fill="#070912"/>
-        <ellipse cx="77" cy="84" rx="5" ry="8" fill="#c47b4a"/><ellipse cx="112" cy="84" rx="5" ry="8" fill="#c4a574"/>
-        <circle cx="90" cy="111" r="7" fill="#070912"/>
-        <path d="M67 127c13 14 33 14 46 0" fill="none" stroke="#070912" stroke-width="8" stroke-linecap="round"/>
-        <path d="M44 76H31v39h13M136 76h13v39h-13" fill="#778093" stroke="#06070c" stroke-width="8"/>
-      </svg>
-    </div>
     <div class="mission-copy">
                         <p class="eyebrow">NOW</p>
                         <h2 id="current-task">Waiting for Jarvis…</h2>
@@ -744,6 +830,67 @@
                     <p class="next-caption" id="next-caption">Showing 0 of 0</p>
                     <ul class="priority-list scroll-list" id="focus-queue"></ul>
                   </article>
+                </div>
+                  </div>
+                  <div class="console-col">
+                    <section class="plate">
+                      <h2>DATA LIST</h2>
+                      <div id="data-list"></div>
+                    </section>
+                    <section class="plate">
+                      <div class="tile-row">
+                        <div class="tile"><span>ACTIVE TASKS</span><b id="tile-tasks">UNKNOWN</b></div>
+                        <div class="tile"><span>REMINDERS</span><b id="tile-reminders">UNKNOWN</b></div>
+                        <div class="tile"><span>INBOX</span><b id="tile-inbox">UNKNOWN</b></div>
+                      </div>
+                    </section>
+                    <section class="plate network-plate">
+                      <div class="mission-mascot" aria-hidden="true">
+                        <svg viewBox="0 0 180 180" focusable="false">
+                          <path d="M57 42h66l14 30v45c0 25-21 44-47 44s-47-19-47-44V72z" fill="#d8dde8" stroke="#06070c" stroke-width="8"/>
+                          <path d="M60 45l12-25h36l12 25" fill="none" stroke="#ff9a35" stroke-width="10" stroke-linecap="round"/>
+                          <path d="M71 22h38" stroke="#c4a574" stroke-width="5" stroke-linecap="round"/>
+                          <ellipse cx="73" cy="91" rx="14" ry="22" fill="#070912"/><ellipse cx="108" cy="91" rx="14" ry="22" fill="#070912"/>
+                          <ellipse cx="77" cy="84" rx="5" ry="8" fill="#c47b4a"/><ellipse cx="112" cy="84" rx="5" ry="8" fill="#c4a574"/>
+                          <circle cx="90" cy="111" r="7" fill="#070912"/>
+                          <path d="M67 127c13 14 33 14 46 0" fill="none" stroke="#070912" stroke-width="8" stroke-linecap="round"/>
+                          <path d="M44 76H31v39h13M136 76h13v39h-13" fill="#778093" stroke="#06070c" stroke-width="8"/>
+                        </svg>
+                      </div>
+                      <div>
+                        <h2>NETWORK INTEGRITY</h2>
+                        <p id="network-version">UNKNOWN</p>
+                        <small>Runtime version. No invented integrity percent.</small>
+                      </div>
+                    </section>
+                    <section class="plate">
+                      <h2>DEV STATUS</h2>
+                      <p id="dev-status">DEVELOPMENT · NOT AUTHORISED</p>
+                    </section>
+                  </div>
+                </div>
+                <div class="console-lower">
+                  <section class="plate">
+                    <h2>TACTICAL OVERLAY</h2>
+                    <div class="tac-map" id="tactical-map"></div>
+                    <p>Nodes are inbox items. Facility names are not invented.</p>
+                  </section>
+                  <section class="plate">
+                    <div class="gauge-pair">
+                      <div class="gauge-face"><svg viewBox="0 0 120 70" aria-hidden="true"><path d="M10 60 A50 50 0 0 1 110 60" fill="none" stroke="#d7a15f" stroke-width="6"/><path d="M60 60 L28 42" stroke="#e8dfd0" stroke-width="3"/></svg><span>SYSTEM LOAD</span><b id="gauge-load">UNKNOWN</b></div>
+                      <div class="gauge-face"><svg viewBox="0 0 120 70" aria-hidden="true"><path d="M10 60 A50 50 0 0 1 110 60" fill="none" stroke="#d7a15f" stroke-width="6"/><path d="M60 60 L28 42" stroke="#e8dfd0" stroke-width="3"/></svg><span>SYSTEM EFFICIENCY</span><b id="gauge-efficiency">UNKNOWN</b></div>
+                    </div>
+                    <h3>CORE ANALYZER</h3>
+                    <div class="analyzer">
+                      <div class="analyzer-row"><span>PERSISTENCE</span><i class="slider"></i><b id="analyzer-persistence">UNKNOWN</b></div>
+                      <div class="analyzer-row"><span>Z-STATE</span><i class="slider"></i><b id="analyzer-z">UNKNOWN</b></div>
+                      <div class="analyzer-row"><span>LIMITS</span><i class="slider"></i><b id="analyzer-limits">UNKNOWN</b></div>
+                      <div class="analyzer-row"><span>PRESENCE</span><i class="slider"></i><b id="analyzer-presence">UNKNOWN</b></div>
+                      <div class="analyzer-row"><span>LIVE WORK</span><i class="slider"></i><b id="analyzer-live">UNKNOWN</b></div>
+                    </div>
+                    <div class="level" aria-hidden="true"><i id="totality-bar"></i></div>
+                    <p id="totality-bar-label">UNKNOWN</p>
+                  </section>
                 </div>
               </section>
               <section class="view" id="view-board">
@@ -1248,6 +1395,16 @@
         const text = (el, value) => { el.textContent = value == null ? "" : String(value); };
         function notify(method, params) { window.parent.postMessage({ jsonrpc: "2.0", method, params }, "*"); }
         function request(method, params, timeoutMs = 0) {
+          if (typeof location !== "undefined" && location.pathname === "/hud") {
+            if (method === "tools/call" && params && params.name === "show_jarvis_dashboard") {
+              return fetch("/api/v1/hud/snapshot", { headers: { accept: "application/json" } }).then((response) => {
+                if (!response.ok) throw new Error("Snapshot unavailable");
+                return response.json().then((data) => ({ structuredContent: data }));
+              });
+            }
+            if (method === "tools/call") return Promise.reject(new Error("This preview is read-only."));
+            return Promise.resolve({});
+          }
           return new Promise((resolve, reject) => {
             const id = ++rpcId;
             const timer = timeoutMs > 0 ? setTimeout(() => {
@@ -1761,6 +1918,112 @@
           const shown = Math.min(3, queued);
           const caption = byId("next-caption");
           if (caption) text(caption, "Showing " + shown + " of " + queued);
+          renderConsole();
+        }
+        function renderConsole() {
+          const status = state.status;
+          const layers = layerEntries();
+          const ready = layers.filter(([, value]) => value.status === "ready").length;
+          text(byId("ring-layers"), status ? ready + "/" + (layers.length || 8) : "UNKNOWN");
+          const arc = byId("ring-layers-arc");
+          if (arc) {
+            const pct = status && layers.length ? Math.round((ready / layers.length) * 100) : 0;
+            arc.setAttribute("stroke-dasharray", pct + " " + (100 - pct));
+          }
+          const persistence = status && status.provider ? String(status.provider.reachability || "UNKNOWN").toUpperCase() : "UNKNOWN";
+          text(byId("ring-persistence"), persistence);
+          const zState = status && status.zState ? String(status.zState).toUpperCase() : "UNKNOWN";
+          text(byId("ring-z"), zState);
+          text(byId("totality-state-value"), status && status.status ? String(status.status).toUpperCase() : "UNKNOWN");
+          const predictor = byId("predictor-state");
+          const line = byId("predictor-line");
+          if (!state.tasksLoaded) {
+            text(predictor, "UNKNOWN");
+            if (line) line.setAttribute("points", "");
+          } else {
+            const counts = {};
+            state.tasks.forEach((task) => {
+              const key = task.category || "personal";
+              counts[key] = (counts[key] || 0) + 1;
+            });
+            const entries = Object.entries(counts);
+            text(predictor, entries.length ? entries.map(([key, value]) => key + " " + value).join(" · ") : "No tasks recorded.");
+            if (line) {
+              if (!entries.length) line.setAttribute("points", "16,100 284,100");
+              else {
+                const max = Math.max(1, ...entries.map(([, value]) => value));
+                line.setAttribute("points", entries.map(([, value], index) => {
+                  const x = entries.length === 1 ? 150 : 16 + (index * 268) / (entries.length - 1);
+                  const y = 100 - (value / max) * 72;
+                  return x + "," + y;
+                }).join(" "));
+              }
+            }
+          }
+          text(byId("waveform-state"), "No waveform signal.");
+          ["host", "mem", "store", "link"].forEach((name) => text(byId("dial-" + name), "UNKNOWN"));
+          const list = byId("data-list");
+          if (list) {
+            list.replaceChildren();
+            const integrations = status && Array.isArray(status.integrations) ? status.integrations : null;
+            if (!status || !integrations) list.append(empty("UNKNOWN"));
+            else if (!integrations.length) list.append(empty("No integrations recorded."));
+            else integrations.forEach((item) => {
+              const row = document.createElement("div");
+              row.className = "data-row";
+              const name = document.createElement("span");
+              const stage = document.createElement("b");
+              const bar = document.createElement("i");
+              text(name, item.name || "integration");
+              const stageWord = String(item.stage || "UNKNOWN");
+              text(stage, stageWord.toUpperCase());
+              const width = stageWord === "production-approved" || stageWord === "commissioned" ? "100%" : stageWord === "configured" ? "55%" : stageWord === "implemented" ? "30%" : "8%";
+              bar.style.width = width;
+              row.append(name, bar, stage);
+              list.append(row);
+            });
+          }
+          text(byId("tile-tasks"), state.tasksLoaded ? String(state.counts.activeTasks) : "UNKNOWN");
+          text(byId("tile-reminders"), state.remindersLoaded ? String(state.counts.reminders) : "UNKNOWN");
+          const inbox = state.inbox;
+          text(byId("tile-inbox"), inbox && Array.isArray(inbox.items) ? String(inbox.items.length) : "UNKNOWN");
+          text(byId("network-version"), status && status.version ? String(status.version) : "UNKNOWN");
+          text(byId("dev-status"), "DEVELOPMENT · NOT AUTHORISED");
+          const map = byId("tactical-map");
+          if (map) {
+            map.replaceChildren();
+            if (!inbox) map.append(empty(inbox === null ? "Inbox UNKNOWN" : "UNKNOWN"));
+            else if (!Array.isArray(inbox.items) || !inbox.items.length) map.append(empty("No tactical nodes recorded."));
+            else inbox.items.slice(0, 6).forEach((item) => {
+              const node = document.createElement("span");
+              node.className = "tac-node";
+              text(node, item.title || "Untitled");
+              map.append(node);
+            });
+          }
+          text(byId("analyzer-persistence"), persistence);
+          text(byId("analyzer-z"), zState);
+          text(byId("analyzer-limits"), limitsChipState());
+          text(byId("analyzer-presence"), deriveHudPresence({ status: state.status }).toUpperCase());
+          const live = state.liveWork;
+          let liveWord = "UNKNOWN";
+          if (live && live.status === "unavailable") liveWord = "UNAVAILABLE";
+          else if (live && live.pipeline && live.pipeline.state) liveWord = String(live.pipeline.state);
+          else if (live && live.status === "ready") liveWord = "NONE";
+          text(byId("analyzer-live"), liveWord);
+          const bar = byId("totality-bar");
+          if (bar) {
+            if (!status || !layers.length) {
+              bar.style.width = "0%";
+              text(byId("totality-bar-label"), "UNKNOWN");
+            } else {
+              const pct = Math.round((ready / layers.length) * 100);
+              bar.style.width = pct + "%";
+              text(byId("totality-bar-label"), ready + "/" + layers.length + " layers ready");
+            }
+          }
+          text(byId("gauge-load"), "UNKNOWN");
+          text(byId("gauge-efficiency"), "UNKNOWN");
         }
         const hudPanelRegistry = [];
         function registerHudPanel(panel) {
@@ -1843,84 +2106,72 @@
             const pal = palette();
             const still = reduced();
             const t = still ? 0 : time * 0.001 * pal.speed;
-            const rows = [];
-            const cols = [];
-            for (let i = 0; i < 8; i += 1) rows.push(0.06 + 0.88 * (i / 7));
-            for (let i = 0; i < 10; i += 1) cols.push(0.04 + 0.92 * (i / 9));
             ctx.clearRect(0, 0, w, h);
-            ctx.fillStyle = "#0c0b09";
+            const sky = ctx.createLinearGradient(0, 0, 0, h);
+            sky.addColorStop(0, severity === "STOPPED" ? "#4a1c22" : severity === "UNKNOWN" ? "#2a3140" : "#243e68");
+            sky.addColorStop(0.34, severity === "UNKNOWN" ? "#6a5438" : "#e08a45");
+            sky.addColorStop(0.5, severity === "UNKNOWN" ? "#3a342c" : "#f2c48a");
+            sky.addColorStop(0.62, "#163044");
+            sky.addColorStop(1, "#071018");
+            ctx.fillStyle = sky;
             ctx.fillRect(0, 0, w, h);
-            const wash = ctx.createRadialGradient(w * 0.5, h * 0.42, h * 0.08, w * 0.5, h * 0.42, Math.max(w, h) * 0.62);
-            wash.addColorStop(0, ink(pal.trace, 0.28));
-            wash.addColorStop(1, ink(pal.trace, 0.4));
-            ctx.fillStyle = wash;
+            const sunY = h * (0.46 + (still ? 0 : Math.sin(t * 0.15) * 0.01));
+            const sun = ctx.createRadialGradient(w * 0.72, sunY, 8, w * 0.72, sunY, w * 0.18);
+            sun.addColorStop(0, "rgba(255, 196, 120, 0.85)");
+            sun.addColorStop(1, "rgba(255, 122, 24, 0)");
+            ctx.fillStyle = sun;
             ctx.fillRect(0, 0, w, h);
-            ctx.lineCap = "round";
-            ctx.lineWidth = Math.max(5, w / 240);
-            rows.forEach((row) => {
-              ctx.strokeStyle = ink(pal.trace, 0.42 * calmAt(w * 0.5, h * row, w, h));
-              ctx.beginPath();
-              ctx.moveTo(w * 0.03, h * row);
-              ctx.lineTo(w * 0.97, h * row);
-              ctx.stroke();
-            });
-            cols.forEach((col) => {
-              ctx.strokeStyle = ink(pal.trace, 0.36 * calmAt(w * col, h * 0.5, w, h));
-              ctx.beginPath();
-              ctx.moveTo(w * col, h * 0.04);
-              ctx.lineTo(w * col, h * 0.96);
-              ctx.stroke();
-            });
-            rows.forEach((row, rowIndex) => {
-              cols.forEach((col, colIndex) => {
-                const x = w * col;
-                const y = h * row;
-                const alpha = (still ? 0.45 : 0.32 + 0.28 * Math.sin(t * 1.6 + rowIndex + colIndex)) * calmAt(x, y, w, h);
-                ctx.fillStyle = ink(pal.pulse, alpha);
-                ctx.beginPath();
-                ctx.arc(x, y, Math.max(3, w / 420), 0, Math.PI * 2);
-                ctx.fill();
-              });
-            });
-            if (!still) {
-              rows.forEach((row, index) => {
-                const x = ((t * 0.07 + index * 0.16) % 1) * w;
-                const y = h * row;
-                ctx.fillStyle = ink(pal.pulse, 0.85 * calmAt(x, y, w, h));
-                ctx.beginPath();
-                ctx.arc(x, y, Math.max(8, w / 140), 0, Math.PI * 2);
-                ctx.fill();
-              });
+            const horizon = h * 0.5;
+            ctx.fillStyle = "rgba(8, 18, 28, 0.92)";
+            ctx.beginPath();
+            ctx.moveTo(0, horizon);
+            const blocks = 28;
+            for (let i = 0; i < blocks; i += 1) {
+              const x = (i / blocks) * w;
+              const bw = w / blocks;
+              const bh = h * (0.08 + ((i * 17) % 9) * 0.012);
+              ctx.lineTo(x, horizon - bh);
+              ctx.lineTo(x + bw * 0.86, horizon - bh);
             }
-            const gauges = [
-              { x: w * 0.1, y: h * 0.84 },
-              { x: w * 0.9, y: h * 0.84 },
+            ctx.lineTo(w, horizon);
+            ctx.lineTo(w, h);
+            ctx.lineTo(0, h);
+            ctx.fill();
+            for (let i = 0; i < 46; i += 1) {
+              const x = ((i * 97) % 1000) / 1000 * w;
+              const y = horizon - h * (0.03 + ((i * 13) % 8) * 0.012);
+              const glow = still ? 0.35 : 0.2 + 0.55 * Math.abs(Math.sin(t * 1.4 + i));
+              ctx.fillStyle = "rgba(255, 196, 120, " + (glow * calmAt(x, y, w, h)).toFixed(3) + ")";
+              ctx.fillRect(x, y, Math.max(3, w / 280), Math.max(4, h / 160));
+            }
+            const waterTop = horizon + h * 0.02;
+            for (let row = 0; row < 8; row += 1) {
+              const y = waterTop + row * (h * 0.045);
+              ctx.strokeStyle = "rgba(120, 190, 200, " + (0.45 * calmAt(w * 0.5, y, w, h)).toFixed(3) + ")";
+              ctx.lineWidth = Math.max(1, w / 900);
+              ctx.beginPath();
+              for (let x = 0; x <= w; x += Math.max(8, w / 80)) {
+                const wave = still ? 0 : Math.sin(x * 0.02 + t * 1.3 + row) * (3 + row);
+                if (x === 0) ctx.moveTo(x, y + wave);
+                else ctx.lineTo(x, y + wave);
+              }
+              ctx.stroke();
+            }
+            const links = [
+              [0.62, 0.7, 0.74, 0.62],
+              [0.74, 0.62, 0.84, 0.72],
+              [0.7, 0.78, 0.84, 0.72],
             ];
-            const radius = Math.min(w, h) * 0.075;
-            gauges.forEach((gauge, index) => {
-              ctx.strokeStyle = ink(pal.trace, 0.55);
-              ctx.lineWidth = Math.max(2, w / 700);
+            links.forEach((link, index) => {
+              const alpha = still ? 0.35 : 0.25 + 0.45 * Math.abs(Math.sin(t * 1.8 + index));
+              ctx.strokeStyle = ink(pal.pulse, alpha);
+              ctx.lineWidth = Math.max(1.5, w / 700);
               ctx.beginPath();
-              ctx.arc(gauge.x, gauge.y, radius, Math.PI * 0.75, Math.PI * 2.25);
-              ctx.stroke();
-              const swing = still ? 0.42 : Math.sin(t * 0.7 + index) * 0.5 + 0.5;
-              const angle = Math.PI * 0.85 + swing * 1.15;
-              ctx.strokeStyle = ink(pal.pulse, 0.8);
-              ctx.beginPath();
-              ctx.moveTo(gauge.x, gauge.y);
-              ctx.lineTo(gauge.x + Math.cos(angle) * radius * 0.82, gauge.y + Math.sin(angle) * radius * 0.82);
+              ctx.moveTo(w * link[0], h * link[1]);
+              ctx.lineTo(w * link[2], h * link[3]);
               ctx.stroke();
             });
-            if (!still) {
-              const sweep = ((t * 40) % (w + 180)) - 90;
-              const grad = ctx.createLinearGradient(sweep - 70, 0, sweep + 70, 0);
-              grad.addColorStop(0, ink(pal.pulse, 0));
-              grad.addColorStop(0.5, ink(pal.pulse, 0.22));
-              grad.addColorStop(1, ink(pal.pulse, 0));
-              ctx.fillStyle = grad;
-              ctx.fillRect(sweep - 70, 0, 140, h);
-            }
-            ctx.fillStyle = ink(pal.trace, 0.7);
+            ctx.fillStyle = ink(pal.trace, 0.75);
             ctx.font = Math.max(12, Math.floor(w / 120)) + "px sans-serif";
             ctx.fillText(still ? "INSTRUMENT STILL" : "INSTRUMENT LIVE", 28, h - 26);
           }
@@ -1959,10 +2210,10 @@
         // END hud-backdrop
 
         function setCaptureMode(mode) { state.captureMode = mode; document.querySelectorAll("[data-capture]").forEach((button) => button.classList.toggle("active",button.dataset.capture === mode)); const category = byId("capture-category"); const due = byId("capture-due"); if (mode === "task") { text(byId("capture-title-label"),"Task command"); text(byId("capture-detail-copy"),"Category"); category.hidden = false; due.hidden = true; text(byId("capture-submit"),"ADD TASK"); } else { text(byId("capture-title-label"),"Reminder command"); text(byId("capture-detail-copy"),"When"); category.hidden = true; due.hidden = false; text(byId("capture-submit"),"SET REMINDER"); } }
-        document.querySelectorAll("[data-view]").forEach((button) => button.addEventListener("click",() => { document.querySelectorAll("[data-view]").forEach((candidate) => candidate.classList.toggle("active",candidate === button)); document.querySelectorAll(".view").forEach((view) => view.classList.toggle("active",view.id === `view-${button.dataset.view}`)); }));
+        document.querySelectorAll("[data-view]").forEach((button) => button.addEventListener("click",() => { document.querySelectorAll("[data-view]").forEach((candidate) => candidate.classList.toggle("active",candidate === button)); document.body.dataset.consoleView = button.dataset.view || "focus"; document.querySelectorAll(".view").forEach((view) => view.classList.toggle("active",view.id === `view-${button.dataset.view}`)); }));
         const settingsTabByHash = { "view-general": "general", "view-credentials": "credentials", "view-persistence": "persistence", "view-limits": "limits", "view-danger": "danger" };
         function showSettingsTab(tab) { document.querySelectorAll("[data-settings-tab]").forEach((candidate) => { const selected = candidate.dataset.settingsTab === tab; candidate.classList.toggle("active", selected); if (selected) candidate.setAttribute("aria-current", "page"); else candidate.removeAttribute("aria-current"); }); document.querySelectorAll("[data-settings-panel]").forEach((panel) => panel.classList.toggle("active", panel.dataset.settingsPanel === tab)); if (tab === "persistence") void loadPersistence(); }
-        function activateNamedView(name) { document.querySelectorAll("[data-view]").forEach((candidate) => candidate.classList.toggle("active", candidate.dataset.view === name)); document.querySelectorAll(".view").forEach((view) => view.classList.toggle("active", view.id === `view-${name}`)); }
+        function activateNamedView(name) { document.body.dataset.consoleView = name; document.querySelectorAll("[data-view]").forEach((candidate) => candidate.classList.toggle("active", candidate.dataset.view === name)); document.querySelectorAll(".view").forEach((view) => view.classList.toggle("active", view.id === `view-${name}`)); }
         function applySettingsHash() { const tab = settingsTabByHash[location.hash.slice(1)]; if (!tab) return; activateNamedView("settings"); showSettingsTab(tab); }
         window.addEventListener("hashchange", applySettingsHash);
         applySettingsHash();

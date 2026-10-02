@@ -1,5 +1,12 @@
 # Jarvis TypeScript Roadmap
 
+## Console 02 HUD (2026-10-02)
+
+The same operator widget is now the JARVIS TOTALITY Console 02 frame: brass
+bezel, dusk coastal canvas, and honest plates. Gauges without a Jarvis meter
+stay UNKNOWN with the needle parked. `GET /hud` and `GET /api/v1/hud/snapshot`
+are loopback-only and read-only. Screenshots: `docs/screenshots/`.
+
 ## Team Board HUD (2026-10-01)
 
 The operator widget is the 55-inch Team Board: riveted Totality frame, frosted

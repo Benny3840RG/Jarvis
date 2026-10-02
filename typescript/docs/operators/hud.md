@@ -1,16 +1,26 @@
-# Operator HUD (Team Board)
+# Operator HUD (Console 02)
 
 The operator HUD is `src/mcp/dashboard-v1.html`, served as the MCP widget
 `ui://jarvis/dashboard-v1.html`. It is a projection over the Jarvis HTTP API.
 It does not own tasks, reminders, quotes, approvals, or missions.
 
-Open a local fail-closed frame with `src/mcp/dashboard-preview-host.html`.
-That host iframes the widget and does not inject a sample snapshot.
+On a loopback bind the HTTP server also serves the same page at `GET /hud`
+(for example `http://127.0.0.1:3000/hud`). That route is public only because
+the bind is loopback. The HTML contains no token. The page fetches
+`GET /api/v1/hud/snapshot` with no `Authorization` header and refuses write
+tools. A non-loopback bind returns 404 for both routes. Open a file preview
+with `src/mcp/dashboard-preview-host.html`. That host iframes the widget and
+does not inject a sample snapshot.
 
 ## Layout
 
-The board is the 55-inch landscape Totality frame: riveted bezel, frosted
-cards, and one animated instrument behind the glass. Desktop, tablet, and
+Console 02 is the 55-inch landscape frame: a riveted brass bezel, the title
+plate `JARVIS TOTALITY` / `CONSOLE 02`, the engraved sub-plate
+`OPTIMIZED TOTALITY STATE`, and the Beez Treez mark. The engraved plate is a
+hardware label. The live reading under it is `status.status`, or `UNKNOWN`
+until status arrives. Translucent dark glass sits over a dusk coastal canvas
+(sky, water, city lights, a few unlabelled links). The nav rail is its own
+row under the title so it does not cover the chips. Desktop, tablet, and
 phone collapse the same regions; they do not get a second data model.
 
 | Zone      | What it shows                                                              | Mount                               |
@@ -37,6 +47,18 @@ There is one limits NOW chip, `#limits-now-chip`, ranked
 `STOPPED > UNKNOWN > WARN > OK > NO LIMIT`. It links to `/settings/limits` and
 is not editable. While the quota store is unread the chip stays `UNKNOWN`.
 
+Console 02 plates that have no Jarvis meter stay parked. Predictor Core draws
+task counts by category only after `tasks` arrives. Waveform Analysis has no
+signal, so the line stays flat. Host, memory, store, and link dials, System
+Load, and System Efficiency have no host meter, so the needles stay parked and
+the caption stays `UNKNOWN`. System Overview uses layer readiness, persistence
+reachability, and `zState` as words, not invented percents. Data List is
+`status.integrations` stages. The numeric tiles are active tasks, reminders,
+and inbox item count. Network Integrity shows `status.version`. Tactical
+Overlay lists inbox item titles and does not invent facility names. Core
+Analyzer sliders show persistence, z-state, limits, presence, and live work
+as words, with thumbs parked.
+
 The instrument backdrop is separate. `deriveBackdropSeverity` uses the same
 rank on readings that actually arrived:
 
@@ -46,12 +68,12 @@ rank on readings that actually arrived:
 - status `ok` → `OK` (sage, calm)
 
 An unread limits chip does not grey out a known runtime. Unread is not a
-measured outage. The canvas is a low-contrast field of traces, travelling
-pulses, gauge needles, and a slow sweep. The middle, behind NOW, stays dimmer
-than the edges. It never draws telemetry numbers. It pauses while
-`document.hidden` is true, and it draws one still frame labelled
-`INSTRUMENT STILL` when `data-console-motion="reduce"` or
-`prefers-reduced-motion: reduce` applies.
+measured outage. The canvas is a dusk coast: a slow sky, moving water, window
+flicker, and pulsing links. Severity tints the palette. It never draws
+telemetry numbers. It pauses while `document.hidden` is true, and it draws one
+still frame labelled `INSTRUMENT STILL` when `data-console-motion="reduce"` or
+`prefers-reduced-motion: reduce` applies. Internal pixels stay at or under
+1920×1080.
 
 ## Data contract
 
@@ -116,7 +138,7 @@ Rules:
    as it was.
 
 Tokens already on the board: cream `#e8dfd0`, brass `#d98938`, sage `#a8c58b`,
-danger `#ff5c75`, glass `rgba(22, 18, 15, 0.34)`. The older warm-instrument
+danger `#ff5c75`, glass `rgba(10, 14, 20, 0.30)`. The older warm-instrument
 stops `#c47b4a`, `#d7a15f`, `#ff7a18` stay in `--violet`, `--green`, `--orange`,
 and `--brand-gradient`. Touch targets grow to at least 56px from 1400px wide.
 Settings controls stay at least 44px.

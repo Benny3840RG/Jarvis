@@ -41,6 +41,8 @@ const PUBLIC_OPERATIONS = new Set([
   "GET /settings/credentials",
   "GET /settings/danger",
   "GET /settings/limits",
+  "GET /hud",
+  "GET /api/v1/hud/snapshot",
 ]);
 
 function unusedPersistence(): PersistenceProvider {

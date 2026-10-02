@@ -63,6 +63,7 @@ import { ReminderController } from "./reminderController.js";
 import { RequestIdInterceptor } from "./requestId.js";
 import { ServiceTokenGuard } from "./serviceTokenGuard.js";
 import { CredentialsController } from "./credentialsController.js";
+import { HudController } from "./hudController.js";
 import { LimitsController } from "./limitsController.js";
 import { GeneralSettingsController } from "./generalSettingsController.js";
 import { HealthController, OperatorSystemController } from "./systemControllers.js";
@@ -147,6 +148,7 @@ export class JarvisHttpModule {
         GeneralSettingsController,
         CredentialsController,
         LimitsController,
+        HudController,
         TotalityController,
         MemoryChangeSetController,
         TaskController,
