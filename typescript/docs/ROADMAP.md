@@ -17,7 +17,9 @@ Completed:
 - `httpServer.ts`: rewired from the Node `http`-based `StreamableHTTPServerTransport` to a
   `createMcpHandler` fetch handler, with a small Node↔web-standard bridge (IncomingMessage →
   `Request`, `Response` → ServerResponse) that preserves CORS/origin/cache handling, telemetry,
-  and client-disconnect cancellation via the request `AbortSignal`.
+  and client-disconnect cancellation via the request `AbortSignal`. The buffered body read is
+  bounded (1 MiB cap → `413`, replacing the pre-2.x transport's implicit limit) and aborts on
+  disconnect.
 - Client tools and tests moved off the old `@modelcontextprotocol/sdk/*` sub-paths to
   `@modelcontextprotocol/client` (+ `/validators/ajv`). `registerAppTool` handler typing needed
   no `any`: the existing raw-shape schemas still infer under the 2.x overloads.

@@ -16,6 +16,18 @@ import {
 const MCP_PATH = "/mcp";
 const MCP_METHODS = new Set(["POST", "GET", "DELETE"]);
 
+/**
+ * Cap on a buffered MCP request body. JSON-RPC tool calls are small; this bounds
+ * the memory an abusive or runaway client can force before the handler runs.
+ */
+const MAX_MCP_BODY_BYTES = 1024 * 1024;
+
+/** The request body exceeded {@link MAX_MCP_BODY_BYTES}; mapped to HTTP 413. */
+class BodyTooLargeError extends Error {}
+
+/** The client disconnected before the body finished; no response is owed. */
+class RequestAbortedError extends Error {}
+
 export type RunningJarvisMcpServer = {
   url: string;
   close(): Promise<void>;
@@ -49,11 +61,55 @@ function corsHeaders(origin: string | undefined): Record<string, string> {
   };
 }
 
-/** Buffer a Node request body. MCP JSON-RPC bodies are small, so one read is fine. */
-async function readRequestBody(request: IncomingMessage): Promise<Buffer> {
-  const chunks: Buffer[] = [];
-  for await (const chunk of request) chunks.push(chunk as Buffer);
-  return Buffer.concat(chunks);
+/**
+ * Buffer a Node request body with two guards the pre-2.x transport gave us for
+ * free: a hard size cap (reject with {@link BodyTooLargeError} → 413 rather than
+ * growing the buffer without bound) and cancellation — if the client
+ * disconnects (`signal` aborts) the socket is destroyed and the read rejects
+ * with {@link RequestAbortedError} instead of draining an abandoned upload.
+ */
+function readRequestBody(
+  request: IncomingMessage,
+  signal: AbortSignal,
+  maxBytes: number,
+): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    let total = 0;
+    let settled = false;
+    const finish = (run: () => void): void => {
+      if (settled) return;
+      settled = true;
+      signal.removeEventListener("abort", onAbort);
+      run();
+    };
+    const onAbort = (): void =>
+      finish(() => {
+        request.destroy();
+        reject(new RequestAbortedError());
+      });
+    if (signal.aborted) {
+      reject(new RequestAbortedError());
+      return;
+    }
+    signal.addEventListener("abort", onAbort, { once: true });
+    request.on("data", (chunk: Buffer) => {
+      if (settled) return;
+      total += chunk.length;
+      if (total > maxBytes) {
+        // Stop buffering, but leave the socket alive so the 413 can be written;
+        // the handler destroys it once that response has flushed.
+        finish(() => {
+          request.pause();
+          reject(new BodyTooLargeError());
+        });
+        return;
+      }
+      chunks.push(chunk);
+    });
+    request.on("end", () => finish(() => resolve(Buffer.concat(chunks))));
+    request.on("error", (error) => finish(() => reject(error)));
+  });
 }
 
 /**
@@ -166,15 +222,27 @@ export async function startJarvisMcpHttpServer(
       const startedAt = performance.now();
       let outcome: "success" | "failure" = "success";
       try {
-        const body = await readRequestBody(request);
+        const body = await readRequestBody(request, disconnect.signal, MAX_MCP_BODY_BYTES);
         const webRequest = toWebRequest(request, url, body, disconnect.signal);
         const webResponse = await runWithMcpRequestSignal(disconnect.signal, () =>
           handler.fetch(webRequest),
         );
         await writeWebResponse(response, webResponse);
-      } catch {
+      } catch (error: unknown) {
         outcome = "failure";
-        if (!response.headersSent) {
+        if (error instanceof RequestAbortedError) {
+          // The client is gone; nothing to send. Telemetry still records the failure.
+        } else if (error instanceof BodyTooLargeError) {
+          if (!response.headersSent) {
+            response
+              .writeHead(413, { "content-type": "text/plain; charset=utf-8" })
+              // Close the connection once the 413 has flushed: the unread body
+              // would otherwise desync a keep-alive socket.
+              .end("Request body too large.", () => request.destroy());
+          } else if (!response.writableFinished) {
+            response.end();
+          }
+        } else if (!response.headersSent) {
           response
             .writeHead(500, { "content-type": "text/plain; charset=utf-8" })
             .end("Jarvis MCP request failed.");
