@@ -1,5 +1,14 @@
 # Jarvis TypeScript Roadmap
 
+## Dashboard: booked jobs in the operations nav badge (2026-10-02)
+
+The operations nav badge now counts booked jobs that need attention, deduped against active
+projects so nothing is double-counted. Its project contribution is the number of distinct
+project ids across active ∪ overdue ∪ today (a job that is both active and booked counts once;
+a non-active booked job — quoted/lead/on_hold that is overdue or due today — adds one). Quotes,
+maintenance, enquiries, invoices and errands are unchanged. Dashboard render-only; no contract,
+store or test-data change beyond the widget. Covered by a widget test asserting the dedup.
+
 ## Daily brief + dashboard: overdue booked jobs (2026-10-02)
 
 Follow-up to the scheduled-jobs slice (#680/#682): the brief and dashboard now also surface

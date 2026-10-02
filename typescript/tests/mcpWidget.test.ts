@@ -398,6 +398,84 @@ describe("Jarvis preview widget", () => {
     ]);
   });
 
+  it("counts booked jobs in the operations nav badge, deduped against active projects", () => {
+    const renderSource = widget.match(
+      /(function renderOperations\(\) \{[\s\S]*?\})\n\s+function renderActivity/,
+    )?.[1];
+    const audSource = widget.match(/const aud = new Intl\.NumberFormat[^;]+;/)?.[0];
+    assert.ok(renderSource, "operations renderer was not found");
+    assert.ok(audSource, "AUD formatter was not found");
+
+    const elements = new Map<string, { id: string; textContent: string }>();
+    const byId = (id: string) => {
+      const existing = elements.get(id);
+      if (existing) return existing;
+      const element = { id, textContent: "" };
+      elements.set(id, element);
+      return element;
+    };
+    const text = (element: { textContent: string }, value: unknown) => {
+      element.textContent = value == null ? "" : String(value);
+    };
+    const fillList = () => {};
+
+    // p1 is active AND booked for today; p2 is a non-active job booked overdue.
+    const p1 = { id: "p1", title: "Deck rebuild", status: "active" };
+    const p2 = { id: "p2", title: "Stump grind", status: "quoted" };
+    const state = {
+      quotes: [],
+      quoteRegisterStatus: "ready",
+      brief: {
+        generatedAt: "2026-07-30T00:00:00.000Z",
+        headline: "Nav badge dedup fixture.",
+        reminders: { dueCount: 0, upcomingCount: 0 },
+        projects: { activeCount: 1, active: [p1] },
+        quotes: {
+          pipelineTotal: 0,
+          acceptedTotal: 0,
+          countsByStatus: { draft: 0, sent: 0, accepted: 0, declined: 0 },
+          awaitingResponse: [],
+          drafts: [],
+        },
+        maintenance: { dueCount: 0, dueSoonCount: 0, due: [], dueSoon: [] },
+        scheduled: {
+          overdueCount: 1,
+          todayCount: 1,
+          thisWeekCount: 0,
+          unscheduledCount: 0,
+          overdue: [p2],
+          today: [p1],
+          thisWeek: [],
+          unscheduled: [],
+        },
+      },
+    };
+    const run = new Function(
+      "state",
+      "byId",
+      "text",
+      "fillList",
+      "operationsRow",
+      "quotePipelineRow",
+      "renderQuoteDetail",
+      "empty",
+      `"use strict"; ${audSource} ${renderSource}; renderOperations();`,
+    );
+    run(
+      state,
+      byId,
+      text,
+      fillList,
+      () => ({}),
+      () => ({}),
+      () => {},
+      () => ({}),
+    );
+
+    // p1 is both active and booked-today but counts once; p2 (booked, non-active) adds one.
+    assert.equal(elements.get("nav-operations-count")?.textContent, "2");
+  });
+
   it("opens a register quote in the read-only inspector", async () => {
     const openSource = widget.match(
       /(async function openQuote\(summary\) \{[\s\S]*?\})\n\s+function renderQuoteDetail/,
