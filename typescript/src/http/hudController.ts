@@ -37,7 +37,7 @@ import {
 const HUD_HTML = readFileSync(new URL("../mcp/dashboard-v1.html", import.meta.url), "utf8");
 
 const HUD_CSP =
-  "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src 'none'; connect-src 'self'; base-uri 'none'; form-action 'none'";
+  "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data: 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'";
 
 function loopbackOnly(): JarvisProblem {
   return new JarvisProblem(

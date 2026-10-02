@@ -18,8 +18,10 @@ Console 02 is the 55-inch landscape frame: a riveted brass bezel, the title
 plate `JARVIS TOTALITY` / `CONSOLE 02`, the engraved sub-plate
 `OPTIMIZED TOTALITY STATE`, and the Beez Treez mark. The engraved plate is a
 hardware label. The live reading under it is `status.status`, or `UNKNOWN`
-until status arrives. Translucent dark glass sits over a dusk coastal canvas
-(sky, water, city lights, a few unlabelled links). The nav rail is its own
+until status arrives. Smoked glass sits over a photographic dusk coast
+(`src/mcp/assets/coast-dusk.jpg`, inlined so the widget stays one file). The
+canvas above it only adds cloud drift, window twinkle, surf, and unlabelled
+link pulses. The nav rail is its own
 row under the title so it does not cover the chips. Desktop, tablet, and
 phone collapse the same regions; they do not get a second data model.
 
@@ -68,8 +70,9 @@ rank on readings that actually arrived:
 - status `ok` → `OK` (sage, calm)
 
 An unread limits chip does not grey out a known runtime. Unread is not a
-measured outage. The canvas is a dusk coast: a slow sky, moving water, window
-flicker, and pulsing links. Severity tints the palette. It never draws
+measured outage. The plate is the committed dusk photograph. Severity tints
+that photograph. The canvas stays transparent and draws drifting cloud,
+surf shimmer, window twinkle, and pulsing links. It never draws
 telemetry numbers. It pauses while `document.hidden` is true, and it draws one
 still frame labelled `INSTRUMENT STILL` when `data-console-motion="reduce"` or
 `prefers-reduced-motion: reduce` applies. Internal pixels stay at or under
@@ -138,10 +141,10 @@ Rules:
    as it was.
 
 Tokens already on the board: cream `#e8dfd0`, brass `#d98938`, sage `#a8c58b`,
-danger `#ff5c75`, glass `rgba(10, 14, 20, 0.30)`. The older warm-instrument
+danger `#ff5c75`, glass `rgba(6, 10, 16, 0.36)`. The older warm-instrument
 stops `#c47b4a`, `#d7a15f`, `#ff7a18` stay in `--violet`, `--green`, `--orange`,
-and `--brand-gradient`. Touch targets grow to at least 56px from 1400px wide.
-Settings controls stay at least 44px.
+and `--brand-gradient`. From 1400px wide the header chrome tightens so the
+frame fits a 1920×1080 display. Settings controls stay at least 44px.
 
 ## What came from the earlier HUD snapshots
 

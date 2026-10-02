@@ -37,6 +37,11 @@ describe("Team Board HUD", () => {
     assert.match(widget, /SYSTEM EFFICIENCY/);
     assert.match(widget, /TACTICAL OVERLAY/);
     assert.match(widget, /No waveform signal/);
+    assert.match(widget, /<svg class="core-rings"/);
+    assert.match(widget, /class="analogue"/);
+    assert.match(widget, /class="knob"/);
+    assert.match(widget, /class="hud-photo"/);
+    assert.match(widget, /data:image\/jpeg;base64,/);
     assert.doesNotMatch(widget, /\b447\b|\b99\.7%|\b0\.999\b|SEAFORD POLICE|SYI 7/);
   });
 
