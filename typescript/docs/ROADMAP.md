@@ -33,7 +33,8 @@ Decisions:
   with a past date); a job only leaves overdue when it is marked done or rebooked. Status is not
   changed automatically — the brief only reports.
 
-Next: optionally fold bookings into the dashboard nav badge with active∩scheduled dedup.
+Next: the nav-badge fold-in (active∩scheduled dedup) shipped — see the booked-jobs nav badge
+entry above.
 
 ## Console 02 HUD (2026-10-02)
 
