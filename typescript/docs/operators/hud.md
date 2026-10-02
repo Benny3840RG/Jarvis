@@ -14,16 +14,19 @@ does not inject a sample snapshot.
 
 ## Layout
 
-Console 02 is the 55-inch landscape frame: a riveted brass bezel, the title
-plate `JARVIS TOTALITY` / `CONSOLE 02`, the engraved sub-plate
-`OPTIMIZED TOTALITY STATE`, and the Beez Treez mark. The engraved plate is a
-hardware label. The live reading under it is `status.status`, or `UNKNOWN`
-until status arrives. Smoked glass sits over a photographic dusk coast
-(`src/mcp/assets/coast-dusk.jpg`, inlined so the widget stays one file). The
-canvas above it only adds cloud drift, window twinkle, surf, and unlabelled
-link pulses. The nav rail is its own
-row under the title so it does not cover the chips. Desktop, tablet, and
-phone collapse the same regions; they do not get a second data model.
+Console 02 is the 55-inch landscape frame: a chamfered brass bezel drawn as
+an SVG stroke (so the coast stays visible), heavy rivets, and a domed title
+plate `JARVIS TOTALITY` / `CONSOLE 02` that breaks the top edge. The engraved
+sub-plate reads `OPTIMIZED TOTALITY STATE`. The live reading under it is
+`status.status`, or `UNKNOWN` until status arrives. Smoked glass with amber
+corner brackets sits over a photographic dusk coast
+(`src/mcp/assets/coast-dusk.jpg`, inlined so the widget stays one file).
+Empty meters still draw their chrome: ring ticks, chart grids, parked dial
+needles, and an unlabelled tactical node sketch. The reading stays `UNKNOWN`.
+On a 1920×1080 desktop the brand sits inside the left of the frame, the chips
+sit inside the right, and the nav is one row under the title so it does not
+cover either. Desktop, tablet, and phone collapse the same regions; they do
+not get a second data model.
 
 | Zone      | What it shows                                                              | Mount                               |
 | --------- | -------------------------------------------------------------------------- | ----------------------------------- |
