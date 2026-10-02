@@ -1,8 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 
 import type { QuoteSnapshot } from "../src/quotes/quoteLifecycle.js";
 import { JarvisApiClient } from "../src/mcp/jarvisApiClient.js";

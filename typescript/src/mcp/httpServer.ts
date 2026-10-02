@@ -1,6 +1,6 @@
-import { createServer, type Server } from "node:http";
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 
-import { StreamableHTTPServerTransport } from "./sdkAdapter.js";
+import { createMcpHandler, type McpHttpHandler } from "./sdkAdapter.js";
 
 import { McpCapabilityGuard, resolveMcpCapabilityGrant } from "./capabilityGuard.js";
 import type { JarvisMcpConfig } from "./config.js";
@@ -49,6 +49,58 @@ function corsHeaders(origin: string | undefined): Record<string, string> {
   };
 }
 
+/** Buffer a Node request body. MCP JSON-RPC bodies are small, so one read is fine. */
+async function readRequestBody(request: IncomingMessage): Promise<Buffer> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of request) chunks.push(chunk as Buffer);
+  return Buffer.concat(chunks);
+}
+
+/**
+ * Build a web-standard `Request` from the incoming Node request. The MCP 2.x
+ * serving entry (`createMcpHandler().fetch`) is fetch-shaped, so the Node HTTP
+ * surface is bridged here rather than throughout the server plane. `signal`
+ * carries client disconnects into the exchange so an abandoned request is
+ * cancelled at the transport, mirroring the pre-2.x `transport.close()` path.
+ */
+function toWebRequest(
+  request: IncomingMessage,
+  url: URL,
+  body: Buffer,
+  signal: AbortSignal,
+): Request {
+  const headers = new Headers();
+  for (const [name, value] of Object.entries(request.headers)) {
+    if (Array.isArray(value)) for (const item of value) headers.append(name, item);
+    else if (value !== undefined) headers.set(name, value);
+  }
+  const method = request.method ?? "GET";
+  const hasBody = method !== "GET" && method !== "HEAD" && body.length > 0;
+  return new Request(url.toString(), {
+    method,
+    headers,
+    signal,
+    ...(hasBody ? { body: body as unknown as BodyInit } : {}),
+  });
+}
+
+/** Stream a web-standard `Response` back onto the Node response, preserving any
+ * headers already set on it (CORS, cache-control) — `writeHead` merges those
+ * with the response's own, the response's taking precedence. */
+async function writeWebResponse(response: ServerResponse, webResponse: Response): Promise<void> {
+  const headers: Record<string, string> = {};
+  webResponse.headers.forEach((value, name) => {
+    headers[name] = value;
+  });
+  response.writeHead(webResponse.status, headers);
+  if (webResponse.body) {
+    for await (const chunk of webResponse.body as unknown as AsyncIterable<Uint8Array>) {
+      response.write(chunk);
+    }
+  }
+  response.end();
+}
+
 export async function startJarvisMcpHttpServer(
   config: JarvisMcpConfig,
   client: JarvisApiClient = new JarvisApiClient(config.api),
@@ -58,6 +110,13 @@ export async function startJarvisMcpHttpServer(
   // misconfigured allowlist fails fast rather than per request. The guard is
   // immutable and shared across requests (the grant is static config today).
   const capabilityGuard = new McpCapabilityGuard(resolveMcpCapabilityGrant(config.capabilities));
+
+  // One fetch-shaped MCP handler for the process. Its default stateless serving
+  // builds a fresh, per-request server instance from this factory — the same
+  // isolation the pre-2.x per-request transport gave, without a shared session.
+  const handler: McpHttpHandler = createMcpHandler(() =>
+    createJarvisMcpServer(client, capabilityGuard),
+  );
 
   const httpServer = createServer(async (request, response) => {
     if (!request.url) {
@@ -100,30 +159,27 @@ export async function startJarvisMcpHttpServer(
       response.setHeader("Cache-Control", "no-store");
       response.setHeader("X-Content-Type-Options", "nosniff");
 
-      const server = createJarvisMcpServer(client, capabilityGuard);
-      const transport = new StreamableHTTPServerTransport({
-        sessionIdGenerator: undefined,
-        enableJsonResponse: true,
-      });
       const disconnect = new AbortController();
       response.on("close", () => {
         if (!response.writableFinished) disconnect.abort();
-        void transport.close();
-        void server.close();
       });
       const startedAt = performance.now();
       let outcome: "success" | "failure" = "success";
       try {
-        await runWithMcpRequestSignal(disconnect.signal, async () => {
-          await server.connect(transport);
-          await transport.handleRequest(request, response);
-        });
+        const body = await readRequestBody(request);
+        const webRequest = toWebRequest(request, url, body, disconnect.signal);
+        const webResponse = await runWithMcpRequestSignal(disconnect.signal, () =>
+          handler.fetch(webRequest),
+        );
+        await writeWebResponse(response, webResponse);
       } catch {
         outcome = "failure";
         if (!response.headersSent) {
           response
             .writeHead(500, { "content-type": "text/plain; charset=utf-8" })
             .end("Jarvis MCP request failed.");
+        } else if (!response.writableFinished) {
+          response.end();
         }
       } finally {
         captureMcpBoundary(telemetry, {
@@ -148,6 +204,9 @@ export async function startJarvisMcpHttpServer(
   const url = `http://${displayHost(config.host)}:${config.port}${MCP_PATH}`;
   return {
     url,
-    close: () => closeHttpServer(httpServer),
+    close: async () => {
+      await handler.close();
+      await closeHttpServer(httpServer);
+    },
   };
 }

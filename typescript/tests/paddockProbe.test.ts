@@ -2,8 +2,7 @@ import assert from "node:assert/strict";
 import { createServer } from "node:net";
 import { describe, it } from "node:test";
 
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 
 import type { DailyBrief } from "../src/briefs/brief.js";
 import type { SystemStatus } from "../src/http/contracts.js";

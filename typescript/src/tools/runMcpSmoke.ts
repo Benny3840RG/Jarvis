@@ -1,8 +1,10 @@
 import { randomUUID } from "node:crypto";
 
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
-import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import {
+  Client,
+  StreamableHTTPClientTransport,
+  type CallToolResult,
+} from "@modelcontextprotocol/client";
 
 import type { DashboardSnapshot } from "../mcp/jarvisApiClient.js";
 import { JARVIS_DASHBOARD_URI } from "../mcp/server.js";

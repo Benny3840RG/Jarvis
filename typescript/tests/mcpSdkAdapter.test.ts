@@ -9,7 +9,11 @@ import ts from "typescript";
 const TYPESCRIPT_ROOT = fileURLToPath(new URL("..", import.meta.url));
 const MCP_DIR = join(TYPESCRIPT_ROOT, "src", "mcp");
 const ADAPTER = "src/mcp/sdkAdapter.ts";
-const SDK_PACKAGE = "@modelcontextprotocol/sdk";
+// The split MCP SDK 2.x server package the adapter fronts (replaced the
+// monolithic `@modelcontextprotocol/sdk` 1.x in the #562 migration). The
+// separate `@modelcontextprotocol/ext-apps` package is intentionally not
+// guarded here — the adapter deliberately does not front it.
+const SDK_PACKAGE = "@modelcontextprotocol/server";
 
 function tsFilesUnder(dir: string): string[] {
   return readdirSync(dir, { recursive: true, withFileTypes: true })
@@ -31,7 +35,7 @@ function moduleSpecifiers(fileName: string, text: string): string[] {
       const literal = node.argument.literal;
       if (ts.isStringLiteralLike(literal)) specifiers.push(literal.text);
     } else if (
-      // `import sdk = require("@modelcontextprotocol/sdk")` — the CommonJS
+      // `import sdk = require("@modelcontextprotocol/server")` — the CommonJS
       // import-equals form, whose module reference must also be scanned or it
       // would bypass this boundary check.
       ts.isExternalModuleReference(node) &&
@@ -65,7 +69,7 @@ describe("MCP SDK adapter boundary (PR D)", () => {
     specifiers: moduleSpecifiers(absolute, readFileSync(absolute, "utf8")),
   }));
 
-  it("routes every src/mcp use of @modelcontextprotocol/sdk through the adapter alone", () => {
+  it("routes every src/mcp use of @modelcontextprotocol/server through the adapter alone", () => {
     assert.ok(files.length > 1, "expected multiple modules under src/mcp");
     const offenders = files
       .filter(({ path }) => path !== ADAPTER)
