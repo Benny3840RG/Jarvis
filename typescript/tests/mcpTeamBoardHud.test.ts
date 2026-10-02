@@ -41,6 +41,12 @@ describe("Team Board HUD", () => {
     assert.match(widget, /class="chart-grid"/);
     assert.match(widget, /No waveform signal/);
     assert.match(widget, /<svg class="core-rings"/);
+    assert.match(widget, /class="spin-slow"/);
+    assert.match(widget, /class="tick-row"/);
+    assert.match(widget, /class="mascot-frame"/);
+    assert.match(widget, /font-family:\s*"Rajdhani"/);
+    assert.match(widget, /data:font\/woff2;base64,/);
+    assert.doesNotMatch(widget, /fonts\.googleapis|fonts\.gstatic|cdn\.jsdelivr/);
     assert.match(widget, /class="analogue"/);
     assert.match(widget, /class="knob"/);
     assert.match(widget, /class="hud-photo"/);

@@ -105,6 +105,7 @@ describe("loopback Console 02 HUD", () => {
     assert.equal(page.statusCode, 200);
     assert.match(page.headers["content-type"] ?? "", /text\/html/);
     assert.match(String(page.headers["content-security-policy"]), /connect-src 'self'/);
+    assert.match(String(page.headers["content-security-policy"]), /font-src data:/);
     assert.match(page.body, /CONSOLE 02/);
     assert.match(page.body, /JARVIS TOTALITY/);
     assert.doesNotMatch(page.body, new RegExp(SERVICE_TOKEN));

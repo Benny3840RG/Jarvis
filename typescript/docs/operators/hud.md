@@ -22,9 +22,12 @@ sub-plate reads `OPTIMIZED TOTALITY STATE`. The live reading under it is
 corner brackets sits over a photographic dusk coast
 (`src/mcp/assets/coast-dusk.jpg`, inlined so the widget stays one file).
 Empty meters still draw their chrome: thick segmented ring dials, a large
-bee-and-tree medallion, chart grids, parked dial needles, vertical Core
-Analyzer channels, and an unlabelled tactical node sketch. The reading stays
-`UNKNOWN`.
+bee-and-tree medallion inside a layered amber gauge (decorative arcs, not a
+percent), chart grids, parked dial needles, vertical Core Analyzer channels,
+and an unlabelled tactical node sketch. The reading stays `UNKNOWN`.
+Headers use an inlined Rajdhani subset (SIL OFL 1.1, see
+`src/mcp/assets/Rajdhani-OFL.txt`). The loopback page allows that face with
+`font-src data:` and does not load a font CDN.
 On a 1920×1080 desktop the brand sits inside the left of the frame, the chips
 sit inside the right, and the nav is one row under the title so it does not
 cover either. Desktop, tablet, and phone collapse the same regions; they do
