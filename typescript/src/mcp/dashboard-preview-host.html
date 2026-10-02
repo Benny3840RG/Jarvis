@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en-AU">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Jarvis HUD local preview</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: #0a0908;
+        color: #e8dfd0;
+        font-family: "Segoe UI", system-ui, sans-serif;
+      }
+      body {
+        display: grid;
+        grid-template-rows: auto minmax(0, 1fr);
+      }
+      p {
+        margin: 0;
+        padding: 10px 16px;
+        background: #1c1814;
+        font-size: 14px;
+      }
+      iframe {
+        display: block;
+        width: 100%;
+        height: 100%;
+        border: 0;
+      }
+    </style>
+  </head>
+  <body>
+    <p>
+      Fail-closed preview. This frame loads the real Console 02 widget and does not inject a sample
+      snapshot. Readings stay UNKNOWN until a live Jarvis bridge responds.
+    </p>
+    <iframe id="hud" title="Jarvis HUD" src="./dashboard-v1.html"></iframe>
+  </body>
+</html>

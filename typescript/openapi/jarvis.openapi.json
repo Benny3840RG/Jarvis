@@ -417,6 +417,72 @@
         }
       }
     },
+    "/hud": {
+      "get": {
+        "operationId": "getHudPage",
+        "summary": "Open the loopback Console 02 HUD",
+        "description": "Serves the operator HUD HTML on a loopback bind only. This route is public (no Bearer token). The page contains no service token and no credential value. It reads GET /api/v1/hud/snapshot from the same origin and does not call write tools. Non-loopback binds do not serve the page.",
+        "tags": ["System"],
+        "security": [],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Loopback Console 02 HTML. Read-only. No token is embedded.",
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/api/v1/hud/snapshot": {
+      "get": {
+        "operationId": "getHudSnapshot",
+        "summary": "Read the loopback Console 02 HUD snapshot",
+        "description": "Returns the same read-only dashboard snapshot the operator HUD renders: status, tasks, reminders, brief, quote register, inbox, activity, live work, credential fingerprints, and counts. Raw tokens and service digests are never included. Served only on a loopback bind, without a Bearer token. Non-loopback binds return 404. This route does not approve, reject, execute, or mutate.",
+        "tags": ["System"],
+        "security": [],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Fingerprint-safe operator snapshot for the loopback HUD.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
     "/api/v1/settings/credentials": {
       "get": {
         "operationId": "getCredentialsStatus",

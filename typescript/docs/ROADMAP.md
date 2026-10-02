@@ -1,5 +1,33 @@
 # Jarvis TypeScript Roadmap
 
+## Console 02 HUD (2026-10-02)
+
+The same operator widget is now the JARVIS TOTALITY Console 02 frame: a
+dark weathered bronze bezel with shaded rivets, a photographic dusk coast under
+smoked glass, a large bee-and-tree medallion inside a layered amber gauge, and
+cream-dial load gauges flanking a vertical Core Analyzer. Display labels use an
+inlined Rajdhani subset (no font CDN; loopback CSP allows `font-src data:`).
+Gauges without a Jarvis meter stay UNKNOWN with the
+needle parked. Instrument chrome (grids, low-opacity tick tracks, parked
+needles, an unlabelled tactical map) is drawn even when the reading is UNKNOWN. `GET /hud` and `GET /api/v1/hud/snapshot`
+are loopback-only and read-only. Screenshots: `docs/screenshots/`.
+
+## Team Board HUD (2026-10-01)
+
+The operator widget is the 55-inch Team Board: riveted Totality frame, frosted
+cards, one NOW action, the Next 3, and a canvas instrument behind the glass.
+Motion follows real severity (STOPPED / WARN / OK / UNKNOWN), pauses in a
+hidden tab, and holds still under reduced motion. Unread crew, load, next, and
+approvals stay UNKNOWN. No sample roster and no new write path.
+
+- Presence and the approval-lifecycle display map are ported from the Codex HUD
+  snapshot (`src/hud/`). The widget does not approve, reject, or execute.
+- Claude's older `dashboard-v1.html` had nothing main lacks, so it was not copied.
+- Contributor notes: `docs/operators/hud.md`.
+
+Next: a proposal list on the dashboard snapshot so Approvals can show stages
+without a per-project fan-out; overdue-unstarted jobs on the board.
+
 ## Daily brief + dashboard: scheduled jobs (2026-10-01)
 
 Nolan can now answer "what's booked today, what's on this week, and what still needs a date"
