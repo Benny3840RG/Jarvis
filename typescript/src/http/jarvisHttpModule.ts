@@ -71,6 +71,8 @@ import { SystemStatusService } from "./systemStatusService.js";
 import { TaskController } from "./taskController.js";
 import { ToolActionController } from "./toolActionController.js";
 import { TotalityController } from "./totalityController.js";
+import { VoiceController } from "./voiceController.js";
+import type { VoiceSessionRegistry } from "../voice/voiceSessionRegistry.js";
 import {
   HTTP_APP_CONFIG,
   HTTP_CREDENTIALS,
@@ -102,6 +104,7 @@ import {
   HTTP_TOOL_ACTIONS,
   HTTP_TOOL_EXECUTION,
   HTTP_TOTALITY_PIPELINE,
+  HTTP_VOICE_REGISTRY,
 } from "./tokens.js";
 
 export type JarvisHttpModuleOptions = {
@@ -135,6 +138,7 @@ export type JarvisHttpModuleOptions = {
   developmentLiveWorkSource: DevelopmentLiveWorkSource | null;
   credentials: CredentialsRuntime;
   dangerZone: DangerZoneService;
+  voiceSessionRegistry: VoiceSessionRegistry;
 };
 
 @Module({})
@@ -175,6 +179,7 @@ export class JarvisHttpModule {
         ActivityTimelineController,
         DevelopmentLiveWorkController,
         DangerZoneController,
+        VoiceController,
       ],
       providers: [
         { provide: HTTP_APP_CONFIG, useValue: options.config },
@@ -243,6 +248,7 @@ export class JarvisHttpModule {
         { provide: HTTP_BUSINESS_SETTINGS_STORE, useValue: options.businessSettingsStore },
         { provide: HTTP_ENQUIRY_STORE, useValue: options.enquiryStore },
         { provide: HTTP_INVOICE_STORE, useValue: options.invoiceStore },
+        { provide: HTTP_VOICE_REGISTRY, useValue: options.voiceSessionRegistry },
         SystemStatusService,
         { provide: APP_GUARD, useClass: ServiceTokenGuard },
         { provide: APP_INTERCEPTOR, useClass: RequestIdInterceptor },

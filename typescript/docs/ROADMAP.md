@@ -34,14 +34,39 @@ confirmations that don't bypass the approval boundary, absent hardware failing c
 Verification: 42 new unit tests across `tests/voiceCommands|voiceParser|voiceSession.test.ts`;
 full `npm run check` green.
 
+### HTTP integration slice (2026-10-03)
+
+Authenticated voice endpoints, contract-first. Every route sits behind the existing global
+service-token guard (authentication preserved).
+
+Completed:
+
+- OpenAPI contract first: `GET /api/v1/voice/catalog`, `POST /api/v1/voice/sessions`,
+  `POST /api/v1/voice/sessions/{sessionId}/utterances`, `POST .../profile`,
+  `DELETE .../{sessionId}`. All marked `x-mcp-tool.exposed: false` (voice is HTTP-only, never an
+  MCP tool). `npm run openapi:lint` clean; the route-alignment and capability-metadata contract
+  tests cover the new routes.
+- `voiceSessionRegistry.ts`: server-authoritative, in-memory, idle-TTL-evicted and
+  count-bounded registry of live `VoiceSession`s. The server owns the confirmation lifecycle so a
+  client cannot forge or replay a confirmation.
+- `voiceController.ts` + `voiceRequest.ts`: stateless controller; strict request validation
+  (bounded transcript/alternative sizes) → 422; unknown/expired session → 404.
+- Governed boundary preserved exactly: a `propose` dispatch returns the governed tool/operation
+  _intent_ only. It never stages, approves or executes a ToolAction — staging and approval stay
+  on `/api/v1/projects/{projectId}/tool-actions`, which alone holds the owner approval token. A
+  spoken confirm gates a propose/actuate but carries no approval token. (A bare spoken phrase has
+  no projectId/revision/arguments, so auto-staging from voice would have to invent a mapping;
+  this slice deliberately does not.)
+
+Verification: 15 new tests (`tests/voiceSessionRegistry.test.ts`, `tests/voiceHttp.test.ts`)
+covering auth-required, catalog, the full HTTP speech lifecycle (arm → confirm/expire/switch),
+fail-closed actuation, 404/422; full `npm run check` green (2354 node tests).
+
 Next slices (same branch/draft PR):
 
-1. Authenticated HTTP integration — OpenAPI contract first (voice session + dispatch endpoints
-   behind the existing OIDC/service-token guard), then the controller wiring `propose` onto the
-   real `ToolActionService.stage` governed path and surfacing pending/unavailable states.
-2. Browser voice/HUD — mic feature detection, explicit enable, wake-word gating, streaming
+1. Browser voice/HUD — mic feature detection, explicit enable, wake-word gating, streaming
    recognition, TTS, interruption, typed fallback; HUD shows authoritative results.
-3. Latency telemetry + an operator commissioning procedure (no invented host timing or hardware
+2. Latency telemetry + an operator commissioning procedure (no invented host timing or hardware
    proof).
 
 ## MCP SDK 2.x migration: ext-apps 2.0 + split core/client/server (2026-10-02)
