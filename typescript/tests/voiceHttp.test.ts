@@ -6,6 +6,23 @@ import type { NestFastifyApplication } from "@nestjs/platform-fastify";
 import { createJarvisHttpApp } from "../src/http/app.js";
 import type { HttpAppConfig } from "../src/http/config.js";
 import type { PersistenceProvider } from "../src/persistence/persistence.js";
+import { captureCredentials, type CredentialsRuntime } from "../src/settings/credentialsStatus.js";
+
+/** A non-loopback bind: serveLocalPage=false, so voice routes require a token. */
+function credentials(host: string): CredentialsRuntime {
+  return captureCredentials({
+    serviceToken: "current-secret",
+    httpHost: host,
+    httpPort: 3000,
+    mcpHost: "127.0.0.1",
+    mcpPort: 8787,
+    remoteGatewayEnabled: false,
+    tlsTerminated: false,
+    oidcConfigured: false,
+    originsConfigured: false,
+    persistenceProvider: "json",
+  });
+}
 
 const CONFIG: HttpAppConfig = {
   version: "0.1.0",
@@ -42,11 +59,12 @@ afterEach(async () => {
   await Promise.all(openApps.splice(0).map((app) => app.close()));
 });
 
-async function makeApp(): Promise<NestFastifyApplication> {
+async function makeApp(host = "10.0.0.5"): Promise<NestFastifyApplication> {
   const app = await createJarvisHttpApp({
     persistence: persistence(),
     providerName: "json",
     config: CONFIG,
+    credentialsRuntime: credentials(host),
     logger: false,
   });
   openApps.push(app);
@@ -74,10 +92,17 @@ function utter(app: NestFastifyApplication, sessionId: string, payload: Record<s
 }
 
 describe("voice HTTP boundary", () => {
-  it("requires authentication on every voice route", async () => {
-    const app = await makeApp();
+  it("requires authentication on a non-local (production) bind", async () => {
+    const app = await makeApp("10.0.0.5"); // non-loopback → serveLocalPage false
     const response = await app.inject({ method: "GET", url: "/api/v1/voice/catalog" });
     assert.equal(response.statusCode, 401);
+  });
+
+  it("serves voice without a token on a local loopback bind (like the HUD snapshot)", async () => {
+    const app = await makeApp("127.0.0.1"); // loopback → serveLocalPage true
+    const response = await app.inject({ method: "GET", url: "/api/v1/voice/catalog" });
+    assert.equal(response.statusCode, 200);
+    assert.ok(response.json().commands.length >= 20);
   });
 
   it("lists the bounded command catalogue", async () => {

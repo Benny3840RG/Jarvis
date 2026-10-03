@@ -43,6 +43,16 @@ const PUBLIC_OPERATIONS = new Set([
   "GET /settings/limits",
   "GET /hud",
   "GET /api/v1/hud/snapshot",
+  // Voice routes (#567) are loopback-public on a local-serve bind — the same
+  // posture as the HUD snapshot, so the tokenless local HUD can drive them.
+  // On a non-local bind they require the service token (covered in
+  // tests/voiceHttp.test.ts: "requires authentication on a non-local bind").
+  // This contract app runs on a loopback bind (serveLocalPage true).
+  "GET /api/v1/voice/catalog",
+  "POST /api/v1/voice/sessions",
+  "DELETE /api/v1/voice/sessions/{sessionId}",
+  "POST /api/v1/voice/sessions/{sessionId}/utterances",
+  "POST /api/v1/voice/sessions/{sessionId}/profile",
 ]);
 
 function unusedPersistence(): PersistenceProvider {

@@ -12,6 +12,7 @@ import {
 
 import { VOICE_COMMANDS, VOICE_PROFILES } from "../voice/voiceCommands.js";
 import type { VoiceSessionRegistry } from "../voice/voiceSessionRegistry.js";
+import { LocalLoopbackRoute } from "./localLoopbackRoute.js";
 import { JarvisProblem } from "./problemDetails.js";
 import {
   parseCreateVoiceSession,
@@ -49,6 +50,7 @@ function sessionNotFound(): JarvisProblem {
  * alone holds the owner approval token.
  */
 @Controller("api/v1/voice")
+@LocalLoopbackRoute()
 export class VoiceController {
   constructor(@Inject(HTTP_VOICE_REGISTRY) private readonly registry: VoiceSessionRegistry) {}
 

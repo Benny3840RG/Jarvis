@@ -62,12 +62,32 @@ Verification: 15 new tests (`tests/voiceSessionRegistry.test.ts`, `tests/voiceHt
 covering auth-required, catalog, the full HTTP speech lifecycle (arm → confirm/expire/switch),
 fail-closed actuation, 404/422; full `npm run check` green (2354 node tests).
 
-Next slices (same branch/draft PR):
+### Browser voice / HUD slice (2026-10-03)
 
-1. Browser voice/HUD — mic feature detection, explicit enable, wake-word gating, streaming
-   recognition, TTS, interruption, typed fallback; HUD shows authoritative results.
-2. Latency telemetry + an operator commissioning procedure (no invented host timing or hardware
-   proof).
+A voice console in the operator HUD (`src/mcp/dashboard-v1.html`): a new "Voice" rail view with
+profile selection, an explicit "Enable microphone" button (no auto-listen), wake-word gating
+("Jarvis …"), streaming recognition, TTS read-back, a Stop/interrupt control, a typed fallback,
+a live transcript, and authoritative result + pending/unavailable lines.
+
+Auth decision (owner-chosen): the voice routes are **loopback-public like the HUD snapshot**.
+A `@LocalLoopbackRoute()` decorator + a `ServiceTokenGuard` bypass allow tokenless access **only**
+on a local-serve bind (`serveLocalPage`); on a production bind the service token is still
+required (authentication preserved). The credentials dependency on the guard is optional and
+fail-closed — a module that does not provide it never grants the bypass. Safe because a voice
+`propose` only returns intent; nothing mutating happens even on the loopback-public surface.
+
+Testability: the safety-bearing client logic lives as pure inline functions
+(`normalizeVoicePhrase`, `voiceCapabilities`, `voiceWakeGate`, `describeVoiceDispatch`) extracted
+and unit-tested in `tests/voiceHudConsole.test.ts`, which also parse-checks the whole inline
+dashboard script. The DOM/Web-Speech wiring is thin glue.
+
+Verification: full `npm run check` green (2366 node tests). The HUD's visual layout needs an
+owner-side `npm run start:preview` eyeball — it cannot be verified headlessly here.
+
+Next slice (same branch/draft PR):
+
+1. Latency telemetry + an operator commissioning procedure (no invented host timing, recognition
+   accuracy, or hardware proof).
 
 ## MCP SDK 2.x migration: ext-apps 2.0 + split core/client/server (2026-10-02)
 
