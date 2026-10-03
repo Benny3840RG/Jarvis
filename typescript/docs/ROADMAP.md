@@ -1,5 +1,49 @@
 # Jarvis TypeScript Roadmap
 
+## Guarded voice interface — deterministic core (2026-10-03)
+
+Mission #567 (builder reassigned Codex → Claude by explicit owner instruction; draft PR only).
+First slice: the pure, deterministic safety core of the voice interface under `src/voice/`.
+No HTTP, browser, or hardware wiring yet — those are the following slices.
+
+Completed:
+
+- `voiceCommands.ts`: the bounded catalog — four profiles (crawler, workshop, trailer, client),
+  29 whole-utterance commands classified `query` | `propose` | `actuate` with `routine` |
+  `critical` criticality. Globally-unique normalized phrases (so an utterance maps to at most
+  one command); every critical command requires a spoken confirmation; actuate commands name a
+  hardware target and never a governed tool; propose commands name a governed tool/operation and
+  never actuate. `normalizeUtterance` + profile-scoped `findVoiceCommand`.
+- `voiceParser.ts`: strict parsing. **Final-only dispatch** — an interim transcript never
+  resolves to a command. **Whole-utterance exact match** after normalization — never a
+  substring, so a long sentence can't smuggle a command through. Recogniser alternatives only
+  reduce confidence: a conflicting alternative → `ambiguous` (fail closed); a lower-confidence
+  alternative is never promoted when the top hypothesis doesn't match.
+- `voiceHardware.ts`: the actuation boundary. `AbsentHardwareProvider` (the only provider in
+  main) reports every target unavailable and never returns a simulated acknowledgement. Only a
+  real commissioned adapter may ever return `actuated`.
+- `voiceSession.ts`: per-session state. Bounded history ring buffer; single-use, TTL-bound
+  pending confirmation (replay-protected by consumption); confirmation invalidated on reset,
+  profile change and manual override; actuation fails closed when hardware is unavailable. The
+  session only _proposes_ governed actions — it never approves or executes, and spoken
+  confirmation never carries an approval token.
+
+Safety contract honored: final-only whole-utterance dispatch, session isolation, governed
+confirmations that don't bypass the approval boundary, absent hardware failing closed.
+
+Verification: 42 new unit tests across `tests/voiceCommands|voiceParser|voiceSession.test.ts`;
+full `npm run check` green.
+
+Next slices (same branch/draft PR):
+
+1. Authenticated HTTP integration — OpenAPI contract first (voice session + dispatch endpoints
+   behind the existing OIDC/service-token guard), then the controller wiring `propose` onto the
+   real `ToolActionService.stage` governed path and surfacing pending/unavailable states.
+2. Browser voice/HUD — mic feature detection, explicit enable, wake-word gating, streaming
+   recognition, TTS, interruption, typed fallback; HUD shows authoritative results.
+3. Latency telemetry + an operator commissioning procedure (no invented host timing or hardware
+   proof).
+
 ## MCP SDK 2.x migration: ext-apps 2.0 + split core/client/server (2026-10-02)
 
 Mission #562. Adopted `@modelcontextprotocol/ext-apps` 2.0, which replaces the monolithic
