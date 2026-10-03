@@ -9,6 +9,11 @@ import {
   getAuthenticatedPrincipal,
   type AuthenticatedPrincipal,
 } from "../src/http/authenticatedPrincipal.js";
+import type { CredentialsRuntime } from "../src/settings/credentialsStatus.js";
+
+// These cases exercise the OIDC path on unflagged routes, so serveLocalPage is
+// irrelevant; a non-local stub keeps the loopback bypass out of the way.
+const nonLocalCredentials = { serveLocalPage: false } as unknown as CredentialsRuntime;
 
 function requestContext(request: Record<string, unknown>) {
   return {
@@ -50,7 +55,12 @@ describe("authenticated HTTP principal context", () => {
       headers: { authorization: "Bearer verified-token" },
       ip: "127.0.0.1",
     };
-    const guard = new ServiceTokenGuard(new Reflector(), config(), oidcVerifier("owner-subject"));
+    const guard = new ServiceTokenGuard(
+      new Reflector(),
+      config(),
+      oidcVerifier("owner-subject"),
+      nonLocalCredentials,
+    );
 
     assert.equal(await guard.canActivate(requestContext(request)), true);
 
@@ -71,7 +81,12 @@ describe("authenticated HTTP principal context", () => {
       headers: { authorization: "Bearer verified-token" },
       ip: "127.0.0.1",
     };
-    const guard = new ServiceTokenGuard(new Reflector(), config(), oidcVerifier("other-subject"));
+    const guard = new ServiceTokenGuard(
+      new Reflector(),
+      config(),
+      oidcVerifier("other-subject"),
+      nonLocalCredentials,
+    );
 
     await assert.rejects(
       () => guard.canActivate(requestContext(request)),

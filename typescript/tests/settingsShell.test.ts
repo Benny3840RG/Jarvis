@@ -17,6 +17,7 @@ describe("settings shell", () => {
       "operations",
       "livework",
       "systems",
+      "voice",
       "settings",
     ]);
     assert.equal(rails.filter((rail) => rail === "settings").length, 1);
