@@ -1468,7 +1468,7 @@
                         <button type="button" class="voice-btn" id="voice-enable">Enable microphone</button>
                         <button type="button" class="voice-btn" id="voice-stop" disabled>Stop</button>
                       </div>
-                      <p class="voice-hint">Say “<strong>Jarvis</strong>” then a command. Partial speech never acts; critical commands need a spoken “confirm”. Equipment with no adapter fails closed.</p>
+                      <p class="voice-hint">Say “<strong>Jarvis</strong>” then a command. Partial speech never acts; critical commands need “Jarvis confirm”. Equipment with no adapter fails closed.</p>
                       <div class="voice-live"><small>HEARD</small><p id="voice-transcript">—</p></div>
                       <div class="voice-pending" id="voice-pending" hidden></div>
                       <div class="voice-result" id="voice-result" data-tone="muted">Idle.</div>
@@ -2629,6 +2629,52 @@
           if (!rest) return { status: "awake" };
           return { status: "command", transcript: rest, isFinal: !!isFinal };
         }
+        function prepareVoiceDispatch(raw, isFinal, alternatives, wakeWord) {
+          if (!isFinal) return null;
+          var gate = voiceWakeGate(raw, true, wakeWord);
+          if (gate.status !== "command") return null;
+          var preparedAlternatives = [];
+          (alternatives || []).forEach(function (alternative) {
+            var alternativeGate = voiceWakeGate(alternative, true, wakeWord);
+            var prepared = alternativeGate.status === "command"
+              ? alternativeGate.transcript
+              : normalizeVoicePhrase(alternative);
+            if (prepared && preparedAlternatives.indexOf(prepared) < 0) preparedAlternatives.push(prepared);
+          });
+          return {
+            transcript: gate.transcript,
+            isFinal: true,
+            alternatives: preparedAlternatives,
+          };
+        }
+        function finalVoiceRecognition(event) {
+          if (!event || !event.results) return null;
+          var segments = [];
+          var start = Number.isInteger(event.resultIndex) ? event.resultIndex : 0;
+          for (var i = start; i < event.results.length; i += 1) {
+            var result = event.results[i];
+            if (!result || !result.isFinal || !result.length || !result[0]) continue;
+            var segment = { top: String(result[0].transcript || ""), alternatives: [] };
+            for (var j = 1; j < result.length; j += 1) {
+              if (result[j]) segment.alternatives.push(String(result[j].transcript || ""));
+            }
+            segments.push(segment);
+          }
+          if (!segments.length) return null;
+          var transcript = segments.map(function (segment) { return segment.top; }).join("").trim();
+          var alternatives = [];
+          segments.forEach(function (segment, segmentIndex) {
+            segment.alternatives.forEach(function (alternative) {
+              if (alternatives.length >= 16) return;
+              var combined = segments
+                .map(function (item, index) { return index === segmentIndex ? alternative : item.top; })
+                .join("")
+                .trim();
+              if (combined && combined !== transcript && alternatives.indexOf(combined) < 0) alternatives.push(combined);
+            });
+          });
+          return { transcript: transcript, alternatives: alternatives };
+        }
         function describeVoiceDispatch(dispatch) {
           var map = {
             "ignored-interim": { label: "Listening…", tone: "muted" },
@@ -2683,7 +2729,7 @@
             if (!el) return;
             if (pending && pending.command) {
               el.hidden = false;
-              el.textContent = "Awaiting confirm: " + pending.command.summary + " — say “confirm” or “cancel”.";
+              el.textContent = "Awaiting confirm: " + pending.command.summary + " — say “Jarvis confirm” or “Jarvis cancel”.";
             } else {
               el.hidden = true;
               el.textContent = "";
@@ -2704,12 +2750,12 @@
               .then(function (response) { return response.json(); })
               .then(function (data) { state.sessionId = data.sessionId; return data.sessionId; });
           }
-          function dispatch(transcript, isFinal) {
+          function dispatch(transcript, isFinal, alternatives) {
             return ensureSession()
               .then(function (id) {
                 return api("/sessions/" + encodeURIComponent(id) + "/utterances", {
                   method: "POST",
-                  body: JSON.stringify({ transcript: transcript, isFinal: isFinal }),
+                  body: JSON.stringify({ transcript: transcript, isFinal: isFinal, alternatives: alternatives || [] }),
                 });
               })
               .then(function (response) { return response.json(); })
@@ -2773,24 +2819,24 @@
             var recognition = new Recognition();
             recognition.continuous = true;
             recognition.interimResults = true;
+            recognition.maxAlternatives = 5;
             recognition.lang = "en-AU";
             recognition.onresult = function (event) {
               var transcript = "";
-              var isFinal = false;
               for (var i = event.resultIndex; i < event.results.length; i += 1) {
                 transcript += event.results[i][0].transcript;
-                if (event.results[i].isFinal) isFinal = true;
               }
               var heard = document.getElementById("voice-transcript");
               if (heard) heard.textContent = transcript || "—";
-              if (!isFinal) return;
-              var normalized = normalizeVoicePhrase(transcript);
-              if (normalized === "confirm" || normalized === "cancel") {
-                dispatch(normalized, true);
-                return;
-              }
-              var gate = voiceWakeGate(transcript, true, WAKE_WORD);
-              if (gate.status === "command") dispatch(gate.transcript, true);
+              var recognitionResult = finalVoiceRecognition(event);
+              if (!recognitionResult) return;
+              var prepared = prepareVoiceDispatch(
+                recognitionResult.transcript,
+                true,
+                recognitionResult.alternatives,
+                WAKE_WORD,
+              );
+              if (prepared) dispatch(prepared.transcript, prepared.isFinal, prepared.alternatives);
             };
             recognition.onend = function () {
               if (stopBtn) stopBtn.disabled = true;
@@ -3028,9 +3074,8 @@
         bridgeReady.then(async () => { try { update(await request("tools/call", { name: "get_general_settings", arguments: {} }, 10000)); } catch { state.generalSettings = null; renderGeneral(); } }).catch(() => {});
         bridgeReady.catch(() => { activity("HUD bridge failed","ChatGPT Apps bridge did not initialise"); toast("The ChatGPT app bridge did not initialise.",true); });
         document.addEventListener("visibilitychange",() => { if (document.visibilityState !== "visible") return; void checkConnectionHealth(true); });
-        seedHudPanels(); setCaptureMode("task"); render(); startHudBackdrop(); clock(); window.setInterval(clock,1000); window.setInterval(checkConnectionHealth,15000);
+        seedHudPanels(); setCaptureMode("task"); render(); startHudBackdrop(); setupVoiceConsole(); clock(); window.setInterval(clock,1000); window.setInterval(checkConnectionHealth,15000);
       })();
-        if (typeof document !== "undefined" && document.getElementById("voice-profiles")) setupVoiceConsole();
     </script>
   </body>
 </html>

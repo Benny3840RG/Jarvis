@@ -66,7 +66,8 @@ fail-closed actuation, 404/422; full `npm run check` green (2354 node tests).
 
 A voice console in the operator HUD (`src/mcp/dashboard-v1.html`): a new "Voice" rail view with
 profile selection, an explicit "Enable microphone" button (no auto-listen), wake-word gating
-("Jarvis …"), streaming recognition, TTS read-back, a Stop/interrupt control, a typed fallback,
+("Jarvis …", including confirm/cancel), streaming recognition with alternatives preserved for
+server-side ambiguity checks, TTS read-back, a Stop/interrupt control, a typed fallback,
 a live transcript, and authoritative result + pending/unavailable lines.
 
 Auth decision (owner-chosen): the voice routes are **loopback-public like the HUD snapshot**.

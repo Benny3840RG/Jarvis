@@ -22,6 +22,7 @@
 
 import {
   VOICE_CONTROL_PHRASES,
+  findVoiceCommand,
   normalizeUtterance,
   type VoiceCommand,
   type VoiceProfile,
@@ -34,6 +35,33 @@ const DEFAULT_CONFIRMATION_TTL_MS = 30_000;
 
 const CONFIRM_PHRASES = new Set(VOICE_CONTROL_PHRASES.confirm.map(normalizeUtterance));
 const CANCEL_PHRASES = new Set(VOICE_CONTROL_PHRASES.cancel.map(normalizeUtterance));
+
+type VoiceControlIntent = "confirm" | "cancel";
+
+function controlIntent(normalized: string): VoiceControlIntent | undefined {
+  if (CONFIRM_PHRASES.has(normalized)) return "confirm";
+  if (CANCEL_PHRASES.has(normalized)) return "cancel";
+  return undefined;
+}
+
+function controlCandidates(
+  profile: VoiceProfile,
+  topIntent: VoiceControlIntent,
+  alternatives: readonly string[] | undefined,
+): readonly string[] {
+  const candidates = new Set<string>([`control.${topIntent}`]);
+  for (const alternative of alternatives ?? []) {
+    const normalized = normalizeUtterance(alternative);
+    const intent = controlIntent(normalized);
+    if (intent) {
+      candidates.add(`control.${intent}`);
+      continue;
+    }
+    const command = findVoiceCommand(profile, normalized);
+    if (command) candidates.add(command.id);
+  }
+  return Object.freeze([...candidates].sort());
+}
 
 export type VoiceHistoryEntry = Readonly<{
   at: number;
@@ -147,10 +175,20 @@ export class VoiceSession {
       return { decision: "ignored-interim" };
     }
 
-    if (CONFIRM_PHRASES.has(normalized)) {
+    const intent = controlIntent(normalized);
+    if (intent) {
+      const candidates = controlCandidates(this.#profile, intent, input.alternatives);
+      if (candidates.length > 1) {
+        this.#record(now, normalized, "ambiguous");
+        this.#invalidatePending();
+        return { decision: "ambiguous", candidates };
+      }
+    }
+
+    if (intent === "confirm") {
       return this.#handleConfirm(now, normalized);
     }
-    if (CANCEL_PHRASES.has(normalized)) {
+    if (intent === "cancel") {
       return this.#handleCancel(now, normalized);
     }
 

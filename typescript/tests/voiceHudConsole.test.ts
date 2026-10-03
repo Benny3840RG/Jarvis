@@ -13,13 +13,20 @@ function loadVoiceLogic(): {
     isFinal: boolean,
     wakeWord?: string,
   ) => { status: string; transcript?: string; isFinal?: boolean };
+  prepareVoiceDispatch: (
+    raw: string,
+    isFinal: boolean,
+    alternatives?: string[],
+    wakeWord?: string,
+  ) => { transcript: string; isFinal: boolean; alternatives: string[] } | null;
+  finalVoiceRecognition: (event: unknown) => { transcript: string; alternatives: string[] } | null;
   describeVoiceDispatch: (dispatch: { decision: string } | null) => { label: string; tone: string };
 } {
   const match = html.match(/\/\/ BEGIN voice-console[\s\S]*?\/\/ END voice-console/);
   assert.ok(match, "voice-console block not found in dashboard HTML");
   // The block ends in a line comment, so the return must start on a new line.
   const factory = new Function(
-    `"use strict"; ${match[0]}\n return { normalizeVoicePhrase, voiceCapabilities, voiceWakeGate, describeVoiceDispatch };`,
+    `"use strict"; ${match[0]}\n return { normalizeVoicePhrase, voiceCapabilities, voiceWakeGate, prepareVoiceDispatch, finalVoiceRecognition, describeVoiceDispatch };`,
   );
   return factory();
 }
@@ -65,6 +72,41 @@ describe("voice HUD console logic (extracted from dashboard-v1.html)", () => {
     it("does not treat a word merely containing the wake word as awake", () => {
       assert.equal(logic.voiceWakeGate("jarvisland tour", true).status, "idle");
     });
+
+    it("never prepares a bare confirm or cancel for microphone dispatch", () => {
+      assert.equal(logic.prepareVoiceDispatch("confirm", true), null);
+      assert.equal(logic.prepareVoiceDispatch("cancel", true), null);
+    });
+
+    it("strips the wake word from the top hypothesis and every alternative", () => {
+      assert.deepEqual(
+        logic.prepareVoiceDispatch("Jarvis confirm", true, [
+          "Jarvis confirm command",
+          "Jarvis cancel",
+        ]),
+        {
+          transcript: "confirm",
+          isFinal: true,
+          alternatives: ["confirm command", "cancel"],
+        },
+      );
+    });
+  });
+
+  it("preserves final browser recognition alternatives for server arbitration", () => {
+    const result = Object.assign(
+      [
+        { transcript: "Jarvis confirm" },
+        { transcript: "Jarvis cancel" },
+        { transcript: "service confirm" },
+      ],
+      { isFinal: true },
+    );
+
+    assert.deepEqual(logic.finalVoiceRecognition({ resultIndex: 0, results: [result] }), {
+      transcript: "Jarvis confirm",
+      alternatives: ["Jarvis cancel", "service confirm"],
+    });
   });
 
   describe("dispatch description", () => {
@@ -92,9 +134,23 @@ describe("voice HUD console logic (extracted from dashboard-v1.html)", () => {
     });
   });
 
+  it("boots the voice console before the dashboard IIFE closes", () => {
+    const bootstrap = html.lastIndexOf("setupVoiceConsole();");
+    const dashboardClosure = html.lastIndexOf("})();");
+    assert.ok(bootstrap >= 0, "voice console bootstrap call not found");
+    assert.ok(
+      bootstrap < dashboardClosure,
+      "voice console bootstrap must remain in function scope",
+    );
+  });
+
   it("keeps the whole inline dashboard script syntactically valid", () => {
-    const script = html.match(/<script>([\s\S]*)<\/script>/);
-    assert.ok(script, "inline script not found");
-    assert.doesNotThrow(() => new Function(script[1]), "inline dashboard script must parse");
+    const openingTag = "<script>";
+    const closingTag = "</script>";
+    const start = html.indexOf(openingTag);
+    const end = html.lastIndexOf(closingTag);
+    assert.ok(start >= 0 && end > start, "inline script not found");
+    const script = html.slice(start + openingTag.length, end);
+    assert.doesNotThrow(() => new Function(script), "inline dashboard script must parse");
   });
 });

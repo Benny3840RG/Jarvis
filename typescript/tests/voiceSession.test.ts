@@ -70,6 +70,41 @@ describe("voice session — dispatch and confirmation lifecycle", () => {
     assert.equal(s.pending(), undefined, "confirmation must be consumed");
   });
 
+  it("fails closed and invalidates pending when confirmation alternatives conflict", async () => {
+    let actuations = 0;
+    const provider: VoiceActuationProvider = {
+      statusOf: () => "available",
+      actuate: async ({ target }) => {
+        actuations += 1;
+        return { status: "actuated", target };
+      },
+    };
+    const s = session(provider);
+    await handle(s, "winch up", { now: 0 });
+
+    const ambiguous = await handle(s, "confirm", {
+      now: 1_000,
+      alternatives: ["cancel", "winch down"],
+    });
+
+    assert.equal(ambiguous.decision, "ambiguous");
+    assert.equal(actuations, 0, "ambiguous confirmation must never reach the provider");
+    assert.equal(s.pending(), undefined, "ambiguous confirmation must disarm the command");
+  });
+
+  it("accepts confirmation alternatives that express the same control intent", async () => {
+    const s = session();
+    await handle(s, "winch up", { now: 0 });
+
+    const confirmed = await handle(s, "confirm", {
+      now: 1_000,
+      alternatives: ["confirm command", "yes confirm"],
+    });
+
+    assert.equal(confirmed.decision, "actuation-unavailable");
+    assert.equal(s.pending(), undefined);
+  });
+
   it("protects against replay: a second confirm after consumption does nothing", async () => {
     const s = session();
     await handle(s, "winch up", { now: 0 });
