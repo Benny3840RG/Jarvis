@@ -34,6 +34,13 @@ describe("voice session — dispatch and confirmation lifecycle", () => {
     if (d.decision === "answer-query") assert.equal(d.command.id, "client.unpaid-invoices");
   });
 
+  it("records the actual normalized recognised alias in history", async () => {
+    const s = new VoiceSession({ profile: "crawler", provider: new AbsentHardwareProvider() });
+    const d = await s.handle({ transcript: "Crawler halt.", isFinal: true, now: 0 });
+    assert.equal(d.decision, "awaiting-confirmation");
+    assert.equal(s.history()[0]?.normalizedTranscript, "crawler halt");
+  });
+
   it("only proposes a governed action — never approves or executes it", async () => {
     const s = new VoiceSession({ profile: "client", provider: new AbsentHardwareProvider() });
     const d = await s.handle({ transcript: "draft a quote", isFinal: true, now: 0 });
