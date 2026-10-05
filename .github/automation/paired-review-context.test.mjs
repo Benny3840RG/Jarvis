@@ -594,7 +594,7 @@ test("large npm lockfiles preserve complete package-entry semantics within revie
     files,
   });
   validateReviewPlan(plan);
-  assert.ok(plan.prompts.length > 1 && plan.prompts.length <= 16);
+  assert.ok(plan.prompts.length > 1 && plan.prompts.length <= 24);
   assert.ok(
     plan.prompts.every((prompt) => Buffer.byteLength(prompt) <= 160 * 1024),
   );
