@@ -1,5 +1,23 @@
 # Jarvis TypeScript Roadmap
 
+## Guarded voice lifecycle review repairs (2026-10-05)
+
+Bounded repairs for #567 / PR #696 (successor to #687), prepared on an isolated
+branch so an active writer's candidate is not overwritten:
+
+- Any newly recognised command disarms the previous pending confirmation, so a
+  routine stop cannot leave an earlier equipment start armed.
+- Browser interruption, profile changes and session expiry invalidate stale work;
+  only current, acknowledged session/profile responses can update the HUD.
+- Query commands explicitly report `query-unavailable` while no read-only query
+  provider is connected. Command recognition is not a successful query answer.
+- Regression tests cover the safety transitions and truthful unavailable result.
+
+Remaining gates: run maintained verification on the final patch, obtain fresh
+independent exact-head review, resolve active branch ownership, and get the
+owner's exact-candidate merge decision. Hardware/query integrations and actual
+browser/host commissioning remain separate; no deployment is authorised.
+
 ## Guarded voice interface — deterministic core (2026-10-03)
 
 Mission #567 (builder reassigned Codex → Claude by explicit owner instruction; draft PR only).

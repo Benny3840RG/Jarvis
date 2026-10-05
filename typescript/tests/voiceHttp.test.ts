@@ -119,7 +119,7 @@ describe("voice HTTP boundary", () => {
     assert.ok(body.commands.some((c: { id: string }) => c.id === "trailer.winch-up"));
   });
 
-  it("opens a session and answers a read-only query directly", async () => {
+  it("returns an explicit unavailable query result without inventing business data", async () => {
     const app = await makeApp();
     const sessionId = await openSession(app, "client");
     const response = await utter(app, sessionId, {
@@ -127,7 +127,9 @@ describe("voice HTTP boundary", () => {
       isFinal: true,
     });
     assert.equal(response.statusCode, 200);
-    assert.equal(response.json().dispatch.decision, "answer-query");
+    assert.equal(response.json().dispatch.decision, "query-unavailable");
+    assert.match(response.json().dispatch.reason, /No read-only query provider/);
+    assert.equal(response.json().pending, null);
   });
 
   it("only proposes a governed send — a spoken confirm never approves it", async () => {

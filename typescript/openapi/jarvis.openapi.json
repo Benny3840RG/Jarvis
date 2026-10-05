@@ -7765,7 +7765,7 @@
       },
       "VoiceUtteranceRequest": {
         "type": "object",
-        "description": "Submit a recognised utterance to the session for a dispatch decision.",
+        "description": "Submit a recognised utterance to the session for a dispatch decision. A newly recognised command invalidates any older pending confirmation; a new critical command then arms its own single-use confirmation.",
         "required": ["transcript", "isFinal"],
         "additionalProperties": false,
         "properties": {
@@ -7818,7 +7818,7 @@
       },
       "VoiceDispatch": {
         "type": "object",
-        "description": "The authoritative decision for one submitted utterance.",
+        "description": "The authoritative decision for one submitted utterance. Query commands return query-unavailable until a read-only query provider is connected; recognizing a command is not a successful business or equipment answer.",
         "required": ["decision"],
         "additionalProperties": false,
         "properties": {
@@ -7830,7 +7830,7 @@
               "empty",
               "unrecognized",
               "ambiguous",
-              "answer-query",
+              "query-unavailable",
               "awaiting-confirmation",
               "confirmation-not-pending",
               "confirmation-expired",
@@ -7861,7 +7861,7 @@
           },
           "reason": {
             "type": "string",
-            "description": "Why actuation was unavailable or failed."
+            "description": "Why a query or actuation was unavailable, or an actuation failed."
           },
           "expiresAt": {
             "type": "integer",

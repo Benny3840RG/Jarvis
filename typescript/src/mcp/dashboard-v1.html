@@ -1466,7 +1466,7 @@
                       <div class="voice-profiles" id="voice-profiles"></div>
                       <div class="voice-actions">
                         <button type="button" class="voice-btn" id="voice-enable">Enable microphone</button>
-                        <button type="button" class="voice-btn" id="voice-stop" disabled>Stop</button>
+                        <button type="button" class="voice-btn" id="voice-stop">Stop</button>
                       </div>
                       <p class="voice-hint">Say “<strong>Jarvis</strong>” then a command. Partial speech never acts; critical commands need “Jarvis confirm”. Equipment with no adapter fails closed.</p>
                       <div class="voice-live"><small>HEARD</small><p id="voice-transcript">—</p></div>
@@ -2682,7 +2682,7 @@
             empty: { label: "No command heard.", tone: "muted" },
             unrecognized: { label: "Command not recognised.", tone: "warn" },
             ambiguous: { label: "Ambiguous — ignored for safety.", tone: "warn" },
-            "answer-query": { label: "Query acknowledged.", tone: "ok" },
+            "query-unavailable": { label: "Query unavailable — no data provider connected.", tone: "warn" },
             "awaiting-confirmation": { label: "Awaiting spoken “confirm”.", tone: "pending" },
             "confirmation-not-pending": { label: "Nothing to confirm.", tone: "muted" },
             "confirmation-expired": { label: "Confirmation expired.", tone: "warn" },
@@ -2711,7 +2711,11 @@
           var VOICE_PROFILES = ["crawler", "workshop", "trailer", "client"];
           var WAKE_WORD = "jarvis";
           var caps = voiceCapabilities(typeof window !== "undefined" ? window : {});
-          var state = { profile: "client", sessionId: null, recognition: null, catalog: [] };
+          var state = {
+            profile: "client", sessionId: null, sessionPromise: null, generation: 0,
+            profilePending: false, profileFailed: false, commandQueue: Promise.resolve(),
+            recognition: null, recognitionGeneration: 0, catalog: [],
+          };
           var capEl = document.getElementById("voice-capability");
           if (capEl) capEl.textContent = caps.recognition ? "MIC AVAILABLE" : "TYPED ONLY";
           var enableBtn = document.getElementById("voice-enable");
@@ -2764,31 +2768,145 @@
               ? "Dispatch failed after " + elapsed.toFixed(1) + " ms."
               : "Dispatch round-trip: " + elapsed.toFixed(1) + " ms.";
           }
-          function ensureSession() {
+          function readResponse(response) {
+            if (!response.ok) {
+              var error = new Error("Voice request failed.");
+              error.status = response.status;
+              throw error;
+            }
+            return response.json();
+          }
+          function renderNotice(message) {
+            var el = document.getElementById("voice-result");
+            if (el) { el.textContent = message; el.setAttribute("data-tone", "warn"); }
+          }
+          function retireSession(id) {
+            if (id) api("/sessions/" + encodeURIComponent(id), { method: "DELETE" })
+              .catch(function () { /* locally detached even if server cleanup is unavailable */ });
+          }
+          function invalidateSession() {
+            var id = state.sessionId;
+            state.generation += 1;
+            state.sessionId = null;
+            state.sessionPromise = null;
+            state.commandQueue = Promise.resolve();
+            renderPending(null);
+            return id;
+          }
+          function acknowledgedSession(data, profile) {
+            if (!data || typeof data.sessionId !== "string" || !data.sessionId || data.profile !== profile) {
+              if (data && typeof data.sessionId === "string") retireSession(data.sessionId);
+              throw new Error("Voice session profile was not acknowledged.");
+            }
+            return data.sessionId;
+          }
+          function ensureSession(generation) {
+            if (generation !== state.generation) return Promise.resolve(null);
             if (state.sessionId) return Promise.resolve(state.sessionId);
-            return api("/sessions", { method: "POST", body: JSON.stringify({ profile: state.profile }) })
-              .then(function (response) { return response.json(); })
-              .then(function (data) { state.sessionId = data.sessionId; return data.sessionId; });
+            if (state.sessionPromise) return state.sessionPromise;
+            var profile = state.profile;
+            var creation = api("/sessions", { method: "POST", body: JSON.stringify({ profile: profile }) })
+              .then(readResponse)
+              .then(function (data) {
+                var id = acknowledgedSession(data, profile);
+                if (generation !== state.generation) { retireSession(id); return null; }
+                state.sessionId = id;
+                return id;
+              })
+              .finally(function () {
+                if (state.sessionPromise === creation) state.sessionPromise = null;
+              });
+            state.sessionPromise = creation;
+            return creation;
           }
           function dispatch(transcript, isFinal, alternatives) {
-            var startedAt = voiceClock();
-            return ensureSession()
-              .then(function (id) {
-                return api("/sessions/" + encodeURIComponent(id) + "/utterances", {
-                  method: "POST",
-                  body: JSON.stringify({ transcript: transcript, isFinal: isFinal, alternatives: alternatives || [] }),
+            if (state.profilePending || state.profileFailed) {
+              renderNotice(state.profilePending
+                ? "Changing voice profile. Commands are paused; submit a fresh command once ready."
+                : "Voice profile change failed. Select a profile to retry before sending commands.");
+              return Promise.resolve();
+            }
+            var generation = state.generation;
+            // Keep one ordered command stream. Invalidated queued commands are never replayed.
+            var command = state.commandQueue.then(function () {
+              if (generation !== state.generation) return;
+              var startedAt = voiceClock();
+              return ensureSession(generation)
+                .then(function (id) {
+                  if (!id || generation !== state.generation) return null;
+                  return api("/sessions/" + encodeURIComponent(id) + "/utterances", {
+                    method: "POST",
+                    body: JSON.stringify({ transcript: transcript, isFinal: isFinal, alternatives: alternatives || [] }),
+                  }).then(readResponse);
+                })
+                .then(function (payload) {
+                  if (!payload || generation !== state.generation) return;
+                  renderLatency(startedAt, voiceClock(), false);
+                  renderResult(payload.dispatch);
+                  renderPending(payload.pending);
+                })
+                .catch(function (error) {
+                  if (generation !== state.generation) return;
+                  var id = invalidateSession();
+                  if (error.status !== 404) retireSession(id);
+                  renderLatency(startedAt, voiceClock(), true);
+                  renderNotice(error.status === 404
+                    ? "Voice session expired or is no longer available. Submit a fresh command; nothing was retried."
+                    : "Voice service unavailable. Submit a fresh command to reconnect.");
                 });
+            });
+            state.commandQueue = command;
+            return command;
+          }
+          function updateMicrophoneControls() {
+            if (enableBtn) enableBtn.disabled = !caps.recognition || !!state.recognition || state.profilePending || state.profileFailed;
+          }
+          function interruptRecognition() {
+            var recognition = state.recognition;
+            state.recognition = null;
+            state.recognitionGeneration += 1;
+            // Invalidate callbacks before abort, which may itself deliver queued events.
+            if (recognition) try { recognition.abort(); } catch (error) { /* best-effort */ }
+            updateMicrophoneControls();
+          }
+          function cancelSpeech() {
+            if (caps.synthesis) try { window.speechSynthesis.cancel(); } catch (error) { /* best-effort */ }
+          }
+          function switchProfile(profile) {
+            var previousCommands = state.commandQueue;
+            var id = invalidateSession();
+            var generation = state.generation;
+            state.profilePending = true;
+            state.profileFailed = false;
+            interruptRecognition();
+            cancelSpeech();
+            renderNotice("Changing voice profile. Commands are paused until the server acknowledges it.");
+            var path = id ? "/sessions/" + encodeURIComponent(id) + "/profile" : "/sessions";
+            // Do not let an already-sent utterance arrive in a different profile on this id.
+            (id ? previousCommands : Promise.resolve())
+              .then(function () {
+                if (generation !== state.generation) { retireSession(id); return null; }
+                return api(path, { method: "POST", body: JSON.stringify({ profile: profile }) }).then(readResponse);
               })
-              .then(function (response) { return response.json(); })
-              .then(function (payload) {
-                renderLatency(startedAt, voiceClock(), false);
-                renderResult(payload.dispatch);
-                renderPending(payload.pending);
+              .then(function (data) {
+                if (!data) return;
+                var acknowledgedId = acknowledgedSession(data, profile);
+                if (generation !== state.generation) { retireSession(acknowledgedId); return; }
+                state.sessionId = acknowledgedId;
+                state.profile = profile;
+                state.profilePending = false;
+                renderProfiles();
+                renderCommands();
+                updateMicrophoneControls();
+                renderNotice("Voice profile ready: " + profile.toUpperCase() + ". Submit a fresh command.");
               })
               .catch(function () {
-                renderLatency(startedAt, voiceClock(), true);
-                var el = document.getElementById("voice-result");
-                if (el) { el.textContent = "Voice service unreachable."; el.setAttribute("data-tone", "warn"); }
+                retireSession(id);
+                if (generation !== state.generation) return;
+                state.profilePending = false;
+                state.profileFailed = true;
+                updateMicrophoneControls();
+                renderNotice("Voice profile change failed. Select a profile to retry before sending commands.");
               });
           }
           function renderCommands() {
@@ -2823,28 +2941,23 @@
               button.className = "voice-profile" + (profile === state.profile ? " active" : "");
               button.textContent = profile;
               button.addEventListener("click", function () {
-                state.profile = profile;
-                renderProfiles();
-                renderCommands();
-                if (state.sessionId) {
-                  api("/sessions/" + encodeURIComponent(state.sessionId) + "/profile", {
-                    method: "POST",
-                    body: JSON.stringify({ profile: profile }),
-                  }).catch(function () { /* non-fatal */ });
-                }
+                switchProfile(profile);
               });
               root.append(button);
             });
           }
           function startRecognition() {
             var Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-            if (!Recognition) return;
+            if (!Recognition || state.recognition || state.profilePending || state.profileFailed) return;
             var recognition = new Recognition();
+            var recognitionGeneration = ++state.recognitionGeneration;
+            state.recognition = recognition;
             recognition.continuous = true;
             recognition.interimResults = true;
             recognition.maxAlternatives = 5;
             recognition.lang = "en-AU";
             recognition.onresult = function (event) {
+              if (state.recognition !== recognition || recognitionGeneration !== state.recognitionGeneration) return;
               var transcript = "";
               for (var i = event.resultIndex; i < event.results.length; i += 1) {
                 transcript += event.results[i][0].transcript;
@@ -2862,19 +2975,26 @@
               if (prepared) dispatch(prepared.transcript, prepared.isFinal, prepared.alternatives);
             };
             recognition.onend = function () {
-              if (stopBtn) stopBtn.disabled = true;
-              if (enableBtn) enableBtn.disabled = !caps.recognition;
+              if (state.recognition !== recognition || recognitionGeneration !== state.recognitionGeneration) return;
+              state.recognition = null;
+              updateMicrophoneControls();
             };
-            recognition.start();
-            state.recognition = recognition;
-            if (stopBtn) stopBtn.disabled = false;
-            if (enableBtn) enableBtn.disabled = true;
+            try { recognition.start(); }
+            catch (error) {
+              state.recognition = null;
+              renderNotice("Microphone unavailable. Use typed commands or enable the microphone again.");
+            }
+            updateMicrophoneControls();
           }
           if (enableBtn) enableBtn.addEventListener("click", startRecognition);
           if (stopBtn)
             stopBtn.addEventListener("click", function () {
-              if (state.recognition) state.recognition.stop();
-              if (caps.synthesis) try { window.speechSynthesis.cancel(); } catch (error) { /* best-effort */ }
+              retireSession(invalidateSession());
+              state.profilePending = false;
+              state.profileFailed = false;
+              interruptRecognition();
+              cancelSpeech();
+              renderNotice("Voice stopped. Submit a fresh command or enable the microphone to resume.");
             });
           var typed = document.getElementById("voice-typed");
           if (typed)
@@ -2887,7 +3007,7 @@
               dispatch(value, true);
             });
           api("/catalog")
-            .then(function (response) { return response.json(); })
+            .then(readResponse)
             .then(function (data) { state.catalog = Array.isArray(data.commands) ? data.commands : []; renderCommands(); })
             .catch(function () { /* catalog is best-effort; typed fallback still works */ });
           renderProfiles();

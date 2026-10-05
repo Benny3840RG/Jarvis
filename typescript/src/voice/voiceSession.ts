@@ -8,7 +8,7 @@
  *   - a bounded history ring buffer (no unbounded growth);
  *   - a single-use, TTL-bound pending confirmation for critical commands
  *     (replay-protected: consuming it clears it);
- *   - confirmation invalidation on reset, profile change and manual override;
+ *   - confirmation invalidation on a fresh command, reset, profile change and manual override;
  *   - the hardware boundary: actuation goes through the provider and fails
  *     closed when hardware is unavailable.
  *
@@ -92,7 +92,7 @@ export type VoiceDispatch =
   | Readonly<{ decision: "empty" }>
   | Readonly<{ decision: "unrecognized"; normalizedTranscript: string }>
   | Readonly<{ decision: "ambiguous"; candidates: readonly string[] }>
-  | Readonly<{ decision: "answer-query"; command: VoiceCommand }>
+  | Readonly<{ decision: "query-unavailable"; command: VoiceCommand; reason: string }>
   | Readonly<{ decision: "awaiting-confirmation"; command: VoiceCommand; expiresAt: number }>
   | Readonly<{ decision: "confirmation-not-pending" }>
   | Readonly<{ decision: "confirmation-expired"; command: VoiceCommand }>
@@ -242,6 +242,9 @@ export class VoiceSession {
     normalizedTranscript: string,
     command: VoiceCommand,
   ): VoiceDispatch | Promise<VoiceDispatch> {
+    // A newly accepted command replaces the previous intent. In particular,
+    // a routine stop must never leave an earlier start armed for a later confirm.
+    this.#invalidatePending();
     this.#record(now, normalizedTranscript, "recognized", command.id);
     if (command.requiresSpokenConfirmation) {
       const expiresAt = now + this.#confirmationTtlMs;
@@ -274,7 +277,11 @@ export class VoiceSession {
   async #dispatch(command: VoiceCommand): Promise<VoiceDispatch> {
     switch (command.kind) {
       case "query":
-        return { decision: "answer-query", command };
+        return {
+          decision: "query-unavailable",
+          command,
+          reason: "No read-only query provider is connected for this voice command.",
+        };
       case "propose":
         return { decision: "proposed", command };
       case "actuate":
