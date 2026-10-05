@@ -43,6 +43,16 @@ const PUBLIC_OPERATIONS = new Set([
   "GET /settings/limits",
   "GET /hud",
   "GET /api/v1/hud/snapshot",
+  // Voice routes (#567) are loopback-public on a local-serve bind — the same
+  // posture as the HUD snapshot, so the tokenless local HUD can drive them.
+  // On a non-local bind they require the service token (covered in
+  // tests/voiceHttp.test.ts: "requires authentication on a non-local bind").
+  // This contract app runs on a loopback bind (serveLocalPage true).
+  "GET /api/v1/voice/catalog",
+  "POST /api/v1/voice/sessions",
+  "DELETE /api/v1/voice/sessions/{sessionId}",
+  "POST /api/v1/voice/sessions/{sessionId}/utterances",
+  "POST /api/v1/voice/sessions/{sessionId}/profile",
 ]);
 
 function unusedPersistence(): PersistenceProvider {
@@ -141,6 +151,58 @@ describe("HTTP route contract", () => {
       );
     } finally {
       await app.close();
+    }
+  });
+
+  it("inventories every HTTP-only voice operation as REST-only app metadata", () => {
+    const raw = readFileSync(new URL("../openapi/jarvis.openapi.json", import.meta.url), "utf8");
+    const document = JSON.parse(raw) as {
+      "x-chatgpt-app": { restOnlyOperationIds: string[] };
+    };
+    const restOnly = new Set(document["x-chatgpt-app"].restOnlyOperationIds);
+    for (const operationId of [
+      "listVoiceCatalog",
+      "createVoiceSession",
+      "endVoiceSession",
+      "dispatchVoiceUtterance",
+      "switchVoiceProfile",
+    ]) {
+      assert.equal(
+        restOnly.has(operationId),
+        true,
+        `${operationId} must be inventoried as REST-only`,
+      );
+    }
+  });
+
+  it("documents voice authentication as token-or-local-loopback only", () => {
+    const raw = readFileSync(new URL("../openapi/jarvis.openapi.json", import.meta.url), "utf8");
+    const document = JSON.parse(raw) as {
+      paths: Record<
+        string,
+        Record<
+          string,
+          {
+            security?: Array<Record<string, string[]>>;
+            "x-jarvis-auth"?: { mode: string; anonymousScope: string };
+          }
+        >
+      >;
+    };
+    for (const [path, method] of [
+      ["/api/v1/voice/catalog", "get"],
+      ["/api/v1/voice/sessions", "post"],
+      ["/api/v1/voice/sessions/{sessionId}", "delete"],
+      ["/api/v1/voice/sessions/{sessionId}/utterances", "post"],
+      ["/api/v1/voice/sessions/{sessionId}/profile", "post"],
+    ] as const) {
+      const operation = document.paths[path]?.[method];
+      assert.ok(operation, `${method.toUpperCase()} ${path} must exist`);
+      assert.deepEqual(operation.security, [{ serviceToken: [] }, {}]);
+      assert.deepEqual(operation["x-jarvis-auth"], {
+        mode: "service-token-or-local-loopback",
+        anonymousScope: "local-serve-loopback-only",
+      });
     }
   });
 

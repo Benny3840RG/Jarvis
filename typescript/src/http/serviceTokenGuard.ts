@@ -1,7 +1,7 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 
 import type { CanActivate, ExecutionContext } from "@nestjs/common";
-import { HttpStatus, Inject, Injectable, Logger } from "@nestjs/common";
+import { HttpStatus, Inject, Injectable, Logger, Optional } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 import type { FastifyRequest } from "fastify";
 
@@ -9,8 +9,10 @@ import type { HttpAppConfig } from "./config.js";
 import type { OidcIdentity, OidcVerifier } from "./oidcVerifier.js";
 import { setAuthenticatedPrincipal } from "./authenticatedPrincipal.js";
 import { JarvisProblem } from "./problemDetails.js";
+import { LOCAL_LOOPBACK_ROUTE } from "./localLoopbackRoute.js";
 import { PUBLIC_ROUTE } from "./publicRoute.js";
-import { HTTP_APP_CONFIG, HTTP_OIDC_VERIFIER } from "./tokens.js";
+import type { CredentialsRuntime } from "../settings/credentialsStatus.js";
+import { HTTP_APP_CONFIG, HTTP_CREDENTIALS, HTTP_OIDC_VERIFIER } from "./tokens.js";
 
 function parseBearerToken(header: string | string[] | undefined): string | undefined {
   if (typeof header !== "string") return undefined;
@@ -50,6 +52,11 @@ export class ServiceTokenGuard implements CanActivate {
     @Inject(Reflector) private readonly reflector: Reflector,
     @Inject(HTTP_APP_CONFIG) private readonly config: HttpAppConfig,
     @Inject(HTTP_OIDC_VERIFIER) private readonly oidcVerifier: OidcVerifier | null,
+    // Optional + fail-closed: modules that do not provide credentials (e.g. the
+    // commissioning ingress) simply never grant the loopback bypass below.
+    @Optional()
+    @Inject(HTTP_CREDENTIALS)
+    private readonly credentials: CredentialsRuntime | null = null,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -58,6 +65,15 @@ export class ServiceTokenGuard implements CanActivate {
       context.getClass(),
     ]);
     if (isPublic) return true;
+
+    // A local-loopback route needs no token ONLY on a local-serve bind (the
+    // same posture as the loopback HUD/snapshot). On any other bind it falls
+    // through to the normal token/OIDC check below, so auth is preserved.
+    const localLoopback = this.reflector.getAllAndOverride<boolean>(LOCAL_LOOPBACK_ROUTE, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
+    if (localLoopback && this.credentials?.serveLocalPage) return true;
 
     const request = context.switchToHttp().getRequest<FastifyRequest>();
     const candidate = parseBearerToken(request.headers.authorization);

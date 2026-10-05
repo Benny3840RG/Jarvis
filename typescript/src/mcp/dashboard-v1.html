@@ -177,6 +177,22 @@
       .ghost { min-height: 29px; padding: 0 8px; border: 1px solid var(--line); border-radius: 7px; background: var(--panel-2); color: var(--text); font-size: 8px; font-weight: 900; }
       .workspace { min-height: 0; }
       .view { display: none; height: 100%; }
+      .voice-controls { display: flex; flex-direction: column; gap: 12px; padding: 12px; }
+      .voice-profiles { display: flex; flex-wrap: wrap; gap: 8px; }
+      .voice-profile { padding: 6px 12px; border: 1px solid var(--line); border-radius: 999px; background: transparent; color: var(--text); cursor: pointer; }
+      .voice-profile.active { background: var(--violet); color: #fff; }
+      .voice-actions { display: flex; gap: 8px; }
+      .voice-btn { padding: 8px 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--violet); color: #fff; cursor: pointer; }
+      .voice-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+      .voice-hint { color: var(--muted); font-size: 12px; margin: 0; }
+      .voice-live p { margin: 4px 0; font-size: 18px; }
+      .voice-pending { padding: 8px 12px; border-radius: 8px; background: rgba(217, 163, 0, 0.15); border: 1px solid #d9a300; }
+      .voice-result { padding: 8px 12px; border-radius: 8px; border: 1px solid var(--line); }
+      .voice-result[data-tone="ok"] { border-color: var(--green); }
+      .voice-result[data-tone="warn"] { border-color: #d9a300; }
+      .voice-result[data-tone="pending"] { border-color: var(--violet); }
+      .voice-typed { display: flex; gap: 8px; }
+      .voice-typed input { flex: 1; padding: 8px; border: 1px solid var(--line); border-radius: 8px; background: transparent; color: var(--text); }
       .view.active { display: block; }
       #view-general { overflow: auto; }
       .settings-layout { display: grid; gap: 10px; padding: 10px; }
@@ -1141,6 +1157,7 @@
                 <button class="rail-button" type="button" data-view="operations"><span class="rail-icon">⌁</span><span><strong>Operations</strong><small>Daily brief</small></span><span class="rail-count" id="nav-operations-count">0</span></button>
                 <button class="rail-button" type="button" data-view="livework"><span class="rail-icon">⛭</span><span><strong>Live Work</strong><small>Mission pipeline</small></span><span class="rail-count" id="nav-livework-count">0</span></button>
                 <button class="rail-button" type="button" data-view="systems"><span class="rail-icon">◇</span><span><strong>Systems</strong><small>Runtime layers</small></span><span class="rail-count" id="nav-system-count">0</span></button>
+                <button class="rail-button" type="button" data-view="voice"><span class="rail-icon">⌨</span><span><strong>Voice</strong><small>Guarded speech</small></span><span class="rail-count" id="nav-voice-count">0</span></button>
                 <button class="rail-button" type="button" data-view="settings"><span class="rail-icon">⚙</span><span><strong>Settings</strong><small>General, credentials, persistence, limits, danger</small></span><span class="rail-count" id="nav-settings-count">0</span></button>
               </div>
             </nav>
@@ -1439,6 +1456,33 @@
                 <div class="two-column-view">
                   <article class="panel list-panel violet"><div class="panel-header"><h2>Reminder contacts</h2><span id="reminders-total"></span></div><div class="scroll-list" id="reminder-list"></div></article>
                   <article class="panel green"><div class="panel-header"><h2>Reminder timing distribution</h2><span>REAL DUE STATE</span></div><div class="chart-wrap"><svg viewBox="0 0 420 300" role="img" aria-label="Reminder timing distribution"><g stroke="var(--line)"><path d="M35 40H395 M35 100H395 M35 160H395 M35 220H395 M35 270H395" /></g><g id="reminder-chart-bars"></g><g fill="var(--muted)" font-size="11" text-anchor="middle"><text x="75" y="289">DUE</text><text x="165" y="289">24H</text><text x="255" y="289">LATER</text><text x="347" y="289">OPEN</text></g></svg></div></article>
+                </div>
+              </section>
+              <section class="view" id="view-voice">
+                <div class="two-column-view">
+                  <article class="panel violet">
+                    <div class="panel-header"><h2>Voice control</h2><span id="voice-capability">CHECKING…</span></div>
+                    <div class="voice-controls">
+                      <div class="voice-profiles" id="voice-profiles"></div>
+                      <div class="voice-actions">
+                        <button type="button" class="voice-btn" id="voice-enable">Enable microphone</button>
+                        <button type="button" class="voice-btn" id="voice-stop">Stop</button>
+                      </div>
+                      <p class="voice-hint">Say “<strong>Jarvis</strong>” then a command. Partial speech never acts; critical commands need “Jarvis confirm”. Equipment with no adapter fails closed.</p>
+                      <div class="voice-live"><small>HEARD</small><p id="voice-transcript">—</p></div>
+                      <div class="voice-pending" id="voice-pending" hidden></div>
+                      <div class="voice-result" id="voice-result" data-tone="muted">Idle.</div>
+                      <p class="voice-hint" id="voice-latency">Dispatch latency: no sample yet.</p>
+                      <form id="voice-typed" class="voice-typed">
+                        <input id="voice-text" type="text" placeholder="Type a command (fallback)" autocomplete="off" aria-label="Type a voice command" />
+                        <button type="submit" class="voice-btn">Send</button>
+                      </form>
+                    </div>
+                  </article>
+                  <article class="panel green">
+                    <div class="panel-header"><h2>Commands</h2><span id="voice-profile-label">—</span></div>
+                    <div class="scroll-list" id="voice-command-list"></div>
+                  </article>
                 </div>
               </section>
               <section class="view" id="view-operations">
@@ -2562,6 +2606,414 @@
           text(byId("gauge-load"), "UNKNOWN");
           text(byId("gauge-efficiency"), "UNKNOWN");
         }
+        // BEGIN voice-console (#567)
+        function normalizeVoicePhrase(raw) {
+          return String(raw == null ? "" : raw)
+            .trim()
+            .toLowerCase()
+            .replace(/\s+/g, " ")
+            .replace(/^[\s.,!?;:]+/, "")
+            .replace(/[\s.,!?;:]+$/, "");
+        }
+        function voiceCapabilities(view) {
+          var w = view || (typeof window !== "undefined" ? window : {});
+          return {
+            recognition: !!(w.SpeechRecognition || w.webkitSpeechRecognition),
+            synthesis: !!w.speechSynthesis,
+          };
+        }
+        function voiceWakeGate(raw, isFinal, wakeWord) {
+          var word = normalizeVoicePhrase(wakeWord || "jarvis");
+          var text = normalizeVoicePhrase(raw);
+          if (text !== word && text.indexOf(word + " ") !== 0) return { status: "idle" };
+          var rest = text === word ? "" : text.slice(word.length + 1).trim();
+          if (!rest) return { status: "awake" };
+          return { status: "command", transcript: rest, isFinal: !!isFinal };
+        }
+        function prepareVoiceDispatch(raw, isFinal, alternatives, wakeWord) {
+          if (!isFinal) return null;
+          var gate = voiceWakeGate(raw, true, wakeWord);
+          if (gate.status !== "command") return null;
+          var preparedAlternatives = [];
+          (alternatives || []).forEach(function (alternative) {
+            var alternativeGate = voiceWakeGate(alternative, true, wakeWord);
+            var prepared = alternativeGate.status === "command"
+              ? alternativeGate.transcript
+              : normalizeVoicePhrase(alternative);
+            if (prepared && preparedAlternatives.indexOf(prepared) < 0) preparedAlternatives.push(prepared);
+          });
+          return {
+            transcript: gate.transcript,
+            isFinal: true,
+            alternatives: preparedAlternatives,
+          };
+        }
+        function finalVoiceRecognition(event) {
+          if (!event || !event.results) return null;
+          var segments = [];
+          var start = Number.isInteger(event.resultIndex) ? event.resultIndex : 0;
+          for (var i = start; i < event.results.length; i += 1) {
+            var result = event.results[i];
+            if (!result || !result.isFinal || !result.length || !result[0]) continue;
+            var segment = { top: String(result[0].transcript || ""), alternatives: [] };
+            for (var j = 1; j < result.length; j += 1) {
+              if (result[j]) segment.alternatives.push(String(result[j].transcript || ""));
+            }
+            segments.push(segment);
+          }
+          if (!segments.length) return null;
+          var transcript = segments.map(function (segment) { return segment.top; }).join("").trim();
+          var alternatives = [];
+          segments.forEach(function (segment, segmentIndex) {
+            segment.alternatives.forEach(function (alternative) {
+              if (alternatives.length >= 16) return;
+              var combined = segments
+                .map(function (item, index) { return index === segmentIndex ? alternative : item.top; })
+                .join("")
+                .trim();
+              if (combined && combined !== transcript && alternatives.indexOf(combined) < 0) alternatives.push(combined);
+            });
+          });
+          return { transcript: transcript, alternatives: alternatives };
+        }
+        function describeVoiceDispatch(dispatch) {
+          var map = {
+            "ignored-interim": { label: "Listening…", tone: "muted" },
+            empty: { label: "No command heard.", tone: "muted" },
+            unrecognized: { label: "Command not recognised.", tone: "warn" },
+            ambiguous: { label: "Ambiguous — ignored for safety.", tone: "warn" },
+            "query-unavailable": { label: "Query unavailable — no data provider connected.", tone: "warn" },
+            "awaiting-confirmation": { label: "Awaiting spoken “confirm”.", tone: "pending" },
+            "confirmation-not-pending": { label: "Nothing to confirm.", tone: "muted" },
+            "confirmation-expired": { label: "Confirmation expired.", tone: "warn" },
+            cancelled: { label: "Cancelled.", tone: "muted" },
+            proposed: { label: "Proposed for governed approval.", tone: "ok" },
+            "actuation-unavailable": { label: "Hardware unavailable — failed closed.", tone: "warn" },
+            actuated: { label: "Actuated.", tone: "ok" },
+            "actuation-failed": { label: "Actuation failed.", tone: "warn" },
+          };
+          return map[dispatch && dispatch.decision] || { label: "Unknown result.", tone: "muted" };
+        }
+        function voiceLatencyMs(startedAt, endedAt) {
+          var start = Number(startedAt);
+          var end = Number(endedAt);
+          if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return null;
+          return Math.round((end - start) * 10) / 10;
+        }
+        function voiceClock() {
+          return typeof performance !== "undefined" && typeof performance.now === "function"
+            ? performance.now()
+            : Date.now();
+        }
+        function setupVoiceConsole() {
+          var root = document.getElementById("voice-profiles");
+          if (!root) return;
+          var VOICE_PROFILES = ["crawler", "workshop", "trailer", "client"];
+          var WAKE_WORD = "jarvis";
+          var caps = voiceCapabilities(typeof window !== "undefined" ? window : {});
+          var state = {
+            profile: "client", sessionId: null, sessionPromise: null, generation: 0,
+            profilePending: false, profileFailed: false, commandQueue: Promise.resolve(),
+            recognition: null, recognitionGeneration: 0, catalog: [],
+          };
+          var capEl = document.getElementById("voice-capability");
+          if (capEl) capEl.textContent = caps.recognition ? "MIC AVAILABLE" : "TYPED ONLY";
+          var enableBtn = document.getElementById("voice-enable");
+          var stopBtn = document.getElementById("voice-stop");
+          if (enableBtn && !caps.recognition) {
+            enableBtn.disabled = true;
+            enableBtn.textContent = "Microphone unavailable";
+          }
+
+          function api(path, options) {
+            return fetch(
+              "/api/v1/voice" + path,
+              Object.assign({ headers: { "content-type": "application/json", accept: "application/json" } }, options || {}),
+            );
+          }
+          function speak(label) {
+            if (!caps.synthesis) return;
+            try {
+              window.speechSynthesis.cancel();
+              window.speechSynthesis.speak(new SpeechSynthesisUtterance(label));
+            } catch (error) {
+              /* synthesis is best-effort */
+            }
+          }
+          function renderPending(pending) {
+            var el = document.getElementById("voice-pending");
+            if (!el) return;
+            if (pending && pending.command) {
+              el.hidden = false;
+              el.textContent = "Awaiting confirm: " + pending.command.summary + " — say “Jarvis confirm” or “Jarvis cancel”.";
+            } else {
+              el.hidden = true;
+              el.textContent = "";
+            }
+          }
+          function renderResult(dispatch) {
+            var info = describeVoiceDispatch(dispatch);
+            var el = document.getElementById("voice-result");
+            if (el) {
+              el.textContent = info.label;
+              el.setAttribute("data-tone", info.tone);
+            }
+            speak(info.label);
+          }
+          function renderLatency(startedAt, endedAt, failed) {
+            var elapsed = voiceLatencyMs(startedAt, endedAt);
+            var el = document.getElementById("voice-latency");
+            if (!el || elapsed === null) return;
+            el.textContent = failed
+              ? "Dispatch failed after " + elapsed.toFixed(1) + " ms."
+              : "Dispatch round-trip: " + elapsed.toFixed(1) + " ms.";
+          }
+          function readResponse(response) {
+            if (!response.ok) {
+              var error = new Error("Voice request failed.");
+              error.status = response.status;
+              throw error;
+            }
+            return response.json();
+          }
+          function renderNotice(message) {
+            var el = document.getElementById("voice-result");
+            if (el) { el.textContent = message; el.setAttribute("data-tone", "warn"); }
+          }
+          function retireSession(id) {
+            if (id) api("/sessions/" + encodeURIComponent(id), { method: "DELETE" })
+              .catch(function () { /* locally detached even if server cleanup is unavailable */ });
+          }
+          function invalidateSession() {
+            var id = state.sessionId;
+            state.generation += 1;
+            state.sessionId = null;
+            state.sessionPromise = null;
+            state.commandQueue = Promise.resolve();
+            renderPending(null);
+            return id;
+          }
+          function acknowledgedSession(data, profile) {
+            if (!data || typeof data.sessionId !== "string" || !data.sessionId || data.profile !== profile) {
+              if (data && typeof data.sessionId === "string") retireSession(data.sessionId);
+              throw new Error("Voice session profile was not acknowledged.");
+            }
+            return data.sessionId;
+          }
+          function ensureSession(generation) {
+            if (generation !== state.generation) return Promise.resolve(null);
+            if (state.sessionId) return Promise.resolve(state.sessionId);
+            if (state.sessionPromise) return state.sessionPromise;
+            var profile = state.profile;
+            var creation = api("/sessions", { method: "POST", body: JSON.stringify({ profile: profile }) })
+              .then(readResponse)
+              .then(function (data) {
+                var id = acknowledgedSession(data, profile);
+                if (generation !== state.generation) { retireSession(id); return null; }
+                state.sessionId = id;
+                return id;
+              })
+              .finally(function () {
+                if (state.sessionPromise === creation) state.sessionPromise = null;
+              });
+            state.sessionPromise = creation;
+            return creation;
+          }
+          function dispatch(transcript, isFinal, alternatives) {
+            if (state.profilePending || state.profileFailed) {
+              renderNotice(state.profilePending
+                ? "Changing voice profile. Commands are paused; submit a fresh command once ready."
+                : "Voice profile change failed. Select a profile to retry before sending commands.");
+              return Promise.resolve();
+            }
+            var generation = state.generation;
+            // Keep one ordered command stream. Invalidated queued commands are never replayed.
+            var command = state.commandQueue.then(function () {
+              if (generation !== state.generation) return;
+              var startedAt = voiceClock();
+              return ensureSession(generation)
+                .then(function (id) {
+                  if (!id || generation !== state.generation) return null;
+                  return api("/sessions/" + encodeURIComponent(id) + "/utterances", {
+                    method: "POST",
+                    body: JSON.stringify({ transcript: transcript, isFinal: isFinal, alternatives: alternatives || [] }),
+                  }).then(readResponse);
+                })
+                .then(function (payload) {
+                  if (!payload || generation !== state.generation) return;
+                  renderLatency(startedAt, voiceClock(), false);
+                  renderResult(payload.dispatch);
+                  renderPending(payload.pending);
+                })
+                .catch(function (error) {
+                  if (generation !== state.generation) return;
+                  var id = invalidateSession();
+                  if (error.status !== 404) retireSession(id);
+                  renderLatency(startedAt, voiceClock(), true);
+                  renderNotice(error.status === 404
+                    ? "Voice session expired or is no longer available. Submit a fresh command; nothing was retried."
+                    : "Voice service unavailable. Submit a fresh command to reconnect.");
+                });
+            });
+            state.commandQueue = command;
+            return command;
+          }
+          function updateMicrophoneControls() {
+            if (enableBtn) enableBtn.disabled = !caps.recognition || !!state.recognition || state.profilePending || state.profileFailed;
+          }
+          function interruptRecognition() {
+            var recognition = state.recognition;
+            state.recognition = null;
+            state.recognitionGeneration += 1;
+            // Invalidate callbacks before abort, which may itself deliver queued events.
+            if (recognition) try { recognition.abort(); } catch (error) { /* best-effort */ }
+            updateMicrophoneControls();
+          }
+          function cancelSpeech() {
+            if (caps.synthesis) try { window.speechSynthesis.cancel(); } catch (error) { /* best-effort */ }
+          }
+          function switchProfile(profile) {
+            var previousCommands = state.commandQueue;
+            var id = invalidateSession();
+            var generation = state.generation;
+            state.profilePending = true;
+            state.profileFailed = false;
+            interruptRecognition();
+            cancelSpeech();
+            renderNotice("Changing voice profile. Commands are paused until the server acknowledges it.");
+            var path = id ? "/sessions/" + encodeURIComponent(id) + "/profile" : "/sessions";
+            // Do not let an already-sent utterance arrive in a different profile on this id.
+            (id ? previousCommands : Promise.resolve())
+              .then(function () {
+                if (generation !== state.generation) { retireSession(id); return null; }
+                return api(path, { method: "POST", body: JSON.stringify({ profile: profile }) }).then(readResponse);
+              })
+              .then(function (data) {
+                if (!data) return;
+                var acknowledgedId = acknowledgedSession(data, profile);
+                if (generation !== state.generation) { retireSession(acknowledgedId); return; }
+                state.sessionId = acknowledgedId;
+                state.profile = profile;
+                state.profilePending = false;
+                renderProfiles();
+                renderCommands();
+                updateMicrophoneControls();
+                renderNotice("Voice profile ready: " + profile.toUpperCase() + ". Submit a fresh command.");
+              })
+              .catch(function () {
+                retireSession(id);
+                if (generation !== state.generation) return;
+                state.profilePending = false;
+                state.profileFailed = true;
+                updateMicrophoneControls();
+                renderNotice("Voice profile change failed. Select a profile to retry before sending commands.");
+              });
+          }
+          function renderCommands() {
+            var list = document.getElementById("voice-command-list");
+            var label = document.getElementById("voice-profile-label");
+            if (label) label.textContent = state.profile.toUpperCase();
+            if (!list) return;
+            list.replaceChildren();
+            var commands = state.catalog.filter(function (command) { return command.profile === state.profile; });
+            if (!commands.length) {
+              var none = document.createElement("div");
+              none.textContent = "No commands loaded.";
+              list.append(none);
+              return;
+            }
+            commands.forEach(function (command) {
+              var row = document.createElement("div");
+              row.className = "operations-row";
+              var title = document.createElement("strong");
+              title.textContent = command.phrases[0];
+              var meta = document.createElement("small");
+              meta.textContent = command.summary + (command.criticality === "critical" ? " · CRITICAL" : "");
+              row.append(title, meta);
+              list.append(row);
+            });
+          }
+          function renderProfiles() {
+            root.replaceChildren();
+            VOICE_PROFILES.forEach(function (profile) {
+              var button = document.createElement("button");
+              button.type = "button";
+              button.className = "voice-profile" + (profile === state.profile ? " active" : "");
+              button.textContent = profile;
+              button.addEventListener("click", function () {
+                switchProfile(profile);
+              });
+              root.append(button);
+            });
+          }
+          function startRecognition() {
+            var Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (!Recognition || state.recognition || state.profilePending || state.profileFailed) return;
+            var recognition = new Recognition();
+            var recognitionGeneration = ++state.recognitionGeneration;
+            state.recognition = recognition;
+            recognition.continuous = true;
+            recognition.interimResults = true;
+            recognition.maxAlternatives = 5;
+            recognition.lang = "en-AU";
+            recognition.onresult = function (event) {
+              if (state.recognition !== recognition || recognitionGeneration !== state.recognitionGeneration) return;
+              var transcript = "";
+              for (var i = event.resultIndex; i < event.results.length; i += 1) {
+                transcript += event.results[i][0].transcript;
+              }
+              var heard = document.getElementById("voice-transcript");
+              if (heard) heard.textContent = transcript || "—";
+              var recognitionResult = finalVoiceRecognition(event);
+              if (!recognitionResult) return;
+              var prepared = prepareVoiceDispatch(
+                recognitionResult.transcript,
+                true,
+                recognitionResult.alternatives,
+                WAKE_WORD,
+              );
+              if (prepared) dispatch(prepared.transcript, prepared.isFinal, prepared.alternatives);
+            };
+            recognition.onend = function () {
+              if (state.recognition !== recognition || recognitionGeneration !== state.recognitionGeneration) return;
+              state.recognition = null;
+              updateMicrophoneControls();
+            };
+            try { recognition.start(); }
+            catch (error) {
+              state.recognition = null;
+              renderNotice("Microphone unavailable. Use typed commands or enable the microphone again.");
+            }
+            updateMicrophoneControls();
+          }
+          if (enableBtn) enableBtn.addEventListener("click", startRecognition);
+          if (stopBtn)
+            stopBtn.addEventListener("click", function () {
+              retireSession(invalidateSession());
+              state.profilePending = false;
+              state.profileFailed = false;
+              interruptRecognition();
+              cancelSpeech();
+              renderNotice("Voice stopped. Submit a fresh command or enable the microphone to resume.");
+            });
+          var typed = document.getElementById("voice-typed");
+          if (typed)
+            typed.addEventListener("submit", function (event) {
+              event.preventDefault();
+              var input = document.getElementById("voice-text");
+              var value = input ? input.value.trim() : "";
+              if (!value) return;
+              if (input) input.value = "";
+              dispatch(value, true);
+            });
+          api("/catalog")
+            .then(readResponse)
+            .then(function (data) { state.catalog = Array.isArray(data.commands) ? data.commands : []; renderCommands(); })
+            .catch(function () { /* catalog is best-effort; typed fallback still works */ });
+          renderProfiles();
+          renderCommands();
+        }
+        // END voice-console (#567)
         const hudPanelRegistry = [];
         function registerHudPanel(panel) {
           if (!panel || typeof panel.id !== "string" || panel.id.length === 0 || panel.id.length > 64) return false;
@@ -2765,7 +3217,7 @@
         bridgeReady.then(async () => { try { update(await request("tools/call", { name: "get_general_settings", arguments: {} }, 10000)); } catch { state.generalSettings = null; renderGeneral(); } }).catch(() => {});
         bridgeReady.catch(() => { activity("HUD bridge failed","ChatGPT Apps bridge did not initialise"); toast("The ChatGPT app bridge did not initialise.",true); });
         document.addEventListener("visibilitychange",() => { if (document.visibilityState !== "visible") return; void checkConnectionHealth(true); });
-        seedHudPanels(); setCaptureMode("task"); render(); startHudBackdrop(); clock(); window.setInterval(clock,1000); window.setInterval(checkConnectionHealth,15000);
+        seedHudPanels(); setCaptureMode("task"); render(); startHudBackdrop(); setupVoiceConsole(); clock(); window.setInterval(clock,1000); window.setInterval(checkConnectionHealth,15000);
       })();
     </script>
   </body>
