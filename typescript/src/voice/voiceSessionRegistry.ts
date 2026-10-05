@@ -85,6 +85,13 @@ export class VoiceSessionRegistry {
   }
 
   end(id: string): boolean {
+    const now = this.#clock();
+    const entry = this.#sessions.get(id);
+    if (!entry) return false;
+    if (now >= entry.expiresAt) {
+      this.#sessions.delete(id);
+      return false;
+    }
     return this.#sessions.delete(id);
   }
 
