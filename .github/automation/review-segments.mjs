@@ -9,7 +9,7 @@ import {
 import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { parseReview } from "./pr-maintenance.mjs";
-export const MAX_SEGMENTS = 16;
+export const MAX_SEGMENTS = 24;
 const CONTEXT_BYTES = 160 * 1024;
 const PROMPT_BYTES = 200_000;
 const hash = (value) => createHash("sha256").update(value).digest("hex");
