@@ -85,10 +85,24 @@ dashboard script. The DOM/Web-Speech wiring is thin glue.
 Verification: full `npm run check` green (2366 node tests). The HUD's visual layout needs an
 owner-side `npm run start:preview` eyeball — it cannot be verified headlessly here.
 
-Next slice (same branch/draft PR):
+### Latency telemetry + commissioning slice (2026-10-05)
 
-1. Latency telemetry + an operator commissioning procedure (no invented host timing, recognition
-   accuracy, or hardware proof).
+Completed:
+
+- The voice HUD now reports the measured browser dispatch-to-response round-trip for each final
+  typed or speech dispatch. The timer starts when dispatch begins and stops after response JSON
+  is parsed; a first dispatch may include session creation. No threshold, recognition-accuracy
+  claim, network-wide timing or hardware timing is invented.
+- `docs/operators/voice.md` records the commissioning sequence and stop conditions: typed
+  fallback, wake-word/final-only behaviour, confirmation/cancel/profile invalidation, auth
+  boundary, absent-hardware fail-closed behaviour, and how to record real latency evidence.
+- Review repairs preserve the actual recognised alias in session history, treat expired sessions
+  as not-live when ending them, and inventory all five HTTP-only voice operations in
+  `x-chatgpt-app.restOnlyOperationIds`, each with regression coverage.
+
+Remaining before merge: maintained CI/review on the exact final candidate SHA and the documented
+owner-side preview/commissioning evidence. Physical hardware commissioning remains a separate
+future adapter gate.
 
 ## MCP SDK 2.x migration: ext-apps 2.0 + split core/client/server (2026-10-02)
 
