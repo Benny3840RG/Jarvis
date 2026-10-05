@@ -167,7 +167,11 @@ describe("HTTP route contract", () => {
       "dispatchVoiceUtterance",
       "switchVoiceProfile",
     ]) {
-      assert.equal(restOnly.has(operationId), true, `${operationId} must be inventoried as REST-only`);
+      assert.equal(
+        restOnly.has(operationId),
+        true,
+        `${operationId} must be inventoried as REST-only`,
+      );
     }
   });
 
