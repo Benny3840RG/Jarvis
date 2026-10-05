@@ -229,7 +229,7 @@ jobs:
             let receipts = [];
             try {
               const entries = fs.readdirSync(resultRoot,{withFileTypes:true});
-              if(entries.length>16) throw new Error('Too many segment artifacts.');
+              if(entries.length>24) throw new Error('Too many segment artifacts.');
               const readReceipt = (file, index) => {
                 if(!fs.lstatSync(file).isFile() || fs.statSync(file).size>70000) throw new Error('Invalid result artifact.');
                 const receipt = JSON.parse(fs.readFileSync(file,'utf8'));

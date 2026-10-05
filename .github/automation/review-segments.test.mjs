@@ -36,7 +36,7 @@ test("oversized full files retain all UTF8 bytes in bounded complete segments", 
   const text = "🙂é schema\n".repeat(30000);
   const plan = make([file(text)]);
   assert.ok(plan.prompts.length > 1);
-  assert.ok(plan.prompts.length <= 16);
+  assert.ok(plan.prompts.length <= 24);
   for (const prompt of plan.prompts)
     assert.ok(Buffer.byteLength(prompt) <= 160 * 1024);
   validateReviewPlan(plan);
@@ -136,7 +136,7 @@ test("caps cannot be expanded by oversized files or excessive escaped content", 
   assert.throws(() => make([file("x".repeat(512 * 1024 + 1))]));
   assert.throws(() =>
     make(
-      Array.from({ length: 17 }, (_, i) => ({
+      Array.from({ length: 25 }, (_, i) => ({
         ...file("x".repeat(150000)),
         filename: `file-${i}.ts`,
       })),
