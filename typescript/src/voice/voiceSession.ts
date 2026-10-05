@@ -63,6 +63,17 @@ function controlCandidates(
   return Object.freeze([...candidates].sort());
 }
 
+function controlAlternativeCandidates(
+  alternatives: readonly string[] | undefined,
+): readonly string[] {
+  const candidates = new Set<string>();
+  for (const alternative of alternatives ?? []) {
+    const intent = controlIntent(normalizeUtterance(alternative));
+    if (intent) candidates.add(`control.${intent}`);
+  }
+  return Object.freeze([...candidates].sort());
+}
+
 export type VoiceHistoryEntry = Readonly<{
   at: number;
   normalizedTranscript: string;
@@ -179,6 +190,15 @@ export class VoiceSession {
     if (intent) {
       const candidates = controlCandidates(this.#profile, intent, input.alternatives);
       if (candidates.length > 1) {
+        this.#record(now, normalized, "ambiguous");
+        this.#invalidatePending();
+        return { decision: "ambiguous", candidates };
+      }
+    } else {
+      const topCommand = findVoiceCommand(this.#profile, normalized);
+      const controlAlternatives = controlAlternativeCandidates(input.alternatives);
+      if (topCommand && controlAlternatives.length > 0) {
+        const candidates = Object.freeze([topCommand.id, ...controlAlternatives].sort());
         this.#record(now, normalized, "ambiguous");
         this.#invalidatePending();
         return { decision: "ambiguous", candidates };
