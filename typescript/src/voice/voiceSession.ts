@@ -210,15 +210,19 @@ export class VoiceSession {
         this.#record(now, outcome.normalizedTranscript, "ambiguous");
         return { decision: "ambiguous", candidates: outcome.candidates };
       case "recognized":
-        return this.#handleRecognized(now, outcome.command);
+        return this.#handleRecognized(now, outcome.normalizedTranscript, outcome.command);
       /* c8 ignore next 2 -- a final transcript never yields pending-final */
       default:
         return { decision: "empty" };
     }
   }
 
-  #handleRecognized(now: number, command: VoiceCommand): VoiceDispatch | Promise<VoiceDispatch> {
-    this.#record(now, command.phrases[0] ?? "", "recognized", command.id);
+  #handleRecognized(
+    now: number,
+    normalizedTranscript: string,
+    command: VoiceCommand,
+  ): VoiceDispatch | Promise<VoiceDispatch> {
+    this.#record(now, normalizedTranscript, "recognized", command.id);
     if (command.requiresSpokenConfirmation) {
       const expiresAt = now + this.#confirmationTtlMs;
       this.#pending = { command, issuedAt: now, expiresAt };
