@@ -154,6 +154,23 @@ describe("HTTP route contract", () => {
     }
   });
 
+  it("inventories every HTTP-only voice operation as REST-only app metadata", () => {
+    const raw = readFileSync(new URL("../openapi/jarvis.openapi.json", import.meta.url), "utf8");
+    const document = JSON.parse(raw) as {
+      "x-chatgpt-app": { restOnlyOperationIds: string[] };
+    };
+    const restOnly = new Set(document["x-chatgpt-app"].restOnlyOperationIds);
+    for (const operationId of [
+      "listVoiceCatalog",
+      "createVoiceSession",
+      "endVoiceSession",
+      "dispatchVoiceUtterance",
+      "switchVoiceProfile",
+    ]) {
+      assert.equal(restOnly.has(operationId), true, `${operationId} must be inventoried as REST-only`);
+    }
+  });
+
   it("guards every served operation except liveness and the loopback settings pages", async () => {
     const { app, routes } = await makeAppWithRoutes();
     try {
