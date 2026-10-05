@@ -42,6 +42,19 @@ describe("VoiceSessionRegistry", () => {
     assert.equal(r.size(), 0, "expired session is dropped");
   });
 
+  it("does not acknowledge an expired session as live when ending it", () => {
+    let now = 0;
+    const r = new VoiceSessionRegistry({
+      provider: new AbsentHardwareProvider(),
+      ttlMs: 1000,
+      clock: () => now,
+    });
+    const { id } = r.create("client");
+    now = 1001;
+    assert.equal(r.end(id), false, "expired session must report not-found");
+    assert.equal(r.size(), 0, "expired session is removed while checking end");
+  });
+
   it("extends the ttl each time the session is touched", () => {
     let now = 0;
     const r = new VoiceSessionRegistry({
