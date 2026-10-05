@@ -175,6 +175,37 @@ describe("HTTP route contract", () => {
     }
   });
 
+  it("documents voice authentication as token-or-local-loopback only", () => {
+    const raw = readFileSync(new URL("../openapi/jarvis.openapi.json", import.meta.url), "utf8");
+    const document = JSON.parse(raw) as {
+      paths: Record<
+        string,
+        Record<
+          string,
+          {
+            security?: Array<Record<string, string[]>>;
+            "x-jarvis-auth"?: { mode: string; anonymousScope: string };
+          }
+        >
+      >;
+    };
+    for (const [path, method] of [
+      ["/api/v1/voice/catalog", "get"],
+      ["/api/v1/voice/sessions", "post"],
+      ["/api/v1/voice/sessions/{sessionId}", "delete"],
+      ["/api/v1/voice/sessions/{sessionId}/utterances", "post"],
+      ["/api/v1/voice/sessions/{sessionId}/profile", "post"],
+    ] as const) {
+      const operation = document.paths[path]?.[method];
+      assert.ok(operation, `${method.toUpperCase()} ${path} must exist`);
+      assert.deepEqual(operation.security, [{ serviceToken: [] }, {}]);
+      assert.deepEqual(operation["x-jarvis-auth"], {
+        mode: "service-token-or-local-loopback",
+        anonymousScope: "local-serve-loopback-only",
+      });
+    }
+  });
+
   it("guards every served operation except liveness and the loopback settings pages", async () => {
     const { app, routes } = await makeAppWithRoutes();
     try {
