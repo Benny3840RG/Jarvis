@@ -65,6 +65,42 @@ describe("voice session — dispatch and confirmation lifecycle", () => {
     if (d.decision === "actuation-unavailable") assert.equal(d.target, "trailer.lights");
   });
 
+  it("fails closed when a routine command conflicts with a control alternative", async () => {
+    let actuations = 0;
+    const provider: VoiceActuationProvider = {
+      statusOf: () => "available",
+      actuate: async ({ target }) => {
+        actuations += 1;
+        return { status: "actuated", target };
+      },
+    };
+    const s = session(provider);
+
+    const ambiguous = await handle(s, "trailer lights on", {
+      now: 0,
+      alternatives: ["cancel"],
+    });
+
+    assert.equal(ambiguous.decision, "ambiguous");
+    assert.equal(actuations, 0, "conflicting control alternative must prevent actuation");
+  });
+
+  it("does not arm a critical command when an alternative is a control phrase", async () => {
+    const s = session();
+
+    const ambiguous = await handle(s, "winch up", {
+      now: 0,
+      alternatives: ["confirm"],
+    });
+
+    assert.equal(ambiguous.decision, "ambiguous");
+    assert.equal(
+      s.pending(),
+      undefined,
+      "conflicting control alternative must not arm confirmation",
+    );
+  });
+
   it("arms a confirmation for a critical command and only acts after a spoken confirm", async () => {
     const s = session();
     const armed = await handle(s, "winch up", { now: 0 });
