@@ -153,8 +153,13 @@
       "get": {
         "operationId": "listVoiceCatalog",
         "summary": "List the voice command catalogue",
-        "description": "Returns the bounded voice command catalogue (profiles and commands) for the browser voice interface to render. Read-only and static.",
+        "description": "Returns the bounded voice command catalogue (profiles and commands) for the browser voice interface to render. Read-only and static. Authentication is deployment-conditional: a local-serve loopback bind may omit Bearer authentication for same-origin HUD use; non-loopback binds retain the configured service-token/OIDC requirement.",
         "tags": ["Voice"],
+        "security": [{ "serviceToken": [] }, {}],
+        "x-jarvis-auth": {
+          "mode": "service-token-or-local-loopback",
+          "anonymousScope": "local-serve-loopback-only"
+        },
         "x-mcp-tool": {
           "exposed": false,
           "annotations": {
@@ -193,8 +198,13 @@
       "post": {
         "operationId": "createVoiceSession",
         "summary": "Open a voice session",
-        "description": "Opens a server-authoritative voice session for one profile. The server owns the confirmation lifecycle so a client cannot forge or replay confirmations.",
+        "description": "Opens a server-authoritative voice session for one profile. The server owns the confirmation lifecycle so a client cannot forge or replay confirmations. Authentication is deployment-conditional: a local-serve loopback bind may omit Bearer authentication for same-origin HUD use; non-loopback binds retain the configured service-token/OIDC requirement.",
         "tags": ["Voice"],
+        "security": [{ "serviceToken": [] }, {}],
+        "x-jarvis-auth": {
+          "mode": "service-token-or-local-loopback",
+          "anonymousScope": "local-serve-loopback-only"
+        },
         "x-mcp-tool": {
           "exposed": false,
           "annotations": {
@@ -251,8 +261,13 @@
       "delete": {
         "operationId": "endVoiceSession",
         "summary": "End a voice session",
-        "description": "Ends a voice session and clears its state, including any pending confirmation.",
+        "description": "Ends a voice session and clears its state, including any pending confirmation. Authentication is deployment-conditional: a local-serve loopback bind may omit Bearer authentication for same-origin HUD use; non-loopback binds retain the configured service-token/OIDC requirement.",
         "tags": ["Voice"],
+        "security": [{ "serviceToken": [] }, {}],
+        "x-jarvis-auth": {
+          "mode": "service-token-or-local-loopback",
+          "anonymousScope": "local-serve-loopback-only"
+        },
         "x-mcp-tool": {
           "exposed": false,
           "annotations": {
@@ -299,8 +314,13 @@
       "post": {
         "operationId": "dispatchVoiceUtterance",
         "summary": "Dispatch a voice utterance",
-        "description": "Submits a recognised utterance to the session and returns the authoritative dispatch decision. Final-only dispatch and whole-utterance matching apply. A propose decision never stages or approves a governed action; staging and approval remain on the governed tool-actions path.",
+        "description": "Submits a recognised utterance to the session and returns the authoritative dispatch decision. Final-only dispatch and whole-utterance matching apply. A propose decision never stages or approves a governed action; staging and approval remain on the governed tool-actions path. Authentication is deployment-conditional: a local-serve loopback bind may omit Bearer authentication for same-origin HUD use; non-loopback binds retain the configured service-token/OIDC requirement.",
         "tags": ["Voice"],
+        "security": [{ "serviceToken": [] }, {}],
+        "x-jarvis-auth": {
+          "mode": "service-token-or-local-loopback",
+          "anonymousScope": "local-serve-loopback-only"
+        },
         "x-mcp-tool": {
           "exposed": false,
           "annotations": {
@@ -360,8 +380,13 @@
       "post": {
         "operationId": "switchVoiceProfile",
         "summary": "Switch a voice session profile",
-        "description": "Switches the session's active profile. Any pending confirmation is invalidated.",
+        "description": "Switches the session's active profile. Any pending confirmation is invalidated. Authentication is deployment-conditional: a local-serve loopback bind may omit Bearer authentication for same-origin HUD use; non-loopback binds retain the configured service-token/OIDC requirement.",
         "tags": ["Voice"],
+        "security": [{ "serviceToken": [] }, {}],
+        "x-jarvis-auth": {
+          "mode": "service-token-or-local-loopback",
+          "anonymousScope": "local-serve-loopback-only"
+        },
         "x-mcp-tool": {
           "exposed": false,
           "annotations": {
