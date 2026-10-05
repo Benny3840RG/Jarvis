@@ -21,12 +21,13 @@ function loadVoiceLogic(): {
   ) => { transcript: string; isFinal: boolean; alternatives: string[] } | null;
   finalVoiceRecognition: (event: unknown) => { transcript: string; alternatives: string[] } | null;
   describeVoiceDispatch: (dispatch: { decision: string } | null) => { label: string; tone: string };
+  voiceLatencyMs: (startedAt: unknown, endedAt: unknown) => number | null;
 } {
   const match = html.match(/\/\/ BEGIN voice-console[\s\S]*?\/\/ END voice-console/);
   assert.ok(match, "voice-console block not found in dashboard HTML");
   // The block ends in a line comment, so the return must start on a new line.
   const factory = new Function(
-    `"use strict"; ${match[0]}\n return { normalizeVoicePhrase, voiceCapabilities, voiceWakeGate, prepareVoiceDispatch, finalVoiceRecognition, describeVoiceDispatch };`,
+    `"use strict"; ${match[0]}\n return { normalizeVoicePhrase, voiceCapabilities, voiceWakeGate, prepareVoiceDispatch, finalVoiceRecognition, describeVoiceDispatch, voiceLatencyMs };`,
   );
   return factory();
 }
@@ -132,6 +133,13 @@ describe("voice HUD console logic (extracted from dashboard-v1.html)", () => {
     it("falls back safely for an unknown decision", () => {
       assert.equal(logic.describeVoiceDispatch({ decision: "nonsense" }).tone, "muted");
     });
+  });
+
+  it("reports measured dispatch latency without inventing a sample", () => {
+    assert.equal(logic.voiceLatencyMs(10, 42.345), 32.3);
+    assert.equal(logic.voiceLatencyMs(42, 10), null);
+    assert.equal(logic.voiceLatencyMs("not-a-number", 10), null);
+    assert.match(html, /id="voice-latency">Dispatch latency: no sample yet\./);
   });
 
   it("boots the voice console before the dashboard IIFE closes", () => {
