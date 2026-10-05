@@ -1472,6 +1472,7 @@
                       <div class="voice-live"><small>HEARD</small><p id="voice-transcript">—</p></div>
                       <div class="voice-pending" id="voice-pending" hidden></div>
                       <div class="voice-result" id="voice-result" data-tone="muted">Idle.</div>
+                      <p class="voice-hint" id="voice-latency">Dispatch latency: no sample yet.</p>
                       <form id="voice-typed" class="voice-typed">
                         <input id="voice-text" type="text" placeholder="Type a command (fallback)" autocomplete="off" aria-label="Type a voice command" />
                         <button type="submit" class="voice-btn">Send</button>
@@ -2693,6 +2694,17 @@
           };
           return map[dispatch && dispatch.decision] || { label: "Unknown result.", tone: "muted" };
         }
+        function voiceLatencyMs(startedAt, endedAt) {
+          var start = Number(startedAt);
+          var end = Number(endedAt);
+          if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return null;
+          return Math.round((end - start) * 10) / 10;
+        }
+        function voiceClock() {
+          return typeof performance !== "undefined" && typeof performance.now === "function"
+            ? performance.now()
+            : Date.now();
+        }
         function setupVoiceConsole() {
           var root = document.getElementById("voice-profiles");
           if (!root) return;
@@ -2744,6 +2756,14 @@
             }
             speak(info.label);
           }
+          function renderLatency(startedAt, endedAt, failed) {
+            var elapsed = voiceLatencyMs(startedAt, endedAt);
+            var el = document.getElementById("voice-latency");
+            if (!el || elapsed === null) return;
+            el.textContent = failed
+              ? "Dispatch failed after " + elapsed.toFixed(1) + " ms."
+              : "Dispatch round-trip: " + elapsed.toFixed(1) + " ms.";
+          }
           function ensureSession() {
             if (state.sessionId) return Promise.resolve(state.sessionId);
             return api("/sessions", { method: "POST", body: JSON.stringify({ profile: state.profile }) })
@@ -2751,6 +2771,7 @@
               .then(function (data) { state.sessionId = data.sessionId; return data.sessionId; });
           }
           function dispatch(transcript, isFinal, alternatives) {
+            var startedAt = voiceClock();
             return ensureSession()
               .then(function (id) {
                 return api("/sessions/" + encodeURIComponent(id) + "/utterances", {
@@ -2760,10 +2781,12 @@
               })
               .then(function (response) { return response.json(); })
               .then(function (payload) {
+                renderLatency(startedAt, voiceClock(), false);
                 renderResult(payload.dispatch);
                 renderPending(payload.pending);
               })
               .catch(function () {
+                renderLatency(startedAt, voiceClock(), true);
                 var el = document.getElementById("voice-result");
                 if (el) { el.textContent = "Voice service unreachable."; el.setAttribute("data-tone", "warn"); }
               });
