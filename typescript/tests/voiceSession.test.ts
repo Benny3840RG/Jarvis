@@ -94,7 +94,11 @@ describe("voice session — dispatch and confirmation lifecycle", () => {
     });
 
     assert.equal(ambiguous.decision, "ambiguous");
-    assert.equal(s.pending(), undefined, "conflicting control alternative must not arm confirmation");
+    assert.equal(
+      s.pending(),
+      undefined,
+      "conflicting control alternative must not arm confirmation",
+    );
   });
 
   it("arms a confirmation for a critical command and only acts after a spoken confirm", async () => {
