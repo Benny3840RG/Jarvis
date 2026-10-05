@@ -136,7 +136,12 @@
       "executeToolAction",
       "getDangerZone",
       "getDangerZonePage",
-      "executeDangerZoneAction"
+      "executeDangerZoneAction",
+      "listVoiceCatalog",
+      "createVoiceSession",
+      "endVoiceSession",
+      "dispatchVoiceUtterance",
+      "switchVoiceProfile"
     ],
     "implementationStatus": "private-development-preview",
     "transport": "streamable-http-stateless",
@@ -144,6 +149,269 @@
     "runbook": "typescript/docs/operators/chatgpt-preview.md"
   },
   "paths": {
+    "/api/v1/voice/catalog": {
+      "get": {
+        "operationId": "listVoiceCatalog",
+        "summary": "List the voice command catalogue",
+        "description": "Returns the bounded voice command catalogue (profiles and commands) for the browser voice interface to render. Read-only and static.",
+        "tags": ["Voice"],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The voice command catalogue.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoiceCatalogResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
+    },
+    "/api/v1/voice/sessions": {
+      "post": {
+        "operationId": "createVoiceSession",
+        "summary": "Open a voice session",
+        "description": "Opens a server-authoritative voice session for one profile. The server owns the confirmation lifecycle so a client cannot forge or replay confirmations.",
+        "tags": ["Voice"],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": false
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateVoiceSessionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The opened voice session.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoiceSessionResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
+    },
+    "/api/v1/voice/sessions/{sessionId}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/VoiceSessionId"
+        }
+      ],
+      "delete": {
+        "operationId": "endVoiceSession",
+        "summary": "End a voice session",
+        "description": "Ends a voice session and clears its state, including any pending confirmation.",
+        "tags": ["Voice"],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The session was ended.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoiceSessionEndedResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
+    },
+    "/api/v1/voice/sessions/{sessionId}/utterances": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/VoiceSessionId"
+        }
+      ],
+      "post": {
+        "operationId": "dispatchVoiceUtterance",
+        "summary": "Dispatch a voice utterance",
+        "description": "Submits a recognised utterance to the session and returns the authoritative dispatch decision. Final-only dispatch and whole-utterance matching apply. A propose decision never stages or approves a governed action; staging and approval remain on the governed tool-actions path.",
+        "tags": ["Voice"],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": false
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VoiceUtteranceRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The dispatch decision.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoiceDispatchResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
+    },
+    "/api/v1/voice/sessions/{sessionId}/profile": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/VoiceSessionId"
+        }
+      ],
+      "post": {
+        "operationId": "switchVoiceProfile",
+        "summary": "Switch a voice session profile",
+        "description": "Switches the session's active profile. Any pending confirmation is invalidated.",
+        "tags": ["Voice"],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SwitchVoiceProfileRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The updated session.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoiceSessionResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
+    },
     "/healthz": {
       "get": {
         "operationId": "getHealth",
@@ -7120,6 +7388,15 @@
       }
     },
     "parameters": {
+      "VoiceSessionId": {
+        "name": "sessionId",
+        "in": "path",
+        "required": true,
+        "description": "The voice session identifier.",
+        "schema": {
+          "type": "string"
+        }
+      },
       "TaskId": {
         "name": "taskId",
         "in": "path",
@@ -7340,6 +7617,269 @@
       }
     },
     "schemas": {
+      "VoiceProfile": {
+        "type": "string",
+        "description": "The active voice profile that scopes which commands may be recognised.",
+        "enum": ["crawler", "workshop", "trailer", "client"]
+      },
+      "VoiceCommandSummary": {
+        "type": "object",
+        "description": "A bounded voice command as advertised to the browser interface.",
+        "required": [
+          "id",
+          "profile",
+          "kind",
+          "criticality",
+          "requiresSpokenConfirmation",
+          "summary",
+          "phrases"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Stable command identifier."
+          },
+          "profile": {
+            "$ref": "#/components/schemas/VoiceProfile"
+          },
+          "kind": {
+            "type": "string",
+            "enum": ["query", "propose", "actuate"],
+            "description": "What dispatching the command does: answer a read-only query, propose a governed action, or actuate hardware."
+          },
+          "criticality": {
+            "type": "string",
+            "enum": ["routine", "critical"],
+            "description": "Critical commands fail closed and always require a spoken confirmation."
+          },
+          "requiresSpokenConfirmation": {
+            "type": "boolean",
+            "description": "Whether a spoken confirmation is required before dispatch. This guards against accidental activation; it is not an authorisation boundary."
+          },
+          "summary": {
+            "type": "string",
+            "description": "One-line human summary surfaced on the HUD."
+          },
+          "phrases": {
+            "type": "array",
+            "description": "Canonical whole-utterance phrases (already normalised).",
+            "items": {
+              "type": "string"
+            }
+          },
+          "actuationTarget": {
+            "type": "string",
+            "description": "For actuate commands: the hardware target id consulted on the provider."
+          },
+          "proposes": {
+            "type": "object",
+            "description": "For propose commands: the governed tool/operation that would be staged (never executed by voice).",
+            "required": ["tool", "operation"],
+            "additionalProperties": false,
+            "properties": {
+              "tool": {
+                "type": "string"
+              },
+              "operation": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "VoiceCatalogResponse": {
+        "type": "object",
+        "description": "The bounded voice command catalogue.",
+        "required": ["profiles", "commands"],
+        "additionalProperties": false,
+        "properties": {
+          "profiles": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/VoiceProfile"
+            }
+          },
+          "commands": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/VoiceCommandSummary"
+            }
+          }
+        }
+      },
+      "CreateVoiceSessionRequest": {
+        "type": "object",
+        "description": "Open a server-authoritative voice session for one profile.",
+        "required": ["profile"],
+        "additionalProperties": false,
+        "properties": {
+          "profile": {
+            "$ref": "#/components/schemas/VoiceProfile"
+          }
+        }
+      },
+      "VoiceSessionResponse": {
+        "type": "object",
+        "description": "A server-side voice session.",
+        "required": ["sessionId", "profile", "expiresAt"],
+        "additionalProperties": false,
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "description": "Opaque session identifier."
+          },
+          "profile": {
+            "$ref": "#/components/schemas/VoiceProfile"
+          },
+          "expiresAt": {
+            "type": "integer",
+            "description": "Epoch milliseconds after which the session is evicted."
+          }
+        }
+      },
+      "VoiceUtteranceRequest": {
+        "type": "object",
+        "description": "Submit a recognised utterance to the session for a dispatch decision.",
+        "required": ["transcript", "isFinal"],
+        "additionalProperties": false,
+        "properties": {
+          "transcript": {
+            "type": "string",
+            "description": "The recogniser's top hypothesis."
+          },
+          "isFinal": {
+            "type": "boolean",
+            "description": "True only for a final transcript. Interim transcripts never dispatch."
+          },
+          "alternatives": {
+            "type": "array",
+            "description": "Lower-confidence alternative hypotheses, if any.",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "SwitchVoiceProfileRequest": {
+        "type": "object",
+        "description": "Switch the session's active profile. Invalidates any pending confirmation.",
+        "required": ["profile"],
+        "additionalProperties": false,
+        "properties": {
+          "profile": {
+            "$ref": "#/components/schemas/VoiceProfile"
+          }
+        }
+      },
+      "VoicePendingConfirmation": {
+        "type": "object",
+        "description": "A critical command awaiting a spoken confirmation.",
+        "required": ["command", "issuedAt", "expiresAt"],
+        "additionalProperties": false,
+        "properties": {
+          "command": {
+            "$ref": "#/components/schemas/VoiceCommandSummary"
+          },
+          "issuedAt": {
+            "type": "integer",
+            "description": "Epoch milliseconds the confirmation was armed."
+          },
+          "expiresAt": {
+            "type": "integer",
+            "description": "Epoch milliseconds the confirmation lapses."
+          }
+        }
+      },
+      "VoiceDispatch": {
+        "type": "object",
+        "description": "The authoritative decision for one submitted utterance.",
+        "required": ["decision"],
+        "additionalProperties": false,
+        "properties": {
+          "decision": {
+            "type": "string",
+            "description": "The outcome of handling the utterance.",
+            "enum": [
+              "ignored-interim",
+              "empty",
+              "unrecognized",
+              "ambiguous",
+              "answer-query",
+              "awaiting-confirmation",
+              "confirmation-not-pending",
+              "confirmation-expired",
+              "cancelled",
+              "proposed",
+              "actuation-unavailable",
+              "actuated",
+              "actuation-failed"
+            ]
+          },
+          "command": {
+            "$ref": "#/components/schemas/VoiceCommandSummary"
+          },
+          "normalizedTranscript": {
+            "type": "string",
+            "description": "The normalised utterance, when relevant."
+          },
+          "candidates": {
+            "type": "array",
+            "description": "Conflicting command ids for an ambiguous result.",
+            "items": {
+              "type": "string"
+            }
+          },
+          "target": {
+            "type": "string",
+            "description": "The hardware target for an actuation decision."
+          },
+          "reason": {
+            "type": "string",
+            "description": "Why actuation was unavailable or failed."
+          },
+          "expiresAt": {
+            "type": "integer",
+            "description": "When an armed confirmation lapses."
+          }
+        }
+      },
+      "VoiceDispatchResponse": {
+        "type": "object",
+        "description": "A dispatch decision plus the session's current pending confirmation.",
+        "required": ["dispatch", "pending"],
+        "additionalProperties": false,
+        "properties": {
+          "dispatch": {
+            "$ref": "#/components/schemas/VoiceDispatch"
+          },
+          "pending": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/VoicePendingConfirmation"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "VoiceSessionEndedResponse": {
+        "type": "object",
+        "description": "Confirmation that a voice session was ended.",
+        "required": ["sessionId", "ended"],
+        "additionalProperties": false,
+        "properties": {
+          "sessionId": {
+            "type": "string"
+          },
+          "ended": {
+            "type": "boolean",
+            "const": true
+          }
+        }
+      },
       "RecordId": {
         "type": "string",
         "minLength": 1,

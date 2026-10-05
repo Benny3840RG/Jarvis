@@ -82,6 +82,8 @@ import {
   selectCredentialsRuntime,
   type CredentialsRuntime,
 } from "../settings/credentialsStatus.js";
+import { AbsentHardwareProvider } from "../voice/voiceHardware.js";
+import { VoiceSessionRegistry } from "../voice/voiceSessionRegistry.js";
 import {
   createDangerZoneFromEnv,
   createInactiveDangerZone,
@@ -147,6 +149,12 @@ export type CreateJarvisHttpAppOptions = (
   activityEventReader?: ActivityEventReader | null;
   developmentLiveWorkSource?: DevelopmentLiveWorkSource | null;
   dangerZone?: DangerZoneService;
+  /**
+   * The voice session registry (#567). Defaults to one backed by the
+   * absent-hardware provider — no hardware adapter ships in main. Tests inject
+   * a custom registry (short TTL, deterministic clock, or a live provider).
+   */
+  voiceSessionRegistry?: VoiceSessionRegistry;
   telemetry?: PostHogTelemetry;
   /**
    * Overrides the process-wide HTTP rate limit. Tests use this so a low budget
@@ -440,6 +448,9 @@ export async function createJarvisHttpApp(
         (usesEnvironment
           ? createDangerZoneFromEnv(providerName)
           : createInactiveDangerZone(providerName)),
+      voiceSessionRegistry:
+        options.voiceSessionRegistry ??
+        new VoiceSessionRegistry({ provider: new AbsentHardwareProvider() }),
     }),
     adapter,
     { logger: options.logger, abortOnError: false },
