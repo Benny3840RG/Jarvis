@@ -1,6 +1,6 @@
 version: 1
 status: canonical
-updated_at: 2026-09-08
+updated_at: 2026-10-06
 
 vision:
   name: Governed Cognitive Operating System
@@ -13,6 +13,162 @@ invariants:
   constitution: JARVIS_CONSTITUTION.md
   transitions: TRANSITIONS.yaml
   events: EVENTS.yaml
+
+release_tracks:
+  - id: local-v1
+    name: Jarvis Local V1
+    status: active
+    tracker_issue: 697
+    plan: docs/operations/local-v1-release-plan.md
+    objective: >-
+      Ship a stable local daily-driver across The Beez Treez business, home and
+      workshop by commissioning and composing existing capabilities before
+      expanding remote production or physical actuation.
+    boundary: >-
+      This operational release track is orthogonal to the governed-development
+      autonomy phases below. A later autonomy phase does not block Local V1
+      unless a Local V1 work item explicitly depends on it.
+    principles:
+      - REUSE before EXTEND
+      - EXTEND before HARDEN
+      - HARDEN before NEW
+      - commissioning evidence is required for external effects
+      - unavailable physical hardware fails closed
+      - no duplicate authority, execution, evidence, completion or persistence path
+    workstreams:
+      - id: lv1-baseline
+        priority: 100
+        status: ready
+        objective: Lock one known-good local runtime and exact source revision.
+      - id: lv1-voice-commissioning
+        priority: 98
+        status: commissioning_required
+        depends_on:
+          - lv1-baseline
+        issues:
+          - 567
+        objective: >-
+          Commission the merged guarded voice interface through typed fallback,
+          microphone/wake handling where available, confirmation safety, HUD
+          feedback and measured dispatch round trips.
+        non_goal: Physical equipment actuation.
+      - id: lv1-outlook-commissioning
+        priority: 97
+        status: commissioning_required
+        depends_on:
+          - lv1-baseline
+        issues:
+          - 294
+          - 297
+        objective: >-
+          Use one non-customer development quote send/reconcile exercise to
+          prove immutable provider identity, one terminal outcome and duplicate
+          send prevention.
+      - id: lv1-voice-query-bridge
+        priority: 94
+        status: planned
+        depends_on:
+          - lv1-voice-commissioning
+        objective: >-
+          Route deterministic voice query intents to existing authoritative
+          Jarvis read models for business, home and workshop information.
+      - id: lv1-voice-safe-writes
+        priority: 92
+        status: planned
+        depends_on:
+          - lv1-voice-query-bridge
+        objective: >-
+          Route safe voice writes through existing API, MCP and ToolAction
+          paths without creating a voice-specific authority or execution path.
+      - id: lv1-business-golden-flow
+        priority: 90
+        status: planned
+        depends_on:
+          - lv1-outlook-commissioning
+        objective: >-
+          Prove enquiry through client/property/project, quote finalisation and
+          delivery/reconciliation to invoice draft and daily operational views.
+      - id: lv1-home-daily-driver
+        priority: 86
+        status: planned
+        depends_on:
+          - lv1-baseline
+        objective: >-
+          Prove tasks, reminders, errands, restart persistence and the existing
+          governed Google Home announcement path against pinned local devices.
+      - id: lv1-workshop-daily-driver
+        priority: 84
+        status: planned
+        depends_on:
+          - lv1-baseline
+        objective: >-
+          Prove assets, builds, build logs, upgrades and maintenance records
+          through the normal Jarvis interaction surfaces.
+        non_goal: Physical machine actuation.
+      - id: lv1-recovery
+        priority: 99
+        status: planned
+        depends_on:
+          - lv1-baseline
+        objective: >-
+          Demonstrate recoverability of the authoritative dataset actually
+          relied upon by Local V1 using isolated restore and normal-store/API
+          readback evidence.
+      - id: lv1-dogfood
+        priority: 82
+        status: planned
+        depends_on:
+          - lv1-voice-safe-writes
+          - lv1-business-golden-flow
+          - lv1-home-daily-driver
+          - lv1-workshop-daily-driver
+          - lv1-recovery
+        objective: >-
+          Operate Jarvis as the daily assistant and repair only observed
+          release-blocking usability, correctness or reliability defects.
+      - id: lv1-release
+        priority: 80
+        status: planned
+        depends_on:
+          - lv1-dogfood
+        objective: >-
+          Freeze one exact candidate, run maintained verification and
+          independent review, record evidence and publish the Local V1 runbook.
+    existing_issue_classification:
+      direct_local_v1:
+        - issue: 567
+          role: voice commissioning
+        - issue: 294
+          role: grouped Outlook quote-send commissioning
+        - issue: 297
+          role: grouped Outlook reconciliation commissioning
+      deferred_non_blocking:
+        - issue: 561
+          role: TypeScript 7 compatibility after supported tooling exists
+        - issue: 306
+          role: remote OIDC/TLS/public gateway commissioning after Local V1
+        - issue: 307
+          role: production operations/deployment gate after Local V1
+        - issue: 324
+          role: live durable orchestration commissioning after runtime prerequisites
+    post_v1:
+      - physical workshop actuation through separately commissioned adapters
+      - remote/public exposure
+      - production deployment
+      - live durable orchestration
+    exit_criteria:
+      - one exact release candidate passes maintained checks and OpenAPI lint
+      - HUD and MCP are usable against the selected local development runtime
+      - guarded voice is commissioned and returns authoritative useful reads
+      - safe voice writes reuse existing governed paths
+      - Outlook quote send and reconciliation have non-customer live evidence
+      - one Beez Treez golden workflow completes through supported interfaces
+      - home and workshop daily-driver flows are proven
+      - Local V1 authoritative data has isolated restore/readback evidence
+      - restart preserves correct state
+      - unavailable hardware never reports successful actuation
+      - independent review has no unresolved release blocker
+      - exact release SHA and operator runbook are recorded
 
 phases:
   - id: phase-1-governed-development
