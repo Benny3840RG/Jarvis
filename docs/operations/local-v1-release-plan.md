@@ -54,6 +54,10 @@ Physical machine actuation is not a Local V1 blocker. Uncommissioned hardware mu
 - **#307 Production operations/deployment:** final production gate, not Local V1.
 - **#324 Durable orchestration commissioning:** offline work is already merged; live commissioning remains behind the real runtime/identity/recovery prerequisites.
 
+## Baseline security reconciliation
+
+The first verification run for this plan exposed a newly published high-severity `source-map-js@1.2.1` advisory in the unchanged root dependency tree. Issue #699 and PR #700 repaired the root lockfile to patched `source-map-js@1.2.2` without weakening the audit gate. PR #700 merged before final verification of this roadmap candidate.
+
 ## Execution sequence
 
 ### LV1-01 — Baseline lock
