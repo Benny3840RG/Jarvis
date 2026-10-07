@@ -98,7 +98,7 @@ function createExecutor(counter: { count: number }): ToolExecutionService {
 }
 
 describe("ToolExecutionService properties", () => {
-  it("preserves authorization, replay and fingerprint invariants across generated attempt sequences", async () => {
+  it("preserves execution invariants across generated attempt sequences", async () => {
     await fc.assert(
       fc.asyncProperty(
         fc.array(attemptArbitrary, { minLength: 1, maxLength: 25 }),
@@ -179,7 +179,7 @@ describe("ToolExecutionService properties", () => {
     );
   });
 
-  it("allows at most one external effect for concurrent single-use attempts with different keys", async () => {
+  it("limits concurrent single-use attempts to one external effect", async () => {
     await fc.assert(
       fc.asyncProperty(fc.integer(), zoneArbitrary, async (seed, zone) => {
         const effects = { count: 0 };
