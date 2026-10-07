@@ -12,7 +12,6 @@ import {
   type BriefEnquiries,
   type BriefInvoices,
   type BriefMaintenance,
-  type BriefQuotes,
   type BriefReminders,
   type BriefScheduled,
   type BriefTasks,
@@ -48,6 +47,9 @@ const EQUIPMENT_STATUS_UNAVAILABLE =
   "Workshop equipment status is unavailable: no commissioned equipment-status source is connected.";
 
 const TIMEZONE_UNAVAILABLE = "Jarvis timezone configuration is unavailable.";
+
+const QUOTE_FOLLOW_UP_UNAVAILABLE =
+  "Quote follow-up is unavailable: no owner-wide read of governed sent quotes is connected. The daily-brief quote file is not that register.";
 
 function unavailable(reason: string): VoiceQueryAnswer {
   return { status: "unavailable", reason };
@@ -142,16 +144,6 @@ function enquiriesAnswer(enquiries: BriefEnquiries): string {
   )}`;
 }
 
-function quotesAnswer(quotes: BriefQuotes): string {
-  const count = quotes.countsByStatus.sent;
-  if (count === 0) return "No quotes awaiting a response.";
-  const noun = count === 1 ? "quote awaiting a response" : "quotes awaiting a response";
-  return `${count} ${noun}.${nameList(
-    count,
-    quotes.awaitingResponse.map((quote) => quote.number),
-  )}`;
-}
-
 function tasksAnswer(tasks: BriefTasks): string {
   if (tasks.openCount === 0) return "No open tasks.";
   return `${countNoun(tasks.openCount, "open task")}.${nameList(
@@ -160,10 +152,14 @@ function tasksAnswer(tasks: BriefTasks): string {
   )}`;
 }
 
-function remindersAnswer(reminders: BriefReminders): string {
-  const total = reminders.dueCount + reminders.upcomingCount + reminders.undatedCount;
-  if (total === 0) return "No reminders.";
+function remindersAnswer(reminders: BriefReminders, registerCount: number): string {
+  if (registerCount === 0) return "No reminders.";
+  const coveredCount = reminders.dueCount + reminders.upcomingCount + reminders.undatedCount;
+  const laterCount = Math.max(0, registerCount - coveredCount);
   let text = `${countNoun(reminders.dueCount, "reminder")} due, ${reminders.upcomingCount} upcoming, ${reminders.undatedCount} undated.`;
+  if (laterCount > 0) {
+    text += ` ${countNoun(laterCount, "reminder")} scheduled later.`;
+  }
   if (reminders.due.length > 0) {
     text += ` Due:${nameList(
       reminders.dueCount,
@@ -317,7 +313,7 @@ async function dispatchQuery(
     case "client.open-enquiries":
       return fromEnquiries(sources, input.now);
     case "client.quote-follow-up":
-      return fromQuotes(sources, input.now);
+      return unavailable(QUOTE_FOLLOW_UP_UNAVAILABLE);
     case "client.open-tasks":
       return fromTasks(sources, input.now);
     case "client.reminders":
@@ -371,17 +367,6 @@ async function fromEnquiries(
   return answered(enquiriesAnswer(composeSlice(now, timezone, { enquiries }).enquiries));
 }
 
-async function fromQuotes(
-  sources: AuthoritativeVoiceQuerySources,
-  now: number,
-): Promise<VoiceQueryAnswer> {
-  const timezone = resolveZone(sources);
-  if (isUnavailable(timezone)) return timezone;
-  const quotes = await readList("Quote records", () => sources.quotes.list());
-  if (isUnavailable(quotes)) return quotes;
-  return answered(quotesAnswer(composeSlice(now, timezone, { quotes }).quotes));
-}
-
 async function fromTasks(
   sources: AuthoritativeVoiceQuerySources,
   now: number,
@@ -401,7 +386,9 @@ async function fromReminders(
   if (isUnavailable(timezone)) return timezone;
   const reminders = await readList("Reminder records", () => sources.reminders.listReminders());
   if (isUnavailable(reminders)) return reminders;
-  return answered(remindersAnswer(composeSlice(now, timezone, { reminders }).reminders));
+  return answered(
+    remindersAnswer(composeSlice(now, timezone, { reminders }).reminders, reminders.length),
+  );
 }
 
 async function fromErrands(
