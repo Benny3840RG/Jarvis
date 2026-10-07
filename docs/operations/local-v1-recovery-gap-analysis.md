@@ -5,7 +5,7 @@
 **Slice:** LV1-09 recovery closure  
 **Source read:** `adf82e37373105b2762033a22e8b1b9e8f7494c4` (`main`)  
 **Plan:** `docs/operations/local-v1-release-plan.md`, `JARVIS_ROADMAP.yaml` `release_tracks.local-v1.workstreams.lv1-recovery`  
-**Mode:** analysis, then PR 1 only. PR 1 adds the lock test in `typescript/tests/localV1PersistenceSplit.test.ts` and does not change runtime behaviour.
+**Mode:** analysis, then PR 1 and PR 2. PR 1 locks the live split. PR 2 adds `captureLocalV1Archive`, a read-only partial capture. It is not a restore and it is not wired to `export-v4`.
 
 ## Decisions (integration lead, 2026-10-07)
 
@@ -286,15 +286,21 @@ Done in `typescript/tests/localV1PersistenceSplit.test.ts`. With `PERSISTENCE_PR
 
 ### PR 2 — EXTEND: one partial capture of the live split
 
-Extend `export-v4` (or a sibling subcommand that still writes an archive v4 file) so that, when the provider is `convex`:
+Landed as `captureLocalV1Archive` in `typescript/src/backup/v4/localV1Capture.ts`. It is a sibling of `export-v4`, not a change to that command. `export-v4` still refuses `PERSISTENCE_PROVIDER=convex`. JSON-provider archive export is unchanged. The function takes an injected Convex client and never constructs one from `CONVEX_URL`.
 
-- business JSON is read with the existing `readBusinessGroup` locks and strict readers, using the checkout data directory;
-- core and memory come from the existing classic snapshot (`exportBackup` / the Convex stores), not from `jarvis-state.json` or `jarvis-builds.json`;
-- quote tables, delivery rows, tool actions, receipts, and reconciliations are attached by calling the existing `backupS6.capture` query;
-- task/reminder idempotency rows are included by extending that capture list with `directCreateReceipts` and `internalActionResults`, using the same owner index and the same overflow abort;
-- PDF bytes are read from `_storage` and recorded with the existing manifest blob entry (digest, byte length, logical artifact reference).
+A successful run creates one new directory and writes only inside it:
 
-The manifest stays `completeness: partial`. Overflow still aborts; it must not truncate. The capture must not open a write mutation. Tokens stay out of the file. If the provider is `json`, keep today's JSON-file capture, and record the quote group as absent rather than pretending the flat file is the lifecycle.
+| Live store | Captured as |
+| --- | --- |
+| Business JSON: clients, properties, projects, flat quotes, invoices, enquiries, errands, settings | `readBusinessGroup` into archive group `businessRecords` |
+| Tasks, reminders, assistant state | `exportBackup` / `ConvexPersistence.snapshot` into group `core` |
+| Builds, build logs, upgrades, assets, preferences | `exportBackup` Convex list stores into group `memory` |
+| S6 tables: quotes, quote revisions, PDF artifact rows, deliveries, migration records, tool actions, tool execution receipts, external reconciliations | `backupS6:captureLocalV1` sidecar `convex-s6.json`. `S6_TABLES` is unchanged |
+| `directCreateReceipts`, `internalActionResults` | Same query, sibling payload `convex-receipts.json`, same 100-row and 512 KiB abort |
+| `_storage` PDF bytes | Read-only action `backupS6:readLocalV1Blobs`; raw bytes under `blobs/<sha256 hex>` plus the existing manifest blob entry |
+| Notes, project memory, orchestration, `quoteAggregate` | Absent. `completeness` stays `partial`. `consistentSnapshot` is false |
+
+Capture refuses a URL equal to `CONVEX_URL` (or another forbidden URL) and refuses an output path that already exists or overlaps a live data directory. Reads finish before the output directory is created. Convex `mutation` calls throw. A missing table, missing PDF bytes, corrupt business JSON, or a failed query/action throws and leaves no output directory. Overflow still aborts; it does not truncate. Tokens stay out of the files. This is not isolated restore. `assertRecoverable` still refuses the archive.
 
 ### PR 3 — EXTEND: isolated restore of that capture
 
@@ -373,4 +379,4 @@ Closed by the integration lead on 2026-10-07. See the decision list at the top o
 
 ## 8. What this file is not
 
-It is not a recovery drill and not a claim that any archive on disk is restorable. PR 1 only locks the split that already exists. PR 2 is the next implementation step, after review of PR 1.
+It is not a recovery drill and not a claim that any archive on disk is restorable. PR 1 locks the split. PR 2 writes a partial capture only. Isolated restore is PR 3. `assertRecoverable` still refuses the archive.

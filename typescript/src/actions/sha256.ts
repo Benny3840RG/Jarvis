@@ -23,7 +23,11 @@ function rotateRight(value: number, amount: number): number {
 }
 
 export function sha256Hex(value: string): string {
-  const source = new TextEncoder().encode(value);
+  return sha256HexBytes(new TextEncoder().encode(value));
+}
+
+/** SHA-256 of raw bytes. Shared by Node and the Convex default runtime. */
+export function sha256HexBytes(source: Uint8Array): string {
   const paddedLength = Math.ceil((source.length + 9) / 64) * 64;
   const bytes = new Uint8Array(paddedLength);
   bytes.set(source);
