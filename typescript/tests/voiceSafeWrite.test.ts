@@ -757,6 +757,45 @@ describe("voice safe writes", () => {
     assert.equal(actions.approveCalls, 0);
   });
 
+  it("still stages when projectId and expectedRevision are both present", async () => {
+    const actions = new MemoryActions();
+    const app = await makeApp(actions);
+    const sessionId = await openSession(app);
+    const response = await utter(app, sessionId, {
+      transcript: "jarvis add a task",
+      isFinal: true,
+      projectId: "project-1",
+      expectedRevision: 1,
+      capture: { title: "Buy timber", category: "workshop" },
+    });
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.json().dispatch.decision, "proposed");
+    assert.equal(typeof response.json().dispatch.toolActionId, "string");
+    assert.equal(actions.rows.size, 1);
+    assert.equal(actions.rows.get(response.json().dispatch.toolActionId)?.state, "proposed");
+    assert.equal(actions.approveCalls, 0);
+  });
+
+  it("still stages nothing when projectId and expectedRevision are both absent", async () => {
+    const actions = new MemoryActions();
+    const app = await makeApp(actions);
+    const sessionId = await openSession(app);
+    const response = await utter(app, sessionId, {
+      transcript: "jarvis add a task",
+      isFinal: true,
+      capture: { title: "Buy timber", category: "workshop" },
+    });
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.json().dispatch.decision, "proposed");
+    assert.equal(response.json().dispatch.toolActionId, undefined);
+    assert.equal(
+      response.json().dispatch.reason,
+      "Safe write was not staged: the tool-action target is not commissioned.",
+    );
+    assert.equal(actions.rows.size, 0);
+    assert.equal(actions.approveCalls, 0);
+  });
+
   it("stages a microphone write only when the original transcript carried the wake word", async () => {
     const actions = new MemoryActions();
     const app = await makeApp(actions);
