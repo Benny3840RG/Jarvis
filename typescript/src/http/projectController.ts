@@ -11,6 +11,7 @@ import {
   Post,
 } from "@nestjs/common";
 
+import { withClientReferenceLock } from "../clients/clientReferenceLock.js";
 import type { Project, ProjectStore } from "../projects/project.js";
 import { JarvisProblem } from "./problemDetails.js";
 import { parseCreateProject, parseUpdateProject } from "./projectRequest.js";
@@ -72,7 +73,9 @@ export class ProjectController {
       }
     })();
     try {
-      return projectResponse(await this.projects.add(input));
+      return await withClientReferenceLock(async () =>
+        projectResponse(await this.projects.add(input)),
+      );
     } catch (error: unknown) {
       if (error instanceof Error && /empty|status must/.test(error.message))
         throw invalid(error.message);
@@ -103,7 +106,7 @@ export class ProjectController {
     })();
     let project: Project | null;
     try {
-      project = await this.projects.update(projectId, input);
+      project = await withClientReferenceLock(() => this.projects.update(projectId, input));
     } catch (error: unknown) {
       if (error instanceof Error && /empty|requires|status must/.test(error.message))
         throw invalid(error.message);
