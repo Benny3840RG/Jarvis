@@ -78,12 +78,21 @@ describe("voice HUD console logic (extracted from dashboard-v1.html)", () => {
     });
 
     it("treats punctuation or whitespace right after the wake word as a separator", () => {
-      const comma = logic.voiceWakeGate("Jarvis, add a task", true);
-      assert.equal(comma.status, "command");
-      assert.equal(comma.transcript, "add a task");
-      const marked = logic.voiceWakeGate("Jarvis! add a task", true);
-      assert.equal(marked.status, "command");
-      assert.equal(marked.transcript, "add a task");
+      for (const raw of [
+        "Jarvis, add a task",
+        "Jarvis! add a task",
+        "Jarvis. add a task",
+        "Jarvis? add a task",
+        "Jarvis; add a task",
+        "Jarvis: add a task",
+      ]) {
+        const gate = logic.voiceWakeGate(raw, true);
+        assert.equal(gate.status, "command", raw);
+        assert.equal(gate.transcript, "add a task", raw);
+      }
+      for (const raw of ["Jarvis", "Jarvis,", "Jarvis.", "Jarvis?", "Jarvis!"]) {
+        assert.equal(logic.voiceWakeGate(raw, true).status, "awake", raw);
+      }
     });
 
     it("never prepares a bare confirm or cancel for microphone dispatch", () => {

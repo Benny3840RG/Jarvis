@@ -599,13 +599,35 @@ describe("voice safe writes", () => {
     assert.equal(actions.rows.size, 1);
     assert.equal(actions.approveCalls, 0);
 
-    const marked = await utter(app, sessionId, {
-      transcript: "Jarvis! add a task",
-      isFinal: true,
-      ...TARGET,
-      capture,
-    });
-    assert.equal(marked.json().dispatch.toolActionId, actionId);
+    for (const transcript of [
+      "Jarvis! add a task",
+      "Jarvis. add a task",
+      "Jarvis? add a task",
+      "Jarvis; add a task",
+      "Jarvis: add a task",
+    ]) {
+      const marked = await utter(app, sessionId, {
+        transcript,
+        isFinal: true,
+        ...TARGET,
+        capture,
+      });
+      assert.equal(marked.statusCode, 200, transcript);
+      assert.equal(marked.json().dispatch.toolActionId, actionId, transcript);
+    }
+    assert.equal(actions.rows.size, 1);
+
+    for (const transcript of ["Jarvis", "Jarvis,", "Jarvis.", "Jarvis?", "Jarvis!"]) {
+      const awake = await utter(app, sessionId, {
+        transcript,
+        isFinal: true,
+        ...TARGET,
+        capture,
+      });
+      assert.equal(awake.statusCode, 200, transcript);
+      assert.equal(awake.json().dispatch.decision, "empty", transcript);
+      assert.equal(awake.json().dispatch.toolActionId, undefined, transcript);
+    }
     assert.equal(actions.rows.size, 1);
 
     const heard = await utter(app, sessionId, {
