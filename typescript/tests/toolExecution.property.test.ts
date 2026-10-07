@@ -144,6 +144,40 @@ describe("ToolExecutionService properties", () => {
           }
 
           const prior = liveReceipts.get(action.actionId);
+          const forbidden =
+            attempt.kind === "unauthorized" ||
+            attempt.kind === "revoked" ||
+            attempt.kind === "expired";
+
+          if (forbidden) {
+            if (prior !== undefined) {
+              if (prior.zone === attempt.zone) {
+                assert.deepEqual(
+                  result,
+                  prior.receipt,
+                  "an identical replay returns the prior authoritative receipt without a new effect",
+                );
+              } else {
+                assert.equal(result.status, "blocked");
+                assert.equal(result.errorCode, "fingerprint-mismatch");
+              }
+              assert.equal(
+                effects.count,
+                before,
+                "forbidden attempts may replay evidence but must never create a new effect",
+              );
+              continue;
+            }
+
+            assert.equal(result.status, "blocked");
+            assert.equal(
+              result.errorCode,
+              attempt.kind === "expired" ? "approval-expired" : "not-authorized",
+            );
+            assert.equal(effects.count, before, "fresh forbidden attempts must not create effects");
+            continue;
+          }
+
           if (prior !== undefined) {
             if (prior.zone === attempt.zone) {
               assert.deepEqual(
@@ -161,20 +195,6 @@ describe("ToolExecutionService properties", () => {
                 "changed content must not inherit an earlier receipt",
               );
             }
-            continue;
-          }
-
-          if (attempt.kind === "unauthorized" || attempt.kind === "revoked") {
-            assert.equal(result.status, "blocked");
-            assert.equal(result.errorCode, "not-authorized");
-            assert.equal(effects.count, before, "unauthorized attempts must not create effects");
-            continue;
-          }
-
-          if (attempt.kind === "expired") {
-            assert.equal(result.status, "blocked");
-            assert.equal(result.errorCode, "approval-expired");
-            assert.equal(effects.count, before, "expired approval must not create effects");
             continue;
           }
 
