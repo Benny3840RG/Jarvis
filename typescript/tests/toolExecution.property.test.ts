@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import fc from "fast-check";
+import * as fc from "fast-check";
 import { z } from "zod";
 
 import type { ToolAction } from "../src/actions/toolActions.js";
