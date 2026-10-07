@@ -15,6 +15,8 @@ import {
 } from "@nestjs/common";
 import type { FastifyRequest } from "fastify";
 
+import type { ClientStore } from "../clients/client.js";
+import { withClientReferenceLock } from "../clients/clientReferenceLock.js";
 import type { Invoice, InvoiceStore } from "../invoices/invoice.js";
 import {
   parseCreateInvoice,
@@ -25,7 +27,7 @@ import {
 } from "./invoiceRequest.js";
 import { JarvisProblem } from "./problemDetails.js";
 import { parseIdempotencyKey } from "./taskRequest.js";
-import { HTTP_INVOICE_STORE } from "./tokens.js";
+import { HTTP_CLIENT_STORE, HTTP_INVOICE_STORE } from "./tokens.js";
 
 type CachedPayment = { fingerprint: string; invoice: Invoice };
 type PendingPayment = { fingerprint: string; invoice: Promise<Invoice | null> };
@@ -78,7 +80,10 @@ export class InvoiceController {
   private readonly cachedPayments = new Map<string, CachedPayment>();
   private readonly pendingPayments = new Map<string, PendingPayment>();
 
-  constructor(@Inject(HTTP_INVOICE_STORE) private readonly invoices: InvoiceStore) {}
+  constructor(
+    @Inject(HTTP_INVOICE_STORE) private readonly invoices: InvoiceStore,
+    @Inject(HTTP_CLIENT_STORE) private readonly clients: ClientStore,
+  ) {}
 
   @Get()
   async list(@Query("clientId") clientId?: string, @Query("status") status?: string) {
@@ -111,8 +116,12 @@ export class InvoiceController {
       }
     })();
     try {
-      return invoiceResponse(await this.invoices.add(input));
+      return await withClientReferenceLock(
+        async () => invoiceResponse(await this.invoices.add(input)),
+        { clients: this.clients, clientId: input.clientId },
+      );
     } catch (error: unknown) {
+      if (error instanceof JarvisProblem) throw error;
       if (isInvalidInvoiceError(error)) throw invalid(error.message);
       throw operationFailed();
     }

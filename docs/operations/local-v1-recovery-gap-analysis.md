@@ -5,7 +5,7 @@
 **Slice:** LV1-09 recovery closure  
 **Source read:** `adf82e37373105b2762033a22e8b1b9e8f7494c4` (`main`)  
 **Plan:** `docs/operations/local-v1-release-plan.md`, `JARVIS_ROADMAP.yaml` `release_tracks.local-v1.workstreams.lv1-recovery`  
-**Mode:** analysis, then PR 1 only. PR 1 adds the lock test in `typescript/tests/localV1PersistenceSplit.test.ts` and does not change runtime behaviour.
+**Mode:** analysis, then PR 1, PR 2, PR 3, and PR 4. PR 1 locks the live split. PR 2 adds `captureLocalV1Archive`, a read-only partial capture. PR 3 restores that capture into a scratch JSON directory and an injected empty database. PR 4 adds `proveLocalV1Recovery`, which calls that restore and does not write a live store. It is not wired to `export-v4`. `completeness` stays `partial`.
 
 ## Decisions (integration lead, 2026-10-07)
 
@@ -223,7 +223,7 @@ Tests: `convex/backupS4*.test.ts`, `convex/backupS5*.test.ts`, `convex/backupS6.
 
 ### 2.4 Danger zone and settings
 
-`clear-local` quarantines every basename in `coreDataFiles` and `businessDataFiles` (`.corrupt-*` rename, not unlink). It does not call Convex deletes. It accepts either an explicit skip or a classic verify receipt from the last 24 hours (`assertVerifiedBackup`). That receipt is written by classic `verify`, whose archive does not contain the business files being quarantined.
+`clear-local` quarantines every basename in `coreDataFiles` and `businessDataFiles` (`.corrupt-*` rename, not unlink). It does not call Convex deletes. Skip still requires accepting irreversible loss. A verified backup authorises the quarantine only when its receipt lists sha256 or `absent` for every business JSON file and those checksums match the live files. A classic verify receipt does not.
 
 `reset-local-json` quarantines only `jarvis-state.json`. Under Convex that file is not the live task store.
 
@@ -286,52 +286,79 @@ Done in `typescript/tests/localV1PersistenceSplit.test.ts`. With `PERSISTENCE_PR
 
 ### PR 2 — EXTEND: one partial capture of the live split
 
-Extend `export-v4` (or a sibling subcommand that still writes an archive v4 file) so that, when the provider is `convex`:
+Landed as `captureLocalV1Archive` in `typescript/src/backup/v4/localV1Capture.ts`. It is a sibling of `export-v4`, not a change to that command. `export-v4` still refuses `PERSISTENCE_PROVIDER=convex`. JSON-provider archive export is unchanged. The function takes an injected Convex client and never constructs one from `CONVEX_URL`.
 
-- business JSON is read with the existing `readBusinessGroup` locks and strict readers, using the checkout data directory;
-- core and memory come from the existing classic snapshot (`exportBackup` / the Convex stores), not from `jarvis-state.json` or `jarvis-builds.json`;
-- quote tables, delivery rows, tool actions, receipts, and reconciliations are attached by calling the existing `backupS6.capture` query;
-- task/reminder idempotency rows are included by extending that capture list with `directCreateReceipts` and `internalActionResults`, using the same owner index and the same overflow abort;
-- PDF bytes are read from `_storage` and recorded with the existing manifest blob entry (digest, byte length, logical artifact reference).
+A successful run creates one new directory and writes only inside it:
 
-The manifest stays `completeness: partial`. Overflow still aborts; it must not truncate. The capture must not open a write mutation. Tokens stay out of the file. If the provider is `json`, keep today's JSON-file capture, and record the quote group as absent rather than pretending the flat file is the lifecycle.
+| Live store                                                                                                                                            | Captured as                                                                                                              |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| Business JSON: clients, properties, projects, flat quotes, invoices, enquiries, errands, settings                                                     | `readBusinessGroup` into archive group `businessRecords`                                                                 |
+| Tasks, reminders, assistant state                                                                                                                     | `exportBackup` / `ConvexPersistence.snapshot` into group `core`                                                          |
+| Builds, build logs, upgrades, assets, preferences                                                                                                     | `exportBackup` Convex list stores into group `memory`                                                                    |
+| S6 tables: quotes, quote revisions, PDF artifact rows, deliveries, migration records, tool actions, tool execution receipts, external reconciliations | `backupS6:captureLocalV1` sidecar `convex-s6.json`. `S6_TABLES` is unchanged                                             |
+| `directCreateReceipts`, `internalActionResults`                                                                                                       | Same query, sibling payload `convex-receipts.json`, same 100-row and 512 KiB abort                                       |
+| `_storage` PDF bytes                                                                                                                                  | Read-only action `backupS6:readLocalV1Blobs`; raw bytes under `blobs/<sha256 hex>` plus the existing manifest blob entry |
+| Notes, project memory, orchestration, `quoteAggregate`                                                                                                | Absent. `completeness` stays `partial`. `consistentSnapshot` is false                                                    |
+
+Capture refuses a URL equal to `CONVEX_URL` (or another forbidden URL) and refuses an output path that already exists or overlaps a live data directory. Reads finish before the output directory is created. Convex `mutation` calls throw. A missing table, missing PDF bytes, corrupt business JSON, or a failed query/action throws and leaves no output directory. Overflow still aborts; it does not truncate. Tokens stay out of the files. This is not isolated restore. `assertRecoverable` still refuses the archive.
 
 ### PR 3 — EXTEND: isolated restore of that capture
 
-Reuse `restoreArchiveV4` for the JSON business documents into a scratch directory.
+Landed as `restoreLocalV1Archive` in `typescript/src/backup/v4/localV1Restore.ts`. JSON business, core, and memory documents go through `restoreArchiveV4` with `allowPartial: true` into a directory that must not already exist and must not overlap the live data directory or the capture directory. Convex rows go through action `backupLocalV1Restore:restoreLocalV1` and internal mutation `insertIsolated`. The caller supplies an empty `convex-test` client. The function never constructs a client and refuses a target identity equal to `CONVEX_URL`.
 
-Add a Convex apply step beside `restoreS6MutableQuotes`, still unregistered as a public mutation, still empty-database only:
+`restoreS6MutableQuotes` and `readS6MutableQuotes` are unchanged. A captured sidecar that contains a finalized revision or a nonempty delivery still throws from the draft-only helper.
 
-- preserve logical `quoteId` / `revisionId`;
-- admit finalised revisions and historical revisions that the capture actually contains, instead of only the first open draft;
-- import PDF bytes with `ctx.storage.store`, write the new `storageId`, and check the digest;
-- insert delivery, migration, action, receipt, and reconciliation rows that belong to those quotes, copying approval expiry and terminal states verbatim, with no execution and no lease;
-- insert tasks, reminders, assistant state, builds, logs, upgrades, assets, and preferences through the existing mutations, with a builds/tasks id map applied to `buildId`, receipt `entityId`, and nested assistant state;
-- reread through `JSONPersistence` or the JSON business stores, `ConvexPersistence`, `ConvexBuildStore`, `ConvexAssetStore`, and `ConvexQuoteRepository.getQuote` / list.
+The new apply path, and only that path:
 
-Keep S6's current draft-only helper as the closed subset it is. Do not loosen it so that a finalised quote sneaks through unverified. The new path is the one that admits finalised rows, and only when artifacts and receipts pass the checks above.
+- preserves logical `quoteId` / `revisionId`, including a finalized current revision and the historical draft that preceded it;
+- stores PDF bytes, checks the digest of the bytes just stored, and writes the new `storageId`;
+- copies delivery, migration, tool-action, receipt, and reconciliation rows verbatim, with no lease and no call to `approve` or send;
+- refuses an approved tool action whose expiry policy is not `ttl` or whose `approvalExpiresAt` is still in the future, so a restored approval is not executable and its expiry is not refreshed;
+- refuses a reconciliation that is not `resolved` with terminal status `succeeded` or `failed`, and refuses one whose receipt is missing or whose effect fingerprint differs, so a restored receipt is not a `no-effect` replay that sends mail;
+- inserts tasks, reminders, assistant state, builds, logs, upgrades, assets, and preferences directly, and returns id maps for tasks, reminders, and builds. Build logs and upgrades take the new build id. Direct-create receipts and internal action results, including `result.id`, take the new task or reminder id. Assistant-state strings that are exactly a mapped id are rewritten;
+- fails before any write when a sidecar checksum, table, quote link, invoice quote, or PDF digest does not match, and deletes the scratch directory plus any blobs it stored when the empty-database apply throws.
 
-The archive remains partial. `assertRecoverable` still refuses it.
+Reread is through `JsonClientStore`, `JsonQuoteStore`, `JsonInvoiceStore`, `ConvexPersistence`, `ConvexBuildStore`, `ConvexAssetStore`, and `ConvexQuoteRepository.getQuote` / `listQuotes`. The archive stays `partial`. `assertRecoverable` still refuses it.
 
 ### PR 4 — HARDEN: the Local V1 proof gate
 
-Add one function, used by verify and by the future evidence run, that returns success only when all of the following held on the isolated targets:
+Landed as `proveLocalV1Recovery` in `typescript/src/backup/v4/localV1Proof.ts`. It calls `restoreLocalV1Archive` and does not add a second apply path. `clear-local` refuses a classic verify receipt that omits core, memory, or business checksums. The explicit skip remains. `completeness` stays `partial`. Operator text names that gate in `archive-v4.md` and `persistence-settings.md`.
 
-1. Every V1 store in section 1.1 and the Convex tables in section 1.3 was in the capture (empty is valid; omitted is not).
-2. Strict validate passed, including blob digests.
-3. Isolated restore finished (JSON completion marker, Convex empty-db apply, no live path).
-4. Store reread matched, including `ConvexQuoteRepository` and the business JSON stores.
-5. Reference and artifact checks in the design above passed.
-6. A second process, or a second `createJarvisHttpApp` bound to the scratch JSON paths and the `convex-test` client, served `GET` for a client, a task, a build, and a quote, then the process was restarted and those `GET`s matched.
-7. Checksums or row counts of the live data directory and a refused write against the live Convex URL were unchanged. A failed apply left no completion marker and no readable "live" scratch.
+The proof criteria are unchanged. They still require a restarted process before the GET results are matched:
 
-This gate must fail closed if any row was skipped for size, if any PDF byte is missing, or if the Convex target URL equals the configured live URL. It must not flip `completeness` to `complete`.
+`capture/export → validate → isolated restore → normal store/API reread → reference/artifact checks → runtime restart → rollback proof`
 
-Point Danger zone `clear-local` at this gate, or stop accepting a classic verify receipt as sufficient when business files are in the quarantine set. A receipt that does not list the business checksums must not authorise quarantining them. The explicit skip checkbox can stay; it already requires accepting irreversible loss.
+Runtime restart means a restarted process serves `GET` for a client, a task, a build, and a quote, and those results match the read taken before the restart. The full criterion, including the quote, is **NOT YET MET**. Recovery is not complete.
+
+Off-host, these parts are met:
+
+- `proveLocalV1Recovery` requires `liveDirectory` to be the same resolved path as `restore.liveDataDir`. When `liveDataDir` is omitted, that path is the checkout data directory. A mismatch throws before restore and writes nothing.
+- `readRestartedProcess` spawns the existing `src/http/main.ts` entrypoint as a child Node process with `JARVIS_DATA_DIR` set to a scratch JSON directory. It GETs a client, a task, and a build, kills the process, spawns `src/http/main.ts` again, and requires those three bodies to match. The live data directory digest is unchanged. The child `CONVEX_URL` is `http://127.0.0.1:9`, which is not the configured deployment URL. The existing entrypoint still constructs a notes client from that process variable; the proof does not call notes and does not pass the configured URL. A node test does this on JSON written by the existing stores. The convex-test restore test does it again on the JSON directory `proveLocalV1Recovery` just wrote.
+- `clear-local` checksums cover every core, memory, and business file that action quarantines. A receipt that lists only the business files does not authorise the quarantine.
+
+The quote half is **NOT YET MET**. The quote lifecycle has no JSON store, `convex-test` is not a backend a child process can dial, and this repository has no local Convex backend harness. The host step for LV1-10 or LV1-11 is: start an isolated local Convex backend whose URL is not the configured `CONVEX_URL`, restore with `restoreLocalV1Archive`, spawn the existing entrypoint against that backend and the scratch JSON directory, GET the client, the task, the build, and the quote, kill the process, spawn it again, and require the four bodies to match.
+
+`proveLocalV1Recovery` itself still does not spawn that process. Recovery is not complete. The function returns success only when these partial checks pass:
+
+- `liveDirectory` equals the restore live data directory, before any restore write.
+- The caller passed `readIsolated`.
+- `restoreLocalV1Archive` is the only apply. The live data directory digest is the same before and after, including when restore throws.
+- The archive has the business, core, and memory groups, `businessSettings` is present, and the V1 collections on those groups are arrays. An empty array is present. An omitted collection is not.
+- The isolated JSON restore left a regular completion-marker file whose `completeness` is `partial`, the archive manifest stays `partial`, and the in-progress marker is absent.
+- `assertRecoverable` still throws. A partial capture is not full recovery.
+- The S6 and receipt sidecars list their tables in order, with only `table` and `documents`, at most 100 rows, a matching payload checksum, and no `skipped` or `truncated` key. Payload size stays within the existing cap.
+- Each captured PDF artifact has a blob file that is not a symlink, and the file's sha256 and length match the manifest.
+- Two calls to the injected `readIsolated` callback return the same client, task, build, and quote ids, and an empty id fails the gate. A capture with no client, no task, no build, or no quote therefore does not pass.
+
+Convex tests supply that callback. The node test calls `rereadIsolatedHttp`, which opens two `createJarvisHttpApp` instances on scratch stores and compares those four GETs. That stand-in is still not the restarted-process criterion. The OS-process harness above is `readRestartedProcess`. It matches client, task, and build only. It does not recover the quote.
+
+The gate fails closed if any row was skipped for size, if any PDF byte is missing, or if the Convex target URL equals the configured live URL. It does not flip `completeness` to `complete`. Recovery is not complete.
+
+Point Danger zone `clear-local` at this gate, or stop accepting a classic verify receipt as sufficient when core, memory, or business files are in the quarantine set. A receipt that does not list those checksums must not authorise quarantining them. The explicit skip checkbox can stay; it already requires accepting irreversible loss.
 
 ### PR 5 — HARDEN: operator text
 
-Update `typescript/docs/operators/archive-v4.md`, `persistence-settings.md`, and `typescript/docs/ROADMAP.md` so they say:
+Recorded in `typescript/docs/operators/archive-v4.md`, `persistence-settings.md`, and `typescript/docs/ROADMAP.md`. Those pages say:
 
 - which files are checkout-local;
 - that v4 full recovery is still refused;
@@ -373,4 +400,4 @@ Closed by the integration lead on 2026-10-07. See the decision list at the top o
 
 ## 8. What this file is not
 
-It is not a recovery drill and not a claim that any archive on disk is restorable. PR 1 only locks the split that already exists. PR 2 is the next implementation step, after review of PR 1.
+It is not a recovery drill and not a claim that any archive on disk is restorable. PR 1 locks the split. PR 2 writes a partial capture only. PR 3 restores that capture into scratch JSON and an injected empty database. PR 4 names the proof gate `proveLocalV1Recovery`. The restarted-process criterion stays required. Client, task, and build GETs across a killed and respawned `src/http/main.ts` are met off-host. The quote GET is **NOT YET MET** until LV1-10 or LV1-11 runs that same entrypoint against an isolated local Convex backend that is not the configured `CONVEX_URL`. It does not flip `completeness` to `complete`. Recovery is not complete. PR 5 records that gate in the operator docs. `assertRecoverable` still refuses the archive.

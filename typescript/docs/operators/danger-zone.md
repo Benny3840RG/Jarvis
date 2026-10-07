@@ -42,9 +42,10 @@ keeps the environment it started with.
 Reset JSON quarantines `jarvis-state.json` only. Clear local quarantines the core, memory,
 and business documents listed in `jarvisDataPaths.ts`. Neither action calls a Convex delete
 API. A live `.lock` whose process is still running is refused with the ownership timeout
-copy. A symlink that resolves outside the data directory is refused. Clear local requires a
-verify receipt from the last 24 hours (`npm run backup -- verify` writes
-`<file>.jarvis-verify.json`) or an explicit skip checkbox.
+copy. A symlink that resolves outside the data directory is refused. Clear local requires
+either an explicit skip checkbox or a verify receipt from the last 24 hours whose receipt
+lists a checksum for every core, memory, and business JSON file. A classic verify receipt
+without those checksums does not authorise the quarantine. Files are renamed aside, not unlinked.
 
 Phase A does not wipe Convex owner data, restore into a non-empty provider, enable the
 remote gateway, change constitutional or ΩΣ settings, or run `restore-drill`.

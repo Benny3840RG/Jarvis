@@ -198,10 +198,15 @@ afterEach(async () => {
 describe("controlled quote HTTP lifecycle", () => {
   it("exposes the approved /api/v1/quotes routes and verbs", async () => {
     const app = await makeApp(successfulRepository());
+    const client = await inject(app, "POST", "/api/v1/clients", {
+      payload: { name: "Referenced client" },
+    });
+    assert.equal(client.statusCode, 201);
+    const clientId = client.json<{ data: { id: string } }>().data.id;
 
     const create = await inject(app, "POST", "/api/v1/quotes", {
       payload: {
-        clientId: "client-1",
+        clientId,
         number: "Q-1",
         lineItems: [{ description: "Fence panel", quantity: 2, unitPrice: 150 }],
         termsIncluded: true,

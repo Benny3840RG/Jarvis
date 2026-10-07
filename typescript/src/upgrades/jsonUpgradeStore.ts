@@ -1,9 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { promises as fs } from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-
 import { writePrivateJsonFile } from "../persistence/atomicJsonFile.js";
+import { jarvisDataFile } from "../persistence/jarvisDataPaths.js";
 import { JsonFileLock } from "../persistence/jsonFileLock.js";
 import type { PersistenceWarning } from "../persistence/types.js";
 import { applyUpgradeUpdate, cloneUpgrade, createUpgrade } from "./upgradeData.js";
@@ -14,8 +12,7 @@ const DOCUMENT_VERSION = 1 as const;
 type UpgradeDocument = { version: number; entries: Upgrade[] };
 
 function defaultUpgradesPath(): string {
-  const filename = fileURLToPath(import.meta.url);
-  return path.resolve(path.dirname(filename), "../../data/jarvis-upgrades.json");
+  return jarvisDataFile("jarvis-upgrades.json");
 }
 
 function isNodeError(error: unknown): error is NodeJS.ErrnoException {

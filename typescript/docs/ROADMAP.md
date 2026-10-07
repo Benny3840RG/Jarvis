@@ -1,5 +1,61 @@
 # Jarvis TypeScript Roadmap
 
+## LV1-06 operator PDF read and one quote register (2026-10-07)
+
+`GET /api/v1/quotes/{quoteId}/revisions/{revision}/pdf` returns the stored artifact from the existing `quotePdfArtifacts` reader. The reader still checks the revision fingerprint and sha256 digest before any bytes leave the process. No second blob store.
+
+When the quote lifecycle repository is configured, the daily brief and the HUD snapshot both read `listQuotes` plus `getQuote` through `readLifecycleQuoteRegister`. An open finalized revision is `sent` only when the existing delivery ledger has a succeeded receipt for that revision. A finalized quote with no succeeded receipt stays `draft` and is not awaiting a response. The flat quote file is used only when that repository is absent. JSON mode is unchanged.
+
+Voice query briefs still take the flat quote store passed into `createAuthoritativeVoiceQueries`. That path was left alone.
+
+Business jobs still cannot stage `quotes:finalize` or `quotes:send`. See `docs/operations/lv1-06-business-project-tool-actions.md`. Closing that gap would create a totality project, which is a new authority path, so it was not built.
+
+Next:
+
+- Leave #294 and #297 open until the host commissioning kit runs against a non-customer dev mailbox.
+- Do not auto-create totality projects from business jobs.
+- Voice brief quotes remain on the flat store until a later slice reuses this register without a new authority.
+
+## Local V1 recovery (LV1-09)
+
+Tracker #697. PR 1 locks the live persistence split. PR 2 adds
+`captureLocalV1Archive`: one partial archive of business JSON, the classic
+Convex snapshot, the existing S6 quote inventory, idempotency receipts, and
+PDF bytes. PR 3 adds `restoreLocalV1Archive`, which restores that capture into
+a new JSON directory and an injected empty database, then rereads through the
+existing stores. `completeness` stays `partial`. Neither function is wired to
+`export-v4`. The draft-only S6 helper is unchanged. PR 4 adds
+`proveLocalV1Recovery`, which calls that restore and succeeds only when
+`liveDirectory` is the restore live data directory, the captured V1
+collections are present, PDF blob digests match, the JSON completion marker
+and manifest stay `partial`, `assertRecoverable` still throws, and two
+injected reads return the same non-empty ids. A restarted `src/http/main.ts`
+matches client, task, and build GETs from scratch JSON. The quote GET on
+that restarted process is NOT YET MET. LV1-10 or LV1-11 still has to run the
+same entrypoint against an isolated local Convex backend that is not the
+configured `CONVEX_URL`. `clear-local` checksums cover the core, memory, and
+business files that action quarantines. Full v4 recovery stays refused.
+Operator docs name `proveLocalV1Recovery` as that gate and state that classic
+restore still writes the live provider. Checkout-local business files stay
+under `typescript/data/` unless `JARVIS_DATA_DIR` is set for that process.
+Recovery is not complete.
+
+## LV1-04 authoritative voice query bridge (2026-10-07)
+
+Deterministic voice query intents now answer from the same list/brief read models
+the HTTP API and daily brief already use. Empty healthy registers are reported as
+none or zero. A missing provider or a failed source stays `query-unavailable` and
+names that source. Live equipment status stays unavailable; crawler and trailer
+queries report recorded build status only.
+
+Next:
+
+- LV1-05 safe voice writes through existing API/MCP/ToolAction paths.
+- Owner-wide quote-delivery follow-up remains unsupported (same gap as the
+  operations inbox). Voice quote follow-up therefore fails closed as unavailable,
+  naming the missing owner-wide governed sent-quote read (lifecycle delivery ledger).
+- The daily-brief quote file is not treated as the governed sent-quote register.
+
 ## LV1-01 runtime data gitignore (2026-10-07)
 
 Business and memory JSON documents under `typescript/data/` were untracked but not ignored, so a local run could leave private customer records as `?? data/`. `.gitignore` now covers `jarvis-*.json*` and the dot-prefixed atomic temps. `check-repository-hygiene.mjs` asserts those paths are ignored and that tracked fixtures stay tracked. No `.bak` or `-wal` writer exists.

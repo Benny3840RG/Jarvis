@@ -12,6 +12,7 @@ import type { ActivityEventReader } from "../operations/activityTimeline.js";
 import type { PersistenceProvider } from "../persistence/persistence.js";
 import type { ProjectStore } from "../projects/project.js";
 import type { QuoteStore } from "../quotes/quote.js";
+import type { QuoteDeliveryRepository } from "../quotes/quoteDeliveryRepository.js";
 import type { QuoteRepository } from "../quotes/quoteRepository.js";
 import type { CredentialsRuntime } from "../settings/credentialsStatus.js";
 import type { HttpAppConfig } from "./config.js";
@@ -30,6 +31,7 @@ import {
   HTTP_INVOICE_STORE,
   HTTP_PERSISTENCE,
   HTTP_PROJECT_STORE,
+  HTTP_QUOTE_DELIVERY_REPOSITORY,
   HTTP_QUOTE_REPOSITORY,
   HTTP_QUOTE_STORE,
 } from "./tokens.js";
@@ -62,6 +64,8 @@ export class HudController {
     @Inject(HTTP_INVOICE_STORE) private readonly invoices: InvoiceStore,
     @Inject(HTTP_ERRAND_STORE) private readonly errands: ErrandStore,
     @Inject(HTTP_QUOTE_REPOSITORY) private readonly quoteRepository: QuoteRepository | null,
+    @Inject(HTTP_QUOTE_DELIVERY_REPOSITORY)
+    private readonly quoteDeliveries: QuoteDeliveryRepository | null,
     @Inject(HTTP_ACTIVITY_EVENTS) private readonly activity: ActivityEventReader | null,
     @Inject(HTTP_DEVELOPMENT_LIVE_WORK)
     private readonly liveWork: DevelopmentLiveWorkSource | null,
@@ -95,6 +99,7 @@ export class HudController {
       invoices: this.invoices,
       errands: this.errands,
       quoteRepository: this.quoteRepository,
+      quoteDeliveryRepository: this.quoteDeliveries,
       activity: this.activity,
       liveWork: this.liveWork,
       credentials: this.credentials,
