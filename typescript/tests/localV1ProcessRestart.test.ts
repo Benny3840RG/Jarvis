@@ -66,4 +66,49 @@ describe("Local V1 restarted process", () => {
     }
     assert.equal(await fs.readFile(sentinel, "utf8"), "keep\n");
   });
+
+  it("refuses a cloud URL and the configured CONVEX_URL before spawning", async () => {
+    const request = {
+      jsonDirectory: "/tmp/jarvis-lv1-restart-must-not-exist",
+      liveDirectory: "/tmp/jarvis-lv1-restart-must-not-exist",
+      clientId: "client",
+      taskId: "task",
+      buildId: "build",
+      quoteId: "quote",
+      configuredConvexUrl: "https://configured.example",
+    };
+    await assert.rejects(
+      () =>
+        readRestartedProcess({
+          ...request,
+          isolatedConvexUrl: "https://happy-animal-123.convex.cloud",
+        }),
+      /refuses a Convex cloud URL/,
+    );
+    await assert.rejects(
+      () =>
+        readRestartedProcess({
+          ...request,
+          isolatedConvexUrl: "https://convex.cloud/api",
+        }),
+      /refuses a Convex cloud URL/,
+    );
+    await assert.rejects(
+      () =>
+        readRestartedProcess({
+          ...request,
+          isolatedConvexUrl: "https://configured.example",
+        }),
+      /refuses the configured CONVEX_URL/,
+    );
+    await assert.rejects(
+      () =>
+        readRestartedProcess({
+          ...request,
+          configuredConvexUrl: "https://configured.example/",
+          isolatedConvexUrl: "https://configured.example",
+        }),
+      /refuses the configured CONVEX_URL/,
+    );
+  });
 });

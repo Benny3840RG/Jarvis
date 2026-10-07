@@ -1,6 +1,8 @@
 import { v } from "convex/values";
 
 import { collectBounded, requireOwner } from "./authHelpers.js";
+import { reminderValidator } from "./reminders.js";
+import { taskValidator } from "./tasks.js";
 import type { Doc, Id } from "./_generated/dataModel.js";
 import { mutation, query } from "./_generated/server.js";
 
@@ -15,41 +17,32 @@ const assistantStateValidator = v.object({
   updatedAt: v.number(),
 });
 
-const taskValidator = v.object({
-  _id: v.id("tasks"),
-  _creationTime: v.number(),
-  ownerId: v.string(),
-  title: v.string(),
-  completed: v.boolean(),
-  category: v.string(),
-  createdAt: v.number(),
-});
-
-const reminderValidator = v.object({
-  _id: v.id("reminders"),
-  _creationTime: v.number(),
-  ownerId: v.string(),
-  title: v.string(),
-  due: v.optional(v.string()),
-  dueRaw: v.optional(v.string()),
-  dueAt: v.optional(v.number()),
-  dueTimezone: v.optional(v.string()),
-  createdAt: v.number(),
-});
-
 const restoreTaskValidator = v.object({
   sourceId: v.string(),
   title: v.string(),
   completed: v.boolean(),
   category: v.string(),
+  projectId: v.optional(v.string()),
+  directCreateIdempotencyKey: v.optional(v.string()),
+  directCreateFingerprint: v.optional(v.string()),
+  updatedAt: v.optional(v.number()),
+  revision: v.optional(v.number()),
+  createdAt: v.optional(v.number()),
 });
 
 const restoreReminderValidator = v.object({
   sourceId: v.string(),
   title: v.string(),
+  due: v.optional(v.string()),
   dueRaw: v.optional(v.string()),
   dueAt: v.optional(v.number()),
   dueTimezone: v.optional(v.string()),
+  projectId: v.optional(v.string()),
+  directCreateIdempotencyKey: v.optional(v.string()),
+  directCreateFingerprint: v.optional(v.string()),
+  updatedAt: v.optional(v.number()),
+  revision: v.optional(v.number()),
+  createdAt: v.optional(v.number()),
 });
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -89,6 +82,43 @@ function validatedDue(args: { dueRaw?: string; dueAt?: number; dueTimezone?: str
   return {
     ...(dueRaw === undefined ? {} : { dueRaw }),
     ...(args.dueAt === undefined ? {} : { dueAt: args.dueAt, dueTimezone: dueTimezone as string }),
+  };
+}
+
+function restoredIdentity(source: {
+  projectId?: string;
+  directCreateIdempotencyKey?: string;
+  directCreateFingerprint?: string;
+  updatedAt?: number;
+  revision?: number;
+}): {
+  projectId?: string;
+  directCreateIdempotencyKey?: string;
+  directCreateFingerprint?: string;
+  updatedAt?: number;
+  revision?: number;
+} {
+  const key = source.directCreateIdempotencyKey;
+  const fingerprint = source.directCreateFingerprint;
+  if ((key === undefined) !== (fingerprint === undefined)) {
+    throw new Error("Direct-create identity must include both the key and the fingerprint.");
+  }
+  if (
+    (key !== undefined && key.length === 0) ||
+    (fingerprint !== undefined && fingerprint.length === 0)
+  ) {
+    throw new Error("Direct-create identity must include both the key and the fingerprint.");
+  }
+  return {
+    ...(source.projectId === undefined ? {} : { projectId: source.projectId }),
+    ...(key === undefined
+      ? {}
+      : {
+          directCreateIdempotencyKey: key,
+          directCreateFingerprint: fingerprint as string,
+        }),
+    ...(source.updatedAt === undefined ? {} : { updatedAt: source.updatedAt }),
+    ...(source.revision === undefined ? {} : { revision: source.revision }),
   };
 }
 
@@ -217,7 +247,8 @@ export const restoreEmpty = mutation({
         title: source.title,
         completed: source.completed,
         category: source.category,
-        createdAt: Date.now(),
+        ...restoredIdentity(source),
+        createdAt: source.createdAt ?? Date.now(),
       });
       const task = await ctx.db.get("tasks", id);
       if (!task) throw new Error(`Failed to restore task: ${source.title}`);
@@ -227,11 +258,17 @@ export const restoreEmpty = mutation({
 
     for (const source of args.reminders) {
       const due = validatedDue(source);
+      const legacyDue = source.due?.trim();
+      if (source.due !== undefined && legacyDue?.length === 0) {
+        throw new Error("Reminder due text cannot be empty.");
+      }
       const id = await ctx.db.insert("reminders", {
         ownerId,
         title: source.title,
+        ...(legacyDue === undefined ? {} : { due: legacyDue }),
         ...due,
-        createdAt: Date.now(),
+        ...restoredIdentity(source),
+        createdAt: source.createdAt ?? Date.now(),
       });
       const reminder = await ctx.db.get("reminders", id);
       if (!reminder) throw new Error(`Failed to restore reminder: ${source.title}`);

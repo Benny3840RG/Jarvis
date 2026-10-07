@@ -4,14 +4,16 @@ import {
   buildLocalV1ReceiptCapture,
 } from "./backupCaptureTables.js";
 import { v } from "convex/values";
-import { action, query } from "./_generated/server.js";
+import { action, query, type QueryCtx } from "./_generated/server.js";
 import type { Id } from "./_generated/dataModel.js";
 import { requireOwner, requireApprovalToken } from "./authHelpers.js";
 import { sha256HexBytes } from "../src/actions/sha256.js";
 import { S4_MAX_PAYLOAD_BYTES } from "../src/backup/v4/convexCapture.js";
 import {
+  LOCAL_V1_DIRECT_CREATE_TOMBSTONE_NOTE,
   LOCAL_V1_RECEIPT_ROW_CAP,
   LOCAL_V1_RECEIPT_TABLES,
+  type LocalV1DirectCreateTombstone,
 } from "../src/backup/v4/localV1Receipts.js";
 import { S6_TABLES } from "../src/backup/v4/s6MutableQuotes.js";
 
@@ -75,10 +77,57 @@ export const captureLocalV1 = query({
     }
     return {
       s6: buildS6Capture(ownerId, args.capturedAt, args.businessChecksum, s6Rows),
-      receipts: buildLocalV1ReceiptCapture(ownerId, args.capturedAt, receiptRows),
+      receipts: buildLocalV1ReceiptCapture(
+        ownerId,
+        args.capturedAt,
+        receiptRows,
+        await directCreateTombstones(ctx, ownerId, receiptRows),
+      ),
     };
   },
 });
+
+async function directCreateTombstones(
+  ctx: QueryCtx,
+  ownerId: string,
+  rows: Awaited<ReturnType<typeof readBackupTables>>,
+): Promise<LocalV1DirectCreateTombstone[]> {
+  const receipts = rows.find((row) => row.table === "directCreateReceipts");
+  const tombstones: LocalV1DirectCreateTombstone[] = [];
+  for (const doc of receipts?.documents ?? []) {
+    const receipt = directCreateReceipt(doc);
+    if (!receipt) throw new Error("Local V1 direct-create receipt has no entity.");
+    const table = receipt.entityType === "task" ? "tasks" : "reminders";
+    const id = ctx.db.normalizeId(table, receipt.entityId);
+    const entity = id === null ? null : await ctx.db.get(table, id);
+    if (entity && entity.ownerId === ownerId) continue;
+    tombstones.push({
+      table: "directCreateReceipts",
+      entityType: receipt.entityType,
+      entityId: receipt.entityId,
+      idempotencyKey: receipt.idempotencyKey,
+      note: LOCAL_V1_DIRECT_CREATE_TOMBSTONE_NOTE,
+    });
+  }
+  return tombstones;
+}
+
+function directCreateReceipt(doc: object): {
+  entityType: "task" | "reminder";
+  entityId: string;
+  idempotencyKey: string;
+} | null {
+  if (!("entityType" in doc) || !("entityId" in doc) || !("idempotencyKey" in doc)) return null;
+  const { entityType, entityId, idempotencyKey } = doc;
+  if (
+    (entityType !== "task" && entityType !== "reminder") ||
+    typeof entityId !== "string" ||
+    typeof idempotencyKey !== "string"
+  ) {
+    return null;
+  }
+  return { entityType, entityId, idempotencyKey };
+}
 
 const blobRequestValidator = v.object({
   reference: v.string(),

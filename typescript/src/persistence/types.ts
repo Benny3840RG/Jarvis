@@ -17,6 +17,11 @@ export type Task = {
   title: string;
   completed: boolean;
   category: string;
+  projectId?: string;
+  directCreateIdempotencyKey?: string;
+  directCreateFingerprint?: string;
+  updatedAt?: number;
+  revision?: number;
   createdAt: number;
 };
 
@@ -26,6 +31,11 @@ export type Reminder = {
   dueRaw?: string;
   dueAt?: number;
   dueTimezone?: string;
+  projectId?: string;
+  directCreateIdempotencyKey?: string;
+  directCreateFingerprint?: string;
+  updatedAt?: number;
+  revision?: number;
   createdAt: number;
 };
 

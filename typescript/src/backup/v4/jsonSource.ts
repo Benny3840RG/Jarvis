@@ -83,8 +83,31 @@ export const CAPTURE_LOCK_ORDER: ReadonlyArray<keyof CapturePaths> = [
 const STATE_DOCUMENT_VERSION = 2;
 const MEMORY_DOCUMENT_VERSION = 1;
 
-const TASK_KEYS = ["id", "title", "completed", "category", "createdAt"] as const;
-const REMINDER_KEYS = ["id", "title", "dueRaw", "dueAt", "dueTimezone", "createdAt"] as const;
+const TASK_KEYS = [
+  "id",
+  "title",
+  "completed",
+  "category",
+  "projectId",
+  "directCreateIdempotencyKey",
+  "directCreateFingerprint",
+  "updatedAt",
+  "revision",
+  "createdAt",
+] as const;
+const REMINDER_KEYS = [
+  "id",
+  "title",
+  "dueRaw",
+  "dueAt",
+  "dueTimezone",
+  "projectId",
+  "directCreateIdempotencyKey",
+  "directCreateFingerprint",
+  "updatedAt",
+  "revision",
+  "createdAt",
+] as const;
 const BUILD_KEYS = [
   "id",
   "name",

@@ -29,11 +29,45 @@ export const reminderFunctions = api.reminders;
 
 export type ConvexClientLike = Pick<ConvexHttpClient, "query" | "mutation">;
 
+function copiedDirectCreate(row: {
+  projectId?: string;
+  directCreateIdempotencyKey?: string;
+  directCreateFingerprint?: string;
+  updatedAt?: number;
+  revision?: number;
+}): Pick<
+  Task,
+  "projectId" | "directCreateIdempotencyKey" | "directCreateFingerprint" | "updatedAt" | "revision"
+> {
+  if (
+    (row.directCreateIdempotencyKey === undefined) !==
+    (row.directCreateFingerprint === undefined)
+  ) {
+    throw new Error("Direct-create identity must include both the key and the fingerprint.");
+  }
+  return {
+    ...(row.projectId === undefined ? {} : { projectId: row.projectId }),
+    ...(row.directCreateIdempotencyKey === undefined
+      ? {}
+      : {
+          directCreateIdempotencyKey: row.directCreateIdempotencyKey,
+          directCreateFingerprint: row.directCreateFingerprint as string,
+        }),
+    ...(row.updatedAt === undefined ? {} : { updatedAt: row.updatedAt }),
+    ...(row.revision === undefined ? {} : { revision: row.revision }),
+  };
+}
+
 function taskFromConvex(row: {
   _id: string;
   title: string;
   completed: boolean;
   category: string;
+  projectId?: string;
+  directCreateIdempotencyKey?: string;
+  directCreateFingerprint?: string;
+  updatedAt?: number;
+  revision?: number;
   createdAt: number;
 }): Task {
   return {
@@ -41,6 +75,7 @@ function taskFromConvex(row: {
     title: row.title,
     completed: row.completed,
     category: row.category,
+    ...copiedDirectCreate(row),
     createdAt: row.createdAt,
   };
 }
@@ -52,6 +87,11 @@ function reminderFromConvex(row: {
   dueRaw?: string;
   dueAt?: number;
   dueTimezone?: string;
+  projectId?: string;
+  directCreateIdempotencyKey?: string;
+  directCreateFingerprint?: string;
+  updatedAt?: number;
+  revision?: number;
   createdAt: number;
 }): Reminder {
   const dueRaw = row.dueRaw ?? row.due;
@@ -61,6 +101,7 @@ function reminderFromConvex(row: {
     title: row.title,
     ...(dueRaw === undefined ? {} : { dueRaw }),
     ...(hasNormalized ? { dueAt: row.dueAt, dueTimezone: row.dueTimezone } : {}),
+    ...copiedDirectCreate(row),
     createdAt: row.createdAt,
   };
 }
@@ -276,6 +317,8 @@ export class ConvexPersistence implements PersistenceProvider {
         title: task.title,
         completed: task.completed,
         category: task.category,
+        ...copiedDirectCreate(task),
+        createdAt: task.createdAt,
       })),
       reminders: snapshot.reminders.map((reminder) => ({
         sourceId: reminder.id,
@@ -287,6 +330,8 @@ export class ConvexPersistence implements PersistenceProvider {
               dueAt: reminder.dueAt,
               dueTimezone: reminder.dueTimezone as string,
             }),
+        ...copiedDirectCreate(reminder),
+        createdAt: reminder.createdAt,
       })),
     });
     return {

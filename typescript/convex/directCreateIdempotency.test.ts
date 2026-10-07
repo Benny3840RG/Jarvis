@@ -104,6 +104,56 @@ describe("durable direct create idempotency", () => {
     expect(await t.query(api.reminders.list, { serviceToken: SERVICE_TOKEN })).toHaveLength(0);
   });
 
+  it("returns direct-create fields from the assistant snapshot", async () => {
+    const t = harness();
+    const task = await t.mutation(api.tasks.create, {
+      serviceToken: SERVICE_TOKEN,
+      title: "Inspect compressor",
+      category: "workshop",
+      idempotencyKey: "http-task-create-1",
+      requestFingerprint: "task-fingerprint-1",
+    });
+    const reminder = await t.mutation(api.reminders.create, {
+      serviceToken: SERVICE_TOKEN,
+      title: "Check compressor pressure",
+      dueRaw: "tomorrow 7am",
+      dueAt: 1_785_000_000_000,
+      dueTimezone: "Australia/Melbourne",
+      idempotencyKey: "http-reminder-create-1",
+      requestFingerprint: "reminder-fingerprint-1",
+    });
+    await t.run(async (ctx) => {
+      await ctx.db.insert("tasks", {
+        ownerId: "jarvis-cli",
+        title: "Controlled",
+        completed: false,
+        category: "workshop",
+        projectId: "project-1",
+        updatedAt: 9,
+        revision: 3,
+        createdAt: 8,
+      });
+    });
+
+    const snapshot = await t.query(api.assistantState.snapshot, { serviceToken: SERVICE_TOKEN });
+    expect(snapshot.tasks.find((row) => row._id === task._id)).toMatchObject({
+      directCreateIdempotencyKey: "http-task-create-1",
+      directCreateFingerprint: "task-fingerprint-1",
+    });
+    expect(snapshot.tasks.find((row) => row.title === "Controlled")).toMatchObject({
+      projectId: "project-1",
+      updatedAt: 9,
+      revision: 3,
+    });
+    expect(snapshot.reminders.find((row) => row._id === reminder._id)).toMatchObject({
+      directCreateIdempotencyKey: "http-reminder-create-1",
+      directCreateFingerprint: "reminder-fingerprint-1",
+      dueRaw: "tomorrow 7am",
+      dueAt: 1_785_000_000_000,
+      dueTimezone: "Australia/Melbourne",
+    });
+  });
+
   it("requires idempotency key and fingerprint together", async () => {
     const t = harness();
 

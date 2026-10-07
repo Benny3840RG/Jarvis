@@ -55,10 +55,13 @@ existing stores. `completeness` stays `partial`. Neither function is wired to
 collections are present, PDF blob digests match, the JSON completion marker
 and manifest stay `partial`, `assertRecoverable` still throws, and two
 injected reads return the same non-empty ids. A restarted `src/http/main.ts`
-matches client, task, and build GETs from scratch JSON. The quote GET on
-that restarted process is NOT YET MET. LV1-10 or LV1-11 still has to run the
-same entrypoint against an isolated local Convex backend that is not the
-configured `CONVEX_URL`. `clear-local` checksums cover the core, memory, and
+matches client, task, and build GETs from scratch JSON. Quote GET across a
+real restarted process is PROVEN on host at main `2d34a741` with an isolated
+self-hosted convex-local-backend on `127.0.0.1` (evidence: host
+`~/lv1-01/restart-proof.md`, quote body sha256 `c7fd9977…dbb8`). That run
+needed workarounds. Full end-to-end recovery on realistic data stays NOT YET
+MET until this change merges and the host proof is repeated. `completeness`
+stays `partial`. `clear-local` checksums cover the core, memory, and
 business files that action quarantines. Full v4 recovery stays refused.
 Operator docs name `proveLocalV1Recovery` as that gate and state that classic
 restore still writes the live provider. Checkout-local business files stay

@@ -70,8 +70,24 @@ function operationProblem(error: unknown): JarvisProblem {
   );
 }
 
-function reminderResponse(reminder: Reminder): { data: Reminder } {
-  return { data: reminder };
+function publicReminder(
+  reminder: Reminder,
+): Pick<Reminder, "id" | "title" | "dueRaw" | "dueAt" | "dueTimezone" | "createdAt"> {
+  return {
+    id: reminder.id,
+    title: reminder.title,
+    ...(reminder.dueRaw === undefined ? {} : { dueRaw: reminder.dueRaw }),
+    ...(reminder.dueAt === undefined
+      ? {}
+      : { dueAt: reminder.dueAt, dueTimezone: reminder.dueTimezone }),
+    createdAt: reminder.createdAt,
+  };
+}
+
+function reminderResponse(reminder: Reminder): {
+  data: Pick<Reminder, "id" | "title" | "dueRaw" | "dueAt" | "dueTimezone" | "createdAt">;
+} {
+  return { data: publicReminder(reminder) };
 }
 
 function requestFingerprint(input: unknown): string {
@@ -88,7 +104,7 @@ export class ReminderController {
   @Get()
   async list() {
     try {
-      const data = await this.persistence.listReminders();
+      const data = (await this.persistence.listReminders()).map(publicReminder);
       return { data, count: data.length };
     } catch (error: unknown) {
       throw operationProblem(error);

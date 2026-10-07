@@ -4,6 +4,7 @@ import { v } from "convex/values";
 import { sha256HexBytes } from "../src/actions/sha256.js";
 import { S4_MAX_PAYLOAD_BYTES } from "../src/backup/v4/convexCapture.js";
 import {
+  LOCAL_V1_DIRECT_CREATE_TOMBSTONE_NOTE,
   LOCAL_V1_RECEIPT_TABLES,
   type LocalV1ReceiptTable,
 } from "../src/backup/v4/localV1Receipts.js";
@@ -45,6 +46,7 @@ type Prepared = {
   assets: Row[];
   preferences: Row[];
   tables: Record<S6Table | LocalV1ReceiptTable, Row[]>;
+  tombstones: Row[];
   clientIds: Set<string>;
   projectIds: Set<string>;
   flatQuoteIds: Set<string>;
@@ -228,16 +230,21 @@ export function prepareLocalV1Restore(payloadJson: string, now: number): Prepare
   const tables = {} as Prepared["tables"];
   for (const table of S6_TABLES) tables[table] = s6.get(table) ?? [];
   for (const table of LOCAL_V1_RECEIPT_TABLES) tables[table] = receipts.get(table) ?? [];
+  const tasks = rows(parsed.core.tasks, "tasks");
+  const reminders = rows(parsed.core.reminders, "reminders");
+  const tombstones = directCreateTombstones(parsed.receiptTombstones);
+  planDirectCreateReceipts(tasks, reminders, tables.directCreateReceipts, tombstones);
   return {
     state: parsed.core.state,
-    tasks: rows(parsed.core.tasks, "tasks"),
-    reminders: rows(parsed.core.reminders, "reminders"),
+    tasks,
+    reminders,
     builds: rows(parsed.memory.builds, "builds"),
     buildLogs: rows(parsed.memory.buildLogs, "build logs"),
     upgrades: rows(parsed.memory.upgrades, "upgrades"),
     assets: rows(parsed.memory.assets, "assets"),
     preferences: rows(parsed.memory.preferences, "preferences"),
     tables,
+    tombstones,
     clientIds,
     projectIds,
     flatQuoteIds,
@@ -245,11 +252,186 @@ export function prepareLocalV1Restore(payloadJson: string, now: number): Prepare
   };
 }
 
+function directCreateTombstones(value: unknown): Row[] {
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) {
+    throw new Error("Local V1 restore direct-create tombstones are invalid.");
+  }
+  const seen = new Set<string>();
+  return value.map((entry, index) => {
+    if (
+      !object(entry) ||
+      entry.table !== "directCreateReceipts" ||
+      (entry.entityType !== "task" && entry.entityType !== "reminder") ||
+      !text(entry.entityId) ||
+      !text(entry.idempotencyKey) ||
+      entry.note !== LOCAL_V1_DIRECT_CREATE_TOMBSTONE_NOTE
+    ) {
+      throw new Error(`Local V1 restore direct-create tombstones are invalid at ${index}.`);
+    }
+    const key = `${entry.entityType}\0${entry.entityId}\0${entry.idempotencyKey}`;
+    if (seen.has(key)) {
+      throw new Error("Local V1 restore direct-create tombstones are invalid.");
+    }
+    seen.add(key);
+    return entry;
+  });
+}
+
+type ReceiptPlan = { entityId: string; tombstoned: boolean };
+
+function planDirectCreateReceipts(
+  tasks: Row[],
+  reminders: Row[],
+  receipts: Row[],
+  tombstones: Row[],
+): ReceiptPlan[] {
+  const taskRows = sourceRows(tasks, "task");
+  const reminderRows = sourceRows(reminders, "reminder");
+  const captured = new Set<string>([...taskRows.keys(), ...reminderRows.keys()]);
+  const byKey = new Map<string, Row>();
+  for (const tombstone of tombstones) {
+    const entityId = String(tombstone.entityId);
+    if (captured.has(entityId)) {
+      throw new Error("Local V1 restore direct-create tombstone names a captured entity.");
+    }
+    byKey.set(
+      `${String(tombstone.entityType)}\0${entityId}\0${String(tombstone.idempotencyKey)}`,
+      tombstone,
+    );
+  }
+  const consumed = new Set<string>();
+  const plan = receipts.map((row) => {
+    const entityType = row.entityType;
+    const entityId = row.entityId;
+    if ((entityType !== "task" && entityType !== "reminder") || !text(entityId)) {
+      throw new Error("Local V1 restore direct-create receipt has no entity.");
+    }
+    const own = entityType === "task" ? taskRows : reminderRows;
+    const other = entityType === "task" ? reminderRows : taskRows;
+    const entity = own.get(entityId);
+    if (entity) {
+      assertReceiptMatchesEntity(entity, row);
+      return { entityId, tombstoned: false };
+    }
+    if (other.has(entityId)) {
+      throw new Error("Local V1 restore direct-create receipt has no entity.");
+    }
+    const key = `${entityType}\0${entityId}\0${String(row.idempotencyKey)}`;
+    if (!byKey.has(key) || consumed.has(key)) {
+      throw new Error("Local V1 restore direct-create receipt has no entity.");
+    }
+    consumed.add(key);
+    return { entityId, tombstoned: true };
+  });
+  if (consumed.size !== byKey.size) {
+    throw new Error("Local V1 restore direct-create tombstone does not match a receipt.");
+  }
+  return plan;
+}
+
+function sourceRows(rows: Row[], label: string): Map<string, Row> {
+  const found = new Map<string, Row>();
+  for (const row of rows) {
+    const id = sourceId(row, label);
+    if (found.has(id)) throw new Error(`Local V1 restore duplicate ${label} source id.`);
+    found.set(id, row);
+  }
+  return found;
+}
+
+function assertReceiptMatchesEntity(entity: Row, receipt: Row): void {
+  const key = entity.directCreateIdempotencyKey;
+  const fingerprint = entity.directCreateFingerprint;
+  if ((key === undefined) !== (fingerprint === undefined)) {
+    throw new Error(
+      "Local V1 restore direct-create identity must include both the key and the fingerprint.",
+    );
+  }
+  if (key === undefined) return;
+  if (
+    typeof key !== "string" ||
+    key.length === 0 ||
+    typeof fingerprint !== "string" ||
+    fingerprint.length === 0 ||
+    key !== receipt.idempotencyKey ||
+    fingerprint !== receipt.requestFingerprint
+  ) {
+    throw new Error("Local V1 restore direct-create receipt does not match its entity.");
+  }
+}
+
 function storedFields(row: Row): Row {
   const fields = { ...row };
   delete fields._id;
   delete fields._creationTime;
   return fields;
+}
+
+function optionalText(row: Row, key: string): string | undefined {
+  const value = row[key];
+  if (value === undefined) return undefined;
+  if (typeof value !== "string" || value.length === 0) {
+    throw new Error(`Local V1 restore ${key} is invalid.`);
+  }
+  return value;
+}
+
+function optionalNumber(row: Row, key: string): number | undefined {
+  const value = row[key];
+  if (value === undefined) return undefined;
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throw new Error(`Local V1 restore ${key} is invalid.`);
+  }
+  return value;
+}
+
+function optionalStrings(row: Row, key: string): string[] | undefined {
+  const value = row[key];
+  if (value === undefined) return undefined;
+  if (
+    !Array.isArray(value) ||
+    value.some((item) => typeof item !== "string" || item.length === 0)
+  ) {
+    throw new Error(`Local V1 restore ${key} is invalid.`);
+  }
+  return value as string[];
+}
+
+function copiedOptionals(
+  row: Row,
+  keys: { text?: string[]; number?: string[]; strings?: string[] },
+): Row {
+  const out: Row = {};
+  for (const key of keys.text ?? []) {
+    const value = optionalText(row, key);
+    if (value !== undefined) out[key] = value;
+  }
+  for (const key of keys.number ?? []) {
+    const value = optionalNumber(row, key);
+    if (value !== undefined) out[key] = value;
+  }
+  for (const key of keys.strings ?? []) {
+    const value = optionalStrings(row, key);
+    if (value !== undefined) out[key] = value;
+  }
+  return out;
+}
+
+function directCreateInsert(row: Row): Row {
+  const key = optionalText(row, "directCreateIdempotencyKey");
+  const fingerprint = optionalText(row, "directCreateFingerprint");
+  if ((key === undefined) !== (fingerprint === undefined)) {
+    throw new Error(
+      "Local V1 restore direct-create identity must include both the key and the fingerprint.",
+    );
+  }
+  return {
+    ...copiedOptionals(row, { text: ["projectId"], number: ["updatedAt", "revision"] }),
+    ...(key === undefined
+      ? {}
+      : { directCreateIdempotencyKey: key, directCreateFingerprint: fingerprint }),
+  };
 }
 
 function sourceId(row: Row, label: string): string {
@@ -320,6 +502,7 @@ export const insertIsolated = internalMutation({
         title: row.title,
         completed: row.completed,
         category: row.category,
+        ...directCreateInsert(row),
         createdAt: row.createdAt,
       });
       taskIds.set(source, targetId);
@@ -327,11 +510,14 @@ export const insertIsolated = internalMutation({
     }
     for (const row of prepared.reminders) {
       const source = sourceId(row, "reminder");
+      const legacyDue = optionalText(row, "due");
       const targetId = await insert(ctx, "reminders", {
         ownerId: "jarvis-cli",
         title: row.title,
+        ...(legacyDue === undefined ? {} : { due: legacyDue }),
         ...(row.dueRaw === undefined ? {} : { dueRaw: row.dueRaw }),
         ...(row.dueAt === undefined ? {} : { dueAt: row.dueAt, dueTimezone: row.dueTimezone }),
+        ...directCreateInsert(row),
         createdAt: row.createdAt,
       });
       reminderIds.set(source, targetId);
@@ -344,6 +530,7 @@ export const insertIsolated = internalMutation({
         name: row.name,
         kind: row.kind,
         status: row.status,
+        ...copiedOptionals(row, { text: ["description", "nickname", "notes"] }),
         createdAt: row.createdAt,
         updatedAt: row.updatedAt,
       });
@@ -365,6 +552,7 @@ export const insertIsolated = internalMutation({
         buildId,
         kind: row.kind,
         title: row.title,
+        ...copiedOptionals(row, { text: ["body"], number: ["occurredAt", "updatedAt"] }),
         createdAt: row.createdAt,
       });
     }
@@ -375,6 +563,11 @@ export const insertIsolated = internalMutation({
         ownerId: "jarvis-cli",
         buildId,
         title: row.title,
+        ...copiedOptionals(row, {
+          text: ["reason", "beforeState", "afterState", "outcome", "version"],
+          strings: ["parts"],
+          number: ["occurredAt", "updatedAt"],
+        }),
         createdAt: row.createdAt,
       });
     }
@@ -383,6 +576,10 @@ export const insertIsolated = internalMutation({
         ownerId: "jarvis-cli",
         name: row.name,
         kind: row.kind,
+        ...copiedOptionals(row, {
+          text: ["notes"],
+          number: ["serviceIntervalDays", "lastServicedAt"],
+        }),
         createdAt: row.createdAt,
         updatedAt: row.updatedAt,
       });
@@ -392,6 +589,7 @@ export const insertIsolated = internalMutation({
         ownerId: "jarvis-cli",
         key: row.key,
         value: row.value,
+        ...copiedOptionals(row, { text: ["category"] }),
         createdAt: row.createdAt,
         updatedAt: row.updatedAt,
       });
@@ -424,10 +622,17 @@ export const insertIsolated = internalMutation({
     ] as const) {
       for (const row of prepared.tables[table]) await insert(ctx, table, storedFields(row));
     }
-    for (const row of prepared.tables.directCreateReceipts) {
-      const targetId = (row.entityType === "task" ? taskIds : reminderIds).get(
-        String(row.entityId),
-      );
+    const receiptPlan = planDirectCreateReceipts(
+      prepared.tasks,
+      prepared.reminders,
+      prepared.tables.directCreateReceipts,
+      prepared.tombstones,
+    );
+    for (const [index, row] of prepared.tables.directCreateReceipts.entries()) {
+      const step = receiptPlan[index];
+      const targetId = step?.tombstoned
+        ? step.entityId
+        : (row.entityType === "task" ? taskIds : reminderIds).get(String(row.entityId));
       if (targetId === undefined)
         throw new Error("Local V1 restore direct-create receipt has no entity.");
       const fields = storedFields(row);

@@ -68,8 +68,22 @@ function operationProblem(error: unknown): JarvisProblem {
   );
 }
 
-function taskResponse(task: Task): { data: Task } {
-  return { data: task };
+function publicTask(
+  task: Task,
+): Pick<Task, "id" | "title" | "completed" | "category" | "createdAt"> {
+  return {
+    id: task.id,
+    title: task.title,
+    completed: task.completed,
+    category: task.category,
+    createdAt: task.createdAt,
+  };
+}
+
+function taskResponse(task: Task): {
+  data: Pick<Task, "id" | "title" | "completed" | "category" | "createdAt">;
+} {
+  return { data: publicTask(task) };
 }
 
 function requestFingerprint(input: unknown): string {
@@ -86,7 +100,7 @@ export class TaskController {
   @Get()
   async list() {
     try {
-      const data = await this.persistence.listTasks();
+      const data = (await this.persistence.listTasks()).map(publicTask);
       return { data, count: data.length };
     } catch (error: unknown) {
       throw operationProblem(error);
