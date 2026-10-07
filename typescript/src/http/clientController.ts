@@ -17,6 +17,7 @@ import {
   findClientDeletionReferences,
   type ClientReferenceKind,
 } from "../clients/clientDeletionGuard.js";
+import { withClientReferenceLock } from "../clients/clientReferenceLock.js";
 import type { EnquiryStore } from "../enquiries/enquiry.js";
 import type { InvoiceStore } from "../invoices/invoice.js";
 import type { PropertyStore } from "../properties/property.js";
@@ -150,36 +151,38 @@ export class ClientController {
 
   @Delete(":clientId")
   async remove(@Param("clientId") clientId: string) {
-    let existing: Client | null;
-    try {
-      existing = await this.clients.get(clientId);
-    } catch {
-      throw operationFailed();
-    }
-    if (!existing) throw notFound();
+    return withClientReferenceLock(async () => {
+      let existing: Client | null;
+      try {
+        existing = await this.clients.get(clientId);
+      } catch {
+        throw operationFailed();
+      }
+      if (!existing) throw notFound();
 
-    let kinds: ClientReferenceKind[];
-    try {
-      kinds = await findClientDeletionReferences(clientId, {
-        enquiries: this.enquiries,
-        invoices: this.invoices,
-        properties: this.properties,
-        projects: this.projects,
-        quotes: this.quotes,
-        quoteRepository: this.quoteRepository,
-      });
-    } catch {
-      throw operationFailed();
-    }
-    if (kinds.length > 0) throw stillReferenced(kinds);
+      let kinds: ClientReferenceKind[];
+      try {
+        kinds = await findClientDeletionReferences(clientId, {
+          enquiries: this.enquiries,
+          invoices: this.invoices,
+          properties: this.properties,
+          projects: this.projects,
+          quotes: this.quotes,
+          quoteRepository: this.quoteRepository,
+        });
+      } catch {
+        throw operationFailed();
+      }
+      if (kinds.length > 0) throw stillReferenced(kinds);
 
-    let client: Client | null;
-    try {
-      client = await this.clients.remove(clientId);
-    } catch {
-      throw operationFailed();
-    }
-    if (!client) throw notFound();
-    return clientResponse(client);
+      let client: Client | null;
+      try {
+        client = await this.clients.remove(clientId);
+      } catch {
+        throw operationFailed();
+      }
+      if (!client) throw notFound();
+      return clientResponse(client);
+    });
   }
 }
