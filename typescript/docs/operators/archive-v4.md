@@ -214,3 +214,24 @@ Because this stage always produces a partial archive, `restore-v4` needs
 `--allow-partial` to materialise one. That flag is an acknowledgement that the
 result is a **staged development restore, not a recovery**. Without it the
 full-recovery path refuses, naming the absent groups.
+
+## Local V1
+
+Business JSON stays in the checkout that started the process: `typescript/data/`
+holds `jarvis-clients.json`, properties, projects, the flat quote register,
+invoices, enquiries, errands, and business settings. Those files are not rows on
+the Convex deployment. Tasks, reminders, assistant state, builds, logs, upgrades,
+assets, preferences, and the quote lifecycle are Convex when
+`PERSISTENCE_PROVIDER=convex`.
+
+Archive v4 full recovery is still refused. A partial archive, including a Local
+V1 capture, stays `completeness: partial`. `--allow-partial` does not make it a
+recovery.
+
+The Local V1 gate is `proveLocalV1Recovery`. It calls `restoreLocalV1Archive`
+into a new JSON directory and an injected empty database, then requires a second
+isolated read to match. It does not write the live data directory and it does
+not construct a client from `CONVEX_URL`.
+
+Classic `npm run backup -- restore` writes the live provider selected by
+`PERSISTENCE_PROVIDER`. That command is not the Local V1 gate.

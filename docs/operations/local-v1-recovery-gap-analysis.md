@@ -322,7 +322,7 @@ Reread is through `JsonClientStore`, `JsonQuoteStore`, `JsonInvoiceStore`, `Conv
 
 ### PR 4 — HARDEN: the Local V1 proof gate
 
-Landed as `proveLocalV1Recovery` in `typescript/src/backup/v4/localV1Proof.ts`. It calls `restoreLocalV1Archive` and does not add a second apply path. `clear-local` refuses a classic verify receipt that omits business checksums. The explicit skip remains. `completeness` stays `partial`. Operator text is PR 5.
+Landed as `proveLocalV1Recovery` in `typescript/src/backup/v4/localV1Proof.ts`. It calls `restoreLocalV1Archive` and does not add a second apply path. `clear-local` refuses a classic verify receipt that omits business checksums. The explicit skip remains. `completeness` stays `partial`. Operator text names that gate in `archive-v4.md` and `persistence-settings.md`.
 
 The function returns success only when all of the following held on the isolated targets:
 
@@ -340,7 +340,7 @@ Point Danger zone `clear-local` at this gate, or stop accepting a classic verify
 
 ### PR 5 — HARDEN: operator text
 
-Update `typescript/docs/operators/archive-v4.md`, `persistence-settings.md`, and `typescript/docs/ROADMAP.md` so they say:
+Recorded in `typescript/docs/operators/archive-v4.md`, `persistence-settings.md`, and `typescript/docs/ROADMAP.md`. Those pages say:
 
 - which files are checkout-local;
 - that v4 full recovery is still refused;
@@ -382,4 +382,4 @@ Closed by the integration lead on 2026-10-07. See the decision list at the top o
 
 ## 8. What this file is not
 
-It is not a recovery drill and not a claim that any archive on disk is restorable. PR 1 locks the split. PR 2 writes a partial capture only. PR 3 restores that capture into scratch JSON and an injected empty database. PR 4 names the proof gate `proveLocalV1Recovery`, including a restarted isolated read. It does not flip `completeness` to `complete`. Operator text is still PR 5. `assertRecoverable` still refuses the archive.
+It is not a recovery drill and not a claim that any archive on disk is restorable. PR 1 locks the split. PR 2 writes a partial capture only. PR 3 restores that capture into scratch JSON and an injected empty database. PR 4 names the proof gate `proveLocalV1Recovery`, including a restarted isolated read. It does not flip `completeness` to `complete`. PR 5 records that gate in the operator docs. `assertRecoverable` still refuses the archive.

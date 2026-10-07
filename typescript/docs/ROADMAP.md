@@ -13,7 +13,9 @@ existing stores. `completeness` stays `partial`. Neither function is wired to
 every V1 store was captured, blob digests match, the JSON completion
 marker stays partial, and a second isolated read matches. `clear-local`
 no longer treats a classic verify receipt as cover for business JSON.
-Full v4 recovery stays refused. Operator text is still open.
+Full v4 recovery stays refused. Operator docs name `proveLocalV1Recovery`
+as that gate and state that classic restore still writes the live provider.
+Checkout-local business files stay under `typescript/data/`.
 
 ## LV1-04 authoritative voice query bridge (2026-10-07)
 
