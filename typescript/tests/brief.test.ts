@@ -6,6 +6,7 @@ import {
   BRIEF_UPCOMING_WINDOW_MS,
   composeDailyBrief,
   isoWeekRange,
+  nextBookedJob,
   operatorLocalDate,
 } from "../src/briefs/brief.js";
 import type { Asset } from "../src/assets/asset.js";
@@ -512,5 +513,57 @@ describe("composeDailyBrief", () => {
       errands: [errand("x1", "open", 1, "Bunnings Frankston")],
     });
     assert.match(brief.headline, /1 open enquiry, 1 invoice unpaid, 1 errand to run\.$/);
+  });
+});
+
+describe("nextBookedJob", () => {
+  const timezone = "Australia/Melbourne";
+  const now = Date.parse("2026-10-07T00:30:00.000Z");
+
+  function booked(
+    id: string,
+    scheduledFor: string | undefined,
+    status: Project["status"] = "active",
+    updatedAt = 1,
+  ): Project {
+    return {
+      id,
+      clientId: "c1",
+      title: id,
+      status,
+      ...(scheduledFor === undefined ? {} : { scheduledFor }),
+      createdAt: 1,
+      updatedAt,
+    };
+  }
+
+  it("picks the earliest not-done job on or after the operator-local today", () => {
+    const next = nextBookedJob(
+      [
+        booked("overdue", "2026-10-06"),
+        booked("done-today", "2026-10-07", "done"),
+        booked("later", "2026-10-12", "active", 5),
+        booked("today", "2026-10-07", "active", 2),
+      ],
+      now,
+      timezone,
+    );
+    assert.equal(next?.title, "today");
+  });
+
+  it("includes a booking after this week when nothing sooner remains", () => {
+    const next = nextBookedJob([booked("next-week", "2026-10-12")], now, timezone);
+    assert.equal(next?.scheduledFor, "2026-10-12");
+  });
+
+  it("returns undefined when the only bookings are done or overdue", () => {
+    assert.equal(
+      nextBookedJob(
+        [booked("overdue", "2026-10-01"), booked("done", "2026-10-08", "done")],
+        now,
+        timezone,
+      ),
+      undefined,
+    );
   });
 });

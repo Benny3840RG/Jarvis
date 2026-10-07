@@ -1,17 +1,26 @@
+import { createHash } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 
 import { writePrivateJsonFile } from "../../persistence/atomicJsonFile.js";
+import { businessDataFiles } from "../../persistence/jarvisDataPaths.js";
 import { VERIFY_MAX_AGE_MS, type VerifiedBackup } from "./catalog.js";
 import { DangerZoneRefusal, nodeErrorCode } from "./errors.js";
 
 const RECEIPT_KIND = "jarvis-backup-verify-receipt";
 const MAX_RECEIPT_BYTES = 4096;
+const CHECKSUM_VALUE = /^(?:absent|[0-9a-f]{64})$/;
+
+/** Business JSON basenames `clear-local` quarantines. A classic receipt must name each one. */
+export const BUSINESS_CLEAR_BASENAMES = Object.values(businessDataFiles).map((filePath) =>
+  path.basename(filePath),
+);
 
 export type BackupVerifyReceipt = {
   kind: typeof RECEIPT_KIND;
   archivePath: string;
   verifiedAt: string;
+  businessChecksums?: Readonly<Record<string, string>>;
 };
 
 function isInside(parent: string, child: string): boolean {
@@ -28,16 +37,68 @@ export function overlapsLiveDataDir(candidate: string, dataDir: string): boolean
   return isInside(live, archive) || isInside(archive, live);
 }
 
+export async function businessFileChecksums(dataDir: string): Promise<Record<string, string>> {
+  const checksums: Record<string, string> = {};
+  for (const basename of BUSINESS_CLEAR_BASENAMES) {
+    const filePath = path.join(dataDir, basename);
+    const entry = await fs.lstat(filePath).catch((error: unknown) => {
+      if (nodeErrorCode(error) === "ENOENT") return null;
+      throw error;
+    });
+    if (entry === null) {
+      checksums[basename] = "absent";
+      continue;
+    }
+    if (entry.isSymbolicLink() || !entry.isFile()) {
+      throw new DangerZoneRefusal(
+        "backup",
+        `Refusing to checksum ${filePath}: business files must be regular files.`,
+      );
+    }
+    checksums[basename] = createHash("sha256")
+      .update(await fs.readFile(filePath))
+      .digest("hex");
+  }
+  return checksums;
+}
+
+function checksumMap(value: unknown): Record<string, string> | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined;
+  const record = value as Record<string, unknown>;
+  const expected = [...BUSINESS_CLEAR_BASENAMES].sort();
+  const keys = Object.keys(record).sort();
+  if (keys.length !== expected.length || keys.some((key, index) => key !== expected[index])) {
+    return undefined;
+  }
+  const checksums: Record<string, string> = {};
+  for (const key of expected) {
+    const digest = record[key];
+    if (typeof digest !== "string" || !CHECKSUM_VALUE.test(digest)) return undefined;
+    checksums[key] = digest;
+  }
+  return checksums;
+}
+
 export async function writeBackupVerifyReceipt(
   archivePath: string,
   verifiedAt: Date,
+  businessChecksums?: Readonly<Record<string, string>>,
 ): Promise<string> {
   const absolute = path.resolve(archivePath);
   const receiptPath = `${absolute}.jarvis-verify.json`;
+  const checksums = businessChecksums === undefined ? undefined : checksumMap(businessChecksums);
+  if (businessChecksums !== undefined && checksums === undefined) {
+    throw new DangerZoneRefusal(
+      "backup",
+      "A clear-local receipt must list sha256 or absent for every business JSON file.",
+    );
+  }
   const receipt: BackupVerifyReceipt = {
     kind: RECEIPT_KIND,
     archivePath: absolute,
     verifiedAt: verifiedAt.toISOString(),
+    ...(checksums === undefined ? {} : { businessChecksums: checksums }),
   };
   await writePrivateJsonFile(receiptPath, receipt);
   return receiptPath;
@@ -60,10 +121,14 @@ function parseReceipt(raw: string, receiptPath: string): BackupVerifyReceipt | n
   }
   const expectedArchive = receiptPath.slice(0, -".jarvis-verify.json".length);
   if (path.resolve(record.archivePath) !== path.resolve(expectedArchive)) return null;
+  const businessChecksums =
+    "businessChecksums" in record ? checksumMap(record.businessChecksums) : undefined;
+  if ("businessChecksums" in record && businessChecksums === undefined) return null;
   return {
     kind: RECEIPT_KIND,
     archivePath: path.resolve(record.archivePath),
     verifiedAt: new Date(record.verifiedAt).toISOString(),
+    ...(businessChecksums === undefined ? {} : { businessChecksums }),
   };
 }
 
@@ -148,4 +213,30 @@ export async function assertVerifiedBackup(options: {
     );
   }
   return recent;
+}
+
+/**
+ * `clear-local` quarantines business JSON. A classic verify receipt does not
+ * list those files, so it cannot authorise that rename.
+ */
+export async function assertBusinessChecksumsForClear(options: {
+  archivePath: string;
+  dataDir: string;
+}): Promise<void> {
+  const receipt = await readReceipt(`${path.resolve(options.archivePath)}.jarvis-verify.json`);
+  if (receipt?.businessChecksums === undefined) {
+    throw new DangerZoneRefusal(
+      "backup",
+      "A classic verify receipt does not list business file checksums, so it cannot authorise quarantining them.",
+    );
+  }
+  const current = await businessFileChecksums(options.dataDir);
+  for (const basename of BUSINESS_CLEAR_BASENAMES) {
+    if (receipt.businessChecksums[basename] !== current[basename]) {
+      throw new DangerZoneRefusal(
+        "backup",
+        `Verified backup checksum for ${basename} does not match the live business file. Nothing was quarantined.`,
+      );
+    }
+  }
 }

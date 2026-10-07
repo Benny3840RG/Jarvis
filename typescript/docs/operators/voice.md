@@ -12,7 +12,7 @@ This runbook commissions the browser/HUD voice path from speech or typed input t
 ## Browser and typed checks
 
 1. Open **Voice**. Record browser/OS and whether the HUD reports **MIC AVAILABLE** or **TYPED ONLY**.
-2. With no microphone enabled, type a read-only command such as `any unpaid invoices`. No read-only query provider is connected in this version, so confirm the HUD explicitly reports the query as unavailable. Recognizing the command must never be presented as an answered business or equipment query.
+2. With no microphone enabled and the **Client** profile selected, type a read-only command such as `any unpaid invoices`. A healthy empty invoice register is reported as none, not as a guessed count. If the invoice register cannot be read, the HUD names invoice records as unavailable. Recognizing the command must never be presented as an answered business query when its source is unavailable. Live workshop, crawler and trailer hardware status stays unavailable until a hardware adapter is commissioned. Recorded crawler or trailer status, when the build register can be read, names only builds whose kind records that equipment.
 3. Type an unknown phrase. Confirm it is rejected/unrecognised and nothing becomes pending.
 4. Select **Crawler** and submit `crawler halt`. Confirm the HUD enters **awaiting confirmation**. Submit `cancel`; confirm the pending command clears without actuation.
 5. Repeat `crawler halt`, then submit `confirm`. On the uncommissioned main hardware provider the result must be **actuation unavailable / failed closed**. Any successful actuation acknowledgement at this stage is a stop condition.

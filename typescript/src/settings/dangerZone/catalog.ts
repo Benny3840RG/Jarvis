@@ -257,7 +257,7 @@ export function buildDangerZoneModel(input: {
         confirm: DANGER_ZONE_CONFIRM["clear-local"],
         cli: "Quarantine the local data JSON set (core, memory, business) with .corrupt-* renames. Never a Convex owner wipe.",
         prerequisites: [
-          "Strongly recommended: Persistence → verify a backup first.",
+          "A classic verify receipt is not enough. The receipt must list a checksum for every business JSON file, or skip and accept irreversible loss.",
           SAFER_PRELUDE,
         ],
         willQuarantine: clearPaths,

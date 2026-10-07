@@ -193,6 +193,35 @@ export function isoWeekRange(isoDate: string): { start: string; end: string } {
 }
 
 /**
+ * The soonest not-done job booked on or after the operator-local today.
+ * Uses the same live-booking predicate as {@link composeDailyBrief}
+ * (`status !== "done"` and a `scheduledFor` calendar day). Jobs booked only
+ * after this week are included, because "next" is the earliest future booking,
+ * not the week digest window.
+ */
+export function nextBookedJob(
+  projects: readonly Project[],
+  now: number,
+  timezone: string,
+): (Project & { scheduledFor: string }) | undefined {
+  const localToday = operatorLocalDate(now, timezone);
+  const upcoming = projects.filter(
+    (project): project is Project & { scheduledFor: string } =>
+      project.status !== "done" &&
+      typeof project.scheduledFor === "string" &&
+      project.scheduledFor >= localToday,
+  );
+  upcoming.sort((a, b) =>
+    a.scheduledFor < b.scheduledFor
+      ? -1
+      : a.scheduledFor > b.scheduledFor
+        ? 1
+        : b.updatedAt - a.updatedAt,
+  );
+  return upcoming[0];
+}
+
+/**
  * Composes the daily brief from the authoritative store contents. Pure and
  * deterministic for a given `now`: every number and highlight is derived from
  * the supplied data, never invented.
