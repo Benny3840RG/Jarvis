@@ -24,6 +24,41 @@ export type OutlookRuntimeReconciliationDependencies = {
   githubDevelopmentClient?: GitHubDevelopmentClient | null;
 };
 
+export function createOutlookReconciliationWorker(
+  outlookRuntime: MicrosoftOutlookRuntime | null,
+  config: EnabledRuntimeReconciliationConfig,
+  dependencies: OutlookRuntimeReconciliationDependencies = {},
+): ReconciliationWorker {
+  const githubDevelopmentClient =
+    dependencies.githubDevelopmentClient === undefined
+      ? createGitHubDevelopmentClientFromEnv()
+      : dependencies.githubDevelopmentClient;
+  if (outlookRuntime === null && githubDevelopmentClient === null) {
+    throw new Error(
+      "Outlook reconciliation worker requires the Outlook runtime or the GitHub development client.",
+    );
+  }
+  const store =
+    dependencies.createStore?.(config) ??
+    new ConvexExternalReconciliationStore(
+      new ConvexHttpClient(config.convexUrl),
+      config.serviceToken,
+      config.convexDeployment,
+    );
+  return new ReconciliationWorker({
+    store,
+    adapters: [
+      ...(outlookRuntime === null ? [] : [outlookRuntime.reconciliationAdapter]),
+      ...(githubDevelopmentClient === null
+        ? []
+        : [new GitHubMergeReconciliationAdapter(githubDevelopmentClient)]),
+    ],
+    maxAttempts: config.maxAttempts,
+    baseRetryMs: config.baseRetryMs,
+    maxRetryMs: config.maxRetryMs,
+  });
+}
+
 export function createOutlookRuntimeReconciliationFactories(
   outlookRuntime: MicrosoftOutlookRuntime | null,
   dependencies: OutlookRuntimeReconciliationDependencies = {},
@@ -36,24 +71,9 @@ export function createOutlookRuntimeReconciliationFactories(
 
   return {
     createEnabledRuntime(config, observeCycle) {
-      const store =
-        dependencies.createStore?.(config) ??
-        new ConvexExternalReconciliationStore(
-          new ConvexHttpClient(config.convexUrl),
-          config.serviceToken,
-          config.convexDeployment,
-        );
-      const worker = new ReconciliationWorker({
-        store,
-        adapters: [
-          ...(outlookRuntime === null ? [] : [outlookRuntime.reconciliationAdapter]),
-          ...(githubDevelopmentClient === null
-            ? []
-            : [new GitHubMergeReconciliationAdapter(githubDevelopmentClient)]),
-        ],
-        maxAttempts: config.maxAttempts,
-        baseRetryMs: config.baseRetryMs,
-        maxRetryMs: config.maxRetryMs,
+      const worker = createOutlookReconciliationWorker(outlookRuntime, config, {
+        ...dependencies,
+        githubDevelopmentClient,
       });
       return new ReconciliationScheduler(worker, {
         workerId: config.workerId,

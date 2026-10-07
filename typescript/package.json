@@ -39,6 +39,7 @@
     "commission:posthog": "node --import tsx src/tools/runPostHogCommissioning.ts",
     "commission:isolated-ingress": "node --import tsx src/tools/runIsolatedIngressCommissioning.ts",
     "commission:sentry": "node --import tsx src/tools/runSentryCommissioning.ts",
+    "commission:outlook-quote": "node --import tsx src/tools/runOutlookQuoteCommissioning.ts",
     "backup": "tsx src/tools/runBackup.ts",
     "restore-drill": "tsx src/tools/runRestoreDrill.ts",
     "import:convex": "tsx src/tools/runConvexImport.ts",
