@@ -331,7 +331,7 @@ The function returns success only when all of the following held on the isolated
 3. Isolated restore finished (JSON completion marker, Convex empty-db apply, no live path).
 4. Store reread matched, including `ConvexQuoteRepository` and the business JSON stores.
 5. Reference and artifact checks in the design above passed.
-6. A second process, or a second `createJarvisHttpApp` bound to the scratch JSON paths and the `convex-test` client, served `GET` for a client, a task, a build, and a quote, then the process was restarted and those `GET`s matched.
+6. Two isolated reads through the injected reader matched. A node test opens two HTTP apps on scratch stores and checks GET for a client, a task, a build, and a quote.
 7. Checksums or row counts of the live data directory and a refused write against the live Convex URL were unchanged. A failed apply left no completion marker and no readable "live" scratch.
 
 This gate must fail closed if any row was skipped for size, if any PDF byte is missing, or if the Convex target URL equals the configured live URL. It must not flip `completeness` to `complete`.
@@ -382,4 +382,4 @@ Closed by the integration lead on 2026-10-07. See the decision list at the top o
 
 ## 8. What this file is not
 
-It is not a recovery drill and not a claim that any archive on disk is restorable. PR 1 locks the split. PR 2 writes a partial capture only. PR 3 restores that capture into scratch JSON and an injected empty database. PR 4 names the proof gate `proveLocalV1Recovery`, including a restarted isolated read. It does not flip `completeness` to `complete`. PR 5 records that gate in the operator docs. `assertRecoverable` still refuses the archive.
+It is not a recovery drill and not a claim that any archive on disk is restorable. PR 1 locks the split. PR 2 writes a partial capture only. PR 3 restores that capture into scratch JSON and an injected empty database. PR 4 names the proof gate `proveLocalV1Recovery`. The function checks two isolated reads through the injected reader, and a node test opens two HTTP apps on scratch stores. It does not flip `completeness` to `complete`. PR 5 records that gate in the operator docs. `assertRecoverable` still refuses the archive.
