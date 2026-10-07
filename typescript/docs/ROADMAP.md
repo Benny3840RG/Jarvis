@@ -1,5 +1,19 @@
 # Jarvis TypeScript Roadmap
 
+## LV1-05 safe voice writes (2026-10-07)
+
+Safe voice writes stage on the existing `ToolActionService` only. `tasks/create` and `reminders/create` are the executors voice may target (the same definitions the tool-execution allowlist already runs). Voice never calls `approve` or `execute`. A receipt is produced by the existing `ToolExecutionService` after the existing approval gate. Retry uses a stable action id and the existing execution idempotency key.
+
+Consequential proposals (`quotes:send`, `quotes:draft`) stay intent-only, including after spoken confirm. Errand phrases name MCP `create_errand` and write nothing: there is no ToolAction executor, and voice does not call the errand store. A missing wake word, unknown intent, incomplete capture, or uncommissioned tool-action target stages nothing. Punctuation or whitespace immediately after `Jarvis` is the same wake word; a longer word such as `Jarvisx` is not. A reminder title comes only from capture; a missing or blank title is incomplete and stages nothing. The staged action id includes `expectedRevision`, so the same revision retries one proposal and a different revision is a different proposal. `projectId` and `expectedRevision` are required together: a body with only one is an invalid voice request and stages nothing. Both absent still means the target is uncommissioned.
+
+Catalog summaries for `client.quote-follow-up` and `client.reminders` now match LV1-04: quote follow-up names the missing lifecycle delivery ledger, and reminders include dates beyond the 24-hour brief window.
+
+Next:
+
+- Do not add an errand or note executor inside voice. A note still needs a complete `notes/create` payload before it can stage.
+- Owner-wide quote-delivery follow-up remains unsupported.
+- Host commissioning (#567) still needs J-arvis online.
+
 ## Local V1 home, workshop, and Google Home kit (2026-10-07)
 
 Off-host LV1-07/08 evidence for #697, base `e438f84ca2560a8585139ee09843a822a5f35c15`. No host commissioning is claimed.

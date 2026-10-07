@@ -7792,7 +7792,7 @@
           },
           "proposes": {
             "type": "object",
-            "description": "For propose commands: the governed tool/operation that would be staged (never executed by voice).",
+            "description": "For propose commands: the governed tool/operation. A safe write is staged only when this names an existing ToolAction executor (tasks/create or reminders/create). Consequential proposals are never staged, approved, or executed by voice.",
             "required": ["tool", "operation"],
             "additionalProperties": false,
             "properties": {
@@ -7860,6 +7860,10 @@
         "type": "object",
         "description": "Submit a recognised utterance to the session for a dispatch decision. A newly recognised command invalidates any older pending confirmation; a new critical command then arms its own single-use confirmation.",
         "required": ["transcript", "isFinal"],
+        "dependentRequired": {
+          "projectId": ["expectedRevision"],
+          "expectedRevision": ["projectId"]
+        },
         "additionalProperties": false,
         "properties": {
           "transcript": {
@@ -7875,6 +7879,41 @@
             "description": "Lower-confidence alternative hypotheses, if any.",
             "items": {
               "type": "string"
+            }
+          },
+          "heardTranscript": {
+            "type": "string",
+            "description": "Original recogniser transcript before the HUD strips the wake word. A safe write is staged only when this, or transcript itself, begins with the wake word and names the same command. A missing wake word stages nothing."
+          },
+          "projectId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256,
+            "pattern": "^[^\\s]+$",
+            "description": "Project a safe write would be staged against on the existing ToolAction path. Required together with expectedRevision. When both are absent the target is uncommissioned and nothing is staged."
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Project revision the staged ToolAction must match. Required together with projectId. Voice does not approve against this revision."
+          },
+          "capture": {
+            "type": "object",
+            "description": "Bounded fields for a safe write. Whole-utterance matching stays exact; these fields are not parsed out of the transcript.",
+            "additionalProperties": false,
+            "properties": {
+              "title": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200,
+                "description": "Title stored by tasks/create or reminders/create."
+              },
+              "category": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "description": "Category required by tasks/create."
+              }
             }
           }
         }
@@ -7955,7 +7994,12 @@
           },
           "reason": {
             "type": "string",
-            "description": "Why a query or actuation was unavailable, or an actuation failed. For a query this names the unavailable source and is never a guessed count."
+            "description": "Why a query or actuation was unavailable, an actuation failed, or a recognised safe write was not staged. For a query this names the unavailable source and is never a guessed count. A safe-write reason means nothing was staged."
+          },
+          "toolActionId": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Identifier of a ToolAction staged for a safe write on the existing ToolAction service. Present only after stage(). Voice never approves or executes that action."
           },
           "answer": {
             "type": "string",

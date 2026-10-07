@@ -74,6 +74,25 @@ describe("voice HUD console logic (extracted from dashboard-v1.html)", () => {
 
     it("does not treat a word merely containing the wake word as awake", () => {
       assert.equal(logic.voiceWakeGate("jarvisland tour", true).status, "idle");
+      assert.equal(logic.voiceWakeGate("Jarvisx add a task", true).status, "idle");
+    });
+
+    it("treats punctuation or whitespace right after the wake word as a separator", () => {
+      for (const raw of [
+        "Jarvis, add a task",
+        "Jarvis! add a task",
+        "Jarvis. add a task",
+        "Jarvis? add a task",
+        "Jarvis; add a task",
+        "Jarvis: add a task",
+      ]) {
+        const gate = logic.voiceWakeGate(raw, true);
+        assert.equal(gate.status, "command", raw);
+        assert.equal(gate.transcript, "add a task", raw);
+      }
+      for (const raw of ["Jarvis", "Jarvis,", "Jarvis.", "Jarvis?", "Jarvis!"]) {
+        assert.equal(logic.voiceWakeGate(raw, true).status, "awake", raw);
+      }
     });
 
     it("never prepares a bare confirm or cancel for microphone dispatch", () => {
@@ -91,6 +110,7 @@ describe("voice HUD console logic (extracted from dashboard-v1.html)", () => {
           transcript: "confirm",
           isFinal: true,
           alternatives: ["confirm command", "cancel"],
+          heardTranscript: "jarvis confirm",
         },
       );
     });
@@ -152,6 +172,15 @@ describe("voice HUD console logic (extracted from dashboard-v1.html)", () => {
     it("describes a governed propose as proposed, not approved", () => {
       const info = logic.describeVoiceDispatch({ decision: "proposed" });
       assert.match(info.label, /propos/i);
+      assert.doesNotMatch(info.label, /approved|executed/i);
+    });
+
+    it("speaks a safe-write reason instead of claiming a proposal was staged", () => {
+      const info = logic.describeVoiceDispatch({
+        decision: "proposed",
+        reason: "Safe write was not staged: the wake word was not heard.",
+      });
+      assert.match(info.label, /wake word/i);
       assert.doesNotMatch(info.label, /approved|executed/i);
     });
 
