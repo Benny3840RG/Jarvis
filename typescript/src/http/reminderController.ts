@@ -17,6 +17,7 @@ import {
 import type { FastifyReply, FastifyRequest } from "fastify";
 
 import type { PersistenceProvider, Reminder } from "../persistence/persistence.js";
+import { publicReminder } from "../persistence/publicRecords.js";
 import type { ReminderDue } from "../reminders/due.js";
 import type { ReminderUpdate } from "../persistence/updates.js";
 import { JarvisProblem } from "./problemDetails.js";
@@ -24,7 +25,7 @@ import { parseCreateReminder, parseUpdateReminder } from "./reminderRequest.js";
 import { parseIdempotencyKey } from "./taskRequest.js";
 import { HTTP_PERSISTENCE } from "./tokens.js";
 
-type CachedCreate = { fingerprint: string; reminder: Reminder };
+type CachedCreate = { fingerprint: string; reminder: Reminder; deleted: boolean };
 type PendingCreate = { fingerprint: string; reminder: Promise<Reminder> };
 const IDEMPOTENCY_CACHE_LIMIT = 1_000;
 
@@ -54,6 +55,14 @@ function operationProblem(error: unknown): JarvisProblem {
       "Idempotency-Key was already used for a different reminder request.",
     );
   }
+  if (/no longer available/i.test(message)) {
+    return problem(
+      "reminder-no-longer-available",
+      "Reminder No Longer Available",
+      HttpStatus.CONFLICT,
+      "Reminder from this create request is no longer available.",
+    );
+  }
   if (/does not exist|not found/i.test(message)) {
     return problem(
       "reminder-not-found",
@@ -70,12 +79,23 @@ function operationProblem(error: unknown): JarvisProblem {
   );
 }
 
-function reminderResponse(reminder: Reminder): { data: Reminder } {
-  return { data: reminder };
+function reminderResponse(reminder: Reminder): {
+  data: Pick<Reminder, "id" | "title" | "dueRaw" | "dueAt" | "dueTimezone" | "createdAt">;
+} {
+  return { data: publicReminder(reminder) };
 }
 
 function requestFingerprint(input: unknown): string {
   return createHash("sha256").update(JSON.stringify(input), "utf8").digest("hex");
+}
+
+function unavailableReminder(): JarvisProblem {
+  return problem(
+    "reminder-no-longer-available",
+    "Reminder No Longer Available",
+    HttpStatus.CONFLICT,
+    "Reminder from this create request is no longer available.",
+  );
 }
 
 @Controller("api/v1/reminders")
@@ -85,10 +105,21 @@ export class ReminderController {
 
   constructor(@Inject(HTTP_PERSISTENCE) private readonly persistence: PersistenceProvider) {}
 
+  private tombstoneCachedReminder(reminderId: string): void {
+    for (const cached of this.cachedCreates.values()) {
+      if (cached.reminder.id === reminderId) cached.deleted = true;
+    }
+  }
+
+  private async reminderStillExists(reminderId: string): Promise<boolean> {
+    const reminders = await this.persistence.listReminders();
+    return reminders.some((reminder) => reminder.id === reminderId);
+  }
+
   @Get()
   async list() {
     try {
-      const data = await this.persistence.listReminders();
+      const data = (await this.persistence.listReminders()).map(publicReminder);
       return { data, count: data.length };
     } catch (error: unknown) {
       throw operationProblem(error);
@@ -125,6 +156,17 @@ export class ReminderController {
           "Idempotency-Key was already used for a different reminder request.",
         );
       }
+      if (cached.deleted) throw unavailableReminder();
+      let stillThere: boolean;
+      try {
+        stillThere = await this.reminderStillExists(cached.reminder.id);
+      } catch (error: unknown) {
+        throw operationProblem(error);
+      }
+      if (!stillThere) {
+        cached.deleted = true;
+        throw unavailableReminder();
+      }
       reply.header("Location", `/api/v1/reminders/${cached.reminder.id}`);
       return reminderResponse(cached.reminder);
     }
@@ -139,6 +181,16 @@ export class ReminderController {
         );
       }
       const reminder = await pending.reminder;
+      let stillThere: boolean;
+      try {
+        stillThere = await this.reminderStillExists(reminder.id);
+      } catch (error: unknown) {
+        throw operationProblem(error);
+      }
+      if (!stillThere) {
+        this.tombstoneCachedReminder(reminder.id);
+        throw unavailableReminder();
+      }
       reply.header("Location", `/api/v1/reminders/${reminder.id}`);
       return reminderResponse(reminder);
     }
@@ -149,7 +201,7 @@ export class ReminderController {
     this.pendingCreates.set(key, { fingerprint, reminder: create });
     try {
       const reminder = await create;
-      this.cachedCreates.set(key, { fingerprint, reminder });
+      this.cachedCreates.set(key, { fingerprint, reminder, deleted: false });
       while (this.cachedCreates.size > IDEMPOTENCY_CACHE_LIMIT) {
         const oldestKey = this.cachedCreates.keys().next().value;
         if (oldestKey === undefined) break;
@@ -199,6 +251,7 @@ export class ReminderController {
     try {
       const reminder = await this.persistence.removeReminder(reminderId);
       if (!reminder) throw new Error("Reminder does not exist.");
+      this.tombstoneCachedReminder(reminder.id);
       return reminderResponse(reminder);
     } catch (error: unknown) {
       throw operationProblem(error);

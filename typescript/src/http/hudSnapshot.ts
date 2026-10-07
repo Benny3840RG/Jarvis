@@ -8,6 +8,7 @@ import {
 } from "../operations/activityTimeline.js";
 import { buildOperationsInbox } from "../operations/operationsInbox.js";
 import type { PersistenceProvider } from "../persistence/persistence.js";
+import { publicReminder, publicTask } from "../persistence/publicRecords.js";
 import type { AssetStore } from "../assets/asset.js";
 import type { EnquiryStore } from "../enquiries/enquiry.js";
 import type { ErrandStore } from "../errands/errand.js";
@@ -56,8 +57,8 @@ export async function readHudSnapshot(input: HudSnapshotSources): Promise<Dashbo
     : null;
   const [tasks, reminders, projects, flatQuotes, assets, enquiries, invoices, errands, register] =
     await Promise.all([
-      input.persistence.listTasks(),
-      input.persistence.listReminders(),
+      input.persistence.listTasks().then((rows) => rows.map(publicTask)),
+      input.persistence.listReminders().then((rows) => rows.map(publicReminder)),
       input.projects.list(),
       registerPromise ? Promise.resolve([]) : input.quotes.list(),
       input.assets.list(),

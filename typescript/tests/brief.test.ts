@@ -178,6 +178,37 @@ describe("composeDailyBrief", () => {
     assert.equal(brief.reminders.undatedCount, 1);
   });
 
+  it("omits direct-create identity from brief highlights", () => {
+    const identity = {
+      projectId: "project-secret",
+      directCreateIdempotencyKey: "idem-secret",
+      directCreateFingerprint: "fp-secret",
+      updatedAt: 9,
+      revision: 4,
+    };
+    const brief = composeDailyBrief({
+      ...baseInputs(),
+      tasks: [{ ...task("open-1", 1), ...identity }],
+      reminders: [
+        { ...reminder("overdue", NOW - 1000), ...identity },
+        { ...reminder("later-today", NOW + 60 * 60 * 1000), ...identity },
+      ],
+    });
+    const highlighted = [...brief.tasks.open, ...brief.reminders.due, ...brief.reminders.upcoming];
+    assert.equal(highlighted.length, 3);
+    for (const row of highlighted) {
+      assert.equal("projectId" in row, false);
+      assert.equal("directCreateIdempotencyKey" in row, false);
+      assert.equal("directCreateFingerprint" in row, false);
+      assert.equal("updatedAt" in row, false);
+      assert.equal("revision" in row, false);
+    }
+    const encoded = JSON.stringify(brief);
+    assert.equal(encoded.includes("fp-secret"), false);
+    assert.equal(encoded.includes("idem-secret"), false);
+    assert.equal(encoded.includes("project-secret"), false);
+  });
+
   it("summarises projects by status with active ones most recently touched first", () => {
     const projects = [
       project("p1", "active", 10),

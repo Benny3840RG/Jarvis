@@ -117,11 +117,24 @@ async function seed(expiresAt = 1) {
       title: "live-task",
       completed: false,
       category: "home",
+      projectId: "project-1",
+      directCreateIdempotencyKey: "direct-key",
+      directCreateFingerprint: "fp",
+      updatedAt: 101,
+      revision: 2,
       createdAt: 1,
     });
-    await ctx.db.insert("reminders", {
+    const reminderId = await ctx.db.insert("reminders", {
       ownerId: "jarvis-cli",
       title: "live-reminder",
+      dueRaw: "tomorrow 7am",
+      dueAt: 50,
+      dueTimezone: "Australia/Melbourne",
+      projectId: "project-1",
+      directCreateIdempotencyKey: "reminder-key",
+      directCreateFingerprint: "rfp",
+      updatedAt: 102,
+      revision: 3,
       createdAt: 2,
     });
     await ctx.db.insert("assistantState", {
@@ -135,6 +148,9 @@ async function seed(expiresAt = 1) {
       name: "live-build",
       kind: "boat",
       status: "active",
+      description: "hull notes",
+      nickname: "Ada",
+      notes: "keep the keel",
       createdAt: 4,
       updatedAt: 5,
     });
@@ -143,18 +159,32 @@ async function seed(expiresAt = 1) {
       buildId,
       kind: "note",
       title: "live-log",
+      body: "log body",
+      occurredAt: 60,
       createdAt: 6,
+      updatedAt: 61,
     });
     await ctx.db.insert("upgrades", {
       ownerId: "jarvis-cli",
       buildId,
       title: "live-upgrade",
+      reason: "because",
+      beforeState: "before",
+      afterState: "after",
+      outcome: "good",
+      parts: ["bolt"],
+      version: "v2",
+      occurredAt: 70,
       createdAt: 7,
+      updatedAt: 71,
     });
     await ctx.db.insert("assets", {
       ownerId: "jarvis-cli",
       name: "live-asset",
       kind: "tool",
+      serviceIntervalDays: 30,
+      lastServicedAt: 80,
+      notes: "asset notes",
       createdAt: 8,
       updatedAt: 9,
     });
@@ -162,6 +192,7 @@ async function seed(expiresAt = 1) {
       ownerId: "jarvis-cli",
       key: "live-pref",
       value: "yes",
+      category: "naming",
       createdAt: 10,
       updatedAt: 11,
     });
@@ -312,6 +343,14 @@ async function seed(expiresAt = 1) {
       idempotencyKey: "direct-key",
       requestFingerprint: "fp",
       createdAt: 24,
+    });
+    await ctx.db.insert("directCreateReceipts", {
+      ownerId: "jarvis-cli",
+      entityType: "reminder",
+      entityId: reminderId,
+      idempotencyKey: "reminder-key",
+      requestFingerprint: "rfp",
+      createdAt: 26,
     });
     await ctx.db.insert("internalActionResults", {
       ownerId: "jarvis-cli",
@@ -529,15 +568,45 @@ it("restores a partial capture into scratch JSON and an empty convex-test, then 
     const client = clientFor(target);
     const snapshot = await new ConvexPersistence(client, serviceToken).snapshot();
     expect(snapshot.tasks.map((row) => row.title)).toEqual(["live-task"]);
-    expect(snapshot.tasks[0]?.id).toBe(restored.maps.tasks[0]?.targetId);
+    expect(snapshot.tasks[0]).toMatchObject({
+      id: restored.maps.tasks[0]?.targetId,
+      completed: false,
+      category: "home",
+      projectId: "project-1",
+      directCreateIdempotencyKey: "direct-key",
+      directCreateFingerprint: "fp",
+      updatedAt: 101,
+      revision: 2,
+      createdAt: 1,
+    });
     expect(snapshot.reminders.map((row) => row.title)).toEqual(["live-reminder"]);
+    expect(snapshot.reminders[0]).toMatchObject({
+      dueRaw: "tomorrow 7am",
+      dueAt: 50,
+      dueTimezone: "Australia/Melbourne",
+      projectId: "project-1",
+      directCreateIdempotencyKey: "reminder-key",
+      directCreateFingerprint: "rfp",
+      updatedAt: 102,
+      revision: 3,
+      createdAt: 2,
+    });
     expect(restored.maps.reminders).toHaveLength(1);
     expect(snapshot.reminders[0]?.id).toBe(restored.maps.reminders[0]?.targetId);
     expect(restored.maps.reminders[0]?.sourceId).not.toBe(restored.maps.reminders[0]?.targetId);
     expect(snapshot.state).toEqual({ note: "live-state" });
-    expect(
-      (await new ConvexBuildStore(client, serviceToken).list()).map((row) => row.name),
-    ).toEqual(["live-build"]);
+    expect(await new ConvexBuildStore(client, serviceToken).list()).toMatchObject([
+      {
+        name: "live-build",
+        kind: "boat",
+        status: "active",
+        description: "hull notes",
+        nickname: "Ada",
+        notes: "keep the keel",
+        createdAt: 4,
+        updatedAt: 5,
+      },
+    ]);
     expect(
       (await new ConvexAssetStore(client, serviceToken).list()).map((row) => row.name),
     ).toEqual(["live-asset"]);
@@ -553,7 +622,23 @@ it("restores a partial capture into scratch JSON and an empty convex-test, then 
     const linked = await target.run(async (ctx) => {
       const log = await ctx.db.query("buildLogs").first();
       const upgrade = await ctx.db.query("upgrades").first();
-      const direct = await ctx.db.query("directCreateReceipts").first();
+      const asset = await ctx.db.query("assets").first();
+      const preference = await ctx.db.query("preferences").first();
+      const direct = await ctx.db
+        .query("directCreateReceipts")
+        .withIndex("by_owner_type_and_key", (q) =>
+          q.eq("ownerId", "jarvis-cli").eq("entityType", "task").eq("idempotencyKey", "direct-key"),
+        )
+        .unique();
+      const reminderReceipt = await ctx.db
+        .query("directCreateReceipts")
+        .withIndex("by_owner_type_and_key", (q) =>
+          q
+            .eq("ownerId", "jarvis-cli")
+            .eq("entityType", "reminder")
+            .eq("idempotencyKey", "reminder-key"),
+        )
+        .unique();
       const internal = await ctx.db.query("internalActionResults").first();
       const actionRow = await ctx.db.query("toolActions").first();
       const artifact = await ctx.db.query("quotePdfArtifacts").first();
@@ -568,9 +653,14 @@ it("restores a partial capture into scratch JSON and an empty convex-test, then 
         .unique();
       const stored = artifact ? await ctx.storage.get(artifact.storageId) : null;
       return {
+        log,
+        upgrade,
+        asset,
+        preference,
         logBuildId: log?.buildId,
         upgradeBuildId: upgrade?.buildId,
         directEntityId: direct?.entityId,
+        reminderReceiptEntityId: reminderReceipt?.entityId,
         internalEntityId: internal?.entityId,
         internalResultId: internal && "id" in internal.result ? internal.result.id : undefined,
         expiresAt: actionRow?.approvalExpiresAt,
@@ -582,7 +672,44 @@ it("restores a partial capture into scratch JSON and an empty convex-test, then 
     });
     expect(linked.logBuildId).toBe(restored.maps.builds[0]?.targetId);
     expect(linked.upgradeBuildId).toBe(restored.maps.builds[0]?.targetId);
+    expect(linked.log).toMatchObject({
+      kind: "note",
+      title: "live-log",
+      body: "log body",
+      occurredAt: 60,
+      createdAt: 6,
+      updatedAt: 61,
+    });
+    expect(linked.upgrade).toMatchObject({
+      title: "live-upgrade",
+      reason: "because",
+      beforeState: "before",
+      afterState: "after",
+      outcome: "good",
+      parts: ["bolt"],
+      version: "v2",
+      occurredAt: 70,
+      createdAt: 7,
+      updatedAt: 71,
+    });
+    expect(linked.asset).toMatchObject({
+      name: "live-asset",
+      kind: "tool",
+      serviceIntervalDays: 30,
+      lastServicedAt: 80,
+      notes: "asset notes",
+      createdAt: 8,
+      updatedAt: 9,
+    });
+    expect(linked.preference).toMatchObject({
+      key: "live-pref",
+      value: "yes",
+      category: "naming",
+      createdAt: 10,
+      updatedAt: 11,
+    });
     expect(linked.directEntityId).toBe(restored.maps.tasks[0]?.targetId);
+    expect(linked.reminderReceiptEntityId).toBe(restored.maps.reminders[0]?.targetId);
     expect(linked.internalEntityId).toBe(restored.maps.tasks[0]?.targetId);
     expect(linked.internalResultId).toBe(restored.maps.tasks[0]?.targetId);
     expect(linked.expiresAt).toBe(1);
@@ -656,6 +783,364 @@ it("restores a partial capture into scratch JSON and an empty convex-test, then 
     expect(restarted.first.clientBody).toContain("Ada");
     expect(restarted.first.taskBody).toContain("live-task");
     expect(restarted.first.buildBody).toContain("live-build");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+}, 120_000);
+
+it("restores a deleted task receipt as a tombstone and still refuses an inconsistent archive", async () => {
+  const seeded = await seed();
+  const { mkdtemp, mkdir, readFile, rm, writeFile } = await import("node:fs/promises");
+  const path = await import("node:path");
+  const { tmpdir } = await import("node:os");
+  const { captureLocalV1Archive } = await import("../src/backup/v4/localV1Capture.js");
+  const { restoreLocalV1Archive } = await import("../src/backup/v4/localV1Restore.js");
+  const { sha256Hex } = await import("../src/actions/sha256.js");
+  const { LOCAL_V1_DIRECT_CREATE_TOMBSTONE_NOTE } =
+    await import("../src/backup/v4/localV1Receipts.js");
+  const root = await mkdtemp(path.join(tmpdir(), "jarvis-lv1-tombstone-"));
+  const live = path.join(root, "live");
+  const capturedDir = path.join(root, "capture");
+  await mkdir(live);
+  await writeBusiness(live, seeded.quote.aggregate.quoteId);
+  const sourceTaskId = await seeded.t.run(async (ctx) => {
+    const task = await ctx.db.query("tasks").first();
+    if (!task) throw new Error("missing task");
+    for (const row of await ctx.db.query("internalActionResults").collect()) {
+      await ctx.db.delete("internalActionResults", row._id);
+    }
+    await ctx.db.delete("tasks", task._id);
+    return task._id;
+  });
+  try {
+    await captureLocalV1Archive({
+      outputDirectory: capturedDir,
+      businessPaths: businessFiles(live),
+      client: {
+        query: seeded.t.query.bind(seeded.t),
+        action: seeded.t.action.bind(seeded.t),
+        mutation: async () => {
+          throw new Error("capture mutation");
+        },
+      } as never,
+      serviceToken,
+      approvalToken,
+      convexUrl: endpoint,
+      capturedAt: new Date(now),
+    });
+    const receiptsPath = path.join(capturedDir, "convex-receipts.json");
+    const sidecar = JSON.parse(await readFile(receiptsPath, "utf8")) as {
+      payloadJson: string;
+      payloadSha256: string;
+    };
+    const payload = JSON.parse(sidecar.payloadJson) as {
+      tables: Array<Record<string, unknown>>;
+      tombstones: Array<Record<string, unknown>>;
+    };
+    expect(
+      payload.tables.every((entry) => Object.keys(entry).sort().join() === "documents,table"),
+    ).toBe(true);
+    expect(payload.tombstones).toEqual([
+      {
+        table: "directCreateReceipts",
+        entityType: "task",
+        entityId: sourceTaskId,
+        idempotencyKey: "direct-key",
+        note: LOCAL_V1_DIRECT_CREATE_TOMBSTONE_NOTE,
+      },
+    ]);
+
+    const target = convexTest(schema, modules);
+    const restored = await restoreLocalV1Archive({
+      captureDirectory: capturedDir,
+      jsonDirectory: path.join(root, "restored"),
+      client: { action: target.action.bind(target) },
+      serviceToken,
+      approvalToken,
+      convexUrl: endpoint,
+      now,
+      liveDataDir: live,
+    });
+    expect(restored.maps.tasks).toEqual([]);
+    const kept = await target.run(async (ctx) => {
+      return await ctx.db
+        .query("directCreateReceipts")
+        .withIndex("by_owner_type_and_key", (q) =>
+          q.eq("ownerId", "jarvis-cli").eq("entityType", "task").eq("idempotencyKey", "direct-key"),
+        )
+        .unique();
+    });
+    expect(kept?.entityId).toBe(sourceTaskId);
+    await expect(
+      target.mutation(api.tasks.create, {
+        serviceToken,
+        title: "Replacement",
+        category: "home",
+        idempotencyKey: "direct-key",
+        requestFingerprint: "fp",
+      }),
+    ).rejects.toThrow(/no longer available/);
+    expect(await target.query(api.tasks.list, { serviceToken })).toHaveLength(0);
+
+    const stripped = { ...payload };
+    delete (stripped as { tombstones?: unknown }).tombstones;
+    const strippedJson = JSON.stringify(stripped);
+    await writeFile(
+      receiptsPath,
+      `${JSON.stringify({
+        ...sidecar,
+        payloadJson: strippedJson,
+        payloadSha256: sha256Hex(strippedJson),
+      })}\n`,
+    );
+    const missing = convexTest(schema, modules);
+    await expect(
+      restoreLocalV1Archive({
+        captureDirectory: capturedDir,
+        jsonDirectory: path.join(root, "missing-note"),
+        client: { action: missing.action.bind(missing) },
+        serviceToken,
+        approvalToken,
+        convexUrl: endpoint,
+        now,
+        liveDataDir: live,
+      }),
+    ).rejects.toThrow(/direct-create receipt has no entity/);
+    expect(await missing.run(async (ctx) => ctx.db.query("tasks").take(1))).toHaveLength(0);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+}, 120_000);
+
+it("normalises a foreign owner on a tombstoned receipt and quote so replay stays refused", async () => {
+  const seeded = await seed();
+  const { mkdtemp, mkdir, readFile, rm, writeFile } = await import("node:fs/promises");
+  const path = await import("node:path");
+  const { tmpdir } = await import("node:os");
+  const { captureLocalV1Archive } = await import("../src/backup/v4/localV1Capture.js");
+  const { restoreLocalV1Archive } = await import("../src/backup/v4/localV1Restore.js");
+  const { sha256Hex } = await import("../src/actions/sha256.js");
+  const root = await mkdtemp(path.join(tmpdir(), "jarvis-lv1-owner-"));
+  const live = path.join(root, "live");
+  const capturedDir = path.join(root, "capture");
+  await mkdir(live);
+  await writeBusiness(live, seeded.quote.aggregate.quoteId);
+  await seeded.t.run(async (ctx) => {
+    const task = await ctx.db.query("tasks").first();
+    if (!task) throw new Error("missing task");
+    for (const row of await ctx.db.query("internalActionResults").collect()) {
+      await ctx.db.delete("internalActionResults", row._id);
+    }
+    await ctx.db.delete("tasks", task._id);
+  });
+  try {
+    await captureLocalV1Archive({
+      outputDirectory: capturedDir,
+      businessPaths: businessFiles(live),
+      client: {
+        query: seeded.t.query.bind(seeded.t),
+        action: seeded.t.action.bind(seeded.t),
+        mutation: async () => {
+          throw new Error("capture mutation");
+        },
+      } as never,
+      serviceToken,
+      approvalToken,
+      convexUrl: endpoint,
+      capturedAt: new Date(now),
+    });
+    const foreignOwner = "other-owner";
+    const rewrite = async (file: string, tables: ReadonlySet<string>) => {
+      const sidecar = JSON.parse(await readFile(file, "utf8")) as {
+        payloadJson: string;
+        payloadSha256: string;
+      };
+      const payload = JSON.parse(sidecar.payloadJson) as {
+        tables: Array<{ table: string; documents: Array<{ ownerId?: string }> }>;
+      };
+      let changed = 0;
+      for (const entry of payload.tables) {
+        if (!tables.has(entry.table)) continue;
+        for (const document of entry.documents) {
+          document.ownerId = foreignOwner;
+          changed += 1;
+        }
+      }
+      if (changed === 0) throw new Error(`no ${[...tables].join(",")} rows to rewrite`);
+      const payloadJson = JSON.stringify(payload);
+      await writeFile(
+        file,
+        `${JSON.stringify({
+          ...sidecar,
+          payloadJson,
+          payloadSha256: sha256Hex(payloadJson),
+        })}\n`,
+      );
+    };
+    await rewrite(
+      path.join(capturedDir, "convex-receipts.json"),
+      new Set(["directCreateReceipts"]),
+    );
+    await rewrite(
+      path.join(capturedDir, "convex-s6.json"),
+      new Set([
+        "quotes",
+        "quoteRevisions",
+        "quotePdfArtifacts",
+        "quoteDeliveryAttempts",
+        "quoteMigrationRecords",
+      ]),
+    );
+    const target = convexTest(schema, modules);
+    await restoreLocalV1Archive({
+      captureDirectory: capturedDir,
+      jsonDirectory: path.join(root, "restored"),
+      client: { action: target.action.bind(target) },
+      serviceToken,
+      approvalToken,
+      convexUrl: endpoint,
+      now,
+      liveDataDir: live,
+    });
+    const receipt = await target.run(async (ctx) => {
+      return await ctx.db
+        .query("directCreateReceipts")
+        .withIndex("by_owner_type_and_key", (q) =>
+          q.eq("ownerId", "jarvis-cli").eq("entityType", "task").eq("idempotencyKey", "direct-key"),
+        )
+        .unique();
+    });
+    expect(receipt?.ownerId).toBe("jarvis-cli");
+    await expect(
+      target.mutation(api.tasks.create, {
+        serviceToken,
+        title: "Replacement",
+        category: "home",
+        idempotencyKey: "direct-key",
+        requestFingerprint: "fp",
+      }),
+    ).rejects.toThrow(/no longer available/);
+    const quote = await target.query(api.quotes.get, {
+      serviceToken,
+      quoteId: seeded.quote.aggregate.quoteId,
+    });
+    expect(quote?.aggregate.number).toBe("LV1-0001");
+    const owners = await target.run(async (ctx) => {
+      const quotes = await ctx.db.query("quotes").collect();
+      const revisions = await ctx.db.query("quoteRevisions").collect();
+      const artifacts = await ctx.db.query("quotePdfArtifacts").collect();
+      const receipts = await ctx.db.query("directCreateReceipts").collect();
+      return { quotes, revisions, artifacts, receipts };
+    });
+    for (const row of [
+      ...owners.quotes,
+      ...owners.revisions,
+      ...owners.artifacts,
+      ...owners.receipts,
+    ]) {
+      expect(row.ownerId).toBe("jarvis-cli");
+    }
+    expect(owners.quotes.length).toBeGreaterThan(0);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+}, 120_000);
+
+it("refuses a mismatched direct-create fingerprint and an untombstoned receipt with no entity key", async () => {
+  const mismatched = await seed();
+  const { mkdtemp, mkdir, rm } = await import("node:fs/promises");
+  const path = await import("node:path");
+  const { tmpdir } = await import("node:os");
+  const { captureLocalV1Archive } = await import("../src/backup/v4/localV1Capture.js");
+  const { restoreLocalV1Archive } = await import("../src/backup/v4/localV1Restore.js");
+  const root = await mkdtemp(path.join(tmpdir(), "jarvis-lv1-receipt-match-"));
+  const live = path.join(root, "live");
+  await mkdir(live);
+  await writeBusiness(live, mismatched.quote.aggregate.quoteId);
+  await mismatched.t.run(async (ctx) => {
+    const task = await ctx.db.query("tasks").first();
+    if (!task) throw new Error("missing task");
+    await ctx.db.patch("tasks", task._id, { directCreateFingerprint: "other-fp" });
+  });
+  try {
+    const capturedDir = path.join(root, "mismatch");
+    await captureLocalV1Archive({
+      outputDirectory: capturedDir,
+      businessPaths: businessFiles(live),
+      client: {
+        query: mismatched.t.query.bind(mismatched.t),
+        action: mismatched.t.action.bind(mismatched.t),
+        mutation: async () => {
+          throw new Error("capture mutation");
+        },
+      } as never,
+      serviceToken,
+      approvalToken,
+      convexUrl: endpoint,
+      capturedAt: new Date(now),
+    });
+    const target = convexTest(schema, modules);
+    await expect(
+      restoreLocalV1Archive({
+        captureDirectory: capturedDir,
+        jsonDirectory: path.join(root, "mismatch-out"),
+        client: { action: target.action.bind(target) },
+        serviceToken,
+        approvalToken,
+        convexUrl: endpoint,
+        now,
+        liveDataDir: live,
+      }),
+    ).rejects.toThrow(/does not match its entity/);
+    expect(await target.run(async (ctx) => ctx.db.query("tasks").take(1))).toHaveLength(0);
+
+    const legacy = await seed();
+    const legacyLive = path.join(root, "legacy-live");
+    await mkdir(legacyLive);
+    await writeBusiness(legacyLive, legacy.quote.aggregate.quoteId);
+    const sourceTaskId = await legacy.t.run(async (ctx) => {
+      const task = await ctx.db.query("tasks").first();
+      if (!task) throw new Error("missing task");
+      await ctx.db.replace("tasks", task._id, {
+        ownerId: task.ownerId,
+        title: task.title,
+        completed: task.completed,
+        category: task.category,
+        createdAt: task.createdAt,
+      });
+      return task._id;
+    });
+    const legacyDir = path.join(root, "legacy");
+    await captureLocalV1Archive({
+      outputDirectory: legacyDir,
+      businessPaths: businessFiles(legacyLive),
+      client: {
+        query: legacy.t.query.bind(legacy.t),
+        action: legacy.t.action.bind(legacy.t),
+        mutation: async () => {
+          throw new Error("capture mutation");
+        },
+      } as never,
+      serviceToken,
+      approvalToken,
+      convexUrl: endpoint,
+      capturedAt: new Date(now),
+    });
+    const legacyTarget = convexTest(schema, modules);
+    await expect(
+      restoreLocalV1Archive({
+        captureDirectory: legacyDir,
+        jsonDirectory: path.join(root, "legacy-out"),
+        client: { action: legacyTarget.action.bind(legacyTarget) },
+        serviceToken,
+        approvalToken,
+        convexUrl: endpoint,
+        now,
+        liveDataDir: legacyLive,
+      }),
+    ).rejects.toThrow(/does not match its entity/);
+    expect(await legacyTarget.run(async (ctx) => ctx.db.query("tasks").take(1))).toHaveLength(0);
+    expect(sourceTaskId).toBeTruthy();
   } finally {
     await rm(root, { recursive: true, force: true });
   }

@@ -86,6 +86,32 @@ function reminderDue(reminder: Reminder): ReminderDue | undefined {
   };
 }
 
+function keptDirectCreate(
+  row: Pick<
+    Task,
+    | "projectId"
+    | "directCreateIdempotencyKey"
+    | "directCreateFingerprint"
+    | "updatedAt"
+    | "revision"
+  >,
+): Pick<
+  Task,
+  "projectId" | "directCreateIdempotencyKey" | "directCreateFingerprint" | "updatedAt" | "revision"
+> {
+  return {
+    ...(row.projectId === undefined ? {} : { projectId: row.projectId }),
+    ...(row.directCreateIdempotencyKey === undefined
+      ? {}
+      : {
+          directCreateIdempotencyKey: row.directCreateIdempotencyKey,
+          directCreateFingerprint: row.directCreateFingerprint as string,
+        }),
+    ...(row.updatedAt === undefined ? {} : { updatedAt: row.updatedAt }),
+    ...(row.revision === undefined ? {} : { revision: row.revision }),
+  };
+}
+
 function restoredReminder(id: string, reminder: Reminder): Reminder {
   const due = reminderDue(reminder);
   return {
@@ -97,6 +123,7 @@ function restoredReminder(id: string, reminder: Reminder): Reminder {
           dueRaw: due.raw,
           ...(due.at === undefined ? {} : { dueAt: due.at, dueTimezone: due.timezone as string }),
         }),
+    ...keptDirectCreate(reminder),
     createdAt: Date.now(),
   };
 }
@@ -355,6 +382,7 @@ export class JSONPersistence implements PersistenceProvider {
             title: task.title,
             completed: task.completed,
             category: task.category,
+            ...keptDirectCreate(task),
             createdAt: Date.now(),
           };
         });

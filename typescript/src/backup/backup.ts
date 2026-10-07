@@ -4,6 +4,7 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 
+import { directCreateFields, StateDocumentError } from "../persistence/document.js";
 import {
   JSONPersistence,
   type AssistantState,
@@ -129,6 +130,7 @@ export function parseTask(value: unknown, index: number): Task {
     title: value.title,
     completed: value.completed,
     category: value.category,
+    ...backupDirectCreate(value, index, "task"),
     createdAt: value.createdAt,
   };
 }
@@ -153,6 +155,7 @@ export function parseReminder(value: unknown, index: number, version: 1 | 2): Re
       id: value.id,
       title: value.title,
       ...(typeof value.due === "string" ? { dueRaw: value.due } : {}),
+      ...backupDirectCreate(value, index, "reminder"),
       createdAt: value.createdAt,
     };
   }
@@ -205,8 +208,24 @@ export function parseReminder(value: unknown, index: number, version: 1 | 2): Re
           dueRaw: due.raw,
           ...(due.at === undefined ? {} : { dueAt: due.at, dueTimezone: due.timezone as string }),
         }),
+    ...backupDirectCreate(value, index, "reminder"),
     createdAt: value.createdAt,
   };
+}
+
+function backupDirectCreate(
+  value: Record<string, unknown>,
+  index: number,
+  noun: "task" | "reminder",
+): ReturnType<typeof directCreateFields> {
+  try {
+    return directCreateFields(value, `Backup ${noun} ${index}`);
+  } catch (error: unknown) {
+    if (error instanceof StateDocumentError) {
+      throw new Error(error.message, { cause: error });
+    }
+    throw error;
+  }
 }
 
 export function parseBuild(value: unknown, index: number): Build {
@@ -638,7 +657,20 @@ export async function readBackupFile(filePath: string): Promise<BackupArchive> {
 }
 
 function taskSignatures(tasks: Task[]): string[] {
-  return tasks.map((task) => JSON.stringify([task.title, task.completed, task.category])).sort();
+  return tasks
+    .map((task) =>
+      JSON.stringify([
+        task.title,
+        task.completed,
+        task.category,
+        task.projectId ?? null,
+        task.directCreateIdempotencyKey ?? null,
+        task.directCreateFingerprint ?? null,
+        task.updatedAt ?? null,
+        task.revision ?? null,
+      ]),
+    )
+    .sort();
 }
 
 function reminderSignatures(reminders: Reminder[]): string[] {
@@ -649,6 +681,11 @@ function reminderSignatures(reminders: Reminder[]): string[] {
         reminder.dueRaw ?? null,
         reminder.dueAt ?? null,
         reminder.dueTimezone ?? null,
+        reminder.projectId ?? null,
+        reminder.directCreateIdempotencyKey ?? null,
+        reminder.directCreateFingerprint ?? null,
+        reminder.updatedAt ?? null,
+        reminder.revision ?? null,
       ]),
     )
     .sort();
