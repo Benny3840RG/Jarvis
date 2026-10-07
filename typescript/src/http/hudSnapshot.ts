@@ -1,3 +1,4 @@
+import { readLifecycleQuoteRegister } from "../briefs/lifecycleBriefQuotes.js";
 import { composeDailyBrief } from "../briefs/brief.js";
 import { readLiveWorkPipeline, type DevelopmentLiveWorkSource } from "../development/liveWork.js";
 import type { DashboardSnapshot } from "../mcp/jarvisApiClient.js";
@@ -13,6 +14,7 @@ import type { ErrandStore } from "../errands/errand.js";
 import type { InvoiceStore } from "../invoices/invoice.js";
 import type { ProjectStore } from "../projects/project.js";
 import type { QuoteStore } from "../quotes/quote.js";
+import type { QuoteDeliveryRepository } from "../quotes/quoteDeliveryRepository.js";
 import type { QuoteRepository } from "../quotes/quoteRepository.js";
 import { resolveReminderTimezone } from "../reminders/due.js";
 import type { CredentialsRuntime } from "../settings/credentialsStatus.js";
@@ -34,6 +36,7 @@ export type HudSnapshotSources = {
   invoices: InvoiceStore;
   errands: ErrandStore;
   quoteRepository: QuoteRepository | null;
+  quoteDeliveryRepository: QuoteDeliveryRepository | null;
   activity: ActivityEventReader | null;
   liveWork: DevelopmentLiveWorkSource | null;
   credentials: CredentialsRuntime;
@@ -48,17 +51,25 @@ export type HudSnapshotSources = {
 export async function readHudSnapshot(input: HudSnapshotSources): Promise<DashboardSnapshot> {
   const timezone = resolveReminderTimezone(input.config.timezone);
   const now = Date.now();
-  const [tasks, reminders, projects, quotes, assets, enquiries, invoices, errands] =
+  const registerPromise = input.quoteRepository
+    ? readLifecycleQuoteRegister(input.quoteRepository, input.quoteDeliveryRepository)
+    : null;
+  const [tasks, reminders, projects, flatQuotes, assets, enquiries, invoices, errands, register] =
     await Promise.all([
       input.persistence.listTasks(),
       input.persistence.listReminders(),
       input.projects.list(),
-      input.quotes.list(),
+      registerPromise ? Promise.resolve([]) : input.quotes.list(),
       input.assets.list(),
       input.enquiries.list({ status: "open" }),
       input.invoices.list(),
       input.errands.list(),
+      registerPromise ?? Promise.resolve(null),
     ]);
+  const quotes = register ? register.quotes : flatQuotes;
+  const quoteRegister: DashboardSnapshot["quoteRegister"] = register
+    ? { status: "ready", quotes: register.summaries }
+    : { status: "unavailable", quotes: [] };
   const brief = composeDailyBrief({
     now,
     timezone,
@@ -71,16 +82,6 @@ export async function readHudSnapshot(input: HudSnapshotSources): Promise<Dashbo
     invoices,
     errands,
   });
-  let quoteRegister: DashboardSnapshot["quoteRegister"];
-  if (!input.quoteRepository) {
-    quoteRegister = { status: "unavailable", quotes: [] };
-  } else {
-    try {
-      quoteRegister = { status: "ready", quotes: await input.quoteRepository.listQuotes({}) };
-    } catch {
-      quoteRegister = { status: "unavailable", quotes: [] };
-    }
-  }
   let inbox: DashboardSnapshot["inbox"];
   try {
     inbox = await buildOperationsInbox({

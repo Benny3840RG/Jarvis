@@ -1,5 +1,58 @@
 # Jarvis TypeScript Roadmap
 
+## LV1-06 operator PDF read and one quote register (2026-10-07)
+
+`GET /api/v1/quotes/{quoteId}/revisions/{revision}/pdf` returns the stored artifact from the existing `quotePdfArtifacts` reader. The reader still checks the revision fingerprint and sha256 digest before any bytes leave the process. No second blob store.
+
+When the quote lifecycle repository is configured, the daily brief and the HUD snapshot both read `listQuotes` plus `getQuote` through `readLifecycleQuoteRegister`. An open finalized revision is `sent` only when the existing delivery ledger has a succeeded receipt for that revision. A finalized quote with no succeeded receipt stays `draft` and is not awaiting a response. The flat quote file is used only when that repository is absent. JSON mode is unchanged.
+
+Voice query briefs still take the flat quote store passed into `createAuthoritativeVoiceQueries`. That path was left alone.
+
+Business jobs still cannot stage `quotes:finalize` or `quotes:send`. See `docs/operations/lv1-06-business-project-tool-actions.md`. Closing that gap would create a totality project, which is a new authority path, so it was not built.
+
+Next:
+
+- Leave #294 and #297 open until the host commissioning kit runs against a non-customer dev mailbox.
+- Do not auto-create totality projects from business jobs.
+- Voice brief quotes remain on the flat store until a later slice reuses this register without a new authority.
+
+## Local V1 recovery (LV1-09)
+
+Tracker #697. PR 1 locks the live persistence split. PR 2 adds
+`captureLocalV1Archive`: one partial archive of business JSON, the classic
+Convex snapshot, the existing S6 quote inventory, idempotency receipts, and
+PDF bytes. PR 3 adds `restoreLocalV1Archive`, which restores that capture into
+a new JSON directory and an injected empty database, then rereads through the
+existing stores. `completeness` stays `partial`. Neither function is wired to
+`export-v4`. The draft-only S6 helper is unchanged. PR 4 adds
+`proveLocalV1Recovery`, which calls that restore and succeeds only when
+every V1 store was captured, blob digests match, the JSON completion
+marker stays partial, and a second isolated read matches. `clear-local`
+no longer treats a classic verify receipt as cover for business JSON.
+Full v4 recovery stays refused. Operator text is still open.
+
+## LV1-04 authoritative voice query bridge (2026-10-07)
+
+Deterministic voice query intents now answer from the same list/brief read models
+the HTTP API and daily brief already use. Empty healthy registers are reported as
+none or zero. A missing provider or a failed source stays `query-unavailable` and
+names that source. Live equipment status stays unavailable; crawler and trailer
+queries report recorded build status only.
+
+Next:
+
+- LV1-05 safe voice writes through existing API/MCP/ToolAction paths.
+- Owner-wide quote-delivery follow-up remains unsupported (same gap as the
+  operations inbox). Voice quote follow-up therefore fails closed as unavailable,
+  naming the missing owner-wide governed sent-quote read (lifecycle delivery ledger).
+- The daily-brief quote file is not treated as the governed sent-quote register.
+
+## LV1-01 runtime data gitignore (2026-10-07)
+
+Business and memory JSON documents under `typescript/data/` were untracked but not ignored, so a local run could leave private customer records as `?? data/`. `.gitignore` now covers `jarvis-*.json*` and the dot-prefixed atomic temps. `check-repository-hygiene.mjs` asserts those paths are ignored and that tracked fixtures stay tracked. No `.bak` or `-wal` writer exists.
+
+Next: finish the rest of the LV1-01 baseline (local preview, HUD/MCP, entity smoke) on the operator host; then voice commissioning (#567) and the shared Outlook send/reconcile (#294, #297).
+
 ## Guarded voice lifecycle review repairs (2026-10-05)
 
 Bounded repairs for #567 / PR #696 (successor to #687), prepared on an isolated

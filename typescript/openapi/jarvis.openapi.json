@@ -3112,7 +3112,7 @@
       "delete": {
         "operationId": "deleteClient",
         "summary": "Delete a business client",
-        "description": "Permanently removes one client by its identifier.",
+        "description": "Permanently removes one client by its identifier when no enquiry, invoice, property, project, flat quote, or quote-lifecycle revision still references that client. A referencing record is a conflict; the client is left unchanged.",
         "tags": ["Clients"],
         "x-mcp-tool": {
           "exposed": true,
@@ -3144,6 +3144,9 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
@@ -4105,6 +4108,81 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/QuoteRevisionSnapshotResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/quotes/{quoteId}/revisions/{revision}/pdf": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/QuoteId"
+        },
+        {
+          "$ref": "#/components/parameters/QuoteRevisionNumber"
+        }
+      ],
+      "get": {
+        "operationId": "readQuoteRevisionPdf",
+        "summary": "Read a finalized revision's stored PDF",
+        "description": "Returns the stored client-ready PDF for the current finalized revision. The existing quote PDF artifact reader verifies the revision fingerprint and sha256 digest before any bytes are returned. Read-only: this route does not render or store a new artifact. A non-current or non-finalized revision is not found. Requires the Convex persistence provider and the quote PDF artifact reader.",
+        "tags": ["Quotes"],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Verified stored PDF artifact.",
+            "headers": {
+              "Content-Disposition": {
+                "description": "Attachment filename recorded with the stored artifact.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Quote-Pdf-Digest": {
+                "description": "Verified quote-pdf:v1 sha256 digest of the response bytes.",
+                "schema": {
+                  "type": "string",
+                  "pattern": "^quote-pdf:v1:sha256:[a-f0-9]{64}$"
+                }
+              },
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/pdf": {
+                "schema": {
+                  "type": "string",
+                  "contentMediaType": "application/pdf",
+                  "contentEncoding": "binary"
                 }
               }
             }
@@ -7345,7 +7423,7 @@
       "post": {
         "operationId": "executeDangerZoneAction",
         "summary": "Run one confirmed Danger zone action",
-        "description": "Runs one Phase A action after a case-sensitive confirmation string. End overlap removes only the matching PREVIOUS Convex env variable and any local previous assignment. Reset JSON quarantines jarvis-state.json. Clear local quarantines the local core, memory, and business JSON files and requires a verified backup from the last 24 hours or an explicit skip. Neither reset nor clear calls Convex delete APIs. Failures leave overlap in place when removal did not succeed, and responses never echo token values.",
+        "description": "Runs one Phase A action after a case-sensitive confirmation string. End overlap removes only the matching PREVIOUS Convex env variable and any local previous assignment. Reset JSON quarantines jarvis-state.json. Clear local quarantines the local core, memory, and business JSON files and requires either an explicit skip or a verified backup from the last 24 hours whose receipt lists a checksum for every business JSON file. A classic verify receipt without those checksums does not authorise the quarantine. Neither reset nor clear calls Convex delete APIs. Failures leave overlap in place when removal did not succeed, and responses never echo token values.",
         "tags": ["Settings"],
         "parameters": [
           {
@@ -7818,7 +7896,7 @@
       },
       "VoiceDispatch": {
         "type": "object",
-        "description": "The authoritative decision for one submitted utterance. Query commands return query-unavailable until a read-only query provider is connected; recognizing a command is not a successful business or equipment answer.",
+        "description": "The authoritative decision for one submitted utterance. A connected read-only query provider returns answered only from existing Jarvis read models. Empty healthy data is stated as none or zero. A missing provider or a failed source returns query-unavailable and names what is unavailable. Recognizing a command is not itself a successful business or equipment answer.",
         "required": ["decision"],
         "additionalProperties": false,
         "properties": {
@@ -7830,6 +7908,7 @@
               "empty",
               "unrecognized",
               "ambiguous",
+              "answered",
               "query-unavailable",
               "awaiting-confirmation",
               "confirmation-not-pending",
@@ -7861,7 +7940,12 @@
           },
           "reason": {
             "type": "string",
-            "description": "Why a query or actuation was unavailable, or an actuation failed."
+            "description": "Why a query or actuation was unavailable, or an actuation failed. For a query this names the unavailable source and is never a guessed count."
+          },
+          "answer": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Spoken read-only answer derived from an existing Jarvis read model. Present only when decision is answered. Empty healthy data is stated as none or zero. This field is never a guess for a missing or failed source."
           },
           "expiresAt": {
             "type": "integer",

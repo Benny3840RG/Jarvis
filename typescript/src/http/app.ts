@@ -33,7 +33,9 @@ import { InMemoryQuoteStore } from "../quotes/inMemoryQuoteStore.js";
 import { JsonQuoteStore } from "../quotes/jsonQuoteStore.js";
 import { createQuoteRepositoryFromEnv } from "../quotes/quoteRepositoryFactory.js";
 import { createQuoteDeliveryRepositoryFromEnv } from "../quotes/quoteDeliveryRepositoryFactory.js";
+import { createQuotePdfArtifactRepositoryFromEnv } from "../quotes/quotePdfArtifactRepository.js";
 import type { QuoteDeliveryRepository } from "../quotes/quoteDeliveryRepository.js";
+import type { QuotePdfArtifactRepository } from "../quotes/quotePdfArtifactRepository.js";
 import type { QuoteRepository } from "../quotes/quoteRepository.js";
 import type { ErrandStore } from "../errands/errand.js";
 import { InMemoryErrandStore } from "../errands/inMemoryErrandStore.js";
@@ -82,6 +84,7 @@ import {
   selectCredentialsRuntime,
   type CredentialsRuntime,
 } from "../settings/credentialsStatus.js";
+import { createAuthoritativeVoiceQueries } from "../voice/authoritativeVoiceQuery.js";
 import { AbsentHardwareProvider } from "../voice/voiceHardware.js";
 import { VoiceSessionRegistry } from "../voice/voiceSessionRegistry.js";
 import {
@@ -139,6 +142,7 @@ export type CreateJarvisHttpAppOptions = (
   quoteStore?: QuoteStore;
   quoteRepository?: QuoteRepository | null;
   quoteDeliveryRepository?: QuoteDeliveryRepository | null;
+  quotePdfArtifactRepository?: QuotePdfArtifactRepository | null;
   errandStore?: ErrandStore;
   buildStore?: BuildStore;
   buildLogStore?: BuildLogStore;
@@ -290,6 +294,12 @@ export async function createJarvisHttpApp(
       : usesEnvironment
         ? createQuoteDeliveryRepositoryFromEnv()
         : null;
+  const quotePdfArtifactRepository =
+    options.quotePdfArtifactRepository !== undefined
+      ? options.quotePdfArtifactRepository
+      : usesEnvironment
+        ? createQuotePdfArtifactRepositoryFromEnv()
+        : null;
   const errandStore =
     options.errandStore ?? (usesEnvironment ? new JsonErrandStore() : new InMemoryErrandStore());
   const buildStore = selectMemoryStore(options.buildStore, usesEnvironment, providerName, {
@@ -433,6 +443,7 @@ export async function createJarvisHttpApp(
       quoteStore,
       quoteRepository,
       quoteDeliveryRepository,
+      quotePdfArtifactRepository,
       errandStore,
       buildStore,
       buildLogStore,
@@ -450,7 +461,21 @@ export async function createJarvisHttpApp(
           : createInactiveDangerZone(providerName)),
       voiceSessionRegistry:
         options.voiceSessionRegistry ??
-        new VoiceSessionRegistry({ provider: new AbsentHardwareProvider() }),
+        new VoiceSessionRegistry({
+          provider: new AbsentHardwareProvider(),
+          queries: createAuthoritativeVoiceQueries({
+            timezone: config.timezone,
+            tasks: persistence,
+            reminders: persistence,
+            projects: projectStore,
+            quotes: quoteStore,
+            assets: assetStore,
+            enquiries: enquiryStore,
+            invoices: invoiceStore,
+            errands: errandStore,
+            builds: buildStore,
+          }),
+        }),
     }),
     adapter,
     { logger: options.logger, abortOnError: false },

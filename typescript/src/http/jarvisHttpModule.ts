@@ -12,6 +12,7 @@ import type { PropertyStore } from "../properties/property.js";
 import type { ProjectStore } from "../projects/project.js";
 import type { QuoteStore } from "../quotes/quote.js";
 import type { QuoteDeliveryRepository } from "../quotes/quoteDeliveryRepository.js";
+import type { QuotePdfArtifactRepository } from "../quotes/quotePdfArtifactRepository.js";
 import type { QuoteRepository } from "../quotes/quoteRepository.js";
 import type { ErrandStore } from "../errands/errand.js";
 import type { BuildStore } from "../builds/build.js";
@@ -86,6 +87,7 @@ import {
   HTTP_QUOTE_STORE,
   HTTP_QUOTE_REPOSITORY,
   HTTP_QUOTE_DELIVERY_REPOSITORY,
+  HTTP_QUOTE_PDF_ARTIFACT_REPOSITORY,
   HTTP_ERRAND_STORE,
   HTTP_BUILD_STORE,
   HTTP_BUILD_LOG_STORE,
@@ -127,6 +129,7 @@ export type JarvisHttpModuleOptions = {
   quoteStore: QuoteStore;
   quoteRepository: QuoteRepository | null;
   quoteDeliveryRepository: QuoteDeliveryRepository | null;
+  quotePdfArtifactRepository: QuotePdfArtifactRepository | null;
   errandStore: ErrandStore;
   buildStore: BuildStore;
   buildLogStore: BuildLogStore;
@@ -194,6 +197,10 @@ export class JarvisHttpModule {
         {
           provide: HTTP_QUOTE_DELIVERY_REPOSITORY,
           useValue: options.quoteDeliveryRepository,
+        },
+        {
+          provide: HTTP_QUOTE_PDF_ARTIFACT_REPOSITORY,
+          useValue: options.quotePdfArtifactRepository,
         },
         { provide: HTTP_ERRAND_STORE, useValue: options.errandStore },
         { provide: HTTP_BUILD_STORE, useValue: options.buildStore },

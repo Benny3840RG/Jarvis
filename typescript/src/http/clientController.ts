@@ -12,9 +12,28 @@ import {
 } from "@nestjs/common";
 
 import type { Client, ClientStore } from "../clients/client.js";
+import {
+  clientStillReferencedDetail,
+  findClientDeletionReferences,
+  type ClientReferenceKind,
+} from "../clients/clientDeletionGuard.js";
+import type { EnquiryStore } from "../enquiries/enquiry.js";
+import type { InvoiceStore } from "../invoices/invoice.js";
+import type { PropertyStore } from "../properties/property.js";
+import type { ProjectStore } from "../projects/project.js";
+import type { QuoteStore } from "../quotes/quote.js";
+import type { QuoteRepository } from "../quotes/quoteRepository.js";
 import { parseCreateClient, parseUpdateClient } from "./clientRequest.js";
 import { JarvisProblem } from "./problemDetails.js";
-import { HTTP_CLIENT_STORE } from "./tokens.js";
+import {
+  HTTP_CLIENT_STORE,
+  HTTP_ENQUIRY_STORE,
+  HTTP_INVOICE_STORE,
+  HTTP_PROJECT_STORE,
+  HTTP_PROPERTY_STORE,
+  HTTP_QUOTE_REPOSITORY,
+  HTTP_QUOTE_STORE,
+} from "./tokens.js";
 
 function invalid(detail: string): JarvisProblem {
   return new JarvisProblem(
@@ -43,13 +62,30 @@ function operationFailed(): JarvisProblem {
   );
 }
 
+function stillReferenced(kinds: readonly ClientReferenceKind[]): JarvisProblem {
+  return new JarvisProblem(
+    HttpStatus.CONFLICT,
+    "client-still-referenced",
+    "Client Still Referenced",
+    clientStillReferencedDetail(kinds),
+  );
+}
+
 function clientResponse(client: Client): { data: Client } {
   return { data: client };
 }
 
 @Controller("api/v1/clients")
 export class ClientController {
-  constructor(@Inject(HTTP_CLIENT_STORE) private readonly clients: ClientStore) {}
+  constructor(
+    @Inject(HTTP_CLIENT_STORE) private readonly clients: ClientStore,
+    @Inject(HTTP_ENQUIRY_STORE) private readonly enquiries: EnquiryStore,
+    @Inject(HTTP_INVOICE_STORE) private readonly invoices: InvoiceStore,
+    @Inject(HTTP_PROPERTY_STORE) private readonly properties: PropertyStore,
+    @Inject(HTTP_PROJECT_STORE) private readonly projects: ProjectStore,
+    @Inject(HTTP_QUOTE_STORE) private readonly quotes: QuoteStore,
+    @Inject(HTTP_QUOTE_REPOSITORY) private readonly quoteRepository: QuoteRepository | null,
+  ) {}
 
   @Get()
   async list() {
@@ -114,6 +150,29 @@ export class ClientController {
 
   @Delete(":clientId")
   async remove(@Param("clientId") clientId: string) {
+    let existing: Client | null;
+    try {
+      existing = await this.clients.get(clientId);
+    } catch {
+      throw operationFailed();
+    }
+    if (!existing) throw notFound();
+
+    let kinds: ClientReferenceKind[];
+    try {
+      kinds = await findClientDeletionReferences(clientId, {
+        enquiries: this.enquiries,
+        invoices: this.invoices,
+        properties: this.properties,
+        projects: this.projects,
+        quotes: this.quotes,
+        quoteRepository: this.quoteRepository,
+      });
+    } catch {
+      throw operationFailed();
+    }
+    if (kinds.length > 0) throw stillReferenced(kinds);
+
     let client: Client | null;
     try {
       client = await this.clients.remove(clientId);
