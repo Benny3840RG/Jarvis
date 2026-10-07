@@ -1,5 +1,21 @@
 # Jarvis TypeScript Roadmap
 
+## LV1-06 operator PDF read and one quote register (2026-10-07)
+
+`GET /api/v1/quotes/{quoteId}/revisions/{revision}/pdf` returns the stored artifact from the existing `quotePdfArtifacts` reader. The reader still checks the revision fingerprint and sha256 digest before any bytes leave the process. No second blob store.
+
+When the quote lifecycle repository is configured, the daily brief and the HUD snapshot both read `listQuotes` plus `getQuote` through `readLifecycleQuoteRegister`. An open finalized revision is `sent` only when the existing delivery ledger has a succeeded receipt for that revision. A finalized quote with no succeeded receipt stays `draft` and is not awaiting a response. The flat quote file is used only when that repository is absent. JSON mode is unchanged.
+
+Voice query briefs still take the flat quote store passed into `createAuthoritativeVoiceQueries`. That path was left alone.
+
+Business jobs still cannot stage `quotes:finalize` or `quotes:send`. See `docs/operations/lv1-06-business-project-tool-actions.md`. Closing that gap would create a totality project, which is a new authority path, so it was not built.
+
+Next:
+
+- Leave #294 and #297 open until the host commissioning kit runs against a non-customer dev mailbox.
+- Do not auto-create totality projects from business jobs.
+- Voice brief quotes remain on the flat store until a later slice reuses this register without a new authority.
+
 ## Local V1 recovery (LV1-09)
 
 Tracker #697. PR 1 locks the live persistence split. PR 2 adds
