@@ -74,6 +74,9 @@ const attemptSequenceArbitrary: fc.Arbitrary<Attempt[]> = fc
     { kind: "unauthorized", actionId: reusedActionId, zone },
     { kind: "revoked", actionId: reusedActionId, zone: changedZone },
     { kind: "expired", actionId: reusedActionId, zone },
+    { kind: "unauthorized", actionId: `${reusedActionId}-fresh-unauthorized`, zone },
+    { kind: "revoked", actionId: `${reusedActionId}-fresh-revoked`, zone },
+    { kind: "expired", actionId: `${reusedActionId}-fresh-expired`, zone },
     ...tail,
   ]);
 
