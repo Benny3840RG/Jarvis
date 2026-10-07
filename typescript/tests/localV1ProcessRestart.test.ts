@@ -168,6 +168,48 @@ describe("Local V1 restarted process", () => {
       () =>
         readRestartedProcess({
           ...request,
+          isolatedConvexUrl: "https://happy-animal-123.convex.cloud%2e",
+        }),
+      /refuses a Convex cloud URL/,
+    );
+    await assert.rejects(
+      () =>
+        readRestartedProcess({
+          ...request,
+          isolatedConvexUrl: "https://happy-animal-123.convex.site%2e",
+        }),
+      /refuses a Convex cloud URL/,
+    );
+    await assert.rejects(
+      () =>
+        readRestartedProcess({
+          ...request,
+          isolatedConvexUrl: "https://happy-animal-123%2econvex.cloud",
+        }),
+      /refuses a Convex cloud URL/,
+    );
+    await assert.rejects(
+      () =>
+        readRestartedProcess({
+          ...request,
+          configuredConvexUrl: "https://configured.example:3210",
+          isolatedConvexUrl: "http://configured.example:3210",
+        }),
+      /refuses the configured CONVEX_URL/,
+    );
+    await assert.rejects(
+      () =>
+        readRestartedProcess({
+          ...request,
+          configuredConvexUrl: "http://127.0.0.1:3210",
+          isolatedConvexUrl: "http://[::ffff:7f00:1]:3210",
+        }),
+      /refuses the configured CONVEX_URL/,
+    );
+    await assert.rejects(
+      () =>
+        readRestartedProcess({
+          ...request,
           isolatedConvexUrl: "http://127.0.0.1:3210",
         }),
       /requires JARVIS_DELIVERY_RUNTIME_TOKEN/,

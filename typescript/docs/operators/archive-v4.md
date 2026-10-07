@@ -240,9 +240,14 @@ client, a task, and a build, kills that process, spawns it again, and requires
 those three bodies to match. That default stays JSON-only and leaves the quote
 unrecovered. The same harness can be pointed at an isolated Convex URL. That
 mode passes the caller-supplied `JARVIS_DELIVERY_RUNTIME_TOKEN` to the child.
-It refuses the configured `CONVEX_URL`, including a localhost / `127.0.0.1` /
-`::1` alias on the same port, and any `*.convex.cloud` or `*.convex.site`
-host, then GETs and compares the quote. Quote GET across a real restarted
+It refuses the configured `CONVEX_URL` by host and port, ignoring scheme and
+treating localhost, `127.0.0.1`, `::1`, and IPv4-mapped loopback as the same
+address, including a trailing dot or `%2e`. It also refuses any host under
+`.convex.cloud` or `.convex.site`. It then GETs and compares the quote.
+HUD snapshot and brief tasks and reminders use the public HTTP shape.
+A direct-create receipt restores only when its entity carries the same key
+and fingerprint, or when the archive tombstones that receipt. Quote and
+receipt rows are stored as `jarvis-cli`. Quote GET across a real restarted
 process is **PROVEN** on host at main `2d34a741` with an isolated self-hosted
 convex-local-backend on `127.0.0.1` (never the shared dev deployment).
 Evidence: host `~/lv1-01/restart-proof.md`, quote body sha256 `c7fd9977…dbb8`.

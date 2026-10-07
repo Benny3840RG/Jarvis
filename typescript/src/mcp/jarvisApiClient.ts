@@ -40,6 +40,7 @@ import type {
   PersistenceSettingsView,
 } from "../settings/persistenceSettings.js";
 import type { Reminder, Task } from "../persistence/persistence.js";
+import type { PublicReminder, PublicTask } from "../persistence/publicRecords.js";
 import type { TaskUpdate } from "../persistence/updates.js";
 import { resolveMcpBackendDeadlineMs, type JarvisApiConfig } from "./config.js";
 import { currentMcpRequestSignal } from "./requestSignal.js";
@@ -52,8 +53,8 @@ export type ReminderRequestUpdate = {
 
 export type DashboardSnapshot = {
   status: SystemStatus;
-  tasks: Task[];
-  reminders: Reminder[];
+  tasks: PublicTask[];
+  reminders: PublicReminder[];
   brief: DailyBrief;
   quoteRegister: {
     status: "ready" | "unavailable";

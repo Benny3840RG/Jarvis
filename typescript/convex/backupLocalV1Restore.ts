@@ -348,7 +348,6 @@ function assertReceiptMatchesEntity(entity: Row, receipt: Row): void {
       "Local V1 restore direct-create identity must include both the key and the fingerprint.",
     );
   }
-  if (key === undefined) return;
   if (
     typeof key !== "string" ||
     key.length === 0 ||
@@ -361,11 +360,18 @@ function assertReceiptMatchesEntity(entity: Row, receipt: Row): void {
   }
 }
 
+const LOCAL_OWNER_ID = "jarvis-cli";
+
 function storedFields(row: Row): Row {
   const fields = { ...row };
   delete fields._id;
   delete fields._creationTime;
   return fields;
+}
+
+/** Same local owner builds and assets already use. A foreign archive owner must not hide a receipt or quote. */
+function localOwnerFields(row: Row): Row {
+  return { ...storedFields(row), ownerId: LOCAL_OWNER_ID };
 }
 
 function optionalText(row: Row, key: string): string | undefined {
@@ -501,7 +507,7 @@ export const insertIsolated = internalMutation({
     for (const row of prepared.tasks) {
       const source = sourceId(row, "task");
       const targetId = await insert(ctx, "tasks", {
-        ownerId: "jarvis-cli",
+        ownerId: LOCAL_OWNER_ID,
         title: row.title,
         completed: row.completed,
         category: row.category,
@@ -515,7 +521,7 @@ export const insertIsolated = internalMutation({
       const source = sourceId(row, "reminder");
       const legacyDue = optionalText(row, "due");
       const targetId = await insert(ctx, "reminders", {
-        ownerId: "jarvis-cli",
+        ownerId: LOCAL_OWNER_ID,
         title: row.title,
         ...(legacyDue === undefined ? {} : { due: legacyDue }),
         ...(row.dueRaw === undefined ? {} : { dueRaw: row.dueRaw }),
@@ -529,7 +535,7 @@ export const insertIsolated = internalMutation({
     for (const row of prepared.builds) {
       const source = sourceId(row, "build");
       const targetId = await insert(ctx, "builds", {
-        ownerId: "jarvis-cli",
+        ownerId: LOCAL_OWNER_ID,
         name: row.name,
         kind: row.kind,
         status: row.status,
@@ -542,7 +548,7 @@ export const insertIsolated = internalMutation({
     }
     const ids = new Map([...taskIds, ...reminderIds, ...buildIds]);
     await insert(ctx, "assistantState", {
-      ownerId: "jarvis-cli",
+      ownerId: LOCAL_OWNER_ID,
       key: "primary",
       state: remap(prepared.state, ids),
       updatedAt: typeof prepared.state.updatedAt === "number" ? prepared.state.updatedAt : args.now,
@@ -551,7 +557,7 @@ export const insertIsolated = internalMutation({
       const buildId = buildIds.get(String(row.buildId));
       if (buildId === undefined) throw new Error("Local V1 restore build log has no build.");
       await insert(ctx, "buildLogs", {
-        ownerId: "jarvis-cli",
+        ownerId: LOCAL_OWNER_ID,
         buildId,
         kind: row.kind,
         title: row.title,
@@ -563,7 +569,7 @@ export const insertIsolated = internalMutation({
       const buildId = buildIds.get(String(row.buildId));
       if (buildId === undefined) throw new Error("Local V1 restore upgrade has no build.");
       await insert(ctx, "upgrades", {
-        ownerId: "jarvis-cli",
+        ownerId: LOCAL_OWNER_ID,
         buildId,
         title: row.title,
         ...copiedOptionals(row, {
@@ -576,7 +582,7 @@ export const insertIsolated = internalMutation({
     }
     for (const row of prepared.assets) {
       await insert(ctx, "assets", {
-        ownerId: "jarvis-cli",
+        ownerId: LOCAL_OWNER_ID,
         name: row.name,
         kind: row.kind,
         ...copiedOptionals(row, {
@@ -589,7 +595,7 @@ export const insertIsolated = internalMutation({
     }
     for (const row of prepared.preferences) {
       await insert(ctx, "preferences", {
-        ownerId: "jarvis-cli",
+        ownerId: LOCAL_OWNER_ID,
         key: row.key,
         value: row.value,
         ...copiedOptionals(row, { text: ["category"] }),
@@ -597,9 +603,9 @@ export const insertIsolated = internalMutation({
         updatedAt: row.updatedAt,
       });
     }
-    for (const row of prepared.tables.quotes) await insert(ctx, "quotes", storedFields(row));
+    for (const row of prepared.tables.quotes) await insert(ctx, "quotes", localOwnerFields(row));
     for (const row of prepared.tables.quoteRevisions) {
-      await insert(ctx, "quoteRevisions", storedFields(row));
+      await insert(ctx, "quoteRevisions", localOwnerFields(row));
     }
     const pdfs: PdfRef[] = [];
     for (const artifact of artifacts) {
@@ -608,7 +614,7 @@ export const insertIsolated = internalMutation({
       if (!pdf || pdf.digest !== artifact.digest) {
         throw new Error(`PDF bytes are missing for ${reference}.`);
       }
-      const fields = storedFields(artifact);
+      const fields = localOwnerFields(artifact);
       delete fields.storageId;
       await insert(ctx, "quotePdfArtifacts", {
         ...fields,
@@ -616,9 +622,10 @@ export const insertIsolated = internalMutation({
       });
       pdfs.push(pdf);
     }
+    for (const table of ["quoteDeliveryAttempts", "quoteMigrationRecords"] as const) {
+      for (const row of prepared.tables[table]) await insert(ctx, table, localOwnerFields(row));
+    }
     for (const table of [
-      "quoteDeliveryAttempts",
-      "quoteMigrationRecords",
       "toolActions",
       "toolExecutionReceipts",
       "externalReconciliations",
@@ -638,7 +645,7 @@ export const insertIsolated = internalMutation({
         : (row.entityType === "task" ? taskIds : reminderIds).get(String(row.entityId));
       if (targetId === undefined)
         throw new Error("Local V1 restore direct-create receipt has no entity.");
-      const fields = storedFields(row);
+      const fields = localOwnerFields(row);
       await insert(ctx, "directCreateReceipts", { ...fields, entityId: targetId });
     }
     for (const row of prepared.tables.internalActionResults) {

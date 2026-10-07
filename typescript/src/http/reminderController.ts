@@ -17,6 +17,7 @@ import {
 import type { FastifyReply, FastifyRequest } from "fastify";
 
 import type { PersistenceProvider, Reminder } from "../persistence/persistence.js";
+import { publicReminder } from "../persistence/publicRecords.js";
 import type { ReminderDue } from "../reminders/due.js";
 import type { ReminderUpdate } from "../persistence/updates.js";
 import { JarvisProblem } from "./problemDetails.js";
@@ -76,20 +77,6 @@ function operationProblem(error: unknown): JarvisProblem {
     HttpStatus.SERVICE_UNAVAILABLE,
     "The configured persistence provider could not complete the reminder operation.",
   );
-}
-
-function publicReminder(
-  reminder: Reminder,
-): Pick<Reminder, "id" | "title" | "dueRaw" | "dueAt" | "dueTimezone" | "createdAt"> {
-  return {
-    id: reminder.id,
-    title: reminder.title,
-    ...(reminder.dueRaw === undefined ? {} : { dueRaw: reminder.dueRaw }),
-    ...(reminder.dueAt === undefined
-      ? {}
-      : { dueAt: reminder.dueAt, dueTimezone: reminder.dueTimezone }),
-    createdAt: reminder.createdAt,
-  };
 }
 
 function reminderResponse(reminder: Reminder): {

@@ -17,6 +17,7 @@ import {
 import type { FastifyReply, FastifyRequest } from "fastify";
 
 import type { PersistenceProvider, Task } from "../persistence/persistence.js";
+import { publicTask } from "../persistence/publicRecords.js";
 import type { TaskUpdate } from "../persistence/updates.js";
 import { JarvisProblem } from "./problemDetails.js";
 import { parseCreateTask, parseIdempotencyKey, parseUpdateTask } from "./taskRequest.js";
@@ -74,18 +75,6 @@ function operationProblem(error: unknown): JarvisProblem {
     HttpStatus.SERVICE_UNAVAILABLE,
     "The configured persistence provider could not complete the task operation.",
   );
-}
-
-function publicTask(
-  task: Task,
-): Pick<Task, "id" | "title" | "completed" | "category" | "createdAt"> {
-  return {
-    id: task.id,
-    title: task.title,
-    completed: task.completed,
-    category: task.category,
-    createdAt: task.createdAt,
-  };
 }
 
 function taskResponse(task: Task): {

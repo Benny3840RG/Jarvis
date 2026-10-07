@@ -912,7 +912,141 @@ it("restores a deleted task receipt as a tombstone and still refuses an inconsis
   }
 }, 120_000);
 
-it("refuses a mismatched direct-create fingerprint and still remaps a legacy entity", async () => {
+it("normalises a foreign owner on a tombstoned receipt and quote so replay stays refused", async () => {
+  const seeded = await seed();
+  const { mkdtemp, mkdir, readFile, rm, writeFile } = await import("node:fs/promises");
+  const path = await import("node:path");
+  const { tmpdir } = await import("node:os");
+  const { captureLocalV1Archive } = await import("../src/backup/v4/localV1Capture.js");
+  const { restoreLocalV1Archive } = await import("../src/backup/v4/localV1Restore.js");
+  const { sha256Hex } = await import("../src/actions/sha256.js");
+  const root = await mkdtemp(path.join(tmpdir(), "jarvis-lv1-owner-"));
+  const live = path.join(root, "live");
+  const capturedDir = path.join(root, "capture");
+  await mkdir(live);
+  await writeBusiness(live, seeded.quote.aggregate.quoteId);
+  await seeded.t.run(async (ctx) => {
+    const task = await ctx.db.query("tasks").first();
+    if (!task) throw new Error("missing task");
+    for (const row of await ctx.db.query("internalActionResults").collect()) {
+      await ctx.db.delete("internalActionResults", row._id);
+    }
+    await ctx.db.delete("tasks", task._id);
+  });
+  try {
+    await captureLocalV1Archive({
+      outputDirectory: capturedDir,
+      businessPaths: businessFiles(live),
+      client: {
+        query: seeded.t.query.bind(seeded.t),
+        action: seeded.t.action.bind(seeded.t),
+        mutation: async () => {
+          throw new Error("capture mutation");
+        },
+      } as never,
+      serviceToken,
+      approvalToken,
+      convexUrl: endpoint,
+      capturedAt: new Date(now),
+    });
+    const foreignOwner = "other-owner";
+    const rewrite = async (file: string, tables: ReadonlySet<string>) => {
+      const sidecar = JSON.parse(await readFile(file, "utf8")) as {
+        payloadJson: string;
+        payloadSha256: string;
+      };
+      const payload = JSON.parse(sidecar.payloadJson) as {
+        tables: Array<{ table: string; documents: Array<{ ownerId?: string }> }>;
+      };
+      let changed = 0;
+      for (const entry of payload.tables) {
+        if (!tables.has(entry.table)) continue;
+        for (const document of entry.documents) {
+          document.ownerId = foreignOwner;
+          changed += 1;
+        }
+      }
+      if (changed === 0) throw new Error(`no ${[...tables].join(",")} rows to rewrite`);
+      const payloadJson = JSON.stringify(payload);
+      await writeFile(
+        file,
+        `${JSON.stringify({
+          ...sidecar,
+          payloadJson,
+          payloadSha256: sha256Hex(payloadJson),
+        })}\n`,
+      );
+    };
+    await rewrite(
+      path.join(capturedDir, "convex-receipts.json"),
+      new Set(["directCreateReceipts"]),
+    );
+    await rewrite(
+      path.join(capturedDir, "convex-s6.json"),
+      new Set([
+        "quotes",
+        "quoteRevisions",
+        "quotePdfArtifacts",
+        "quoteDeliveryAttempts",
+        "quoteMigrationRecords",
+      ]),
+    );
+    const target = convexTest(schema, modules);
+    await restoreLocalV1Archive({
+      captureDirectory: capturedDir,
+      jsonDirectory: path.join(root, "restored"),
+      client: { action: target.action.bind(target) },
+      serviceToken,
+      approvalToken,
+      convexUrl: endpoint,
+      now,
+      liveDataDir: live,
+    });
+    const receipt = await target.run(async (ctx) => {
+      return await ctx.db
+        .query("directCreateReceipts")
+        .withIndex("by_owner_type_and_key", (q) =>
+          q.eq("ownerId", "jarvis-cli").eq("entityType", "task").eq("idempotencyKey", "direct-key"),
+        )
+        .unique();
+    });
+    expect(receipt?.ownerId).toBe("jarvis-cli");
+    await expect(
+      target.mutation(api.tasks.create, {
+        serviceToken,
+        title: "Replacement",
+        category: "home",
+        idempotencyKey: "direct-key",
+        requestFingerprint: "fp",
+      }),
+    ).rejects.toThrow(/no longer available/);
+    const quote = await target.query(api.quotes.get, {
+      serviceToken,
+      quoteId: seeded.quote.aggregate.quoteId,
+    });
+    expect(quote?.aggregate.number).toBe("LV1-0001");
+    const owners = await target.run(async (ctx) => {
+      const quotes = await ctx.db.query("quotes").collect();
+      const revisions = await ctx.db.query("quoteRevisions").collect();
+      const artifacts = await ctx.db.query("quotePdfArtifacts").collect();
+      const receipts = await ctx.db.query("directCreateReceipts").collect();
+      return { quotes, revisions, artifacts, receipts };
+    });
+    for (const row of [
+      ...owners.quotes,
+      ...owners.revisions,
+      ...owners.artifacts,
+      ...owners.receipts,
+    ]) {
+      expect(row.ownerId).toBe("jarvis-cli");
+    }
+    expect(owners.quotes.length).toBeGreaterThan(0);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+}, 120_000);
+
+it("refuses a mismatched direct-create fingerprint and an untombstoned receipt with no entity key", async () => {
   const mismatched = await seed();
   const { mkdtemp, mkdir, rm } = await import("node:fs/promises");
   const path = await import("node:path");
@@ -993,28 +1127,20 @@ it("refuses a mismatched direct-create fingerprint and still remaps a legacy ent
       capturedAt: new Date(now),
     });
     const legacyTarget = convexTest(schema, modules);
-    const restored = await restoreLocalV1Archive({
-      captureDirectory: legacyDir,
-      jsonDirectory: path.join(root, "legacy-out"),
-      client: { action: legacyTarget.action.bind(legacyTarget) },
-      serviceToken,
-      approvalToken,
-      convexUrl: endpoint,
-      now,
-      liveDataDir: legacyLive,
-    });
-    const remapped = restored.maps.tasks.find((row) => row.sourceId === sourceTaskId);
-    expect(remapped?.targetId).toBeTruthy();
-    expect(remapped?.targetId).not.toBe(sourceTaskId);
-    const receipt = await legacyTarget.run(async (ctx) => {
-      return await ctx.db
-        .query("directCreateReceipts")
-        .withIndex("by_owner_type_and_key", (q) =>
-          q.eq("ownerId", "jarvis-cli").eq("entityType", "task").eq("idempotencyKey", "direct-key"),
-        )
-        .unique();
-    });
-    expect(receipt?.entityId).toBe(remapped?.targetId);
+    await expect(
+      restoreLocalV1Archive({
+        captureDirectory: legacyDir,
+        jsonDirectory: path.join(root, "legacy-out"),
+        client: { action: legacyTarget.action.bind(legacyTarget) },
+        serviceToken,
+        approvalToken,
+        convexUrl: endpoint,
+        now,
+        liveDataDir: legacyLive,
+      }),
+    ).rejects.toThrow(/does not match its entity/);
+    expect(await legacyTarget.run(async (ctx) => ctx.db.query("tasks").take(1))).toHaveLength(0);
+    expect(sourceTaskId).toBeTruthy();
   } finally {
     await rm(root, { recursive: true, force: true });
   }

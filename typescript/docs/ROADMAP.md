@@ -62,10 +62,15 @@ self-hosted convex-local-backend on `127.0.0.1` (evidence: host
 needed workarounds. A host re-proof of `990bd8c2` passed capture, restore,
 field fidelity, and tombstoned replay refusal; the restart step failed because
 the isolated child was not given `JARVIS_DELIVERY_RUNTIME_TOKEN`. The follow-up
-passes that token, refuses `*.convex.site` and loopback aliases of the
-configured URL, tombstones a deleted task or reminder idempotency key in the
-same process, and maps a persistence "no longer available" refusal to a
-non-retryable 409. Full end-to-end recovery on realistic data stays NOT YET MET
+passes that token, refuses `.convex.cloud` and `.convex.site` (including a
+trailing dot or `%2e`), and treats the configured URL as the same host and
+port regardless of scheme, localhost aliases, or IPv4-mapped loopback. It
+tombstones a deleted task or reminder idempotency key in the same process,
+maps a persistence "no longer available" refusal to a non-retryable 409,
+projects HUD and brief tasks and reminders through the public HTTP shape, and
+restores a direct-create receipt only when it matches an entity key and
+fingerprint or a tombstone. Quote and receipt rows are stored under
+`jarvis-cli`. Full end-to-end recovery on realistic data stays NOT YET MET
 until the host repeats that restart step. `completeness`
 stays `partial`. `clear-local` checksums cover the core, memory, and
 business files that action quarantines. Full v4 recovery stays refused.

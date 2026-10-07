@@ -747,7 +747,7 @@
       "get": {
         "operationId": "getHudSnapshot",
         "summary": "Read the loopback Console 02 HUD snapshot",
-        "description": "Returns the same read-only dashboard snapshot the operator HUD renders: status, tasks, reminders, brief, quote register, inbox, activity, live work, credential fingerprints, and counts. Raw tokens and service digests are never included. Served only on a loopback bind, without a Bearer token. Non-loopback binds return 404. This route does not approve, reject, execute, or mutate.",
+        "description": "Returns the same read-only dashboard snapshot the operator HUD renders: status, tasks, reminders, brief, quote register, inbox, activity, live work, credential fingerprints, and counts. Tasks and reminders in the snapshot and the embedded brief use the public Task and Reminder shapes and omit direct-create identity. Raw tokens and service digests are never included. Served only on a loopback bind, without a Bearer token. Non-loopback binds return 404. This route does not approve, reject, execute, or mutate.",
         "tags": ["System"],
         "security": [],
         "x-mcp-tool": {

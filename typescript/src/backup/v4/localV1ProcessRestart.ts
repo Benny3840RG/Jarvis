@@ -49,9 +49,9 @@ export type RestartedProcessRequest = {
   configuredConvexUrl: string | undefined;
   /**
    * Isolated Convex backend. Absent keeps the JSON-only harness. Refused when
-   * it is the configured CONVEX_URL (including localhost / 127.0.0.1 / ::1
-   * aliases on the same port), any `*.convex.cloud` host, or any `*.convex.site`
-   * host.
+   * it is the configured CONVEX_URL (scheme-insensitive host and port,
+   * including localhost / 127.0.0.1 / ::1 / IPv4-mapped loopback and a trailing
+   * dot or `%2e`), or a host under `.convex.cloud` or `.convex.site`.
    */
   isolatedConvexUrl?: string;
   /** Defaults to the harness token. A host backend can supply its own. */
@@ -112,25 +112,48 @@ function childEnvironment(
   };
 }
 
-function canonicalHostname(hostname: string): string {
-  let host = hostname.toLowerCase();
+/** Lowercase host, decoded, trailing dots removed, loopback collapsed. Endpoint ignores scheme. */
+function normaliseHttpUrl(url: URL): { host: string; endpoint: string } {
+  let host = url.hostname.toLowerCase();
+  if (host.startsWith("[") && host.endsWith("]")) host = host.slice(1, -1);
+  if (host.includes("%")) {
+    try {
+      host = decodeURIComponent(host);
+    } catch {
+      // A leftover percent sequence stays in the host so the denylist can still see it.
+    }
+  }
+  host = host.toLowerCase();
   if (host.startsWith("[") && host.endsWith("]")) host = host.slice(1, -1);
   while (host.endsWith(".")) host = host.slice(0, -1);
-  if (host === "localhost" || host === "::1" || host === "0:0:0:0:0:0:0:1") return "127.0.0.1";
-  return host;
-}
-
-function canonicalOrigin(url: URL): string {
+  if (
+    host === "localhost" ||
+    host === "::1" ||
+    host === "0:0:0:0:0:0:0:1" ||
+    isIpv4MappedLoopback(host)
+  ) {
+    host = "127.0.0.1";
+  }
   const port = url.port !== "" ? url.port : url.protocol === "https:" ? "443" : "80";
-  return `${url.protocol}//${canonicalHostname(url.hostname)}:${port}`;
+  return { host, endpoint: `${host}:${port}` };
 }
 
-function isConvexHosted(hostname: string): boolean {
-  const host = canonicalHostname(hostname);
+function isIpv4MappedLoopback(host: string): boolean {
+  const mapped = /^::ffff:(?:(\d{1,3}(?:\.\d{1,3}){3})|([0-9a-f]{1,4}):([0-9a-f]{1,4}))$/.exec(
+    host,
+  );
+  if (!mapped) return false;
+  if (mapped[1] !== undefined) return mapped[1] === "127.0.0.1";
+  const high = Number.parseInt(mapped[2] ?? "", 16);
+  const low = Number.parseInt(mapped[3] ?? "", 16);
+  return high === 0x7f00 && low === 0x0001;
+}
+
+function isConvexHosted(host: string): boolean {
   return (
     host === "convex.cloud" ||
-    host.endsWith(".convex.cloud") ||
     host === "convex.site" ||
+    host.endsWith(".convex.cloud") ||
     host.endsWith(".convex.site")
   );
 }
@@ -149,7 +172,8 @@ function assertIsolatedConvexUrl(url: string, configured: string | undefined): v
   ) {
     throw new Error("Local V1 process restart isolated Convex URL is not an isolated http(s) URL.");
   }
-  if (isConvexHosted(parsed.hostname)) {
+  const isolated = normaliseHttpUrl(parsed);
+  if (isConvexHosted(isolated.host)) {
     throw new Error("Local V1 process restart refuses a Convex cloud URL.");
   }
   const configuredTrimmed = configured?.trim();
@@ -163,7 +187,7 @@ function assertIsolatedConvexUrl(url: string, configured: string | undefined): v
   } catch {
     return;
   }
-  if (canonicalOrigin(parsed) === canonicalOrigin(configuredUrl)) {
+  if (isolated.endpoint === normaliseHttpUrl(configuredUrl).endpoint) {
     throw new Error("Local V1 process restart refuses the configured CONVEX_URL.");
   }
 }
