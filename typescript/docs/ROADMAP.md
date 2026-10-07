@@ -75,6 +75,7 @@ queries report recorded build status only.
 
 Next:
 
+- LV1-05 safe voice writes through existing API/MCP/ToolAction paths.
 - Owner-wide quote-delivery follow-up remains unsupported (same gap as the
   operations inbox). Voice quote follow-up therefore fails closed as unavailable,
   naming the missing owner-wide governed sent-quote read (lifecycle delivery ledger).
