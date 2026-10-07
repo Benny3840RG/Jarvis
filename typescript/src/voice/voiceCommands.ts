@@ -13,8 +13,9 @@
  *   - `actuate` commands name a hardware target and nothing else — with no
  *     hardware adapter present in main they resolve to "unavailable", never a
  *     simulated acknowledgement;
- *   - `propose` commands stage a governed ToolAction through the existing
- *     approval path — the voice layer never approves or executes;
+ *   - `propose` commands name a governed tool. A safe write whose tool and
+ *     operation already have a ToolAction executor may be staged; consequential
+ *     proposals stay intent-only. The voice layer never approves or executes;
  *   - `critical` commands always require a spoken confirmation step, which
  *     guards against accidental activation and is NOT an authorisation
  *     boundary (it never supplies JARVIS_APPROVAL_TOKEN).
@@ -37,7 +38,7 @@ export const VOICE_PROFILES: readonly VoiceProfile[] = ["crawler", "workshop", "
 export type VoiceDispatchKind =
   /** Read-only information request; safe to answer directly. */
   | "query"
-  /** Stages a governed ToolAction. The voice layer never approves or executes. */
+  /** Names a governed tool. Safe writes may be staged; voice never approves or executes. */
   | "propose"
   /** Physical/equipment actuation; requires a hardware adapter (absent in main). */
   | "actuate";
@@ -402,7 +403,8 @@ export const VOICE_COMMANDS: readonly VoiceCommand[] = Object.freeze([
     kind: "query",
     criticality: "routine",
     requiresSpokenConfirmation: false,
-    summary: "Read quotes the daily brief marks as awaiting a response.",
+    summary:
+      "Quote follow-up stays unavailable until an owner-wide governed sent-quote read (lifecycle delivery ledger) exists. The daily-brief quote file is not that register.",
   }),
   command({
     id: "client.open-tasks",
@@ -420,7 +422,7 @@ export const VOICE_COMMANDS: readonly VoiceCommand[] = Object.freeze([
     kind: "query",
     criticality: "routine",
     requiresSpokenConfirmation: false,
-    summary: "Read reminders due, upcoming, and undated.",
+    summary: "Read reminders due, upcoming, undated, and dated beyond the 24-hour brief window.",
   }),
   command({
     id: "client.open-errands",
@@ -459,7 +461,27 @@ export const VOICE_COMMANDS: readonly VoiceCommand[] = Object.freeze([
     criticality: "routine",
     requiresSpokenConfirmation: false,
     summary: "Propose a follow-up reminder for the operator to confirm.",
-    proposes: { tool: "create_reminder", operation: "reminders:create" },
+    proposes: { tool: "reminders", operation: "create" },
+  }),
+  command({
+    id: "client.capture-task",
+    profile: "client",
+    phrases: ["add a task", "capture a task"],
+    kind: "propose",
+    criticality: "routine",
+    requiresSpokenConfirmation: false,
+    summary: "Stage a task on the existing ToolAction path. Voice does not approve or execute it.",
+    proposes: { tool: "tasks", operation: "create" },
+  }),
+  command({
+    id: "client.capture-errand",
+    profile: "client",
+    phrases: ["add an errand", "capture an errand"],
+    kind: "propose",
+    criticality: "routine",
+    requiresSpokenConfirmation: false,
+    summary: "Name create_errand. Voice does not write errands; no ToolAction executor exists.",
+    proposes: { tool: "create_errand", operation: "errands:create" },
   }),
 ]);
 

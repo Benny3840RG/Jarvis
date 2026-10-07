@@ -6,11 +6,14 @@ import {
   HttpCode,
   HttpStatus,
   Inject,
+  Optional,
   Param,
   Post,
 } from "@nestjs/common";
 
+import type { ToolActionService } from "../actions/toolActions.js";
 import { VOICE_COMMANDS, VOICE_PROFILES } from "../voice/voiceCommands.js";
+import { stageVoiceSafeWrite, voiceUtteranceForSession } from "../voice/voiceSafeWrite.js";
 import type { VoiceSessionRegistry } from "../voice/voiceSessionRegistry.js";
 import { LocalLoopbackRoute } from "./localLoopbackRoute.js";
 import { JarvisProblem } from "./problemDetails.js";
@@ -19,7 +22,7 @@ import {
   parseSwitchVoiceProfile,
   parseVoiceUtterance,
 } from "./voiceRequest.js";
-import { HTTP_VOICE_REGISTRY } from "./tokens.js";
+import { HTTP_TOOL_ACTIONS, HTTP_VOICE_REGISTRY } from "./tokens.js";
 
 function invalid(detail: string): JarvisProblem {
   return new JarvisProblem(
@@ -44,15 +47,20 @@ function sessionNotFound(): JarvisProblem {
  * service-token guard. The controller is stateless; the session registry owns
  * the confirmation lifecycle so a client cannot forge or replay a confirmation.
  *
- * A `propose` dispatch returns the governed tool/operation *intent* only — it
- * never stages, approves or executes a ToolAction. Staging and approval stay on
- * the existing governed `/api/v1/projects/{projectId}/tool-actions` path, which
- * alone holds the owner approval token.
+ * A safe write (`tasks/create`, `reminders/create`) may call `ToolActionService.stage`
+ * on the existing service. Voice never approves or executes. Consequential
+ * proposals stay intent-only. Approval stays on the existing tool-action route,
+ * which alone holds the owner approval token.
  */
 @Controller("api/v1/voice")
 @LocalLoopbackRoute()
 export class VoiceController {
-  constructor(@Inject(HTTP_VOICE_REGISTRY) private readonly registry: VoiceSessionRegistry) {}
+  constructor(
+    @Inject(HTTP_VOICE_REGISTRY) private readonly registry: VoiceSessionRegistry,
+    @Optional()
+    @Inject(HTTP_TOOL_ACTIONS)
+    private readonly toolActions?: ToolActionService | null,
+  ) {}
 
   @Get("catalog")
   catalog() {
@@ -89,8 +97,37 @@ export class VoiceController {
     }
     const session = this.registry.get(sessionId);
     if (!session) throw sessionNotFound();
-    const dispatch = await session.handle(parsed);
-    return { dispatch, pending: session.pending() ?? null };
+    const prepared = voiceUtteranceForSession(parsed);
+    const dispatch = await session.handle({
+      transcript: prepared.transcript,
+      isFinal: parsed.isFinal,
+      ...(prepared.alternatives ? { alternatives: prepared.alternatives } : {}),
+    });
+    if (dispatch.decision !== "proposed") {
+      return { dispatch, pending: session.pending() ?? null };
+    }
+    const staged = await stageVoiceSafeWrite({
+      service: this.toolActions,
+      sessionId,
+      command: dispatch.command,
+      wakeAuthorized: prepared.wakeAuthorized,
+      ...(parsed.projectId === undefined ? {} : { projectId: parsed.projectId }),
+      ...(parsed.expectedRevision === undefined
+        ? {}
+        : { expectedRevision: parsed.expectedRevision }),
+      ...(parsed.capture === undefined ? {} : { capture: parsed.capture }),
+    });
+    if (!staged) return { dispatch, pending: session.pending() ?? null };
+    if ("toolActionId" in staged) {
+      return {
+        dispatch: { ...dispatch, toolActionId: staged.toolActionId },
+        pending: session.pending() ?? null,
+      };
+    }
+    return {
+      dispatch: { ...dispatch, reason: staged.reason },
+      pending: session.pending() ?? null,
+    };
   }
 
   @Post("sessions/:sessionId/profile")
