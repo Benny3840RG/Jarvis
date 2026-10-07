@@ -5,7 +5,7 @@
 **Slice:** LV1-09 recovery closure  
 **Source read:** `adf82e37373105b2762033a22e8b1b9e8f7494c4` (`main`)  
 **Plan:** `docs/operations/local-v1-release-plan.md`, `JARVIS_ROADMAP.yaml` `release_tracks.local-v1.workstreams.lv1-recovery`  
-**Mode:** analysis, then PR 1, PR 2, and PR 3. PR 1 locks the live split. PR 2 adds `captureLocalV1Archive`, a read-only partial capture. PR 3 restores that capture into a scratch JSON directory and an injected empty database. It is not wired to `export-v4` and it does not write a live store.
+**Mode:** analysis, then PR 1, PR 2, PR 3, and PR 4. PR 1 locks the live split. PR 2 adds `captureLocalV1Archive`, a read-only partial capture. PR 3 restores that capture into a scratch JSON directory and an injected empty database. PR 4 adds `proveLocalV1Recovery`, which calls that restore and does not write a live store. It is not wired to `export-v4`. `completeness` stays `partial`.
 
 ## Decisions (integration lead, 2026-10-07)
 
@@ -223,7 +223,7 @@ Tests: `convex/backupS4*.test.ts`, `convex/backupS5*.test.ts`, `convex/backupS6.
 
 ### 2.4 Danger zone and settings
 
-`clear-local` quarantines every basename in `coreDataFiles` and `businessDataFiles` (`.corrupt-*` rename, not unlink). It does not call Convex deletes. It accepts either an explicit skip or a classic verify receipt from the last 24 hours (`assertVerifiedBackup`). That receipt is written by classic `verify`, whose archive does not contain the business files being quarantined.
+`clear-local` quarantines every basename in `coreDataFiles` and `businessDataFiles` (`.corrupt-*` rename, not unlink). It does not call Convex deletes. Skip still requires accepting irreversible loss. A verified backup authorises the quarantine only when its receipt lists sha256 or `absent` for every business JSON file and those checksums match the live files. A classic verify receipt does not.
 
 `reset-local-json` quarantines only `jarvis-state.json`. Under Convex that file is not the live task store.
 
@@ -322,7 +322,9 @@ Reread is through `JsonClientStore`, `JsonQuoteStore`, `JsonInvoiceStore`, `Conv
 
 ### PR 4 — HARDEN: the Local V1 proof gate
 
-Add one function, used by verify and by the future evidence run, that returns success only when all of the following held on the isolated targets:
+Landed as `proveLocalV1Recovery` in `typescript/src/backup/v4/localV1Proof.ts`. It calls `restoreLocalV1Archive` and does not add a second apply path. `clear-local` refuses a classic verify receipt that omits business checksums. The explicit skip remains. `completeness` stays `partial`. Operator text is PR 5.
+
+The function returns success only when all of the following held on the isolated targets:
 
 1. Every V1 store in section 1.1 and the Convex tables in section 1.3 was in the capture (empty is valid; omitted is not).
 2. Strict validate passed, including blob digests.
@@ -380,4 +382,4 @@ Closed by the integration lead on 2026-10-07. See the decision list at the top o
 
 ## 8. What this file is not
 
-It is not a recovery drill and not a claim that any archive on disk is restorable. PR 1 locks the split. PR 2 writes a partial capture only. PR 3 restores that capture into scratch JSON and an injected empty database. The named proof gate, including a restarted HTTP reread, is still PR 4. `assertRecoverable` still refuses the archive.
+It is not a recovery drill and not a claim that any archive on disk is restorable. PR 1 locks the split. PR 2 writes a partial capture only. PR 3 restores that capture into scratch JSON and an injected empty database. PR 4 names the proof gate `proveLocalV1Recovery`, including a restarted isolated read. It does not flip `completeness` to `complete`. Operator text is still PR 5. `assertRecoverable` still refuses the archive.
