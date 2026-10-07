@@ -71,6 +71,15 @@ afterEach(async () => {
   await Promise.all(openApps.splice(0).map((app) => app.close()));
 });
 
+async function createClient(app: NestFastifyApplication): Promise<string> {
+  const created = await inject(app, "POST", "/api/v1/clients", {
+    headers: AUTH,
+    payload: { name: "Referenced client" },
+  });
+  assert.equal(created.statusCode, 201);
+  return created.json<{ data: { id: string } }>().data.id;
+}
+
 describe("project HTTP boundary", () => {
   it("requires authentication", async () => {
     const app = await makeApp();
@@ -79,16 +88,17 @@ describe("project HTTP boundary", () => {
 
   it("creates, lists, gets, updates, and deletes a project", async () => {
     const app = await makeApp();
+    const clientId = await createClient(app);
 
     const created = await inject(app, "POST", "/api/v1/projects", {
       headers: AUTH,
-      payload: { clientId: "c1", propertyId: "p1", title: "Deck rebuild", status: "active" },
+      payload: { clientId, propertyId: "p1", title: "Deck rebuild", status: "active" },
     });
     assert.equal(created.statusCode, 201);
     const project = created.json<{ data: Project }>().data;
     assert.equal(project.title, "Deck rebuild");
     assert.equal(project.status, "active");
-    assert.equal(project.clientId, "c1");
+    assert.equal(project.clientId, clientId);
     assert.equal(project.propertyId, "p1");
 
     assert.equal(

@@ -14,6 +14,7 @@ import {
 } from "@nestjs/common";
 import type { FastifyReply, FastifyRequest } from "fastify";
 
+import type { ClientStore } from "../clients/client.js";
 import { withClientReferenceLock } from "../clients/clientReferenceLock.js";
 import {
   QuoteFingerprintMismatchError,
@@ -43,6 +44,7 @@ import {
   parseUpdateQuoteDraft,
 } from "./quoteRequest.js";
 import {
+  HTTP_CLIENT_STORE,
   HTTP_QUOTE_DELIVERY_REPOSITORY,
   HTTP_QUOTE_PDF_ARTIFACT_REPOSITORY,
   HTTP_QUOTE_REPOSITORY,
@@ -217,6 +219,7 @@ export class QuoteController {
     private readonly deliveries: QuoteDeliveryRepository | null,
     @Inject(HTTP_QUOTE_PDF_ARTIFACT_REPOSITORY)
     private readonly pdfArtifacts: QuotePdfArtifactRepository | null,
+    @Inject(HTTP_CLIENT_STORE) private readonly clients: ClientStore,
   ) {}
 
   private requireRepository(): QuoteRepository {
@@ -239,8 +242,9 @@ export class QuoteController {
       throw invalid(error instanceof Error ? error.message : "The quote request is invalid.");
     }
     try {
-      return await withClientReferenceLock(async () =>
-        snapshotResponse(await this.requireRepository().createQuote(input)),
+      return await withClientReferenceLock(
+        async () => snapshotResponse(await this.requireRepository().createQuote(input)),
+        { clients: this.clients, clientId: input.clientId },
       );
     } catch (error: unknown) {
       if (error instanceof JarvisProblem) throw error;

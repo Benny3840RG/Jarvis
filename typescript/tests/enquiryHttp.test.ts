@@ -71,6 +71,15 @@ afterEach(async () => {
   await Promise.all(openApps.splice(0).map((app) => app.close()));
 });
 
+async function createClient(app: NestFastifyApplication): Promise<string> {
+  const created = await inject(app, "POST", "/api/v1/clients", {
+    headers: AUTH,
+    payload: { name: "Referenced client" },
+  });
+  assert.equal(created.statusCode, 201);
+  return created.json<{ data: { id: string } }>().data.id;
+}
+
 describe("enquiry HTTP boundary", () => {
   it("requires authentication", async () => {
     const app = await makeApp();
@@ -79,10 +88,11 @@ describe("enquiry HTTP boundary", () => {
 
   it("creates, replays, filters, updates, closes, and converts an enquiry", async () => {
     const app = await makeApp();
+    const clientId = await createClient(app);
     const created = await inject(app, "POST", "/api/v1/enquiries", {
       headers: AUTH,
       payload: {
-        clientId: "c1",
+        clientId,
         propertyId: "p1",
         source: "phone",
         requestedWork: "Prune trees near fence",
@@ -94,7 +104,7 @@ describe("enquiry HTTP boundary", () => {
     const replay = await inject(app, "POST", "/api/v1/enquiries", {
       headers: AUTH,
       payload: {
-        clientId: "c1",
+        clientId,
         source: "email",
         requestedWork: "Different",
         duplicateKey: "phone-123",
@@ -103,7 +113,9 @@ describe("enquiry HTTP boundary", () => {
     assert.equal(replay.json<{ data: Enquiry }>().data.id, enquiry.id);
     assert.equal(
       (
-        await inject(app, "GET", "/api/v1/enquiries?status=open&clientId=c1", { headers: AUTH })
+        await inject(app, "GET", `/api/v1/enquiries?status=open&clientId=${clientId}`, {
+          headers: AUTH,
+        })
       ).json<{ count: number }>().count,
       1,
     );
@@ -123,7 +135,7 @@ describe("enquiry HTTP boundary", () => {
     assert.equal(converted.statusCode, 201);
     const conversion = converted.json<{ data: EnquiryConversionResult }>().data;
     assert.equal(conversion.enquiry.status, "converted");
-    assert.equal(conversion.project.clientId, "c1");
+    assert.equal(conversion.project.clientId, clientId);
     assert.equal(conversion.project.propertyId, "p1");
     const conversionReplay = await inject(
       app,
@@ -149,9 +161,10 @@ describe("enquiry HTTP boundary", () => {
       (await inject(app, "GET", "/api/v1/enquiries?status=lost", { headers: AUTH })).statusCode,
       422,
     );
+    const clientId = await createClient(app);
     const created = await inject(app, "POST", "/api/v1/enquiries", {
       headers: AUTH,
-      payload: { clientId: "c1", source: "phone", requestedWork: "Hedge trim" },
+      payload: { clientId, source: "phone", requestedWork: "Hedge trim" },
     });
     const id = created.json<{ data: Enquiry }>().data.id;
     assert.equal(
