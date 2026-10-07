@@ -77,7 +77,7 @@ function safeWriteArguments(
     return { title, category };
   }
   if (key === "reminders:create") {
-    const title = capture?.title?.trim() || "Follow up";
+    const title = capture?.title?.trim() ?? "";
     if (title.length < 1 || title.length > 200) return undefined;
     return { title };
   }

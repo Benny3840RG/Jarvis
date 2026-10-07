@@ -359,6 +359,7 @@ describe("voice safe writes", () => {
       transcript: "Jarvis remind me to follow up.",
       isFinal: true,
       ...TARGET,
+      capture: { title: "Call the client" },
     };
 
     const first = await utter(app, sessionId, payload);
@@ -369,7 +370,7 @@ describe("voice safe writes", () => {
     assert.ok(staged);
     assert.equal(staged.tool, "reminders");
     assert.equal(staged.operation, "create");
-    assert.deepEqual(staged.arguments, { title: "Follow up" });
+    assert.deepEqual(staged.arguments, { title: "Call the client" });
     assert.equal(actions.approveCalls, 0);
 
     const approved = await actions.approve({
@@ -381,7 +382,7 @@ describe("voice safe writes", () => {
     const receipt = await executeLive(execution, approved);
     assert.equal(receipt.status, "succeeded");
     assert.equal(reminders.records.length, 1);
-    assert.equal(reminders.records[0]?.title, "Follow up");
+    assert.equal(reminders.records[0]?.title, "Call the client");
 
     const retry = await utter(app, sessionId, payload);
     assert.equal(retry.json().dispatch.toolActionId, actionId);
@@ -390,6 +391,42 @@ describe("voice safe writes", () => {
     assert.equal(replay.receiptId, receipt.receiptId);
     assert.equal(reminders.records.length, 1);
     assert.equal(tasks.records.length, 0);
+  });
+
+  it("does not invent a reminder title when capture is missing or blank", async () => {
+    const actions = new MemoryActions();
+    const app = await makeApp(actions);
+    const sessionId = await openSession(app);
+
+    const missing = await utter(app, sessionId, {
+      transcript: "jarvis remind me to follow up",
+      isFinal: true,
+      ...TARGET,
+    });
+    assert.equal(missing.statusCode, 200);
+    assert.equal(missing.json().dispatch.decision, "proposed");
+    assert.equal(missing.json().dispatch.toolActionId, undefined);
+    assert.equal(
+      missing.json().dispatch.reason,
+      "Safe write was not staged: the capture is missing a required field.",
+    );
+    assert.equal(actions.rows.size, 0);
+
+    const blank = await utter(app, sessionId, {
+      transcript: "jarvis remind me to follow up",
+      isFinal: true,
+      ...TARGET,
+      capture: { title: "   " },
+    });
+    assert.equal(blank.statusCode, 200);
+    assert.equal(blank.json().dispatch.decision, "proposed");
+    assert.equal(blank.json().dispatch.toolActionId, undefined);
+    assert.equal(
+      blank.json().dispatch.reason,
+      "Safe write was not staged: the capture is missing a required field.",
+    );
+    assert.equal(actions.rows.size, 0);
+    assert.equal(actions.approveCalls, 0);
   });
 
   it("keeps a consequential quote send as a proposal with no effect", async () => {

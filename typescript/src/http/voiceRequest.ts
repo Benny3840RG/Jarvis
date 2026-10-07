@@ -66,7 +66,8 @@ function parseCaptureField(value: unknown, name: string, max: number): string | 
   if (value === undefined) return undefined;
   if (typeof value !== "string") throw new Error(`${name} must be a string.`);
   const trimmed = value.trim();
-  if (trimmed.length < 1 || trimmed.length > max) {
+  if (trimmed.length === 0) return undefined;
+  if (trimmed.length > max) {
     throw new Error(`${name} must be within its length limit.`);
   }
   return trimmed;
