@@ -6,14 +6,23 @@ import { pathToFileURL } from "node:url";
 
 import { ConvexHttpClient } from "convex/browser";
 
-import { createMicrosoftOutlookRuntimeFromEnv } from "../auth/microsoftOutlookRuntime.js";
+import { resolveOutlookConnections } from "../auth/microsoftOutlookConnections.js";
+import {
+  createMicrosoftOutlookRuntimeFromEnv,
+  type MicrosoftOutlookRuntime,
+} from "../auth/microsoftOutlookRuntime.js";
 import { api } from "../../convex/_generated/api.js";
 import { createOutlookReconciliationWorker } from "../reconciliation/outlookRuntimeReconciliation.js";
-import { resolveRuntimeReconciliationConfig } from "../reconciliation/runtimeReconciliationHost.js";
+import {
+  resolveRuntimeReconciliationConfig,
+  type EnabledRuntimeReconciliationConfig,
+} from "../reconciliation/runtimeReconciliationHost.js";
 import { ReconciliationWorker } from "../reconciliation/reconciliationWorker.js";
 import {
   assertOutlookCommissioningProof,
   beginOutlookQuoteCommissioning,
+  normaliseCommissioningEnvironment,
+  type CommissioningEnvironment,
   type CommissioningPlan,
   type OutlookCommissioningEvidence,
   type ReconciliationObservation,
@@ -32,6 +41,14 @@ function loadLocalEnvironment(): void {
     if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
   }
 }
+
+export type CommissioningRequest = (input: {
+  baseUrl: string;
+  token: string;
+  method: "GET" | "POST" | "PATCH";
+  path: string;
+  body?: Json;
+}) => Promise<{ status: number; body: Json }>;
 
 async function requestJson(input: {
   baseUrl: string;
@@ -156,9 +173,55 @@ function observationFrom(value: unknown): ReconciliationObservation | null {
   };
 }
 
-async function loadContacts(baseUrl: string, token: string): Promise<string[]> {
+/**
+ * Named mode must stage the exact sender fingerprint. Legacy mode omits it.
+ * There is no default connection when more than one mailbox is configured.
+ */
+export function commissioningSenderConnection(
+  environment: CommissioningEnvironment,
+): string | undefined {
+  const named =
+    environment.JARVIS_OUTLOOK_ENABLED === "true" &&
+    environment.JARVIS_OUTLOOK_CONNECTIONS_JSON !== undefined;
+  const selected = environment.JARVIS_OUTLOOK_COMMISSIONING_CONNECTION?.trim() ?? "";
+  if (!named) {
+    if (selected.length > 0) {
+      throw new Error(
+        "Outlook quote commissioning refused: JARVIS_OUTLOOK_COMMISSIONING_CONNECTION is only valid when named Outlook connections are enabled.",
+      );
+    }
+    return undefined;
+  }
+  if (selected.length === 0) {
+    throw new Error(
+      "Outlook quote commissioning refused: JARVIS_OUTLOOK_COMMISSIONING_CONNECTION must name the sender connection.",
+    );
+  }
+  let connections;
+  try {
+    connections = resolveOutlookConnections(environment);
+  } catch {
+    throw new Error(
+      "Outlook quote commissioning refused: named Outlook connections could not be read.",
+    );
+  }
+  const match = connections.filter((connection) => connection.id === selected);
+  const chosen = match[0];
+  if (match.length !== 1 || !chosen) {
+    throw new Error(
+      "Outlook quote commissioning refused: JARVIS_OUTLOOK_COMMISSIONING_CONNECTION must name one configured connection.",
+    );
+  }
+  return chosen.senderConnection;
+}
+
+async function loadContacts(
+  request: CommissioningRequest,
+  baseUrl: string,
+  token: string,
+): Promise<string[]> {
   const body = expectStatus(
-    await requestJson({ baseUrl, token, method: "GET", path: "/api/v1/clients" }),
+    await request({ baseUrl, token, method: "GET", path: "/api/v1/clients" }),
     200,
     "List clients",
   );
@@ -175,20 +238,29 @@ async function loadContacts(baseUrl: string, token: string): Promise<string[]> {
   return values;
 }
 
-async function projectRevision(plan: CommissioningPlan, serviceToken: string): Promise<number> {
+async function projectRevision(
+  plan: CommissioningPlan,
+  serviceToken: string,
+): Promise<number | null> {
   const project = await new ConvexHttpClient(plan.convexUrl).query(api.projects.get, {
     serviceToken,
     projectKey: plan.projectKey,
   });
-  if (project === null) {
+  if (project === null) return null;
+  return project.revision;
+}
+
+function requireProject(revision: number | null): number {
+  if (revision === null) {
     throw new Error(
       "Outlook quote commissioning refused: the totality project does not exist. This kit does not create one.",
     );
   }
-  return project.revision;
+  return revision;
 }
 
 async function stageSend(input: {
+  request: CommissioningRequest;
   plan: CommissioningPlan;
   token: string;
   approvalToken: string;
@@ -198,7 +270,7 @@ async function stageSend(input: {
   fingerprint: string;
 }): Promise<void> {
   const staged = expectStatus(
-    await requestJson({
+    await input.request({
       baseUrl: input.plan.apiBaseUrl,
       token: input.token,
       method: "POST",
@@ -214,6 +286,9 @@ async function stageSend(input: {
           recipient: input.plan.recipient,
           deliveryChannel: "email",
           expectedRevisionFingerprint: input.fingerprint,
+          ...(input.plan.senderConnection === undefined
+            ? {}
+            : { senderConnection: input.plan.senderConnection }),
         },
         rationale: "Commissioning send of a disposable non-customer quote.",
         requiredAuthority: "T2",
@@ -229,7 +304,7 @@ async function stageSend(input: {
     throw new Error("Staged quotes:send did not bind the totality project revision.");
   }
   const approved = expectStatus(
-    await requestJson({
+    await input.request({
       baseUrl: input.plan.apiBaseUrl,
       token: input.token,
       method: "POST",
@@ -248,13 +323,14 @@ async function stageSend(input: {
 }
 
 async function executeSend(input: {
+  request: CommissioningRequest;
   plan: CommissioningPlan;
   token: string;
   actionId: string;
 }): Promise<{ status: string; providerRequestId?: string; reconciliationId?: string }> {
   return readReceipt(
     expectStatus(
-      await requestJson({
+      await input.request({
         baseUrl: input.plan.apiBaseUrl,
         token: input.token,
         method: "POST",
@@ -283,12 +359,13 @@ async function drainWorker(worker: ReconciliationWorker, marker: string): Promis
 }
 
 async function readReconciliations(input: {
+  request: CommissioningRequest;
   plan: CommissioningPlan;
   token: string;
   reconciliationId: string;
 }): Promise<ReconciliationObservation[]> {
   const listed = expectStatus(
-    await requestJson({
+    await input.request({
       baseUrl: input.plan.apiBaseUrl,
       token: input.token,
       method: "GET",
@@ -305,7 +382,7 @@ async function readReconciliations(input: {
     }
   }
   const detail = expectStatus(
-    await requestJson({
+    await input.request({
       baseUrl: input.plan.apiBaseUrl,
       token: input.token,
       method: "GET",
@@ -321,27 +398,23 @@ async function readReconciliations(input: {
   return records;
 }
 
-async function runCommissioning(
-  environment: NodeJS.ProcessEnv,
-  plan: CommissioningPlan,
-): Promise<
+async function runCommissioning(input: {
+  request: CommissioningRequest;
+  environment: CommissioningEnvironment;
+  plan: CommissioningPlan;
+  outlook: MicrosoftOutlookRuntime;
+  reconciliation: EnabledRuntimeReconciliationConfig;
+  projectRevision: number;
+}): Promise<
   OutlookCommissioningEvidence & { quoteId: string; revision: number; recipient: string }
 > {
-  const outlook = createMicrosoftOutlookRuntimeFromEnv(environment);
-  if (!outlook) {
-    throw new Error(
-      "Outlook quote commissioning refused: the Microsoft Outlook runtime is not configured.",
-    );
-  }
-  const reconciliation = resolveRuntimeReconciliationConfig(environment);
-  if (!reconciliation.enabled) {
-    throw new Error("Outlook quote commissioning refused: reconciliation is not enabled.");
-  }
+  const { request, environment, plan, outlook, reconciliation } = input;
+  const projectRevisionNumber = input.projectRevision;
   const token = environment.JARVIS_SERVICE_TOKEN?.trim() ?? "";
   const approvalToken = environment.JARVIS_APPROVAL_TOKEN?.trim() ?? "";
   const marker = `outlook-commission-${randomUUID()}`;
   const createdClient = expectStatus(
-    await requestJson({
+    await request({
       baseUrl: plan.apiBaseUrl,
       token,
       method: "POST",
@@ -361,7 +434,7 @@ async function runCommissioning(
   const clientId = createdClient.data.id;
   let snapshot = readSnapshot(
     expectStatus(
-      await requestJson({
+      await request({
         baseUrl: plan.apiBaseUrl,
         token,
         method: "POST",
@@ -379,7 +452,7 @@ async function runCommissioning(
   );
   snapshot = readSnapshot(
     expectStatus(
-      await requestJson({
+      await request({
         baseUrl: plan.apiBaseUrl,
         token,
         method: "PATCH",
@@ -392,7 +465,7 @@ async function runCommissioning(
   );
   snapshot = readSnapshot(
     expectStatus(
-      await requestJson({
+      await request({
         baseUrl: plan.apiBaseUrl,
         token,
         method: "POST",
@@ -405,7 +478,7 @@ async function runCommissioning(
   );
   snapshot = readSnapshot(
     expectStatus(
-      await requestJson({
+      await request({
         baseUrl: plan.apiBaseUrl,
         token,
         method: "POST",
@@ -423,18 +496,18 @@ async function runCommissioning(
   if (snapshot.status !== "finalized" || !snapshot.fingerprint) {
     throw new Error("Finalise did not stamp a fingerprint.");
   }
-  const revision = await projectRevision(plan, token);
   const sendActionId = `${marker}-send`;
   await stageSend({
+    request,
     plan,
     token,
     approvalToken,
-    projectRevision: revision,
+    projectRevision: projectRevisionNumber,
     actionId: sendActionId,
     quoteId: snapshot.quoteId,
     fingerprint: snapshot.fingerprint,
   });
-  const sent = await executeSend({ plan, token, actionId: sendActionId });
+  const sent = await executeSend({ request, plan, token, actionId: sendActionId });
   if (!sent.providerRequestId || !sent.reconciliationId) {
     throw new Error(
       `quotes:send did not capture a Graph message identity (receipt status ${sent.status}).`,
@@ -443,18 +516,19 @@ async function runCommissioning(
   const worker = createOutlookReconciliationWorker(outlook, reconciliation);
   await drainWorker(worker, `${marker}-first`);
   await stageSend({
+    request,
     plan,
     token,
     approvalToken,
-    projectRevision: revision,
+    projectRevision: projectRevisionNumber,
     actionId: `${marker}-repeat`,
     quoteId: snapshot.quoteId,
     fingerprint: snapshot.fingerprint,
   });
-  const repeated = await executeSend({ plan, token, actionId: `${marker}-repeat` });
+  const repeated = await executeSend({ request, plan, token, actionId: `${marker}-repeat` });
   await drainWorker(worker, `${marker}-again`);
   const deliveries = expectStatus(
-    await requestJson({
+    await request({
       baseUrl: plan.apiBaseUrl,
       token,
       method: "GET",
@@ -466,6 +540,7 @@ async function runCommissioning(
   const deliveryCount =
     isRecord(deliveries) && Array.isArray(deliveries.data) ? deliveries.data.length : -1;
   const records = await readReconciliations({
+    request,
     plan,
     token,
     reconciliationId: sent.reconciliationId,
@@ -484,17 +559,56 @@ async function runCommissioning(
   };
 }
 
+export async function executeOutlookQuoteCommissioning(
+  environment: NodeJS.ProcessEnv,
+  overrides: {
+    request?: CommissioningRequest;
+    loadProjectRevision?: (plan: CommissioningPlan, serviceToken: string) => Promise<number | null>;
+    createOutlookRuntime?: typeof createMicrosoftOutlookRuntimeFromEnv;
+  } = {},
+): Promise<
+  OutlookCommissioningEvidence & { quoteId: string; revision: number; recipient: string }
+> {
+  const normalised = normaliseCommissioningEnvironment(environment);
+  const request = overrides.request ?? requestJson;
+  const token = normalised.JARVIS_SERVICE_TOKEN?.trim() ?? "";
+  const plan = await beginOutlookQuoteCommissioning({
+    environment: normalised,
+    loadClientContactValues: () =>
+      loadContacts(request, normalised.JARVIS_API_BASE_URL ?? "", token),
+  });
+  const senderConnection = commissioningSenderConnection(normalised);
+  const planned = senderConnection === undefined ? plan : { ...plan, senderConnection };
+  const outlook = (overrides.createOutlookRuntime ?? createMicrosoftOutlookRuntimeFromEnv)(
+    normalised,
+  );
+  if (!outlook) {
+    throw new Error(
+      "Outlook quote commissioning refused: the Microsoft Outlook runtime is not configured.",
+    );
+  }
+  const reconciliation = resolveRuntimeReconciliationConfig(normalised);
+  if (!reconciliation.enabled) {
+    throw new Error("Outlook quote commissioning refused: reconciliation is not enabled.");
+  }
+  const revision = requireProject(
+    await (overrides.loadProjectRevision ?? projectRevision)(planned, token),
+  );
+  return runCommissioning({
+    request,
+    environment: normalised,
+    plan: planned,
+    outlook,
+    reconciliation,
+    projectRevision: revision,
+  });
+}
+
 async function main(): Promise<void> {
   loadLocalEnvironment();
-  const environment = process.env;
-  const token = environment.JARVIS_SERVICE_TOKEN?.trim() ?? "";
-  const plan = await beginOutlookQuoteCommissioning({
-    environment,
-    loadClientContactValues: () => loadContacts(environment.JARVIS_API_BASE_URL ?? "", token),
-  });
-  const evidence = await runCommissioning(environment, plan);
+  const evidence = await executeOutlookQuoteCommissioning(process.env);
   const json = `${JSON.stringify(evidence, null, 2)}\n`;
-  const evidencePath = environment.JARVIS_OUTLOOK_COMMISSIONING_EVIDENCE?.trim();
+  const evidencePath = process.env.JARVIS_OUTLOOK_COMMISSIONING_EVIDENCE?.trim();
   if (evidencePath) {
     if (!path.isAbsolute(evidencePath)) {
       throw new Error("JARVIS_OUTLOOK_COMMISSIONING_EVIDENCE must be an absolute path.");

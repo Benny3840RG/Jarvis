@@ -11,6 +11,8 @@ export type CommissioningPlan = {
   apiBaseUrl: string;
   convexUrl: string;
   deployment: string;
+  /** Set only for named Outlook connections. Legacy mode omits it. */
+  senderConnection?: string;
 };
 
 export type ReconciliationObservation = {
@@ -66,6 +68,28 @@ function parseHttpUrl(value: string, name: string): URL {
 }
 
 const DEPLOYMENT_SLUG = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/u;
+
+/**
+ * Node's `.env.local` parser drops an unquoted trailing `#` comment.
+ * A systemd EnvironmentFile keeps that comment in the value. Strip one
+ * so both sources name the same deployment. Quoted values are left whole.
+ */
+export function stripUnquotedTrailingComment(value: string): string {
+  const trimmed = value.trim();
+  if (trimmed.startsWith('"') || trimmed.startsWith("'")) return trimmed;
+  const hash = trimmed.search(/\s+#/u);
+  return hash === -1 ? trimmed : trimmed.slice(0, hash).trim();
+}
+
+export function normaliseCommissioningEnvironment<T extends CommissioningEnvironment>(
+  environment: T,
+): T {
+  const deployment = environment.CONVEX_DEPLOYMENT;
+  if (deployment === undefined) return environment;
+  const stripped = stripUnquotedTrailingComment(deployment);
+  if (stripped === deployment) return environment;
+  return { ...environment, CONVEX_DEPLOYMENT: stripped };
+}
 
 function developmentSlug(deployment: string): string {
   if (deployment.startsWith("prod:") || !deployment.startsWith("dev:")) {
@@ -314,7 +338,7 @@ export function assessOutlookQuoteCommissioningGuard(
     throw refused("JARVIS_ENVIRONMENT must be development.");
   }
 
-  const deployment = required(environment, "CONVEX_DEPLOYMENT");
+  const deployment = stripUnquotedTrailingComment(required(environment, "CONVEX_DEPLOYMENT"));
   const slug = developmentSlug(deployment);
 
   const convexRaw = required(environment, "CONVEX_URL");
@@ -374,8 +398,23 @@ export function recipientCollidesWithContacts(
 }
 
 /**
+ * Phone numbers and other values that do not fold into an address are ignored.
+ * A value that still contains an address, or whose fold is invalid, must be
+ * exactly one mailbox. Anything else could hide the recipient and is refused.
+ */
+function contactForComparison(value: string): "skip" | "compare" | "refuse" {
+  const decoded = decodeEncodedWords(value);
+  if (decoded === null) return "refuse";
+  const uncommented = removeComments(decoded.toLowerCase());
+  if (uncommented === null) return "refuse";
+  const folded = unquoteQuotedAtoms(uncommented);
+  if (!folded.includes("@") && !folded.includes("<") && !folded.includes(">")) return "skip";
+  return exactMailbox(value) ? "compare" : "refuse";
+}
+
+/**
  * Loads client contacts only after the environment guard has passed, and
- * refuses when the mailbox is already a client contact.
+ * refuses when an email-shaped contact is the commissioning mailbox.
  */
 export async function beginOutlookQuoteCommissioning(input: {
   environment: CommissioningEnvironment;
@@ -383,13 +422,17 @@ export async function beginOutlookQuoteCommissioning(input: {
 }): Promise<CommissioningPlan> {
   const plan = assessOutlookQuoteCommissioningGuard(input.environment);
   const contacts = await input.loadClientContactValues();
+  const emailContacts: string[] = [];
   for (const value of contacts) {
-    if (!exactMailbox(value)) {
+    const disposition = contactForComparison(value);
+    if (disposition === "skip") continue;
+    if (disposition === "refuse") {
       throw refused("a client contact could not be parsed into one mailbox.");
     }
+    emailContacts.push(value);
   }
-  const contained = contacts.some((value) => value.toLowerCase().includes(plan.recipient));
-  if (recipientCollidesWithContacts(plan.recipient, contacts) || contained) {
+  const contained = emailContacts.some((value) => value.toLowerCase().includes(plan.recipient));
+  if (recipientCollidesWithContacts(plan.recipient, emailContacts) || contained) {
     throw refused(
       "the commissioning recipient matches a client contact and is not a non-customer mailbox.",
     );

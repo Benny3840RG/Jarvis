@@ -22,11 +22,16 @@ those same plain mailboxes in the shell or ignored `.env.local`. A missing or
 empty allowlist refuses the run, and the recipient must exactly match one
 entry. The client-contact check still runs after that. It strips every trailing
 dot, removes comments, decodes one encoded-word, and unquotes a dot-atom local
-part. A contact that is not one mailbox, or whose text contains the recipient,
-also refuses the run. A `+tag` is ignored only when comparing the mailbox with
-client contacts. `JARVIS_OUTLOOK_COMMISSIONING_CONFIRM`
+part. Only a contact that folds into an address is compared. A phone number or
+a name with no mailbox does not abort the run. A value that still contains an
+address, or whose fold is invalid, must be exactly one mailbox; anything else
+refuses the run. A contact that is that mailbox, or whose text contains the
+recipient, also refuses the run. A `+tag` is ignored only when comparing the
+mailbox with client contacts. `JARVIS_OUTLOOK_COMMISSIONING_CONFIRM`
 must be exactly `non-customer`. `JARVIS_OUTLOOK_COMMISSIONING_PROJECT_KEY` must
 already be a Convex totality project. This kit does not create that project.
+The project is read before any client or quote is created. A missing project
+stops the run with nothing written.
 
 From `typescript/`, with Jarvis HTTP already listening on loopback and
 reconciliation enabled:
@@ -38,7 +43,7 @@ npm run commission:outlook-quote
 Required environment (shell or ignored `.env.local`, never a command argument):
 
 - `JARVIS_ENVIRONMENT=development`
-- `CONVEX_DEPLOYMENT=dev:...`
+- `CONVEX_DEPLOYMENT=dev:...` (an unquoted trailing `#` comment is stripped; a comment glued to the slug is refused)
 - `CONVEX_URL` loopback, or exactly `https://<slug>.convex.cloud` for `dev:<slug>`
 - `JARVIS_API_BASE_URL` loopback
 - `JARVIS_RECONCILIATION_ENABLED=true`
@@ -49,23 +54,48 @@ Required environment (shell or ignored `.env.local`, never a command argument):
 - `JARVIS_OUTLOOK_COMMISSIONING_RECIPIENT`
 - `JARVIS_OUTLOOK_COMMISSIONING_RECIPIENT_ALLOWLIST` (comma-separated plain mailboxes; required)
 - the existing Outlook runtime variables that register `quotes:send`
+- `JARVIS_OUTLOOK_COMMISSIONING_CONNECTION` when named Outlook connections are enabled (the connection id, such as `personal`). Legacy single-mailbox mode must omit it.
+
+`CONVEX_DEPLOYMENT` may include one unquoted trailing comment, for example
+`dev:outgoing-ram-798 # note`. Node's `.env.local` parser drops that comment.
+A systemd EnvironmentFile keeps it. The kit strips the same comment before the
+development check and passes the stripped value to reconciliation, so both
+sources name one deployment. Quoted values are left whole. `prod:... # note`
+is still refused. `dev:slug#note` is refused because the `#` is not preceded by
+whitespace.
+
+When `JARVIS_OUTLOOK_CONNECTIONS_JSON` is set, the kit stages `quotes:send`
+with that connection's `senderConnection` fingerprint. There is no default
+connection. The approval step is unchanged: it still posts the existing
+approval token and does not add another approver.
+
+A personal Microsoft account (the consumers authority, no tenant id) is
+addressed as Graph `/me`. Before any mailbox call, `mail` or
+`userPrincipalName` on the signed-in profile must equal the configured
+mailbox. A mismatch or an unreadable profile fails closed. Work or school
+mailboxes stay on `/users/{mailbox}`.
 
 The command uses the existing HTTP routes and the existing Outlook
 reconciliation worker:
 
-1. Read clients and refuse if the recipient is one of their contacts.
-2. Create a disposable client with no email contact, then a quote draft.
-3. Edit the draft, review it, and finalise it.
-4. Stage, approve, and execute governed `quotes:send` on the supplied totality
-   project. Approval uses the existing approval token. The command does not
+1. Read clients. Skip contacts that are not an email. Refuse when an email
+   contact is the recipient or cannot be parsed as one mailbox.
+2. Resolve the named sender, require the Outlook runtime and reconciliation,
+   and require the totality project. A missing project creates no client and
+   no quote.
+3. Create a disposable client with no email contact, then a quote draft.
+4. Edit the draft, review it, and finalise it.
+5. Stage, approve, and execute governed `quotes:send` on the supplied totality
+   project. Named mode includes the sender fingerprint in the staged
+   arguments. Approval uses the existing approval token. The command does not
    invent another approver.
-5. Read the immutable Graph message id from the execution receipt
+6. Read the immutable Graph message id from the execution receipt
    (`providerRequestId`).
-6. Run the existing reconciliation worker three times, then twice in parallel.
-7. Stage and execute a second `quotes:send` for the same finalized revision and
+7. Run the existing reconciliation worker three times, then twice in parallel.
+8. Stage and execute a second `quotes:send` for the same finalized revision and
    recipient. That execution must come back `failed` or `blocked`, and the
    delivery ledger must still contain one attempt.
-8. Run the worker again, sequentially and in parallel, then require exactly one
+9. Run the worker again, sequentially and in parallel, then require exactly one
    `resolved` reconciliation for that message id.
 
 Stdout is one JSON object. `issues` is `{ "294": "OPEN", "297": "OPEN" }` and

@@ -5,7 +5,9 @@ import {
   assertOutlookCommissioningProof,
   assessOutlookQuoteCommissioningGuard,
   beginOutlookQuoteCommissioning,
+  normaliseCommissioningEnvironment,
   recipientCollidesWithContacts,
+  stripUnquotedTrailingComment,
 } from "../src/tools/outlookQuoteCommissioningGuard.js";
 
 const READY = {
@@ -357,19 +359,11 @@ describe("outlook quote commissioning guard", () => {
       assert.equal(loaded, true, entry.contacts[0]);
     }
 
-    let unparsed = false;
-    await assert.rejects(
-      () =>
-        beginOutlookQuoteCommissioning({
-          environment: READY,
-          loadClientContactValues: () => {
-            unparsed = true;
-            return Promise.resolve(["not-a-mailbox"]);
-          },
-        }),
-      /could not be parsed into one mailbox/,
-    );
-    assert.equal(unparsed, true);
+    const skipped = await beginOutlookQuoteCommissioning({
+      environment: READY,
+      loadClientContactValues: () => Promise.resolve(["not-a-mailbox"]),
+    });
+    assert.equal(skipped.recipient, READY.JARVIS_OUTLOOK_COMMISSIONING_RECIPIENT);
 
     let contained = false;
     await assert.rejects(
@@ -417,6 +411,92 @@ describe("outlook quote commissioning guard", () => {
       assert.equal(staged, 0, contact);
       assert.equal(sent, 0, contact);
     }
+  });
+
+  it("ignores phone numbers and names, and still refuses an ambiguous address", async () => {
+    const accepted = await beginOutlookQuoteCommissioning({
+      environment: READY,
+      loadClientContactValues: () =>
+        Promise.resolve([
+          "+1 (555) 010-0000",
+          "07123 456789",
+          "Ada Lovelace",
+          "=?utf-8?q?workshop_phone?=",
+          "other@example.com",
+        ]),
+    });
+    assert.equal(accepted.recipient, "commissioning@example.invalid");
+
+    const ambiguous = [
+      "not-quite@",
+      "Name <not-an-email>",
+      "customer@example.com extra",
+      "+1 555 =?utf-8?q?customer=40example.com?=",
+    ];
+    for (const contact of ambiguous) {
+      let staged = 0;
+      let sent = 0;
+      await assert.rejects(async () => {
+        const plan = await beginOutlookQuoteCommissioning({
+          environment: READY,
+          loadClientContactValues: () => Promise.resolve([contact]),
+        });
+        staged += 1;
+        sent += 1;
+        void plan;
+      }, /could not be parsed into one mailbox/);
+      assert.equal(staged, 0, contact);
+      assert.equal(sent, 0, contact);
+    }
+
+    await assert.rejects(
+      () =>
+        beginOutlookQuoteCommissioning({
+          environment: READY,
+          loadClientContactValues: () =>
+            Promise.resolve(["07123 456789", "commissioning@example.invalid"]),
+        }),
+      /matches a client contact/,
+    );
+  });
+
+  it("strips one unquoted CONVEX_DEPLOYMENT comment and still refuses production", () => {
+    assert.equal(
+      stripUnquotedTrailingComment("dev:outgoing-ram-798 # systemd kept this comment"),
+      "dev:outgoing-ram-798",
+    );
+    assert.equal(
+      stripUnquotedTrailingComment('"dev:outgoing-ram-798 # comment"'),
+      '"dev:outgoing-ram-798 # comment"',
+    );
+    const plan = assessOutlookQuoteCommissioningGuard({
+      ...READY,
+      CONVEX_DEPLOYMENT: "dev:outgoing-ram-798 # systemd kept this comment",
+    });
+    assert.equal(plan.deployment, "dev:outgoing-ram-798");
+    const normalised = normaliseCommissioningEnvironment({
+      ...READY,
+      JARVIS_SERVICE_TOKEN: "service # not a comment",
+      CONVEX_DEPLOYMENT: "dev:outgoing-ram-798 # systemd kept this comment",
+    });
+    assert.equal(normalised.CONVEX_DEPLOYMENT, "dev:outgoing-ram-798");
+    assert.equal(normalised.JARVIS_SERVICE_TOKEN, "service # not a comment");
+    assert.throws(
+      () =>
+        assessOutlookQuoteCommissioningGuard({
+          ...READY,
+          CONVEX_DEPLOYMENT: "prod:outgoing-ram-798 # comment",
+        }),
+      /CONVEX_DEPLOYMENT must identify a development deployment/,
+    );
+    assert.throws(
+      () =>
+        assessOutlookQuoteCommissioningGuard({
+          ...READY,
+          CONVEX_DEPLOYMENT: "dev:outgoing-ram-798#glued",
+        }),
+      /CONVEX_DEPLOYMENT must identify a development deployment/,
+    );
   });
 
   it("records one terminal reconciliation and leaves #294 and #297 open", () => {

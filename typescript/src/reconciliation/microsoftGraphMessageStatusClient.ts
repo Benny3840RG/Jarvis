@@ -1,3 +1,9 @@
+import {
+  graphMailboxPrefix,
+  readSignedInProfile,
+  signedInMailboxMatches,
+  type GraphMailboxAddressing,
+} from "../auth/microsoftGraphMailbox.js";
 import type {
   OutlookMessageStatusClient,
   OutlookMessageStatusResult,
@@ -12,6 +18,8 @@ export type MicrosoftGraphMessageStatusClientOptions = {
   graphOrigin?: "https://graph.microsoft.com/v1.0";
   /** Clock used to turn an HTTP-date Retry-After into a wait. */
   now?: () => number;
+  /** Personal Microsoft accounts use `/me`. Work or school mailboxes stay on `/users`. */
+  addressing?: GraphMailboxAddressing;
 };
 
 type MessageStatusInput = Parameters<OutlookMessageStatusClient["getMessageStatus"]>[0];
@@ -79,12 +87,32 @@ export class MicrosoftGraphMessageStatusClient implements OutlookMessageStatusCl
   private readonly fetch: typeof globalThis.fetch;
   private readonly graphOrigin: "https://graph.microsoft.com/v1.0";
   private readonly now: () => number;
+  private readonly addressing: GraphMailboxAddressing;
 
   constructor(options: MicrosoftGraphMessageStatusClientOptions) {
     this.getAccessToken = options.getAccessToken;
     this.fetch = options.fetch ?? globalThis.fetch;
     this.graphOrigin = options.graphOrigin ?? "https://graph.microsoft.com/v1.0";
     this.now = options.now ?? Date.now;
+    this.addressing = options.addressing ?? "users";
+  }
+
+  private async ensureSignedInMailbox(
+    token: string,
+    mailbox: string,
+    signal: AbortSignal,
+  ): Promise<void> {
+    if (this.addressing !== "signed-in") return;
+    const profile = await readSignedInProfile({
+      origin: this.graphOrigin,
+      token,
+      fetch: this.fetch,
+      signal,
+    });
+    if (!profile.ok) throw new OutlookReconciliationError("outlook-signed-in-mailbox-unreadable");
+    if (!signedInMailboxMatches(profile.body, mailbox)) {
+      throw new OutlookReconciliationError("outlook-signed-in-mailbox-mismatch");
+    }
   }
 
   async getMessageStatus(input: MessageStatusInput): Promise<OutlookMessageStatusResult> {
@@ -97,9 +125,10 @@ export class MicrosoftGraphMessageStatusClient implements OutlookMessageStatusCl
     if (!token.trim()) {
       throw new OutlookReconciliationError("outlook-graph-authorization-failed");
     }
+    await this.ensureSignedInMailbox(token, input.mailbox, input.signal);
 
     const url = new URL(
-      `${this.graphOrigin}/users/${encodeURIComponent(input.mailbox)}/messages/${encodeURIComponent(
+      `${this.graphOrigin}/${graphMailboxPrefix(this.addressing, input.mailbox)}/messages/${encodeURIComponent(
         input.immutableMessageId,
       )}`,
     );

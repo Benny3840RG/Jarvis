@@ -8,6 +8,12 @@ import {
   FileRefreshTokenStore,
   MicrosoftDelegatedAccessTokenSupplier,
 } from "./microsoftDelegatedOAuth.js";
+import {
+  graphMailboxAddressing,
+  graphMailboxPrefix,
+  readSignedInProfile,
+  signedInMailboxMatches,
+} from "./microsoftGraphMailbox.js";
 import type { OutlookConnection } from "./microsoftOutlookConnections.js";
 
 async function assertPrivateDirectory(path: string): Promise<void> {
@@ -27,8 +33,17 @@ export async function probeOutlookMailbox(
   signal: AbortSignal,
   request: typeof fetch = fetch,
 ): Promise<void> {
+  const origin = "https://graph.microsoft.com/v1.0";
+  const addressing = graphMailboxAddressing(connection.config.tokenEndpoint);
+  if (addressing === "signed-in") {
+    const profile = await readSignedInProfile({ origin, token, fetch: request, signal });
+    if (!profile.ok) throw new Error("outlook-signed-in-mailbox-unreadable");
+    if (!signedInMailboxMatches(profile.body, connection.config.mailbox)) {
+      throw new Error("outlook-signed-in-mailbox-mismatch");
+    }
+  }
   const response = await request(
-    `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(connection.config.mailbox)}/mailFolders/inbox?$select=id`,
+    `${origin}/${graphMailboxPrefix(addressing, connection.config.mailbox)}/mailFolders/inbox?$select=id`,
     {
       method: "GET",
       headers: { Authorization: `Bearer ${token}` },

@@ -63,6 +63,15 @@ describe("Microsoft Outlook runtime composition", () => {
         }
 
         graphRequests.push({ method: init?.method ?? "GET", url });
+        if (url.includes("/v1.0/me?")) {
+          return new Response(
+            JSON.stringify({
+              mail: "thebeeztreez@outlook.com",
+              userPrincipalName: "thebeeztreez@outlook.com",
+            }),
+            { status: 200 },
+          );
+        }
         if (init?.method === "GET") {
           return new Response(
             JSON.stringify({
@@ -96,10 +105,71 @@ describe("Microsoft Outlook runtime composition", () => {
     assert.equal(tokenRefreshes, 1);
     assert.deepEqual(
       graphRequests.map(({ method }) => method),
-      ["GET", "POST"],
+      ["GET", "GET", "GET", "POST"],
     );
     assert.ok(
-      graphRequests.every(({ url }) =>
+      graphRequests.every(({ url }) => url.startsWith("https://graph.microsoft.com/v1.0/me")),
+    );
+    assert.equal(
+      graphRequests.some((request) => request.url.includes("/users/")),
+      false,
+    );
+  });
+
+  it("keeps a tenant mailbox on /users and does not call /me", async () => {
+    const graphRequests: string[] = [];
+    const runtime = createMicrosoftOutlookRuntimeFromEnv(
+      {
+        ...enabledEnvironment,
+        JARVIS_OUTLOOK_TENANT_ID: "11111111-2222-3333-4444-555555555555",
+      },
+      {
+        refreshTokenStore: new MemoryRefreshTokenStore("refresh-token"),
+        fetch: async (input, init) => {
+          const url = String(input);
+          if (url.includes("/oauth2/v2.0/token")) {
+            return new Response(
+              JSON.stringify({
+                token_type: "Bearer",
+                access_token: "access-token",
+                expires_in: 3600,
+                scope: "offline_access Mail.ReadWrite Mail.Send",
+              }),
+              { status: 200 },
+            );
+          }
+          graphRequests.push(url);
+          if (init?.method === "GET") {
+            return new Response(
+              JSON.stringify({
+                id: "immutable-message-id",
+                isDraft: false,
+                sentDateTime: "2026-07-28T00:00:00.000Z",
+              }),
+              { status: 200 },
+            );
+          }
+          return new Response(null, { status: 202 });
+        },
+      },
+    );
+    assert.ok(runtime);
+    const reference = {
+      provider: OUTLOOK_MAIL_RECONCILIATION_PROVIDER,
+      providerRequestId: "immutable-message-id",
+      providerCorrelationId: "immutable-message-id",
+    };
+    const signal = new AbortController().signal;
+    assert.equal(
+      (await runtime.reconciliationAdapter.reconcile(reference, signal)).status,
+      "succeeded",
+    );
+    assert.deepEqual(await runtime.quoteEmailProvider.sendPrepared(reference, signal), {
+      status: "accepted",
+    });
+    assert.deepEqual(graphRequests.length, 2);
+    assert.ok(
+      graphRequests.every((url) =>
         url.startsWith("https://graph.microsoft.com/v1.0/users/thebeeztreez%40outlook.com/"),
       ),
     );

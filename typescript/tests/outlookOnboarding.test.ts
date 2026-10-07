@@ -8,6 +8,7 @@ import { createServer as createProbeServer } from "node:net";
 import { describe, it } from "node:test";
 import {
   authorizeOutlookConnection,
+  probeOutlookMailbox,
   verifyOutlookConnection,
 } from "../src/auth/outlookOnboarding.js";
 import { resolveOutlookConnections } from "../src/auth/microsoftOutlookConnections.js";
@@ -160,9 +161,10 @@ describe("Outlook browser onboarding", () => {
           },
           fetch: async (url) => {
             requests += 1;
+            const address = String(url);
             return new Response(
               JSON.stringify(
-                String(url).endsWith("/token")
+                address.endsWith("/token")
                   ? {
                       token_type: "Bearer",
                       access_token: "synthetic-access",
@@ -170,13 +172,15 @@ describe("Outlook browser onboarding", () => {
                       expires_in: 3600,
                       scope: "Mail.ReadWrite Mail.Send",
                     }
-                  : { id: "inbox-id" },
+                  : address.includes("/v1.0/me?")
+                    ? { mail: "test@outlook.com", userPrincipalName: "test@outlook.com" }
+                    : { id: "inbox-id" },
               ),
             );
           },
         });
         assert.deepEqual(attempted, ["127.0.0.1", "::1"]);
-        assert.equal(requests, 3);
+        assert.equal(requests, 4);
         assert.equal(
           await readFile(connection.config.refreshTokenFile, "utf8"),
           "synthetic-rotated\n",
@@ -213,9 +217,10 @@ describe("Outlook browser onboarding", () => {
       const requests: string[] = [];
       t.mock.method(globalThis, "fetch", async (url: string | URL | Request) => {
         requests.push(String(url));
+        const address = String(url);
         return new Response(
           JSON.stringify(
-            String(url).endsWith("/token")
+            address.endsWith("/token")
               ? {
                   token_type: "Bearer",
                   access_token: "synthetic-access",
@@ -223,14 +228,16 @@ describe("Outlook browser onboarding", () => {
                   expires_in: 3600,
                   scope: "Mail.ReadWrite Mail.Send",
                 }
-              : { id: "inbox-id" },
+              : address.includes("/v1.0/me?")
+                ? { mail: "test@outlook.com", userPrincipalName: "test@outlook.com" }
+                : { id: "inbox-id" },
           ),
         );
       });
       try {
         if (boundary === "private") {
           await verifyOutlookConnection(connection);
-          assert.equal(requests.length, 2);
+          assert.equal(requests.length, 3);
           assert.equal(await readFile(tokenPath, "utf8"), "synthetic-rotated\n");
         } else {
           await assert.rejects(
@@ -419,7 +426,15 @@ describe("Outlook browser onboarding", () => {
                 );
               }
               assert.equal(init?.method, "GET");
-              assert.match(String(url), /users\/test%40outlook.com\/mailFolders\/inbox/u);
+              if (String(url).includes("/v1.0/me?")) {
+                return new Response(
+                  JSON.stringify({
+                    mail: "test@outlook.com",
+                    userPrincipalName: "test@outlook.com",
+                  }),
+                );
+              }
+              assert.match(String(url), /\/me\/mailFolders\/inbox/u);
               return outcome === "denied"
                 ? new Response(null, { status: 403 })
                 : new Response(JSON.stringify({ id: "inbox-id" }));
@@ -434,11 +449,84 @@ describe("Outlook browser onboarding", () => {
           } else {
             await run;
             assert.equal(await readFile(connection.config.refreshTokenFile, "utf8"), "rotated\n");
-            assert.equal(requests.length, 3);
+            assert.equal(requests.length, 4);
           }
         } finally {
           await rm(dir, { recursive: true, force: true });
         }
       },
     );
+});
+
+describe("Outlook mailbox probe addressing", () => {
+  const signal = new AbortController().signal;
+
+  function connection(entry: Record<string, string>) {
+    const resolved = resolveOutlookConnections({
+      JARVIS_OUTLOOK_CONNECTIONS_JSON: JSON.stringify([entry]),
+    })[0];
+    if (!resolved) throw new Error("missing connection");
+    return resolved;
+  }
+
+  it("uses /me for a personal account and /users for a tenant mailbox", async () => {
+    const personal = connection({
+      id: "personal",
+      clientId: "aaaaaaaa-2222-3333-4444-555555555555",
+      mailbox: "test@outlook.com",
+      refreshTokenFile: "/private/personal.token",
+    });
+    const personalUrls: string[] = [];
+    await probeOutlookMailbox(personal, "token", signal, async (url) => {
+      personalUrls.push(String(url));
+      if (String(url).includes("/v1.0/me?")) {
+        return new Response(
+          JSON.stringify({ mail: "test@outlook.com", userPrincipalName: "test@outlook.com" }),
+        );
+      }
+      return new Response(JSON.stringify({ id: "inbox-id" }));
+    });
+    assert.match(personalUrls[0] ?? "", /\/v1\.0\/me\?/u);
+    assert.match(personalUrls[1] ?? "", /\/me\/mailFolders\/inbox/u);
+    assert.equal(
+      personalUrls.some((url) => url.includes("/users/")),
+      false,
+    );
+
+    const business = connection({
+      id: "business",
+      clientId: "bbbbbbbb-2222-3333-4444-555555555555",
+      mailbox: "biz@example.com",
+      tenantId: "11111111-2222-3333-4444-555555555555",
+      refreshTokenFile: "/private/business.token",
+    });
+    const businessUrls: string[] = [];
+    await probeOutlookMailbox(business, "token", signal, async (url) => {
+      businessUrls.push(String(url));
+      return new Response(JSON.stringify({ id: "inbox-id" }));
+    });
+    assert.deepEqual(businessUrls.length, 1);
+    assert.match(businessUrls[0] ?? "", /\/users\/biz%40example.com\/mailFolders\/inbox/u);
+  });
+
+  it("does not open the inbox when the signed-in mailbox differs", async () => {
+    const personal = connection({
+      id: "personal",
+      clientId: "aaaaaaaa-2222-3333-4444-555555555555",
+      mailbox: "test@outlook.com",
+      refreshTokenFile: "/private/personal.token",
+    });
+    const urls: string[] = [];
+    await assert.rejects(
+      probeOutlookMailbox(personal, "token", signal, async (url) => {
+        urls.push(String(url));
+        return new Response(
+          JSON.stringify({ mail: "other@outlook.com", userPrincipalName: "other@outlook.com" }),
+        );
+      }),
+      /outlook-signed-in-mailbox-mismatch/u,
+    );
+    assert.equal(urls.length, 1);
+    assert.match(urls[0] ?? "", /\/v1\.0\/me\?/u);
+  });
 });

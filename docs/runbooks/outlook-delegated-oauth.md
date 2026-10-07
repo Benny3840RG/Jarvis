@@ -31,6 +31,14 @@ For legacy single-mailbox mode:
 | `JARVIS_OUTLOOK_REFRESH_TOKEN_FILE` | Absolute path to that mailbox's owner-only refresh-token file                                                      |
 | `JARVIS_OUTLOOK_TENANT_ID`          | Business tenant GUID for tenant-pinned Microsoft 365 authentication; omit only for the personal `/consumers/` flow |
 
+A personal account (consumers authority, no tenant id) is addressed as Graph
+`/me`. Microsoft Graph documents `/me` for that delegated mailbox and does not
+support addressing it through the directory. Before a mailbox call, Jarvis
+reads `/me` and requires `mail` or `userPrincipalName` to equal
+`JARVIS_OUTLOOK_MAILBOX`. A different mailbox, including a plus-tag, fails
+closed and does not send. A work or school mailbox stays on
+`/users/{mailbox}`.
+
 Background reconciliation is independently disabled unless `JARVIS_RECONCILIATION_ENABLED=true` and its existing Convex/service-token configuration is complete. Enabling reconciliation without an Outlook adapter fails startup before the listener is ready.
 
 **Pairing rule:** `JARVIS_OUTLOOK_ENABLED=true` requires `JARVIS_RECONCILIATION_ENABLED=true`. Maintained HTTP and preview entrypoints fail closed if Outlook is enabled while reconciliation is not, so quote sends cannot register without a worker that can resolve Graph `202 Accepted` outcomes.
