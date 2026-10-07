@@ -1,5 +1,20 @@
 # Jarvis TypeScript Roadmap
 
+## LV1-04 authoritative voice query bridge (2026-10-07)
+
+Deterministic voice query intents now answer from the same list/brief read models
+the HTTP API and daily brief already use. Empty healthy registers are reported as
+none or zero. A missing provider or a failed source stays `query-unavailable` and
+names that source. Live equipment status stays unavailable; crawler and trailer
+queries report recorded build status only.
+
+Next:
+
+- LV1-05 safe voice writes through existing API/MCP/ToolAction paths.
+- Owner-wide quote-delivery follow-up remains unsupported (same gap as the
+  operations inbox). Voice quote follow-up is the daily brief's sent-quote slice.
+- Governed Convex quote-lifecycle register is not folded into that slice.
+
 ## Guarded voice lifecycle review repairs (2026-10-05)
 
 Bounded repairs for #567 / PR #696 (successor to #687), prepared on an isolated

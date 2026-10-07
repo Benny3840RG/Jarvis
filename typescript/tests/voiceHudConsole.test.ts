@@ -20,7 +20,9 @@ function loadVoiceLogic(): {
     wakeWord?: string,
   ) => { transcript: string; isFinal: boolean; alternatives: string[] } | null;
   finalVoiceRecognition: (event: unknown) => { transcript: string; alternatives: string[] } | null;
-  describeVoiceDispatch: (dispatch: { decision: string } | null) => { label: string; tone: string };
+  describeVoiceDispatch: (
+    dispatch: { decision: string; answer?: string; reason?: string } | null,
+  ) => { label: string; tone: string };
   voiceLatencyMs: (startedAt: unknown, endedAt: unknown) => number | null;
 } {
   const match = html.match(/\/\/ BEGIN voice-console[\s\S]*?\/\/ END voice-console/);
@@ -115,6 +117,23 @@ describe("voice HUD console logic (extracted from dashboard-v1.html)", () => {
       const info = logic.describeVoiceDispatch({ decision: "query-unavailable" });
       assert.equal(info.tone, "warn");
       assert.match(info.label, /query unavailable.*no data provider/i);
+    });
+
+    it("speaks an authoritative answer and a named source failure as a warning", () => {
+      const answered = logic.describeVoiceDispatch({
+        decision: "answered",
+        answer: "No unpaid invoices.",
+      });
+      assert.equal(answered.tone, "ok");
+      assert.equal(answered.label, "No unpaid invoices.");
+      const failed = logic.describeVoiceDispatch({
+        decision: "query-unavailable",
+        reason: "Invoice records are unavailable.",
+      });
+      assert.equal(failed.tone, "warn");
+      assert.equal(failed.label, "Invoice records are unavailable.");
+      const blank = logic.describeVoiceDispatch({ decision: "answered", answer: "  " });
+      assert.equal(blank.tone, "warn");
     });
 
     it("marks unavailable actuation as a warning, never success", () => {
