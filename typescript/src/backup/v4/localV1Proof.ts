@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 
 import { sha256Hex, sha256HexBytes } from "../../actions/sha256.js";
+import { JARVIS_DATA_DIR } from "../../persistence/jarvisDataPaths.js";
 import { assertRecoverable } from "../archiveManifest.js";
 import type { ArchiveV4 } from "./archive.js";
 import { S4_MAX_PAYLOAD_BYTES } from "./convexCapture.js";
@@ -73,6 +74,11 @@ export function assertIsolatedReadsMatch(first: IsolatedRead, second: IsolatedRe
   ) {
     throw new LocalV1ProofError("Local V1 proof restart did not match the first read.");
   }
+}
+
+/** Byte digest of one directory. The proof uses this for the live data directory. */
+export async function localV1LiveDirectoryDigest(root: string): Promise<string> {
+  return directoryDigest(root);
 }
 
 async function directoryDigest(root: string): Promise<string> {
@@ -299,9 +305,20 @@ async function assertJsonRestore(jsonDirectory: string, archive: ArchiveV4): Pro
  * Calls `restoreLocalV1Archive` and does not write the live provider.
  * `completeness` stays partial.
  */
+function assertSameLiveDirectory(request: LocalV1ProofRequest): void {
+  const proofLive = path.resolve(request.liveDirectory);
+  const restoreLive = path.resolve(request.restore.liveDataDir ?? JARVIS_DATA_DIR);
+  if (proofLive !== restoreLive) {
+    throw new LocalV1ProofError(
+      "Local V1 proof requires liveDirectory to be the restore live data directory.",
+    );
+  }
+}
+
 export async function proveLocalV1Recovery(
   request: LocalV1ProofRequest,
 ): Promise<LocalV1RestoreResult> {
+  assertSameLiveDirectory(request);
   if (typeof request.readIsolated !== "function") {
     throw new LocalV1ProofError("Local V1 proof requires an isolated read.");
   }

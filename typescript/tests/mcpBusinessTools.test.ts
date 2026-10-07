@@ -158,9 +158,15 @@ type InvoiceShape = {
 describe("business MCP tools: properties", () => {
   it("creates, reads, filters, updates, clears notes, and deletes a property", async () => {
     const { client } = await startHarness();
+    const firstClient = (
+      await ok<{ client: { id: string } }>(client, "create_client", { name: "First client" })
+    ).client.id;
+    const secondClient = (
+      await ok<{ client: { id: string } }>(client, "create_client", { name: "Second client" })
+    ).client.id;
 
     const { property } = await ok<{ property: PropertyShape }>(client, "create_property", {
-      clientId: "client-1",
+      clientId: firstClient,
       address: "12 Example St, Geelong",
       hazards: ["Steep slope", "Steep slope", "Dog on site"],
       accessNotes: "Side gate code from client",
@@ -168,7 +174,7 @@ describe("business MCP tools: properties", () => {
     assert.equal(property.address, "12 Example St, Geelong");
     assert.deepEqual(property.hazards, ["Steep slope", "Dog on site"], "server de-duplicates");
 
-    await ok(client, "create_property", { clientId: "client-2", address: "9 Other Rd" });
+    await ok(client, "create_property", { clientId: secondClient, address: "9 Other Rd" });
 
     const fetched = await ok<{ property: PropertyShape }>(client, "get_property", {
       propertyId: property.id,
@@ -178,7 +184,7 @@ describe("business MCP tools: properties", () => {
     const filtered = await ok<{ properties: PropertyShape[]; count: number }>(
       client,
       "list_properties",
-      { clientId: "client-1" },
+      { clientId: firstClient },
     );
     assert.equal(filtered.count, 1);
     assert.equal(filtered.properties[0]?.id, property.id);
@@ -218,9 +224,15 @@ describe("business MCP tools: properties", () => {
 describe("business MCP tools: enquiries", () => {
   it("logs, replays, filters, updates, closes and converts enquiries", async () => {
     const { client } = await startHarness();
+    const firstClient = (
+      await ok<{ client: { id: string } }>(client, "create_client", { name: "First client" })
+    ).client.id;
+    const secondClient = (
+      await ok<{ client: { id: string } }>(client, "create_client", { name: "Second client" })
+    ).client.id;
 
     const first = await ok<{ enquiry: EnquiryShape }>(client, "create_enquiry", {
-      clientId: "client-1",
+      clientId: firstClient,
       source: "phone",
       requestedWork: "Prune two gums near the fence",
       urgency: "urgent",
@@ -230,7 +242,7 @@ describe("business MCP tools: enquiries", () => {
     assert.equal(first.enquiry.urgency, "urgent");
 
     const replay = await ok<{ enquiry: EnquiryShape }>(client, "create_enquiry", {
-      clientId: "client-1",
+      clientId: firstClient,
       source: "phone",
       requestedWork: "Prune two gums near the fence",
       urgency: "urgent",
@@ -239,7 +251,7 @@ describe("business MCP tools: enquiries", () => {
     assert.equal(replay.enquiry.id, first.enquiry.id, "a retried log does not duplicate");
 
     const second = await ok<{ enquiry: EnquiryShape }>(client, "create_enquiry", {
-      clientId: "client-2",
+      clientId: secondClient,
       source: "website form",
       requestedWork: "Quarterly lawn and edge maintenance",
     });
@@ -269,7 +281,7 @@ describe("business MCP tools: enquiries", () => {
     });
     assert.equal(converted.enquiry.status, "converted");
     assert.equal(converted.enquiry.convertedProjectId, converted.project.id);
-    assert.equal(converted.project.clientId, "client-1");
+    assert.equal(converted.project.clientId, firstClient);
     assert.equal(converted.project.title, "Gum pruning and wattle removal");
     assert.equal(converted.replayed, false);
 
@@ -278,7 +290,7 @@ describe("business MCP tools: enquiries", () => {
     const forClient = await ok<{ enquiries: EnquiryShape[]; count: number }>(
       client,
       "list_enquiries",
-      { clientId: "client-2" },
+      { clientId: secondClient },
     );
     assert.equal(forClient.count, 1);
     assert.equal(forClient.enquiries[0]?.status, "closed");
@@ -291,8 +303,11 @@ describe("business MCP tools: enquiries", () => {
 
   it("refuses closed-enquiry conversion, bad urgency, empty updates and unknown ids", async () => {
     const { client } = await startHarness();
+    const clientId = (
+      await ok<{ client: { id: string } }>(client, "create_client", { name: "Enquiry client" })
+    ).client.id;
     const { enquiry } = await ok<{ enquiry: EnquiryShape }>(client, "create_enquiry", {
-      clientId: "client-1",
+      clientId,
       source: "phone",
       requestedWork: "Gutter clean",
     });
@@ -315,9 +330,12 @@ describe("business MCP tools: enquiries", () => {
 describe("business MCP tools: invoice drafts", () => {
   it("creates and edits a draft with server-computed totals", async () => {
     const { client } = await startHarness();
+    const clientId = (
+      await ok<{ client: { id: string } }>(client, "create_client", { name: "Invoice client" })
+    ).client.id;
 
     const { invoice } = await ok<{ invoice: InvoiceShape }>(client, "create_invoice_draft", {
-      clientId: "client-1",
+      clientId,
       number: "INV-1001",
       lineItems: [
         { description: "Hedge trim", quantity: 2, unitPrice: 150 },
@@ -332,7 +350,7 @@ describe("business MCP tools: invoice drafts", () => {
     assert.ok(invoice.tax > 0, "tax is computed by the server, not the caller");
 
     const replay = await ok<{ invoice: InvoiceShape }>(client, "create_invoice_draft", {
-      clientId: "client-1",
+      clientId,
       number: "INV-1001",
       lineItems: [{ description: "Hedge trim", quantity: 2, unitPrice: 150 }],
       taxRate: 0.1,
@@ -375,13 +393,16 @@ describe("business MCP tools: invoice drafts", () => {
 describe("business MCP tools: daily brief", () => {
   it("shows open enquiries and unpaid invoices in get_daily_brief", async () => {
     const { client } = await startHarness();
+    const clientId = (
+      await ok<{ client: { id: string } }>(client, "create_client", { name: "Brief client" })
+    ).client.id;
     await ok(client, "create_enquiry", {
-      clientId: "client-1",
+      clientId,
       source: "phone",
       requestedWork: "Storm-damaged tree on the roof",
       urgency: "emergency",
     });
-    await ok(client, "create_invoice_draft", { clientId: "client-1", number: "INV-1" });
+    await ok(client, "create_invoice_draft", { clientId, number: "INV-1" });
 
     const { brief } = await ok<{
       brief: {

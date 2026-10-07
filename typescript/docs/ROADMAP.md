@@ -26,17 +26,19 @@ a new JSON directory and an injected empty database, then rereads through the
 existing stores. `completeness` stays `partial`. Neither function is wired to
 `export-v4`. The draft-only S6 helper is unchanged. PR 4 adds
 `proveLocalV1Recovery`, which calls that restore and succeeds only when
-the captured V1 collections are present, PDF blob digests match, the JSON
-completion marker and manifest stay `partial`, `assertRecoverable` still
-throws, and two injected reads return the same non-empty ids. The
-restarted-process criterion stays required and is NOT YET MET. What exists
-today is those two reads plus a node test that opens two HTTP apps on
-scratch stores. That proof is still owed under LV1-10 or LV1-11.
-`clear-local` no longer treats a classic verify receipt as cover for
-business JSON. Full v4 recovery stays refused. Operator docs name
-`proveLocalV1Recovery` as that gate and state that classic restore still
-writes the live provider. Checkout-local business files stay under
-`typescript/data/`. Recovery is not complete.
+`liveDirectory` is the restore live data directory, the captured V1
+collections are present, PDF blob digests match, the JSON completion marker
+and manifest stay `partial`, `assertRecoverable` still throws, and two
+injected reads return the same non-empty ids. A restarted `src/http/main.ts`
+matches client, task, and build GETs from scratch JSON. The quote GET on
+that restarted process is NOT YET MET. LV1-10 or LV1-11 still has to run the
+same entrypoint against an isolated local Convex backend that is not the
+configured `CONVEX_URL`. `clear-local` checksums cover the core, memory, and
+business files that action quarantines. Full v4 recovery stays refused.
+Operator docs name `proveLocalV1Recovery` as that gate and state that classic
+restore still writes the live provider. Checkout-local business files stay
+under `typescript/data/` unless `JARVIS_DATA_DIR` is set for that process.
+Recovery is not complete.
 
 ## LV1-04 authoritative voice query bridge (2026-10-07)
 

@@ -3112,7 +3112,7 @@
       "delete": {
         "operationId": "deleteClient",
         "summary": "Delete a business client",
-        "description": "Permanently removes one client by its identifier when no enquiry, invoice, property, project, flat quote, or quote-lifecycle revision still references that client. A referencing record is a conflict; the client is left unchanged.",
+        "description": "Permanently removes one client by its identifier when no enquiry, invoice, property, project, flat quote, or quote-lifecycle revision still references that client. A referencing record is a conflict; the client is left unchanged. The 409 guarantee covers writers in the same Jarvis HTTP process; the quote:create CLI is a separate process and stores the typed client name, not the id.",
         "tags": ["Clients"],
         "x-mcp-tool": {
           "exposed": true,
@@ -3252,6 +3252,9 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
           },
           "422": {
             "$ref": "#/components/responses/UnprocessableEntity"
@@ -3501,6 +3504,9 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
           },
           "422": {
             "$ref": "#/components/responses/UnprocessableEntity"
@@ -3789,6 +3795,9 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
           },
           "422": {
             "$ref": "#/components/responses/UnprocessableEntity"
@@ -6643,6 +6652,9 @@
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
           "422": {
             "$ref": "#/components/responses/UnprocessableEntity"
           },
@@ -7021,6 +7033,9 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
           },
           "422": {
             "$ref": "#/components/responses/UnprocessableEntity"
@@ -7423,7 +7438,7 @@
       "post": {
         "operationId": "executeDangerZoneAction",
         "summary": "Run one confirmed Danger zone action",
-        "description": "Runs one Phase A action after a case-sensitive confirmation string. End overlap removes only the matching PREVIOUS Convex env variable and any local previous assignment. Reset JSON quarantines jarvis-state.json. Clear local quarantines the local core, memory, and business JSON files and requires either an explicit skip or a verified backup from the last 24 hours whose receipt lists a checksum for every business JSON file. A classic verify receipt without those checksums does not authorise the quarantine. Neither reset nor clear calls Convex delete APIs. Failures leave overlap in place when removal did not succeed, and responses never echo token values.",
+        "description": "Runs one Phase A action after a case-sensitive confirmation string. End overlap removes only the matching PREVIOUS Convex env variable and any local previous assignment. Reset JSON quarantines jarvis-state.json. Clear local quarantines the local core, memory, and business JSON files and requires either an explicit skip or a verified backup from the last 24 hours whose receipt lists a checksum for every core, memory, and business JSON file. A classic verify receipt without those checksums does not authorise the quarantine. Neither reset nor clear calls Convex delete APIs. Failures leave overlap in place when removal did not succeed, and responses never echo token values.",
         "tags": ["Settings"],
         "parameters": [
           {

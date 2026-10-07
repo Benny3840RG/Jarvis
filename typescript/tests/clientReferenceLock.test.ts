@@ -11,6 +11,7 @@ import { InMemoryPropertyStore } from "../src/properties/inMemoryPropertyStore.j
 import { InMemoryQuoteStore } from "../src/quotes/inMemoryQuoteStore.js";
 import { ClientController } from "../src/http/clientController.js";
 import { EnquiryController } from "../src/http/enquiryController.js";
+import { JarvisProblem } from "../src/http/problemDetails.js";
 
 describe("client reference lock", () => {
   it("runs a later client-reference write only after the earlier one finishes", async () => {
@@ -68,7 +69,7 @@ describe("client reference lock", () => {
       new InMemoryQuoteStore(),
       null,
     );
-    const enquiriesHttp = new EnquiryController(enquiries, new InMemoryProjectStore());
+    const enquiriesHttp = new EnquiryController(enquiries, new InMemoryProjectStore(), clients);
 
     const removal = clientsHttp.remove(client.id);
     for (let attempt = 0; attempt < 50 && !scanned; attempt += 1) await delay(5);
@@ -83,9 +84,58 @@ describe("client reference lock", () => {
     releaseAfterScan();
     const removed = await removal;
     assert.equal(removed.data.id, client.id);
-    await creating;
-    assert.equal(added, 1);
-    assert.equal((await enquiries.list({ clientId: client.id })).length, 1);
+    await assert.rejects(creating, (error: unknown) => {
+      assert.ok(error instanceof JarvisProblem);
+      assert.equal(error.getStatus(), 404);
+      assert.equal(error.slug, "client-not-found");
+      return true;
+    });
+    assert.equal(added, 0);
+    assert.equal((await enquiries.list({ clientId: client.id })).length, 0);
     assert.equal(await clients.get(client.id), null);
+  });
+
+  it("refuses delete when the enquiry create already holds the lock", async () => {
+    const clients = new InMemoryClientStore();
+    const enquiries = new InMemoryEnquiryStore();
+    const client = await clients.add({ name: "Ada" });
+    let releaseAdd: () => void = () => {};
+    const adding = new Promise<void>((resolve) => {
+      releaseAdd = resolve;
+    });
+    const add = enquiries.add.bind(enquiries);
+    enquiries.add = async (input) => {
+      await adding;
+      return add(input);
+    };
+    const clientsHttp = new ClientController(
+      clients,
+      enquiries,
+      new InMemoryInvoiceStore(),
+      new InMemoryPropertyStore(),
+      new InMemoryProjectStore(),
+      new InMemoryQuoteStore(),
+      null,
+    );
+    const enquiriesHttp = new EnquiryController(enquiries, new InMemoryProjectStore(), clients);
+
+    const creating = enquiriesHttp.create({
+      clientId: client.id,
+      source: "phone",
+      requestedWork: "Replace the tap",
+    });
+    await delay(20);
+    const removal = clientsHttp.remove(client.id);
+    releaseAdd();
+    const created = await creating;
+    assert.equal(created.data.clientId, client.id);
+    await assert.rejects(removal, (error: unknown) => {
+      assert.ok(error instanceof JarvisProblem);
+      assert.equal(error.getStatus(), 409);
+      assert.equal(error.slug, "client-still-referenced");
+      return true;
+    });
+    assert.ok(await clients.get(client.id));
+    assert.equal((await enquiries.list({ clientId: client.id })).length, 1);
   });
 });
