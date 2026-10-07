@@ -74,6 +74,9 @@ const mustKeep = [
   "typescript/src/quoting/fixtures/quote176.ts",
   "typescript/src/quoting/fixtures/pavingChelseaHeights.ts",
   "typescript/tests/fixtures/jsonWriter.ts",
+  "typescript/data/jarvis-schema.jsonnet",
+  "typescript/data/jarvis-clients.json.example",
+  "typescript/data/jarvis-client.json-schema",
 ];
 
 const ignored = gitCheckIgnore([...mustIgnore, ...mustKeep]);
@@ -95,8 +98,13 @@ console.log("Repository hygiene check passed.");
 
 function isRuntimeDataPath(path) {
   return (
-    /^typescript\/data\/jarvis-.*\.(?:json(?:[.-].*)?|jsonl)$/.test(path) ||
-    /^typescript\/data\/\.jarvis-.*\.json\.tmp-/.test(path)
+    /^typescript\/data\/jarvis-.*\.json$/.test(path) ||
+    /^typescript\/data\/jarvis-.*\.jsonl$/.test(path) ||
+    /^typescript\/data\/jarvis-.*\.json\.lock$/.test(path) ||
+    /^typescript\/data\/jarvis-.*\.json\.lock\.tmp-[^/]+$/.test(path) ||
+    /^typescript\/data\/jarvis-.*\.json\.lock\.reclaim-[^/]+$/.test(path) ||
+    /^typescript\/data\/jarvis-.*\.json\.corrupt-[^/]+$/.test(path) ||
+    /^typescript\/data\/\.jarvis-.*\.json\.tmp-[^/]+$/.test(path)
   );
 }
 
