@@ -29,6 +29,7 @@ import {
 } from "./voiceCommands.js";
 import type { VoiceActuationProvider } from "./voiceHardware.js";
 import { parseUtterance } from "./voiceParser.js";
+import type { VoiceQueryProvider } from "./voiceQuery.js";
 
 const DEFAULT_HISTORY_LIMIT = 20;
 const DEFAULT_CONFIRMATION_TTL_MS = 30_000;
@@ -92,6 +93,7 @@ export type VoiceDispatch =
   | Readonly<{ decision: "empty" }>
   | Readonly<{ decision: "unrecognized"; normalizedTranscript: string }>
   | Readonly<{ decision: "ambiguous"; candidates: readonly string[] }>
+  | Readonly<{ decision: "answered"; command: VoiceCommand; answer: string }>
   | Readonly<{ decision: "query-unavailable"; command: VoiceCommand; reason: string }>
   | Readonly<{ decision: "awaiting-confirmation"; command: VoiceCommand; expiresAt: number }>
   | Readonly<{ decision: "confirmation-not-pending" }>
@@ -115,6 +117,8 @@ export type VoiceDispatch =
 export type VoiceSessionOptions = Readonly<{
   profile: VoiceProfile;
   provider: VoiceActuationProvider;
+  /** Read-only answers. Absent means every query stays explicitly unavailable. */
+  queries?: VoiceQueryProvider;
   historyLimit?: number;
   confirmationTtlMs?: number;
   clock?: () => number;
@@ -131,6 +135,7 @@ export type VoiceSessionInput = Readonly<{
 export class VoiceSession {
   #profile: VoiceProfile;
   readonly #provider: VoiceActuationProvider;
+  readonly #queries: VoiceQueryProvider | undefined;
   readonly #historyLimit: number;
   readonly #confirmationTtlMs: number;
   readonly #clock: () => number;
@@ -140,6 +145,7 @@ export class VoiceSession {
   constructor(options: VoiceSessionOptions) {
     this.#profile = options.profile;
     this.#provider = options.provider;
+    this.#queries = options.queries;
     this.#historyLimit = options.historyLimit ?? DEFAULT_HISTORY_LIMIT;
     this.#confirmationTtlMs = options.confirmationTtlMs ?? DEFAULT_CONFIRMATION_TTL_MS;
     this.#clock = options.clock ?? Date.now;
@@ -251,7 +257,7 @@ export class VoiceSession {
       this.#pending = { command, issuedAt: now, expiresAt };
       return { decision: "awaiting-confirmation", command, expiresAt };
     }
-    return this.#dispatch(command);
+    return this.#dispatch(command, now);
   }
 
   #handleConfirm(now: number, normalized: string): VoiceDispatch | Promise<VoiceDispatch> {
@@ -263,7 +269,7 @@ export class VoiceSession {
     if (now >= pending.expiresAt) {
       return { decision: "confirmation-expired", command: pending.command };
     }
-    return this.#dispatch(pending.command);
+    return this.#dispatch(pending.command, now);
   }
 
   #handleCancel(now: number, normalized: string): VoiceDispatch {
@@ -274,19 +280,47 @@ export class VoiceSession {
     return { decision: "cancelled", command: pending.command };
   }
 
-  async #dispatch(command: VoiceCommand): Promise<VoiceDispatch> {
+  async #dispatch(command: VoiceCommand, now: number): Promise<VoiceDispatch> {
     switch (command.kind) {
       case "query":
-        return {
-          decision: "query-unavailable",
-          command,
-          reason: "No read-only query provider is connected for this voice command.",
-        };
+        return this.#query(command, now);
       case "propose":
         return { decision: "proposed", command };
       case "actuate":
         return this.#actuate(command);
     }
+  }
+
+  async #query(command: VoiceCommand, now: number): Promise<VoiceDispatch> {
+    if (!this.#queries) {
+      return {
+        decision: "query-unavailable",
+        command,
+        reason: "No read-only query provider is connected for this voice command.",
+      };
+    }
+    let result;
+    try {
+      result = await this.#queries.answer({ commandId: command.id, now });
+    } catch {
+      return {
+        decision: "query-unavailable",
+        command,
+        reason: "The voice query provider failed before returning an authoritative answer.",
+      };
+    }
+    if (result.status === "unavailable") {
+      return { decision: "query-unavailable", command, reason: result.reason };
+    }
+    const answer = result.answer.trim();
+    if (answer.length === 0) {
+      return {
+        decision: "query-unavailable",
+        command,
+        reason: "The voice query provider returned an empty answer.",
+      };
+    }
+    return { decision: "answered", command, answer };
   }
 
   async #actuate(command: VoiceCommand): Promise<VoiceDispatch> {

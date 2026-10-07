@@ -12,6 +12,7 @@ import { randomUUID } from "node:crypto";
 
 import type { VoiceProfile } from "./voiceCommands.js";
 import type { VoiceActuationProvider } from "./voiceHardware.js";
+import type { VoiceQueryProvider } from "./voiceQuery.js";
 import { VoiceSession } from "./voiceSession.js";
 
 const DEFAULT_TTL_MS = 30 * 60_000;
@@ -19,6 +20,7 @@ const DEFAULT_MAX_SESSIONS = 256;
 
 export type VoiceSessionRegistryOptions = Readonly<{
   provider: VoiceActuationProvider;
+  queries?: VoiceQueryProvider;
   ttlMs?: number;
   maxSessions?: number;
   clock?: () => number;
@@ -32,6 +34,7 @@ type Entry = { session: VoiceSession; expiresAt: number };
 
 export class VoiceSessionRegistry {
   readonly #provider: VoiceActuationProvider;
+  readonly #queries: VoiceQueryProvider | undefined;
   readonly #ttlMs: number;
   readonly #maxSessions: number;
   readonly #clock: () => number;
@@ -41,6 +44,7 @@ export class VoiceSessionRegistry {
 
   constructor(options: VoiceSessionRegistryOptions) {
     this.#provider = options.provider;
+    this.#queries = options.queries;
     this.#ttlMs = options.ttlMs ?? DEFAULT_TTL_MS;
     this.#maxSessions = options.maxSessions ?? DEFAULT_MAX_SESSIONS;
     this.#clock = options.clock ?? Date.now;
@@ -56,6 +60,7 @@ export class VoiceSessionRegistry {
     const session = new VoiceSession({
       profile,
       provider: this.#provider,
+      ...(this.#queries === undefined ? {} : { queries: this.#queries }),
       clock: this.#clock,
       ...(this.#confirmationTtlMs === undefined
         ? {}
