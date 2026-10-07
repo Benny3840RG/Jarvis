@@ -95,7 +95,7 @@ console.log("Repository hygiene check passed.");
 
 function isRuntimeDataPath(path) {
   return (
-    /^typescript\/data\/jarvis-.*\.json/.test(path) ||
+    /^typescript\/data\/jarvis-.*\.(?:json(?:[.-].*)?|jsonl)$/.test(path) ||
     /^typescript\/data\/\.jarvis-.*\.json\.tmp-/.test(path)
   );
 }
