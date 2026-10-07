@@ -48,7 +48,8 @@
     "outlook": "node --import tsx src/tools/runOutlookOnboarding.ts",
     "temporal:readiness": "node --import tsx src/tools/runTemporalReadiness.ts",
     "home:discover": "node --import tsx src/tools/runGoogleHomeDiscovery.ts",
-    "home:kit": "node --import tsx src/tools/runGoogleHomeCommissioningKit.ts"
+    "home:kit": "node --import tsx src/tools/runGoogleHomeCommissioningKit.ts",
+    "commission:outlook-quote": "node --import tsx src/tools/runOutlookQuoteCommissioning.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.131.0",
