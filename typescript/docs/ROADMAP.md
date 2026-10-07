@@ -16,6 +16,14 @@ Next:
 - Do not auto-create totality projects from business jobs.
 - Voice brief quotes remain on the flat store until a later slice reuses this register without a new authority.
 
+## Local V1 recovery (LV1-09)
+
+Tracker #697. PR 1 locks the live persistence split. PR 2 adds
+`captureLocalV1Archive`: one partial archive of business JSON, the classic
+Convex snapshot, the existing S6 quote inventory, idempotency receipts, and
+PDF bytes. `completeness` stays `partial`. The function is read-only against
+live stores and is not wired to `export-v4`. Isolated restore is still open.
+
 ## LV1-04 authoritative voice query bridge (2026-10-07)
 
 Deterministic voice query intents now answer from the same list/brief read models

@@ -8,7 +8,13 @@ import {
   type S4Table,
 } from "../src/backup/v4/convexCapture.js";
 import { S6_TABLES, S6_CAPTURE_VERSION, type S6Table } from "../src/backup/v4/s6MutableQuotes.js";
-export type BackupTable = S4Table | S6Table;
+import {
+  LOCAL_V1_RECEIPT_CAPTURE_VERSION,
+  LOCAL_V1_RECEIPT_ROW_CAP,
+  LOCAL_V1_RECEIPT_TABLES,
+  type LocalV1ReceiptTable,
+} from "../src/backup/v4/localV1Receipts.js";
+export type BackupTable = S4Table | S6Table | LocalV1ReceiptTable;
 export type CapturedTable = { table: BackupTable; documents: Doc<BackupTable>[] };
 /** Owner-indexed union reader; every requested table is read once within the caller's transaction. */
 export async function readBackupTables(
@@ -119,7 +125,17 @@ export async function readBackupTables(
         .query("externalReconciliations")
         .withIndex("by_owner_and_reconciliation_id", (q) => q.eq("ownerId", ownerId)),
   };
-  const readers = { ...s4, ...s6 };
+  const receipts = {
+    directCreateReceipts: () =>
+      ctx.db
+        .query("directCreateReceipts")
+        .withIndex("by_owner_type_and_key", (q) => q.eq("ownerId", ownerId)),
+    internalActionResults: () =>
+      ctx.db
+        .query("internalActionResults")
+        .withIndex("by_owner_entity", (q) => q.eq("ownerId", ownerId)),
+  };
+  const readers = { ...s4, ...s6, ...receipts };
   const result: CapturedTable[] = [];
   for (const table of tables) {
     const bound = limit(table);
@@ -189,4 +205,31 @@ export function buildS6Capture(
     }),
     restoreVerified: false as const,
   };
+}
+export function buildLocalV1ReceiptCapture(
+  ownerId: string,
+  capturedAt: number,
+  rows: CapturedTable[],
+) {
+  const tables = LOCAL_V1_RECEIPT_TABLES.map((table) => {
+    const entry = rows.find((row) => row.table === table);
+    if (!entry || entry.documents.length > LOCAL_V1_RECEIPT_ROW_CAP) {
+      throw new Error("Invalid Local V1 receipt capture table bound.");
+    }
+    return entry;
+  });
+  try {
+    return encodeS4Payload({
+      version: LOCAL_V1_RECEIPT_CAPTURE_VERSION,
+      provider: "convex",
+      ownerId,
+      capturedAt,
+      tables,
+    });
+  } catch (error: unknown) {
+    if (error instanceof Error && error.message.includes("payload byte limit")) {
+      throw new Error("S6 capture exceeds its payload byte limit.", { cause: error });
+    }
+    throw error;
+  }
 }
