@@ -39,7 +39,6 @@
     "commission:posthog": "node --import tsx src/tools/runPostHogCommissioning.ts",
     "commission:isolated-ingress": "node --import tsx src/tools/runIsolatedIngressCommissioning.ts",
     "commission:sentry": "node --import tsx src/tools/runSentryCommissioning.ts",
-    "commission:outlook-quote": "node --import tsx src/tools/runOutlookQuoteCommissioning.ts",
     "backup": "tsx src/tools/runBackup.ts",
     "restore-drill": "tsx src/tools/runRestoreDrill.ts",
     "import:convex": "tsx src/tools/runConvexImport.ts",
@@ -49,7 +48,8 @@
     "outlook": "node --import tsx src/tools/runOutlookOnboarding.ts",
     "temporal:readiness": "node --import tsx src/tools/runTemporalReadiness.ts",
     "home:discover": "node --import tsx src/tools/runGoogleHomeDiscovery.ts",
-    "home:kit": "node --import tsx src/tools/runGoogleHomeCommissioningKit.ts"
+    "home:kit": "node --import tsx src/tools/runGoogleHomeCommissioningKit.ts",
+    "commission:outlook-quote": "node --import tsx src/tools/runOutlookQuoteCommissioning.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.131.0",
@@ -88,6 +88,7 @@
     "concurrently": "10.0.5",
     "convex-test": "0.0.60",
     "eslint": "^10.11.0",
+    "fast-check": "4.10.2",
     "globals": "^17.13.0",
     "js-yaml": "^4.3.2",
     "prettier": "^3.9.9",
@@ -111,11 +112,11 @@
     "ip-address": "^10.7.2",
     "js-yaml": "^4.3.2",
     "nanoid": "^3.3.18",
-    "concurrently": {
-      "shell-quote": "1.11.0"
-    },
     "castv2": {
       "protobufjs": "^7.6.6"
+    },
+    "concurrently": {
+      "shell-quote": "1.11.0"
     }
   }
 }
